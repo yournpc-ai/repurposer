@@ -77,7 +77,9 @@ import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/LogoMark"
 import {
   assetTypeKind,
+  outputLabelWithVersion,
   outputMentionLabel,
+  outputMentionName,
   type ChatMention,
   type MentionContext,
 } from "@/lib/mentions"
@@ -1963,7 +1965,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [outputs, setOutputs] = useState<Output[]>([])
   const [globalReferences, setGlobalReferences] = useState<{
     assets: { id: string; title: string; type: string }[]
-    outputs: { id: string; name: string; type: string }[]
+    outputs: { id: string; name: string; type: string; composition_version_number?: number | null }[]
   }>({ assets: [], outputs: [] })
   const fetchOutputs = useCallback(async () => {
     try {
@@ -2035,14 +2037,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       else chatContainerRef.current?.focus({ preventScroll: true })
     })
   }, [])
-  const mentionViewerOutput = useCallback((output: Output, revise: boolean) => {
+  const mentionViewerOutput = useCallback((output: Output) => {
     setDockHidden(false)
     editorRef.current?.insertMention({
       type: "output",
       id: output.id,
       label: outputMentionLabel(output, t(`chat.anchorCards.types.${output.type}`)),
     })
-    if (revise) editorRef.current?.insertText(` ${t("chat.outputViewer.continuePrompt")}`)
     setViewerOutputId(null)
     requestAnimationFrame(() => editorRef.current?.focus())
   }, [t])
@@ -2070,11 +2071,23 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           kind: assetTypeKind(a.type),
         })),
       outputs: [...new Map([
-        ...globalReferences.outputs.map((o) => ({ id: o.id, label: o.name || t("chat.videoStoryboard.title"), kind: o.type })),
+        ...globalReferences.outputs.map((o) => ({
+          id: o.id,
+          label: o.name || t("chat.videoStoryboard.title"),
+          chipLabel: outputLabelWithVersion(o.name || t("chat.videoStoryboard.title"), o.composition_version_number),
+          kind: o.type,
+          hint: o.composition_version_number != null
+            ? t("chat.outputCard.version", { number: o.composition_version_number })
+            : undefined,
+        })),
         ...outputs.map((o) => ({
         id: o.id,
-        label: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
+        label: outputMentionName(o, t(`chat.anchorCards.types.${o.type}`)),
+        chipLabel: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
         kind: o.type,
+        hint: o.composition_version_number != null
+          ? t("chat.outputCard.version", { number: o.composition_version_number })
+          : undefined,
       })),
       ].map((o) => [o.id, o])).values()],
     }),
@@ -4225,14 +4238,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             {m.candidates ? (
               <CandidateSurfaceCard surface={m.candidates} />
             ) : null}
-            {/* Structured presentation blocks (Video Project phase B):
-                the storyboard card resolves its server DTO from the
-                block's reference — unknown kinds render nothing (读容忍). */}
+            {/* Structured presentation blocks (Video Project phase B): the
+                visible storyboard is the assistant's Markdown above; this
+                companion resolves the version reference and ACKs after prose
+                and any real previews are ready. Unknown kinds render nothing. */}
             {m.blocks?.map((block, index) =>
               block.kind === "video_storyboard" ? (
                 <Message key={`${m.id}-b${index}`} align="start">
                   <MessageContent>
-                    <StoryboardCard block={block} messageId={m.id} onRunStarted={landOnStartedRun} />
+                    <StoryboardCard
+                      block={block}
+                      messageId={m.id}
+                      prosePresented={!m.streaming && m.content.trim().length > 0}
+                      onRunStarted={landOnStartedRun}
+                    />
                   </MessageContent>
                 </Message>
               ) : null,
@@ -4891,8 +4910,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         entries={chatOutputEntries}
         onNavigate={setViewerOutputId}
         onOpenChange={(open) => { if (!open) closeOutputViewer() }}
-        onMention={(output) => mentionViewerOutput(output, false)}
-        onRevise={(output) => mentionViewerOutput(output, true)}
+        onMention={mentionViewerOutput}
       />
     </>
   )

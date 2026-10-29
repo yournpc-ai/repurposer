@@ -1,6 +1,6 @@
 # R1.1 Commercial / Distribution——PLANNED 合同
 
-> Status: PLANNED，排期挂起。启动窗口由 PROGRESS §0.3 决定；计费、分发和渠道规则分别归 BILLING.md / DISTRIBUTION.md。本文件只保留启动范围与验收，不复制旧批次状态。
+> Status: PLANNED，排期挂起。Stripe 一次性积分充值由 `stripe-credit-topup.md` 单独实施；订阅与其余启动窗口由 PROGRESS §0.3 决定。计费、支付、分发和渠道规则分别归 BILLING.md / PAYMENTS.md / DISTRIBUTION.md。本文件只保留剩余启动范围与验收，不复制旧批次状态。
 
 ## 1. 目标
 
@@ -9,7 +9,7 @@
 ## 2. 启动范围
 
 1. **agent_calls 台账**：记录每次 provider 调用，包括空内容、max-tokens 和校验失败首试；保存 agent/run/step/attempt/outcome/tokens/error/prompt 模板与 usage，可重建调用 envelope，大 prompt 走对象存储。动工时补 ADR。
-2. **支付与订阅**：支付商沙盒、webhook、续费/升级/取消、周期额度与购买比例。
+2. **订阅**：支付商沙盒、订阅 webhook、续费/升级/取消、周期额度与订阅权益；一次性积分充值不在本文件重复登记。
 3. **权益执行**：额度检查、超限提示、周期重置；用户余额不足与 provider 402 严格分开。
 4. **用户计费中心**：用量、明细、套餐与余额的同一事实投影。
 5. **渠道联调**：LinkedIn/TikTok OAuth、发布成功/失败/授权过期通知；平台凭据未到位时用 mock 验收并保留真联调清单。

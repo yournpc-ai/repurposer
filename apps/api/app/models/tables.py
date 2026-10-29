@@ -1205,15 +1205,15 @@ class CreditTransaction(Base):
     """Credit ledger row (ADR-055) — append-only, the sole source of truth for
     every balance change; ``wallets.balance`` is only its materialized cache.
 
-    ``kind`` is a plain string (Notification.type precedent — W11's
-    ``purchase`` joins without a migration): grant | purchase | hold |
+    ``kind`` is a plain string (Notification.type precedent — the payment
+    adapter's ``purchase`` joins without a migration): grant | purchase | hold |
     capture | release | refund | adjust. ``amount`` is signed (hold/capture
     negative); ``balance_after`` chains each row to the balance it produced,
     so ledger drift is a one-query audit. ``idempotency_key`` is a
-    first-class UNIQUE column: worker restarts, step retries and (W11)
-    payment webhook replays dedupe structurally, never via check-then-write
+    first-class UNIQUE column: worker restarts, step retries and payment
+    webhook replays dedupe structurally, never via check-then-write
     code. ``ref`` carries the cause ({\"run_id\": …} / {\"step_id\": …} /
-    {\"source\": \"signup\"} / W11 {\"payment_event\": …}).
+    {\"source\": \"signup\"} / PAYMENTS {\"payment_event\": …}).
     """
 
     __tablename__ = "credit_transactions"
@@ -1227,6 +1227,48 @@ class CreditTransaction(Base):
     idempotency_key = Column(String(128), nullable=False, unique=True)
     note = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
+
+
+class PaymentOrder(Base):
+    """One fiat credit-package purchase (PAYMENTS §4).
+
+    Stripe owns the payment fact; this row owns the internal order snapshot
+    and its exactly-once link to the credits ledger. Money stays in minor
+    units here and never leaks into ``credit_transactions``.
+    """
+
+    __tablename__ = "payment_orders"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    package_key = Column(String(40), nullable=False)
+    provider = Column(String(20), nullable=False, default="stripe")
+    livemode = Column(Boolean, nullable=False)
+    amount_minor = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False)
+    credits = Column(BigInteger, nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    provider_checkout_session_id = Column(String(255), nullable=True)
+    provider_payment_intent_id = Column(String(255), nullable=True)
+    credit_transaction_id = Column(
+        UUID(as_uuid=True), ForeignKey("credit_transactions.id"), nullable=True
+    )
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    credited_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        CheckConstraint("amount_minor >= 0", name="ck_payment_orders_amount_nonnegative"),
+        CheckConstraint("credits > 0", name="ck_payment_orders_credits_positive"),
+        UniqueConstraint(
+            "provider_checkout_session_id", name="uq_payment_orders_checkout_session"
+        ),
+        UniqueConstraint(
+            "credit_transaction_id", name="uq_payment_orders_credit_transaction"
+        ),
+        Index("ix_payment_orders_user_created_at", "user_id", "created_at"),
+    )
 
 
 class ConversationUsage(Base):

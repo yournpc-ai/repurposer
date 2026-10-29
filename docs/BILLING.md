@@ -1,6 +1,6 @@
 # BILLING — 积分与计费架构
 
-> Status: 当前规范（2026-10-26）。积分、钱包与 hold/capture/release 是当前能力；支付、套餐与订阅经济仍按 `PROGRESS.md` 挂起。
+> Status: 当前规范（2026-10-29）。积分、钱包与 hold/capture/release 是当前能力；Stripe 一次性积分充值首批已落码、真实验收未运行，支付架构归 `PAYMENTS.md`，订阅经济仍按 `PROGRESS.md` 挂起。
 > 本文是积分 / 钱包 / 计费架构的**唯一事实源**：概念、表、扣费时序、比例参数、负余额语义、API 与边界。参数的当前生效值以 `app/platform/configs.py` 注册表为准（本文只写默认）。
 
 ## 1. 概念层（三个词，两层货币）
@@ -13,7 +13,7 @@
   │ 永不直接上 UI            │             │ ledger = 余额变动唯一事实源  │
   └─────────────────────────┘             └──────────────────────────┘
                                                         ▲
-                                  W11 payment adapter ──┘ 只是一种 grant 写入者
+                                  payment adapter（PAYMENTS）──┘ 只是一种 purchase 写入者
                                   （钱→积分换算发生在适配器边界，台账不认识"钱"）
 ```
 
@@ -55,7 +55,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 - **不往 `users` 加列**——钱包是独立聚合根，首登 lazy 开户 + 开户 grant。
 - **幂等键是一等列**：worker 重启、step 重试、支付 webhook 重放，全靠 `idempotency_key` 唯一约束去重，不写防御代码。
 - **`balance_after` 链**：台账任意行可独立校验，对账 SQL 一条查出漂移。
-- kind 的 `purchase` 座位本期留空——W11 支付只新增枚举值和适配器，台账结构零改动。
+- kind 的 `purchase` 座位在支付实施前留空——支付只新增枚举值和适配器，台账结构零改动。
 
 ## 3. 资金流四个时刻（hold → capture → release）
 
@@ -71,7 +71,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
 3. **实扣（capture）**：先锁钱包，同一事务释放实际费用覆盖的预扣（`release`，idem `step:{id}:capture:hold-release`，增量 capture 使用对应增量键），再记实际扣费。两条台账同事务提交，余额只减少超出预扣的部分，禁止 hold 和 capture 重复扣款。在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
 4. **释放（release）**：run 终态释放 `hold − Σrelease` 的剩余预扣（idem `run:{id}:release`）。终态恒等式：`Σrelease = hold`，净支出仅为 `Σcapture`；无预扣的实际扣费合法。历史重复扣款由 `scripts/repair_credit_reservations.py` 审计，默认只读，`--apply` 追加幂等释放行，不改旧记录。
-5. **购买（purchase，W11）**：payment adapter 收 webhook 确认 → 钱→积分换算（**购买比例**，W11 套餐定价时定，与消耗比例解耦）→ 写 `kind=purchase, idempotency_key=provider_event_id`。订阅周期额度 = `kind=grant, ref={source:"subscription", period:…}`。
+5. **购买（purchase）**：payment adapter 收 webhook 确认 → 钱→积分换算（**购买比例**，积分包定价时定，与消耗比例解耦）→ 写 `kind=purchase`，幂等键由 provider_event_id 派生，精确合同见 `PAYMENTS.md §4`。订阅周期额度 = `kind=grant, ref={source:"subscription", period:…}`。
 
 ### NULL 估价的诚实处理
 
@@ -89,7 +89,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 ```
 
 - 报价 fold 与实扣读同一个值，结构性同源；调消费比例 = 改 config 一行，不用发版。
-- **消耗比例 ≠ 购买比例**（钱→积分汇率是 W11 套餐定价的另一个决策，可独立做阶梯加赠）。
+- **消耗比例 ≠ 购买比例**（钱→积分汇率是积分包定价的另一个决策，可独立做阶梯加赠）。
 - 调参不改已经写入的 ledger 积分额；USD 成本仍保留在 `workflow_steps.cost`。**读面不是全部冻结**：历史 step 的 `cost_credits` 也由持久 USD × 当前比例重新序列化，估价贴同样随参数变化；只有已写 transaction 金额与幂等事实不随比例重写。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
 - **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
@@ -129,7 +129,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 - **`conversation_usage` 表**（owner = 平台层）：每回合一行（user / project / prompt_tokens / completion_tokens / cached_tokens / cost_usd 写入时定型 / model / created_at）。chat 回合入口绑 `bind_conversation_turn()` contextvar，复用 `record_usage` 唯一咽喉（`minimax.py` provider 层），tool loop 多轮迭代聚合为一行；写纪律 = 与回合 assistant 消息同一 commit；计量永不打断生成。
 - 会话计量按真实调用聚合；空回合无调用时零 usage 行，记录失败不能打断回复。取证级 agent_calls envelope 是独立需求，不由 conversation_usage 冒充。真实 tokens/cache/cost/model/project 归属与窗口边界验收仍开放，见验证登记 §4.2。
-- **永不上用户账单、永不上 UI**。用途三：COGS 可见性（会话/生产成本比）/ W11 fair-use 配额的数据基础 / context 预算校准数据源。
+- **永不上用户账单、永不上 UI**。用途三：COGS 可见性（会话/生产成本比）/ 商业化 fair-use 配额的数据基础 / context 预算校准数据源。
 - **context 预算**（纯后端零 UI）：装配超 `chat.context_budget_tokens`（ops 参数）→ 消息历史滑动窗口收编（现有 `history[-n:]` 散座归一预算谓词）；世界状态（图快照 / 资产元数据）不走消息窗，天然幸存。LLM 滚动摘要 = 缓做项（真实溢出率由台账观察后再评）。prefix cache 友好装配顺序不动。
 - token 是内部计量单位，credit 是用户面唯一货币——token 数字与 USD 一样永不上 UI。
 
@@ -163,15 +163,16 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 
 旧 `billing.confirm_large_threshold` 不再读取，不能建立第二套确认语义；目标环境是否残留与是否实际清理须分别记录。删除前执行只读查询 `SELECT * FROM configs WHERE key='billing.confirm_large_threshold'`，按已有目标环境授权处理；文档收敛不代表已执行 SQL。确认/计量/配置的剩余检查统一归 [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置)。
 
-## 8. 当前边界与支付延期
+## 8. 当前边界与支付分工
 
 | 范围 | 当前状态 |
 |---|---|
 | 积分底座 | 三表、migration、configs reconcile、开户 grant、hold/capture/release、shortfall、钱包与多个估价读面是当前能力 |
-| 支付/订阅 | `platform/payments.py`、三方 webhook、订阅生命周期、购买比例与套餐档位仍是 PLANNED；启动时间归 `PROGRESS.md` R1.1 |
+| 支付 | `PAYMENTS.md` 定义 Stripe adapter、公网/本地 webhook、支付订单与 purchase 写门；首批已落码，migration、测试与真实联调未运行 |
+| 订阅 | 订阅生命周期、周期额度与套餐权益仍是 PLANNED；启动时间归 `PROGRESS.md` R1.1 |
 | 计费中心扩展 | 当前 Settings/CreditsPill 共用语义交易投影；分桶余额、周期额度、fair-use 配额与 admin configs 写面按后续商业合同实施 |
 
-**支付边界**：未来 `/payments/*` 与 webhook 只经适配器写 ledger；分桶余额若实施，应增加明确字段/语义而非篡改现有交易。三桶方向（Subscription / Purchased / Bonus）、到期顺序、fair-use 和 admin 写面都不是当前已实现能力。auto-spend 的当前法律仍是 ADR-117 默认 auto + 制作意图 + 守卫线，不由支付批另造一套授权。
+**支付边界**：当前 `/payments/*` 与 webhook 只经适配器写 ledger；分桶余额若实施，应增加明确字段/语义而非篡改现有交易。三桶方向（Subscription / Purchased / Bonus）、到期顺序、fair-use 和 admin 写面都不是当前已实现能力。auto-spend 的当前法律仍是 ADR-117 默认 auto + 制作意图 + 守卫线，不由支付批另造一套授权。
 
 **孤儿 hold 回收**：run 被删（project 级联，台账 append-only 按设计存活）或永停非终态（WAITING_HUMAN 被弃）时，hold 的解冻走双路闭环：① **删除即退**——project 删除端点同事务对非 RUNNING run 调 `release_run`（RUNNING 在途 run 的捕获量仍在增长，提前退会与后落 capture 对不上账；它归 worker 收官路）；② **收官路台账自结算**——`maybe_finalize_run` 对 run 行已删 / 项目已删的残余调用走 `_release_orphaned_hold`（ledger hold 行自带 owner，remainder 从台账重算，幂等键防双退）；WAITING_HUMAN 被弃由 TTL 过期扫荡（`expire_stale_interrupts`）→ run 收官 → 正常 release 兜住。reconcile 尺子对「被删 run 的未结 hold」保留 ○ known-open 豁免，活 run 未结仍硬判。
 
@@ -181,9 +182,10 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 app/platform/
 ├── configs.py     # CONFIG_REGISTRY + get_config（缓存+写失效）+ set_config + 启动 reconcile
 ├── billing.py     # 钱包服务：get_or_create_wallet（lazy 开户+grant）/ credits_for_cost /
-│                  #   check_hold / hold_run / capture_step / release_run / balance
-└── routes.py      # /wallet 路由（W11 加计费中心投影）
-# W11: platform/payments.py —— 支付适配器边界（webhook → purchase 行）
+│                  #   check_hold / hold_run / purchase_credits / capture_step / release_run / balance
+├── payments.py    # Stripe adapter：Checkout / 订单状态机 / webhook → purchase（PAYMENTS）
+├── payment_routes.py  # /payments/packages、checkout-sessions、orders、stripe/webhook
+└── routes.py      # /wallet 路由（计费中心扩展投影）
 ```
 
 - 三表进 `models/tables.py`（User 先例）；表归属 = 平台层（MODULE_ARCH §4 已登记）。

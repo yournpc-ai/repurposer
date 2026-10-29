@@ -1,13 +1,19 @@
 """MiniMax M3 client."""
 
 import asyncio
+import base64
+import hashlib
 import json
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import TypeVar
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TypeVar
+from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import httpx
 import structlog
@@ -29,6 +35,84 @@ from app.providers.llm.base import (
 )
 
 logger = structlog.get_logger()
+
+
+def _trace_path() -> Path | None:
+    raw = settings.minimax_journey_trace.strip()
+    return Path(raw) if raw else None
+
+
+def _trace_safe(value: Any, path: Path) -> Any:
+    """Keep business payloads verbatim except credentials and inline bytes."""
+    if isinstance(value, dict):
+        safe = {}
+        for key, item in value.items():
+            if key.lower() in {"authorization", "cookie", "api_key", "apikey", "token"}:
+                safe[key] = "<redacted>"
+            else:
+                safe[key] = _trace_safe(item, path)
+        return safe
+    if isinstance(value, list):
+        return [_trace_safe(item, path) for item in value]
+    if isinstance(value, str):
+        if value.startswith("data:") and ";base64," in value:
+            header, encoded = value.split(",", 1)
+            raw = base64.b64decode(encoded)
+            digest = hashlib.sha256(raw).hexdigest()
+            media_dir = path.parent / "media"
+            media_dir.mkdir(parents=True, exist_ok=True)
+            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "video/mp4": ".mp4"}.get(
+                header[5:].split(";", 1)[0], ".bin"
+            )
+            target = media_dir / f"{digest}{suffix}"
+            if not target.exists():
+                target.write_bytes(raw)
+            return {"binary_ref": str(target), "sha256": digest, "bytes": len(raw)}
+        if value.startswith(("https://", "http://")):
+            parts = urlsplit(value)
+            if parts.query:
+                return urlunsplit((parts.scheme, parts.netloc, parts.path, "", "")) + "?<redacted-query>"
+        return value
+    return value
+
+
+def _trace_write(record: dict[str, Any]) -> None:
+    path = _trace_path()
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(_trace_safe(record, path), ensure_ascii=False) + "\n")
+
+
+def _trace_start(payload: dict[str, Any], seat: str) -> str:
+    call_id = str(uuid4())
+    from app.metering import current_conversation_trace
+
+    _trace_write({
+        "phase": "request",
+        "model_call_id": call_id,
+        "seat": seat,
+        "started_at": datetime.now(UTC).isoformat(),
+        **(current_conversation_trace() or {}),
+        "payload": payload,
+    })
+    return call_id
+
+
+def _trace_finish(call_id: str, *, response: Any = None, error: BaseException | None = None) -> None:
+    if _trace_path() is None:
+        return
+    from app.metering import current_conversation_trace
+
+    _trace_write({
+        "phase": "response" if error is None else "error",
+        "model_call_id": call_id,
+        "finished_at": datetime.now(UTC).isoformat(),
+        **(current_conversation_trace() or {}),
+        "response": response,
+        "error": None if error is None else {"type": type(error).__name__, "message": str(error)},
+    })
 
 
 # Process-wide connection pool (provider 硬化批 1, 2026-09-27): every call
@@ -456,6 +540,7 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        trace_id = _trace_start(payload, "generate")
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -477,7 +562,9 @@ class MiniMaxClient:
                 )
                 _raise_for_status(response)
                 data = response.json()
+                _trace_finish(trace_id, response=data)
         except Exception as e:
+            _trace_finish(trace_id, error=e)
             logger.warning(
                 "llm_request_failed",
                 model=settings.minimax_model,
@@ -565,6 +652,7 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        trace_id = _trace_start(payload, "generate_stream")
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -666,6 +754,7 @@ class MiniMaxClient:
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
+                    _trace_finish(trace_id, error=exc)
                     logger.warning(
                         "llm_request_failed",
                         model=settings.minimax_model,
@@ -704,6 +793,7 @@ class MiniMaxClient:
         await record_usage(usage)
 
         content = self._clean_json(accumulated)
+        _trace_finish(trace_id, response={"content": accumulated, "usage": usage})
         try:
             return response_model.model_validate_json(content)
         except ValidationError as e:
@@ -755,6 +845,7 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        trace_id = _trace_start(payload, "generate_with_tools")
         async with _pooled_client() as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -766,6 +857,7 @@ class MiniMaxClient:
             )
             _raise_for_status(response)
             data = response.json()
+            _trace_finish(trace_id, response=data)
 
         # ADR-025 metering: report usage to the bound workflow step (no-op when
         # unbound). Done before validation — tokens were consumed either way.
@@ -840,6 +932,7 @@ class MiniMaxClient:
         if thinking:
             payload["thinking"] = True
 
+        trace_id = _trace_start(payload, "generate_stream_with_tools")
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -939,6 +1032,7 @@ class MiniMaxClient:
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
                 if emitted or attempt == 2:
+                    _trace_finish(trace_id, error=exc)
                     logger.warning(
                         "llm_request_failed",
                         model=settings.minimax_model,
@@ -983,6 +1077,15 @@ class MiniMaxClient:
         # schema class, so the harness's repair round answers it with
         # feedback — never a blind client-side re-roll.
         calls = accumulator.finish(finish_reason)
+        _trace_finish(trace_id, response={
+            "content": accumulated,
+            "tool_calls": [
+                {"id": call.id, "name": call.name, "arguments": call.arguments}
+                for call in calls
+            ],
+            "finish_reason": finish_reason,
+            "usage": usage,
+        })
         if not content and not calls:
             # 空响应信标: the turn's words and calls BOTH came back empty —
             # log the raw finish_reason/usage so the next occurrence is

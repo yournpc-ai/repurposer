@@ -80,9 +80,10 @@ async def queue_composition_render(
         project_id=project.id,
         workflow_step_id=None,
         type="video",
-        language=project.language,
+        language=(version.skill_provenance or {}).get("language"),
         provenance="generated",
         payload={
+            "content_language": (version.skill_provenance or {}).get("language"),
             "name": composition.name,
             "duration_seconds": duration_seconds,
             "duration": duration_seconds,

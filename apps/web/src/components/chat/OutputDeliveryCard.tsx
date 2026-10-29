@@ -4,18 +4,10 @@ import { useTranslation } from "react-i18next"
 import { toAbsoluteUrl } from "@/lib/api"
 import { anchorCardOf, anchorLabel } from "@/lib/anchorCards"
 import { useOutputPoster } from "@/lib/outputPoster"
+import { outputAspect } from "@/lib/outputAspect"
 import { outputFullText } from "@/components/results/outputText"
 import { cn, formatDuration } from "@/lib/utils"
 import type { Output } from "@/lib/types"
-
-function outputAspect(output: Output): number {
-  const spec = output.render_spec as { aspect?: string; width?: number; height?: number } | null
-  const declared = output.aspect ?? spec?.aspect
-  const match = declared?.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/)
-  if (match) return Number(match[1]) / Number(match[2])
-  if (spec?.width && spec.height) return spec.width / spec.height
-  return output.type === "clip" || output.type === "film" || output.type === "video" ? 16 / 9 : 4 / 3
-}
 
 export function OutputPosterImage({
   output,
@@ -65,10 +57,10 @@ export function OutputDeliveryCard({
         onClick={() => onOpen(output.id)}
         className={cn(
           "group relative block max-w-full overflow-hidden rounded-lg bg-muted text-left",
-          "hover:ring-1 hover:ring-foreground/30 focus-visible:ring-1 focus-visible:ring-foreground/30",
+          "focus-visible:ring-2 focus-visible:ring-ring/30",
           portrait ? "h-72" : "w-[340px]",
         )}
-        style={portrait ? { aspectRatio: aspect } : { aspectRatio: aspect }}
+        style={{ aspectRatio: aspect }}
       >
         {imageUrl ? (
           <img src={imageUrl} alt="" className="h-full w-full object-contain" />
@@ -85,20 +77,22 @@ export function OutputDeliveryCard({
         <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-background text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none max-md:opacity-100">
           <Maximize2 className="h-4 w-4" />
         </span>
-        {card.durationSec != null ? (
-          <span className="absolute bottom-2 right-2 rounded-md bg-background px-1.5 py-0.5 font-mono text-[11px] leading-4 text-foreground">
-            {formatDuration(card.durationSec)}
+        <span className="absolute right-2 bottom-2 left-2 flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-baseline gap-2 rounded-md bg-background px-2 py-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100">
+            <span className="truncate text-sm font-medium text-foreground">{label}</span>
+            {output.composition_version_number != null ? (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {t("chat.outputCard.version", { number: output.composition_version_number })}
+              </span>
+            ) : null}
           </span>
-        ) : null}
+          {card.durationSec != null ? (
+            <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 font-mono text-[11px] leading-4 text-foreground">
+              {formatDuration(card.durationSec)}
+            </span>
+          ) : null}
+        </span>
       </button>
-      <div className="mt-2 flex max-w-[340px] items-baseline gap-2">
-        <span className="min-w-0 truncate text-sm font-medium text-foreground">{label}</span>
-        {output.composition_version_number != null ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {t("chat.outputCard.version", { number: output.composition_version_number })}
-          </span>
-        ) : null}
-      </div>
     </div>
   )
 }

@@ -155,7 +155,7 @@ async def pin_video_production(db, project, tasks, approved_by):
         if receipt.get(key) != read[key]:
             raise ValueError("Present this exact saved video version before production")
     if not receipt.get("presentation_complete"):
-        raise ValueError("The complete storyboard has not finished presenting")
+        raise ValueError("The creative overview has not finished presenting")
     presented = await db.get(Message, UUID(receipt["presented_message_id"]))
     approval = await db.get(Message, approved_by) if approved_by else None
     revision_approval = False

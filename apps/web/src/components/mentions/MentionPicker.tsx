@@ -104,7 +104,7 @@ export function MentionPicker({
         e.stopPropagation()
         const picked = filtered[activeIndex]
         if (picked) {
-          onSelect({ type: picked.type, id: picked.candidate.id, label: picked.candidate.label })
+          onSelect({ type: picked.type, id: picked.candidate.id, label: picked.candidate.chipLabel ?? picked.candidate.label })
         }
       } else if (e.key === "Escape") {
         e.preventDefault()
@@ -144,16 +144,16 @@ export function MentionPicker({
               onMouseDown={(e) => e.preventDefault() /* keep textarea focus */}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() =>
-                onSelect({ type, id: candidate.id, label: candidate.label })
+                onSelect({ type, id: candidate.id, label: candidate.chipLabel ?? candidate.label })
               }
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                 index === activeIndex ? "bg-accent" : ""
               }`}
             >
               {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
-              <span className="flex-1 truncate">{candidate.label}</span>
+              <span className="min-w-0 flex-1 truncate">{candidate.label}</span>
               {candidate.hint ? (
-                <span className="truncate text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-[10px] text-muted-foreground">
                   {candidate.hint}
                 </span>
               ) : null}

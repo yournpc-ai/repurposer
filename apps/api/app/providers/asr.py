@@ -65,6 +65,14 @@ def transcribe(file_path: Path) -> dict[str, Any]:
     of ``{start, end, word}`` (seconds). Decoding is handled by faster-whisper
     (PyAV), so video files work without a separate audio-extraction step.
     """
+    import av
+
+    with av.open(str(file_path)) as media:
+        if not media.streams.audio:
+            return {
+                "transcript": "", "words": [], "language": None,
+                "duration": float(media.duration or 0) / av.time_base,
+            }
     model = _get_model()
     segments, info = model.transcribe(str(file_path), word_timestamps=True)
 

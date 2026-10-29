@@ -353,7 +353,8 @@ def landed_fact(output: Any, film_confirmed: dict[str, Any] | None = None,
     return LandedFact(
         output_type=str(getattr(output, "type", "") or "unknown"),
         video_version_matches=video_matches,
-        language=getattr(output, "language", None),
+        language=(payload.get("content_language") if getattr(output, "type", None) == "video"
+                  else getattr(output, "language", None)),
         duration_s=(
             int(payload["duration"])
             if is_render_contracted and isinstance(payload.get("duration"), (int, float))

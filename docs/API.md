@@ -802,3 +802,49 @@ GET /api/v1/recipes
 ```
 
 The public card catalogue: each recipe's public projection (base structure / flow / example_* / input_slots, RECIPES §7.1). No auth — the landing audience is anonymous and reads the same cards. Pin substance (the `tasks` compile shape) never leaves the server.
+
+## 19. Payments (Stripe credit packages)
+
+Hosted Checkout and order/webhook semantics are defined by `docs/PAYMENTS.md`. An empty environment Price hides its package; clients never submit prices, currencies, credits, or arbitrary Stripe Price IDs.
+
+### List Active Credit Packages
+
+```http
+GET /api/v1/payments/packages
+```
+
+Requires the caller's JWT. Returns `{ "items": [{ "key", "credits", "amount_minor", "currency" }] }`. `amount_minor` is the integer minor currency unit (EUR cents for the current starter package).
+
+### Create Checkout Session
+
+```http
+POST /api/v1/payments/checkout-sessions
+Content-Type: application/json
+
+{ "package_key": "starter" }
+```
+
+Validates the Stripe Price as active, one-time, and exactly matched to the server's amount/currency before creating and committing an internal `pending` order, then creates a card-only Stripe `mode=payment` Checkout Session. Returns:
+
+```json
+{ "order_id": "uuid", "checkout_url": "https://checkout.stripe.com/..." }
+```
+
+Unknown/inactive packages return 404 `payments.package_not_found`; missing server configuration returns 503 `payments.not_configured`; Stripe creation failure returns 502 `payments.checkout_failed`. The browser must open `checkout_url`; no card data crosses this API.
+
+### Read Payment Order
+
+```http
+GET /api/v1/payments/orders/{order_id}
+```
+
+Returns the caller's `{ id, package_key, status, credits, amount_minor, currency, paid_at, credited_at, created_at }`; another user's order returns 404 `payments.order_not_found`. Status is `pending | paid | expired | failed`. This read never grants credits and is the only return-page polling source for announcing a top-up.
+
+### Stripe Webhook
+
+```http
+POST /api/v1/payments/stripe/webhook
+Stripe-Signature: ...
+```
+
+No user JWT: the endpoint authenticates Stripe with the raw request body and webhook signing secret. It handles `checkout.session.completed` and `checkout.session.expired`. Only a fully cross-checked Session with `payment_status=paid` writes the `purchase` ledger row and marks the order paid in the same transaction. Replays are successful no-ops; invalid signatures return 400, temporary internal failures return non-2xx for Stripe retry. Browser success/cancel URLs never move credits.

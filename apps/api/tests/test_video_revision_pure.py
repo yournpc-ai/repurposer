@@ -79,6 +79,7 @@ def test_update_text_deep_copies_and_clears_background():
                 "clip_id": "clp_title",
                 "text": "Bonjour",
                 "background": None,  # explicit null clears (absent keeps)
+                "y": 80,
             }
         ),
     )
@@ -88,14 +89,16 @@ def test_update_text_deep_copies_and_clears_background():
     )
     assert title.object.text == "Bonjour"
     assert title.object.style.background is None
+    assert title.object.layout.y == 80
     # The base is immutable: untouched by the translation's copy.
     original = next(
         c for t in base.timeline.tracks for c in t.clips if c.clip_id == "clp_title"
     )
     assert original.object.text == "Hello"
+    assert original.object.layout.y != title.object.layout.y
 
 
-def test_revision_observation_contains_only_the_changed_saved_clips():
+def test_revision_observation_contains_only_the_changed_saved_fields():
     base = valid_content()
     updated = apply_ops(
         base,
@@ -121,8 +124,12 @@ def test_revision_observation_contains_only_the_changed_saved_clips():
 
     facts = json.loads(format_revision_text(read))
     assert facts["base_ref"] == read["base_ref"]
-    assert [clip["clip_id"] for clip in facts["changed_clips"]] == ["clp_title"]
-    assert facts["changed_clips"][0]["text"] == "Bonjour"
+    assert "changed_clips" not in facts
+    updated_clip = facts["change_set"]["clips"]["updated"][0]
+    assert updated_clip["clip_id"] == "clp_title"
+    assert updated_clip["fields"] == [
+        {"path": "object.text", "before": "Hello", "after": "Bonjour"}
+    ]
 
 
 def test_update_text_rejects_non_text_clip():
@@ -267,7 +274,16 @@ def test_update_video_changes_only_that_layer_and_keeps_output_duration():
     assert changed.range == clip.range
     assert music_after == music_before
     assert compute_change_set(base, updated)["clips"]["updated"] == [
-        {"clip_id": "clp_bg", "changes": ["object", "source"]}
+        {
+            "clip_id": "clp_bg",
+            "changes": ["object", "source"],
+            "fields": [
+                {"path": "object.muted", "before": False, "after": True},
+                {"path": "object.transform.scale", "before": 1.0, "after": 0.8},
+                {"path": "source.source_range.end", "before": 360000, "after": 405000},
+                {"path": "source.source_range.start", "before": 0, "after": 45000},
+            ],
+        }
     ]
 
 
@@ -489,6 +505,7 @@ def test_mg_direction_instantiates_into_valid_content():
                     "lines": ["Start today."],
                     "size": "hero",
                     "enter": "words",
+                    "drift": "push_in",
                 },
             ],
         }
@@ -512,6 +529,12 @@ def test_mg_direction_instantiates_into_valid_content():
     assert shape.animations[0].property == "transform.scale"
     shape_tracks = [t.track_id for t in content.timeline.tracks if any(c.object.kind == "shape" for c in t.clips)]
     assert shape_tracks == ["trk_shape", "trk_shape_2"]
+    closing = next(c for t in content.timeline.tracks for c in t.clips
+                   if c.scene_id == "scn_mg_2" and c.object.kind == "text")
+    push = next(a for a in closing.animations if a.property == "transform.scale")
+    assert [k.value for k in push.keyframes] == [1.0, 1.035]
+    assert push.keyframes[-1].at == closing.range.end - closing.range.start
+    assert any(a.text_part and a.text_part.kind == "word" for a in closing.animations)
 
 
 def test_native_shape_and_animation_revision_preserve_other_layers():

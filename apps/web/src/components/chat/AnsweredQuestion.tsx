@@ -62,15 +62,12 @@ interface AnsweredQuestionProps {
 export function AnsweredQuestion({ question, questionDetail, answer, muted }: AnsweredQuestionProps) {
   const { t } = useTranslation()
   return (
-    <Message align="start">
-      <MessageContent>
-        {/* 2026-09-09 user ruling: the card hugs its content (w-fit), never
-            stretches column-wide — the 85% cap stays so a long question
-            wraps instead of running off. The right padding answers for the
-            LEFT inset (same-day ruling): the text's left edge sits ~40px in
-            (card 12 + Q/A chip ~20 + gap 8), so pr-10 (40px) keeps the
-            hugged card optically balanced instead of crowding the text
-            against its right edge. */}
+    <Message align="end">
+      <MessageContent className="items-end">
+        {/* The settled choice belongs to the user's side of the transcript,
+            including the question context quoted above it. The Q/A chips stay
+            on the left, so the original optical padding does not mirror with
+            the bubble's host alignment. */}
         <div className="w-fit max-w-[85%] space-y-2 rounded-lg bg-muted py-2.5 pl-3 pr-10 text-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
           <div className="flex items-start gap-2">
             <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

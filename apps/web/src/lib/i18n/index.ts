@@ -1,4 +1,4 @@
-import { createInstance, type i18n as I18n } from "i18next"
+import { createInstance, type i18n as I18n, type TOptions } from "i18next"
 import { initReactI18next } from "react-i18next"
 
 import en from "./locales/en"
@@ -77,7 +77,7 @@ export function setLocale(lng: Locale, instance?: I18n) {
 
 /** Facade over the active instance for non-React consumers. */
 const i18nFacade = {
-  t: (key: string) => current().t(key),
+  t: (key: string, options?: TOptions) => current().t(key, options ?? {}),
   get language() {
     return current().language
   },

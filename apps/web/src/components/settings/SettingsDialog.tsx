@@ -33,6 +33,11 @@ import { GeneralSection } from "@/components/settings/GeneralSection"
 
 export type SettingsSectionId = "channels" | "general" | "assistant" | "credits"
 
+export interface CheckoutReturn {
+  orderId: string
+  outcome: "success" | "cancelled"
+}
+
 interface SettingsSectionDef {
   id: SettingsSectionId
   icon: typeof Share2
@@ -68,7 +73,9 @@ const SECTIONS: SettingsSectionDef[] = [
 ]
 
 interface SettingsDialogHandle {
-  openSettings: (section?: SettingsSectionId) => void
+  openSettings: (section?: SettingsSectionId, checkoutReturn?: CheckoutReturn) => void
+  checkoutReturn: CheckoutReturn | null
+  clearCheckoutReturn: () => void
 }
 
 const SettingsDialogContext = createContext<SettingsDialogHandle | null>(null)
@@ -83,20 +90,33 @@ export function useSettingsDialog(): SettingsDialogHandle {
 export function SettingsDialogProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState<SettingsSectionId>("channels")
+  const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturn | null>(null)
 
-  const openSettings = useCallback((s: SettingsSectionId = "channels") => {
-    setSection(s)
-    setOpen(true)
+  const openSettings = useCallback(
+    (s: SettingsSectionId = "channels", checkout?: CheckoutReturn) => {
+      setSection(s)
+      setCheckoutReturn(checkout ?? null)
+      setOpen(true)
+    },
+    [],
+  )
+  const clearCheckoutReturn = useCallback(() => setCheckoutReturn(null), [])
+  const onOpenChange = useCallback((next: boolean) => {
+    setOpen(next)
+    if (!next) setCheckoutReturn(null)
   }, [])
 
-  const handle = useMemo(() => ({ openSettings }), [openSettings])
+  const handle = useMemo(
+    () => ({ openSettings, checkoutReturn, clearCheckoutReturn }),
+    [openSettings, checkoutReturn, clearCheckoutReturn],
+  )
 
   return (
     <SettingsDialogContext.Provider value={handle}>
       {children}
       <SettingsDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={onOpenChange}
         section={section}
         onSectionChange={setSection}
       />

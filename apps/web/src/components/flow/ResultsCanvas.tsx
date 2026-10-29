@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
+import { outputAspect } from "@/lib/outputAspect"
 import { cn, formatDuration } from "@/lib/utils"
 import type { GraphNode, Output, ProjectArtifact, ProjectGraph, WorkflowStep } from "@/lib/types"
 import {
@@ -48,6 +49,11 @@ import type {
   FlowOutputAction,
   LineageHover,
 } from "./types"
+
+function getFlowMediaSlot(slotId: string) {
+  const root = document.querySelector<HTMLElement>(`[data-flow-node-id="${CSS.escape(slotId)}"]`)
+  return root?.querySelector<HTMLElement>("video, img") ?? root
+}
 
 export interface ResultsCanvasProps {
   /** The graph's one read frame (ADR-057). Null = not yet loaded — the
@@ -420,8 +426,11 @@ export function ResultsCanvas({
       const title =
         output.publishing.title || (output.payload.hook as string | undefined) || node.label
       setLightbox({
+        id: output.id,
+        slotId: node.id,
         kind: output.files.video ? "video" : "image",
         url,
+        aspect: outputAspect(output),
         // Poster derives from the SHOWN output.
         poster: output.files.video
           ? toAbsoluteUrl(output.files.image ?? output.publishing.cover_image_url ?? null)
@@ -458,8 +467,11 @@ export function ResultsCanvas({
         chips.push({ Icon: Clock, label: `${asset.duration_seconds}s` })
       }
       setLightbox({
+        id: asset.id,
+        slotId: node.id,
         kind: node.videoUrl ? "video" : "image",
         url,
+        aspect: asset.width && asset.height ? asset.width / asset.height : null,
         // The caption carries the type name now — the filename (detail) is
         // the lightbox's title.
         title: node.detail ?? node.label,
@@ -762,6 +774,7 @@ export function ResultsCanvas({
       )}
       <MediaLightbox
         data={lightbox}
+        getSlot={getFlowMediaSlot}
         onOpenChange={(open) => {
           if (!open) setLightbox(null)
         }}

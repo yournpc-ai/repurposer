@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # API boot seeds the passive prefix cache on one backend pod (forensics
     # 2026-09-27). Fire-and-forget, never blocks startup.
     minimax_warmup_enabled: bool = True
+    # Local, opt-in request/response capture for journey review. Empty = off.
+    minimax_journey_trace: str = ""
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"
@@ -137,6 +139,11 @@ class Settings(BaseSettings):
     api_public_url: str = "http://localhost:8000"
     # Public base of the web app — OAuth callbacks redirect the browser back here.
     web_public_url: str = "http://localhost:3000"
+
+    # Payments — hosted Stripe Checkout (PAYMENTS). Empty Price = package hidden.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_starter: str = ""
 
     # Auth / email
     resend_api_key: str = ""

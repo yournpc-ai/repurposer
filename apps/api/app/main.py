@@ -31,6 +31,7 @@ from app.pipeline.routes import (
     staging,
 )
 from app.platform.configs import reconcile_configs
+from app.platform.payment_routes import router as payment_router
 from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
 from app.operations.routes import router as operations_router
 from app.ui_locale import capture_ui_language
@@ -167,7 +168,11 @@ async def log_requests(request, call_next):
     # "Unexpected message received" guard (chat SSE, 2026-08-04).
     request_body: bytes | None = None
     request_content_type = request.headers.get("content-type", "")
-    if "application/json" in request_content_type:
+    if (
+        "application/json" in request_content_type
+        and request.url.path != "/api/v1/payments/stripe/webhook"
+    ):
+        # Stripe's signed payload must never be duplicated into request logs.
         request_body = await request.body()
 
     response = await call_next(request)
@@ -280,6 +285,7 @@ app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
 app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])
 app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
 app.include_router(wallet_router, prefix="/api/v1", tags=["wallet"])
+app.include_router(payment_router, prefix="/api/v1/payments", tags=["payments"])
 
 
 @app.get("/health")

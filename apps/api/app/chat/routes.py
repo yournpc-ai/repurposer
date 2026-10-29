@@ -903,7 +903,7 @@ async def list_chat_references(
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
     """The existing mention picker gets a small owner-scoped global feed."""
-    from app.models.tables import Asset, Output
+    from app.models.tables import Asset, CompositionVersion, Output
     from app.pipeline.outputs import visible_outputs_stmt
     from app.pipeline.run_review import output_is_delivered
     assets = (await db.scalars(select(Asset).where(Asset.user_id == current_user.id)
@@ -911,12 +911,22 @@ async def list_chat_references(
     outputs = (await db.scalars(visible_outputs_stmt().join(Project, Output.project_id == Project.id)
         .where(Project.user_id == current_user.id)
         .order_by(Output.created_at.desc()).limit(100))).all()
+    delivered = [output for output in outputs if output_is_delivered(output)]
+    version_ids = list(dict.fromkeys(
+        output.composition_version_id for output in delivered
+        if output.composition_version_id is not None
+    ))
+    versions = list((
+        await db.execute(select(CompositionVersion).where(CompositionVersion.id.in_(version_ids)))
+    ).scalars().all()) if version_ids else []
+    version_numbers = {version.id: version.version for version in versions}
     return {
         "assets": [{"id": str(a.id), "title": a.title or a.display_name or str(a.id),
                     "type": a.type.value} for a in assets],
         "outputs": [{"id": str(o.id), "type": o.type,
-                     "name": (o.payload or {}).get("name") or output_one_liner(o) or o.type}
-                    for o in outputs if output_is_delivered(o)],
+                     "name": (o.payload or {}).get("name") or output_one_liner(o) or o.type,
+                     "composition_version_number": version_numbers.get(o.composition_version_id)}
+                    for o in delivered],
     }
 
 
@@ -926,10 +936,10 @@ async def read_video_storyboard(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """The canonical storyboard DTO a message block's StoryboardCard
-    resolves (ADR-145 phase B): the SAVED version's payload — the server
-    is the truth, a card never re-derives the table from prose. Owner-
-    scoped; an unknown/foreign version reads 404, never a leak."""
+    """The canonical storyboard DTO behind a presenting message block.
+    Tools use the complete facts; the visible reply is the LLM's grounded
+    Markdown overview. Owner-scoped; an unknown/foreign version reads 404,
+    never a leak."""
     from app.editing.service import video_version_read  # deferred: editing seam
     from app.editing.store import (  # deferred: write door
         CompositionNotFound,
@@ -961,7 +971,7 @@ async def complete_video_presentation(
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """Client completed the canonical card; this is not user approval."""
+    """Client completed the creative overview; this is not user approval."""
     message = await db.get(Message, message_id)
     conversation = await db.get(Conversation, message.conversation_id) if message else None
     if conversation is None:

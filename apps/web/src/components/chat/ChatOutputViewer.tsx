@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AtSign, ChevronLeft, ChevronRight, Download, FileWarning, Loader2, Pencil } from "lucide-react"
+import { AtSign, ChevronLeft, ChevronRight, Download, FileWarning, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,14 @@ import { outputFullText } from "@/components/results/outputText"
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { anchorCardOf, anchorLabel } from "@/lib/anchorCards"
 import { useOutputPoster } from "@/lib/outputPoster"
+import { outputAspect } from "@/lib/outputAspect"
 import { outputViewerItems } from "@/lib/outputViewer"
 import type { ChatOutputEntry, Output } from "@/lib/types"
 import { OutputPosterImage } from "./OutputDeliveryCard"
+
+function getOutputSlot(slotId: string) {
+  return document.querySelector<HTMLElement>(`[data-output-id="${CSS.escape(slotId)}"]`)
+}
 
 function CarouselReader({ output }: { output: Output }) {
   const { t } = useTranslation()
@@ -52,14 +57,12 @@ export function ChatOutputViewer({
   onNavigate,
   onOpenChange,
   onMention,
-  onRevise,
 }: {
   outputId: string | null
   entries: ChatOutputEntry[] | null
   onNavigate: (outputId: string) => void
   onOpenChange: (open: boolean) => void
   onMention: (output: Output) => void
-  onRevise: (output: Output) => void
 }) {
   const { t } = useTranslation()
   const selectedEntry = outputId ? entries?.find((entry) => entry.output_id === outputId) : undefined
@@ -97,7 +100,11 @@ export function ChatOutputViewer({
     const title = anchorLabel(card, t(`chat.anchorCards.types.${output.type}`, { defaultValue: output.type }), null)
     return {
       id: output.id,
+      slotId: output.id,
       kind: card.kind,
+      url: toAbsoluteUrl(output.files.video ?? output.files.image) ?? undefined,
+      poster: toAbsoluteUrl(output.publishing.cover_image_url ?? output.files.image) ?? undefined,
+      aspect: outputAspect(output),
       title,
       thumbnail: card.kind === "text" ? undefined : <OutputPosterImage output={output} />,
     }
@@ -123,9 +130,11 @@ export function ChatOutputViewer({
     const url = toAbsoluteUrl(selectedOutput.files.video ?? selectedOutput.files.image) ?? undefined
     data = {
       id: selectedOutput.id,
+      slotId: selectedOutput.id,
       kind: card.kind,
       url,
       poster,
+      aspect: outputAspect(selectedOutput),
       title,
       versionLabel: selectedOutput.composition_version_number != null
         ? t("chat.outputCard.version", { number: selectedOutput.composition_version_number })
@@ -159,6 +168,7 @@ export function ChatOutputViewer({
       onOpenChange={onOpenChange}
       navigation={navigation}
       gallery={gallery}
+      getSlot={getOutputSlot}
       actions={selectedOutput ? (
         <>
           {!selectedOutput.files.video && !selectedOutput.files.image ? (
@@ -168,9 +178,6 @@ export function ChatOutputViewer({
           ) : null}
           <Button variant="outline" size="sm" className="h-9" onClick={() => onMention(selectedOutput)}>
             <AtSign className="size-4" />{t("chat.outputViewer.mention")}
-          </Button>
-          <Button variant="outline" size="sm" className="h-9" onClick={() => onRevise(selectedOutput)}>
-            <Pencil className="size-4" />{t("chat.outputViewer.revise")}
           </Button>
         </>
       ) : null}

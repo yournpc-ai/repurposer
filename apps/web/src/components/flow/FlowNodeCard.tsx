@@ -2725,6 +2725,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
     node.kind === "materialize"
   return (
     <div
+      data-flow-node-id={node.id}
       className={cn(
         "h-full w-full cursor-pointer rounded-md text-foreground transition-colors",
         // 状态原地表达 (ADR-057 §5): skipped is the one whole-card dim; a

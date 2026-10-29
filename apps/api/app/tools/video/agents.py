@@ -76,6 +76,7 @@ def _assemble_mg(
     scene_count: int | None = None,
     target_seconds: float | None = None,
     narration: str | None = None,
+    background: str | None = None,
 ) -> AssembleResult:
     return (
         {
@@ -87,6 +88,7 @@ def _assemble_mg(
             "scene_count": scene_count,
             "target_seconds": target_seconds,
             "narration": narration,
+            "background": background,
         },
         [],
     )

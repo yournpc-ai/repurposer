@@ -48,6 +48,8 @@ export interface ChatMention {
 export interface MentionCandidate {
   id: string
   label: string
+  /** Serialized chip label when it carries more identity than the picker row. */
+  chipLabel?: string
   hint?: string
   icon?: LucideIcon
 }
@@ -74,15 +76,36 @@ export function assetTypeKind(type: string): MentionFileKind {
   return "document"
 }
 
-/** An output's mention label (shared by the chat surfaces' output feeds):
- * the clip's hook, truncated; the caller supplies the type-name fallback. */
-export function outputMentionLabel(
+/** Keep the exact content version visible anywhere an Output is named. */
+export function outputLabelWithVersion(
+  label: string,
+  version: number | null | undefined,
+): string {
+  return version == null
+    ? label
+    : `${label} ${i18n.t("chat.outputCard.version", { number: version })}`
+}
+
+/** An output's user-facing base name, without its version suffix. */
+export function outputMentionName(
   output: { payload: unknown; type: string },
   fallback: string,
 ): string {
   const hook = (output.payload as { hook?: string }).hook
   if (hook) return hook.length > 40 ? `${hook.slice(0, 40)}…` : hook
   return fallback
+}
+
+/** An output's mention label (shared by the chat surfaces' output feeds):
+ * the clip's hook, truncated; the caller supplies the type-name fallback. */
+export function outputMentionLabel(
+  output: { payload: unknown; type: string; composition_version_number?: number | null },
+  fallback: string,
+): string {
+  return outputLabelWithVersion(
+    outputMentionName(output, fallback),
+    output.composition_version_number,
+  )
 }
 
 /** The live data a candidate source reads from — handed down from the
@@ -97,7 +120,7 @@ export interface MentionContext {
   assets?: { id?: string; name: string; kind: MentionFileKind }[]
   /** A project's outputs (chat surfaces) — id is the real UUID: the server
    * resolves it into `target_output_id` deterministically. */
-  outputs?: { id: string; label: string; kind: string }[]
+  outputs?: { id: string; label: string; kind: string; chipLabel?: string; hint?: string }[]
 }
 
 export interface MentionTypeDef {
@@ -133,6 +156,8 @@ async function outputSource(ctx: MentionContext): Promise<MentionCandidate[]> {
   return (ctx.outputs ?? []).map((o) => ({
     id: o.id,
     label: o.label,
+    chipLabel: o.chipLabel,
+    hint: o.hint,
     icon: ["clip", "film", "video"].includes(o.kind) ? Clapperboard : FileText,
   }))
 }

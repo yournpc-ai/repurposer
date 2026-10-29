@@ -3140,7 +3140,10 @@ async def execute_chat_turn(
         # 会话层计量 (ADR-117 D3): the turn-entry seam binds the usage
         # ledger — the canned interrupt reply needs no LLM (empty ledger,
         # zero rows), the agent branches meter through record_usage.
-        with bind_conversation_turn() as _usage_bind:
+        with bind_conversation_turn(
+            conversation_id=UUID(str(prepared.conversation.id)),
+            turn_id=prepared.user_message.id,
+        ) as _usage_bind:
             if prepared.plan_path:
                 # The intent router's context excludes this turn's own message
                 # (already the prompt being judged); the latest rounds before

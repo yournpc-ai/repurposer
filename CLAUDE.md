@@ -28,6 +28,7 @@
 - **Agent / tools / graph**：`docs/AGENT_ARCHITECTURE.md` §2（四层地图）、§4（Graph）、§5（Harness）、§7（工具包）；报价另读 §8。
 - **Rendering / spec families**：`docs/RENDERING.md` §1、§3、§6、§8；新视频内容与版本契约读 VIDEO_PROJECT，编辑器交互另读 `docs/VIDEO_EDITOR.md`。clip-spec 与 film-spec 是平级家族，renderer 概念不得泄漏进任一 spec。
 - **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
+- **Payments / Stripe / 充值**：长期架构、凭据/部署、订单字段与 webhook 规则读 `docs/PAYMENTS.md`；首批一次性积分充值施工与验收读 `docs/tasks/stripe-credit-topup.md`。
 - **定位 / 人设 / 渠道 / 选题 / home**：`docs/POSITIONING.md`（已拍板未实施）与当前任务合同；代码层落地前仍只使用 `persona`。
 - **音乐 / UI 文案以外的专门子系统**：按 `docs/README.md` 索引进入对应文档，不从 CLAUDE.md 复制第二份规范。
 - **ADR**：在 `docs/DECISIONS.md` 按主题索引和编号定点阅读。普通 bug 修复、字段接线、测试结果和会话汇报不新增 ADR；只有架构边界、产品语义或关键取舍变化才新增独立决策。

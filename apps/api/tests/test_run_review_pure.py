@@ -71,6 +71,12 @@ def _film(delivered: bool = True, **kw) -> LandedFact:
 
 # ---- extraction (landed_fact) -------------------------------------------------
 
+def test_video_delivery_language_uses_pinned_content_not_project_default():
+    output = _OutputStub("video", language="zh", payload={"content_language": "en"})
+    assert landed_fact(output).language == "en"
+    output.payload = {}
+    assert landed_fact(output).language is None
+
 
 class TestLandedFact:
     def test_clip_full_spec(self) -> None:

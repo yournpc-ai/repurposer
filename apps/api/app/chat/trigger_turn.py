@@ -686,8 +686,9 @@ async def run_trigger_turn(
                 outcome["suggestions"] = params.suggestions
                 return None
 
-            with bind_conversation_turn() as _usage_bind:
-                # run_completed rides the READLESS delivery agent (修复批 B)
+            with bind_conversation_turn(
+                conversation_id=conversation_id, turn_id=ref
+            ) as _usage_bind:
                 # — the facts block is its whole record, so the review is
                 # written once and closed; the other triggers keep the
                 # read-bearing agent (look before you speak).

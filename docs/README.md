@@ -1,6 +1,6 @@
 # Repurposer Docs 索引
 
-> Status: Active navigation（2026-10-26）。
+> Status: Active navigation（2026-10-29）。
 >
 > 文档治理原则：**单一事实源**——每类信息只有一个家，其他文档只引用、不复述。
 > **两类职责**：现行规范回答“现在必须怎样工作”；PROGRESS 与局部 progress 回答“做到哪、下一步做什么”。不维护历史、归档或逐轮报告，清理规则以 CLAUDE.md 为准。
@@ -22,6 +22,7 @@
 | 意图路由 / plan path / brief | `DIALOG_WORKFLOW.md` §2、§4 + `CHAT_ARCHITECTURE.md` §3 |
 | 渲染 / clip-spec / film-spec / 编辑器 | `RENDERING.md` §3、§6、§8 中对应小节；Film 另读其总设计，编辑器交互再加 `VIDEO_EDITOR.md` |
 | 积分 / 钱包 / 授权 / 估价 | `BILLING.md` 对应章节 + 当前任务涉及的确认规则 |
+| 支付 / Stripe / 充值 / webhook | `PAYMENTS.md` 对应架构、凭据/部署、订单或 webhook 章节 + `tasks/stripe-credit-topup.md` 当前施工与验收 |
 | 新功能 / 用户体验 | `JOURNEYS.md` 的对应旅程与缺口，不通读其他旅程；目标架构只有被动到才读 `ARCHITECTURE_NORTH_STAR.md` 对应章节 |
 | 决策 / 排障 | `DECISIONS.md` 按主题和编号定点读；排障查当前代码、测试与运行证据，不依赖历史文档库 |
 
@@ -63,6 +64,7 @@
 | Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。当前状态只见 PROGRESS §0 与施工合同；Generator 是 B-IV/V 目标，不因命名已登记而视为已实现 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
+| 支付 / 法币订单 / Stripe | `PAYMENTS.md` | 公司账号凭据、本地 CLI 与公网 Docker 拓扑、积分包白名单、payment_orders、Checkout/webhook、入账幂等与上线门只住这里；首批欠账归 `tasks/stripe-credit-topup.md` |
 | Lifecycle / Activity / Confirmation | `DECISIONS.md` ADR-087 + `CHAT_ARCHITECTURE.md` 对应章节 | 生命周期五态、活动投影与确认约束按 ADR 定点阅读；实施与验收欠账归 `PROGRESS.md`，不在导航中复制 |
 | 探索产物 / Agent 工作循环 / 执行边界 | `DECISIONS.md` ADR-088/089 + `JOURNEYS.md` 旅程四 | 探索产物、Content Plan、Execution Scope、决策包与项目记忆按对应 ADR 阅读；旅程理由只住 JOURNEYS |
 | 精确编辑 / 产物身份 / 版本与归档 | `DECISIONS.md` ADR-090/091 + `VIDEO_EDITOR.md` / `RENDERING.md` | 编辑解算、work/version、归档与存储不变量按改动面选读；产品版本保留是现行能力，不是文档历史 |
@@ -85,7 +87,8 @@
 | `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 可用 = operations 端点 + chat 撤销；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
 | `RENDERING.md` | **clip-spec / film-spec / video-spec 迁移期家族契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ clip-spec 轨道模型（§8 = 现行契约，ADR-044） | 活跃 | 动渲染链、任一 spec family、轨道或渲染服务前 |
 | `MUSIC_ARCHITECTURE.md` | 音乐库、人设音乐选择、自定义生成与启动 reconcile | 当前实现： persona 皮肤面板可自定义生成，Chat `add_music` 只选库；prompt 缓存、配额、上传与更多入口 deferred | 动音乐前 |
-| `BILLING.md` | 积分/钱包/计费架构母文档（ADR-055）：credit / wallet / credit_transactions + hold→capture→release + configs + live ratio + 负余额语义；支付/订阅随 R1.1 挂起 | 活跃 | 动积分 / 钱包 / configs / 扣费 / 估价展示前 |
+| `BILLING.md` | 积分/钱包/计费架构母文档（ADR-055）：credit / wallet / credit_transactions + hold→capture→release + configs + live ratio + 负余额语义；支付与订阅边界分别指向 PAYMENTS / PROGRESS | 活跃 | 动积分 / 钱包 / configs / 扣费 / 估价展示前 |
+| `PAYMENTS.md` | 支付架构母文档：公司 Stripe 凭据与本地/公网拓扑、积分包、payment_orders、Checkout/webhook、purchase 幂等、前端购买座位与上线门 | 当前规范；首批已落码，联调欠账归 `tasks/stripe-credit-topup.md` | 动支付、充值、Stripe、webhook、退款或订阅前 |
 | `DECISIONS.md` | 现行架构决策集（ADR；编号不连续，主题索引 + 定点阅读；退役引用保留替代去向） | 活跃 | 新决策 / 架构约束变化时按编号读；普通 bug 修复、字段接线、测试结果不新增 ADR，不要求通读全文 |
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 发布对话框 / 通知 / 回流边界 | 直发链路代码已落；平台凭据、审批与真实联调随 R1.1 挂起 | 动 Distribution 前 |

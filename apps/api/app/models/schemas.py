@@ -1277,6 +1277,10 @@ class VideoEditUpdateText(BaseModel):
     )
     align: Literal["left", "center", "right"] | None = None
     weight: Literal[400, 500, 600, 700, 800] | None = None
+    x: float | None = Field(default=None, description="Text box left edge in canvas pixels; absent keeps it.")
+    y: float | None = Field(default=None, description="Text box top edge in canvas pixels; absent keeps it.")
+    width: float | None = Field(default=None, gt=0)
+    height: float | None = Field(default=None, gt=0)
 
 
 class VideoEditUpdateSpeech(BaseModel):
@@ -5095,6 +5099,7 @@ class VideoPayload(BaseModel):
     duration_seconds: float = 0
     duration: float = 0
     aspect: str | None = None
+    content_language: str | None = None
     execution_digest: str | None = None
     composition_digest: str = ""
     generator_media: dict[str, dict[str, Any]] = {}

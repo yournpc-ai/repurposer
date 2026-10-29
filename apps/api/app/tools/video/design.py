@@ -56,7 +56,6 @@ from app.editing.storyboard import storyboard_payload
 from app.editing.templates import (
     DesignSlots,
     MusicBed,
-    TemplateError,
     ViewFact,
     instantiate_generated_image,
     instantiate_mg,
@@ -617,6 +616,7 @@ async def _design_locked(
             scene_count=args.scene_count,
             target_seconds=args.target_seconds,
             narration=narration_text,
+            background=args.background,
         )
         validate_mg_direction(
             direction,
@@ -643,7 +643,7 @@ async def _design_locked(
             narration_voice=narration_voice,
             music_bed=bed,
         )
-        provenance = {"skill": None, "mode": "mg"}
+        provenance = {"skill": None, "mode": "mg", "language": args.language or direction.language}
         name = (direction.name or "").strip()[:24] or ""
     elif mixed_design:
         # ---- mixed media: frozen real video → native title/captions + sound ----
@@ -810,6 +810,7 @@ async def _design_locked(
         }
         name = slots.name or _fallback_name(snapshot_metas)
 
+    provenance.setdefault("language", args.language or ((base_version.skill_provenance or {}).get("language") if base_version else None))
     ops = _OPS.validate_python(raw_ops)
     for op in ops:
         if (

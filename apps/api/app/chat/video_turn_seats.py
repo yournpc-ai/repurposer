@@ -142,7 +142,7 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
     from app.tools.video.production import pin_video_production, latest_video_approval
     from app.editing.store import CompositionNotFound, PermissionDenied
     # A later revision may carry this turn's explicit "change and make".
-    # It still waits for the canonical card to finish before auto Start.
+    # It still waits for the creative overview to finish before auto Start.
     prior = (project.pending_brief or {}).get("video_presentation") or {}
     if len(tasks) == 1:
         # A new revision is not presented yet. Recover the presentation of
@@ -283,7 +283,7 @@ async def design_video_seat(
     preview_images = tuple(await generator_preview_images(read))
     preview_note = (
         "\nExact drawing-v1 preview media is stored; the attached image is its real middle frame. "
-        "The user card carries the playable MP4 for this same program digest. Do not claim aesthetic approval."
+        "The presenting reply carries the playable MP4 for this same program digest. Do not claim aesthetic approval."
         if read.get("generator_previews") else ""
     )
     return read, ToolObservation(
@@ -291,10 +291,9 @@ async def design_video_seat(
         f"(composition {read['composition_id']}; "
         f"{'redraft — the earlier versions stay in history' if redraft else 'first version'}; "
         "no plan docked, no run started, nothing has been produced). "
-        "Your next message introduces its saved storyboard card briefly. "
-        "The system attaches the COMPLETE canonical card automatically; "
-        "do not duplicate its scenes or internal ids in prose. Then "
-        "wait for the user's word: a saved storyboard is not a produced "
+        "The saved version reference rides the presenting reply. Follow the "
+        "Video works law for the user-facing Markdown creative overview. "
+        "Then wait for the user's word: a saved storyboard is not a produced "
         "video, and this chain never starts production on its own.\n"
         "SAVED VERSION (execution truth):\n"
         + format_storyboard_text(read)
@@ -368,10 +367,10 @@ async def revise_video_seat(
     )
     return read, ToolObservation(
         f"World facts: video version {read['version']} is saved as a revision; "
-        "no run started and nothing has been produced. The canonical card "
-        "contains the complete saved storyboard. Follow the Video works law "
-        "for the user handoff. These saved facts contain the system change "
-        "set, only the changed clips, and the reference needed by the next tool:\n"
+        "no run started and nothing has been produced. The saved version "
+        "reference rides the presenting reply. Follow the Video works law "
+        "for the user-facing natural-language handoff. These saved facts contain the system-computed "
+        "field-level delta and the reference needed by the next tool:\n"
         + format_revision_text(read)
         + preview_note,
         images=preview_images,

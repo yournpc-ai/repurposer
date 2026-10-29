@@ -133,7 +133,8 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 
 上下半批、B-III 混合合成、B-IV 两个纵向出口与 B-V 首个模型图片消费者均已落码于 `feat/mg`，具体提交状态以 git 为准；**真实 MG、官网片、混合实拍、原生图形、受控程序画面及 MiniMax image-01 单图混合短片的制作/交付与修订闭环均已按各自出口通过，B 主链收口，仍未封板**（欠账见下）。不要按旧提示词重做上半批、生产链或已通过的 B-IV 出口；B-V 只声明当前单供应商单图用例，不扩张为全模型媒体能力。
 
-- **已有实现**：`editing/service.py`、`chat/video_turn_seats.py` 共用 plan/propose，canonical 卡片、真实消息 id、完整呈现 ACK、首稿批准守卫、明确后续修订并制作的延迟启动与现有确认/费用设置接线。补齐版本上下文、幕数/时长/背景约束、背景修订、全局 @asset/@output owner 读面。新增 `tools/video/params.py`、`tools/video/production/`，produce_video 经既有图写口/create_run 固定版本、估价/hold、manifest、渲染/上传/probe、成功 capture、交付；成功才归档同作品旧完成产物。
+- **已有实现**：`editing/service.py`、`chat/video_turn_seats.py` 共用 plan/propose，canonical 版本引用、真实消息 id、完整呈现 ACK、首稿批准守卫、明确后续修订并制作的延迟启动与现有确认/费用设置接线。补齐版本上下文、幕数/时长/背景约束、背景修订、全局 @asset/@output owner 读面。新增 `tools/video/params.py`、`tools/video/production/`，produce_video 经既有图写口/create_run 固定版本、估价/hold、manifest、渲染/上传/probe、成功 capture、交付；成功才归档同作品旧完成产物。
+- **当前呈现改动（未验收）**：用户可见分镜改为 LLM 基于完整保存版撰写的 Markdown 创作概要，标题/列表/表格自由组织，重点讲整体方向与大致画面设计；原 CompositionVersion、`storyboard_payload`、消息 block 和 digest 结构不变，技术 DTO 不再平铺。首稿/修订提示词、工具描述与 observation 已同步；ACK 随正文完成打字释放且必要真实 Generator 预览就绪后发送，首稿批准、制作、Run 和费用链不变。尚未运行 TypeScript、API、真实 Chat、prompt_gate 或刷新/延迟启动验收，既有卡片证据不覆盖本次呈现改动。
 - **B-III 已有实现**：VideoObject 与真实视频 SourceSnapshot 接入 validator、video-spec、Remotion `OffthreadVideo` 和 render probe；画面与原声共享同一 Clip 源窗，支持 layout/fit/transform/opacity/gain/muted。`instantiate_mixed` 生成同源全屏静音动态背景、中央原比例录像、独立标题/定时字幕与既有音乐床；`update_video` 通过唯一写口局部改布局、源窗与原声，目标源窗修改保持当前输出时长。视频 Asset 与 Output 均可冻结为新素材，继续修改 Output 原作品仍走版本修订。
 - **B-IV 已有实现**：ShapeObject 支持 rect/ellipse/path 几何、绘制与外部表现，MG Director 可按需创作 rect/ellipse，多个同幕图元分轨避免重叠；`update_shape`/`update_animation` 精确局部修订。GeneratorObject 固定 `runtime/code/parameters/output` 与 program_digest；首个 runtime `drawing-v1` 由权限受限 Node 进程执行 Agent 的 `render(ctx)`，只接受有界 JSON 绘图命令，经 Pillow/PyAV 生成固定 MP4/PNG。设计、修订和生产共享 exact-digest 媒体准备；预览绑定版本来源，执行 manifest 固定媒体血缘，最终 video-spec 只含普通 muted video，不包含程序。
 - **B-V 已有实现**：新增单一 `image-v1` 消费者，保存可审阅的 MiniMax `image-01` 16:9 单图请求及独立原生标题；设计/修订只经既有写口保存来源，不生成、不计图片费。只有带授权 `execution_id` 的 produce Run 才调用供应商；共享 `generate_image` 每次调用只发一次非幂等 POST，image-v1 在调用前持久化 `submitted` 标记，传输/响应解析失败或恢复仅见该标记时按“结果未确认”失败闭，不自动重放、不虚记确定用量。真实图片返回后按实际数量计量并固定为不可变媒体；固定执行 manifest 记录完整请求、Run 身份与实际媒体 digest，Composition/Object 复用指针指向该作品最新固定结果。普通恢复与原生内容修订复用媒体；只有 `produce_video.params.regenerate_media=true` 的新 Run 明确重生成，使用 Run 独立执行命名空间，同 Run 重试仍复用。报价只计缺失图片；最终 video-spec 只含无源窗的普通静态 image，不泄漏 prompt/provider/model，也不把生成像素冒充原生可编辑元素。
@@ -173,6 +174,11 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 - **本批顺路修复**：narration_enabled=false 在媒体设计中不再被当作开启旁白；mixed Director 只返回其实际支持的平面字段；remove_clip 经唯一候选校验删除确切媒体及其转场链接，不再受过期的“只能删文字”限制。storage.read 使用已配置的下载客户端，避免内存读取绕过现有下载代理。未建新调度链、框架或数据库表。
 - **对话与呈现收口复验**：项目 `2f875e94` 经正常 Chat 完成「仅保存标题 v8 → 插入能力问答且零版本/零 Run → 后续按刚存 v8 制作」，Run `fc0668b3` 与 Output `b6a6e87c` COMPLETED；能力答复的 BeatGrid 容差数值为默认0.2s、大于0且至多1s。用户报告项目 `822a422d` 首次续跑因素材 schema 与 captured-page 上下文矛盾而12次工具耗尽；补齐既有页面 URL/id/view 事实并解除该矛盾后，正常纠错消息复用三张既有网页及冻结音乐保存 Composition `d047448e` v1 `30ed2ad0`，零重新采集、零 Run。该回合首轮工具参数拒绝后的零 delta 属现行 frame-silent 法，最终信封由客户端打字释放；未为放行修改流断言。卡片 ACK 原先把消息块旧展示 hash 与当前 DTO 强绑，现严格校验同版 content_digest + 当前实际 DTO digest，并同步更新消息块和版本外 receipt；真实浏览器初次与硬刷新后的 ACK 均200，两处 digest/complete 一致，设计活动行在刷新前后均回放，零新 Output、零控制台错误、零翻译 key 泄漏。video design/revise/review 的持久活动 replay key 已对齐；定向 API283、web69、tsc 与 check_gates 通过。普通仅保存修订 v10 虽保存/ACK/零 Run 成功，回复仍逐项复述未改层、字号、源窗与音频参数，且明显承接前一轮技术汇报形态；表达验收未通过，未继续用付费回合试措辞，完整 B 不因此封板。证据归 `artifacts/video-project-b/b-vi-temporal/`。
 
+
+- **Use prompt 与 Chat 收口（2026-10-30，进行中）**：按当前代码及真实首页盘点14项：6个可点击 demo、6个禁用族配方、2个隐藏配方（image-video同时reserved）。未启用隐藏入口。正常前端已交付英文逐字短片项目 `1dcdfbac` / Run `a13c943d` / Output `9a35636a`、文案节奏短片 `dd0c2062` / Run `7b86600b` / Output `b6d96fcb`、基础网站片 `28c04380` / Run `6f716937` / Output `555f14c1`；首片局部修订v4只保存、零新Run。字幕入口 `47f045f4` 因Mixed Director任意 prose字数限制两次失败；去掉 intent/visual_description 的非领域限制并暴露现有文字布局字段后，v2的两个字幕分别0–4s顶端、4–8s底端，原声/源窗保留，Run `d5866541` 已发起。第二网站入口 `6675b8b3` / Run `cd7fa91a` 已发起；这两条最终交付须待Docker/数据库恢复核验。最后上传操作演示入口只证明预填，浏览器上传权限及原生选择器阻塞，未标通过。
+- **本批源头修复与取证**：design/revise工具说明与canonical卡片职责一致；修订观察用系统字段差异。MG Director明确实际background字段与读得清的配色，微推近/拉远通过既有transform.scale表达，不建相机引擎；首条暗字深底且缺运镜的错误首稿及正常Chat纠错保留。分镜区分逐词/逐字/逐行，update_text支持现有布局的像素x/y/width/height。一次英文片交付被错误称为中文，来源是project.language；新视频按保存设计声明传递content_language，历史未声明者不向交付模型声称语言，不回写旧版本/账本。当前简单修订已有简短回复样例，不宣称所有多轮语言稳定。旧展示hash调查原结论与original_hash_reproduced=false矛盾，已修正；当前重复DTO一致，历史原始工作树/DTO不全，无法声明完全复现旧漂移。
+- **本批检查、费用与证据**：相关API125项、check_gates通过；Ruff检查中无用导入已删除，最终检查以本批收尾为准。前端TypeScript初次报既有并行mentions/支付改动类型问题，未写成全绿。原¥10窗口已记录USD0.9543168/约¥6.87及旧未知项不重置；用户另授权¥20，本次已返回供应商用量约¥4.73，含失败、修复与worker，当前API日志无未返回调用，历史未知仍另列。完整中英预填、实际消息、全部捕获模型payload/工具观察、SSE、证据与失败过程合并为 `artifacts/video-project-b/b-vi-temporal/chat-journey-review.md`，该文件不代替尚未完成的前端/交付验收。当前数据库重置连接且Docker命令超时，暂停新增收费操作，继续无付费检查；不擅自强杀Docker，不以环境阻塞删需求或标完整B完成。
+
 ### 2.1 目标
 
 新链按 §2.5 分批支持“网页/MG/混合内容 → 分镜 → 首稿审阅 → 授权 → 制作 → 交付 → 持续修改”，逐步接入程序画面、生成媒体与旁白；不能把文字动画的阶段成果称为全部画面能力。launch-film 在新链只是 Skill，不再拥有专用设计或生产链。
@@ -196,14 +202,14 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 - 新版本完整呈现、change_set、未解决项与当前制作设置都由保存版生成；仅内容修订不产生虚假已交付 Output，制作成功后才交付新产物，旧产物保留。
 - @output 服务端解算确切 CompositionVersion；“继续修改”与“当素材使用”分开。旧版不是 current 时明确差异与选择，以当前 head 条件提交，不静默覆盖。
 
-**B3. Canonical Storyboard 与首稿授权**
+**B3. 创作概要与首稿授权**
 
-- `storyboard_payload(version)` 由服务端生成完整表格：时间/帧、visual_description、精确屏上文字、旁白、素材和音频事实。
-- Chat 不再让 LLM 转录唯一分镜真相；结构化 payload + 组件/确定性表格负责呈现，LLM 只补充解释和下一步。
-- 持久化 `presented_message_id + presentation_digest + composition_version_id` 到通用确认状态；首稿 Start 校验三者。
-- 按 VIDEO_PROJECT §2.3 明确完整呈现与中断的回执边界；生成 payload 不冒充已呈现，回执不冒充用户已读，首稿另需呈现之后的批准。
-- 保留“首版先完整呈现并等待”、普通修订不重制、明确“改完直接做”才进入制作、auto/ask 与守卫线规则。
-- 所有 assistant 散文与 LLM 散文字段继续满足 null 读容忍和打字机节拍；结构化组件不得成为瞬移旁路。
+- `storyboard_payload(version)` 继续由服务端生成完整事实：时间/帧、visual_description、精确屏上文字、旁白、素材和音频事实，供工具、版本身份与修订使用，不直接作为用户技术表。
+- LLM 基于完整保存版撰写简洁 Markdown 创作概要，自由使用标题、列表或表格，重点说明整体方向与大致画面设计；不输出第二份可编辑数据，不转录技术 DTO。
+- 持久化 `presented_message_id + presentation_digest + composition_version_id` 到通用确认状态；消息块只携带版本引用，可见正文由 Streamdown 渲染。
+- 按 VIDEO_PROJECT §2.3 明确概要与必要真实预览完整释放后的回执边界；生成 payload 不冒充已呈现，回执不冒充用户已读，首稿另需呈现之后的批准。
+- 保留“首版先呈现创作概要并等待”、普通修订不重制、明确“改完直接做”才进入制作、auto/ask 与守卫线规则。用户确认方向，不逐项审批技术分镜。
+- 所有 assistant 散文与 LLM 散文字段继续满足 null 读容忍和打字机节拍；真实预览不得成为提前 ACK 的旁路。
 
 **B4. Graph / Run / Node 接缝**
 
@@ -318,6 +324,8 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 
 本批归 B5 的 Chat 表面接入，在已有交付链与 Output 引用上独立施工、独立验收；不等待个人 Skill、完整视觉改版或 D4 Inspector，不改变既有首个限定能力发布门。当前代表旅程与有声播放证据见 §2.0；不代替完整音乐接缝/音画同步听感或完整 B 验收。产品行为唯一事实源为 VIDEO_PROJECT §10.4。
 
+当前查看器已在共享 `MediaLightbox` 内接入全屏媒体舞台、卡片往返飞行、滑动/下拉手势、图片缩放与底部缩略导航；视频保留原生控制，选中事实仍按 exact Output ID。此次视觉与手势替换仅完成落码，TypeScript、API 与真实浏览器检查尚未运行，下方既有代表旅程证据不自动覆盖新交互。
+
 **施工范围**：
 
 1. 核对并补齐前后端 Output DTO 的准确版本标识、作品/内容版本引用与归档信息；复用现有身份，不新增作品根或浏览专用持久化模型。
@@ -330,6 +338,7 @@ A 的最小出口：版本写口与权限/幂等成立、代表性静态网页/M
 - [x] 同内容版本再交付仍是独立 Output、保持相同内容版本标识；普通修订未制作不新增成片项，失败/未完成制作不冒充交付。真实项目已有三个同 v2 Output 独立显示；AgentVeil v5 仅保存无 Output；内部/未完成行由交付准入排除。
 - [x] 新交付使旧 Output 归档后，旧消息仍可打开、播放、下载和准确引用；刷新/重连顺序不变、不重复，新增交付不抢走当前项，引用失效明确显示不可用。归档 v2/v3 的打开、播放、下载与 @ 引用已通过；硬刷新六项顺序与身份保持；打开状态 3/5 → 3/6 不抢原 v2；不可用替代禁止已有纯测试。
 - [x] 混合媒体按声明类型和画幅展示，竖屏不裁；文档页码不混用 Output 序号，视频切换无残留声音。关闭恢复聊天位置与焦点，移动端、键盘、双主题和 reduced-motion 通过。竖屏 contain、真实文本/PNG、三页 carousel、视频切换、关闭消息位置/焦点恢复、440×956 移动端、双主题、左右/Escape 与 reduced-motion 均有真实浏览器证据；用户已确认重新展示的视频有声音；完整独立听感不在本浏览能力通过范围。
+- [ ] 当前全屏舞台与 Arc 式交互完成真实复验：卡片打开/返回飞行、跨消息关闭不追滚、图片 pinch/滚轮/双击缩放与惯性 pan、视频原生控制不受手势拦截、移动端缩略导航、双主题和 reduced-motion；先通过 TypeScript 检查，再跑上述浏览器旅程。
 
 ### 2.5.3 B 支撑增量：按需采集与内容质检（两个首个最小闭环已通过，完整能力待扩）
 

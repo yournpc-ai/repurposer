@@ -1158,7 +1158,16 @@ def instantiate_mg(
                         clip_ticks=duration,
                         timebase=timebase,
                         prefix=f"anm_mg_{index}",
-                    ),
+                    ) + ([{
+                        "animation_id": f"anm_mg_{index}_drift",
+                        "target_object_id": object_id,
+                        "text_part": None,
+                        "property": "transform.scale",
+                        "keyframes": [
+                            _kf(0, 1.0 if scene.drift == "push_in" else 1.035),
+                            _kf(duration, 1.035 if scene.drift == "push_in" else 1.0),
+                        ],
+                    }] if scene.drift != "none" else []),
                 },
             }
         )

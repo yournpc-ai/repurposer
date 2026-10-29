@@ -23,8 +23,8 @@ interface WalletState {
   held: number
 }
 
-/** The ProjectHeader's credits read surface (BILLING §7 — absolute credits,
- * no plan quota or purchase entry yet). Seat (2026-10-15 user ruling):
+/** The ProjectHeader's credits read + purchase-entry surface (BILLING §7 —
+ * absolute credits, no plan quota). Seat (2026-10-15 user ruling):
  * inside the glass ProjectHeader, right end, all breakpoints and all world
  * states — credits must be visible at the spend point, pre-run included.
  * Bare anatomy (the MobileHeader bell's law): controls inside glass carry
@@ -150,6 +150,18 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
               <TransactionRow key={item.id} item={item} className="px-2" />
             ))
           )}
+          {/* Purchase selection stays in the management seat; this is only an
+              entry, never a second package panel. */}
+          <button
+            type="button"
+            className="mt-0.5 flex h-8 w-full items-center rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+            onClick={() => {
+              setOpen(false)
+              openSettings("credits")
+            }}
+          >
+            {t("credits.buyTitle")}
+          </button>
           {/* Full-ledger deep link — the management seat is the
               SettingsDialog credits section. */}
           <button

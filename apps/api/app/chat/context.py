@@ -139,7 +139,7 @@ async def build_context(
     (execution, credits) — rendered as one fact line the system template's
     mode-conditional close law reads."""
     lines = [
-        f"Project: {project.title} (id={project.id}, language={project.language})",
+        f"Project: {project.title} (id={project.id}, default_language={project.language}; not the delivered content language)",
     ]
     from app.chat.video_turn_seats import video_context_lines
     lines.extend(await video_context_lines(db, project, mentions))

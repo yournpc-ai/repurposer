@@ -11,8 +11,8 @@ metering merge point (same session, same commit — ADR-050) → ``release_run``
 returns the un-captured remainder at the run's terminal state. Failed/skipped
 steps never write a capture row (失败不扣费); NULL-estimate steps hold 0 but
 capture their actual — the balance may go negative (BILLING §5, by design).
-``purchase`` arrives with the W11 payment adapter; the ledger needs no change
-for it.
+``purchase`` is written by the Stripe payment adapter (PAYMENTS); the ledger
+needs no money columns for it.
 
 Write discipline (create_notification precedent): writers flush, callers
 commit — a ledger row must commit atomically with the event that caused it
@@ -180,7 +180,7 @@ async def list_transactions(
     cursor: tuple[datetime, UUID] | None = None,
 ) -> tuple[list[CreditTransaction], tuple[datetime, UUID] | None]:
     """Read the caller's ledger, newest first — the ``/wallet/transactions``
-    projection (BILLING §7, the W11 billing center's read-only前身).
+    projection (BILLING §7, the billing center's read-only predecessor).
 
     Keyset pagination on (created_at, id) DESC: the ledger is append-only,
     so a keyset cursor is stable under concurrent appends where OFFSET would
@@ -276,6 +276,34 @@ async def hold_run(
         idem=f"run:{run_id}:hold",
         note="Run estimate hold",
         require_balance=amount,
+    )
+
+
+async def purchase_credits(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    order_id: UUID,
+    provider_event_id: str,
+    amount: int,
+) -> CreditTransaction:
+    """Grant a paid order's credits through the ledger's exactly-once gate.
+
+    The payment adapter locks its order before calling here; this event-level
+    key handles webhook replays while the order lock separates different
+    events for the same purchase. Writers flush, callers commit (PAYMENTS §4).
+    """
+    if amount <= 0:
+        raise ValueError("purchase amount must be positive")
+    await get_or_create_wallet(db, user_id)
+    return await _mutate(
+        db,
+        user_id=user_id,
+        kind="purchase",
+        amount=amount,
+        ref={"payment_order_id": str(order_id), "payment_event": provider_event_id},
+        idem=f"stripe:{provider_event_id}:purchase",
+        note="Credit package purchase",
     )
 
 

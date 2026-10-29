@@ -231,6 +231,9 @@ def _translate_update_text(content: CompositionContent, op: VideoEditUpdateText)
         obj.style.align = op.align
     if op.weight is not None:
         obj.style.weight = op.weight
+    for key in ("x", "y", "width", "height"):
+        if getattr(op, key) is not None:
+            setattr(obj.layout, key, getattr(op, key))
     if op.text is not None and op.text != clip.object.text and obj.caption is not None:
         obj.caption.state = "independent"
     return _updated_text_clip(clip, obj)
@@ -819,6 +822,26 @@ def compute_change_set(
             changes.append("linked_group_id")
         return changes
 
+    def field_changes(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
+        """Only scalar/list values that actually changed, never the unchanged surroundings."""
+        if isinstance(before, dict) and isinstance(after, dict):
+            return [
+                change
+                for key in sorted(before.keys() | after.keys())
+                for change in field_changes(
+                    before.get(key), after.get(key), f"{path}.{key}" if path else key
+                )
+            ]
+        if before == after:
+            return []
+        return [{"path": path, "before": before, "after": after}]
+
+    def clip_field_changes(before: Clip, after: Clip) -> list[dict[str, Any]]:
+        return field_changes(
+            before.model_dump(mode="json", exclude={"track_id"}),
+            after.model_dump(mode="json", exclude={"track_id"}),
+        )
+
     return {
         **({"transitions": {"before": [t.model_dump(mode="json") for t in base.timeline.transitions],
                             "after": [t.model_dump(mode="json") for t in new.timeline.transitions]}}
@@ -849,7 +872,11 @@ def compute_change_set(
             ],
             "removed": [cid for cid in base_clips if cid not in new_clips],
             "updated": [
-                {"clip_id": cid, "changes": clip_changes(base_clips[cid], new_clips[cid])}
+                {
+                    "clip_id": cid,
+                    "changes": clip_changes(base_clips[cid], new_clips[cid]),
+                    "fields": clip_field_changes(base_clips[cid], new_clips[cid]),
+                }
                 for cid in new_clips.keys() & base_clips.keys()
                 if clip_changes(base_clips[cid], new_clips[cid])
             ],
@@ -901,8 +928,8 @@ def redraft_batch(base: CompositionContent, fresh_ops: list[Op]) -> list[Op]:
 
 # ---------------------------------------------------------------------------
 # The model-facing fact sheet: the canonical payload rendered as compact
-# text (the loop's observation; the USER's table is the structured card —
-# the model introduces it, never re-transcribes it)
+# text (the loop's observation; the USER's visible presentation is the
+# model's grounded Markdown overview — it never re-transcribes this DTO)
 # ---------------------------------------------------------------------------
 
 
@@ -1021,32 +1048,20 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
 
 
 def format_revision_text(read: dict[str, Any]) -> str:
-    """The saved delta plus only the changed clips' current facts.
+    """The saved field-level delta plus the reference needed by the next tool.
 
-    The canonical card already owns the whole work. The answering iteration
-    needs the new base_ref and the actual changed objects, not an unrelated
-    execution dump of every unchanged layer.
+    The saved version owns the complete current work. Returning the changed
+    clips' whole style/layout/source readout here invites a technical handoff
+    and repeats unchanged layers; the system-computed delta is the only fact
+    the answering iteration needs. A later parameter question can explicitly
+    read the full version again.
     """
     import json
 
-    change_set = read.get("change_set") or {}
-    clip_delta = change_set.get("clips") or {}
-    changed_ids = {
-        item["clip_id"]
-        for key in ("added", "updated")
-        for item in clip_delta.get(key) or []
-    }
-    changed_clips = [
-        clip
-        for scene in read["storyboard"]["scenes"]
-        for clip in scene["clips"]
-        if clip["clip_id"] in changed_ids
-    ]
     return json.dumps({
         "version": read["version"],
         "base_ref": read["base_ref"],
-        "change_set": change_set,
-        "changed_clips": changed_clips,
+        "change_set": read.get("change_set") or {},
     }, ensure_ascii=False, indent=1)
 
 
@@ -1085,8 +1100,7 @@ def video_presentation_receipt(
 
 
 def storyboard_block(read: dict[str, Any]) -> dict[str, Any]:
-    """The message block the StoryboardCard resolves (§10: a reference, not
-    the payload — the component reads the server DTO)."""
+    """The version reference stamped on the presenting Markdown reply (§10)."""
     return {
         "kind": "video_storyboard",
         "composition_id": read["composition_id"],

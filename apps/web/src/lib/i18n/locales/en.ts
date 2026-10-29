@@ -77,9 +77,9 @@ const en = {
     /** The inspector's 对账尺 actual side (2026-09-06) — the metered charge
      * of the product's producing step, shown against credits.range's quote. */
     spent: "{{count}} credits",
-    /** The user-level shortfall grey row (BILLING §7, 2026-09-10) — strictly
-     * two vocabularies with the provider's 402 line. Factual, no CTA: the
-     * purchase entry is W11, so there is nothing to sell yet. */
+    /** The user-level shortfall grey row (BILLING §7) — strictly two
+     * vocabularies with the provider's 402 line. Purchase lives in the
+     * Settings credits section, not in this inline run error. */
     insufficient:
       "Not enough credits — your balance is {{balance}}, this run needs about {{required}}.",
     /** BILLING §5: a NULL-estimate run may settle the balance negative — the
@@ -97,10 +97,21 @@ const en = {
     /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
      * balance + ledger full-view seat, same two endpoints as the pill. */
     title: "Credits",
-    subtitle: "Your balance and recent activity.",
+    subtitle: "Your balance, top-ups, and recent activity.",
     overview: "Overview",
-    planFree: "Free trial",
-    plansComing: "Paid plans coming soon",
+    buyTitle: "Add credits",
+    packageCredits: "{{count}} credits",
+    buy: "Buy credits",
+    buying: "Opening…",
+    packagesUnavailable: "Credit packages aren't available yet.",
+    topupSuccess: "{{count}} credits added.",
+    checkAgain: "Check again",
+    return: {
+      confirming: "Confirming your payment…",
+      pending: "Payment is still being confirmed. Check again shortly.",
+      cancelled: "Checkout cancelled — no credits were added.",
+      failed: "This payment didn't complete — no credits were added.",
+    },
     showingRecent: "Latest {{count}}",
     viewAll: "View all →",
     tx: {
@@ -1412,35 +1423,13 @@ const en = {
       worked: "Worked for {{elapsed}}",
       actionCount: "{{count}} actions",
     },
-    /** The video family's storyboard card (Video Project phase B): the
-     * canonical saved-version table a message block resolves to — the
-     * server DTO is the truth, never a re-transcribed table. */
+    /** Video presentation companions: activity labels and the optional real
+     * Generator preview. The visible storyboard itself is LLM Markdown. */
     videoStoryboard: {
-      crossfade: "Crossfade · {{seconds}}s",
-      sourceWindow: "Source",
       video: "Video",
-      savedSource: "Saved source material",
-      audio: "Audio",
-      motion: "Motion",
-      motionProperty: { opacity: "Fade", transform_position: "Movement", transform_scale: "Scale", transform_rotation: "Rotation" },
-      noNarration: "Narration off",
-      narrationOn: "Narration · {{voices}}",
-      musicOn: "Music set",
-      musicOff: "No music",
-      webScene: "Captured webpage",
-      mixedScene: "Real recording with native text and sound",
-      generatorScene: "Program-authored moving picture with independent native layers",
-      shape: "Native shape",
       programPreview: "Program preview",
       programPreviewError: "The exact program preview could not be loaded; production has not been acknowledged.",
-      originalAudioOn: "Original audio",
-      originalAudioOff: "Original audio muted",
-      textScene: "Visual content and on-screen text",
       title: "Storyboard",
-      version: "v{{n}}",
-      duration: "{{s}}s",
-      view: "Page: {{heading}}",
-      loading: "Loading the saved storyboard…",
       unavailable: "This storyboard version is no longer available.",
     },
     /** Past-tense mirrors of the inspecting family — a read activity's
@@ -1595,8 +1584,10 @@ const en = {
       nextSlide: "Next slide",
       slidePosition: "Slide {{current}} / {{total}}",
       mention: "Reference",
-      revise: "Continue editing",
-      continuePrompt: "Continue editing this output",
+      details: "Output details",
+      allOutputs: "All delivered outputs",
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
       unavailable: "Output unavailable",
       unavailableDetail: "This exact delivered Output is no longer available. No newer version has been substituted.",
     },

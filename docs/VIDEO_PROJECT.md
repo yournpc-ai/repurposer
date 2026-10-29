@@ -128,9 +128,9 @@ base_ref(composition_id, version_id, content_digest) + request_id + edits
 
 ### 2.3 可审阅呈现也是版本事实
 
-`storyboard_payload(version)` 由服务端从保存后的 CompositionVersion 确定性生成，包含完整分镜表和回退事实标签。Chat 呈现这份 canonical payload 并补充解释，不要求 LLM 把整张表重新转录一遍。
+`storyboard_payload(version)` 由服务端从保存后的 CompositionVersion 确定性生成，向工具与 LLM 提供完整分镜事实和回退事实标签。用户可见呈现不是这份 DTO 的技术表，而是 LLM 基于这些事实写出的简洁 Markdown 创作概要：整体方向、主要段落的画面与动作，以及有助于理解的屏上文字、旁白和音频事实；标题、列表或表格按内容自由组织。`visual_description` 是画面描述的主要来源，缺失时只能概述真实结构支持的事实。保存版仍是唯一制作真相，概要不是第二份可编辑作品数据。
 
-呈现记录持久化 `presented_message_id + presentation_digest + composition_version_id`。消息块是版本引用；卡片重新读取并完整释放当前 canonical DTO 后，ACK 必须同时匹配该块的版本/已有 `content_digest` 与当前 DTO 的 `presentation_digest`，再更新版本外呈现回执；旧引用缺失的 content digest 在这次真实呈现时补齐。刷新后旧展示摘要不得否决当前真实呈现，过期摘要回放仍拒绝。首稿 Start 同时校验版本、完整呈现记录与后续用户批准；仅有“消息曾提到某版”或服务端生成了 payload 不算完成呈现。该记录证明承载内容与版本的关联，不证明用户主观已读，不新增阅读追踪系统。结构化表格、组件和 LLM 散文字段的释放都遵守现有打字机律，不能借 canonical payload 整段瞬移。
+呈现记录持久化 `presented_message_id + presentation_digest + composition_version_id`。消息块只保存版本引用；可见 Markdown 走普通 assistant 正文与 Streamdown，完整打字释放且所需真实预览就绪后才 ACK。ACK 同时匹配该块的版本/已有 `content_digest` 与当前 DTO 的 `presentation_digest`，再更新版本外呈现回执；旧引用缺失的 content digest 在这次真实呈现时补齐。刷新后旧展示摘要不得否决当前真实呈现，过期摘要回放仍拒绝。这里的“完整呈现”指创作概要和必要真实预览已经释放，不要求技术字段全量上屏，也不证明用户主观已读。首稿 Start 同时校验版本、完整呈现记录与后续用户批准；用户确认的是创作方向，不是逐项审批技术分镜。
 
 ### 2.4 内容、执行与产物身份
 
@@ -199,7 +199,7 @@ Storyboard 由 CompositionVersion 投影，分镜表最少包含：
 | 旁白 | 引用的 SpeechObject.text 原文；无旁白明确标记 |
 | 素材与音频事实 | SourceSnapshots 与覆盖该范围的音频 Clips |
 
-修改分镜就是修改 CompositionVersion；修改后重新投影**完整当前表**，不是拿旧表加一段模型猜测的 diff。结构化表格由 `storyboard_payload` 生成；`visual_description` 虽然是 LLM 创作字段，也已经随版本保存，因此不需要让 Chat 模型再次概括或转录内部元素。
+修改分镜就是修改 CompositionVersion；修改后重新投影**完整当前事实**，不是拿旧表加一段模型猜测的 diff。结构化 `storyboard_payload` 是工具、版本身份与修订的读面，不直接平铺给用户；LLM 根据保存版撰写当前创作概要，`visual_description` 已随版本保存，因此不需要让 Chat 模型再次转录内部元素或技术参数。
 
 ## 4. Timeline、Track、Clip、Object
 
@@ -498,7 +498,7 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 ### 8.1.1 生成媒体与程序化画面的生产边界（drawing-v1 / image-v1 已接）
 
-- 内容版本用 GeneratorObject 保存可审阅的程序或模型请求，语义见 §4.3.2。drawing-v1 已实现有限的“提出要求→Agent 写程序→动态预览→局部改程序/参数→再预览”闭环，不把手写固定模板冒充程序创作能力。预览标明所对应的 program_digest，后续修改不沿用旧预览冒充新版；StoryboardCard 等代表帧与 MP4 可播放后才发完整呈现 ACK。
+- 内容版本用 GeneratorObject 保存可审阅的程序或模型请求，语义见 §4.3.2。drawing-v1 已实现有限的“提出要求→Agent 写程序→动态预览→局部改程序/参数→再预览”闭环，不把手写固定模板冒充程序创作能力。预览标明所对应的 program_digest，后续修改不沿用旧预览冒充新版；创作概要与对应真实预览均就绪后才发完整呈现 ACK。
 - 预览和纠错复用现有有界 agent/harness，冻结实际尝试次数、资源与费用上限；不新建开放式自主循环，不以缺少完整 D4 Inspector 阻塞最小预览。首次程序消费者须给出可播放短预览或动态序列、执行诊断及 Agent 可读取的代表画面；模型无法看图时如实声明并接受用户视觉反馈，不声称自动审美通过。预览涉及付费同样进入既有授权/计量；仅在输入和执行配置一致时复用预览结果。
 - 生成输入须固定用户素材/参考、请求参数、供应商及模型版本（可获得时）、程序与依赖资源身份、尺寸/时长等输出约束；相关费用与授权进入既有 Run 机制。image-v1 的设计/修订只保存请求，报价按本次缺失图片数计算，授权制作才真实生成。供应商私有参数留在 provider 边界，不进入通用 VideoObject。
 - 本地受控的程序生产与导入外部 Skill 脚本分开：外部 scripts/ 不因引入程序画面而获得执行权限。代码画面运行须隔离可用能力、依赖、时间/资源与外部访问；只围绕实际样例建立最小执行边界，不开发通用插件平台。
@@ -604,7 +604,7 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 Chat 内组件通过结构化 block 引用 `composition_id + composition_version_id (+ clip/object ids)`，并记录承载组件的 Chat/project_id，组件读取服务端 DTO；不把可变 spec JSON 或模型手写 HTML 当作持久真相。
 
-- StoryboardCard：分镜表与当前版本；
+- Storyboard 呈现：Markdown 创作概要、版本引用与呈现回执；
 - CompositionPreview：作品预览与交付；B 提供最小版本化预览，C 复用而不重新建设；
 - Clip/ObjectInspector：后续定点修改；
 - Canvas 若保留，是同类可视化组件/Graph 投影，不再是所有项目的默认归宿。
@@ -620,13 +620,13 @@ Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画
 | 呈现面 | 职责 |
 |---|---|
 | assistant 正文 | 创作意图、修改理由、必要问题与结果的关键变化；开工句仍由模型生成，不由组件模板替说 |
-| Storyboard / 版本卡片 | canonical 内容、配置、change_set、未解决项与准确版本引用；承担完整首稿呈现与属性编辑 |
+| Storyboard / 版本呈现 | LLM 基于保存版撰写的 Markdown 创作概要、必要 change_set、未解决项与准确版本引用；承担首稿方向呈现，真实 Generator 预览继续随版本展示 |
 | 工具活动 / Run 工作段 | 世界事实支持的读取、设计、修订与制作过程；提供当前阶段和可查看的真实执行记录 |
 | Output / 成片卡片 | 通过交付准入后的播放、下载、@引用和继续修改；始终关联实际制作版本 |
 
 - 主旅程为讨论需求 → 设计并完整呈现首稿 → 审阅/修订 → 按已有授权规则制作 → 查看过程 → 收到产物 → @继续修改。普通修订只产生版本，不能伪装成新成片；新版本不让在飞 Run 追随改变。
 - 正文、活动与结构化产物在同一 transcript 中按既有有序消息/事件协议呈现，能够对应同一次动作；不能把所有工具过程挪到长篇总结之后，也不为每个工具另造一条冗长 assistant 回复。刷新/断线重连保持关联、顺序和去重。
-- 配置事实以版本卡片为准；正文不例行转录整份分镜、音乐/字幕设置和计费机制。费用与执行确认仍在决策位置完整呈现，不能以精简文案省略授权。首稿完整呈现不因正文简短而缩减。
+- 制作事实以保存版为准；正文只呈现创作概要，不例行转录内部元素、音乐/字幕技术设置和计费机制。费用与执行确认仍在决策位置完整呈现，不能以精简文案省略授权。首稿完整呈现指概要与必要真实预览全部释放，不要求完整技术 DTO 上屏。
 - `CompositionVersion` 回答“制作哪一版”，Run/step/attempt 回答“这次执行到哪里”。RunTaskList/WorkSegmentRow 显示真实过程，不把 Scene/Track 当执行节点，也不为 UI 把单个 produce 节点预拆成 DAG。
 - 内部阶段由真实执行点报告。准备、旁白、渲染、交付检查只在实际发生时出现；缓存复用、排队、失败与恢复有事实依据。旁白关闭不显示虚假合成；渲染完成不冒充交付完成；无可靠分母不显示百分比，无证据不承诺后台通知。
 - 当前可覆盖的 `stage` 不是历史记录。B 在既有 Run/step 存储与推送机制上补最小可回放阶段记录，区分执行尝试、稳定事件身份与顺序，防止重试重复或旧 attempt 覆盖当前状态；不新建通用事件总线。记录不携带原始工具参数、推理或敏感结果，作品/产物只用受权限约束的引用。
@@ -772,7 +772,7 @@ apps/render/src/
 
 apps/web/src/
 ├── components/chat/video/
-│   ├── StoryboardCard.tsx               canonical 分镜呈现，B
+│   ├── StoryboardCard.tsx               版本呈现回执与真实 Generator 预览，B
 │   ├── CompositionPreview.tsx           版本化最小预览，B
 │   ├── preview/                        PreviewAdapter；先复用播放器/服务端预览
 │   └── inspectors/                     完整 Clip/Object/Scrub 交互，D4

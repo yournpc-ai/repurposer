@@ -145,6 +145,14 @@ async def record_usage(usage: dict | None) -> None:
 _current_conversation_ledger: contextvars.ContextVar[dict | None] = (
     contextvars.ContextVar("metering_conversation_ledger", default=None)
 )
+_current_conversation_trace: contextvars.ContextVar[dict[str, str] | None] = (
+    contextvars.ContextVar("metering_conversation_trace", default=None)
+)
+
+
+def current_conversation_trace() -> dict[str, str] | None:
+    """Optional local diagnostic correlation; never part of model input."""
+    return _current_conversation_trace.get()
 
 
 def _new_conversation_ledger() -> dict:
@@ -180,15 +188,26 @@ class bind_conversation_turn:
     warm call that outlives the turn writes into a ledger nobody folds,
     which is silently dropped — never miscounted onto another turn."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, conversation_id: UUID | None = None, turn_id: UUID | str | None = None
+    ) -> None:
         self._token: contextvars.Token[dict | None] | None = None
+        self._trace_token: contextvars.Token[dict[str, str] | None] | None = None
+        self._trace = (
+            {"conversation_id": str(conversation_id), "turn_id": str(turn_id)}
+            if conversation_id is not None and turn_id is not None else None
+        )
         self.accrued: dict = _new_conversation_ledger()
 
     def __enter__(self) -> "bind_conversation_turn":
         self._token = _current_conversation_ledger.set(self.accrued)
+        if self._trace is not None:
+            self._trace_token = _current_conversation_trace.set(self._trace)
         return self
 
     def __exit__(self, *exc: object) -> bool:
+        if self._trace_token is not None:
+            _current_conversation_trace.reset(self._trace_token)
         if self._token is not None:
             _current_conversation_ledger.reset(self._token)
         return False

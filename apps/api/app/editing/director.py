@@ -182,7 +182,7 @@ class MgSceneAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intent: str = Field(default="", max_length=120)
-    visual_description: str | None = Field(default=None, max_length=240)
+    visual_description: str | None = Field(default=None, description="A short sentence describing the actual saved picture and motion.")
     duration_seconds: float = Field(gt=0, le=30)
     lines: list[str] = Field(min_length=1, max_length=3)
     narration: str | None = Field(
@@ -193,6 +193,7 @@ class MgSceneAnswer(BaseModel):
     size: Literal["medium", "large", "hero"] = "large"
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     enter: Literal["fade", "rise", "lines", "words", "graphemes"] = "rise"
+    drift: Literal["none", "push_in", "pull_out"] = "none"
     align: Literal["left", "center", "right"] = "center"
     shapes: list[MgShapeAnswer] = Field(default=[], max_length=4)
 
@@ -257,8 +258,8 @@ class MixedDirection(BaseModel):
     source_start_seconds: float = Field(ge=0)
     source_end_seconds: float = Field(gt=0)
     title: str = Field(min_length=1, max_length=100)
-    intent: str = Field(min_length=1, max_length=120)
-    visual_description: str | None = Field(default=None, max_length=240)
+    intent: str = Field(min_length=1, description="The scene's purpose, in plain language.")
+    visual_description: str | None = Field(default=None, description="A short sentence describing the actual saved picture and motion.")
     captions: list[MixedCaptionAnswer] = Field(default=[], max_length=16)
     include_original_audio: bool = True
 
