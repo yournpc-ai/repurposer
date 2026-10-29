@@ -248,7 +248,7 @@ async def test_quote_covers_the_bounded_remaining_passes_without_synthesis(monke
         return original
 
     monkeypatch.setattr(narration_store, "peek_original", overlong)
-    assert await narration.narration_quote_characters(content, user_id=USER_ID) == 9
+    assert await narration.narration_quote_characters(content, user_id=USER_ID) == upper_bound
 
 
 def test_minimax_sentence_envelope_accepts_real_float_millisecond_times():

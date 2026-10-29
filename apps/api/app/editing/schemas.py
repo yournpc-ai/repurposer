@@ -4,8 +4,8 @@ The four JSONB columns of a ``composition_versions`` row (settings / sources
 / scenes / timeline) serialize from ``CompositionContent`` — this module is
 the single shape law for what a version may carry. Current scope: Text /
 Shape / Image / Web / Video / Audio / Speech objects over visual + audio
-tracks; Transitions are a declared empty list (a non-empty one is an honest
-"unsupported", not silent data loss). Pending Speech carries its reviewed
+tracks; centered crossfades connect adjacent opaque fixed-media clips.
+Pending Speech carries its reviewed
 script and voice, never fabricated source media.
 
 Three time domains stay name-separated (§6.1):
@@ -472,6 +472,7 @@ class Clip(BaseModel):
     clip_id: str = _ID
     range: TimeRange  # OUTPUT time (ticks at settings.timebase)
     scene_id: str | None = None
+    linked_group_id: str | None = None
     source: ClipSource | None = None
     object: Object
     animations: list[Animation] = []
@@ -506,13 +507,21 @@ class Scene(BaseModel):
     speech_clip_ids: list[str] = []
 
 
+class Transition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    transition_id: str = _ID
+    from_clip_id: str = _ID
+    to_clip_id: str = _ID
+    kind: Literal["crossfade"] = "crossfade"
+    duration: int = Field(gt=0)
+    alignment: Literal["center"] = "center"
+
+
 class Timeline(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tracks: list[Track] = []
-    # First slice: declared, always empty — a non-empty list is an honest
-    # "transitions unsupported yet" rejection, never silent data loss.
-    transitions: list[dict] = []
+    transitions: list[Transition] = []
 
 
 class CompositionContent(BaseModel):

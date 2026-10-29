@@ -197,23 +197,60 @@ export function toAbsoluteUrl(
   return `${API_URL}${url.startsWith("/") ? url : `/${url}`}`
 }
 
-/** Download a URL as a file via fetch → blob → object URL.
+/** Download a URL without leaking API credentials to another origin.
  *
- * Works cross-origin (object-storage public URLs): unlike `<a download>` on a
- * remote URL — which browsers ignore — a blob object URL is same-origin, so
- * the filename is honored. API-relative URLs carry the bearer token via
- * apiFetch; absolute URLs go through plain fetch (no auth header leaked to
- * the storage host).
+ * Public object storage already answers with Content-Disposition: attachment,
+ * so direct navigation saves it without CORS or an in-memory video Blob.
+ * API-relative and legacy API file URLs carry the bearer token via apiFetch;
+ * other absolute URLs retain the previous fetch → Blob behavior.
  */
+function storageProxyPath(absolute: string): string | null {
+  try {
+    const parsed = new URL(absolute)
+    const fileMatch = parsed.pathname.match(/^\/api\/v1\/(?:files|outputs)\/(.+)$/)
+    if (!fileMatch) return null
+    const key = fileMatch[1]
+    if (!key) return null
+    return `/api/v1/files/${key}?proxy=1`
+  } catch {
+    return null
+  }
+}
+
+function isObjectStorageUrl(absolute: string): boolean {
+  try {
+    return new URL(absolute).hostname.endsWith(".volces.com")
+  } catch {
+    return false
+  }
+}
+
 export async function downloadFile(
   url: string | null | undefined,
   filename: string
 ): Promise<void> {
   const absolute = toAbsoluteUrl(url)
   if (!absolute) return
-  const resp = absolute.startsWith(API_URL)
-    ? await apiFetch(absolute.slice(API_URL.length))
-    : await fetch(absolute)
+  // Public object-storage downloads use direct navigation, not a CORS fetch:
+  // the storage attachment response saves the real bytes without touching a
+  // prior no-cors <video>/<img> cache entry or buffering the whole video.
+  if (isObjectStorageUrl(absolute)) {
+    const a = document.createElement("a")
+    a.href = absolute
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    return
+  }
+  // Authenticated legacy API file URLs need the same-origin proxy for
+  // programmatic reads; the caller still names the resulting Blob.
+  const proxyPath = storageProxyPath(absolute)
+  const resp = proxyPath
+    ? await apiFetch(proxyPath)
+    : absolute.startsWith(API_URL)
+      ? await apiFetch(absolute.slice(API_URL.length))
+      : await fetch(absolute)
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
   const blob = await resp.blob()
   const objectUrl = URL.createObjectURL(blob)

@@ -2,6 +2,8 @@
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.schemas import VideoVersionRef
 
+NARRATION_FIT_MARGIN = 1.08
+
 
 class NarrationPolicy(BaseModel):
     """Server-pinned paid-fit bounds for one authorized production."""
@@ -11,7 +13,7 @@ class NarrationPolicy(BaseModel):
     min_speed: float = Field(default=1.0, ge=1.0, le=2.0)
     max_speed: float = Field(default=1.35, ge=1.0, le=2.0)
     max_attempts: int = Field(default=2, ge=1, le=2)
-    fit_margin: float = Field(default=1.02, ge=1.0, le=1.1)
+    fit_margin: float = Field(default=NARRATION_FIT_MARGIN, ge=1.0, le=1.1)
     max_tts_characters: int = Field(ge=0)
 
 

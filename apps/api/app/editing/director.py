@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.editing.grounding import (
     CiteLine,
@@ -81,6 +81,37 @@ class LaunchFilmDirection(BaseModel):
     """The launch-film director's answer (the website-promo design)."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_arc_scene_echoes(cls, data: Any) -> Any:
+        """Read the fixed arc's scene labels without creating nested slots.
+
+        Only the exact known group/citation shapes fold. Conflicts, unknown
+        nested fields and every other extra field still fail the schema.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for group, fields in (
+            ("hero", ("hero_word", "hero_sub")),
+            ("reveal", ("reveal_lead", "reveal_word", "reveal_sub")),
+            ("end", ("end_name", "end_tagline")),
+        ):
+            nested = data.get(group)
+            if not isinstance(nested, dict) or set(nested) - set(fields):
+                continue
+            if any(field in nested and data.get(field) is not None for field in fields):
+                continue
+            for field in fields:
+                if field in nested:
+                    data[field] = nested[field]
+            data.pop(group)
+        proof = data.get("proof")
+        if isinstance(proof, dict) and set(proof) <= {"citation", "line"}:
+            # Proof is a system-assigned walk, not a standalone cited slot.
+            data.pop("proof")
+        return data
 
     name: str | None = Field(default=None, description="The film's display name (≤24 chars); null = the system labels it from the material.")
     language: str | None = Field(default=None, description="The film's language code, declared verbatim.")

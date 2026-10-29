@@ -138,6 +138,8 @@ plan path 的推理者是 **intent router**——有界工具 loop（`plan_turn.
 >
 > `app/skills/*/SKILL.md` 是另一层的**指令包**：只在 prompt 装配时注入写作/工艺知识，永不在运行时发现，也不替代代码能力。新增工具与新增指令包分别登记，不混用两个 registry。
 
+能力发现与执行共享当前声明：`capability_menu_lines()` 从注册表投影用户可理解的能力菜单，plan/propose 两路共同消费；内容编辑操作由 `revise_video` 的参数 schema 与说明暴露，不为每个操作新增执行节点。时间编辑包含 split/trim、首个固定媒体 crossfade、已知音乐节拍吸附，能力菜单与模型工具面随同一 video-project 开关生效。能调用操作与能回答“你能做什么”须分别核对。
+
 每条工具登记：
 
 ```jsonc
@@ -324,9 +326,9 @@ GET /api/v1/runs/{id}/events   （chat/routes.py 或 pipeline/routes/）
 - 失败回合不得留下半应用的候选或选择：回滚本回合 Candidate Surface 变更，已落库的旧选择不被静默改写。
 - 跨轮继续沿用 journey 身份；settled 后只读，replay 零写。选择修订在 dock 前、dock 后与 run 后的授权路径分别遵循 §8.5、`DIALOG_WORKFLOW.md` §4.3 与 `BILLING.md` 当前守卫，不因卡片交互绕过 Start 或费用确认。
 
-### Video Project 的 Chat 目标接入
+### Video Project 的 Chat 接入
 
-**TARGET，未实施**：视频新链的正文、版本卡、工具活动/Run 工作段、成片卡职责与真实制作阶段回放见 [VIDEO_PROJECT §10](VIDEO_PROJECT.md#10-chat-组件canvas-与-scrub)，实施与旅程验收纳入 [施工合同 B7](tasks/video-project-implementation.md#22-施工范围)。UIArc 整合 block 仅为待调研呈现候选；具体组件可替换，消息顺序、SSE、工作段和交付收口仍须一致，不另造状态真相；本段不声明当前 Film 已采用新协议。
+视频新链的正文、版本卡、工具活动/Run 工作段、成片卡职责与真实制作阶段回放见 [VIDEO_PROJECT §10](VIDEO_PROJECT.md#10-chat-组件canvas-与-scrub)，实施与旅程验收归 [施工合同](tasks/video-project-implementation.md#22-施工范围)。当前 Chat 交付读面由持久化 transcript/run-step refs 投影 exact Outputs（含归档）；消息行保留独立封面入口，ChatDock 以受控 `output_id` 承载共享查看器，不再为每条消息创建局部 MediaLightbox，也不新增合集卡或 DOM gallery 数据源。动作只消费当前 exact Output；消息顺序、SSE、工作段和交付收口仍沿用本文件规则。B-UI 代表旅程已通过，用户已确认重新展示的视频有声音；完整音乐接缝/音画同步听感另行验收，具体事实归施工合同 §2.5.2；不代替完整 B 或发布门。
 
 ## 9. 修订边界（ADR-057：wiring 统一 + edit ops 节点内部存活）
 

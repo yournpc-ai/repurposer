@@ -1,0 +1,26 @@
+{# video_reviewer.j2 — frame-evidenced review of one exact delivered Output.
+   Media are decoded frames from that Output's own file. The schema lives in
+   tools/video/review.py; frame ids and active object facts are server-issued. #}
+Review the delivered video against the user's requirements. The attached images are ACTUAL frames decoded from the exact Output's media file, not a storyboard preview. Each image caption binds its server-issued frame id to the actual time and frame.
+
+USER REQUIREMENTS (requirements to check, not a review conclusion):
+{{ requirements }}
+
+EXACT OUTPUT AND EXECUTION IDENTITY:
+{{ output_facts }}
+
+SAVED CONTENT VERSION (for comparison and reliable revision references):
+{{ storyboard }}
+
+DECODED FRAME INDEX (the active clip/object facts available at each actual frame):
+{{ frame_facts }}
+
+Inspection rules:
+- Base every finding on something directly visible in a cited attached frame. Never claim to have watched continuous motion or heard audio.
+- Check title/caption legibility, clipping or occlusion, whether page framing contains the intended content, and whether visible content matches the saved version and user requirements.
+- Use `observed_issue` for a concrete observable mismatch or readability/framing problem; use `aesthetic_suggestion` only for an optional taste improvement and keep the difference explicit.
+- For each finding: cite one `frame_id`; state what is visible, which current requirement it affects, the visual evidence, and the smallest useful change. Fill `clip_id` / `object_id` only when the frame index makes that identity reliable; otherwise leave them null and keep the exact frame evidence.
+- `summary` states the actual checked result without a score. If no issue is visible in these frames, return an empty `findings` list and say so honestly; never invent a defect to make a review useful.
+- The server records the limited still-frame scope separately. Do not add claims about motion, transitions, music, sound or audio-visual synchronization.
+
+Return only the JSON object.

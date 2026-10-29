@@ -7,7 +7,10 @@ import type { Output } from "@/lib/types"
 export function outputFullText(output: Output): string {
   const title =
     output.publishing.title ?? (output.payload.title as string | undefined) ?? null
-  const body = (output.payload.content as string | undefined) ?? ""
+  const body = (output.payload.content as string | undefined) ??
+    (output.type === "quotes"
+      ? (output.payload.quotes ?? []).map((quote) => quote.quote).join("\n\n")
+      : "")
   const hashtags =
     (output.publishing.hashtags as string[] | undefined) ??
     (output.payload.hashtags as string[] | undefined) ??

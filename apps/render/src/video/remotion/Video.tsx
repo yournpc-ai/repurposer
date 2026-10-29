@@ -230,10 +230,10 @@ const TextObjectView: React.FC<{
   );
 };
 
-const VideoObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, frame }) => {
+const VideoObjectView: React.FC<{ clip: VideoClip; frame: number; gain: number }> = ({ clip, frame, gain }) => {
   if (clip.object.kind !== "video" || !clip.source) return null;
   const object = clip.object;
-  const base = gainLinear(object.gain_db);
+  const base = gainLinear(object.gain_db) * gain;
   const gainAnim = clip.animations.find(
     (animation) =>
       animation.target_object_id === object.object_id &&
@@ -292,9 +292,10 @@ const ShapeObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, f
   );
 };
 
-const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"] }> = ({
+const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"]; gain: number }> = ({
   clip,
   fonts,
+  gain,
 }) => {
   const frame = useCurrentFrame();
   const obj = clip.object;
@@ -303,7 +304,7 @@ const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"] }>
     return <TextObjectView clip={clip as VideoClip & { object: VideoTextObject }} fonts={fonts} frame={frame} />;
   }
   if (obj.kind === "video") {
-    return <VideoObjectView clip={clip} frame={frame} />;
+    return <VideoObjectView clip={clip} frame={frame} gain={gain} />;
   }
   if (obj.kind === "shape") {
     return <ShapeObjectView clip={clip} frame={frame} />;
@@ -349,6 +350,16 @@ const AudioClipView: React.FC<{ clip: VideoClip }> = ({ clip }) => {
 };
 
 export const Video: React.FC<{ spec: VideoSpec }> = ({ spec }) => {
+  const frame = useCurrentFrame();
+  const dissolve = (clipId: string) => {
+    let opacity = 1, gain = 1;
+    for (const transition of spec.transitions ?? []) {
+      const progress = Math.max(0, Math.min(1, (frame-transition.start_frame) / (transition.end_frame-transition.start_frame-1)));
+      if (clipId === transition.to_clip_id) { opacity *= progress; gain *= progress; }
+      if (clipId === transition.from_clip_id) gain *= 1-progress;
+    }
+    return { opacity, gain };
+  };
   const visualTracks = spec.tracks
     .filter((track) => track.kind === "visual")
     .sort((a, b) => a.order - b.order);
@@ -363,7 +374,9 @@ export const Video: React.FC<{ spec: VideoSpec }> = ({ spec }) => {
             from={clip.start_frame}
             durationInFrames={clip.end_frame - clip.start_frame}
           >
-            <VisualObjectView clip={clip} fonts={spec.fonts} />
+            <AbsoluteFill style={{ opacity: dissolve(clip.clip_id).opacity }}>
+              <VisualObjectView clip={clip} fonts={spec.fonts} gain={dissolve(clip.clip_id).gain} />
+            </AbsoluteFill>
           </Sequence>
         )),
       )}

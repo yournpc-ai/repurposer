@@ -154,6 +154,21 @@ describe("buildConversationUnits — the array map (ADR-108)", () => {
     expect(fold.rows[0].duration_ms).toBe(32500)
   })
 
+  it("video design, revision and review receipts all survive history replay", () => {
+    const keys = [
+      "chat.activity.videoDesignDone",
+      "chat.activity.videoReviseDone",
+      "chat.activity.videoReviewDone",
+    ]
+    const units = buildConversationUnits([
+      msg("user"),
+      ...keys.map((key, index) => activityMsg(`video-${index}`, { kind: "draft", key })),
+      msg("reply"),
+    ])
+
+    expect(units.map(unitId)).toEqual(["user", "video-0", "video-1", "video-2", "reply"])
+  })
+
   it("the PATCH variant's pair rides the same exception — an adjust receipt renders", () => {
     // A targeted edit's span persists exactly like the compose span: the
     // storyboardEdit/storyboardEditDone keys must NOT be swallowed by the

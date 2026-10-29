@@ -32,6 +32,10 @@ from app.editing.edits import (
     UnbindSource,
     UpdateClip,
     UpdateScene,
+    SplitClip,
+    TrimClip,
+    SetTransition,
+    RemoveTransition,
 )
 from app.editing.schemas import (
     Animation,
@@ -48,6 +52,7 @@ from app.editing.schemas import (
     TextStyle,
     TimeRange,
     Track,
+    Transition,
     VideoObject,
     WebObject,
     speech_text_digest,
@@ -64,6 +69,11 @@ from app.editing.templates import ClipBlueprint, ViewFact, _camera_animations
 from app.editing.timing import SOURCE_TIMEBASE, seconds_to_ticks
 from app.models.schemas import (
     ReviseVideoArgs,
+    VideoEditSplitClip,
+    VideoEditTrimClip,
+    VideoEditTransition,
+    VideoEditRemoveTransition,
+    VideoEditSnapCut,
     VideoEditAddText,
     VideoEditBackground,
     VideoEditFocusWeb,
@@ -352,13 +362,7 @@ def _translate_add_text(content: CompositionContent, op: VideoEditAddText, token
 
 
 def _translate_remove_clip(content: CompositionContent, op: VideoEditRemoveClip) -> Op:
-    clip = _find_clip(content, op.clip_id)
-    if not isinstance(clip.object, TextObject):
-        raise VideoServiceError(
-            f"clip {op.clip_id!r} is a {clip.object.kind} clip — removing "
-            "media clips one by one is not supported yet (remove_scene takes "
-            "a whole scene)"
-        )
+    _find_clip(content, op.clip_id)
     return RemoveClip(op="remove_clip", clip_id=op.clip_id)
 
 
@@ -648,6 +652,38 @@ def translate_revision(
             ops.append(_translate_remove_clip(current, edit))
         elif isinstance(edit, VideoEditUpdateVideo):
             ops.append(_translate_update_video(current, edit))
+        elif isinstance(edit, VideoEditSplitClip):
+            token = uuid5(NAMESPACE_URL, f"split:{request_id}:{index}").hex if request_id else uuid4().hex
+            ops.append(SplitClip(op="split_clip", clip_id=edit.clip_id,
+                at=seconds_to_ticks(edit.at_seconds, content.settings.timebase),
+                new_clip_id=f"clp_{token}", new_object_id=f"obj_{token}"))
+        elif isinstance(edit, VideoEditTrimClip):
+            ops.append(TrimClip(op="trim_clip", clip_id=edit.clip_id,
+                range=TimeRange(start=seconds_to_ticks(edit.start_seconds, content.settings.timebase),
+                                end=seconds_to_ticks(edit.end_seconds, content.settings.timebase))))
+        elif isinstance(edit, VideoEditTransition):
+            token = uuid5(NAMESPACE_URL, f"crossfade:{edit.from_clip_id}:{edit.to_clip_id}").hex
+            ops.append(SetTransition(op="set_transition", transition=Transition(
+                transition_id=f"trn_{token}", from_clip_id=edit.from_clip_id, to_clip_id=edit.to_clip_id,
+                duration=seconds_to_ticks(edit.duration_seconds, content.settings.timebase))))
+        elif isinstance(edit, VideoEditRemoveTransition):
+            ops.append(RemoveTransition(op="remove_transition", transition_id=edit.transition_id))
+        elif isinstance(edit, VideoEditSnapCut):
+            from app.editing.temporal import snap_cut
+            a, b, music = (_find_clip(current, ref) for ref in (edit.from_clip_id, edit.to_clip_id, edit.music_clip_id))
+            if snapshots is None or music.source is None:
+                raise VideoServiceError("snap_cut needs the frozen music snapshot")
+            changed = snap_cut(current, a, b, music, snapshots[music.source.snapshot_id],
+                               seconds_to_ticks(edit.tolerance_seconds, content.settings.timebase))
+            from app.editing.temporal import slice_clip
+            for original, updated in zip((a, b), changed[:]):
+                if original.linked_group_id:
+                    changed.extend(slice_clip(current, sibling, updated.range, extend=True)
+                                   for track in current.timeline.tracks for sibling in track.clips
+                                   if sibling.clip_id != original.clip_id and sibling.linked_group_id == original.linked_group_id)
+            for clip in changed:
+                ops.append(UpdateClip(op="update_clip", clip_id=clip.clip_id,
+                                      range=clip.range, source=clip.source, animations=clip.animations))
         elif isinstance(edit, VideoEditFocusWeb):
             if snapshots is None:
                 raise VideoServiceError("focus_web needs the base version's resolved snapshots")
@@ -779,9 +815,14 @@ def compute_change_set(
             changes.append("scene_id")
         if before.source != after.source:
             changes.append("source")
+        if before.linked_group_id != after.linked_group_id:
+            changes.append("linked_group_id")
         return changes
 
     return {
+        **({"transitions": {"before": [t.model_dump(mode="json") for t in base.timeline.transitions],
+                            "after": [t.model_dump(mode="json") for t in new.timeline.transitions]}}
+           if base.timeline.transitions != new.timeline.transitions else {}),
         "settings": {
             key: {"before": before, "after": new.settings.model_dump(mode="json")[key]}
             for key, before in base.settings.model_dump(mode="json").items()
@@ -894,7 +935,9 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
         if scene.get("visual_description"):
             lines.append(f"  picture: {scene['visual_description']}")
         for clip in scene["clips"]:
-            desc = f"  clip {clip['clip_id']} ({clip['object_kind']}, {clip['track_role']})"
+            output_range = clip["range_seconds"]
+            desc = (f"  clip {clip['clip_id']} ({clip['object_kind']}, {clip['track_role']}) "
+                    f"output={output_range['start']:.3f}s–{output_range['end']:.3f}s")
             if clip.get("text") is not None:
                 style = clip.get("style") or {}
                 desc += f" text={clip['text']!r} (size {style.get('font_size')}, {style.get('color')})"
@@ -956,6 +999,11 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
         lines.append(
             f"\nglobal clip {clip['clip_id']} ({clip['object_kind']}, {clip['track_role']})"
         )
+    for transition in payload.get("transitions", []):
+        lines.append("transition " + json.dumps(transition, sort_keys=True))
+    for source in payload["sources"]:
+        if (source.get("beat_grid") or {}).get("available") or (source.get("beat_grid") or {}).get("bpm"):
+            lines.append(f"frozen music snapshot {source['snapshot_id']} BeatGrid={source['beat_grid']}")
     speech_clips = [
         clip
         for scene in payload["scenes"]
@@ -970,6 +1018,36 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
     else:
         lines.append("\nNarration: off.")
     return "\n".join(lines)
+
+
+def format_revision_text(read: dict[str, Any]) -> str:
+    """The saved delta plus only the changed clips' current facts.
+
+    The canonical card already owns the whole work. The answering iteration
+    needs the new base_ref and the actual changed objects, not an unrelated
+    execution dump of every unchanged layer.
+    """
+    import json
+
+    change_set = read.get("change_set") or {}
+    clip_delta = change_set.get("clips") or {}
+    changed_ids = {
+        item["clip_id"]
+        for key in ("added", "updated")
+        for item in clip_delta.get(key) or []
+    }
+    changed_clips = [
+        clip
+        for scene in read["storyboard"]["scenes"]
+        for clip in scene["clips"]
+        if clip["clip_id"] in changed_ids
+    ]
+    return json.dumps({
+        "version": read["version"],
+        "base_ref": read["base_ref"],
+        "change_set": change_set,
+        "changed_clips": changed_clips,
+    }, ensure_ascii=False, indent=1)
 
 
 # ---------------------------------------------------------------------------

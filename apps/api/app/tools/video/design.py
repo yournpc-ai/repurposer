@@ -198,6 +198,21 @@ def _lines_text(snapshot_metas: list[dict[str, Any]]) -> str:
     return "\n".join(f"L{line.index} [{line.kind}] {line.text}" for line in lines)
 
 
+def _capture_status_text(snapshot_metas: list[dict[str, Any]]) -> str:
+    """Frozen capture completeness, kept outside the citable product copy."""
+    rows: list[str] = []
+    for page, meta in enumerate(snapshot_metas, start=1):
+        truncated = meta.get("body_truncated")
+        if truncated is True:
+            state = "TRUNCATED — the rendered body is incomplete; do not claim full-page coverage"
+        elif truncated is False:
+            state = "not truncated by the bounded capture"
+        else:
+            state = "UNKNOWN — this older snapshot froze no body-truncation fact"
+        rows.append(f"page {page}: rendered body {state}")
+    return "\n".join(rows) or "no captured-page completeness facts"
+
+
 def _views_text(views: list[ViewFact]) -> str:
     rows: list[str] = []
     for i, view in enumerate(views, start=1):
@@ -343,8 +358,12 @@ def _current_design_summary(content_scenes: list[dict[str, Any]]) -> str:
         for clip in scene.get("clips", []):
             if clip.get("object_kind") == "text" and clip.get("text"):
                 texts.append(str(clip["text"]).replace("\n", " / ")[:80])
+        # Director answers use template scene keys, not the stored Scene ids.
+        scene_key = str(scene["scene_id"])
+        if scene_key.startswith("scn_"):
+            scene_key = scene_key[4:]
         rows.append(
-            f"- {scene['scene_id']}: {scene.get('intent') or ''}"
+            f"- {scene_key}: {scene.get('intent') or ''}"
             + (" | " + "; ".join(texts) if texts else "")
             + (" | narration: " + str(scene["narration"]).replace("\n", " / ") if scene.get("narration") else "")
         )
@@ -365,12 +384,14 @@ async def _directed_launch_slots(
     """The bounded direction loop: answer → resolve/ground → repair with the
     violation echo. Past the budget the design refuses honestly."""
     lines_text = _lines_text(snapshot_metas)
+    capture_status_text = _capture_status_text(snapshot_metas)
     views_text = _views_text(views)
     feedback: str | None = None
     last_violations: list[str] = []
     for _attempt in range(_MAX_DIRECTION_ATTEMPTS):
         direction: LaunchFilmDirection = await video_director.call(
             lines_text=lines_text,
+            capture_status_text=capture_status_text,
             views_text=views_text,
             focus=focus,
             instruction=instruction,

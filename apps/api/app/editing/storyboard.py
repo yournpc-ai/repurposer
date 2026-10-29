@@ -56,6 +56,7 @@ def _clip_summary(
     fps_num, fps_den = settings.fps.num, settings.fps.den
     summary: dict[str, Any] = {
         "clip_id": clip.clip_id,
+        "linked_group_id": clip.linked_group_id,
         "object_id": clip.object.object_id,
         "object_kind": clip.object.kind,
         "track_role": track_role,
@@ -163,6 +164,8 @@ def storyboard_payload(
     headings. Absent facts degrade to ids, never to invention.
     """
     source_facts = source_facts or {}
+    beat_grids = {key: (facts.get("meta") or {}).get("beat_grid") or {}
+                  for key, facts in source_facts.items()}
     settings = content.settings
     timebase = settings.timebase
     fps_num, fps_den = settings.fps.num, settings.fps.den
@@ -241,6 +244,10 @@ def storyboard_payload(
         "sources": [
             {
                 "snapshot_id": str(binding.snapshot_id),
+                "beat_grid": {
+                    "available": bool(beat_grids.get(binding.snapshot_id, {}).get("beats")),
+                    "bpm": beat_grids.get(binding.snapshot_id, {}).get("bpm"),
+                },
                 "kind": (source_facts.get(binding.snapshot_id) or {}).get("kind"),
                 "url": (
                     (source_facts.get(binding.snapshot_id) or {}).get("meta") or {}
@@ -249,6 +256,9 @@ def storyboard_payload(
             for binding in content.sources
         ],
         "scenes": scenes,
+        "transitions": [{**transition.model_dump(mode="json"),
+                         "duration_seconds": transition.duration / content.settings.timebase}
+                        for transition in content.timeline.transitions],
         "unassigned_clips": [
             _clip_summary(c, content, track_role=clip_tracks[c.clip_id], view_facts=view_facts)
             for c in all_clips

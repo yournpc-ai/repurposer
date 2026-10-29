@@ -18,4 +18,4 @@ Choose one supplied source_snapshot_id and a 1× source window inside its real d
 
 Create timed captions from the recording's transcript when available, aligned to the selected source window and expressed in OUTPUT seconds starting at 0. Caption text must come from the transcript or the user's explicit copy; never invent quotations or facts. Keep caption windows ordered, non-overlapping and inside the selected window. If the user explicitly asks for no captions, return an empty list; otherwise provide useful timed captions. Set include_original_audio=false only when the user asks to remove it or the snapshot has no audio.
 
-Return only the structured answer. No commentary.
+Return one FLAT JSON object with these fields: name, language, source_snapshot_id, source_start_seconds, source_end_seconds, title, intent, visual_description, captions, include_original_audio. Each captions entry has exactly text, start_seconds, end_seconds. The source window determines duration. Layout, canvas, music selection and gains belong to the system or subsequent targeted edits; they are not additional answer fields. No scenes wrapper or commentary.

@@ -121,7 +121,7 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # was a targeted edit. The variant is read off the VALIDATED params at
 # execute entry (ReadExecuting.params): knowable there, never guessed at
 # name_known (the arguments are still streaming at that beat).
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard", "design_video", "revise_video"})
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard", "design_video", "revise_video", "review_video"})
 _RUN_TOOLS = frozenset({"start_run", "retry_upload"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
@@ -155,7 +155,7 @@ _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
 # as its own span — 「正在设计分镜」/「正在调整分镜」 ride the phase channel
 # (on_phase) inside it; the span's settle is the ONE draft-family frame that
 # persists (its markdown message is the deliverable, no dock card absorbs it).
-_STORYBOARD_TOOLS = frozenset({"design_storyboard", "design_video", "revise_video"})
+_STORYBOARD_TOOLS = frozenset({"design_storyboard", "design_video", "revise_video", "review_video"})
 _STORYBOARD_KEYS = ("chat.activity.storyboard", "chat.activity.storyboardDone")
 # The patch variant's pair (same span anatomy, its own vocabulary): a call
 # carrying edits reads as 调整, never as a fresh 设计.
@@ -169,6 +169,7 @@ _STORYBOARD_EDIT_KEYS = (
 # two calls are already distinct verbs, no params probe needed).
 _VIDEO_DESIGN_KEYS = ("chat.activity.videoDesign", "chat.activity.videoDesignDone")
 _VIDEO_REVISE_KEYS = ("chat.activity.videoRevise", "chat.activity.videoReviseDone")
+_VIDEO_REVIEW_KEYS = ("chat.activity.videoReview", "chat.activity.videoReviewDone")
 
 
 def _is_storyboard_key(key: str | None) -> bool:
@@ -177,6 +178,7 @@ def _is_storyboard_key(key: str | None) -> bool:
         + _STORYBOARD_EDIT_KEYS
         + _VIDEO_DESIGN_KEYS
         + _VIDEO_REVISE_KEYS
+        + _VIDEO_REVIEW_KEYS
     )
 
 
@@ -625,6 +627,8 @@ class ActivityProjector:
                 keys = _VIDEO_DESIGN_KEYS
             elif name == "revise_video":
                 keys = _VIDEO_REVISE_KEYS
+            elif name == "review_video":
+                keys = _VIDEO_REVIEW_KEYS
             else:
                 edits = (
                     getattr(event.params, "edits", None)

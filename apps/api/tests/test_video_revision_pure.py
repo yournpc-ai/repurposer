@@ -8,6 +8,7 @@ system-computed change set, and the presentation receipt/block shapes.
 
 from __future__ import annotations
 
+import json
 from uuid import UUID, uuid4
 
 import pytest
@@ -26,7 +27,9 @@ from app.editing.schemas import CompositionContent, TimeRange, VideoObject, WebO
 from app.editing.service import (
     VideoServiceError,
     compute_change_set,
+    format_revision_text,
     storyboard_block,
+    storyboard_payload,
     translate_revision,
     video_carry_state,
     video_presentation_receipt,
@@ -92,6 +95,36 @@ def test_update_text_deep_copies_and_clears_background():
     assert original.object.text == "Hello"
 
 
+def test_revision_observation_contains_only_the_changed_saved_clips():
+    base = valid_content()
+    updated = apply_ops(
+        base,
+        translate_revision(base, _args({"op": "update_text", "clip_id": "clp_title", "text": "Bonjour"})),
+        {},
+    )
+    read = {
+        "version": 2,
+        "base_ref": {
+            "composition_id": str(COMP_ID),
+            "composition_version_id": str(VER_ID),
+            "content_digest": "c" * 64,
+        },
+        "change_set": compute_change_set(base, updated),
+        "storyboard": storyboard_payload(
+            updated,
+            composition_id=COMP_ID,
+            version_id=VER_ID,
+            version=2,
+            content_digest="d" * 64,
+        ),
+    }
+
+    facts = json.loads(format_revision_text(read))
+    assert facts["base_ref"] == read["base_ref"]
+    assert [clip["clip_id"] for clip in facts["changed_clips"]] == ["clp_title"]
+    assert facts["changed_clips"][0]["text"] == "Bonjour"
+
+
 def test_update_text_rejects_non_text_clip():
     with pytest.raises(VideoServiceError):
         translate_revision(
@@ -154,7 +187,7 @@ def test_add_text_stays_inside_the_scene_window():
         )
 
 
-def test_remove_clip_is_text_only():
+def test_remove_clip_preserves_unrelated_text_and_music():
     ops = translate_revision(
         valid_content(), _args({"op": "remove_clip", "clip_id": "clp_title"})
     )
@@ -162,10 +195,12 @@ def test_remove_clip_is_text_only():
     assert all(
         c.clip_id != "clp_title" for t in updated.timeline.tracks for c in t.clips
     )
-    with pytest.raises(VideoServiceError):
-        translate_revision(
-            valid_content(), _args({"op": "remove_clip", "clip_id": "clp_bg"})
-        )
+    base = valid_content()
+    ops = translate_revision(base, _args({"op": "remove_clip", "clip_id": "clp_bg"}))
+    updated = apply_ops(base, ops, {})
+    validate_content(updated, SNAPSHOT_FACTS)
+    assert updated.timeline.tracks[1:] == base.timeline.tracks[1:]
+    assert updated.timeline.tracks[0].clips == []
 
 
 def test_focus_web_recomputes_camera_from_frozen_element_without_model_numbers():

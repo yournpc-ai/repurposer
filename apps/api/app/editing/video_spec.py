@@ -395,7 +395,7 @@ def _compile_clip(
                 settings.fps.den,
             )
             source["start_frame"] = source_start
-            if isinstance(clip.object, VideoObject):
+            if isinstance(clip.object, (VideoObject, AudioObject)):
                 # Quantize once, then preserve the exact 1× output duration.
                 # Independently rounding source start/end can otherwise add or
                 # drop a frame and desynchronize the coupled original audio.
@@ -465,6 +465,24 @@ def compile_video_spec(
                 "clips": clips,
             }
         )
+    from app.editing.transitions import transition_windows
+    transitions = transition_windows(content, snapshots)
+    by_id = {clip["clip_id"]: clip for track in tracks for clip in track["clips"]}
+    for transition in transitions:
+        cut = transition["cut_frame"]
+        outgoing = by_id[transition["from_clip_id"]]
+        incoming = by_id[transition["to_clip_id"]]
+        after = transition["end_frame"] - cut
+        before = cut - transition["start_frame"]
+        outgoing["end_frame"] += after
+        incoming["start_frame"] -= before
+        if outgoing["source"].get("end_frame") is not None:
+            outgoing["source"]["end_frame"] += after
+        if incoming["source"].get("start_frame") is not None:
+            incoming["source"]["start_frame"] -= before
+        for animation in incoming["animations"]:
+            for keyframe in animation["keyframes"]:
+                keyframe["at"] += before
     return {
         "family": "video",
         "format": SPEC_FORMAT,
@@ -476,6 +494,7 @@ def compile_video_spec(
         "duration_frames": _quantize_frames(total_ticks, content),
         "fonts": _compile_fonts(content),
         "tracks": tracks,
+        **({"transitions": transitions} if transitions else {}),
         "provenance": {
             "composition_id": str(composition_id),
             "composition_version_id": str(version_id),

@@ -20,7 +20,7 @@ from app.editing.schemas import (
     SpeechObject,
     speech_text_digest,
 )
-from app.tools.video.params import NarrationPolicy
+from app.tools.video.params import NARRATION_FIT_MARGIN, NarrationPolicy
 
 DEFAULT_VIDEO_VOICE_ID = "presenter_male"
 NARRATION_ALIGNMENT = "minimax-t2a-v2-sentence-v1"
@@ -83,12 +83,12 @@ def narration_alignment_digest(text: str, cues: list[dict]) -> str:
 
 
 def adaptation_speed(
-    *, duration_s: float, window_s: float, speed_max: float, fit_margin: float = 1.02
+    *, duration_s: float, window_s: float, speed_max: float, fit_margin: float = NARRATION_FIT_MARGIN
 ) -> float | None:
     """Return None when the original fits; otherwise its bounded second-pass speed."""
     if duration_s <= window_s:
         return None
-    # A small margin absorbs decoder/container rounding without trimming audio.
+    # Leave room for measured provider duration variation, without trimming audio.
     needed = duration_s / max(window_s, 1 / 30) * fit_margin
     return min(needed, speed_max)
 
@@ -254,9 +254,11 @@ async def narration_quote_characters(content: CompositionContent, *, user_id: UU
         window = clip.range.duration / content.settings.timebase
         if original["duration_s"] <= window:
             continue
-        required = original["duration_s"] / max(window, 1 / 30) * 1.02
+        required = original["duration_s"] / max(window, 1 / 30) * NARRATION_FIT_MARGIN
         if required <= 1.35:
-            total += int(original.get("usage_characters") or upper_bound)
+            # A new request needs the same conservative bound as _check_budget;
+            # the original's actual charge cannot authorize its next synthesis.
+            total += upper_bound
     return total
 
 

@@ -307,6 +307,8 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "role",
       "content",
       "runId",
+      // Delivery transcript ownership only — not a lifecycle/readiness signal.
+      "runDelivery",
       "seq",
       "at",
       "assets",

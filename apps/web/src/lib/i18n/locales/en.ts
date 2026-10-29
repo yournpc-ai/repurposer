@@ -1375,6 +1375,8 @@ const en = {
       videoDesignDone: "Designed the video storyboard",
       videoRevise: "Adjusting the video storyboard…",
       videoReviseDone: "Adjusted the video storyboard",
+      videoReview: "Reviewing the delivered video…",
+      videoReviewDone: "Reviewed the delivered video",
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
@@ -1396,6 +1398,8 @@ const en = {
      * canonical saved-version table a message block resolves to — the
      * server DTO is the truth, never a re-transcribed table. */
     videoStoryboard: {
+      crossfade: "Crossfade · {{seconds}}s",
+      sourceWindow: "Source",
       video: "Video",
       savedSource: "Saved source material",
       audio: "Audio",
@@ -1552,6 +1556,7 @@ const en = {
       types: {
         clip: "Clip",
         film: "Film",
+        video: "Video",
         post: "Social post",
         quotes: "Quote card",
         quote_frame: "Quote card",
@@ -1559,6 +1564,23 @@ const en = {
         article: "Article",
       },
       words: "~{{count}} words",
+    },
+    outputCard: {
+      version: "v{{number}}",
+    },
+    outputViewer: {
+      title: "Delivered output",
+      previous: "Previous output",
+      next: "Next output",
+      position: "{{current}} / {{total}}",
+      previousSlide: "Previous slide",
+      nextSlide: "Next slide",
+      slidePosition: "Slide {{current}} / {{total}}",
+      mention: "Reference",
+      revise: "Continue editing",
+      continuePrompt: "Continue editing this output",
+      unavailable: "Output unavailable",
+      unavailableDetail: "This exact delivered Output is no longer available. No newer version has been substituted.",
     },
     openInEditor: "Open in editor",
     uploadFile: "Upload file",

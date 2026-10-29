@@ -19,12 +19,18 @@ from app.models.schemas import (
     DubRequest,
     FeedbackRequest,
     OutputResponse,
+    OutputPosterResponse,
     RenderStatus,
     TranslateCaptionsRequest,
     validate_output_payload,
 )
 from app.models.tables import Output, Project, User
-from app.pipeline.outputs import delete_outputs_fk_safe
+from app.pipeline.outputs import (
+    composition_version_number,
+    delete_outputs_fk_safe,
+    output_to_response,
+)
+from app.pipeline.output_posters import ensure_output_poster
 from app.tools.captions.procedure import translate_caption_track
 from app.operations.service import apply_precomputed
 from app.pipeline.images import generate_clip_cover_image
@@ -36,7 +42,7 @@ from app.platform.project_context import (
 )
 from app.tools.dub.procedure import synthesize_dub
 from app.pipeline.errors import TransientNodeError, user_error_line
-from app.providers.storage import delete_file
+from app.providers.storage import delete_file, resolve_stored_url
 from app.ui_locale import current_ui_language
 
 router = APIRouter()
@@ -85,11 +91,33 @@ async def get_output(
     output_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
-) -> Output:
+) -> OutputResponse:
     """Get a single output (editor load + render-status polling)."""
-    return await get_output_for_user(
+    output = await get_output_for_user(
         db, output_id, UUID(str(current_user.id)) if current_user else None
     )
+    return output_to_response(
+        output,
+        composition_version_number=await composition_version_number(db, output),
+    )
+
+
+@router.post("/{output_id}/poster", response_model=OutputPosterResponse)
+async def ensure_poster(
+    output_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> OutputPosterResponse:
+    """Cache one real frame for this exact Output; archived rows stay unchanged."""
+    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    try:
+        key = await ensure_output_poster(output)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    poster_url = resolve_stored_url(key)
+    if poster_url is None:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Poster URL could not be resolved")
+    return OutputPosterResponse(output_id=output.id, poster_url=poster_url)
 
 
 @router.put("/{output_id}", response_model=OutputResponse)

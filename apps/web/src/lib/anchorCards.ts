@@ -88,16 +88,27 @@ export function anchorCardOf(output: Output): AnchorCardData {
 /** The receipt's anchor array (N 产物 = 数组平铺): refs resolve against
  * the dock's outputs read; unresolved refs (the fetch still in flight)
  * simply drop out — the frame is static, never a skeleton. */
+export function deliveredOutputsForRun(
+  steps: WorkflowStep[],
+  outputs: Output[],
+): Output[] {
+  const byId = new Map(outputs.map((o) => [o.id, o]))
+  const stepIds = new Set(steps.map((step) => step.id))
+  const refs = [...new Set([
+    ...runOutputRefs(steps),
+    ...outputs.filter((output) => output.workflow_step_id && stepIds.has(output.workflow_step_id)).map((output) => output.id),
+  ])]
+  return refs
+    .map((id) => byId.get(id))
+    .filter((o): o is Output => o != null)
+    .filter(isDeliveredOutput)
+}
+
 export function anchorCardsForRun(
   steps: WorkflowStep[],
   outputs: Output[],
 ): AnchorCardData[] {
-  const byId = new Map(outputs.map((o) => [o.id, o]))
-  return runOutputRefs(steps)
-    .map((id) => byId.get(id))
-    .filter((o): o is Output => o != null)
-    .filter(isDeliveredOutput)
-    .map(anchorCardOf)
+  return deliveredOutputsForRun(steps, outputs).map(anchorCardOf)
 }
 
 /** 名缺回退 (零模板回填): 类型词 + 规格（时长 / 画幅 / 字数 —— 世界自

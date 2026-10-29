@@ -33,6 +33,7 @@ from __future__ import annotations
 import copy
 from typing import Annotated, Literal
 from uuid import UUID
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -48,6 +49,7 @@ from app.editing.schemas import (
     SpeechObject,
     TimeRange,
     Track,
+    Transition,
     VersionSettings,
 )
 
@@ -151,6 +153,34 @@ class RemoveClip(BaseModel):
     clip_id: str
 
 
+class TrimClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["trim_clip"]
+    clip_id: str
+    range: TimeRange
+
+
+class SetTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["set_transition"]
+    transition: Transition
+
+
+class RemoveTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["remove_transition"]
+    transition_id: str
+
+
+class SplitClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["split_clip"]
+    clip_id: str
+    at: int = Field(gt=0)
+    new_clip_id: str
+    new_object_id: str
+
+
 Op = Annotated[
     SetSettings
     | BindSource
@@ -163,7 +193,11 @@ Op = Annotated[
     | RemoveTrack
     | AddClip
     | UpdateClip
-    | RemoveClip,
+    | RemoveClip
+    | TrimClip
+    | SplitClip
+    | SetTransition
+    | RemoveTransition,
     Field(discriminator="op"),
 ]
 
@@ -262,6 +296,8 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
             if clip.scene_id == op.scene_id
         }
         content.scenes = [s for s in content.scenes if s.scene_id != op.scene_id]
+        content.timeline.transitions = [t for t in content.timeline.transitions
+                                       if t.from_clip_id not in removed_ids and t.to_clip_id not in removed_ids]
         for track in content.timeline.tracks:
             track.clips = [clip for clip in track.clips if clip.clip_id not in removed_ids]
         for scene in content.scenes:
@@ -302,9 +338,48 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
             clip.animations = list(op.animations or [])
         if "scene_id" in op.model_fields_set and clip.scene_id != old_scene_id:
             _invalidate_visual_description(content, clip.scene_id)
+    elif isinstance(op, SetTransition):
+        content.timeline.transitions = [t for t in content.timeline.transitions
+                                       if t.transition_id != op.transition.transition_id]
+        content.timeline.transitions.append(copy.deepcopy(op.transition))
+        for clip_id in (op.transition.from_clip_id, op.transition.to_clip_id):
+            _invalidate_visual_description(content, _find_clip(content, clip_id).scene_id)
+    elif isinstance(op, RemoveTransition):
+        content.timeline.transitions = [t for t in content.timeline.transitions if t.transition_id != op.transition_id]
+    elif isinstance(op, (TrimClip, SplitClip)):
+        from app.editing.temporal import slice_clip
+
+        target = _find_clip(content, op.clip_id)
+        members = [clip for track in content.timeline.tracks for clip in track.clips
+                   if clip.clip_id == target.clip_id or
+                   (target.linked_group_id is not None and clip.linked_group_id == target.linked_group_id)]
+        for clip in members:
+            _invalidate_visual_description(content, clip.scene_id)
+            if isinstance(op, TrimClip):
+                kept = slice_clip(content, clip, op.range)
+                clip.range, clip.source, clip.animations = kept.range, kept.source, kept.animations
+            else:
+                left = slice_clip(content, clip, TimeRange(start=clip.range.start, end=op.at))
+                right = slice_clip(content, clip, TimeRange(start=op.at, end=clip.range.end))
+                token = uuid5(NAMESPACE_URL, f"split:{op.new_clip_id}:{clip.clip_id}").hex
+                right.clip_id = op.new_clip_id if clip is target else f"clp_{token}"
+                right.object.object_id = op.new_object_id if clip is target else f"obj_{token}"
+                for animation in right.animations:
+                    animation.animation_id = uuid5(NAMESPACE_URL, f"split:{token}:{animation.animation_id}").hex
+                    animation.target_object_id = right.object.object_id
+                if clip.linked_group_id:
+                    right.linked_group_id = uuid5(NAMESPACE_URL, f"split-group:{op.new_clip_id}").hex
+                clip.range, clip.source, clip.animations = left.range, left.source, left.animations
+                track = next(track for track in content.timeline.tracks if clip in track.clips)
+                track.clips.append(right)
+                for transition in content.timeline.transitions:
+                    if transition.from_clip_id == clip.clip_id:
+                        transition.from_clip_id = right.clip_id
     elif isinstance(op, RemoveClip):
         clip = _find_clip(content, op.clip_id)
         _invalidate_visual_description(content, clip.scene_id)
+        content.timeline.transitions = [t for t in content.timeline.transitions
+                                       if op.clip_id not in (t.from_clip_id, t.to_clip_id)]
         for track in content.timeline.tracks:
             track.clips = [c for c in track.clips if c.clip_id != op.clip_id]
         # Scene speech references to the removed clip die with it — a

@@ -16,11 +16,12 @@ from sqlalchemy.sql import Select
 
 from app.models.schemas import (
     INTERNAL_OUTPUT_TYPES,
+    OutputResponse,
     StepResponse,
     RunResponse,
     is_null_token,
 )
-from app.models.tables import Operation, Output, Publication, WorkflowStep, WorkflowRun
+from app.models.tables import CompositionVersion, Operation, Output, Publication, WorkflowStep, WorkflowRun
 from app.pipeline.graph import fold_estimates, node_for
 from app.platform.billing import cost_usd, credits_at_ratio, estimate_usd_range
 from app.platform.configs import get_config
@@ -88,6 +89,77 @@ async def archive_outputs(db: AsyncSession, ids: list[UUID]) -> None:
         .where(Output.id.in_(ids))
         .values(archived_at=datetime.now(UTC))
     )
+
+
+def chat_delivery_output_ids(messages: list, steps: list, outputs: list = ()) -> list[UUID]:
+    """Flatten delivered refs by their persisted transcript seats, then step order."""
+    seats: dict[UUID, tuple[int, bool]] = {}
+    for index, message in enumerate(messages):
+        run_id = message.workflow_run_id
+        if run_id is None:
+            continue
+        intent = message.intent or {}
+        is_delivery = (
+            intent.get("type") == "trigger_review"
+            and intent.get("trigger") in {"run_completed", "run_failed"}
+        )
+        previous = seats.get(run_id)
+        if previous is None or (is_delivery and not previous[1]):
+            # A spoken delivery owns the exact delivery position. If proactive
+            # speech was legitimately silent, the persisted Run receipt remains
+            # the historical card's transcript seat instead of losing the Output.
+            seats[run_id] = (index, is_delivery)
+    run_order = [run_id for run_id, _ in sorted(seats.items(), key=lambda item: item[1][0])]
+
+    refs_by_run: dict[UUID, list[UUID]] = {run_id: [] for run_id in run_order}
+    materialized: dict[UUID, list[UUID]] = {}
+    for output in outputs:
+        materialized.setdefault(output.workflow_step_id, []).append(output.id)
+    for step in sorted(steps, key=lambda item: item.seq):
+        refs = refs_by_run.get(step.run_id)
+        if refs is not None:
+            refs.extend(UUID(str(ref)) for ref in (step.output_refs or []))
+            # Older quote-card writers materialized images under the producing
+            # step without returning their ids. Their persisted ownership is
+            # still a delivery fact, including after the images are archived.
+            if materialized:
+                refs.extend(materialized.get(step.id, []))
+
+    ordered: list[UUID] = []
+    seen: set[UUID] = set()
+    for run_id in run_order:
+        for output_id in refs_by_run[run_id]:
+            if output_id not in seen:
+                seen.add(output_id)
+                ordered.append(output_id)
+    return ordered
+
+
+def is_delivered_output(output: Output) -> bool:
+    """Mirror the user-facing delivery gate, including archived exact reads."""
+    if output.type in INTERNAL_OUTPUT_TYPES:
+        return False
+    if output.type not in {"clip", "film", "video"}:
+        return True
+    render_status = getattr(output.render_status, "value", output.render_status)
+    return render_status == "completed" and bool((output.files or {}).get("video"))
+
+
+def output_to_response(
+    output: Output,
+    *,
+    composition_version_number: int | None = None,
+) -> OutputResponse:
+    return OutputResponse.model_validate(output).model_copy(
+        update={"composition_version_number": composition_version_number}
+    )
+
+
+async def composition_version_number(db: AsyncSession, output: Output) -> int | None:
+    if output.composition_version_id is None:
+        return None
+    version = await db.get(CompositionVersion, output.composition_version_id)
+    return version.version if version is not None else None
 
 
 # output type → archived work_ids, oldest first (a sweep's inheritance chain)

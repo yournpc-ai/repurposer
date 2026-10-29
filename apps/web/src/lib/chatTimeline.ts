@@ -63,6 +63,8 @@ const STORYBOARD_SPAN_KEYS = new Set([
   "chat.activity.videoDesignDone",
   "chat.activity.videoRevise",
   "chat.activity.videoReviseDone",
+  "chat.activity.videoReview",
+  "chat.activity.videoReviewDone",
 ])
 
 export function isDraftSpanRow(a: ActivityRowFrame): boolean {

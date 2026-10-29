@@ -64,6 +64,8 @@ interface VideoVersionRead {
   composition_name?: string | null
   composition_version_id: string
   version: number
+  content_digest: string
+  presentation_digest: string
   generator_previews?: GeneratorPreview[]
   storyboard: {
     duration_seconds: number
@@ -71,6 +73,7 @@ interface VideoVersionRead {
     scenes: StoryboardScene[]
     sources?: { kind?: string | null; url?: string | null }[]
     unassigned_clips?: StoryboardClip[]
+    transitions?: { transition_id: string; kind: "crossfade"; duration_seconds: number }[]
   }
 }
 
@@ -105,7 +108,7 @@ export function StoryboardCard({ block, messageId, onRunStarted }: { block: Vide
       .then(async (res) => {
         if (!res.ok) throw new Error("Storyboard unavailable")
         const data = (await res.json()) as VideoVersionRead
-        if (data.composition_id !== block.composition_id || data.composition_version_id !== block.composition_version_id) {
+        if (data.composition_id !== block.composition_id || data.composition_version_id !== block.composition_version_id || (block.content_digest != null && data.content_digest !== block.content_digest)) {
           throw new Error("Storyboard identity mismatch")
         }
         if (!cancelled) setRead(data)
@@ -153,10 +156,10 @@ export function StoryboardCard({ block, messageId, onRunStarted }: { block: Vide
     if (!read || completedVersion !== read.composition_version_id || !previewsReady) return
     let cancelled = false
     void new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))).then(async () => {
-      if (cancelled || !messageId || !block.presentation_digest) return
+      if (cancelled || !messageId || !read.presentation_digest) return
       const response = await apiFetch(`/api/v1/chat/messages/${block.presented_message_id || messageId}/video-presentation`, {
         method: "POST", toast: false,
-        body: { composition_version_id: block.composition_version_id, presentation_digest: block.presentation_digest },
+        body: { composition_version_id: block.composition_version_id, presentation_digest: read.presentation_digest },
       }).catch(() => {})
       if (response?.ok) {
         const result = await response.json()
@@ -164,7 +167,7 @@ export function StoryboardCard({ block, messageId, onRunStarted }: { block: Vide
       }
     })
     return () => { cancelled = true }
-  }, [read, completedVersion, previewsReady, messageId, block.presented_message_id, block.composition_version_id, block.presentation_digest, onRunStarted])
+  }, [read, completedVersion, previewsReady, messageId, block.presented_message_id, block.composition_version_id, onRunStarted])
 
   let remaining = visibleChars
   const reveal = (value?: string | null) => {
@@ -229,6 +232,11 @@ export function StoryboardCard({ block, messageId, onRunStarted }: { block: Vide
             ) : null}
           </div>
         ))}
+        {(read.storyboard.transitions ?? []).map((transition) => (
+          <p key={transition.transition_id} className="mt-1 text-xs text-meta">
+            {t("chat.videoStoryboard.crossfade", { seconds: transition.duration_seconds })}
+          </p>
+        ))}
         {(read.storyboard.sources ?? []).map((source, index) => (
           <p key={index} className="mt-1 break-all text-xs text-meta">{source.url || t("chat.videoStoryboard.savedSource")}</p>
         ))}
@@ -272,11 +280,12 @@ export function StoryboardCard({ block, messageId, onRunStarted }: { block: Vide
                     })}
                   </p>
                 ) : null}
-                {video ? (
-                  <p className="pl-6 text-xs text-muted-foreground">
-                    {video.source_range_seconds ? `${formatWindow(video.source_range_seconds.start, video.source_range_seconds.end)} · ` : ""}{video.fit} · {t(video.muted ? "chat.videoStoryboard.originalAudioOff" : "chat.videoStoryboard.originalAudioOn")} · {video.gain_db ?? 0} dB
+                {scene.clips.filter((clip) => clip.object_kind === "video").map((clip) => (
+                  <p key={clip.clip_id} className="pl-6 text-xs text-muted-foreground">
+                    {clip.range_seconds ? `${formatWindow(clip.range_seconds.start, clip.range_seconds.end)} · ` : ""}
+                    {clip.source_range_seconds ? `${t("chat.videoStoryboard.sourceWindow")} ${formatWindow(clip.source_range_seconds.start, clip.source_range_seconds.end)} · ` : ""}{clip.fit} · {t(clip.muted ? "chat.videoStoryboard.originalAudioOff" : "chat.videoStoryboard.originalAudioOn")} · {clip.gain_db ?? 0} dB
                   </p>
-                ) : null}
+                ))}
                 {shapes.map((clip) => (
                   <p key={`shape-${clip.clip_id}`} className="pl-6 text-xs text-meta">
                     {t("chat.videoStoryboard.shape")} · {clip.shape} · {clip.fill}

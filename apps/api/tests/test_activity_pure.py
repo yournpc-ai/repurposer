@@ -722,16 +722,16 @@ def test_storyboard_tool_lands_in_one_bucket():
     on BOTH paths (the read tools' seat — the design beat observes and
     iterates like a read; ADR-129) and lands in exactly one projector
     bucket (draft). ADR-145 phase B: the deployment gate swaps the
-    vocabulary — video_project_enabled ON puts design_video/revise_video
-    on the wire and pulls design_storyboard off it (两套分镜词汇永不同席);
+    vocabulary — video_project_enabled ON puts design_video/revise_video and
+    the exact-Output review_video on the wire and pulls design_storyboard off it (两套分镜词汇永不同席);
     OFF keeps the film chain's original shape. The assertion keys off the
     same gate, never a frozen registry dump."""
     from app.config import settings
 
     if settings.video_project_enabled:
-        wired, unwired = ("design_video", "revise_video"), ("design_storyboard",)
+        wired, unwired = ("design_video", "revise_video", "review_video"), ("design_storyboard",)
     else:
-        wired, unwired = ("design_storyboard",), ("design_video", "revise_video")
+        wired, unwired = ("design_storyboard",), ("design_video", "revise_video", "review_video")
     for name in wired:
         assert name in all_known_tool_names()
         assert kind_for_tool(name) == "draft"

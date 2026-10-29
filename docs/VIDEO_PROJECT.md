@@ -130,7 +130,7 @@ base_ref(composition_id, version_id, content_digest) + request_id + edits
 
 `storyboard_payload(version)` 由服务端从保存后的 CompositionVersion 确定性生成，包含完整分镜表和回退事实标签。Chat 呈现这份 canonical payload 并补充解释，不要求 LLM 把整张表重新转录一遍。
 
-呈现记录持久化 `presented_message_id + presentation_digest + composition_version_id`。首稿 Start 同时校验版本、完整呈现记录与后续用户批准；仅有“消息曾提到某版”或服务端生成了 payload 不算完成呈现。B 明确发送、客户端释放与中断时的回执边界；该记录证明承载内容与版本的关联，不证明用户主观已读，不新增阅读追踪系统。结构化表格、组件和 LLM 散文字段的释放都遵守现有打字机律，不能借 canonical payload 整段瞬移。
+呈现记录持久化 `presented_message_id + presentation_digest + composition_version_id`。消息块是版本引用；卡片重新读取并完整释放当前 canonical DTO 后，ACK 必须同时匹配该块的版本/已有 `content_digest` 与当前 DTO 的 `presentation_digest`，再更新版本外呈现回执；旧引用缺失的 content digest 在这次真实呈现时补齐。刷新后旧展示摘要不得否决当前真实呈现，过期摘要回放仍拒绝。首稿 Start 同时校验版本、完整呈现记录与后续用户批准；仅有“消息曾提到某版”或服务端生成了 payload 不算完成呈现。该记录证明承载内容与版本的关联，不证明用户主观已读，不新增阅读追踪系统。结构化表格、组件和 LLM 散文字段的释放都遵守现有打字机律，不能借 canonical payload 整段瞬移。
 
 ### 2.4 内容、执行与产物身份
 
@@ -286,7 +286,7 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 | 可编辑图形 MG | 原生图形/路径与 Animation | 按代表场景添加最小受支持图元，参数可编辑；不预建完整矢量设计系统 |
 | 受控 2D/3D 程序画面、模型生产画面 | GeneratorObject → 固定媒体 | 保留程序/请求与参数，显式生产后参与合成；内部修改需改来源并重新生产。当前实际 runtime 为 drawing-v1 的受限 2D 绘图命令与 image-v1 的 MiniMax image-01 单图请求 |
 
-**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `drawing-v1`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；也已接 `image-v1`：保存 MiniMax `image-01` 的 16:9 单图请求，经既有 Run 授权后真实生成并按普通 image 参与合成。局部换源窗当前保持输出时长。其他模型、生成视频、Speech、Transition 与自由改时长仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
+**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `drawing-v1`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；也已接 `image-v1`：保存 MiniMax `image-01` 的 16:9 单图请求，经既有 Run 授权后真实生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；其他模型、生成视频、自由改时长和通用 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
 
 代表性出口为“动态背景 + 中央实拍 + 独立标题/定时字幕 + 原声/音乐”，经 Chat 设计、审阅、制作与局部修订完成。平台播放器按钮、账号与弹幕不属于该作品内容。不能以静态网页或纯文字片通过替代此混合合成能力。
 
@@ -326,7 +326,7 @@ Transition
 └── easing / params
 ```
 
-Transition 属于同一 Track 上相邻 Clips 的编辑关系；单 Object 的 fade、slide、zoom 仍是 Animation。首批只实现当前宣传片/MG 需要的封闭枚举，不做转场画廊。
+Transition 属于同一 Track 上相邻 Clips 的编辑关系；单 Object 的 fade、slide、zoom 仍是 Animation。当前首个消费者为 crossfade + center：同轨相邻、全画幅 cover、无外部视觉 transform/opacity 动画的不透明固定 image/web/video；不移动切点或总长。编译围绕切点扩展两侧覆盖窗，视频使用真实前后 source handles，余量不足明确冲突；VideoObject 内原声同时交叉淡化，独立文字和音乐不连带。单独关联 AudioClip 的转场淡化、透明层及其他转场仍未声明支持，不做转场画廊。
 
 ## 5. Animation 与 TextPart
 
@@ -410,13 +410,13 @@ TextObject
 - `bpm` 是音乐素材的名义速度，可空；BeatGrid 是实际分析出的源时间节拍，可空。
 - 音乐 Clip 的 source_range 决定 BeatGrid 如何映射到输出时间。
 - 有真实 BeatGrid 时优先吸附真实节拍；只有 BPM 时才按均匀拍长推导。
-- snap 后统一量化到输出时间/帧；不得由 API 与 Renderer 各自 round。
+- snap 后统一量化到输出时间/帧；不得由 API 与 Renderer 各自 round。当前 snap_cut 读取该版本音乐 SourceSnapshot.meta.beat_grid，将源时间节拍经音乐 source_range 映射到输出时间，在显式容差内吸附所选相邻切点；BPM 仅在无真实 beats 时按均匀拍长推导，无两者则明确不吸附。总长、独立文字和音乐不自动 ripple。
 - 没有音乐不伪造 BPM；BPM 不代替 fps，也不自动改变所有 Object 动画。
 
 ### 6.4 旁白、字幕与固定切点
 
 - 默认固定已审阅 Scene/Clip 切点；TTS 可在显式制作政策的有界语速范围内适配，不借用其他 Scene 帧数、不移动切点、不改旁白原文、不静默截断或交付缺失旁白的成片。
-- 当前首个 MG 消费者的制作政策为 1.0–1.35×、每条 SpeechClip 至多两次付费合成、`fit_margin=1.02`；`max_tts_characters` 按剩余实际合成需求报价并与上述边界一起钉入授权 Run。原速原件可跨 Chat 复用，加速适配只属当前 Run；已提交但结果未确认的供应商请求不自动重放，已固定音频的字幕下载可单独恢复。
+- 当前首个 MG 消费者的制作政策为 1.0–1.35×、每条 SpeechClip 至多两次付费合成、`fit_margin=1.08`；`max_tts_characters` 按剩余实际合成需求报价并与上述边界一起钉入授权 Run。原速原件可跨 Chat 复用，加速适配只属当前 Run；已提交但结果未确认的供应商请求不自动重放，已固定音频的字幕下载可单独恢复。
 - 字幕可由旁白派生，记录源 SpeechObject、文本版本与对齐 provenance；用户手改后标记独立编辑，不再被旁白重生成静默覆盖。字幕同步刷新是显式编辑。
 - 视频与其原声分离到视觉/音频 Clip 时记录关联；split/trim/move 明确同步范围。不能只移动画面留下旧音轨，也不能强制连带用户已解除关联的声音。
 
@@ -424,7 +424,7 @@ TextObject
 
 A 的最小纵向样片开工前，给出纯函数与 golden fixtures，冻结：时间范围 `[start, end)`、各时间域单位、量化/舍入与时长换算、视觉 Track order 方向及唯一性。同轨非转场重叠首版拒绝；需要叠放时使用不同 Track。
 
-Transition 明确输出覆盖窗、前后 source handles 与余量不足行为；首版无足够余量就拒绝，不偷改时长。split/trim 必须明确关键帧裁剪、端点取样和重新定基规则；同一 Object/属性的重叠动画首版拒绝，TextPart 与父对象的变换按声明的层级组合。
+Transition 明确输出覆盖窗、前后 source handles 与余量不足行为；首版无足够余量就拒绝，不偷改时长。当前 split_clip/trim_clip 通过唯一内容写口保留选定输出子区间：固定媒体源窗按同一帧映射同步，VideoObject 内原声一起移动；显式 linked_group_id 的固定媒体随同拆分/裁短，独立 Clip 不连带。左段保留身份，右段重映射 clip/object/animation 与内部关联；局部动画（含 TextPart stagger）按既有帧求值采样并重新定基，保持可见帧值，动画可继续修改。无 ripple；待生产 Speech 和 Generator 内部媒体切分不在该消费者范围。同一 Object/属性的重叠动画首版拒绝，TextPart 与父对象的变换按声明的层级组合。
 
 字体文件与 digest、文本切分、grapheme/word/line 寻址及排版实现版本必须可追溯。Preview/Render 用相同资源与一致求值；不同实现通过中文、英文、换行和 Emoji fixtures 对照，不能只验证时间插值。
 
@@ -551,13 +551,15 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 可复用的底层保持不变：`create_run` 唯一 Run 出生地、WorkflowStep inputs/状态调度、NODE_KINDS、队列、fencing、计费、Output render ownership、render_status 认领、artifact probe 与终态写。当前设计/修订双路重复、Film 版本落 pending JSON 和 produce 缺版重设计是新链明确消除的耦合。
 
-### 8.5 基于画面证据的内容质量检查（目标，待实施）
+### 8.5 基于画面证据的内容质量检查（首个静帧闭环已接，完整检查待扩）
 
 目标是让 Agent 根据真实画面发现问题、修订并复核。`render_probe` 保留媒体文件硬检查；内容 reviewer 归 `tools/video`，复用既有 Agent harness；`run_review.py` 保持事实聚合。无需先建立通用质量平台或新的审批流程。
 
+当前 `review_video` 只接受确切 delivered Output id，校验其完成文件、执行 spec 与版本血缘后直接解码该 Output 的媒体；默认按执行场景抽少量静帧，`at_seconds` 存在时只抽这些指定复核点。报告写入该 Output 的 `quality.content_review`，记录真实帧号/时间、内容寻址帧证据、检查范围与限制；finding 必须引用实际解码帧，只有该帧 active facts 能证明时才保留 clip/object 引用。无问题允许空 findings，可观察问题与审美建议分开。报告复用须匹配确切 Output、检查要求和显式持久化的 `at_seconds` 采样范围，缺采样元数据的旧报告不猜测覆盖新请求，单点复核不能代替整片场景抽样；`refresh=true` 强制重新检查。静帧实现不声称检查连续运动、转场、声音或音画同步。
+
 首个消费者直接从实际 Output 抽取少量关键帧，对照用户要求和对应内容版本，返回问题描述、帧号/时间与证据；能可靠解算时附 clip/object 引用。运动或声音问题再按需取短片/音频，不要求静帧检查覆盖所有质量维度。报告沿用既有质量/交付读面，说明实际检查范围；模型未能检查时如实说明。
 
-发现问题后通过现有创作/修订流程修改并检查结果。已有授权范围内可自动推进有界修复，不因增加 reviewer 而逐次新增确认；改变确认内容须形成新版本，制作仍服从现有授权与计量。首版主观判断作为建议，不作为未经校准的强制交付门。具体采样、结果字段和修复次数由首条真实旅程决定。
+发现问题后通过现有创作/修订流程修改并检查结果。已有授权范围内可自动推进有界修复，不因增加 reviewer 而逐次新增确认；改变确认内容须形成新版本，制作仍服从现有授权与计量。首版主观判断作为建议，不作为未经校准的强制交付门。
 
 审片首版可直接解码成片，不依赖 D4 编辑上下文或新建通用帧服务；出现真实复用时再提取共享实现。
 
@@ -586,7 +588,7 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 ### 9.2 网页理解与镜头素材采集（首个静态镜头已接）
 
-制作采集已包含实际渲染正文、字体/图片加载后的 2× 整页图与视口图，以及所选镜头需要的目标元素图、CSS 页面坐标和图像像素映射。普通 `get_web_page` 仍沿用 `page_readings` / 服务器 HTML 读取及 6000 字符上限，不等同于制作采集。存储内容与送入模型的摘要分开，截断必须明示；当前 Asset 的 `body_truncated` 尚未传入 SourceSnapshot 与 Director，需补齐该信息传递。
+制作采集已包含实际渲染正文、字体/图片加载后的 2× 整页图与视口图，以及所选镜头需要的目标元素图、CSS 页面坐标和图像像素映射。普通 `get_web_page` 仍沿用 `page_readings` / 服务器 HTML 读取及 6000 字符上限，不等同于制作采集。存储内容与送入模型的摘要分开：新 SourceSnapshot manifest 在根级冻结 `body_truncated`，Director 在独立 `CAPTURE STATUS` 区读取 TRUNCATED / not truncated / UNKNOWN；状态信息不进入可引用产品正文，旧快照缺字段只读 UNKNOWN，不回写或推断为完整。
 
 结果沿既有 Asset → SourceSnapshot 接缝冻结和复用；Director 同时消费文本清单、视口图与元素图，最终 WebObject 引用冻结视口。不能只保存新增字段或截图，却让创作链继续读取旧摘要或旧视口图。
 
@@ -658,7 +660,7 @@ A 定义最小关联与 fixtures，B 实现真实读写、推送和回放。接�
 - **版本标识**：产物 DTO 提供准确的版本展示字段，由实际关联的内容版本投影；新视频沿用 `composition_id + composition_version_id`，不按卡片位置或 Output 数量编造版本号。同一内容版本的多次交付可以显示相同版本号；普通修订没有新交付时不新增 Output 浏览项。
 - **浏览与动作**：查看器支持上一项/下一项、当前位置与总数、底部缩略导航；播放、下载、@引用与继续修改始终针对当前确切 Output。历史卡不追随 current，查看历史不触发恢复、重新制作或付费；旧版修订继续遵守 §9.1。
 - **类型适配**：图片、视频、文本与分页文档共用查看器外壳，内部复用声明类型、画幅与已有展示原语；产物 contain 不裁剪。文档内部页码与外层 Output 序号分开；切换视频暂停上一项并沿用声音互斥。
-- **历史与回放**：按持久化交付引用读取历史产物，不能仅收集已挂载卡片或只用活跃 outputs 列表；归档不让旧卡消失。沿用服务端权限与交付准入；删除或权限失效明确显示不可用，不替换为最新版。刷新/重连保持身份、顺序与去重，新增交付不抢走当前查看项。
+- **历史与回放**：按持久化交付引用读取历史产物，不能仅收集已挂载卡片或只用活跃 outputs 列表；归档不让旧卡消失。沿用服务端权限与交付准入；仍存在但属于内部节点、失败或未完成制作的 Output 不进入浏览列表，引用目标确实不存在或权限失效时明确显示不可用，不替换为最新版。刷新/重连保持身份、顺序与去重，新增交付不抢走当前查看项。
 - **关闭与可访问性**：关闭恢复打开前的聊天滚动位置与触发焦点；当前浏览项位于其他消息行时，不自动滚动 Chat 追踪它。触发卡未挂载时焦点回到合理的 Chat 容器；保留键盘、移动端、双主题与 reduced-motion，跨消息飞行动画可降级为淡入淡出。
 
 交互参考 [UIArc Lightbox gallery](https://uiarc.dev/components/lightbox-gallery)，采用其共享翻页与缩略导航思路；现成源码或自建实现仍需适配现有 Dialog、主题与媒体组件，不因交互需求已确定便认定组件已安装或选型通过。此需求归 B 的独立 UI 增量，施工与验收见四阶段合同 §2.5.2，不依赖 C 或 D4。
@@ -727,7 +729,7 @@ apps/api/
 │   │   ├── preparation.py               素材冻结/上传、字体发布；调用 editing 快照登记
 │   │   ├── programs.py                  drawing-v1 校验、固定媒体、预览与 exact-digest 复用
 │   │   ├── generated_images.py          image-v1 单图生产、执行清单与 Composition 复用指针
-│   │   ├── review.py                    TARGET：首个视频审片消费者，复用既有 Agent 与媒体取帧
+│   │   ├── review.py                    首个 exact-Output 静帧审片消费者，复用既有 Agent 与媒体取帧
 │   │   ├── program_runner.mjs           无业务能力的权限受限 Node 程序入口
 │   │   ├── narration.py                 固定切点、有界语速、真实音频准备
 │   │   └── narration_store.py           合成复用、占位/接管/完成与失败恢复
@@ -740,6 +742,7 @@ apps/api/
 │   │   └── import_skill.py              不可信文档包解析与能力差异报告，C
 │   ├── prompts/
 │   │   ├── video_director.j2            通用导演输入/输出合同，B
+│   │   ├── video_reviewer.j2            exact-Output 真实帧审片合同，B 支撑
 │   │   ├── mg_director.j2 / mixed_director.j2 / program_director.j2 / image_director.j2
 │   │   │                                  MG / 混合实拍 / drawing-v1 / image-v1 导演合同
 │   │   └── chat/                       原地收敛通用设计/修订/呈现/授权规则（B 上半批新增 _video_project.j2 门控替换 _website_film/_text_film）

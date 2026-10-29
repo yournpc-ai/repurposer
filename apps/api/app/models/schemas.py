@@ -1190,12 +1190,12 @@ class DesignVideoArgs(BaseModel):
             raise ValueError("text and media materials never mix — use an MG video or a media composition")
         if self.narration_enabled is False and self.narration is not None:
             raise ValueError("narration text and narration_enabled=false conflict")
-        if (self.narration is not None or self.narration_enabled is not None) and not self.text:
+        if (self.narration is not None or self.narration_enabled is True) and not self.text:
             raise ValueError("the first narration consumer is an MG design with exact on-screen text")
         if self.composition_id is None and self.narration_enabled and not self.narration:
             raise ValueError("a fresh narrated design needs the exact spoken copy")
         if self.mode in {"program", "image"} and (
-            self.narration is not None or self.narration_enabled is not None
+            self.narration is not None or self.narration_enabled is True
         ):
             raise ValueError("narration currently belongs to the MG design path")
         if self.mode == "program":
@@ -1216,12 +1216,6 @@ class DesignVideoArgs(BaseModel):
                 raise ValueError("the first image-v1 consumer supports a 16:9 background")
         if self.mode == "motion_graphics" and not self.text:
             raise ValueError("native motion graphics needs exact on-screen text")
-        if self.composition_id is None and self.mode not in {"program", "image"} and not (self.text or self.material_urls or self.material_asset_ids or self.material_output_ids):
-            raise ValueError(
-                "a new design needs its material: text for an MG video, "
-                "video asset/output ids for a mixed composition, or "
-                "material_urls for a website promo"
-            )
         if len(self.material_asset_ids or []) + len(self.material_output_ids or []) > 12:
             raise ValueError("a design accepts at most 12 referenced media items")
         if self.composition_id is not None and not self.specific_instruction and not self.focus:
@@ -1230,6 +1224,39 @@ class DesignVideoArgs(BaseModel):
                 "(open feedback) or focus"
             )
         return self
+
+
+class ReviewVideoArgs(BaseModel):
+    """Review one exact delivered Output against the user's stated requirements."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_id: UUID = Field(
+        description="Exact delivered video Output id from its card or @output mention; never the composition's latest Output by implication."
+    )
+    requirements: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="The relevant user requirements, copied faithfully from the current request and conversation; never a prewritten review conclusion.",
+    )
+    at_seconds: list[float] | None = Field(
+        default=None,
+        max_length=4,
+        description="Specific actual Output times to inspect; when present these times define the sample, especially for rechecking an earlier finding."
+    )
+    refresh: bool = Field(
+        default=False,
+        description="True to decode and review again; false reuses this exact Output's saved report when one exists. A new Output always needs its own review."
+    )
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "at_seconds", "refresh", "pending_disposition")
 
 
 class VideoEditUpdateText(BaseModel):
@@ -1296,7 +1323,7 @@ class VideoEditAddText(BaseModel):
 
 
 class VideoEditRemoveClip(BaseModel):
-    """Remove one text clip (a caption or title beat) by its clip_id."""
+    """Remove one exact clip and its transition links; other clips stay intact."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1322,6 +1349,48 @@ class VideoEditUpdateVideo(BaseModel):
     fit: Literal["cover", "contain"] | None = None
     gain_db: float | None = Field(default=None, ge=-60, le=12)
     muted: bool | None = None
+
+
+class VideoEditSplitClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["split_clip"]
+    clip_id: str
+    at_seconds: float = Field(gt=0, description="Absolute output time; linked media follows the split.")
+
+
+class VideoEditTrimClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["trim_clip"]
+    clip_id: str
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(gt=0, description="Keep this output subrange; no ripple of other clips.")
+
+
+class VideoEditTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["set_transition"]
+    from_clip_id: str
+    to_clip_id: str
+    duration_seconds: float = Field(gt=0)
+    kind: Literal["crossfade"] = "crossfade"
+
+
+class VideoEditRemoveTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["remove_transition"]
+    transition_id: str
+
+
+class VideoEditSnapCut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    op: Literal["snap_cut"]
+    from_clip_id: str
+    to_clip_id: str
+    music_clip_id: str
+    tolerance_seconds: float = Field(
+        default=0.2, gt=0, le=1,
+        description="Maximum cut shift in seconds: greater than zero, at most 1; defaults to 0.2.",
+    )
 
 
 class VideoEditFocusWeb(BaseModel):
@@ -1431,6 +1500,11 @@ VideoEditOp = Annotated[
     | VideoEditAddText
     | VideoEditRemoveClip
     | VideoEditUpdateVideo
+    | VideoEditSplitClip
+    | VideoEditTrimClip
+    | VideoEditTransition
+    | VideoEditRemoveTransition
+    | VideoEditSnapCut
     | VideoEditFocusWeb
     | VideoEditUpdateShape
     | VideoEditUpdateGenerator
@@ -5451,6 +5525,9 @@ class OutputResponse(BaseModel):
     # Composition lineage (ADR-145): set on video-family outputs only.
     composition_id: UUID | None = None
     composition_version_id: UUID | None = None
+    # The immutable content version's real sequence number, not an Output
+    # count. Multiple deliveries may honestly show the same number.
+    composition_version_number: int | None = None
     score: dict | None = None
     # 质检裁决 (期 3): verify 节点的 {status, checks, attempt, checked_at};
     # None = 未质检（旧行 / 无 verify 的图）。
@@ -5542,6 +5619,20 @@ class OutputResponse(BaseModel):
             None,
         )
         return self
+
+
+class ChatOutputEntry(BaseModel):
+    """One persisted delivery reference in a Chat's shared Output browser."""
+
+    output_id: UUID
+    # Null = the exact historical reference no longer resolves. Keeping its
+    # seat makes the viewer honest instead of silently substituting a newer Output.
+    output: OutputResponse | None = None
+
+
+class OutputPosterResponse(BaseModel):
+    output_id: UUID
+    poster_url: str
 
 
 class CaptionTranslation(BaseModel):

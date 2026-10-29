@@ -114,10 +114,11 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     # web pair get_web_page/search_web, 2026-10-15; +1 with the gated media
     # discovery read riding in gate-ON processes; +3 with the ADR-145 video
     # family — design_video/revise_video replace the filtered
-    # design_storyboard and get_video_version joins as the version read,
-    # gate-ON processes) — bump it deliberately, never silently.
+    # design_storyboard and get_video_version joins as the version read;
+    # review_video adds the exact-Output content review, gate-ON processes) —
+    # bump it deliberately, never silently.
     assert trigger_agent.max_iterations == 6
-    assert len(trigger_agent.tools) <= 21
+    assert len(trigger_agent.tools) <= 22
 
 
 class TestWrapUpArgs:

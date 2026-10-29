@@ -12,7 +12,7 @@ import re
 from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid5
 from typing import Any
 
 import av
@@ -163,13 +163,18 @@ async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) 
                 view[field_name] = int(shot[field_name])
         views.append(view)
 
+    research = source_meta.get("research")
     manifest: dict[str, Any] = {
         "schema_version": 1,
         "canonical_url": canonical_url,
         "captured_at": captured_at.isoformat(),
         "views": views,
-        "lines": _research_lines(source_meta.get("research")),
+        "lines": _research_lines(research),
     }
+    # Capture completeness is metadata, never a citable product line. Older
+    # snapshots legitimately have no fact here; absence must stay unknown.
+    if isinstance(research, dict) and isinstance(research.get("body_truncated"), bool):
+        manifest["body_truncated"] = research["body_truncated"]
     source_page = source_meta.get("page")
     if isinstance(source_page, dict) and isinstance(source_page.get("key"), str):
         frozen_page = await _freeze_png(source_page["key"])
@@ -371,12 +376,14 @@ async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) 
         db,
         owner_id=owner_id,
         asset=None,
-        identity=track.id,
+        identity=uuid5(track.id, "music-beat-grid-v1:" + hashlib.sha256(
+            json.dumps(track.meta or {}, sort_keys=True).encode()).hexdigest()),
         kind="audio",
         storage_key=key,
         digest=digest,
         duration_ticks=duration_ticks,
-        meta={"media": media, "music": {"music_id": str(track.id), "title": track.title}},
+        meta={"media": media, "music": {"music_id": str(track.id), "title": track.title},
+              "beat_grid": {key: (track.meta or {}).get(key) for key in ("bpm", "beats")}},
         captured_at=_captured_at(getattr(track, "created_at", None)),
     )
 

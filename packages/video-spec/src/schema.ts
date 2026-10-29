@@ -277,6 +277,15 @@ export const videoSpecSchema = z
     duration_frames: z.number().int().positive(),
     fonts: z.array(fontResourceSchema),
     tracks: z.array(trackSchema).min(1),
+    transitions: z.array(z.object({
+      transition_id: z.string().min(1),
+      kind: z.literal("crossfade"),
+      from_clip_id: z.string().min(1),
+      to_clip_id: z.string().min(1),
+      start_frame: z.number().int().nonnegative(),
+      end_frame: z.number().int().positive(),
+      cut_frame: z.number().int().positive(),
+    }).strict()).optional(),
     provenance: z
       .object({
         composition_id: z.string().min(1),

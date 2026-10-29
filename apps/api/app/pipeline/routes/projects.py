@@ -13,6 +13,7 @@ from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetResponse,
     BulkDeleteRequest,
+    ChatOutputEntry,
     ExportRequest,
     GenerateRequest,
     GenerateResponse,
@@ -34,6 +35,7 @@ from app.models.tables import (
     Asset,
     Conversation,
     ConversationUsage,
+    CompositionVersion,
     GraphEdge,
     GraphIsland,
     GraphNode,
@@ -67,9 +69,12 @@ from app.pipeline.scope_classifier import (
 from app.pipeline.track_stack import build_track_stack
 from app.pipeline.outputs import (
     aggregate_step_cost,
+    chat_delivery_output_ids,
     compose_spec_prompt,
+    is_delivered_output,
     list_visible_outputs,
     model_facts_for,
+    output_to_response,
     workflow_step_to_response,
     run_to_response,
     visible_outputs_stmt,
@@ -1113,6 +1118,72 @@ async def generate_content(
     await db.refresh(run)
 
     return GenerateResponse(run_id=run.id, status=run.status)
+
+
+@router.get("/{project_id}/chat/outputs", response_model=list[ChatOutputEntry])
+async def list_chat_delivered_outputs(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User | None = Depends(get_current_user),
+) -> list[ChatOutputEntry]:
+    """The Chat's exact delivered Outputs, including archived history."""
+    await get_project_for_user(
+        db, project_id, current_user.id if current_user else None
+    )
+    messages = list((
+        await db.execute(
+            select(Message)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(Conversation.project_id == project_id, Message.workflow_run_id.is_not(None))
+            .order_by(Message.seq, Message.created_at)
+        )
+    ).scalars().all())
+    run_ids = list(dict.fromkeys(message.workflow_run_id for message in messages))
+    steps = list((
+        await db.execute(
+            select(WorkflowStep)
+            .where(WorkflowStep.run_id.in_(run_ids))
+            .order_by(WorkflowStep.seq)
+        )
+    ).scalars().all()) if run_ids else []
+    refs = chat_delivery_output_ids(messages, steps)
+    if not steps:
+        return []
+
+    outputs = list((
+        await db.execute(select(Output).where(
+            Output.project_id == project_id,
+            or_(Output.id.in_(refs), Output.workflow_step_id.in_([step.id for step in steps])),
+        ).order_by(Output.created_at, Output.id))
+    ).scalars().all())
+    refs = chat_delivery_output_ids(messages, steps, outputs)
+    by_id = {output.id: output for output in outputs if is_delivered_output(output)}
+    # Extant internal/unfinished rows were never delivered media. A genuinely
+    # absent exact historical row stays in the projection as output=None.
+    undelivered_ids = {output.id for output in outputs if output.id not in by_id}
+    version_ids = list(dict.fromkeys(
+        output.composition_version_id for output in by_id.values()
+        if output.composition_version_id is not None
+    ))
+    versions = list((
+        await db.execute(select(CompositionVersion).where(CompositionVersion.id.in_(version_ids)))
+    ).scalars().all()) if version_ids else []
+    version_numbers = {version.id: version.version for version in versions}
+    return [
+        ChatOutputEntry(
+            output_id=output_id,
+            output=(
+                output_to_response(
+                    output,
+                    composition_version_number=version_numbers.get(output.composition_version_id),
+                )
+                if (output := by_id.get(output_id)) is not None
+                else None
+            ),
+        )
+        for output_id in refs
+        if output_id not in undelivered_ids
+    ]
 
 
 @router.get("/{project_id}/runs", response_model=list[RunResponse])

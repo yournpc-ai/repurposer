@@ -978,20 +978,27 @@ async def complete_video_presentation(
     block = next((b for b in message.blocks or []
                   if b.get("composition_version_id") == expected
                   and b.get("kind") == "video_storyboard"), None)
-    if (not block or block.get("presentation_digest") != data.presentation_digest
+    if (not block or block.get("content_digest", read["content_digest"]) != read["content_digest"]
             or read["presentation_digest"] != data.presentation_digest):
         raise HTTPException(409, "Presentation does not match the saved version")
+    # The block is a version reference, while its presentation receipt lives
+    # outside the immutable version. A refresh ACKs the DTO actually shown
+    # now and re-stamps that receipt; an old presentation hash still fails.
     message.blocks = [
-        {**b, "presentation_complete": True} if b is block else b
+        {**b, "content_digest": read["content_digest"],
+         "presentation_digest": data.presentation_digest,
+         "presentation_complete": True} if b is block else b
         for b in message.blocks
     ]
     # Completion belongs to the message even when another work is now active.
     if receipt.get("presented_message_id") != str(message_id):
         await db.commit()
         return {"accepted": False}
-    if receipt.get("composition_version_id") != expected or receipt.get("presentation_digest") != data.presentation_digest:
+    if receipt.get("composition_version_id") != expected or receipt.get("content_digest", read["content_digest"]) != read["content_digest"]:
         raise HTTPException(409, "Presentation receipt is stale")
-    receipt = {**receipt, "presentation_complete": True}
+    receipt = {**receipt, "content_digest": read["content_digest"],
+               "presentation_digest": data.presentation_digest,
+               "presentation_complete": True}
     project.pending_brief = stored.model_copy(
         update={"video_presentation": receipt}
     ).model_dump(mode="json")

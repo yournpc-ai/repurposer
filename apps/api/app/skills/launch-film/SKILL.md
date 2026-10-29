@@ -35,6 +35,10 @@ say.**
 - One `chapters` entry per pillar: its cited `pillar` line, its short
   `chapter_title`, and its walk's optional `camera_focus`. There are no
   separate title or camera lists — each chapter carries its own.
+- A numbers plate is not a creative slot: the system detects the number-led
+  manifest lines, generates its cards and places its `chapter_N_plate` scene.
+  A redraft may write that scene's subtitle or visual description only when
+  the current design contains the key.
 - Factual slots cite ONE manifest line each; the citation alone is the
   answer — never restate the line's text next to it.
 - `subtitles` maps a scene key to that scene's caption copy. There is no

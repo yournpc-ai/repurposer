@@ -395,7 +395,11 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
 # venue-free too (a venue word in it once surfaced in user speech as 通讯稿,
 # 批5 v2); venues are the user's to name.
 _MENU_PHRASES: list[tuple[str, str]] = [
-    ("produce_video", "website walkthrough videos and text motion graphics from saved storyboards"),
+    ("produce_video", "website walkthroughs, text/shape motion graphics and mixed videos "
+     "from saved storyboards, with music and optional narration/captions; "
+     "revise individual elements, split/trim clips without moving later clips, "
+     "crossfade adjacent full-frame fixed media with enough source footage, "
+     "and align existing cuts to known music beats within a chosen tolerance"),
     ("select_clips", "highlight clips cut from the source media"),
     ("write_post", "social posts"),
     ("write_article", "long-form articles"),

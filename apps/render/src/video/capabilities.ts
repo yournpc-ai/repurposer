@@ -18,7 +18,7 @@ export const VIDEO_CAPABILITIES = {
     "audio.gain",
   ],
   easings: ["linear", "hold", "cubic_bezier"],
-  transitions: [] as string[],
+  transitions: ["crossfade"] as string[],
   fractional_fps: false,
 } as const;
 

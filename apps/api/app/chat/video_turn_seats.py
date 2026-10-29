@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from app.agents.tool_loop import ToolObservation
-from app.models.schemas import DesignVideoArgs, PendingPlan, ReviseVideoArgs
+from app.models.schemas import DesignVideoArgs, PendingPlan, ReviewVideoArgs, ReviseVideoArgs
 from app.models.tables import Message, Project
 
 
@@ -24,6 +24,7 @@ async def video_context_lines(db, project, mentions=()):
     if not settings.video_project_enabled:
         return []
     from sqlalchemy import select
+    from app.models.schemas import AssetStatus, AssetType
     from app.models.tables import Asset, Composition, CompositionVersion, Output
     rows = (await db.execute(select(Composition, CompositionVersion)
         .join(CompositionVersion, Composition.current_version_id == CompositionVersion.id)
@@ -34,6 +35,24 @@ async def video_context_lines(db, project, mentions=()):
         lines.append(json.dumps({"name": composition.name, "composition_id": str(composition.id),
             "composition_version_id": str(version.id), "content_digest": version.content_digest,
             "version": version.version}, ensure_ascii=False))
+    web_assets = list((await db.execute(select(Asset).where(
+        Asset.project_id == project.id,
+        Asset.user_id == project.user_id,
+        Asset.type == AssetType.WEB_PAGE,
+        Asset.processing_status == AssetStatus.COMPLETED,
+    ).order_by(Asset.created_at))).scalars())
+    captured = [asset for asset in web_assets if (asset.meta or {}).get("shots")]
+    if captured:
+        lines.append(
+            "Captured website pages already saved in this project (reuse them for a website design; "
+            "no recapture or material fields are needed; ids are internal references):"
+        )
+        for asset in captured:
+            lines.append(json.dumps({
+                "asset_id": str(asset.id),
+                "url": (asset.meta or {}).get("capture_url"),
+                "captured_view_count": len((asset.meta or {}).get("shots") or []),
+            }, ensure_ascii=False))
     receipt = (project.pending_brief or {}).get("video_presentation")
     if receipt:
         lines.append("Video currently under review: " + json.dumps(receipt, ensure_ascii=False))
@@ -78,6 +97,28 @@ async def read_video_for_presentation(db, project, params):
     )
 
 
+async def review_video_seat(*, project: Project, args: ReviewVideoArgs) -> str | ToolObservation:
+    """Decode and review the exact Output; persist its advisory report."""
+    from app.config import settings
+
+    if not settings.video_project_enabled:
+        return "review_video is not available in this deployment — no frames were decoded."
+    import json
+    from app.models.database import AsyncSessionLocal
+    from app.tools.video.review import ReviewError, review_video
+
+    try:
+        async with AsyncSessionLocal() as video_db:
+            report = await review_video(video_db, owner_id=project.user_id, args=args)
+    except (ReviewError, ValueError) as exc:
+        return f"review_video rejected: {exc}"
+    return ToolObservation(
+        "Content review saved on the exact reviewed Output. These are the persisted report facts "
+        "(advisory still-frame findings, not a delivery gate):\n"
+        + json.dumps(report, ensure_ascii=False)
+    )
+
+
 async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
     if not any(t.tool == "produce_video" for t in tasks):
         return None
@@ -103,8 +144,11 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
     # A later revision may carry this turn's explicit "change and make".
     # It still waits for the canonical card to finish before auto Start.
     prior = (project.pending_brief or {}).get("video_presentation") or {}
-    if pending_read is None and len(tasks) == 1:
-        ref = (tasks[0].params or {}).get("version_ref") or {}
+    if len(tasks) == 1:
+        # A new revision is not presented yet. Recover the presentation of
+        # its actual base work, rather than the other work last shown in Chat.
+        ref = ((pending_read or {}).get("previous_version_ref")
+               or (tasks[0].params or {}).get("version_ref") or {})
         if prior.get("composition_version_id") != ref.get("composition_version_id"):
             from sqlalchemy import select
             from app.models.tables import Conversation
@@ -283,7 +327,7 @@ async def revise_video_seat(
         )
     from app.editing.edits import EditError  # deferred: write door
     from app.editing.service import (  # deferred: editing seam
-        format_storyboard_text,
+        format_revision_text,
         revise_video,
     )
     from app.editing.store import (  # deferred: write door
@@ -314,8 +358,7 @@ async def revise_video_seat(
         )
     except (EditError, ValueError) as exc:
         return None, f"revise_video rejected: {exc}"
-    import json
-
+    read["previous_version_ref"] = args.base_ref.model_dump(mode="json")
     read = await enrich_generator_previews(read)
     preview_images = tuple(await generator_preview_images(read))
     preview_note = (
@@ -324,14 +367,12 @@ async def revise_video_seat(
         if read.get("generator_previews") else ""
     )
     return read, ToolObservation(
-        f"Video version {read['version']} saved as a revision "
-        "(no run started, nothing has been produced). The SYSTEM computed "
-        "this change set — summarize the changed user-visible facts, never re-derive the delta "
-        "yourself:\n"
-        + json.dumps(read.get("change_set") or {}, ensure_ascii=False, indent=1)
-        + "\nThe system attaches the complete saved storyboard card; introduce it briefly without repeating its scenes. Canonical "
-        "facts (internal ids stay internal):\n"
-        + format_storyboard_text(read)
+        f"World facts: video version {read['version']} is saved as a revision; "
+        "no run started and nothing has been produced. The canonical card "
+        "contains the complete saved storyboard. Follow the Video works law "
+        "for the user handoff. These saved facts contain the system change "
+        "set, only the changed clips, and the reference needed by the next tool:\n"
+        + format_revision_text(read)
         + preview_note,
         images=preview_images,
     )

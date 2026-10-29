@@ -20,11 +20,13 @@ from app.editing.director import (
     MixedDirection,
     ProgramDirection,
 )
+from app.tools.video.review import ContentReviewAnswer
 
 
 def _assemble_launch(
     *,
     lines_text: str,
+    capture_status_text: str,
     views_text: str,
     focus: str | None,
     instruction: str | None,
@@ -35,6 +37,7 @@ def _assemble_launch(
     return (
         {
             "lines_text": lines_text,
+            "capture_status_text": capture_status_text,
             "views_text": views_text,
             "focus": focus,
             "instruction": instruction,
@@ -198,4 +201,48 @@ image_director: Agent[GeneratedImageDirection] = Agent(
 )
 
 
-__all__ = ["image_director", "mg_director", "mixed_director", "program_director", "video_director"]
+def _assemble_review(
+    *,
+    requirements: str,
+    output_facts: str,
+    storyboard: str,
+    frame_facts: str,
+    frames: list | None = None,
+) -> AssembleResult:
+    return (
+        {
+            "requirements": requirements,
+            "output_facts": output_facts,
+            "storyboard": storyboard,
+            "frame_facts": frame_facts,
+        },
+        list(frames or []),
+    )
+
+
+video_reviewer: Agent[ContentReviewAnswer] = Agent(
+    name="video_reviewer",
+    prompt="video_reviewer.j2",
+    schema=ContentReviewAnswer,
+    system=(
+        "You are a video content reviewer. Judge only the actual decoded frames "
+        "attached to the request against the saved content and the user's "
+        "requirements. Output valid JSON, no commentary."
+    ),
+    temperature=0.2,
+    assemble=_assemble_review,
+    # Never degrade to storyboard-only review and then claim pixels were seen.
+    media_text_fallback=False,
+    stream=True,
+    timeout_s=300,
+)
+
+
+__all__ = [
+    "image_director",
+    "mg_director",
+    "mixed_director",
+    "program_director",
+    "video_director",
+    "video_reviewer",
+]

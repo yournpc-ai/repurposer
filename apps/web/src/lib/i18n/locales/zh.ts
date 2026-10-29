@@ -1297,6 +1297,8 @@ const zh: Resources = {
       videoDesignDone: "已设计视频分镜",
       videoRevise: "正在调整视频分镜…",
       videoReviseDone: "已调整视频分镜",
+      videoReview: "正在检查成片…",
+      videoReviewDone: "已检查成片",
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
@@ -1314,6 +1316,8 @@ const zh: Resources = {
     /** 视频族分镜卡（Video Project 阶段 B）：消息 block 解出的已存版本
      * canonical 分镜表——服务端 DTO 是真相，永不重抄。 */
     videoStoryboard: {
+      crossfade: "叠化 · {{seconds}} 秒",
+      sourceWindow: "源片段",
       video: "短片",
       savedSource: "已固定的源素材",
       audio: "音轨",
@@ -1458,6 +1462,7 @@ const zh: Resources = {
       types: {
         clip: "短片",
         film: "影片",
+        video: "视频",
         post: "社交帖子",
         quotes: "金句卡",
         quote_frame: "金句卡",
@@ -1465,6 +1470,23 @@ const zh: Resources = {
         article: "文章",
       },
       words: "约 {{count}} 字",
+    },
+    outputCard: {
+      version: "v{{number}}",
+    },
+    outputViewer: {
+      title: "已交付产物",
+      previous: "上一个产物",
+      next: "下一个产物",
+      position: "{{current}} / {{total}}",
+      previousSlide: "上一页",
+      nextSlide: "下一页",
+      slidePosition: "第 {{current}} / {{total}} 页",
+      mention: "@引用",
+      revise: "继续修改",
+      continuePrompt: "继续修改这个产物",
+      unavailable: "产物不可用",
+      unavailableDetail: "这个确切的历史交付已不可用，没有替换成更新的版本。",
     },
     openInEditor: "在编辑器中打开",
     uploadFile: "上传源文件",

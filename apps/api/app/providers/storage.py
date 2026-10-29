@@ -364,7 +364,7 @@ async def save_output(
 
 async def read(key: str) -> bytes:
     """Read an object's bytes from storage."""
-    client = _get_s3_client()
+    client = _get_s3_download_client()
     response = await asyncio.to_thread(
         client.get_object,
         Bucket=settings.s3_bucket_name,

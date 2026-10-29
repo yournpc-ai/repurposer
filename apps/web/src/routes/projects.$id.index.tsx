@@ -15,7 +15,7 @@ import { PublishDialog } from "@/components/publish/PublishDialog"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { canvasCapableFor, canvasVisible } from "@/lib/canvasVisibility"
+import { canvasCapableFor } from "@/lib/canvasVisibility"
 import { useWorkspaceLayout } from "@/hooks/use-workspace-layout"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import { useRunEvents } from "@/lib/use-run-events"
@@ -215,10 +215,6 @@ function ProjectDetailPage() {
   // there is the prose echo, not a canvas).
   const hasRuns = latestRun != null
   const worldLive = hasRuns || (canvasCapable && isPlanReady(lifecycle))
-  // 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
-  // 屏 = 可承载 ∧ 已揭幕 —— chat 锚卡的渲染分支只读此值,任何组件不再以
-  // 视口/设备名/设置项自行推断。
-  const canvasVis = canvasVisible({ canvasAvailable: canvasCapable, worldLive })
   // The desktop chat panel is a FROSTED OVERLAY on the full-bleed canvas
   // (2026-09-06 用户拍板, FLORA "Dock panel" parity — float / docked-right,
   // never an in-flow column): the canvas's top-right zoom pill steps clear
@@ -745,7 +741,6 @@ function ProjectDetailPage() {
         // derivation.
         lifecycle={lifecycle}
         onPanelStateChange={setPanelState}
-        canvasVisible={canvasVis}
         canvasAvailable={canvasCapable}
         prompt={
           firstMessage?.text ??

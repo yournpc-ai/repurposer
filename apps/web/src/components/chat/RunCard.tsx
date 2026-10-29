@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next"
 
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { apiFetch } from "@/lib/api"
-import { isDeliveredOutput } from "@/lib/anchorCards"
+import { deliveredOutputsForRun } from "@/lib/anchorCards"
 import { useRunEvents } from "@/lib/use-run-events"
 import type { Output } from "@/lib/types"
 
@@ -26,11 +26,14 @@ import { RunTaskList } from "./RunTaskList"
 interface RunCardProps {
   runId: string
   projectId: string
+  deliveryOutputs: Output[]
   /** Fired once when the run reaches a terminal state (outputs loaded). */
   onDone?: () => void
+  /** Every delivery entrance opens the one Chat-hosted Output viewer. */
+  onOpen: (outputId: string) => void
 }
 
-export function RunCard({ runId, onDone }: RunCardProps) {
+export function RunCard({ runId, deliveryOutputs, onDone, onOpen }: RunCardProps) {
   const { t } = useTranslation()
   const [outputs, setOutputs] = useState<Output[] | null>(null)
   const onDoneRef = useRef(onDone)
@@ -63,7 +66,9 @@ export function RunCard({ runId, onDone }: RunCardProps) {
   }, [terminal])
 
   const failed = status === "failed"
-  const deliveredOutputs = outputs?.filter(isDeliveredOutput) ?? null
+  const deliveredOutputs = terminal
+    ? deliveredOutputsForRun(steps, [...(outputs ?? []), ...deliveryOutputs])
+    : null
 
   return (
     <div className="flex w-full flex-col gap-1.5">
@@ -93,11 +98,9 @@ export function RunCard({ runId, onDone }: RunCardProps) {
       )}
 
       {deliveredOutputs && deliveredOutputs.length > 0 && (
-        <div className="flex flex-wrap gap-3 pt-1.5">
+        <div className="flex flex-wrap items-start gap-4 pt-3">
           {deliveredOutputs.map((output) => (
-            <div key={output.id} className="w-40">
-              <OutputChatCard output={output} />
-            </div>
+            <OutputChatCard key={output.id} output={output} onOpen={onOpen} />
           ))}
         </div>
       )}

@@ -113,7 +113,8 @@ import {
 } from "@/components/ui/message-scroller"
 import { RunCard } from "@/components/chat/RunCard"
 import { AnchorCards } from "@/components/chat/AnchorCards"
-import { anchorCardsForRun } from "@/lib/anchorCards"
+import { ChatOutputViewer } from "@/components/chat/ChatOutputViewer"
+import { deliveredOutputsForRun } from "@/lib/anchorCards"
 import { createSpeechSegments, isSpeechSegmentRow } from "@/lib/speechSegments"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { StoryboardCard } from "@/components/chat/video/StoryboardCard"
@@ -171,7 +172,7 @@ import {
   RunTaskList,
 } from "@/components/chat/RunTaskList"
 import { ActivityRow, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
-import type { LifecycleStamp, Output } from "@/lib/types"
+import type { ChatOutputEntry, LifecycleStamp, Output } from "@/lib/types"
 import { isPlanReady } from "@/lib/lifecycleStamp"
 import {
   acceptsStagedFile,
@@ -524,10 +525,6 @@ interface ChatDockProps {
    * only when it can actually be covered (docked = full-height; float
    * starts ~18% down and never reaches the pill). */
   onPanelStateChange?: (state: { hidden: boolean; docked: boolean }) => void
-  /** 环境谓词 (ADR-118 §6 真值表 · lib/canvasVisibility 单源): 画布此刻在
-   * 屏——渲染时刻状态。锚卡只在 !canvasVisible 环境允许挂载，实际展示
-   * 另等 run 工作段 settled；桌面 true → 零锚卡。 */
-  canvasVisible: boolean
   /** 环境能力位 (ADR-118 §6 双键的客户端一半): 视口可承载画布（裸能力,
    * 非 panel 形态位——surface 座不动）,随每条 chat 请求送达; 服务端的
    * canvas_visible = 此位 ∧ world-liveness (api 半座:
@@ -817,7 +814,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   onRunStarted,
   onDraftGraphChange,
   onPanelStateChange,
-  canvasVisible,
   canvasAvailable,
 }, ref) {
   const { t } = useTranslation()
@@ -1352,6 +1348,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         content?: string | null
         created_at?: string
         workflow_run_id?: string | null
+        intent?: unknown
         seq?: number | null
       },
       {
@@ -1376,6 +1373,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             seq: row.seq ?? undefined,
             at: row.created_at,
             runId: row.workflow_run_id,
+            runDelivery: triggerSuggestions(row.intent) !== undefined,
           },
           { fresh },
         ),
@@ -1985,6 +1983,70 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     void fetchOutputs()
   }, [fetchOutputs, terminal])
 
+  // Persistent delivery facts, including archived exact Outputs. The active
+  // /results rows only fill the brief window before this projection refreshes.
+  const [chatOutputEntries, setChatOutputEntries] = useState<ChatOutputEntry[] | null>(null)
+  const [viewerOutputId, setViewerOutputId] = useState<string | null>(null)
+  const deliveryMessageKey = messages
+    .filter((message) => message.runId)
+    .map((message) => `${message.id}:${message.runId}`)
+    .join("|")
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => apiFetch(`/api/v1/projects/${projectId}/chat/outputs`, { toast: false })
+      .then(async (response) => {
+        if (response.ok && !cancelled) {
+          setChatOutputEntries((await response.json()) as ChatOutputEntry[])
+        }
+      })
+      .catch(() => {})
+    void refresh()
+    // A delivery can finish in another tab while this viewer remains open.
+    // Refresh its existing projection without changing the selected id.
+    const interval = viewerOutputId ? setInterval(() => { void refresh() }, 5000) : null
+    return () => {
+      cancelled = true
+      if (interval) clearInterval(interval)
+    }
+  }, [projectId, terminal, deliveryMessageKey, viewerOutputId])
+
+  const chatOutputs = useMemo(() => {
+    const byId = new Map(outputs.map((output) => [output.id, output]))
+    for (const entry of chatOutputEntries ?? []) {
+      if (entry.output) byId.set(entry.output_id, entry.output)
+    }
+    return [...byId.values()]
+  }, [outputs, chatOutputEntries])
+
+  // One Chat-hosted viewer: message rows supply only the exact Output id.
+  const viewerTriggerRef = useRef<HTMLElement | null>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const openOutputViewer = useCallback((outputId: string) => {
+    viewerTriggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    setViewerOutputId(outputId)
+  }, [])
+  const closeOutputViewer = useCallback(() => {
+    setViewerOutputId(null)
+    requestAnimationFrame(() => {
+      const trigger = viewerTriggerRef.current
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true })
+      else chatContainerRef.current?.focus({ preventScroll: true })
+    })
+  }, [])
+  const mentionViewerOutput = useCallback((output: Output, revise: boolean) => {
+    setDockHidden(false)
+    editorRef.current?.insertMention({
+      type: "output",
+      id: output.id,
+      label: outputMentionLabel(output, t(`chat.anchorCards.types.${output.type}`)),
+    })
+    if (revise) editorRef.current?.insertText(` ${t("chat.outputViewer.continuePrompt")}`)
+    setViewerOutputId(null)
+    requestAnimationFrame(() => editorRef.current?.focus())
+  }, [t])
+
   useEffect(() => {
     let cancelled = false
     void apiFetch("/api/v1/chat/references", { toast: false }).then(async (res) => {
@@ -2011,7 +2073,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ...globalReferences.outputs.map((o) => ({ id: o.id, label: o.name || t("chat.videoStoryboard.title"), kind: o.type })),
         ...outputs.map((o) => ({
         id: o.id,
-        label: outputMentionLabel(o, t(`chat.derivativeTypes.${o.type}`)),
+        label: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
         kind: o.type,
       })),
       ].map((o) => [o.id, o])).values()],
@@ -3953,13 +4015,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   )
   const rowStreamUnits = runStreamUnits ?? conversationUnits
 
-  // 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律): 工作段收据行下
-  // 的静态产物数组 —— 只读既有 steps 的 output_refs × 既有 outputs 读数
-  // (mention feed 同一份,零新 SSE 订阅、零新拉取)。挂载点在 taskList
-  // 单元(收据行 = 锚卡唯一父座)，由 run settled × !canvasVisible 把守。
-  const anchorCards = useMemo(
-    () => anchorCardsForRun(steps, outputs),
-    [steps, outputs],
+  // Cover entrances read persisted step refs × the Chat delivery projection
+  // (including archived rows). Mounting still waits for the settled Worked edge.
+  const anchorOutputs = useMemo(
+    () => deliveredOutputsForRun(steps, chatOutputs),
+    [steps, chatOutputs],
   )
 
   // The now label is shared by the bottom seat (no current activity host
@@ -4082,6 +4142,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
+  const deliveryRunIds = new Set(
+    messages.filter((message) => message.runDelivery && message.runId).map((message) => message.runId),
+  )
   const renderConversationMessage = (m: OverlayMessage) => (
     // Keyed by birthKey (OverlayMessage law): a checkpoint-promoted row's
     // id changes (streamId → #cpN) but its key must not — an id-keyed list
@@ -4149,10 +4212,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                 subscriptions, two step snapshots). Detached runs (older
                 history the dock no longer attaches) keep the inline archive
                 — it is their only surface. */}
-            {m.runId && m.runId !== runId ? (
+            {m.runId && m.runId !== runId && (!deliveryRunIds.has(m.runId) || m.runDelivery) ? (
               <Message align="start">
                 <MessageContent>
-                  <RunCard runId={m.runId} projectId={projectId} />
+                  <RunCard runId={m.runId} projectId={projectId} deliveryOutputs={chatOutputs} onOpen={openOutputViewer} />
                 </MessageContent>
               </Message>
             ) : null}
@@ -4303,8 +4366,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
                             terminal,
                             reviewPending,
                             workEndedAtMs: runWorkEndedAtMs,
-                          }) === "settled" && !canvasVisible ? (
-                            <AnchorCards cards={anchorCards} />
+                          }) === "settled" ? (
+                            <AnchorCards outputs={anchorOutputs} onOpen={openOutputViewer} />
                           ) : null}
                         </MessageContent>
                       </Message>
@@ -4547,6 +4610,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         panel root hides via `hidden` when tucked away (display:none keeps
         the MentionEditor's DOM-owned draft). */}
     <div
+      ref={chatContainerRef}
+      tabIndex={-1}
       className={cn(
         "pointer-events-none fixed inset-0 z-50 flex flex-col",
         panel && dockHidden && "hidden"
@@ -4821,6 +4886,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           <LogoMark className="h-5 w-5" />
         </Button>
       </div>
+      <ChatOutputViewer
+        outputId={viewerOutputId}
+        entries={chatOutputEntries}
+        onNavigate={setViewerOutputId}
+        onOpenChange={(open) => { if (!open) closeOutputViewer() }}
+        onMention={(output) => mentionViewerOutput(output, false)}
+        onRevise={(output) => mentionViewerOutput(output, true)}
+      />
     </>
   )
 })

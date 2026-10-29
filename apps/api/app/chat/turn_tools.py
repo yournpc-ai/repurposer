@@ -38,6 +38,7 @@ from app.models.schemas import (
     PresentPlanArgs,
     ProposeTasksArgs,
     RetryUploadArgs,
+    ReviewVideoArgs,
     ReviseOutputArgs,
     ReviseVideoArgs,
     StartRunArgs,
@@ -458,9 +459,12 @@ _DESIGN_VIDEO_DESCRIPTION = (
     "walkthrough film from page urls, a native text/shape motion-graphics piece, "
     "an Agent-authored drawing-v1 program (mode=program), or a mixed composition "
     "from real video assets / delivered Outputs used explicitly as new material. "
-    "Cite the project's own materials (material_urls, material_asset_ids, or material_output_ids; text for "
-    "the MG path) — never invent a source. The system designs, saves and "
-    "answers with the complete saved storyboard facts; your next message "
+    "Cite the project's own materials (material_urls for an uncaptured site, "
+    "material_asset_ids for explicit @asset selections, material_output_ids for "
+    "Outputs used as new material, or text for the MG path). When the context "
+    "already lists captured pages for the requested website, omit all material "
+    "fields to reuse them without recapture — never invent a source. The system "
+    "designs, saves and answers with the complete saved storyboard facts; your next message "
     "presents them fully and waits for the user's word — a first version "
     "never starts production. With composition_id set this is a REDRAFT of "
     "that work (the saved material snapshots are reused, never recaptured): "
@@ -473,7 +477,10 @@ _REVISE_VIDEO_DESCRIPTION = (
     "read, plus the edits (change a scene's on-screen text, add/remove a "
     "text object, change native shape paint/geometry or an existing animation's "
     "keyframes, rewrite a GeneratorObject's actual code/parameters, move/remove a "
-    "scene, or update one video clip's layout/source window/original audio). "
+    "scene, update one video clip's layout/source window/original audio, "
+    "split or trim a clip without ripple, add/change/remove a supported "
+    "fixed-media crossfade, or snap an existing cut to frozen music beats "
+    "within the user's tolerance). "
     "The system applies the ops atomically as ONE new version and answers "
     "with the computed change summary plus the complete current "
     "storyboard facts. The revision alone never starts production. What "
@@ -495,6 +502,23 @@ _REVISE_VIDEO_TOOL = ChatTool(
 )
 
 
+_REVIEW_VIDEO_DESCRIPTION = (
+    "Review one exact delivered video Output against the user's requirements. "
+    "The system decodes that Output's own file, attaches actual sampled frames "
+    "with real times, checks the pinned version and saves an advisory report. "
+    "Reuse its saved report by default; set refresh=true for a new full review, "
+    "or at_seconds for a focused recheck defined only by those times. "
+    "Use this before claiming you saw a delivered video or before a requested "
+    "content-quality revision; never substitute a storyboard read or the latest Output."
+)
+_REVIEW_VIDEO_TOOL = ChatTool(
+    name="review_video",
+    terminal=False,
+    description=_REVIEW_VIDEO_DESCRIPTION,
+    params_model=ReviewVideoArgs,
+)
+
+
 def _video_project_tools() -> list[ChatTool]:
     """The video family's wire seats ride the deployment gate
     (settings.video_project_enabled, internal-test while the journey
@@ -511,6 +535,7 @@ def _video_project_tools() -> list[ChatTool]:
     return [
         _DESIGN_VIDEO_TOOL,
         _REVISE_VIDEO_TOOL,
+        _REVIEW_VIDEO_TOOL,
         *perception_chat_tools("get_video_version"),
     ]
 

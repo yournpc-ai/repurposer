@@ -144,6 +144,76 @@ def valid_content() -> CompositionContent:
     return content
 
 
+def test_chat_split_then_trim_preserves_curve_frames_and_linked_audio():
+    from app.editing.schemas import Easing, Keyframe
+
+    content = valid_content()
+    title = _clip_of(content, "clp_title")
+    music = next(c for t in content.timeline.tracks for c in t.clips if c.object.kind == "audio")
+    title.linked_group_id = music.linked_group_id = "linked"
+    music.range = TimeRange(start=SOURCE_TIMEBASE, end=FOUR_S_TICKS)
+    music.source.source_range = TimeRange(start=SOURCE_TIMEBASE, end=FOUR_S_TICKS)
+    title.animations[0].keyframes = [
+        Keyframe(at=0, value=0, easing=Easing(kind="cubic_bezier", params=(0.42, 0, 0.58, 1))),
+        Keyframe(at=3*SOURCE_TIMEBASE, value=1),
+    ]
+    result = apply_ops(content, [ADAPT.validate_python({
+        "op": "split_clip", "clip_id": title.clip_id, "at": 2*SOURCE_TIMEBASE,
+        "new_clip_id": "clp_right", "new_object_id": "obj_right",
+    })], {})
+    validate_content(result, SNAPSHOT_FACTS)
+    right = _clip_of(result, "clp_right")
+    assert right.animations[0].keyframes[0].value == pytest.approx(0.2317748, abs=1e-6)
+    assert _clip_of(result, title.clip_id).animations[0].keyframes[-1].value == right.animations[0].keyframes[0].value
+    linked_audio = next(c for t in result.timeline.tracks for c in t.clips
+                        if c.object.kind == "audio" and c.linked_group_id == right.linked_group_id)
+    assert linked_audio.source.source_range == TimeRange(start=2*SOURCE_TIMEBASE, end=FOUR_S_TICKS)
+    kept = TimeRange(start=seconds_ticks(2.25), end=seconds_ticks(3.75))
+    trimmed = apply_ops(result, [ADAPT.validate_python({
+        "op": "trim_clip", "clip_id": right.clip_id, "range": kept.model_dump(),
+    })], {})
+    validate_content(trimmed, SNAPSHOT_FACTS)
+    assert _clip_of(trimmed, linked_audio.clip_id).range == kept
+    from app.editing.timing import ticks_to_frames
+    audio_range = _clip_of(trimmed, linked_audio.clip_id).source.source_range
+    assert (ticks_to_frames(audio_range.start, SOURCE_TIMEBASE, 30),
+            ticks_to_frames(audio_range.end, SOURCE_TIMEBASE, 30)) == (68, 113)
+    assert audio_range.duration == kept.duration
+    assert _clip_of(trimmed, "clp_bg") == _clip_of(content, "clp_bg")
+
+
+def seconds_ticks(value):
+    from app.editing.timing import seconds_to_ticks
+    return seconds_to_ticks(value)
+
+
+def test_adjacent_media_crossfade_compiles_handles_and_frozen_grid_snap():
+    from app.editing.temporal import snap_cut
+    from app.editing.video_spec import compile_video_spec
+
+    content = valid_content()
+    content = apply_ops(content, [ADAPT.validate_python({
+        "op": "split_clip", "clip_id": "clp_bg", "at": seconds_ticks(2),
+        "new_clip_id": "clp_next", "new_object_id": "obj_next",
+    })], {})
+    a, b = _clip_of(content, "clp_bg"), _clip_of(content, "clp_next")
+    music = next(c for t in content.timeline.tracks for c in t.clips if c.object.kind == "audio")
+    for clip in snap_cut(content, a, b, music, {"meta": {"beat_grid": {"beats": [0.1, 1.1, 2.1, 3.1], "bpm": 60}}}, seconds_ticks(.2)):
+        content = apply_ops(content, [ADAPT.validate_python({"op": "update_clip", "clip_id": clip.clip_id,
+            "range": clip.range.model_dump(), "source": clip.source.model_dump(),
+            "animations": [x.model_dump() for x in clip.animations]})], {})
+    content = apply_ops(content, [ADAPT.validate_python({"op": "set_transition", "transition": {
+        "transition_id": "trn_one", "from_clip_id": a.clip_id, "to_clip_id": b.clip_id,
+        "duration": seconds_ticks(.4),
+    }})], {})
+    validate_content(content, SNAPSHOT_FACTS)
+    spec = compile_video_spec(content, SNAPSHOT_FACTS, composition_id=uuid4(), version_id=uuid4(), content_digest="c"*64)
+    assert spec["transitions"][0] == {"transition_id": "trn_one", "kind": "crossfade",
+        "from_clip_id": "clp_bg", "to_clip_id": "clp_next", "start_frame": 57, "end_frame": 69, "cut_frame": 63}
+    main = spec["tracks"][0]["clips"]
+    assert (main[0]["end_frame"], main[1]["start_frame"], spec["duration_frames"]) == (69, 57, 120)
+
+
 def test_sample_content_validates():
     content = valid_content()
     assert len(content.timeline.tracks) == 3
@@ -374,11 +444,3 @@ def test_animation_target_law():
         return content
 
     assert "non-audio object" in _invalid(gain_on_text)
-
-
-def test_transitions_declared_but_unsupported():
-    def patch(content: CompositionContent) -> CompositionContent:
-        content.timeline.transitions = [{"from": "a", "to": "b"}]
-        return content
-
-    assert "not supported in this slice" in _invalid(patch)

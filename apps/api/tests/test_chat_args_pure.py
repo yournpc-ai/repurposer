@@ -31,6 +31,7 @@ from app.models.schemas import (
     ChatAnswerArgs,
     ChatAskArgs,
     DesignStoryboardArgs,
+    DesignVideoArgs,
     Option,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -380,6 +381,17 @@ class TestDesignStoryboardArgs:
     def test_unknown_keys_reject(self) -> None:
         with pytest.raises(ValidationError):
             DesignStoryboardArgs.model_validate({"scenes": 5})
+
+
+class TestDesignVideoCapturedMaterial:
+    def test_auto_design_can_reuse_project_captures_without_material_fields(self):
+        args = DesignVideoArgs.model_validate({"focus": "key features"})
+        assert args.material_urls is None
+        assert args.material_asset_ids is None
+
+    def test_motion_graphics_still_requires_text(self):
+        with pytest.raises(ValidationError, match="native motion graphics needs exact on-screen text"):
+            DesignVideoArgs.model_validate({"mode": "motion_graphics"})
 
 
 class TestProductionIntentBirthFact:

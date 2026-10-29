@@ -135,6 +135,7 @@ from app.models.schemas import (
     QuestionProposal,
     RenderStatus,
     RetryUploadArgs,
+    ReviewVideoArgs,
     ReviseOutputArgs,
     ReviseVideoArgs,
     SuggestionRef,
@@ -546,6 +547,10 @@ class ChatTurn:
         if name == "revise_video":
             assert isinstance(params, ReviseVideoArgs)
             return await self._revise_video(params)
+        if name == "review_video":
+            assert isinstance(params, ReviewVideoArgs)
+            from app.chat.video_turn_seats import review_video_seat
+            return await review_video_seat(project=self.project, args=params)
         if name == "edit_graph":
             assert isinstance(params, EditGraphArgs)
             return await self._edit_graph(params, prose)

@@ -370,7 +370,11 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                 _fail(problems, f"scene {scene.scene_id}: speech clip {ref} escapes the reviewed scene window")
 
     if content.timeline.transitions:
-        _fail(problems, "transitions are not supported in this slice")
+        from app.editing.transitions import transition_windows
+        try:
+            transition_windows(content, snapshots)
+        except ValueError as exc:
+            _fail(problems, str(exc))
     if total_ticks == 0:
         _fail(problems, "a version needs at least one clip")
     if problems:

@@ -158,14 +158,43 @@ export interface OutputScore {
  * semantics (source_ref) and the render pipeline; derivatives are plain
  * types. Creative fields live in payload, artifacts in files, publish
  * metadata in publishing. */
+/** Advisory frame-evidenced review of one exact delivered video Output. */
+export interface OutputContentReview {
+  output_id: string
+  composition_version_id: string
+  video_sha256: string
+  summary: string
+  scope: {
+    actual_output_decoded: boolean
+    static_frames_checked: boolean
+    motion_and_transitions_checked: boolean
+    audio_and_av_sync_checked: boolean
+  }
+  limitations: string[]
+  frames: { frame_id: string; time_seconds: number; frame: number }[]
+  findings: {
+    kind: "observed_issue" | "aesthetic_suggestion"
+    frame_id: string
+    time_seconds: number
+    frame: number
+    observed: string
+    requirement: string
+    evidence: string
+    suggestion: string
+    clip_id: string | null
+    object_id: string | null
+  }[]
+}
 /** 质检裁决 (产物质量线期 3): the verify node's verdict on the product row.
  * null = never verified (legacy rows / verify-less graphs). needs_human is
  * non-blocking — the badge is the only surface (成功安静). */
 export interface OutputQuality {
-  status: "passed" | "needs_human"
-  checks: { id: string; ok: boolean | null; detail: string; cls: string }[]
-  attempt: number
-  checked_at: string
+  status?: "passed" | "needs_human"
+  checks?: { id: string; ok: boolean | null; detail: string; cls: string }[]
+  attempt?: number
+  checked_at?: string
+  /** Advisory frame-evidenced review; independent of the delivery verdict above. */
+  content_review?: OutputContentReview
 }
 
 export interface Output {
@@ -178,6 +207,13 @@ export interface Output {
   language: string | null
   status: string
   provenance: string
+  /** Exact composition lineage; archived history remains readable by id. */
+  work_id?: string | null
+  archived_at?: string | null
+  composition_id?: string | null
+  composition_version_id?: string | null
+  /** Real CompositionVersion.version; repeated deliveries may share it. */
+  composition_version_number?: number | null
   payload: OutputPayload
   files: OutputFiles
   source_ref: OutputSourceRef | null
@@ -208,6 +244,12 @@ export interface Output {
   track_stack?: TrackStack | null
   created_at: string
   updated_at: string | null
+}
+
+export interface ChatOutputEntry {
+  output_id: string
+  /** Null = the persisted exact reference is unavailable; never substitute latest. */
+  output: Output | null
 }
 
 /** One kept segment of a clip product on the OUTPUT timeline (ADR-113 §4):

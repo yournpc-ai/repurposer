@@ -64,6 +64,8 @@ export interface OverlayMessage {
   role: "user" | "assistant"
   content: string
   runId?: string | null
+  /** A trigger delivery row owns its Run's single historical card seat. */
+  runDelivery?: boolean
   /** The persisted transcript position (messages.seq). Optimistic local rows
    * have none until their envelope stamps it; ordering never substitutes the
    * display timestamp for this server position. */
@@ -810,8 +812,8 @@ export function mapHistoryRows(
         role: "assistant",
         content: m.content ?? "",
         runId: m.workflow_run_id,
+        runDelivery: triggerSuggestions(m.intent) !== undefined,
         at: m.created_at,
-        // 触发回合回放 (T3): a proactive review row's pills rebuild
         // from its intent dump — undefined on every other shape.
         suggestions: triggerSuggestions(m.intent),
         // The presenting row's storyboard block references replay with it

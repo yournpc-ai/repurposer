@@ -118,6 +118,7 @@ from app.models.schemas import (
     PresentPlanArgs,
     QuestionPayload,
     QuestionProposal,
+    ReviewVideoArgs,
     ReviseVideoArgs,
     StartAnswerRequest,
     StartRunArgs,
@@ -844,6 +845,10 @@ class PlanTurn:
         if name == "revise_video":
             assert isinstance(params, ReviseVideoArgs)
             return await self._revise_video(params)
+        if name == "review_video":
+            assert isinstance(params, ReviewVideoArgs)
+            from app.chat.video_turn_seats import review_video_seat
+            return await review_video_seat(project=self.project, args=params)
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)

@@ -142,6 +142,48 @@ async def test_video_production_pins_reviewed_version_and_uses_run_render_billin
 OP = TypeAdapter(Op)
 
 
+async def test_revision_uses_its_own_presentation_when_another_work_was_shown(database):
+    """Two works in one Chat must not turn an approved revision into a read loop."""
+    from app.chat.video_turn_seats import stamp_video_presentation, video_proposal_guard
+    from app.editing.service import video_version_read
+    from app.models.schemas import TaskItem
+    from app.models.tables import Conversation, Message
+
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    await _snapshots(database, uid)
+    first, v1, _ = await _create(database, uid, pid, name="Morning")
+    _, other, _ = await _create(database, uid, pid, name="Night")
+    async with database() as db:
+        project = await db.get(Project, pid)
+        conversation = Conversation(user_id=uid, project_id=pid)
+        db.add(conversation)
+        await db.flush()
+        for seq, version in enumerate((v1, other), 1):
+            shown = Message(conversation_id=conversation.id, role="assistant", content="Storyboard", seq=seq)
+            db.add(shown)
+            await db.flush()
+            read = await video_version_read(db, owner_id=uid, version_id=version.id)
+            stamp_video_presentation(project, shown, read)
+            shown.blocks = [{**block, "presentation_complete": True} for block in shown.blocks]
+            project.pending_brief = {**project.pending_brief, "video_presentation": {
+                **project.pending_brief["video_presentation"], "presentation_complete": True,
+            }}
+        approval = Message(conversation_id=conversation.id, role="user", content="Revise Morning and make it", seq=3)
+        db.add(approval)
+        await db.flush()
+        base = await video_version_read(db, owner_id=uid, version_id=v1.id)
+        revised = await apply_composition_edits(db, owner_id=uid, composition_id=first.id,
+            base_version_id=v1.id, ops=[set_intent("A brighter morning")])
+        pending = await video_version_read(db, owner_id=uid, version_id=revised[1].id)
+        pending["previous_version_ref"] = base["base_ref"]
+        task = TaskItem(tool="produce_video", params={"version_ref": pending["base_ref"]})
+        assert await video_proposal_guard(db, project, [task], pending_read=pending,
+            production_intent=True) is None
+        assert pending["authorized_revision_message_id"] == str(approval.id)
+        assert project.pending_brief["video_presentation"]["composition_id"] == str(first.id)
+
+
 def set_intent(intent: str) -> Op:
     return OP.validate_python(
         {"op": "update_scene", "scene_id": "scn_open", "intent": intent}
@@ -249,7 +291,7 @@ async def test_two_compositions_in_one_chat_are_independent(database):
 async def test_cross_chat_concurrent_edit_never_overwrites(database):
     uid = await _user(database)
     pid_a = await _project(database, uid, title="chat A")
-    pid_b = await _project(database, uid, title="chat B")
+    await _project(database, uid, title="chat B")
     await _snapshots(database, uid)
     comp, ver1, _ = await _create(database, uid, pid_a)
 

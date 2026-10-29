@@ -4,21 +4,21 @@ import type { Output } from "@/lib/types"
 /** Per-type download — the old card-face actions moved over verbatim
  * (ADR-041 D5 平移): clip → MP4, quotes → image, text types → markdown. */
 export function downloadOutput(output: Output): void {
-  if (output.type === "clip") {
+  if (output.type === "clip" || output.type === "film" || output.type === "video") {
     const url = output.files.video
     if (!url) return
-    const title = output.publishing.title || output.payload.hook || "clip"
+    const title = output.publishing.title || output.payload.hook || output.payload.name || output.type
     downloadFile(url, `${title}.mp4`).catch((e) =>
       console.error("Download failed", e)
     )
     return
   }
-  if (output.type === "quotes") {
+  if (output.files.image) {
     const url = toAbsoluteUrl(output.files.image)
     if (!url) return
     const a = document.createElement("a")
     a.href = url
-    a.download = `quotes-${output.id}.png`
+    a.download = `${output.type}-${output.id}.png`
     document.body.appendChild(a)
     a.click()
     a.remove()

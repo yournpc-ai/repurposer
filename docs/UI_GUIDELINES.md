@@ -142,4 +142,4 @@
 
 素材卡以 media/divider/transcript 共用 rounded-lg ring-foreground/10，medialess 不造空槽；StageSkin 底缘3px、cue/停顿/播放针与真实源时间一致，点击只 seek 不自动发声；overlay 时隐藏不可靠时间皮、恢复原文回归。成片NLE轴是检视面：34px视频道、22px连续字幕道、26px修饰道，字幕块不塞残字；NLE_AXIS_PX=116 与 graph_store 镜像、port base/lanes/handles 同批。L0结构常驻、L1唯一HoverChip portal/overlay-surface且不遮挡、L2既有inspector；空间不足用折叠点击，不用hover藏结构。血缘只cross-highlight，视频边锚视频道中心，不新建子元素边。
 
-这些是现有 Clip 检视合同，不要求新视频建设自由NLE或强制Canvas。环境只读唯一canvasAvailable/canvasVisible，锚卡挂真实终态收据、稳定数组/去重、点击MediaLightbox，无独立订阅或合集卡；切布局不remount MentionEditor、不以背景更新移动相机。新 Composition 预览走 VIDEO_PROJECT §10，现有面剩余验收归 VERIFICATION §5.4/§5.7。
+这些是现有 Clip 检视合同，不要求新视频建设自由NLE或强制Canvas。环境只读唯一canvasAvailable/canvasVisible，锚卡挂真实终态收据、稳定数组/去重，无独立订阅或合集卡；切布局不remount MentionEditor、不以背景更新移动相机。Chat 交付入口使用 `OutputDeliveryCard` 真实封面：横屏约 340px、竖屏有界高度，媒体 contain 不裁；名称与真实内容版本号在封面下，时长只在封面角出现一次，卡片不内嵌常态播放器。点击由 ChatDock 按 exact `output_id` 打开共用 `MediaLightbox` 查看器，播放、翻页、缩略导航、下载、@ 引用与继续修改都针对当前 Output；不再使用消息行局部 MediaLightbox 或 44px 文件胶囊。新 Composition 预览走 VIDEO_PROJECT §10，现有面剩余验收归 VERIFICATION §5.4/§5.7。

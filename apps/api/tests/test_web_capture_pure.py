@@ -34,7 +34,7 @@ from app.tools.research.capture import (
     render_manifest_text,
 )
 from app.tools.video import preparation
-from app.tools.video.design import _view_media_inputs
+from app.tools.video.design import _capture_status_text, _current_design_summary, _view_media_inputs
 from app.editing.templates import ViewFact
 
 # ---------------------------------------------------------------------------
@@ -186,6 +186,7 @@ async def test_snapshot_freezes_rendered_lines_page_and_element_images(monkeypat
             "capture_url": "https://agent.example/",
             "research": {
                 "url": "https://agent.example/", "body": ["Client-only approval state"],
+                "body_truncated": True,
             },
             "page": {
                 "key": "page", "css_width": 100, "css_height": 200,
@@ -206,6 +207,8 @@ async def test_snapshot_freezes_rendered_lines_page_and_element_images(monkeypat
     )
     manifest = await preparation.snapshot_web_asset(None, asset, owner_id=owner_id)
     assert manifest["lines"] == [{"kind": "text", "text": "Client-only approval state"}]
+    assert manifest["body_truncated"] is True
+    assert all("truncat" not in line["text"].lower() for line in manifest["lines"])
     assert manifest["page"]["storage_key"] in objects
     assert (manifest["page"]["width"], manifest["page"]["height"]) == (200, 400)
     view = manifest["views"][0]
@@ -215,6 +218,48 @@ async def test_snapshot_freezes_rendered_lines_page_and_element_images(monkeypat
     assert element["digest"]
     assert (element["image_width"], element["image_height"]) == (80, 40)
     assert element["pixel_box"]["width"] == 80
+
+
+def test_capture_status_is_separate_and_old_snapshots_stay_unknown():
+    status = _capture_status_text([{"body_truncated": True}, {"body_truncated": False}, {}])
+    assert "page 1: rendered body TRUNCATED" in status
+    assert "page 2: rendered body not truncated" in status
+    assert "page 3: rendered body UNKNOWN" in status
+
+
+def test_redraft_summary_uses_director_scene_keys_not_stored_scene_ids():
+    summary = _current_design_summary([{
+        "scene_id": "scn_chapter_1_plate", "intent": "Show evidence", "clips": [],
+    }])
+    assert summary.startswith("- chapter_1_plate:")
+    assert "scn_chapter" not in summary
+
+
+def test_director_reads_only_known_fixed_arc_group_echoes():
+    from app.editing.director import LaunchFilmDirection
+
+    payload = {
+        "cold_open": ["Who decides?"],
+        "hero": {"hero_word": "L1", "hero_sub": "L3"},
+        "chapters": [
+            {"pillar": "L4", "chapter_title": "One"},
+            {"pillar": "L5", "chapter_title": "Two"},
+            {"pillar": "L6", "chapter_title": "Three"},
+        ],
+        "reveal": {"reveal_lead": "One more thing", "reveal_word": "L7", "reveal_sub": "L8"},
+        "proof": {"citation": "L47"},
+        "end": {"end_name": "L1", "end_tagline": "L9"},
+    }
+    direction = LaunchFilmDirection.model_validate(payload)
+    assert direction.hero_word.line == 1
+    assert direction.reveal_lead == "One more thing"
+    assert direction.end_tagline.line == 9
+    with pytest.raises(ValueError, match="proof"):
+        LaunchFilmDirection.model_validate({**payload, "proof": {"text": "Not a slot"}})
+    with pytest.raises(ValueError, match="hero"):
+        LaunchFilmDirection.model_validate({
+            **payload, "hero": {"hero_word": "L1", "hero_sub": "L3", "unknown": "reject"},
+        })
 
 
 @pytest.mark.asyncio
