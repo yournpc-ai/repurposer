@@ -186,7 +186,7 @@ const en = {
     entry: {
       navigation: "Main navigation",
       community: "Join the community",
-      roadmap: "View roadmap",
+      roadmap: "Roadmap",
       preview: "Preview",
       communityTitle: "Build with us.",
       communityDescription: "Share what you’re creating, exchange ideas, and help shape Repurposer.",
