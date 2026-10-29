@@ -1,5 +1,5 @@
-import { motion, useScroll, useTransform } from "motion/react"
-import { useRef, type ReactNode } from "react"
+import { motion } from "motion/react"
+import { type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { useNavigate } from "@tanstack/react-router"
 
@@ -9,6 +9,7 @@ import {
 } from "@/components/landing/motion"
 import { HeroWaves } from "@/components/landing/HeroWaves"
 import { MagneticLink } from "@/components/landing/MagneticLink"
+import { LandingInfoDialog } from "@/components/landing/LandingInfoDialog"
 import { useAuth } from "@/lib/auth-context"
 
 /**
@@ -22,14 +23,6 @@ export function LandingHero(): ReactNode {
   const { isAuthenticated, setLoginOpen } = useAuth()
   const navigate = useNavigate()
   const prefersReducedMotion = useReducedMotion()
-  const heroRef = useRef<HTMLElement>(null)
-
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"],
-  })
-  const scrollFade = useTransform(scrollYProgress, [0, 0.45], [1, 0])
-
   const fadeUp = (delay: number) => ({
     initial: prefersReducedMotion
       ? ({ opacity: 0 } as const)
@@ -42,11 +35,9 @@ export function LandingHero(): ReactNode {
 
   return (
     <section
-      ref={heroRef}
-      className="relative flex h-svh min-h-[640px] items-center justify-center overflow-clip"
+      className="relative flex h-full items-center justify-center overflow-clip"
     >
       <motion.div
-        style={{ opacity: prefersReducedMotion ? 1 : scrollFade }}
         className="absolute inset-0 flex items-center justify-center"
       >
         {/* Reserved WebGL mount point — now hosting the ASCII wave field. */}
@@ -56,7 +47,7 @@ export function LandingHero(): ReactNode {
         {/* Ambient glow — soft opal-tinted atmosphere behind the hero content. */}
         <div aria-hidden data-slot="hero-background" className="absolute inset-0 ambient-glow" />
 
-        <div className="relative z-10 flex max-w-3xl flex-col items-center px-6 text-center">
+        <div className="relative z-10 flex w-full max-w-6xl flex-col items-center px-5 py-6 text-center sm:px-8">
           {/* Legibility veil — radial background tint that quiets the ASCII
               field behind the text only. Sized off THIS content box (as in
               the Sentinel hero), so the field stays vivid at the edges. */}
@@ -70,15 +61,15 @@ export function LandingHero(): ReactNode {
           />
           <motion.h1
             {...fadeUp(0.1)}
-            className="font-display text-[clamp(44px,7.5vw,84px)] leading-[1.02] font-medium tracking-tight text-balance text-foreground"
+            className="font-display text-[clamp(36px,7.5vw,84px)] leading-[1.02] font-medium tracking-tight text-balance text-foreground"
           >
-            {t("landing.heroTitle1")}
+            <span className="sm:whitespace-nowrap">{t("landing.heroTitle1")}</span>
             <br />
-            {t("landing.heroTitle2")}
+            <span className="sm:whitespace-nowrap">{t("landing.heroTitle2")}</span>
           </motion.h1>
           <motion.p
             {...fadeUp(0.24)}
-            className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground"
+            className="mt-6 max-w-3xl text-base sm:text-lg leading-relaxed text-muted-foreground"
           >
             <Trans
               i18nKey="landing.heroSubtitle"
@@ -97,14 +88,12 @@ export function LandingHero(): ReactNode {
               }}
               className="inline-flex h-13 items-center rounded-full bg-foreground px-8 text-sm font-medium text-background transition-opacity hover:opacity-85"
             >
-              {t("landing.ctaTryBeta")}
+              {t("landing.openStudio")}
             </MagneticLink>
-            <a
-              href="#how-it-works"
+            <LandingInfoDialog
+              kind="community"
               className="inline-flex h-13 items-center rounded-full border border-border bg-background px-8 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              {t("landing.ctaSeeHow")}
-            </a>
+            />
           </motion.div>
         </div>
       </motion.div>

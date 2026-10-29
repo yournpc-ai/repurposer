@@ -1,20 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { AppShowcase } from "@/components/landing/AppShowcase"
-import { Faq } from "@/components/landing/Faq"
-import { FinalCta } from "@/components/landing/FinalCta"
-import { Footer } from "@/components/landing/Footer"
-// import { Gallery } from "@/components/landing/Gallery" — hidden, see main
-import { Channels } from "@/components/landing/Channels"
 import { LandingHeader } from "@/components/landing/LandingHeader"
 import { LandingHero } from "@/components/landing/LandingHero"
-import { Manifesto } from "@/components/landing/Manifesto"
 import { ReducedMotionProvider } from "@/components/landing/motion"
-import { Pricing } from "@/components/landing/Pricing"
 import { SkipToContent } from "@/components/landing/SkipToContent"
-import { SmoothScroll } from "@/components/landing/SmoothScroll"
-// import { Testimonials } from "@/components/landing/Testimonials" — hidden, see main
-import { VideoShowcase } from "@/components/landing/VideoShowcase"
 
 export const Route = createFileRoute("/")({
   head: (ctx) => {
@@ -64,54 +53,32 @@ const SITE_URL = "https://repurposer.ai"
 
 const LANDING_META = {
   en: {
-    title: "Repurposer — You focus on your craft; we handle the rest",
-    description:
-      "Repurposer is an AI assistant that turns your existing material — talks, reports, podcasts, transcripts — into the content you name: LinkedIn posts, short clips, articles, newsletters, in the languages your audience speaks. GDPR-ready.",
-    ogDescription:
-      "An AI assistant that turns your existing material into the content you name — LinkedIn posts, clips, articles, newsletters, in the languages your audience speaks.",
+    title: "Repurposer — Your content creation agent",
+    description: "Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
+    ogDescription: "Your content creation agent. Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
   },
   zh: {
-    title: "Repurposer——你讲完了，剩下的交给我们",
-    description:
-      "Repurposer 是一个 AI 助手，把你现有的素材——演讲、报告、播客、文字稿——变成你点名的内容：LinkedIn 帖子、短片、文章、newsletter，用你受众的语言。GDPR 就绪。",
-    ogDescription:
-      "一个 AI 助手，把你现有的素材变成你点名的内容——LinkedIn 帖子、短片、文章、newsletter，用你受众的语言。",
+    title: "Repurposer — 你的内容创作 Agent",
+    description: "通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
+    ogDescription: "你的内容创作 Agent。通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
   },
 }
 
 function LandingPage() {
   return (
     <ReducedMotionProvider>
-      <SmoothScroll>
-        {/* Marketing register opts out of the studio gray underlay (ADR-046):
-            the landing keeps its pure-white canvas + the softer legacy hover
-            step, scoped via CSS-var overrides so every bg-background /
-            bg-accent inside resolves exactly as before. */}
-        <div
-          id="top"
-          className="flex min-h-svh flex-1 flex-col bg-background [--accent:oklch(0.95_0_0)] [--background:oklch(1_0_0)] dark:[--accent:oklch(1_0_0/8%)] dark:[--background:oklch(0.12_0_0)]"
-        >
-          <SkipToContent />
-          <LandingHeader />
-          <main id="main-content" className="flex-1 overflow-x-clip">
-            <LandingHero />
-            <VideoShowcase />
-            <Manifesto />
-            <AppShowcase />
-            {/* Gallery ("Made from one source") and Testimonials ("In
-                their own words") stay hidden pending narrative rework —
-                their #gallery / #reviews anchors are removed from the
-                header dropdown and footer; restore by uncommenting. */}
-            {/* <Gallery /> */}
-            <Channels />
-            {/* <Testimonials /> */}
-            <Pricing />
-            <Faq />
-            <FinalCta />
-          </main>
-          <Footer />
-        </div>
-      </SmoothScroll>
+      <div
+        id="top"
+        className="flex h-svh flex-col overflow-hidden bg-background [--accent:oklch(0.95_0_0)] [--background:oklch(1_0_0)] dark:[--accent:oklch(1_0_0/8%)] dark:[--background:oklch(0.12_0_0)]"
+      >
+        <SkipToContent />
+        <LandingHeader />
+        <main id="main-content" className="min-h-0 flex-1 overflow-hidden">
+          <LandingHero />
+          {/* Long-form sections are intentionally unmounted. Their components
+              remain in components/landing for a future evidence-led page. */}
+        </main>
+      </div>
     </ReducedMotionProvider>
   )
 }
