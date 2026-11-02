@@ -244,4 +244,10 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 - 每个 paid 订单恰好一条 `credit_transaction_id`，其 `kind=purchase`、`amount=orders.credits`、owner 与订单一致。
 - 每个 pending/expired/failed 订单没有 purchase 台账。
 - Stripe 已付款但内部未 paid 的 Session 可由 Session ID 对账；不得通过手工改余额修复，必须重放/补走同一入账写门。
-- 日志只记内部订单、Stripe Session/Event/PaymentIntent ID、状态、校验码与 provider 错误诊断（错误类型、code、param、短消息），不记 secret、完整 payload 或银行卡资料。
+- 日志只记内部订单、内部用户 ID、金额/币种/积分快照、Stripe Session/Event/PaymentIntent/Request ID、状态、校验码与 provider 错误诊断（错误类型、HTTP 状态、code、param、截断短消息），不记 secret、签名、完整 webhook payload、邮箱或银行卡资料。
+- 生产直接从 Docker 查 API 日志：
+  ```bash
+  docker compose logs --since 1h api
+  docker compose logs --since 1h api 2>&1 | grep -E 'stripe_|http_'
+  ```
+  正常链可按事件名核对：下单 `stripe_order_pending` → `stripe_checkout_created`；已验签 webhook `stripe_webhook_received` → `stripe_order_crediting` → `stripe_order_paid`；重放为 `stripe_webhook_duplicate`，过期为 `stripe_order_expired`。Stripe 拒绝看 `stripe_checkout_failed`，签名为 `stripe_webhook_signature_missing` / `stripe_webhook_signature_invalid`，订单边界校验为 `stripe_webhook_validation_failed`，入账事务异常为 `stripe_order_credit_failed`（含 traceback）；配置错误看 `stripe_environment_invalid` / `stripe_webhook_not_configured`。最终 HTTP 状态与同请求的 `http_request` / `http_error` 日志互证。

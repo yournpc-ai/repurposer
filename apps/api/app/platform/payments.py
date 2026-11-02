@@ -134,12 +134,28 @@ def _package(package_key: str) -> CreditPackage:
     raise PaymentPackageNotFound()
 
 
+def _order_log_fields(order: PaymentOrder) -> dict[str, Any]:
+    """Non-sensitive order facts shared by every payment lifecycle log."""
+    return {
+        "order_id": str(order.id),
+        "user_id": str(order.user_id),
+        "package_key": order.package_key,
+        "order_status": order.status,
+        "livemode": order.livemode,
+        "amount_minor": int(order.amount_minor),
+        "currency": order.currency,
+        "credits": int(order.credits),
+        "checkout_session_id": order.provider_checkout_session_id,
+    }
+
+
 def _configured_livemode() -> bool:
     key = settings.stripe_secret_key.strip()
     if key.startswith(("sk_test_", "rk_test_")):
         return False
     if key.startswith(("sk_live_", "rk_live_")):
         return True
+    logger.error("stripe_environment_invalid", secret_key_present=bool(key))
     raise PaymentConfigurationError()
 
 
@@ -173,9 +189,11 @@ async def create_checkout_session(
     )
     db.add(order)
     await db.commit()
+    logger.info("stripe_order_pending", **_order_log_fields(order))
 
     base = settings.web_public_url.rstrip("/")
     metadata = {"order_id": str(order.id), "package_key": package.key}
+    provider_session_id: str | None = None
     try:
         session = await stripe.checkout.Session.create_async(
             mode="payment",
@@ -189,6 +207,7 @@ async def create_checkout_session(
             cancel_url=f"{base}/settings?checkout=cancelled&order_id={order.id}",
             idempotency_key=f"checkout:{order.id}",
         )
+        provider_session_id = session.id
         if not session.url:
             raise PaymentProviderError()
     except stripe.error.StripeError as e:
@@ -196,26 +215,30 @@ async def create_checkout_session(
         await db.commit()
         logger.warning(
             "stripe_checkout_failed",
-            order_id=str(order.id),
+            **_order_log_fields(order),
+            provider_request_id=getattr(e, "request_id", None),
+            provider_http_status=getattr(e, "http_status", None),
             error_type=type(e).__name__,
             error_code=e.code,
             error_param=e.param,
-            error_message=str(e),
+            error_message=str(e)[:500],
         )
         raise PaymentProviderError() from e
     except PaymentProviderError:
         order.status = "failed"
         await db.commit()
+        logger.warning(
+            "stripe_checkout_failed",
+            **_order_log_fields(order),
+            provider_session_id=provider_session_id,
+            error_type="MissingCheckoutURL",
+            error_code="missing_checkout_url",
+        )
         raise
 
     order.provider_checkout_session_id = session.id
     await db.commit()
-    logger.info(
-        "stripe_checkout_created",
-        order_id=str(order.id),
-        checkout_session_id=session.id,
-        livemode=livemode,
-    )
+    logger.info("stripe_checkout_created", **_order_log_fields(order))
     return order, session.url
 
 
@@ -271,20 +294,33 @@ async def process_stripe_webhook(
 ) -> dict[str, Any]:
     """Verify and apply one Stripe event; only a paid Session moves credits."""
     secret = settings.stripe_webhook_secret.strip()
-    if not secret or not signature:
-        if not signature:
-            raise InvalidStripeSignature()
+    if not signature:
+        logger.warning("stripe_webhook_signature_missing", payload_bytes=len(payload))
+        raise InvalidStripeSignature()
+    if not secret:
+        logger.error("stripe_webhook_not_configured", payload_bytes=len(payload))
         raise PaymentConfigurationError()
     try:
         event = stripe.Webhook.construct_event(payload, signature, secret)
-    except (stripe.error.SignatureVerificationError, ValueError) as e:
+    except stripe.error.SignatureVerificationError as e:
+        logger.warning("stripe_webhook_signature_invalid", payload_bytes=len(payload))
+        raise InvalidStripeSignature() from e
+    except ValueError as e:
+        logger.warning("stripe_webhook_payload_invalid", payload_bytes=len(payload))
         raise InvalidStripeSignature() from e
 
     data = event.to_dict()
     event_id = str(data.get("id") or "")
     event_type = str(data.get("type") or "")
     if not event_id:
+        logger.warning("stripe_webhook_event_invalid", reason="missing_event_id")
         raise InvalidStripeSignature()
+    logger.info(
+        "stripe_webhook_received",
+        event_id=event_id,
+        event_type=event_type,
+        event_livemode=data.get("livemode"),
+    )
     if event_type not in {"checkout.session.completed", "checkout.session.expired"}:
         return _ignored("unsupported_event", event_id=event_id, event_type=event_type)
 
@@ -314,10 +350,13 @@ async def process_stripe_webhook(
     if mismatch:
         logger.warning(
             "stripe_webhook_validation_failed",
+            **_order_log_fields(order),
             event_id=event_id,
-            order_id=str(order.id),
-            checkout_session_id=order.provider_checkout_session_id,
             reason=mismatch,
+            provider_session_id=session.get("id"),
+            provider_amount_total=session.get("amount_total"),
+            provider_currency=session.get("currency"),
+            provider_payment_status=session.get("payment_status"),
         )
         return {"received": True, "ignored": mismatch}
 
@@ -325,49 +364,88 @@ async def process_stripe_webhook(
         if order.status == "pending":
             order.status = "expired"
             await db.commit()
-            logger.info("stripe_order_expired", event_id=event_id, order_id=str(order.id))
+            logger.info("stripe_order_expired", **_order_log_fields(order), event_id=event_id)
+        else:
+            _ignored(
+                "expired_order_not_pending",
+                **_order_log_fields(order),
+                event_id=event_id,
+            )
         return {"received": True, "status": order.status}
 
     if session.get("payment_status") != "paid":
-        return _ignored("payment_not_paid", event_id=event_id, order_id=str(order.id))
+        return _ignored(
+            "payment_not_paid",
+            **_order_log_fields(order),
+            event_id=event_id,
+            provider_payment_status=session.get("payment_status"),
+        )
     if order.status == "paid":
         if order.credit_transaction_id is None:
+            logger.error(
+                "stripe_order_invariant_failed",
+                **_order_log_fields(order),
+                event_id=event_id,
+                invariant="paid_without_credit_transaction",
+            )
             raise RuntimeError(f"paid payment order {order.id} has no credit transaction")
+        logger.info(
+            "stripe_webhook_duplicate",
+            **_order_log_fields(order),
+            event_id=event_id,
+            credit_transaction_id=str(order.credit_transaction_id),
+        )
         return {"received": True, "status": "paid", "duplicate": True}
     if order.credit_transaction_id is not None:
+        logger.error(
+            "stripe_order_invariant_failed",
+            **_order_log_fields(order),
+            event_id=event_id,
+            invariant="unpaid_with_credit_transaction",
+            credit_transaction_id=str(order.credit_transaction_id),
+        )
         raise RuntimeError(f"unpaid payment order {order.id} already has a credit transaction")
     # An expired marker may win an out-of-order delivery race; a verified paid
     # Session is the stronger fact. The reverse transition remains forbidden.
     if order.status not in {"pending", "expired"}:
-        return _ignored("invalid_order_state", event_id=event_id, order_id=str(order.id))
+        return _ignored(
+            "invalid_order_state", **_order_log_fields(order), event_id=event_id
+        )
 
-    transaction = await purchase_credits(
-        db,
-        user_id=order.user_id,
-        order_id=order.id,
-        provider_event_id=event_id,
-        amount=int(order.credits),
-    )
-    created = data.get("created")
-    order.paid_at = (
-        datetime.fromtimestamp(int(created), UTC)
-        if isinstance(created, int | float)
-        else now_utc()
-    )
-    order.credited_at = now_utc()
-    order.status = "paid"
-    order.credit_transaction_id = transaction.id
-    payment_intent = session.get("payment_intent")
-    if isinstance(payment_intent, dict):
-        payment_intent = payment_intent.get("id")
-    order.provider_payment_intent_id = (
-        payment_intent if isinstance(payment_intent, str) else None
-    )
-    await db.commit()
+    credit_fields = _order_log_fields(order)
+    logger.info("stripe_order_crediting", **credit_fields, event_id=event_id)
+    try:
+        transaction = await purchase_credits(
+            db,
+            user_id=order.user_id,
+            order_id=order.id,
+            provider_event_id=event_id,
+            amount=int(order.credits),
+        )
+        created = data.get("created")
+        order.paid_at = (
+            datetime.fromtimestamp(int(created), UTC)
+            if isinstance(created, int | float)
+            else now_utc()
+        )
+        order.credited_at = now_utc()
+        order.status = "paid"
+        order.credit_transaction_id = transaction.id
+        payment_intent = session.get("payment_intent")
+        if isinstance(payment_intent, dict):
+            payment_intent = payment_intent.get("id")
+        order.provider_payment_intent_id = (
+            payment_intent if isinstance(payment_intent, str) else None
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("stripe_order_credit_failed", **credit_fields, event_id=event_id)
+        raise
     logger.info(
         "stripe_order_paid",
+        **_order_log_fields(order),
         event_id=event_id,
-        order_id=str(order.id),
         credit_transaction_id=str(transaction.id),
+        payment_intent_id=order.provider_payment_intent_id,
     )
     return {"received": True, "status": "paid"}

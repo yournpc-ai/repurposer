@@ -418,6 +418,7 @@ async def test_nested_start_never_commits_before_stop_fence(database, monkeypatc
     from app.chat.service import (
         TurnStopped,
         answer_question,
+        append_activity_row,
         stop_turn_at_visible_frontier,
     )
     from app.models.schemas import (
@@ -502,6 +503,25 @@ async def test_nested_start_never_commits_before_stop_fence(database, monkeypatc
                 WorkflowRun.project_id == project_id
             ))).all()) == []
             assert await billing.held(observer, uid) == 0
+        async with database() as activity_db:
+            # Terminal Activity persistence uses its own session inside the same
+            # Chat Turn. It must share the outer Start's fence rather than wait
+            # on the opening-row lock that its owner cannot release yet.
+            await asyncio.wait_for(
+                append_activity_row(
+                    activity_db,
+                    conversation_id,
+                    {
+                        "activity_id": "redirected",
+                        "kind": "repair",
+                        "status": "completed",
+                        "key": "chat.activity.repairDone",
+                    },
+                    turn_id=turn_id,
+                ),
+                timeout=1,
+            )
+            await activity_db.commit()
         await main.rollback()
 
     async with database() as stop_db:

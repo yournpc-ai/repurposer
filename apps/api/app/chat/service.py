@@ -44,8 +44,10 @@ is a new intent and the question stays pending.
 
 import json
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -2252,6 +2254,13 @@ async def answer_question(
             start_turn_id = turn_ref.turn_id if turn_ref is not None else None
         if start_turn_id is not None:
             await _lock_turn_for_transcript_write(db, start_turn_id)
+            # The outer transaction now owns this fence until its one final
+            # commit. Independent transcript sessions in the SAME async turn
+            # must share that ownership instead of waiting on their owner;
+            # Stop arrives in a different context and still takes the lock.
+            _TURN_ROW_LOCKS_HELD.set(
+                _TURN_ROW_LOCKS_HELD.get() | {start_turn_id}
+            )
 
     # Row lock to the request boundary: a double-clicked Start (or retry)
     # otherwise passes the answer-is-None check concurrently and births two
@@ -3320,6 +3329,29 @@ class TurnStopped(Exception):
     """A Stop decision won before this transcript/final-commit write."""
 
 
+# Dynamic lock ownership, scoped to one async Chat Turn. A nested Start holds
+# the opening-row DB lock through the outer final commit; its independent
+# transcript sessions must not re-acquire that lock from their own owner.
+# Other requests (notably Stop) have a different context and still serialize
+# on the database row. execute_chat_turn restores the previous value on exit.
+_TURN_ROW_LOCKS_HELD: ContextVar[frozenset[UUID]] = ContextVar(
+    "turn_row_locks_held", default=frozenset()
+)
+
+
+def _scope_turn_row_lock_ownership(fn):
+    """Clear this turn's shared lock ownership on commit, rollback or error."""
+    @wraps(fn)
+    async def wrapped(*args, **kwargs):
+        inherited = _TURN_ROW_LOCKS_HELD.get()
+        try:
+            return await fn(*args, **kwargs)
+        finally:
+            _TURN_ROW_LOCKS_HELD.set(inherited)
+
+    return wrapped
+
+
 async def _lock_turn_for_transcript_write(
     db: AsyncSession,
     turn_id: UUID,
@@ -3333,15 +3365,19 @@ async def _lock_turn_for_transcript_write(
     commit additionally require the opening Turn to remain in flight.
     ``populate_existing`` is load-bearing: this session may have loaded the row
     before waiting for its lock, and the post-wait database state must win.
+    When the outer nested-Start transaction already owns the fence, a fresh
+    transcript session in that same async context reads without re-locking:
+    its owner still excludes Stop, while a second lock request would wait on
+    the owner itself and prevent the outer commit forever.
     """
-    row = (
-        await db.execute(
-            select(Message)
-            .where(Message.id == turn_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one_or_none()
+    query = (
+        select(Message)
+        .where(Message.id == turn_id)
+        .execution_options(populate_existing=True)
+    )
+    if turn_id not in _TURN_ROW_LOCKS_HELD.get():
+        query = query.with_for_update()
+    row = (await db.execute(query)).scalar_one_or_none()
     if (
         row is None
         or row.turn_state in {"cancelled", "retracted"}
@@ -3641,6 +3677,7 @@ async def persist_turn_failed_line(
         )
 
 
+@_scope_turn_row_lock_ownership
 async def execute_chat_turn(
     db: AsyncSession,
     prepared: PreparedTurn,
