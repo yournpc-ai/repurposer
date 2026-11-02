@@ -7,7 +7,6 @@ import {
   Sun,
   LogOut,
   LogIn,
-  Crown,
   Zap,
   RotateCcw,
   Settings,
@@ -25,14 +24,15 @@ import { useTheme, type Theme } from "@/lib/theme/ThemeProvider"
 import { clearAuth, getUser } from "@/lib/auth"
 import { useAuth } from "@/lib/auth-context"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
+import { formatCredits } from "@/components/credits/tx-row"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 /** The account console (ADR-046 D5) — the Popover the rail-foot avatar opens.
- * Grouping (MiniMax discipline, 2026-08-21): the inset ACCOUNT block carries
- * only value surfaces (plan / credits); system surfaces live in 偏好 as
- * labeled rows — theme / language with TRAILING segmented controls, deep
- * settings as a chevron row opening the shared SettingsDialog. Never a
- * DropdownMenu — it carries inline controls, not a list of links. */
+ * Grouping: the inset ACCOUNT block carries the actionable Credits value;
+ * system surfaces live in 偏好 as labeled rows — theme / language with
+ * TRAILING segmented controls, deep settings as a chevron row opening the
+ * shared SettingsDialog. Never a DropdownMenu — it carries inline controls,
+ * not a list of links. */
 
 const THEME_OPTIONS: { value: Theme; icon: typeof Monitor; labelKey: string }[] = [
   { value: "system", icon: Monitor, labelKey: "common.themeSystem" },
@@ -131,23 +131,25 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Inset ACCOUNT block — value surfaces ONLY (plan / credits slots).
-          Settings is NOT here: it belongs to 偏好 (MiniMax grouping law). */}
+      {/* Inset ACCOUNT block — Credits is the only value surface while
+          subscriptions are unavailable. The whole row opens its real
+          management seat instead of presenting a static, button-like row. */}
       <div className="flex flex-col gap-0.5 rounded-lg bg-inset p-1">
-        <div className="flex h-8 items-center gap-2 px-2">
-          <Crown className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-foreground">{t("nav.subscription")}</span>
-          <span className="ml-auto rounded-md bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {t("common.freePlan")}
-          </span>
-        </div>
-        <div className="flex h-8 items-center gap-2 px-2">
+        <button
+          type="button"
+          onClick={() => {
+            onClose()
+            openSettings("credits")
+          }}
+          className="group flex h-8 items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent"
+        >
           <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-foreground">{t("common.credits")}</span>
-          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
-            {balance ?? "—"}
+          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground group-hover:text-foreground">
+            {balance !== null ? formatCredits(balance, i18n.language) : "—"}
           </span>
-        </div>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
         {/* Negative balance (BILLING §5): a NULL-estimate run may settle the
             balance past zero — the number shows honestly and this note
             explains it. */}

@@ -71,8 +71,8 @@ export function AppSidebar() {
   /* The trigger is a NATIVE button (PopoverTrigger's default render), not a
      Button component — no variant fills to fight. The expanded row's hover/
      open fill lives on the footer container below, so the whole row
-     (avatar + text + upgrade pill) reads as ONE unit; only the collapsed
-     rail gives this button its own hover fill. */
+     (avatar + text) reads as ONE unit; only the collapsed rail gives this
+     button its own hover fill. */
   const avatarTrigger = (
     <PopoverTrigger className="flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-start gap-3 rounded-xl px-3 text-left font-normal transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring/30 group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:flex-none group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0 group-data-[state=collapsed]:hover:bg-sidebar-accent">
       <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
@@ -81,13 +81,8 @@ export function AppSidebar() {
           {isAuthenticated ? initial : <User className="h-3 w-3" />}
         </AvatarFallback>
       </Avatar>
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left group-data-[state=collapsed]:hidden">
+      <div className="flex min-w-0 flex-1 flex-col items-start text-left group-data-[state=collapsed]:hidden">
         <span className="w-full truncate text-sm font-medium leading-none">{displayName}</span>
-        {isAuthenticated && (
-          <span className="text-xs leading-none text-muted-foreground">
-            {t("common.freePlan")}
-          </span>
-        )}
       </div>
     </PopoverTrigger>
   )

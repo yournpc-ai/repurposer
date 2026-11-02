@@ -24,10 +24,11 @@ interface WalletState {
   held: number
 }
 
-/** The ProjectHeader's credits read + purchase-entry surface (BILLING §7 —
- * absolute credits, no plan quota). Seat (2026-10-15 user ruling):
- * inside the glass ProjectHeader, right end, all breakpoints and all world
- * states — credits must be visible at the spend point, pre-run included.
+/** Shared Home / ProjectHeader credits read + purchase-entry surface
+ * (BILLING §7 — absolute credits, no plan quota). Seats: Home places the bare
+ * readout left of the notification bell (and inside MobileHeader below md);
+ * ProjectHeader keeps it at the right end, all breakpoints and world states —
+ * credits must be visible at the spend point, pre-run included.
  * Bare anatomy (the MobileHeader bell's law): controls inside glass carry
  * no tile of their own.
  *

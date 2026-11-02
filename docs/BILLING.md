@@ -155,7 +155,7 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页 **CreditsPill** + 余额不足入流灰行及购买入口。**生成前估价的家**：dock echo 的真实估价信息、需要确认时的 dock Start pill（服务端 `quote_high` / unquotable 标记）与画布草稿节点逐节点估价共同呈现；重型确认卡和第二总价面不再另建。执行与费用确认控件只住 dock，画布不放计划 Start/Confirm（ADR-070）；确认针对当前受影响节点、scope 与报价，不由客户端自行推导。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端四面 + 三余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + Home / 项目页共用 **CreditsPill** + 余额不足入流灰行及购买入口。**生成前估价的家**：dock echo 的真实估价信息、需要确认时的 dock Start pill（服务端 `quote_high` / unquotable 标记）与画布草稿节点逐节点估价共同呈现；重型确认卡和第二总价面不再另建。执行与费用确认控件只住 dock，画布不放计划 Start/Confirm（ADR-070）；确认针对当前受影响节点、scope 与报价，不由客户端自行推导。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
 
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 

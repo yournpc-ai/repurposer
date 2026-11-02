@@ -8,6 +8,7 @@ import { FolderKanban, User } from "lucide-react"
 import { getUser } from "@/lib/auth"
 import { useAuth } from "@/lib/auth-context"
 import { AccountConsole } from "@/components/account-console"
+import { CreditsPill } from "@/components/credits/CreditsPill"
 import { LogoMark } from "@/components/LogoMark"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -23,8 +24,8 @@ import {
  * AppHeader — the bell is the single floating chip" scopes to md+. Below md
  * the sidebar rail AND its drawer go away entirely — a two-entry nav
  * (Home / Projects) doesn't deserve a bottom tab bar, so this header absorbs
- * everything: brand lockup left (tap = /home), Projects + bell + avatar
- * (the same AccountConsole popover as the rail footer) right. The floating
+ * everything: brand lockup left (tap = /home), Projects + home CreditsPill +
+ * bell + avatar (the same AccountConsole popover as the rail footer) right. The floating
  * sidebar trigger and floating bell chip are retired below md with it.
  *
  * Material = dock-surface glass (user ruling — Pexo parity): the pinned
@@ -47,6 +48,7 @@ export function MobileHeader() {
   const { t } = useTranslation()
   const router = useRouterState()
   const onProjects = router.location.pathname.startsWith("/projects")
+  const onHome = router.location.pathname === "/home"
   const { isAuthenticated } = useAuth()
 
   // Same SSR discipline as the rail footer: getUser() reads localStorage,
@@ -69,7 +71,7 @@ export function MobileHeader() {
         className="-ml-2 flex items-center gap-2 rounded-lg px-2 py-1 transition-colors active:bg-accent"
       >
         <LogoMark className="h-6 w-6" />
-        <span className="font-semibold tracking-tight">Repurposer</span>
+        <span className="font-semibold tracking-tight max-[400px]:hidden">Repurposer</span>
       </Link>
 
       <div className="flex items-center gap-1">
@@ -88,6 +90,10 @@ export function MobileHeader() {
         >
           <FolderKanban />
         </Button>
+
+        {/* Home carries the same CreditsPill as the project spend point;
+            bare inside the shared glass, never another floating chip. */}
+        {onHome && <CreditsPill refreshKey="home" />}
 
         {/* Bell in its bare form — the glass tile is the header's. */}
         <NotificationBell chip={false} />

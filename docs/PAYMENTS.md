@@ -209,7 +209,7 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 ## 7. 前端座位与返回行为
 
 - `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、预设按钮、换算 tooltip、取消与 Checkout 跳转都在该轻量弹窗内完成。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
-- `components/settings/CreditsSection.tsx` 只承载余额/held、购买入口、支付返回确认与语义台账，不内嵌金额选择或支付表单。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
+- `components/settings/CreditsSection.tsx` 只承载余额/held、购买入口、支付返回确认与语义台账，不内嵌金额选择或支付表单；余额区唯一主行动为 Add credits，Recent 仅作台账标题，不设同页滚动按钮。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
 - `lib/payments.ts` 统一 packages / checkout / order 的 wire types 与 `apiFetch`；金额用 `Intl.NumberFormat` 按 EUR 与当前语言格式化，积分沿用 `formatCredits`。
 - `routes/_app.settings.tsx` 复用为 Checkout return shim：接收 `checkout=success|cancelled&order_id=...`，打开积分 section 后回 `/home`；不新建支付设置页。
 - 返回 success 只显示“正在确认付款”，有界轮询订单（2 秒一次、至多 30 秒）。只有服务端 `paid` 才显示充值成功并刷新 wallet/transactions；超时仍 pending 显示稍后刷新，不重复下单。

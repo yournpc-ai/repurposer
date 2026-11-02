@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -37,7 +37,6 @@ export function CreditsSection() {
   const [expanded, setExpanded] = useState(false)
   const [returnNotice, setReturnNotice] = useState<ReturnNotice>(null)
   const [pollNonce, setPollNonce] = useState(0)
-  const activityRef = useRef<HTMLElement>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -154,24 +153,13 @@ export function CreditsSection() {
               </p>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => activityRef.current?.scrollIntoView({ block: "start" })}
-            >
-              {t("credits.recent")}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => openCreditTopup()}
-            >
-              {t("credits.buyTitle")}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => openCreditTopup()}
+          >
+            {t("credits.buyTitle")}
+          </Button>
         </div>
         {wallet != null && wallet.balance < 0 && (
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -180,7 +168,7 @@ export function CreditsSection() {
         )}
       </section>
 
-      <section ref={activityRef} className="border-t border-subtle pt-6">
+      <section className="border-t border-subtle pt-6">
         <div className="flex items-center gap-3">
           <h4 className="min-w-0 flex-1 text-sm font-semibold">
             {t("credits.recent")}

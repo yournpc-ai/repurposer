@@ -1,7 +1,8 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router"
+import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { CreditsPill } from "@/components/credits/CreditsPill"
 import { MobileHeader } from "@/components/mobile-header"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
 import {
@@ -53,6 +54,8 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const onHome = pathname === "/home"
   return (
     <SidebarProvider defaultOpen={sidebarOpen}>
       {/* Settings = a shared dialog rooted at __root.tsx (summonable from
@@ -71,9 +74,11 @@ function AppLayout() {
             (-mt-14) so the frost has something to blur. First child order
             keeps it above the Outlet in both paint and tab order. */}
         <MobileHeader />
-        {/* …and the bell chip (top-right, reserved app-wide) — md+ only;
-            below md the bell lives bare inside the MobileHeader. */}
-        <div className="fixed right-4 top-4 z-40 hidden md:block">
+        {/* Home exposes the same bare CreditsPill as the project spend point,
+            immediately left of the bell. The bell remains the only floating
+            chip; other pages keep their existing credits seats. */}
+        <div className="fixed right-4 top-4 z-40 hidden items-center gap-1 md:flex">
+          {onHome && <CreditsPill refreshKey="home" />}
           <NotificationBell />
         </div>
         <Outlet />

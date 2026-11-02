@@ -25,7 +25,7 @@ const zh: Resources = {
     themeSystem: "跟随系统",
     themeLight: "浅色",
     themeDark: "深色",
-    replayTour: "重播导览",
+    replayTour: "重播首页导览",
     credits: "积分",
     language: "语言",
     settings: "设置",
@@ -33,7 +33,6 @@ const zh: Resources = {
     login: "登录",
     guest: "访客",
     new: "新建",
-    freePlan: "免费版",
     upgrade: "升级",
     requestFailed: "请求失败",
     networkError: "网络错误，请检查连接",
@@ -82,7 +81,7 @@ const zh: Resources = {
     held: "预占中",
     /** pill hero meta 行的预占内联提及（"积分 · 12 预占中"）。 */
     heldInline: "{{count}} 预占中",
-    recent: "消耗记录",
+    recent: "最近记录",
     /** SettingsDialog「积分」section（BILLING §7 展示主轴）——余额与台账
      * 的全貌座位，与 pill 同两个端点。 */
     title: "积分",
@@ -123,7 +122,6 @@ const zh: Resources = {
     home: "首页",
     personas: "人设",
     myProjects: "我的项目",
-    subscription: "订阅",
   },
   home: {
     newChat: "新对话",

@@ -23,7 +23,7 @@ const en = {
     themeSystem: "System",
     themeLight: "Light",
     themeDark: "Dark",
-    replayTour: "Replay tour",
+    replayTour: "Replay home tour",
     credits: "Credits",
     language: "Language",
     settings: "Settings",
@@ -31,7 +31,6 @@ const en = {
     login: "Log in",
     guest: "Guest",
     new: "New",
-    freePlan: "Free plan",
     upgrade: "Upgrade",
     requestFailed: "Request failed",
     networkError: "Network error — check your connection",
@@ -93,7 +92,7 @@ const en = {
     held: "Held in active runs",
     /** The pill hero's inline held mention (meta row: "Credits · 12 held"). */
     heldInline: "{{count}} held",
-    recent: "Activity",
+    recent: "Recent",
     /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
      * balance + ledger full-view seat, same two endpoints as the pill. */
     title: "Credits",
@@ -135,7 +134,6 @@ const en = {
     home: "Home",
     personas: "Personas",
     myProjects: "My projects",
-    subscription: "Subscription",
   },
   home: {
     newChat: "New chat",
