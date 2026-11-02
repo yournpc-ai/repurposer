@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "output_id": "8674d76e-4dc8-4e91-82c2-75d0686f7e7e",
+  "composition_id": "f372ae17-b351-4abf-8a3f-ac46fcdfc27c",
+  "composition_version_id": "5a112f13-3458-4ae3-aa50-cfab8a67f9bf",
+  "content_digest": "ef4e082022980e2e15c63670dfcea2f0437dcb0cde3529dd722d41388351b5e2",
+  "execution_digest": null,
+  "video_sha256": "820a47449ab92834d2c4c10d3f24911bbadd8552c424de8eafb29c96000585eb",
+  "reviewed_at": "2026-10-30T20:10:11.349407+00:00",
+  "requirements": "Create a four-second word-by-word blur-slide title animation with the exact supplied English title and subtitle. All words must finish fully visible, legible and uncropped. No narration or soundtrack is required.",
+  "at_seconds": [
+    0.4,
+    0.8,
+    1.5,
+    3.5
+  ],
+  "summary": "The sampled frames show the exact saved title and subtitle on a clean white canvas. F01 shows an early title word in a blurred reveal state, F03 shows staggered blur during the subtitle reveal, and F04 shows “Make every idea / move clearly” and “Your existing material shaped into the content you name” fully visible, legible, and uncropped. No concrete visual issue is visible in the provided frames.",
+  "scope": {
+    "actual_output_decoded": true,
+    "static_frames_checked": true,
+    "deterministic_output_checks": true,
+    "sampled_frame_signals_checked": true,
+    "audio_signal_checked": true,
+    "motion_and_transitions_checked": false,
+    "audio_and_av_sync_checked": false
+  },
+  "limitations": [
+    "Findings are based on the listed decoded still frames, not continuous motion playback.",
+    "Flat or repeated sampled frames are candidates for inspection, not proof of a defect.",
+    "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+    "RMS and peak dBFS are not BS.1770 integrated LUFS."
+  ],
+  "media_inspection": {
+    "checker_version": "output-checks-v1",
+    "visual": {
+      "sampled_frames": 4,
+      "flat_frame_candidates": [],
+      "repeated_frame_groups": []
+    },
+    "audio": {
+      "expected": false,
+      "present": true,
+      "decode_ok": true,
+      "scope": "full_stream",
+      "sample_rate": 22050,
+      "samples": 89376,
+      "duration_seconds": 4.053333,
+      "rms_dbfs": -240.0,
+      "peak_dbfs": -240.0,
+      "clipped_sample_ratio": 0.0,
+      "integrated_lufs": null
+    },
+    "issues": []
+  },
+  "frames": [
+    {
+      "frame_id": "F01",
+      "time_seconds": 0.4,
+      "frame": 12,
+      "scene_id": null,
+      "storage_key": "video-review/34cf201570cbb456ad27c1fdca943f9e480e320ad647d5d2c5492b834fad9cc8.jpg",
+      "digest": "34cf201570cbb456ad27c1fdca943f9e480e320ad647d5d2c5492b834fad9cc8"
+    },
+    {
+      "frame_id": "F02",
+      "time_seconds": 0.8,
+      "frame": 24,
+      "scene_id": null,
+      "storage_key": "video-review/718f5494997ace478e9e248372a1a08ac4f09de30a9b2a13ee808d3601793846.jpg",
+      "digest": "718f5494997ace478e9e248372a1a08ac4f09de30a9b2a13ee808d3601793846"
+    },
+    {
+      "frame_id": "F03",
+      "time_seconds": 1.5,
+      "frame": 45,
+      "scene_id": null,
+      "storage_key": "video-review/67c3aaff4d848752ffa19965b3bdc6e1fb234dc438be9db6e0ddc6780d7d9049.jpg",
+      "digest": "67c3aaff4d848752ffa19965b3bdc6e1fb234dc438be9db6e0ddc6780d7d9049"
+    },
+    {
+      "frame_id": "F04",
+      "time_seconds": 3.5,
+      "frame": 105,
+      "scene_id": null,
+      "storage_key": "video-review/cbca92ab031f10fe7229d57483449896e0906c72fa2e7c81b4cdab90bb9b651e.jpg",
+      "digest": "cbca92ab031f10fe7229d57483449896e0906c72fa2e7c81b4cdab90bb9b651e"
+    }
+  ],
+  "findings": []
+}

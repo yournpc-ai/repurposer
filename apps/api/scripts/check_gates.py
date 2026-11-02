@@ -28,9 +28,8 @@ sense.
 Gate 4 (retired flow-control node kind): the retired node KIND
 ``checkpoint`` as a kind-string (``kind="checkpoint"`` /
 ``kind == 'checkpoint'``) must never reappear under ``app/``. The WORD
-``checkpoint`` is current vocabulary — ADR-085 re-claimed it for the
-Assistant Conversation channel (``on_checkpoint`` hook /
-``assistant.checkpoint`` SSE event / ``intent.type=checkpoint`` row).
+``checkpoint`` remains legal for unrelated direction/domain checkpoints;
+the Assistant Conversation channel is named ``interim_prose`` throughout.
 
 Gate 5 (ADR-087 dependency direction, Phase 2.5 — the three-way split made
 grep-provable):
@@ -117,11 +116,9 @@ BANNED_LLM_IMPORT = re.compile(r"^\s*(from|import)\s+app\.(agents|clients|provid
 # someone reintroduced a retry without feedback.
 BANNED_BLIND_RETRY = re.compile(r"auto_retry|_with_retry")
 
-# The retired flow-control node KIND (naming batch v2, N-40): ADR-085
-# (2026-09-17) re-claimed the WORD ``checkpoint`` for the Assistant
-# Conversation channel (``on_checkpoint`` hook / ``assistant.checkpoint``
-# SSE event / ``intent.type=checkpoint`` row) — that vocabulary is current
-# and legal; what must never come back is the node kind as a kind-string.
+# The retired flow-control node KIND (naming batch v2, N-40): unrelated
+# direction/domain checkpoints remain legal, while the Assistant Conversation
+# channel uses ``interim_prose``. Only the retired kind-string must stay banned.
 BANNED_CHECKPOINT_KIND = re.compile(
     r"kind\s*(?:=|==)\s*[\"']checkpoint[\"']",
     re.IGNORECASE,
@@ -314,7 +311,7 @@ def main() -> int:
             print(f"  {failure}")
     checkpoint = check_checkpoint_node_kind()
     if checkpoint:
-        print("checkpoint-kind gate FAILED (the retired flow-control node kind must never reappear; the WORD checkpoint belongs to the Assistant Conversation channel — ADR-085):")
+        print("checkpoint-kind gate FAILED (the retired flow-control node kind must never reappear; unrelated direction/domain checkpoints remain legal):")
         for failure in checkpoint:
             print(f"  {failure}")
     kernel = check_kernel_boundary()

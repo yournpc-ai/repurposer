@@ -60,7 +60,7 @@ export function MobileHeader() {
   const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase()
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between px-4 dock-surface ring-1 ring-foreground/10 md:hidden">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between px-4 dock-surface border border-subtle md:hidden">
       {/* Brand lockup = the Home entry (mobile convention: brand tap goes
           home; the rail's SidebarHeader lockup mirrored in miniature). */}
       <Link
@@ -98,7 +98,7 @@ export function MobileHeader() {
         <Popover open={consoleOpen} onOpenChange={setConsoleOpen}>
           <PopoverTrigger
             aria-label={displayName}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none hover:bg-accent active:bg-accent focus-visible:outline-2 focus-visible:outline-ring/30"
           >
             <Avatar className="h-7 w-7 rounded-full">
               <AvatarImage src="" alt={displayName} />

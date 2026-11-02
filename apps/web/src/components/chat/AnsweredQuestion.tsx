@@ -9,44 +9,8 @@
 import { useTranslation } from "react-i18next"
 
 import { Message, MessageContent } from "@/components/ui/message"
-
-/** The typed answer payload mirrored from the API (messages.answer). */
-export interface QuestionAnswer {
-  kind: "option" | "freeform" | "bail" | "start"
-  option_id?: string | null
-  text?: string | null
-  answered_at?: string
-}
-
-/** Resolve an answer payload to its display line. Bail variants are
- * localized (a graceful exit, never an error); freeform shows its text. */
-export function answeredQuestionText(
-  answer: QuestionAnswer,
-  t: (key: string) => string,
-  /** The answered question carried a run (interrupt): its bail stops the
-   * run, it doesn't send the project back to draft — different copy. */
-  hasRun?: boolean,
-): { text: string; muted: boolean } {
-  if (answer.kind === "bail") {
-    if (answer.text === "superseded") {
-      return { text: t("chat.qa.superseded"), muted: true }
-    }
-    return hasRun
-      ? { text: t("chat.qa.stopped"), muted: true }
-      : { text: t("chat.qa.cancelled"), muted: true }
-  }
-  // The interrupt expiry sweep's auto-answer (machine marker, same pattern
-  // as "superseded") — a system decision, rendered muted.
-  if (answer.kind === "option" && answer.text === "expired") {
-    return { text: t("chat.qa.expired"), muted: true }
-  }
-  // start 类 QA 退役 (Workspace 合同 v4.2 C8, 2026-09-26 封板): the
-  // confirmation beat archives as a plain user bubble (「确认生成」via the
-  // sendChat channel), never as a Q&A block — task_book answers bypass
-  // this resolver entirely (historyReplay replays the echo only), so no
-  // "start" branch lives here anymore. QA blocks serve genuine Q&A only.
-  return { text: answer.text || answer.option_id || "", muted: false }
-}
+import { cn } from "@/lib/utils"
+import { shouldAnimateEntrance } from "./timeline/reveal"
 
 interface AnsweredQuestionProps {
   /** Human question line (already localized / user data). */
@@ -57,9 +21,16 @@ interface AnsweredQuestionProps {
   answer: string
   /** Bail/supersede answers render muted — a graceful exit, not a failure. */
   muted?: boolean
+  hydrated?: boolean
 }
 
-export function AnsweredQuestion({ question, questionDetail, answer, muted }: AnsweredQuestionProps) {
+export function AnsweredQuestion({
+  question,
+  questionDetail,
+  answer,
+  muted,
+  hydrated,
+}: AnsweredQuestionProps) {
   const { t } = useTranslation()
   return (
     <Message align="end">
@@ -68,7 +39,11 @@ export function AnsweredQuestion({ question, questionDetail, answer, muted }: An
             including the question context quoted above it. The Q/A chips stay
             on the left, so the original optical padding does not mirror with
             the bubble's host alignment. */}
-        <div className="w-fit max-w-[85%] space-y-2 rounded-lg bg-muted py-2.5 pl-3 pr-10 text-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
+        <div className={cn(
+          "w-fit max-w-[85%] space-y-2 rounded-lg bg-muted py-2.5 pl-3 pr-10 text-sm",
+          shouldAnimateEntrance(hydrated) &&
+            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+        )}>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {t("chat.qa.q")}

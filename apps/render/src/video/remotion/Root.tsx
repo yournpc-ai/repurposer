@@ -44,7 +44,7 @@ export const VideoRoot: React.FC = () => (
     height={1080}
     durationInFrames={30}
     defaultProps={{ spec: DEFAULT_SPEC }}
-    calculateMetadata={({ props }) => ({
+    calculateMetadata={({ props }: { props: { spec: VideoSpec } }) => ({
       fps: props.spec.fps.num / props.spec.fps.den,
       width: props.spec.width,
       height: props.spec.height,

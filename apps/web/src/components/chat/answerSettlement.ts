@@ -1,6 +1,6 @@
 /** Answer-stream envelope settlement (ADR-093 §1 信封对账补全): the answer
  * SSE path's terminal-frame seam, extracted as PURE functions so the branch
- * matrix is testable (historyReplay.ts 同款先例 — ChatDock imports them
+ * matrix is testable (timeline/history.ts 同款先例 — ChatDock imports them
  * back, one source).
  *
  * 对账完整律: the envelope always wins = identity stamping (runId /
@@ -12,7 +12,8 @@
  * divergent text (a stale typed text replaying against the archive is the
  * live-only double-paragraph bug class). */
 
-import type { OverlayMessage, QuestionMessage } from "./historyReplay"
+import type { OverlayMessage, QuestionMessage } from "./timeline/types"
+import { releaseSettledCandidateRows } from "@/lib/chatStreamFrames"
 
 /** 信封散文真值: the follow-up row's prose truth, RAW (the DB's verbatim
  * content — trim only judges emptiness and the bare-question comparison,
@@ -71,11 +72,12 @@ export function spliceAnswerEnvelope(
     previewId: string
     answeredRow: Omit<OverlayMessage, "id"> | null
     followUp: QuestionMessage | null
+    pendingCandidates?: readonly OverlayMessage[]
   },
 ): OverlayMessage[] {
   const { optimisticId, previewId, answeredRow, followUp } = args
   const prose = followUp ? answerEnvelopeProse(followUp) : ""
-  return prev.flatMap((m) => {
+  const spliced = prev.flatMap((m) => {
     if (m.id === optimisticId)
       // Keep the optimistic block's KEY — a fresh id unmounts the DOM node
       // and replays the entrance animation (the 2026-09-08 post-typewriter
@@ -108,13 +110,21 @@ export function spliceAnswerEnvelope(
           // text (a prose-less follow-up stamps identity only).
           content: prose || m.content,
           runId: followUp?.workflow_run_id ?? m.runId,
+          turnId: followUp?.turn_id ?? m.turnId,
+          ...(followUp
+            ? { blocks: followUp.blocks?.length ? followUp.blocks : undefined }
+            : {}),
           ...(followUp?.seq != null ? { seq: followUp.seq } : {}),
           // Re-anchor on the server row's created_at — the preview's client
           // clock was only a stand-in (finalizePreview parity).
           at: followUp?.created_at ?? m.at,
           streaming: false,
+          proseDrainedAtMs: m.proseDrainedAtMs ?? Date.now(),
         },
       ]
     return [m]
   })
+  return followUp
+    ? releaseSettledCandidateRows(spliced, args.pendingCandidates ?? [], previewId)
+    : spliced
 }

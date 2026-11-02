@@ -655,17 +655,17 @@ export function SkinEditor({
                     onClick={() => update("captionColor", c)}
                     style={{ backgroundColor: c }}
                     className={cn(
-                      "h-7 w-7 rounded-md ring-2 ring-offset-2 ring-offset-card transition-all focus-visible:outline-none focus-visible:ring-primary",
-                      skin.captionColor === c ? "ring-primary" : "ring-transparent"
+                      "h-7 w-7 rounded-md outline-2 outline-offset-2 transition-all focus-visible:outline-primary",
+                      skin.captionColor === c ? "outline-primary" : "outline-transparent"
                     )}
                   />
                 ))}
                 <label
                   className={cn(
-                    "relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md ring-2 ring-offset-2 ring-offset-card transition-all focus-within:ring-primary",
+                    "relative flex h-7 w-7 cursor-pointer items-center justify-center rounded-md outline-2 outline-offset-2 transition-all focus-within:outline-primary",
                     CAPTION_COLORS.includes(skin.captionColor)
-                      ? "ring-transparent"
-                      : "ring-primary"
+                      ? "outline-transparent"
+                      : "outline-primary"
                   )}
                   style={{
                     background:
@@ -802,13 +802,14 @@ export function SkinEditor({
           <div className="flex items-center justify-end gap-2">
             <Button
               variant="ghost"
+              size="sm"
               onClick={handleReset}
               disabled={saving || brand === null}
             >
               <RotateCcw className="mr-2 h-4 w-4" />
               {t("personaDetail.skin.reset")}
             </Button>
-            <Button onClick={handleSave} disabled={saving || !dirty}>
+            <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>
               {dirty ? (
                 <Save className="mr-2 h-4 w-4" />
               ) : (
@@ -858,7 +859,7 @@ export function SkinEditor({
         </div>
         <div
           ref={previewRef}
-          className="relative h-[480px] rounded-2xl ring-1 ring-foreground/10 md:h-[560px]"
+          className="relative h-[480px] rounded-2xl border border-subtle md:h-[560px]"
           style={{ aspectRatio: "9 / 16" }}
         >
           {mounted ? (

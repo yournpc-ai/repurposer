@@ -91,7 +91,6 @@ export function LandingHero(): ReactNode {
               {t("landing.openStudio")}
             </MagneticLink>
             <LandingInfoDialog
-              kind="community"
               className="inline-flex h-13 items-center rounded-full border border-border bg-background px-8 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             />
           </motion.div>

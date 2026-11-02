@@ -6,43 +6,18 @@
  *
  * The frame vocabulary is the three-channel separation (ADR-087 §1):
  * System Status (`assistant.thinking`) / Activity (`assistant.activity`) /
- * Conversation (`assistant.delta` / `assistant.checkpoint` /
+ * Conversation (`assistant.delta` / `assistant.interim_prose` /
  * `question.preview` / `assistant.candidates` — the v4.2 C8-c Candidate
  * Surface channel) + the terminal pair. Unknown events route to
  * "ignored" (heartbeat comment frames never reach onmessage at all). */
 
-import type { VideoStoryboardBlock } from "@/components/chat/historyReplay"
-
-/** One user-safe activity frame (ADR-087 §3 Phase 2 — the append-oriented
- * Activity Stream). Status flips arrive as NEW frames carrying the same
- * `activity_id` (append-only wire; the client keeps an ordered map keyed by
- * id). `kind` is a user-semantic category — never a tool name; `key` is the
- * i18n copy identity for THAT status (active = progressive form, completed =
- * past-tense form, failed/cancelled = the active form, the ✗ says the rest).
- * The field set is the contract's whitelist — no params, results, or
- * reasoning ever ride this channel. */
-export interface ActivityFramePayload {
-  activity_id: string
-  seq: number
-  kind: "read" | "draft" | "run" | "repair"
-  status: "active" | "completed" | "failed" | "cancelled"
-  key: string | null
-  /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
-   * artifact count on `chat.explore.*Ready` frames, absent elsewhere. */
-  count?: number
-  /** iter-3 S7 (E7, N-58 ⑥): the frame's birth stamp (ISO, every frame).
-   * ADR-108 后它是**展示戳**——持久化行的诚实出生时刻（open append 的
-   * `at` = execute 入口重锚点）；渲染顺序永远来自数组位置（seq），此戳
-   * 不参与排序。The reducer replaces frames wholesale — the latest frame's
-   * `at` wins, no field-level merging. */
-  at?: string
-  /** iter-3 S7 (E7): the real elapsed of a genuinely-active span, present
-   * only on its settling frame — a born-completed milestone is an instant
-   * fact and carries none. Read/repair spans anchor the elapsed at EXECUTE
-   * entry (the honest-duration re-anchor), not at the mid-generation
-   * name_known beat. */
-  duration_ms?: number
-}
+import type {
+  ActivityFramePayload,
+  CandidateMemberPayload,
+  CandidateSurface,
+  OverlayMessage,
+  VideoStoryboardBlock,
+} from "@/components/chat/timeline/types"
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the
  * indicator, never render); `{phase}` = a REAL System Status label
@@ -67,17 +42,6 @@ export interface QuestionPreviewPayload {
   default_path?: string | null
 }
 
-/** Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26) — one candidate
- * member: the source range + the source-faithful excerpt (C4 锚链) + the
- * speaker when the ASR named one. The ordinal IS the member's array index
- * (0-based on the wire; the card renders the two-digit visual address). */
-export interface CandidateMemberPayload {
-  start: number
-  end: number
-  excerpt: string
-  speaker?: string | null
-}
-
 /** One ``assistant.candidates`` event. ``set`` = a candidate set's birth
  * (or idempotent re-emit — the client replaces by candidate_set_id);
  * ``selection`` = the set's FULL current selection (the client replaces,
@@ -91,8 +55,14 @@ export type CandidateEventPayload =
       topic: string
       asset_id?: string | null
       members: CandidateMemberPayload[]
+      turn_id?: string | null
     }
-  | { kind: "selection"; candidate_set_id: string; selected: number[] }
+  | {
+      kind: "selection"
+      candidate_set_id: string
+      selected: number[]
+      turn_id?: string | null
+    }
 
 /** One routed stream frame — the onmessage dispatch's discriminated
  * output. `envelope`/`detail` stay `unknown`: the caller owns the envelope
@@ -108,6 +78,7 @@ export interface RowAppendPayload {
   id: string
   role: "user" | "assistant"
   content: string
+  turn_id?: string | null
   seq?: number | null
   /** The row's intent dump — activity rows carry {type:"activity", frame}. */
   intent?: unknown
@@ -126,17 +97,114 @@ export type ActivityRowFramePayload = Omit<ActivityFramePayload, "seq"> & {
 }
 
 export type RoutedStreamFrame =
-  | { kind: "delta"; text: string }
+  | { kind: "turn_started"; turnId: string }
+  | { kind: "delta"; text: string; messageId: string | null }
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "question_preview"; payload: QuestionPreviewPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
-  | { kind: "checkpoint"; text: string; at?: string }
+  | {
+      kind: "interim_prose"
+      text: string
+      at?: string
+      turnId: string | null
+      messageId: string
+      seq: number | null
+    }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "row_append"; row: RowAppendPayload }
   | { kind: "row_update"; id: string; frame: ActivityRowFramePayload }
   | { kind: "completed"; envelope: unknown }
-  | { kind: "failed"; detail: unknown; persisted: boolean }
+  | { kind: "failed"; detail: unknown; persisted: boolean; turnId: string | null }
   | { kind: "ignored" }
+
+/** Live Candidate Surface reducer. Set identity comes from the server frame;
+ * selection repaints never adopt a neighbouring or current turn. */
+export function reduceCandidateFrame(
+  prev: OverlayMessage[],
+  event: CandidateEventPayload,
+  at: string,
+): OverlayMessage[] {
+  if (event.kind === "selection") {
+    return prev.map((message) =>
+      message.candidates?.candidateSetId === event.candidate_set_id
+        ? {
+            ...message,
+            candidates: { ...message.candidates, selected: event.selected },
+          }
+        : message,
+    )
+  }
+  const surface: CandidateSurface = {
+    candidateSetId: event.candidate_set_id,
+    topic: event.topic,
+    assetId: event.asset_id ?? null,
+    members: event.members,
+    selected: [],
+  }
+  const exists = prev.some(
+    (message) => message.candidates?.candidateSetId === event.candidate_set_id,
+  )
+  if (exists) {
+    return prev.map((message) =>
+      message.candidates?.candidateSetId === event.candidate_set_id
+        ? {
+            ...message,
+            candidates: {
+              ...surface,
+              selected: message.candidates?.selected ?? [],
+            },
+          }
+        : message,
+    )
+  }
+  return [
+    ...prev,
+    {
+      id: `live-cand-${event.candidate_set_id}`,
+      role: "assistant",
+      content: "",
+      turnId: event.turn_id ?? undefined,
+      independentKind: event.turn_id ? undefined : "candidate",
+      at,
+      candidates: surface,
+    },
+  ]
+}
+
+/** Release tool-time candidates only after their turn's final prose has
+ * drained. Pending rows have never occupied the visible timeline, so this is
+ * their single birth directly behind the exact final reply — never a move.
+ * Existing hydrated/live sets win by candidate_set_id, keeping replay and
+ * idempotent re-emits from creating a second card. */
+export function releaseSettledCandidateRows(
+  prev: OverlayMessage[],
+  pending: readonly OverlayMessage[],
+  replyId: string,
+): OverlayMessage[] {
+  if (pending.length === 0) return prev
+  const replyIndex = prev.findIndex(
+    (message) => message.id === replyId && message.role === "assistant",
+  )
+  if (replyIndex < 0) return prev
+  const turnId = prev[replyIndex].turnId
+  if (!turnId) return prev
+  const existing = new Set(
+    prev.flatMap((message) =>
+      message.candidates ? [message.candidates.candidateSetId] : [],
+    ),
+  )
+  const candidates = pending.filter((message) =>
+    message.candidates !== undefined &&
+    message.turnId === turnId &&
+    !existing.has(message.candidates.candidateSetId),
+  )
+  if (candidates.length === 0) return prev
+  return [
+    ...prev.slice(0, replyIndex + 1),
+    ...candidates,
+    ...prev.slice(replyIndex + 1),
+  ]
+}
 
 /** Route one SSE message to its typed frame. `terminal` names the turn's
  * terminal events ({completed, failed} — chat and answer turns differ).
@@ -146,9 +214,17 @@ export function routeStreamFrame(
   data: string,
   terminal: { completed: string; failed: string },
 ): RoutedStreamFrame {
+  if (event === "turn.started") {
+    const parsed = JSON.parse(data) as { turn_id: string }
+    return { kind: "turn_started", turnId: parsed.turn_id }
+  }
   if (event === "assistant.delta") {
-    const parsed = JSON.parse(data) as { text: string }
-    return { kind: "delta", text: parsed.text }
+    const parsed = JSON.parse(data) as { text: string; message_id?: string | null }
+    return {
+      kind: "delta",
+      text: parsed.text,
+      messageId: typeof parsed.message_id === "string" ? parsed.message_id : null,
+    }
   }
   if (event === "assistant.thinking") {
     return { kind: "thinking", payload: JSON.parse(data) as ThinkingPayload }
@@ -165,12 +241,24 @@ export function routeStreamFrame(
       event: JSON.parse(data) as CandidateEventPayload,
     }
   }
-  if (event === "assistant.checkpoint") {
-    const parsed = JSON.parse(data) as { text: string; at?: string | null }
+  if (event === "assistant.interim_prose") {
+    const parsed = JSON.parse(data) as {
+      text: string
+      at?: string | null
+      turn_id?: string | null
+      message_id?: unknown
+      seq?: unknown
+    }
+    if (typeof parsed.message_id !== "string" || !parsed.message_id) {
+      throw new Error("assistant.interim_prose requires message_id")
+    }
     return {
-      kind: "checkpoint",
+      kind: "interim_prose",
       text: parsed.text,
       at: typeof parsed.at === "string" ? parsed.at : undefined,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,
+      messageId: parsed.message_id,
+      seq: typeof parsed.seq === "number" ? parsed.seq : null,
     }
   }
   if (event === "assistant.activity") {
@@ -191,11 +279,13 @@ export function routeStreamFrame(
     const parsed = JSON.parse(data) as {
       detail?: unknown
       persisted?: boolean
+      turn_id?: string | null
     }
     return {
       kind: "failed",
       detail: parsed.detail,
       persisted: !!parsed.persisted,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,
     }
   }
   return { kind: "ignored" }

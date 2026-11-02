@@ -352,6 +352,33 @@ async def test_request_retry_replays_and_key_reuse_is_refused(database):
             )
 
 
+async def test_temporal_edit_with_stale_base_ref_creates_no_version(database):
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    await _snapshots(database, uid)
+    comp, base, _ = await _create(database, uid, pid)
+    async with database() as db:
+        await apply_composition_edits(
+            db, owner_id=uid, composition_id=comp.id,
+            base_version_id=base.id, base_digest=base.content_digest,
+            ops=[set_intent("newer head")],
+        )
+    temporal = OP.validate_python({
+        "op": "temporal_edit", "action": "time_map",
+        "target": {"kind": "timeline"}, "scale": 0.5, "source_policy": "crop_1x",
+    })
+    async with database() as db:
+        with pytest.raises(StaleBase):
+            await apply_composition_edits(
+                db, owner_id=uid, composition_id=comp.id,
+                base_version_id=base.id, base_digest=base.content_digest, ops=[temporal],
+            )
+    async with database() as db:
+        assert await db.scalar(
+            select(func.count()).select_from(CompositionVersion)
+        ) == 2
+
+
 @pytest.mark.parametrize("changed_field", ["composition_id", "base_version_id", "base_digest"])
 async def test_request_identity_covers_edit_target_and_base(database, changed_field):
     uid = await _user(database)

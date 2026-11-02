@@ -21,11 +21,11 @@ Four-state machine — OPEN → BUFFERING → ACCEPT→FLUSH / REJECT→DROP→R
   (:meth:`drop` at the resolution — the settled envelope paces out whole,
   the zero-delta path's law);
 - mid-turn release stays armed: a read's acceptance keeps the queue (read
-  speech rides the speech ledger into the envelope), and the checkpoint
+  speech rides the speech ledger into the envelope), and the interim_prose
   channel flushes FIRST (its frame goes out live mid-loop) without
   disarming — prose spoken before a read lands before the read EXECUTES
   (the loop's emission seat sits pre-execute, ADR-104 发射时点修订), and
-  frames after a checkpoint stay buffered until the close.
+  frames after a interim_prose stay buffered until the close.
 
 Liveness never suffers: reasoning keepalives, phase labels, and activity
 frames ride their own channels, undeferred. The StatusLine covers the
@@ -89,7 +89,7 @@ class DeferredFrames:
 
     async def flush(self) -> None:
         """Replay the queue in arrival order through the real hooks, STAYING
-        ARMED — mid-turn releases (the checkpoint channel's flush-first)
+        ARMED — mid-turn releases (the interim_prose channel's flush-first)
         and the clean close share this seat; the close follows with
         :meth:`disarm`. Replays each queued frame exactly once."""
         frames, self._frames = self._frames, []

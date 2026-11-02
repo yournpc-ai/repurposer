@@ -62,6 +62,7 @@ const textStyleSchema = z
     ]),
     align: z.enum(["left", "center", "right"]),
     line_height: z.number().finite().positive(),
+    letter_spacing: z.number().finite().min(-0.2).max(0.5).default(0),
     font: fontRefSchema,
   })
   .strict();
@@ -213,6 +214,8 @@ const animationSchema = z
       "transform.position",
       "transform.scale",
       "transform.rotation",
+      "filter.blur",
+      "text.letter_spacing",
       "audio.gain",
     ]),
     keyframes: z.array(keyframeSchema).min(1),

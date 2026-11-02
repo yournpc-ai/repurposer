@@ -13,8 +13,10 @@ import pytest
 
 from app.providers.llm.base import LLMSchemaError, ToolCall
 from app.providers.llm.minimax import (
+    _MiniMaxToolMarkupStripper,
     _ToolCallAccumulator,
     _parse_tool_arguments,
+    _strip_minimax_tool_markup,
     _tool_call_from_object,
 )
 
@@ -173,3 +175,32 @@ async def test_stream_done_finishes_without_waiting_for_connection_close(monkeyp
                 api_key="test", base_url="https://test.invalid"
             ).generate_stream(messages=[], response_model=Result, timeout_s=7)
     assert result.ok
+
+
+def test_minimax_tool_dialect_never_leaks_truncated_seq29_markup() -> None:
+    leaked = (
+        "这三个都是标准 Freesound 预览文件，我试一下导入第二个（Click_7），"
+        "同时读出片子的当前版本。]<]minimax[>[<tool_call>\n"
+        "]<]minimax[>[<invoke name=\"import_s"
+    )
+    expected = (
+        "这三个都是标准 Freesound 预览文件，我试一下导入第二个（Click_7），"
+        "同时读出片子的当前版本。"
+    )
+    assert _strip_minimax_tool_markup(leaked) == expected
+    for split in range(len(leaked) + 1):
+        stripper = _MiniMaxToolMarkupStripper()
+        streamed = (
+            stripper.feed(leaked[:split])
+            + stripper.feed(leaked[split:])
+            + stripper.finish()
+        )
+        assert streamed == expected
+
+
+def test_minimax_tool_filter_preserves_markdown_links_code_and_less_than() -> None:
+    ordinary = "**保留** <https://example.com> 与 1 < 2，以及 `<tool>`。"
+    assert _strip_minimax_tool_markup(ordinary) == ordinary
+    stripper = _MiniMaxToolMarkupStripper()
+    streamed = "".join(stripper.feed(char) for char in ordinary) + stripper.finish()
+    assert streamed == ordinary

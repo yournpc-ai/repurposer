@@ -46,7 +46,6 @@ path.write_text("\n".join(lines) + "\n")' "$ENV_FILE" "$1" "$2"
 
 API_KEY="$(env_value STRIPE_SECRET_KEY)"
 WEBHOOK_SECRET="$(env_value STRIPE_WEBHOOK_SECRET)"
-PRICE_ID="$(env_value STRIPE_PRICE_STARTER)"
 
 case "$API_KEY" in
   sk_test_*|rk_test_*) ;;
@@ -55,10 +54,6 @@ esac
 case "$WEBHOOK_SECRET" in
   whsec_*|"") ;;
   *) fail "STRIPE_WEBHOOK_SECRET has an invalid format in .env" ;;
-esac
-case "$PRICE_ID" in
-  price_*) ;;
-  *) fail "STRIPE_PRICE_STARTER is missing from .env" ;;
 esac
 
 # Respect an explicit proxy; otherwise discover the macOS system proxy as the

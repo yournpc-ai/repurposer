@@ -593,21 +593,21 @@ def test_declaration_guards() -> None:
         _make_agent("tl_roster", client)
 
 
-# ---- ADR-109 checkpoint 座位（通用化） ------------------------------------------
+# ---- ADR-109 interim_prose 座位（通用化） ------------------------------------------
 #
 # The ONE routing rule: prose before a TERMINAL call is settled speech (the
-# ledger, unchanged); prose before ANY non-terminal call is a checkpoint —
+# ledger, unchanged); prose before ANY non-terminal call is a interim_prose —
 # eligibility is universal (ADR-109), never a per-tool registry flag. The
 # emission happens BEFORE the call executes (发射座前移, ADR-104): a waiting
 # read (ADR-102) would otherwise hold the speech hostage for the whole wait.
-# Checkpoint prose rides on_checkpoint with its full text and never enters
-# the ledger; without an on_checkpoint channel (the one-shot JSON path) the
-# ledger keeps everything. MAX_CHECKPOINTS_PER_TURN (=4) is the anti-chatter
+# InterimProse prose rides on_interim_prose with its full text and never enters
+# the ledger; without an on_interim_prose channel (the one-shot JSON path) the
+# ledger keeps everything. MAX_INTERIM_PROSES_PER_TURN (=4) is the anti-chatter
 # rhythm guardrail, not an eligibility gate.
 
 
 def _eligible_read(name: str = "understanding") -> ChatTool:
-    # ADR-109: every read is checkpoint-ridable; the helper name survives as
+    # ADR-109: every read is interim_prose-ridable; the helper name survives as
     # the "the material judgment read" fixture only.
     return ChatTool(name, "Read it.", None, terminal=False)
 
@@ -619,9 +619,9 @@ async def _reads_observe(name: str, params: Any, prose: str):
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_fires_for_result_speech_after_an_eligible_read() -> None:
+async def test_interim_prose_fires_for_result_speech_after_an_eligible_read() -> None:
     """iter0 silent read → iter1 result prose + another read → the prose
-    rides the checkpoint channel; the terminal call's settled speech never
+    rides the interim_prose channel; the terminal call's settled speech never
     contains it."""
     tools = [_eligible_read(), _read_tool(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
@@ -629,7 +629,7 @@ async def test_checkpoint_fires_for_result_speech_after_an_eligible_read() -> No
         _call("lookup", {}, prose="I read it — a keynote on urban heat"),
         _call("echo", {"text": "done"}, prose="the plan"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     seen: list[tuple[str, str]] = []
 
     async def execute(name: str, params: Any, prose: str):
@@ -638,19 +638,19 @@ async def test_checkpoint_fires_for_result_speech_after_an_eligible_read() -> No
 
     agent = _make_agent("tl_cp_fires", client, tools=tools)
     result = await agent.call_loop(
-        execute, on_checkpoint=lambda t: checkpoints.append(t)
+        execute, on_interim_prose=lambda t: interim_proses.append(t)
     )
-    assert checkpoints == ["I read it — a keynote on urban heat"]
+    assert interim_proses == ["I read it — a keynote on urban heat"]
     assert result.tool_name == "echo" and result.prose == "the plan"
     # The terminal execution received ONLY the settled speech — the
-    # checkpoint never enters the composed reply.
+    # interim_prose never enters the composed reply.
     assert seen[-1] == ("echo", "the plan")
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_cap_drops_without_leaking_into_the_ledger() -> None:
+async def test_interim_prose_cap_drops_without_leaking_into_the_ledger() -> None:
     """≤4 per turn (ADR-109 rhythm guardrail): a breaching model loses the
-    channel — the fifth checkpoint prose is dropped, NOT merged into the
+    channel — the fifth interim_prose prose is dropped, NOT merged into the
     settled reply."""
     tools = [_eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
@@ -662,12 +662,12 @@ async def test_checkpoint_cap_drops_without_leaking_into_the_ledger() -> None:
         _call("understanding", {}, prose="finding five"),
         _call("echo", {"text": "done"}, prose="the plan"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     agent = _make_agent("tl_cp_cap", client, tools=tools, max_iterations=8)
     result = await agent.call_loop(
-        _reads_observe, on_checkpoint=lambda t: checkpoints.append(t)
+        _reads_observe, on_interim_prose=lambda t: interim_proses.append(t)
     )
-    assert checkpoints == [
+    assert interim_proses == [
         "finding one",
         "finding two",
         "finding three",
@@ -677,9 +677,9 @@ async def test_checkpoint_cap_drops_without_leaking_into_the_ledger() -> None:
 
 
 @pytest.mark.asyncio
-async def test_iteration_zero_prose_before_eligible_read_is_a_checkpoint() -> None:
-    """The iteration-0 checkpoint seat (ADR-104): prose before the turn's
-    FIRST read rides the checkpoint channel — the waiting-read's
+async def test_iteration_zero_prose_before_eligible_read_is_a_interim_prose() -> None:
+    """The iteration-0 interim_prose seat (ADR-104): prose before the turn's
+    FIRST read rides the interim_prose channel — the waiting-read's
     waiter line settles as its own segment so the read's activity sorts
     between the two speeches; the ledger keeps only the terminal speech."""
     tools = [_eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
@@ -687,41 +687,41 @@ async def test_iteration_zero_prose_before_eligible_read_is_a_checkpoint() -> No
         _call("understanding", {}, prose="我先看一下这个视频"),
         _call("echo", {"text": "done"}, prose="the plan"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     agent = _make_agent("tl_cp_iter0", client, tools=tools)
     result = await agent.call_loop(
         _reads_observe,
         on_delta=lambda t: None,
-        on_checkpoint=lambda t: checkpoints.append(t),
+        on_interim_prose=lambda t: interim_proses.append(t),
     )
-    assert checkpoints == ["我先看一下这个视频"]
+    assert interim_proses == ["我先看一下这个视频"]
     assert result.prose == "the plan"
 
 
 @pytest.mark.asyncio
-async def test_iteration_zero_prose_before_plain_read_is_a_checkpoint() -> None:
-    """ADR-109: the checkpoint seat is universal — iteration-0 prose before a
-    PLAIN read checkpoints exactly like prose before any other non-terminal
+async def test_iteration_zero_prose_before_plain_read_is_a_interim_prose() -> None:
+    """ADR-109: the interim_prose seat is universal — iteration-0 prose before a
+    PLAIN read interim_proses exactly like prose before any other non-terminal
     call; the ledger keeps only the terminal speech."""
     tools = [_read_tool(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
         _call("lookup", {}, prose="I'll pull…"),
         _call("echo", {"text": "done"}, prose="the plan"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     agent = _make_agent("tl_cp_iter0_plain", client, tools=tools)
     result = await agent.call_loop(
         _reads_observe,
         on_delta=lambda t: None,
-        on_checkpoint=lambda t: checkpoints.append(t),
+        on_interim_prose=lambda t: interim_proses.append(t),
     )
-    assert checkpoints == ["I'll pull…"]
+    assert interim_proses == ["I'll pull…"]
     assert result.prose == "the plan"
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_emits_before_the_read_executes() -> None:
-    """发射座前移 (ADR-104 发射时点修订): the checkpoint rides out BEFORE the
+async def test_interim_prose_emits_before_the_read_executes() -> None:
+    """发射座前移 (ADR-104 发射时点修订): the interim_prose rides out BEFORE the
     read's execute runs — a waiting read (ADR-102, execute blocks until the
     material's terminal state) would otherwise hold the waiter line hostage
     for the whole wait and stamp its row after the activity's birth moment."""
@@ -739,10 +739,10 @@ async def test_checkpoint_emits_before_the_read_executes() -> None:
     agent = _make_agent("tl_cp_pre_execute", client, tools=tools)
     result = await agent.call_loop(
         execute,
-        on_checkpoint=lambda t: order.append(f"checkpoint:{t}"),
+        on_interim_prose=lambda t: order.append(f"interim_prose:{t}"),
     )
     assert order == [
-        "checkpoint:我先看一下这个视频",
+        "interim_prose:我先看一下这个视频",
         "execute:understanding",
         "execute:echo",
     ]
@@ -750,9 +750,9 @@ async def test_checkpoint_emits_before_the_read_executes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_design_storyboard_checkpoint_empty_execute_speech_is_legal() -> None:
+async def test_design_storyboard_interim_prose_empty_execute_speech_is_legal() -> None:
     """Non-terminal design beat regression: the framing prose rides the real
-    on_checkpoint channel, so ``design_storyboard`` legally executes with an
+    on_interim_prose channel, so ``design_storyboard`` legally executes with an
     EMPTY remaining speech. The runner-shaped ReadAccepted hook then
     publishes the board, and the model closes with a separate reply."""
     tools = [
@@ -780,11 +780,11 @@ async def test_design_storyboard_checkpoint_empty_execute_speech_is_legal() -> N
     agent = _make_agent("tl_design_cp", client, tools=tools)
     result = await agent.call_loop(
         execute,
-        on_checkpoint=lambda text: order.append(f"checkpoint:{text}"),
+        on_interim_prose=lambda text: order.append(f"interim_prose:{text}"),
         on_loop_event=on_event,
     )
     assert order == [
-        "checkpoint:好的，按这个方向设计分镜",
+        "interim_prose:好的，按这个方向设计分镜",
         "execute:design_storyboard:''",
         "publish:storyboard",
         "execute:answer:'分镜已经发布，你可以看当前版本'",
@@ -794,28 +794,28 @@ async def test_design_storyboard_checkpoint_empty_execute_speech_is_legal() -> N
 
 
 @pytest.mark.asyncio
-async def test_terminal_call_prose_never_takes_the_checkpoint_route() -> None:
+async def test_terminal_call_prose_never_takes_the_interim_prose_route() -> None:
     """The pre-execution seat's terminal guard: reply prose riding the
-    TERMINAL call is settled speech — routing it to the checkpoint channel
+    TERMINAL call is settled speech — routing it to the interim_prose channel
     would double-speak (the ledger already carries it into the envelope)."""
     tools = [_eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
         _call("understanding", {}, prose=""),
         _call("echo", {"text": "done"}, prose="看完了。这是讲城市过热的主题演讲"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     agent = _make_agent("tl_cp_terminal_guard", client, tools=tools)
     result = await agent.call_loop(
-        _reads_observe, on_checkpoint=lambda t: checkpoints.append(t)
+        _reads_observe, on_interim_prose=lambda t: interim_proses.append(t)
     )
-    assert checkpoints == []
+    assert interim_proses == []
     assert result.prose == "看完了。这是讲城市过热的主题演讲"
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_route_ignores_the_predecessor() -> None:
+async def test_interim_prose_route_ignores_the_predecessor() -> None:
     """ADR-109: there is no eligibility predecessor axis — result talk riding
-    a read checkpoints after a catalog browse exactly as after any other
+    a read interim_proses after a catalog browse exactly as after any other
     read."""
     tools = [_read_tool(), _eligible_read(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
@@ -823,18 +823,18 @@ async def test_checkpoint_route_ignores_the_predecessor() -> None:
         _call("understanding", {}, prose="result talk after a catalog browse"),
         _call("echo", {"text": "done"}, prose="the plan"),
     ])
-    checkpoints: list[str] = []
+    interim_proses: list[str] = []
     agent = _make_agent("tl_cp_eligible", client, tools=tools)
     result = await agent.call_loop(
-        _reads_observe, on_checkpoint=lambda t: checkpoints.append(t)
+        _reads_observe, on_interim_prose=lambda t: interim_proses.append(t)
     )
-    assert checkpoints == ["result talk after a catalog browse"]
+    assert interim_proses == ["result talk after a catalog browse"]
     assert result.prose == "the plan"
 
 
 @pytest.mark.asyncio
-async def test_no_checkpoint_channel_keeps_the_ledger() -> None:
-    """The one-shot JSON path (on_checkpoint=None): nothing is lost — the
+async def test_no_interim_prose_channel_keeps_the_ledger() -> None:
+    """The one-shot JSON path (on_interim_prose=None): nothing is lost — the
     prose composes into the envelope as settled speech."""
     tools = [_eligible_read(), _read_tool(), ChatTool("echo", "Echo.", EchoArgs)]
     client = StubClient([
@@ -1086,7 +1086,10 @@ async def test_terminal_refusal_rejects_and_ends_the_loop() -> None:
         calls.append(name)
         if len(calls) == 1:
             return "the begin was refused — the design entry is closed this turn"
-        return TerminalRefusal("design entry closed: begin already refused")
+        return TerminalRefusal(
+            "design entry closed: begin already refused",
+            facts={"entry": "design_begin"},
+        )
 
     agent = _make_agent("tl_terminal_refusal", client, tools=tools)
     result = await agent.call_loop(
@@ -1095,6 +1098,7 @@ async def test_terminal_refusal_rejects_and_ends_the_loop() -> None:
     assert calls == ["design_storyboard", "design_storyboard"]
     assert client.entries == ["plain", "plain"]  # the third generation never ran
     assert result.ended_by == "design_storyboard"
+    assert result.refusal_facts == {"entry": "design_begin"}
     assert result.exhausted is False
     assert result.tool_name is None
     rejected = [e for e in events if isinstance(e, ToolRejected)]

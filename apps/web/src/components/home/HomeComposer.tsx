@@ -10,6 +10,7 @@ import { useStagingUploads } from "@/lib/stagingUploads"
 import { acceptsStagedFile } from "@/lib/stagedFiles"
 import { useFileDrop } from "@/lib/useFileDrop"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
+import type { SkillOption } from "@/lib/skills"
 import { useAuth } from "@/lib/auth-context"
 import {
   MentionEditor,
@@ -57,6 +58,8 @@ interface HomeComposerProps {
   onPromptChange: (value: string) => void
   mentions: ChatMention[]
   onMentionsChange: (value: ChatMention[]) => void
+  selectedSkill: SkillOption | null
+  onSkillChange: (option: SkillOption | null) => void
   editorRef: RefObject<MentionEditorHandle | null>
 }
 
@@ -110,11 +113,11 @@ const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 // docked bar is 56px tall — 16px pad + one 24px
 // text-base line + 16px pad, so the single line self-centers by construction
 // and the h-9 send rides with 10px air (MiniMax bar proportions: the button
-// is ~2/3 of the bar height, never stuffed). The radius IS a morph property
-// after all (2026-08-21 reversal): a scroll-linked 16px (rest — MiniMax's
-// soft rectangle) → 40px (docked), where the CSS radius cap (≤ half the bar)
-// turns it into the stadium. Still a pure function of dockP — never a clock
-// transition. An inline style also sidesteps the stock
+// is ~2/3 of the bar height, never stuffed).
+// The radius is a scroll-linked morph property: the 16px resting surface
+// becomes a 40px docked bar, where the CSS radius cap (≤ half the bar) turns
+// it into a stadium. Still a pure function of dockP — never a clock transition.
+// An inline style also sidesteps the stock
 // has-data-[align=*]:rounded-md pins (their :has() specificity outranks any
 // plain rounded-* class).
 const EDITOR_H = 80 // rest band FLOOR (the empty/one-line MiniMax card look)
@@ -128,7 +131,7 @@ const BAR_PAD_X = 8 // bar: the attach button + the row's send reserve already
 // hold the horizontal air — the band's own 20px sides would be dead width
 // (on a phone that's 40px of the text lane, the difference between the
 // placeholder fitting and clipping).
-const RADIUS_REST = 16 // rounded-2xl
+const RADIUS_REST = 16 // rounded-surface
 const RADIUS_DOCK = 40 // ≥ half the 56px bar — the cap makes the stadium
 const CHIPS_MAX_H = 160 // ~4 chip rows
 const CHIPS_PAD_TOP = 20 // pt-5 — interpolated, never a class (see chipsStyle)
@@ -153,6 +156,8 @@ export function HomeComposer({
   onPromptChange,
   mentions,
   onMentionsChange,
+  selectedSkill,
+  onSkillChange,
   editorRef,
 }: HomeComposerProps) {
   const { t } = useTranslation()
@@ -268,6 +273,8 @@ export function HomeComposer({
     launch({
       prompt,
       mentions,
+      skill: selectedSkill?.reference,
+      skillOption: selectedSkill ?? undefined,
       staged,
       personaId: personaId === AUTO_GENERATE ? undefined : personaId || undefined,
       onStart: onGenerateStart,
@@ -293,7 +300,7 @@ export function HomeComposer({
   const placeholderPrompts = t("home.placeholderPrompts", {
     returnObjects: true,
   }) as string[]
-  const promptEmpty = prompt.trim() === "" && mentions.length === 0
+  const promptEmpty = prompt.trim() === "" && mentions.length === 0 && !selectedSkill
   const [placeholderRoll, setPlaceholderRoll] = useState<{
     idx: number
     prev: number | null
@@ -353,7 +360,7 @@ export function HomeComposer({
       cancelAnimationFrame(id)
       window.removeEventListener("resize", remeasure)
     }
-  }, [prompt, mentions, editorRef])
+  }, [prompt, mentions, selectedSkill, editorRef])
   // One-place law: the Assets panel IS the chips band's expanded form —
   // while it's open the band folds away, so the file list lives in exactly
   // one place. The fold interpolates maxHeight AND the one-sided padding in
@@ -414,8 +421,8 @@ export function HomeComposer({
     {/* Two forms, ONE DOM (the MentionEditor never unmounts — the DOM owns
         the draft). The shell is the shadcn InputGroup, re-skinned to the
         card law (2026-08-21 adoption): the stock `border-input` stroke and
-        `bg-input/20` fill give way to the base hairline + bg-card + NO
-        shadow; the focus-within ring machinery, cursor-text addons, and the
+        `bg-input/20` fill give way to the base subtle border + bg-card + NO
+        shadow; the focus-within outline machinery, cursor-text addons, and the
         block-start/block-end anatomy are what we came for. expanded = chips
         addon / editor band / control-row addon at a 16px radius (MiniMax's
         soft rectangle); docked = the one-line explore bar — the stadium
@@ -425,10 +432,10 @@ export function HomeComposer({
         transition. NO backdrop-filter (it would make the card the containing
         block for the portaled MentionPicker). */}
     <InputGroup
-      className={`border-0 bg-card shadow-none dark:bg-card ${
+      className={`border bg-card shadow-none dark:bg-card ${
         dragging
-          ? "border-2 border-dashed border-foreground/30 ring-0"
-          : "ring-1 ring-foreground/10"
+          ? "border-2 border-dashed border-foreground/30 "
+          : "border border-subtle"
       }`}
       style={shellStyle}
       {...dropProps}
@@ -436,10 +443,10 @@ export function HomeComposer({
         {/* Drop affordance — the floating pill (screenshot parity): centered
             over the card, pointer-events-none so the drop always lands on
             the shell. Frosted floating layer (overlay-surface family) with
-            the /10 hairline; icon + plain-weight label per the pill law. */}
+            the subtle border; icon + plain-weight label per the pill law. */}
         {dragging && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-            <div className="overlay-surface flex items-center gap-2.5 rounded-2xl px-5 py-3 ring-1 ring-foreground/10">
+            <div className="overlay-surface flex items-center gap-2.5 rounded-2xl px-5 py-3 border border-subtle">
               <Upload className="size-4.5" />
               <span className="text-base">{t("composer.dropHint")}</span>
             </div>
@@ -533,6 +540,8 @@ export function HomeComposer({
               ref={editorRef}
               disabled={isGenerating}
               mentionContext={mentionContext}
+              selectedSkill={selectedSkill}
+              onSkillChange={onSkillChange}
               className="p-0"
               onChange={(text, ms) => {
                 onPromptChange(text)

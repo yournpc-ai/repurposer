@@ -178,7 +178,7 @@ export function NotificationBell({ chip = true }: { chip?: boolean }) {
               // active:bg-accent — `hover:` never fires on touch; the press
               // must still read (the header is a <md surface).
               chip
-                ? "relative h-10 w-10 rounded-lg overlay-surface ring-1 ring-foreground/10"
+                ? "relative h-10 w-10 rounded-lg overlay-surface border border-subtle"
                 : "relative h-10 w-10 rounded-lg active:bg-accent"
             }
           >

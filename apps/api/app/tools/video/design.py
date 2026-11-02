@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.director import (
+    ComponentDirection,
     DirectionRejected,
     LaunchFilmDirection,
     MixedDirection,
@@ -57,6 +58,7 @@ from app.editing.templates import (
     DesignSlots,
     MusicBed,
     ViewFact,
+    instantiate_component,
     instantiate_generated_image,
     instantiate_mg,
     instantiate_mixed,
@@ -65,9 +67,18 @@ from app.editing.templates import (
     load_template,
 )
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import AssetStatus, AssetType, DesignVideoArgs
+from app.models.schemas import (
+    AssetStatus,
+    AssetType,
+    BuiltInSkillReference,
+    DesignVideoArgs,
+    ExternalSkillReference,
+    SkillReference,
+)
 from app.models.tables import Asset, Output, Project, SourceSnapshot
+from app.skills.loading import SkillCreativeContext, load_skill_creative_context
 from app.tools.video.agents import (
+    component_director,
     image_director,
     mg_director,
     mixed_director,
@@ -75,13 +86,14 @@ from app.tools.video.agents import (
     video_director,
 )
 from app.tools.video.narration import narration_synth_config, resolve_video_voice
-from app.tools.video.programs import ensure_generator_clip
 from app.tools.video.preparation import (
     snapshot_music_track,
     snapshot_video_asset,
     snapshot_video_output,
     snapshot_web_asset,
 )
+from app.tools.video.components import assert_component_bake_enabled, ensure_component_clip
+from app.tools.video.programs import ensure_generator_clip
 
 logger = structlog.get_logger()
 
@@ -516,6 +528,8 @@ async def _design_locked(
     project_id: UUID,
     args: DesignVideoArgs,
     request_id: str | None,
+    skill: SkillCreativeContext | None = None,
+    builtin_skill: BuiltInSkillReference | None = None,
 ) -> dict[str, Any]:
     from app.pipeline.assets import (  # deferred: capture lifecycle owner
         create_web_page_assets_committed_from_urls,
@@ -524,6 +538,28 @@ async def _design_locked(
     base_content = None
     base_version = None
     composition = None
+    if (skill is not None or builtin_skill is not None) and args.composition_id is not None:
+        raise DesignError(
+            "an explicit Skill binds only a new first version; use revise_video for existing work"
+        )
+    if builtin_skill is not None:
+        if args.text or args.material_output_ids or args.mode != "auto":
+            raise DesignError("launch-film requires a website design, not text or mixed media")
+        if args.material_asset_ids:
+            non_web = await db.scalar(
+                select(Asset.id).where(
+                    Asset.id.in_(args.material_asset_ids),
+                    Asset.user_id == owner_id,
+                    Asset.type != AssetType.WEB_PAGE,
+                ).limit(1)
+            )
+            if non_web is not None:
+                raise DesignError("launch-film accepts only captured webpage assets")
+    if skill is not None:
+        skill.validate_design(args)
+    instruction = (
+        skill.instruction(args.specific_instruction) if skill else args.specific_instruction
+    )
     if args.composition_id is not None:
         composition, base_version = await get_video_version(
             db, owner_id=owner_id, composition_id=args.composition_id
@@ -550,7 +586,7 @@ async def _design_locked(
         direction: ProgramDirection = await program_director.call(
             text=args.text or "",
             focus=args.focus,
-            instruction=args.specific_instruction or "",
+            instruction=instruction or "",
             language=args.language,
             target_seconds=args.target_seconds,
         )
@@ -562,12 +598,47 @@ async def _design_locked(
         )
         provenance = {"skill": None, "mode": "program"}
         name = (direction.name or "").strip()[:24] or ""
+    elif args.mode == "component":
+        # ---- controlled TSX: Agent source → exact baked preview → version ----
+        # Block the existing public design seat before paying for a Director
+        # call when the upstream runner cannot safely execute authored code.
+        assert_component_bake_enabled()
+        narration_text = args.narration if args.narration_enabled is not False else None
+        narration_voice = (
+            await _resolve_narration_voice(db, project_id=project_id, base_content=None)
+            if narration_text is not None
+            else None
+        )
+        component_direction: ComponentDirection = await component_director.call(
+            text=args.text or "",
+            focus=args.focus,
+            instruction=instruction or "",
+            language=args.language,
+            target_seconds=args.target_seconds,
+            narration=narration_text,
+        )
+        validate_program_direction(
+            component_direction, source_text=args.text, target_seconds=args.target_seconds
+        )
+        if narration_voice is not None:
+            narration_voice["language"] = (
+                args.language or component_direction.language or narration_voice.get("language") or "en"
+            ).split("-")[0].split("_")[0].lower()
+        raw_ops = instantiate_component(
+            component_direction,
+            aspect=args.aspect or "16:9",
+            background=args.background,
+            narration=narration_text,
+            narration_voice=narration_voice,
+        )
+        provenance = {"skill": None, "mode": "component"}
+        name = (component_direction.name or "").strip()[:24] or ""
     elif args.mode == "image":
         # ---- model image: save the request now; authorized production generates later ----
         image_direction = await image_director.call(
             text=args.text or "",
             focus=args.focus,
-            instruction=args.specific_instruction or "",
+            instruction=instruction or "",
             language=args.language,
             target_seconds=args.target_seconds,
         )
@@ -610,7 +681,7 @@ async def _design_locked(
         direction = await mg_director.call(
             text=args.text,
             focus=args.focus,
-            instruction=args.specific_instruction,
+            instruction=instruction,
             language=args.language,
             current=current,
             scene_count=args.scene_count,
@@ -697,7 +768,7 @@ async def _design_locked(
         direction = await _directed_mixed(
             snapshots=snapshots,
             focus=args.focus,
-            instruction=args.specific_instruction,
+            instruction=instruction,
             language=args.language,
             current=current,
             target_seconds=args.target_seconds,
@@ -721,6 +792,11 @@ async def _design_locked(
         name = (direction.name or "").strip()[:24] or str((selected.meta or {}).get("title") or "")[:24]
     else:
         # ---- the website-promo path: capture → snapshot → template --------
+        if skill is not None:
+            raise DesignError(
+                "this external Skill has no website-design consumer; "
+                "the built-in launch-film Skill was not executed"
+            )
         if composition is not None and (args.material_urls or args.material_asset_ids):
             raise DesignError("a redraft keeps its bound snapshots; new material needs an explicit new design")
         if args.composition_id is None and args.material_urls:
@@ -791,7 +867,7 @@ async def _design_locked(
             views=views,
             images=images,
             focus=args.focus,
-            instruction=args.specific_instruction,
+            instruction=instruction,
             language=args.language,
             current=current,
         )
@@ -810,18 +886,25 @@ async def _design_locked(
         }
         name = slots.name or _fallback_name(snapshot_metas)
 
+    if skill is not None:
+        provenance["external_skill"] = skill.provenance
+        provenance["skill_reference"] = ExternalSkillReference(
+            kind="external", skill_version_id=skill.version.id
+        ).model_dump(mode="json")
+    if builtin_skill is not None:
+        provenance["skill_version"] = builtin_skill.version
+        provenance["skill_reference"] = builtin_skill.model_dump(mode="json")
     provenance.setdefault("language", args.language or ((base_version.skill_provenance or {}).get("language") if base_version else None))
     ops = _OPS.validate_python(raw_ops)
     for op in ops:
-        if (
-            isinstance(op, AddClip)
-            and op.clip.object.kind == "generator"
-            and op.clip.object.runtime == "drawing-v1"
-        ):
+        if isinstance(op, AddClip) and op.clip.object.kind == "generator":
             # Preview is a bounded candidate preflight. Orphaned content-
             # addressed media from a later validation rejection is reusable;
             # it never becomes a SourceSnapshot or a delivered Output.
-            await ensure_generator_clip(op.clip)
+            if op.clip.object.runtime == "drawing-v1":
+                await ensure_generator_clip(op.clip)
+            elif op.clip.object.runtime == "component-v1":
+                await ensure_component_clip(op.clip)
     if composition is None:
         composition, version, replayed = await apply_composition_edits(
             db,
@@ -859,6 +942,8 @@ async def _design_locked(
     read = version_read_dict(composition, version, payload)
     if base_content is not None:
         read["change_set"] = compute_change_set(base_content, new_content)
+    if skill is not None:
+        read["skill_adaptation"] = skill.presentation
     read["replayed"] = replayed
     return read
 
@@ -885,13 +970,40 @@ async def design_video(
     project_id: UUID,
     args: DesignVideoArgs,
     request_id: str | None,
+    skill_version_id: UUID | None = None,
+    skill_reference_paths: list[str] | None = None,
+    skill_reference: SkillReference | None = None,
 ) -> dict[str, Any]:
-    """The chat seats' one design entry — own session, own transaction."""
+    """The one design entry, optionally bound to one immutable Skill."""
+    if skill_reference is not None and skill_version_id is not None:
+        raise DesignError("bind one Skill reference, not two")
+    builtin_skill = None
+    if isinstance(skill_reference, BuiltInSkillReference):
+        from app.skills.resolution import get_builtin_skill_option
+
+        option = get_builtin_skill_option(skill_reference.skill_id)
+        if option.reference != skill_reference:
+            raise DesignError("built-in Skill version is unavailable")
+        builtin_skill = skill_reference
+    elif isinstance(skill_reference, ExternalSkillReference):
+        skill_version_id = skill_reference.skill_version_id
     async with AsyncSessionLocal() as db:
+        skill = (
+            await load_skill_creative_context(
+                db,
+                owner_id=owner_id,
+                skill_version_id=skill_version_id,
+                reference_paths=skill_reference_paths or [],
+            )
+            if skill_version_id is not None
+            else None
+        )
         return await _design_locked(
             db,
             owner_id=owner_id,
             project_id=project_id,
             args=args,
             request_id=request_id,
+            skill=skill,
+            builtin_skill=builtin_skill,
         )

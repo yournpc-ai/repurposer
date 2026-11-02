@@ -927,7 +927,7 @@ export function MediaLightboxStage({
                 key={item.id ?? item.url ?? i}
                 type="button"
                 data-index={i}
-                className="relative h-12 shrink-0 overflow-hidden rounded-md bg-muted transition-[width] motion-reduce:transition-none data-active:ring-2 data-active:ring-foreground/60"
+                className="relative h-12 shrink-0 overflow-hidden rounded-md bg-muted transition-[width] motion-reduce:transition-none"
                 data-active={active || undefined}
                 style={{ width: active ? width : 36 }}
                 onClick={() => goTo(i)}

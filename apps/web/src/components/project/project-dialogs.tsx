@@ -77,10 +77,10 @@ export function RenameProjectDialog({
           autoFocus
         />
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button disabled={!value.trim() || busy} onClick={handleRename}>
+          <Button size="sm" disabled={!value.trim() || busy} onClick={handleRename}>
             {busy ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
@@ -133,10 +133,10 @@ export function DeleteProjectDialog({
           {t("projects.deleteDesc", { title })}
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={handleDelete}>
+          <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
             {busy ? t("common.loading") : t("common.delete")}
           </Button>
         </DialogFooter>
@@ -194,10 +194,10 @@ export function DeleteProjectsDialog({
           {t("projects.selection.deleteDesc")}
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={handleDelete}>
+          <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
             {busy ? t("common.loading") : t("common.delete")}
           </Button>
         </DialogFooter>

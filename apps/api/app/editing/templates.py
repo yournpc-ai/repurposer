@@ -855,8 +855,8 @@ def instantiate_template(
                 slot="caption",
                 layout=_Layout(x=260, y=920, width=1400, height=110),
                 style=_Style(
-                    font_size=36, color="#F8FAFC", weight=600, align="center",
-                    line_height=1.25, background="#111827",
+                    font_size=34, color="#FFFFFF", weight=600, align="center",
+                    line_height=1.3, background="#000000",
                 ),
                 preset="fade_in_out",
                 preset_params={"in_s": 0.3, "out_s": 0.3},
@@ -1212,12 +1212,12 @@ def instantiate_mg(
                                 "height": 120.0,
                             },
                             "style": {
-                                "font_size": 42,
-                                "color": "#F8FAFC",
-                                "background": "#111827",
-                                "weight": 500,
+                                "font_size": max(24, round(canvas[0] * 34 / 1920)),
+                                "color": "#FFFFFF",
+                                "background": "#000000",
+                                "weight": 600,
                                 "align": "center",
-                                "line_height": 1.25,
+                                "line_height": 1.3,
                             },
                             "transform": {
                                 "x": 0.0, "y": 0.0, "scale": 1.0,
@@ -1294,8 +1294,12 @@ def _instantiate_generator(
     title_clip_id: str,
     title_object_id: str,
     animation_prefix: str,
+    narration: str | None = None,
+    narration_voice: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """One fixed-media Generator background plus an independent native title."""
+    """One fixed-media Generator background plus independent native content."""
+    if (narration is None) != (narration_voice is None):
+        raise TemplateError("native narration needs exact text and a resolved voice")
     width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
     timebase = 90000
     duration = max(1, round(direction.duration_seconds * 15)) * timebase // 15
@@ -1382,6 +1386,82 @@ def _instantiate_generator(
                 },
             },
         ])
+    if narration is not None and narration_voice is not None:
+        # Narration drives the component's design, but its spoken copy and
+        # captions remain native editable objects, never baked component audio.
+        speech_clip_id = f"{scene_id.replace('scn_', 'clp_', 1)}_speech"
+        caption_clip_id = f"{scene_id.replace('scn_', 'clp_', 1)}_caption"
+        speech_object_id = f"{speech_clip_id.replace('clp_', 'obj_', 1)}"
+        ops[1]["scene"]["speech_clip_ids"] = [speech_clip_id]
+        ops.extend([
+            {
+                "op": "add_track",
+                "track": {"track_id": "trk_dialogue", "kind": "audio", "role": "dialogue", "order": 0, "clips": []},
+            },
+            {
+                "op": "add_track",
+                "track": {"track_id": "trk_caption", "kind": "visual", "role": "caption", "order": 2, "clips": []},
+            },
+            {
+                "op": "add_clip",
+                "track_id": "trk_dialogue",
+                "clip": {
+                    "clip_id": speech_clip_id,
+                    "range": {"start": 0, "end": duration},
+                    "scene_id": scene_id,
+                    "source": None,
+                    "object": {
+                        "kind": "speech",
+                        "object_id": speech_object_id,
+                        "text": narration,
+                        **narration_voice,
+                        "gain_db": 0.0,
+                    },
+                    "animations": [],
+                },
+            },
+            {
+                "op": "add_clip",
+                "track_id": "trk_caption",
+                "clip": {
+                    "clip_id": caption_clip_id,
+                    "range": {"start": 0, "end": duration},
+                    "scene_id": scene_id,
+                    "source": None,
+                    "object": {
+                        "kind": "text",
+                        "object_id": f"{caption_clip_id.replace('clp_', 'obj_', 1)}",
+                        "text": narration,
+                        "layout": {
+                            "x": 160.0,
+                            "y": float(height - 170),
+                            "width": float(width - 320),
+                            "height": 120.0,
+                        },
+                        "style": {
+                            "font_size": max(24, round(width * 34 / 1920)),
+                            "color": "#FFFFFF",
+                            "background": "#000000",
+                            "weight": 600,
+                            "align": "center",
+                            "line_height": 1.3,
+                        },
+                        "transform": {
+                            "x": 0.0, "y": 0.0, "scale": 1.0,
+                            "rotation": 0.0, "origin": "center",
+                        },
+                        "opacity": 1.0,
+                        "caption": {
+                            "speech_object_id": speech_object_id,
+                            "source_text_digest": speech_text_digest(narration),
+                            "alignment": "minimax-t2a-v2-sentence-v1",
+                            "state": "derived",
+                        },
+                    },
+                    "animations": [],
+                },
+            },
+        ])
     return ops
 
 
@@ -1412,6 +1492,43 @@ def instantiate_program(
         title_clip_id="clp_program_title",
         title_object_id="obj_program_title",
         animation_prefix="anm_program_title",
+    )
+
+
+def instantiate_component(
+    direction: Any,
+    *,
+    aspect: str = "16:9",
+    background: str | None = None,
+    narration: str | None = None,
+    narration_voice: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """One controlled TSX visual plus independent native title/narration."""
+    width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
+    duration_frames = max(1, round(direction.duration_seconds * 15))
+    output = {
+        "width": width // 2,
+        "height": height // 2,
+        "fps": 15,
+        "duration_frames": duration_frames,
+        "background": background or direction.background,
+    }
+    return _instantiate_generator(
+        direction,
+        aspect=aspect,
+        background=output["background"],
+        output=output,
+        source_fields={
+            "runtime": "component-v1",
+            "code": direction.code,
+            "parameters": direction.parameters,
+        },
+        scene_id="scn_component",
+        title_clip_id="clp_component_title",
+        title_object_id="obj_component_title",
+        animation_prefix="anm_component_title",
+        narration=narration,
+        narration_voice=narration_voice,
     )
 
 
@@ -1597,12 +1714,12 @@ def instantiate_mixed(
                     "text": caption.text.strip(),
                     "layout": {"x": width * 0.12, "y": height * 0.86, "width": width * 0.76, "height": height * 0.09},
                     "style": {
-                        "font_size": max(24, round(width * 0.024)),
-                        "color": "#F8FAFC",
-                        "background": "#111827",
+                        "font_size": max(24, round(width * 34 / 1920)),
+                        "color": "#FFFFFF",
+                        "background": "#000000",
                         "weight": 600,
                         "align": "center",
-                        "line_height": 1.2,
+                        "line_height": 1.3,
                     },
                     "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
                     "opacity": 1.0,

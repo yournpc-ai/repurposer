@@ -2697,7 +2697,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-145: 视频编辑本体——Composition / CompositionVersion / Track·Clip·Object / Skill / video-spec
 
-**Status**: Decided（2026-10-26 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；四阶段施工 = `docs/tasks/video-project-implementation.md`；**未实施**）
+**Status**: Decided（2026-11-02 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；四阶段施工 = `docs/tasks/video-project-implementation.md`；A/B/C 按当前合同验收，D5 未实施）
 
 **Decision**:
 
@@ -2709,7 +2709,8 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 6. **video-spec 是 Film 的继任渲染契约**。它只描述量化时间、Tracks/Clips/Objects、Animations/Transitions、样式、音频和解析后素材，不含 React/Remotion/DOM/任意 CSS。RenderAdapter 与 PreviewAdapter 都必须可替换并声明能力；Remotion 商业许可或替代实现须在生产前收口。
 7. **素材绑定不可变快照**。CompositionVersion 引用 SourceSnapshot 与 content digest；多轮修订不依赖聊天历史恢复素材，不因同一快照重复读取/采集，显式 refresh 才更换绑定。
 8. **独立分支内破坏性替换，不迁移既有业务数据**。生产无实际用户，允许停机与本应用旧数据 reset，执行仍核对目标和 dry-run；生产就绪后合并 main。新链先做网页宣传片/MG，验收后删除旧 Film 专用实现，不建设 FilmStoryboard/film-spec 数据适配器。Clip 迁移与删除后置，完整 Scrub/Inspector 最后实施；B 先提供纯 Chat 最小预览，属性组件经统一编辑写口提交。A 内先打通最小渲染闭环，再补官网片/MG 对照；默认切换以 A+B 和生产许可门为前提，不等待个人 Skill 或完整素材库页面。B 在开发期直接替换旧 Film 专用合同，不建设兼容双链；共享可靠性机制与授权/计费/交付不变量保留。D 必须完成旧链残留、依赖、测试与文档的一轮显式删除清理和清理后旅程验收。现有 Chat 外观可保持，必要前端协议接线纳入 B，UI 改版可并行。
+9. **创作能力只扩展现有本体，不新增平行架构**。固定 Skill、外部 Skill、自由设计和 Generator 共用「grounding → 能力选择 → CompositionVersion → 真实呈现 → 授权制作 → 视听检查 → 结构化修订」循环；出生后都是同一多轨作品。Generator 可新增受控 runtime：`component-v1` 允许 Agent 按用户讲稿/素材编写 TSX，HTML/SVG 作为组件内标记，经有界上游 runner 烘焙为固定媒体。CompositionVersion 保存该不可变 Generator 来源是唯一 renderer-source 例外，最终 video-spec 仍无 React/Remotion；原始外部 Skill 脚本不因此获得执行权。SFX 复用 AudioObject/effect Track/SourceSnapshot 与通用修订，候选试听和 D4 Inspector 共享真实播放器但保持 search/import/revise 各自语义。
 
-**Consequences**: ADR-016/119 的 clip/film 两家族仍是当前代码事实，但不再是长期视频本体上限；迁移期的 video-spec 是 Film 继任而非永久第三套架构。ADR-127 的“模型只填创意槽、代码保证结构”继续成立，但固定结构改由内置 VideoTemplate + 确定性实例化承载。ADR-140 的 composite 不作为长期特殊 Scene 类型，能力由通用 Track/Clip/Object 承接。旧 Film 任务与旧结构锁退出；现行实现查代码与 RENDERING，有效需求归 VIDEO_PROJECT §15，新施工以 ADR-145 两份合同为准，测试退役不代表新链完成。
+**Consequences**: ADR-016/119 的 clip/film 两家族仍是当前代码事实，但不再是长期视频本体上限；迁移期的 video-spec 是 Film 继任而非永久第三套架构。ADR-127 的“模型只填创意槽、代码保证结构”继续成立，但固定结构改由内置 VideoTemplate + 确定性实例化承载；component-v1 服务无法预设的讲稿/内容画面，不改变固定 Skill 与自由创作共用作品和修订链的事实。ADR-140 的 composite 不作为长期特殊 Scene 类型，能力由通用 Track/Clip/Object 承接。旧 Film 任务与旧结构锁退出；现行实现查代码与 RENDERING，有效需求归 VIDEO_PROJECT §15，新施工以 ADR-145 两份合同为准，测试退役不代表新链完成。
 
 **Related**: ADR-016（renderer-neutral spec 与黑盒）/ ADR-119（Film storyboard 与 skill 接入）/ ADR-127（固定骨架与创意槽）/ ADR-129（版本身份与执行钉版）/ ADR-137（结构化编辑与 base_ref）/ ADR-139（制作意图）/ ADR-140（组合元素）/ ADR-144（首稿审阅）

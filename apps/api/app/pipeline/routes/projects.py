@@ -71,7 +71,7 @@ from app.pipeline.outputs import (
     aggregate_step_cost,
     chat_delivery_output_ids,
     compose_spec_prompt,
-    is_delivered_output,
+    is_chat_video_output,
     list_visible_outputs,
     model_facts_for,
     output_to_response,
@@ -1138,29 +1138,18 @@ async def list_chat_delivered_outputs(
             .order_by(Message.seq, Message.created_at)
         )
     ).scalars().all())
-    run_ids = list(dict.fromkeys(message.workflow_run_id for message in messages))
-    steps = list((
-        await db.execute(
-            select(WorkflowStep)
-            .where(WorkflowStep.run_id.in_(run_ids))
-            .order_by(WorkflowStep.seq)
-        )
-    ).scalars().all()) if run_ids else []
-    refs = chat_delivery_output_ids(messages, steps)
-    if not steps:
+    refs = chat_delivery_output_ids(messages)
+    if not refs:
         return []
 
     outputs = list((
         await db.execute(select(Output).where(
             Output.project_id == project_id,
-            or_(Output.id.in_(refs), Output.workflow_step_id.in_([step.id for step in steps])),
+            Output.id.in_(refs),
         ).order_by(Output.created_at, Output.id))
     ).scalars().all())
-    refs = chat_delivery_output_ids(messages, steps, outputs)
-    by_id = {output.id: output for output in outputs if is_delivered_output(output)}
-    # Extant internal/unfinished rows were never delivered media. A genuinely
-    # absent exact historical row stays in the projection as output=None.
-    undelivered_ids = {output.id for output in outputs if output.id not in by_id}
+    by_id = {output.id: output for output in outputs if is_chat_video_output(output)}
+    extant_ids = {output.id for output in outputs}
     version_ids = list(dict.fromkeys(
         output.composition_version_id for output in by_id.values()
         if output.composition_version_id is not None
@@ -1182,7 +1171,7 @@ async def list_chat_delivered_outputs(
             ),
         )
         for output_id in refs
-        if output_id not in undelivered_ids
+        if output_id in by_id or output_id not in extant_ids
     ]
 
 

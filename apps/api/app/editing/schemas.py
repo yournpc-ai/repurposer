@@ -149,6 +149,7 @@ class TextStyle(BaseModel):
     weight: Literal[400, 500, 600, 700, 800] = 600
     align: Literal["left", "center", "right"] = "left"
     line_height: float = Field(default=1.2, gt=0)
+    letter_spacing: float = Field(default=0.0, ge=-0.2, le=0.5)  # em
     font: FontRef = FontRef()
 
 
@@ -293,6 +294,18 @@ class GeneratedImageOutput(BaseModel):
     aspect_ratio: Literal["16:9"] = "16:9"
 
 
+# The first component consumer has no open dependency or resource loader. These
+# exact locked versions are part of its content identity and checked again by
+# the upstream bake runner.
+COMPONENT_DEPENDENCIES = {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "remotion": "4.0.484",
+    "@remotion/bundler": "4.0.484",
+    "@remotion/renderer": "4.0.484",
+}
+
+
 class GeneratorObject(BaseModel):
     """A reviewable program or model request; production resolves fixed media."""
 
@@ -300,7 +313,7 @@ class GeneratorObject(BaseModel):
 
     kind: Literal["generator"]
     object_id: str = _ID
-    runtime: Literal["drawing-v1", "image-v1"] = "drawing-v1"
+    runtime: Literal["drawing-v1", "image-v1", "component-v1"] = "drawing-v1"
     code: str | None = Field(default=None, min_length=1, max_length=24000)
     prompt: str | None = Field(default=None, min_length=1, max_length=2000)
     provider: Literal["minimax"] | None = None
@@ -319,11 +332,11 @@ class GeneratorObject(BaseModel):
                 raise ValueError("program parameter keys use letters, digits and underscores")
             if isinstance(value, str) and len(value) > 128:
                 raise ValueError("program string parameters stay within 128 characters")
-        if self.runtime == "drawing-v1":
+        if self.runtime in {"drawing-v1", "component-v1"}:
             if self.code is None or not isinstance(self.output, ProgramOutput):
-                raise ValueError("drawing-v1 needs code and program output constraints")
+                raise ValueError(f"{self.runtime} needs code and program output constraints")
             if self.prompt is not None or self.provider is not None or self.model is not None:
-                raise ValueError("drawing-v1 does not take model-generation fields")
+                raise ValueError(f"{self.runtime} does not take model-generation fields")
         else:
             if (
                 self.prompt is None
@@ -337,13 +350,19 @@ class GeneratorObject(BaseModel):
         return self
 
     def program_digest(self) -> str:
-        if self.runtime == "drawing-v1":
-            # Preserve the drawing-v1 identity byte-for-byte across the image extension.
+        if self.runtime in {"drawing-v1", "component-v1"}:
+            # Preserve drawing-v1 identity byte-for-byte; component-v1 also
+            # pins the exact runtime/dependency lock consumed by its baker.
             payload = {
                 "runtime": self.runtime,
                 "code": self.code,
                 "parameters": self.parameters,
                 "output": self.output.model_dump(mode="json"),
+                **(
+                    {"dependencies": COMPONENT_DEPENDENCIES}
+                    if self.runtime == "component-v1"
+                    else {}
+                ),
             }
         else:
             payload = {
@@ -434,6 +453,8 @@ AnimatableProperty = Literal[
     "transform.position",
     "transform.scale",
     "transform.rotation",
+    "filter.blur",
+    "text.letter_spacing",
     "audio.gain",
 ]
 
@@ -522,6 +543,33 @@ class Timeline(BaseModel):
 
     tracks: list[Track] = []
     transitions: list[Transition] = []
+
+
+class EditTarget(BaseModel):
+    """A stable-id target set for the shared temporal editing algebra."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["clip", "scene", "track", "selection", "timeline"]
+    id: str | None = Field(default=None, min_length=1, max_length=64)
+    clip_ids: list[str] = Field(default_factory=list, max_length=256)
+    scene_ids: list[str] = Field(default_factory=list, max_length=256)
+    track_ids: list[str] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="after")
+    def _address_matches_kind(self) -> EditTarget:
+        if self.kind == "selection":
+            if self.id is not None or not (self.clip_ids or self.scene_ids or self.track_ids):
+                raise ValueError("a selection needs explicit clip/scene/track ids and no singular id")
+        else:
+            if self.clip_ids or self.scene_ids or self.track_ids:
+                raise ValueError("selection id lists belong only to a selection target")
+            if self.kind == "timeline":
+                if self.id is not None:
+                    raise ValueError("the timeline target takes no id")
+            elif self.id is None:
+                raise ValueError(f"{self.kind} target needs its stable id")
+        return self
 
 
 class CompositionContent(BaseModel):

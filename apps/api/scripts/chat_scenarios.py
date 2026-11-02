@@ -59,6 +59,13 @@
              对话已有的链接）→ 方向拍或直达 design_storyboard（指纹守卫
              使未呈现即 dock 机械不可能）→ 分镜 markdown 骑普通消息 +
              web_page 资产诞生（正形）
+    S13 网站作品通用时间修订：88 秒四章确定性作品 → 一次正常 Chat 压缩
+             总时长且只更新分镜 → 恰好一个 v2，实体/文案/动画值/素材与
+             provenance 保持，音乐显式 1× 裁取；缩短一章只落 v3，下游
+             等距前移且不擅自补尾，Run 恒为 0
+    S14 旁白时间编辑失败闭：确定性 20 秒 Speech 作品 → 一次正常 Chat
+             等比压缩 → 一次能力拒绝即终态，零新版零 Run，回复说明真实
+             版本、20 秒、未制作与可选择的媒体调整方向
 
 harness 公共断言（ADR-114 §3.2——每本自动携带，不再单独立本）：
 
@@ -182,15 +189,15 @@ class StreamTurn(NamedTuple):
     previews: list[dict]
     completed: dict | None
     failed: dict | None
-    # ADR-085 checkpoint frames: each entry is one checkpoint's full text.
-    checkpoints: list[str]
-    # Parallel to checkpoints: True = the frame arrived BEFORE any read
+    # ADR-085 interim_prose frames: each entry is one interim_prose's full text.
+    interim_prose_rows: list[str]
+    # Parallel to interim_prose_rows: True = the frame arrived BEFORE any read
     # activity settled — the waiter seat (ADR-104: pre-read speech is legal
     # waiter talk; with the pre-execute emission seat the wire order makes
     # the discrimination exact — a waiter strictly precedes its read's
     # settle frame, result talk strictly follows its predecessor read's
     # settle).
-    checkpoints_pre_read: list[bool]
+    interim_prose_pre_read: list[bool]
     # ADR-087 §3 activity frames: the append-oriented work stream — each
     # entry is one assistant.activity payload {activity_id, seq, kind,
     # status, key}.
@@ -248,13 +255,13 @@ class Ctx:
         the turn.completed envelope, and turn.failed if any.
 
         harness 公共断言（ADR-114 §3.2）在回合成功收官时自动携带：SSE 线
-        格式律 / Activity 帧形态 / checkpoint 形态 / 选项问预览帧律 /
+        格式律 / Activity 帧形态 / interim_prose 形态 / 选项问预览帧律 /
         dock 形态。"""
         deltas: list[str] = []
         thinking: list[dict] = []
         previews: list[dict] = []
-        checkpoints: list[str] = []
-        checkpoints_pre_read: list[bool] = []
+        interim_prose_rows: list[str] = []
+        interim_prose_pre_read: list[bool] = []
         activities: list[dict] = []
         raw_events: list[dict] = []
         row_events: list[dict] = []
@@ -281,9 +288,9 @@ class Ctx:
                         thinking.append(payload)
                     elif event == "question.preview":
                         previews.append(payload)
-                    elif event == "assistant.checkpoint":
-                        checkpoints.append(payload["text"])
-                        checkpoints_pre_read.append(not read_settled_seen)
+                    elif event == "assistant.interim_prose":
+                        interim_prose_rows.append(payload["text"])
+                        interim_prose_pre_read.append(not read_settled_seen)
                     elif event == "assistant.activity":
                         activities.append(payload)
                         if payload.get("kind") == "read" and payload.get(
@@ -304,8 +311,8 @@ class Ctx:
             previews=previews,
             completed=completed,
             failed=failed,
-            checkpoints=checkpoints,
-            checkpoints_pre_read=checkpoints_pre_read,
+            interim_prose_rows=interim_prose_rows,
+            interim_prose_pre_read=interim_prose_pre_read,
             activities=activities,
             raw_events=raw_events,
             row_events=row_events,
@@ -792,13 +799,13 @@ def check_stream_law(
         return  # replaced speech: even the prefix relation is void
     streamed = concat.strip()
     if had_reads and allow_reads:
-        checkpointed = {c.strip() for c in stream.checkpoints}
+        interim_prose_text = {c.strip() for c in stream.interim_prose_rows}
         check(
             not streamed
             or content.startswith(streamed)
-            or streamed in checkpointed,
+            or streamed in interim_prose_text,
             f"{label}: the read-first stream law (kept speech prefixes the "
-            "content, or rode the checkpoint channel — ADR-104)",
+            "content, or rode the interim_prose channel — ADR-104)",
             f"{concat[:120]!r} vs {content[:120]!r}",
         )
     else:
@@ -839,15 +846,15 @@ def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, la
         # estimate whisper (appended at compose, blank-line join — the
         # reminder tail's same doctrine; the settled envelope paces it out
         # whole client-side). Iteration-0 read-first speech may instead
-        # ride the CHECKPOINT channel (ADR-104 — never enters the ledger).
+        # ride the INTERIM PROSE channel (ADR-104 — never enters the ledger).
         streamed = "".join(stream.deltas).strip()
-        checkpointed = {c.strip() for c in stream.checkpoints}
+        interim_prose_text = {c.strip() for c in stream.interim_prose_rows}
         check(
             not streamed
             or content.startswith(streamed)
-            or streamed in checkpointed,
+            or streamed in interim_prose_text,
             f"{label}: task_book turn's iteration-0 speech prefixes the "
-            "content or rode the checkpoint channel (ADR-104)",
+            "content or rode the interim_prose channel (ADR-104)",
             f"{streamed[:120]!r} vs {content[:120]!r}",
         )
         check(
@@ -869,8 +876,8 @@ def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, la
 # the contract bans is a SHAPE, and a banned shape is assertable).
 
 # Process narration: read-iteration process talk must never persist into the
-# settled message (ADR-104: pre-read speech rides the checkpoint channel as
-# its own segment — the settled reply stands alone; post-read checkpoints
+# settled message (ADR-104: pre-read speech rides the interim_prose channel as
+# its own segment — the settled reply stands alone; post-read interim_prose_rows
 # carry results, never process narration).
 # 词边界 adjudication（C-6，2026-09-19）：IGNORECASE 下裸 `I'?ll` 会把
 # "will pull from" 的 "ill pull" 误判为第一人称过程叙述（"the caption text
@@ -885,43 +892,43 @@ PROCESS_NARRATION = re.compile(
 )
 
 
-def check_checkpoint_shape(stream: "StreamTurn", content: str, label: str) -> None:
-    """Checkpoint shape laws (ADR-109 言语座位通用化; opportunistic —
-    checkpoints are EARNED, so absence is legal; when they fired, the shape
+def check_interim_prose_shape(stream: "StreamTurn", content: str, label: str) -> None:
+    """Interim prose shape laws (ADR-109 言语座位通用化; opportunistic —
+    entries are EARNED, so absence is legal; when they fired, the shape
     must hold): ≤4/turn (节奏护栏), never empty, never process narration
     POST-READ (pre-read waiter speech is legal — ADR-104 服务员话术律;
     phase-turn expectation sentences are the legal pre-read form), and the
     settled reply never repeats one verbatim."""
-    if not stream.checkpoints:
+    if not stream.interim_prose_rows:
         return
     check(
-        len(stream.checkpoints) <= 4,
-        f"{label}: checkpoints are capped at ≤4 per turn (ADR-109 rhythm guardrail)",
-        stream.checkpoints,
+        len(stream.interim_prose_rows) <= 4,
+        f"{label}: interim_prose_rows are capped at ≤4 per turn (ADR-109 rhythm guardrail)",
+        stream.interim_prose_rows,
     )
     check(
-        all(c.strip() for c in stream.checkpoints),
-        f"{label}: checkpoints are never empty",
-        stream.checkpoints,
+        all(c.strip() for c in stream.interim_prose_rows),
+        f"{label}: interim_prose_rows are never empty",
+        stream.interim_prose_rows,
     )
     check(
-        # The waiter exemption (ADR-104): a checkpoint that arrived BEFORE
+        # The waiter exemption (ADR-104): interim prose that arrived BEFORE
         # any read settled is pre-read waiter speech — legal process talk
         # by the waiter-line law. The results-only bar polices POST-read
-        # checkpoints (grounded judgment, never process narration).
+        # entries (grounded judgment, never process narration).
         not PROCESS_NARRATION.search(
             " ".join(
-                c for c, pre in zip(stream.checkpoints, stream.checkpoints_pre_read) if not pre
+                c for c, pre in zip(stream.interim_prose_rows, stream.interim_prose_pre_read) if not pre
             )
         ),
-        f"{label}: post-read checkpoints carry results, never process narration",
-        stream.checkpoints,
+        f"{label}: post-read interim_prose_rows carry results, never process narration",
+        stream.interim_prose_rows,
     )
-    for cp in stream.checkpoints:
+    for cp in stream.interim_prose_rows:
         check(
             cp.strip() not in content,
-            f"{label}: the settled reply never repeats a checkpoint verbatim",
-            {"checkpoint": cp[:120], "settled": content[:120]},
+            f"{label}: the settled reply never repeats interim prose verbatim",
+            {"interim_prose": cp[:120], "settled": content[:120]},
         )
 
 
@@ -1171,13 +1178,13 @@ def check_dock_shape(msg: dict, label: str) -> None:
 def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
     """SSE 回合的 harness 公共断言全家桶（``Ctx.chat_stream`` 在信封成功
     收官时自动携带）：线格式律（含文字问/选项问合成枝）+ Activity 帧形态
-    + checkpoint 形态 + 选项问预览帧律 + dock 形态。"""
+    + interim_prose 形态 + 选项问预览帧律 + dock 形态。"""
     msg = stream.completed["assistant_message"]
     content = msg.get("content") or ""
     q = msg.get("question") or {}
     check_turn_stream_law(stream, content, q, label)
     check_activity_shape(stream, label)
-    check_checkpoint_shape(stream, content, label)
+    check_interim_prose_shape(stream, content, label)
     # question.preview 预览帧律（言语提交协议 G2：预览骑缓冲、接受才释
     # 放——收到的预览即权威件，与信封 dock 载荷逐字段一致）。文字类提问
     # 永不预览 dock（与 R1 文字问门禁同律）——只有选项问 dock 触发本律。
@@ -4310,6 +4317,421 @@ async def s12_site_entry_variants(ctx: Ctx) -> None:
           "(material_urls absorb from conversation history)", None)
 
 
+async def _seed_temporal_journey(ctx: Ctx, pid: str):
+    """An 88s website/native/music work; only the revision turn uses an LLM."""
+    from pydantic import TypeAdapter
+    from app.editing.edits import Op
+    from app.editing.store import apply_composition_edits
+    from app.editing.timing import SOURCE_TIMEBASE
+    from app.models.tables import SourceSnapshot
+
+    async with AsyncSessionLocal() as db:
+        stem = f"scenario/s13/{uuid.uuid4().hex}"
+        image = SourceSnapshot(
+            owner_id=ctx.user_id, kind="image", storage_key=f"{stem}/still.png", digest="a" * 64,
+        )
+        audio = SourceSnapshot(
+            owner_id=ctx.user_id, kind="audio", storage_key=f"{stem}/music.wav", digest="b" * 64,
+            duration_ticks=88 * SOURCE_TIMEBASE,
+        )
+        web = SourceSnapshot(
+            owner_id=ctx.user_id, kind="web", storage_key=f"{stem}/page.json", digest="c" * 64,
+            meta={"views": [{
+                "view_id": "view-main", "heading": "Fixture page", "width": 1920, "height": 1080,
+                "storage_key": f"{stem}/view.png", "digest": "d" * 64,
+            }]},
+        )
+        db.add_all([image, audio, web])
+        await db.flush()
+        ops: list[dict] = [
+            {"op": "set_settings", "settings": {"width": 1920, "height": 1080}},
+            *[
+                {"op": "bind_source", "snapshot_id": str(snapshot.id)}
+                for snapshot in (image, audio, web)
+            ],
+        ]
+        scene_ranges = [
+            ("scn_open", 0, 8),
+            ("scn_chapter_1", 8, 28),
+            ("scn_chapter_2", 28, 48),
+            ("scn_chapter_3", 48, 68),
+            ("scn_chapter_4", 68, 80),
+            ("scn_close", 80, 88),
+        ]
+        for scene_id, start, end in scene_ranges:
+            ops.append({"op": "add_scene", "scene": {
+                "scene_id": scene_id,
+                "range": {"start": start * SOURCE_TIMEBASE, "end": end * SOURCE_TIMEBASE},
+                "intent": scene_id,
+                "visual_description": f"Visible direction for {scene_id}",
+            }})
+        for track_id, kind, role, order in (
+            ("trk_stills", "visual", "main", 0),
+            ("trk_web", "visual", "main", 1),
+            ("trk_title", "visual", "title", 2),
+            ("trk_music", "audio", "music", 0),
+        ):
+            ops.append({"op": "add_track", "track": {
+                "track_id": track_id, "kind": kind, "role": role, "order": order,
+            }})
+
+        def add_clip(track_id: str, clip: dict) -> None:
+            ops.append({"op": "add_clip", "track_id": track_id, "clip": clip})
+
+        layout = {"x": 0, "y": 0, "width": 1920, "height": 1080}
+        for clip_id, object_id, start, end in (
+            ("clp_still_a", "obj_still_a", 0, 4),
+            ("clp_still_b", "obj_still_b", 4, 8),
+        ):
+            add_clip("trk_stills", {
+                "clip_id": clip_id,
+                "range": {"start": start * SOURCE_TIMEBASE, "end": end * SOURCE_TIMEBASE},
+                "scene_id": "scn_open",
+                "source": {"snapshot_id": str(image.id), "snapshot_digest": image.digest},
+                "object": {"kind": "image", "object_id": object_id, "layout": layout},
+            })
+        for scene_id, start, end in scene_ranges:
+            duration = (end - start) * SOURCE_TIMEBASE
+            add_clip("trk_web", {
+                "clip_id": f"clp_web_{scene_id}",
+                "range": {"start": start * SOURCE_TIMEBASE, "end": end * SOURCE_TIMEBASE},
+                "scene_id": scene_id,
+                "source": {"snapshot_id": str(web.id), "snapshot_digest": web.digest},
+                "object": {
+                    "kind": "web", "object_id": f"obj_web_{scene_id}",
+                    "view_id": "view-main", "layout": layout,
+                },
+                "animations": [
+                    {
+                        "animation_id": f"anm_scale_{scene_id}",
+                        "target_object_id": f"obj_web_{scene_id}",
+                        "property": "transform.scale",
+                        "keyframes": [{"at": 0, "value": 1}, {"at": duration, "value": 1.2}],
+                    },
+                    {
+                        "animation_id": f"anm_camera_{scene_id}",
+                        "target_object_id": f"obj_web_{scene_id}",
+                        "property": "transform.position",
+                        "keyframes": [
+                            {"at": 0, "value": [0, 0]},
+                            {"at": duration // 2, "value": [120, -40]},
+                            {"at": duration, "value": [80, -20]},
+                        ],
+                    },
+                ],
+            })
+            add_clip("trk_title", {
+                "clip_id": f"clp_text_{scene_id}",
+                "range": {"start": start * SOURCE_TIMEBASE, "end": end * SOURCE_TIMEBASE},
+                "scene_id": scene_id,
+                "object": {
+                    "kind": "text", "object_id": f"obj_text_{scene_id}",
+                    "text": f"Exact copy for {scene_id}",
+                    "layout": {"x": 160, "y": 100, "width": 1600, "height": 160},
+                    "style": {"font_size": 72, "color": "#FFFFFF"},
+                },
+                "animations": [
+                    {
+                        "animation_id": f"anm_blur_{scene_id}",
+                        "target_object_id": f"obj_text_{scene_id}", "property": "filter.blur",
+                        "keyframes": [{"at": 0, "value": 12}, {"at": duration, "value": 0}],
+                    },
+                    {
+                        "animation_id": f"anm_spacing_{scene_id}",
+                        "target_object_id": f"obj_text_{scene_id}", "property": "text.letter_spacing",
+                        "keyframes": [{"at": 0, "value": 0.2}, {"at": duration, "value": 0}],
+                    },
+                ],
+            })
+        add_clip("trk_music", {
+            "clip_id": "clp_music",
+            "range": {"start": 0, "end": 88 * SOURCE_TIMEBASE},
+            "scene_id": None,
+            "source": {
+                "snapshot_id": str(audio.id), "snapshot_digest": audio.digest,
+                "source_range": {"start": 0, "end": 88 * SOURCE_TIMEBASE},
+            },
+            "object": {"kind": "audio", "object_id": "obj_music", "gain_db": -18},
+            "animations": [{
+                "animation_id": "anm_music_gain", "target_object_id": "obj_music",
+                "property": "audio.gain",
+                "keyframes": [{"at": 0, "value": 0.8}, {"at": 88 * SOURCE_TIMEBASE, "value": 1}],
+            }],
+        })
+        ops.append({"op": "set_transition", "transition": {
+            "transition_id": "trn_open", "from_clip_id": "clp_still_a", "to_clip_id": "clp_still_b",
+            "duration": SOURCE_TIMEBASE,
+        }})
+        composition, version, _ = await apply_composition_edits(
+            db,
+            owner_id=ctx.user_id,
+            origin_project_id=uuid.UUID(pid),
+            name="Temporal journey",
+            skill_provenance={"fixture": "temporal-journey", "preserve": "verbatim"},
+            ops=TypeAdapter(list[Op]).validate_python(ops),
+        )
+        return composition.id, version.id
+
+
+async def s13_temporal_revision_without_production(ctx: Ctx) -> None:
+    """S13 通用时间修订：88→30 秒恰好落 v2；随后缩短一章只落 v3，
+    下游等距前移、保留段时长与全局音乐不变，两个回合均零 Run。"""
+    from app.editing.store import content_of
+    from app.editing.timing import SOURCE_TIMEBASE
+    from app.models.tables import Composition, CompositionVersion
+
+    pid = await ctx.new_project("S13 temporal revision")
+    composition_id, version_id = await _seed_temporal_journey(ctx, pid)
+    turn = await ctx.chat(
+        pid,
+        "Compress Temporal journey from 88 seconds to 30 seconds. Keep all four "
+        "chapters, the opening/closing, copy, layout, camera moves, animation "
+        "values and music style unchanged. Update the storyboard only; do not produce.",
+    )
+    check(turn.get("run_id") is None, "temporal revision starts no Run", turn)
+    check(not is_plan_dock(turn["assistant_message"]),
+          "storyboard-only temporal revision docks no production plan", turn["assistant_message"])
+
+    async with AsyncSessionLocal() as db:
+        versions = list((await db.scalars(
+            select(CompositionVersion)
+            .where(CompositionVersion.composition_id == composition_id)
+            .order_by(CompositionVersion.version)
+        )).all())
+        run_count = await db.scalar(
+            select(func.count()).select_from(WorkflowRun).where(WorkflowRun.project_id == uuid.UUID(pid))
+        )
+        composition_count = await db.scalar(
+            select(func.count()).select_from(Composition).where(Composition.origin_project_id == uuid.UUID(pid))
+        )
+    check(run_count == 0, "the project still has zero Runs", run_count)
+    check(composition_count == 1, "revision does not create another work", composition_count)
+    check(len(versions) == 2 and versions[0].id == version_id,
+          "one Chat revision creates exactly one new version", [v.version for v in versions])
+    before_row, after_row = versions
+    check(after_row.base_version_id == before_row.id and after_row.skill_provenance == before_row.skill_provenance,
+          "v2 is a child of the fixture and preserves skill provenance", None)
+    before, after = content_of(before_row), content_of(after_row)
+    duration = max(c.range.end for t in after.timeline.tracks for c in t.clips)
+    check(abs(duration - 30 * SOURCE_TIMEBASE) <= SOURCE_TIMEBASE // 30,
+          "max(all clip.range.end) is 30s within one output frame", duration / SOURCE_TIMEBASE)
+    check([s.scene_id for s in after.scenes] == [s.scene_id for s in before.scenes],
+          "opening, four chapters and closing keep their stable ids", None)
+    check([(s.intent, s.visual_description) for s in after.scenes]
+          == [(s.intent, s.visual_description) for s in before.scenes],
+          "Scene intent and visual copy are not rewritten by a time map", None)
+    check(after.sources == before.sources and after.settings == before.settings,
+          "SourceSnapshot bindings and canvas settings are unchanged", None)
+
+    before_clips = {c.clip_id: c for t in before.timeline.tracks for c in t.clips}
+    after_clips = {c.clip_id: c for t in after.timeline.tracks for c in t.clips}
+    check(set(after_clips) == set(before_clips), "every Clip keeps its stable id", None)
+    before_animations = {
+        a.animation_id: a for c in before_clips.values() for a in c.animations
+    }
+    for clip_id, revised in after_clips.items():
+        original = before_clips[clip_id]
+        check(revised.object == original.object,
+              f"{clip_id}: copy/layout/object values stay unchanged", None)
+        check(revised.scene_id == original.scene_id and revised.linked_group_id == original.linked_group_id,
+              f"{clip_id}: structural membership stays unchanged", None)
+        check({a.animation_id for a in revised.animations} == {a.animation_id for a in original.animations},
+              f"{clip_id}: animation identities stay unchanged", None)
+        check((revised.source is None) == (original.source is None) and (
+            revised.source is None or original.source is None or (
+                revised.source.snapshot_id == original.source.snapshot_id
+                and revised.source.snapshot_digest == original.source.snapshot_digest
+            )
+        ), f"{clip_id}: immutable source identity stays unchanged", None)
+        for animation in revised.animations:
+            previous = before_animations[animation.animation_id]
+            check([k.value for k in animation.keyframes] == [k.value for k in previous.keyframes],
+                  f"{animation.animation_id}: time mapping never changes values", None)
+            check(all(
+                abs(new.at - old.at * 30 / 88) <= SOURCE_TIMEBASE // 30
+                for new, old in zip(animation.keyframes, previous.keyframes)
+            ), f"{animation.animation_id}: local keyframes follow the Timeline map", None)
+            for new, old in zip(animation.keyframes, previous.keyframes):
+                if old.at == original.range.duration:
+                    check(new.at == revised.range.duration,
+                          f"{animation.animation_id}: terminal keyframe shares the Clip's quantized output end",
+                          {"keyframe_at": new.at, "clip_duration": revised.range.duration})
+    music = after_clips["clp_music"]
+    check(music.source is not None and music.source.source_range is not None
+          and music.source.source_range.start == before_clips["clp_music"].source.source_range.start
+          and music.source.source_range.duration == music.range.duration,
+          "music is recropped at explicit 1×, never silently rate-changed", None)
+    check([t.transition_id for t in after.timeline.transitions]
+          == [t.transition_id for t in before.timeline.transitions]
+          and after.timeline.transitions[0].duration < before.timeline.transitions[0].duration,
+          "the Transition keeps its identity and follows output time", None)
+
+    v2_row, v2 = after_row, after
+    trim_turn = await ctx.chat(
+        pid,
+        "Shorten chapter 2 by 2 seconds. Move chapter 3, chapter 4 and the closing "
+        "forward by those 2 seconds. Keep every retained downstream section's "
+        "duration unchanged and leave the global music untouched. Save the "
+        "storyboard only; do not produce.",
+    )
+    check(trim_turn.get("run_id") is None, "Scene trim starts no Run", trim_turn)
+    check(not is_plan_dock(trim_turn["assistant_message"]),
+          "Scene trim docks no production plan", trim_turn["assistant_message"])
+    async with AsyncSessionLocal() as db:
+        versions = list((await db.scalars(
+            select(CompositionVersion)
+            .where(CompositionVersion.composition_id == composition_id)
+            .order_by(CompositionVersion.version)
+        )).all())
+        run_count = await db.scalar(
+            select(func.count()).select_from(WorkflowRun).where(WorkflowRun.project_id == uuid.UUID(pid))
+        )
+    check(run_count == 0, "Scene trim still has zero Runs", run_count)
+    check(len(versions) == 3,
+          "a satisfied Scene trim does not extend the ending in another version",
+          [v.version for v in versions])
+    v3_row = versions[-1]
+    check(v3_row.base_version_id == v2_row.id,
+          "the sole Scene-trim revision is based on v2", None)
+    v3 = content_of(v3_row)
+    v2_scenes = {scene.scene_id: scene for scene in v2.scenes}
+    downstream = {"scn_chapter_3", "scn_chapter_4", "scn_close"}
+    for scene in v3.scenes:
+        old = v2_scenes[scene.scene_id]
+        if scene.scene_id == "scn_chapter_2":
+            check(scene.range.start == old.range.start
+                  and scene.range.end == old.range.end - 2 * SOURCE_TIMEBASE,
+                  "chapter 2 alone shortens by 2 seconds", None)
+        elif scene.scene_id in downstream:
+            check(scene.range.start == old.range.start - 2 * SOURCE_TIMEBASE
+                  and scene.range.end == old.range.end - 2 * SOURCE_TIMEBASE
+                  and scene.range.duration == old.range.duration,
+                  f"{scene.scene_id}: downstream translates without stretching", None)
+        else:
+            check(scene.range == old.range,
+                  f"{scene.scene_id}: upstream range stays unchanged", None)
+    v2_music = next(c for t in v2.timeline.tracks for c in t.clips if c.clip_id == "clp_music")
+    v3_music = next(c for t in v3.timeline.tracks for c in t.clips if c.clip_id == "clp_music")
+    check(v3_music == v2_music,
+          "global music range, source window and animation are completely untouched", None)
+    duration = max(c.range.end for t in v3.timeline.tracks for c in t.clips)
+    check(duration == 30 * SOURCE_TIMEBASE,
+          "a music-only tail still owns the real 30-second timeline duration",
+          duration / SOURCE_TIMEBASE)
+
+
+async def _seed_speech_temporal_journey(ctx: Ctx, pid: str):
+    """A 20s native-text/Speech work; only the revision turn uses an LLM."""
+    from pydantic import TypeAdapter
+    from app.editing.edits import Op
+    from app.editing.store import apply_composition_edits
+    from app.editing.timing import SOURCE_TIMEBASE
+
+    duration = 20 * SOURCE_TIMEBASE
+    ops = TypeAdapter(list[Op]).validate_python([
+        {"op": "set_settings", "settings": {"width": 1920, "height": 1080}},
+        {"op": "add_scene", "scene": {
+            "scene_id": "scn_speech", "range": {"start": 0, "end": duration},
+            "intent": "Reviewed narration", "speech_clip_ids": ["clp_speech"],
+        }},
+        {"op": "add_track", "track": {
+            "track_id": "trk_title", "kind": "visual", "role": "title", "order": 0,
+        }},
+        {"op": "add_track", "track": {
+            "track_id": "trk_dialogue", "kind": "audio", "role": "dialogue", "order": 0,
+        }},
+        {"op": "add_clip", "track_id": "trk_title", "clip": {
+            "clip_id": "clp_title", "range": {"start": 0, "end": duration},
+            "scene_id": "scn_speech",
+            "object": {
+                "kind": "text", "object_id": "obj_title", "text": "Keep the reviewed narration",
+                "layout": {"x": 160, "y": 240, "width": 1600, "height": 240},
+                "style": {"font_size": 72, "color": "#FFFFFF"},
+            },
+        }},
+        {"op": "add_clip", "track_id": "trk_dialogue", "clip": {
+            "clip_id": "clp_speech", "range": {"start": 0, "end": duration},
+            "scene_id": "scn_speech",
+            "object": {
+                "kind": "speech", "object_id": "obj_speech",
+                "text": "这段已经审阅的旁白必须保持原文和语速。",
+                "voice_id": "fixture-voice", "language": "zh",
+            },
+        }},
+    ])
+    async with AsyncSessionLocal() as db:
+        composition, version, _ = await apply_composition_edits(
+            db,
+            owner_id=ctx.user_id,
+            origin_project_id=uuid.UUID(pid),
+            name="Speech timing",
+            skill_provenance={"fixture": "speech-capability"},
+            ops=ops,
+        )
+        return composition.id, version.id
+
+
+async def s14_speech_capability_refusal_closes_honestly(ctx: Ctx) -> None:
+    """S14 旁白时间映射失败闭：一次正常 Chat、一次确定性拒绝、零新版零 Run，
+    最终回复必须说明真实版本/时长/未制作，不漫游到其他产品建议。"""
+    from app.editing.store import content_of
+    from app.editing.timing import SOURCE_TIMEBASE
+    from app.models.tables import CompositionVersion, Conversation
+
+    pid = await ctx.new_project("S14 speech capability refusal")
+    composition_id, version_id = await _seed_speech_temporal_journey(ctx, pid)
+    turn = await ctx.chat(
+        pid,
+        "把这条带旁白的片子等比压缩到10秒，现有文案、旁白、画面和布局都不要换。"
+        "请直接在当前版本上修改，不要重新设计，只保存分镜，不制作视频。"
+        "如果做不到，请明确说明原因，不要偷偷删掉旁白、改变语速或用重新创作代替修改。",
+    )
+    check(terminal_tool_of(turn) == "answer",
+          "a capability refusal closes with an honest answer", turn)
+    check(turn.get("run_id") is None, "Speech refusal starts no Run", turn)
+    content = (turn.get("assistant_message") or {}).get("content") or ""
+    check("第 1 版" in content and "20 秒" in content,
+          "the reply names the standing version and actual duration", content)
+    check("没有保存新版本" in content and "没有开始制作" in content,
+          "the reply states zero new version and zero production", content)
+    check("旁白" in content and "金句卡" not in content,
+          "the reply addresses narration instead of unrelated product suggestions", content)
+
+    async with AsyncSessionLocal() as db:
+        versions = list((await db.scalars(
+            select(CompositionVersion).where(CompositionVersion.composition_id == composition_id)
+        )).all())
+        run_count = await db.scalar(
+            select(func.count()).select_from(WorkflowRun).where(WorkflowRun.project_id == uuid.UUID(pid))
+        )
+        forensic_rows = list((await db.scalars(
+            select(Message)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(
+                Conversation.project_id == uuid.UUID(pid),
+                Message.intent["type"].astext == "activity_forensics",
+            )
+        )).all())
+    rejections = [
+        rejection
+        for row in forensic_rows
+        for rejection in (row.intent or {}).get("rejections", [])
+        if rejection.get("tool_name") == "revise_video"
+    ]
+    check(len(rejections) == 1,
+          "the first deterministic media refusal ends the revision loop",
+          rejections)
+    check("cannot preserve its reviewed semantics" in rejections[0].get("detail", ""),
+          "the sole refusal is the Speech capability boundary", rejections[0])
+    check(len(versions) == 1 and versions[0].id == version_id,
+          "the refused edit creates no CompositionVersion", [v.version for v in versions])
+    check(run_count == 0, "the refused edit still has zero Runs", run_count)
+    standing = content_of(versions[0])
+    duration = max(c.range.end for t in standing.timeline.tracks for c in t.clips)
+    check(duration == 20 * SOURCE_TIMEBASE,
+          "the saved Speech work remains exactly 20 seconds", duration / SOURCE_TIMEBASE)
+
+
 SCENARIOS = {
     "S1": s1_lost_user_full_journey,
     "S2": s2_material_to_clips_full_chain,
@@ -4323,6 +4745,8 @@ SCENARIOS = {
     "S10": s10_remix_flagship,
     "S11": s11_url_to_launch_film,
     "S12": s12_site_entry_variants,
+    "S13": s13_temporal_revision_without_production,
+    "S14": s14_speech_capability_refusal_closes_honestly,
 }
 
 

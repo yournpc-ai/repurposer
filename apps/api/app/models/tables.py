@@ -569,6 +569,63 @@ class SourceSnapshot(Base):
     captured_at = Column(DateTime(timezone=True), default=now_utc)
 
 
+class UserSkill(Base):
+    """An owner-scoped external Skill identity; built-ins stay in code."""
+
+    __tablename__ = "user_skills"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name = Column(String(64), nullable=False)
+    description = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_user_skills_owner_name"),
+    )
+
+
+class SkillVersion(Base):
+    """One immutable, owner-scoped external Skill package and review policy.
+
+    ``references`` retains source text as untrusted evidence, including scripts
+    which are never executable. ``declared_inputs`` and ``policy`` are reviewed
+    product declarations, not permissions inferred from external frontmatter.
+    A database trigger rejects UPDATE/DELETE; new methods require a new row.
+    """
+
+    __tablename__ = "skill_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    skill_id = Column(
+        UUID(as_uuid=True), ForeignKey("user_skills.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version = Column(Integer, nullable=False)
+    instructions = Column(Text, nullable=False)
+    references = Column(JSONB, nullable=False, default=list)
+    declared_inputs = Column(JSONB, nullable=False, default=list)
+    capability_report = Column(JSONB, nullable=False, default=dict)
+    policy = Column(JSONB, nullable=False, default=dict)
+    source_uri = Column(Text, nullable=True)
+    source_revision = Column(String(128), nullable=True)
+    source_hash = Column(String(64), nullable=False)
+    # Full immutable draft identity (source + reviewed declarations/policy).
+    # Nullable only for rows born before this companion digest existed.
+    version_digest = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("skill_id", "version", name="uq_skill_versions_version"),
+        UniqueConstraint("skill_id", "version_digest", name="uq_skill_versions_version_digest"),
+    )
+
+
 class Composition(Base):
     """A work's durable identity (ADR-145): one continuously-edited film.
 
@@ -866,6 +923,14 @@ class Message(Base):
         ForeignKey("workflow_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # The opening user row's id for facts born inside that user turn. NULL on
+    # legacy rows and independent trigger/material facts; no relationship is
+    # inferred from transcript adjacency.
+    turn_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     intent = Column(JSONB(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent); JSONB — the trigger dedup reads intent["trigger"].astext (generic JSON's subscript has no .astext, R1 B1 实证)
     # Turn identity (交互完整性批 A, 2026-09-17 — the minimal in-flight
     # contract): set ONLY on the user row that opens a chat turn — durable
@@ -874,8 +939,11 @@ class Message(Base):
     # else (assistant rows, legacy rows, non-turn seats). Values:
     # in_flight (the turn owns it — the trigger admission gate's read) →
     # settled (the turn's final commit stamps it) | failed (best-effort
-    # stamp on the failure/cancel path; a crashed turn's row AGES OUT of
-    # in_flight via the stale bound, never holds the gate forever).
+    # failure/disconnect stamp) | cancelled (explicit Stop after a visible
+    # reply/fact). A Stop with no visible reply deletes the whole Turn instead
+    # of leaving a retracted tombstone.
+    # A crashed turn's row AGES OUT of in_flight via the stale bound, never
+    # holds the gate forever.
     turn_state = Column(String(20), nullable=True)
     # One row, two states (the ask_user machinery): ``question`` is the typed payload
     # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —

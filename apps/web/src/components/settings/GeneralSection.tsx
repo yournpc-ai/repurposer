@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 
-import { Card } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -92,43 +91,39 @@ export function GeneralSection() {
   )
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("general.subtitle")}</p>
-      <Card className="gap-0 px-4 py-2">
-        <div className="flex items-center gap-3 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-foreground">
-              {t("general.workspaceLayout.label")}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {t("general.workspaceLayout.desc")}
-            </p>
-          </div>
-          <Select
-            value={layout ?? "chat"}
-            onValueChange={(v) => void update(v as WorkspaceLayout)}
-            disabled={layout === null || saving}
-          >
-            <SelectTrigger
-              aria-label={t("general.workspaceLayout.label")}
-              className="h-8 flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
-            >
-              {saving && (
-                <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-              )}
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false} align="end">
-              <SelectItem value="auto">
-                {t("general.workspaceLayout.auto")}
-              </SelectItem>
-              <SelectItem value="chat">
-                {t("general.workspaceLayout.chat")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </Card>
+    <div className="flex items-center gap-3 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-foreground">
+          {t("general.workspaceLayout.label")}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          {t("general.workspaceLayout.desc")}
+        </p>
+      </div>
+      <Select
+        value={layout ?? "chat"}
+        onValueChange={(v) => void update(v as WorkspaceLayout)}
+        disabled={layout === null || saving}
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label={t("general.workspaceLayout.label")}
+          className="flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
+        >
+          {saving && (
+            <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+          )}
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false} align="end">
+          <SelectItem value="auto">
+            {t("general.workspaceLayout.auto")}
+          </SelectItem>
+          <SelectItem value="chat">
+            {t("general.workspaceLayout.chat")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   )
 }

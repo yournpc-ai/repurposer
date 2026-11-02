@@ -320,12 +320,29 @@ export interface IntentSlot {
   explicit: boolean
 }
 
+/** One safe, replayable produce_video stage inside a step attempt. */
+export interface ProductionStage {
+  event_id: string
+  kind: string
+  run_id: string
+  step_id: string
+  attempt: number
+  seq: number
+  status: "running" | "completed" | "failed"
+  started_at: string
+  finished_at: string | null
+  reused?: boolean | null
+  item_count?: number | null
+  reused_count?: number | null
+}
+
 /** One step of a run's execution plan (ADR-028) — the user-facing step. */
 export interface WorkflowStep {
   id: string
   kind: string
   status: StepStatus
   seq: number
+  attempt?: number
   error: string | null
   cost: Record<string, number> | null
   stage?: string | null
@@ -334,7 +351,7 @@ export interface WorkflowStep {
   /** The runner's structured "nothing to do" declaration (2026-09-10 receipt
    * whisper tier) — stamped at the same seat as the "…skipped" summary. */
   noop?: boolean | null
-  /** Output row ids this node produced (RunCard inlines these on completion). */
+  /** Output row ids this node produced (execution/delivery facts, not Chat ownership). */
   output_refs?: string[]
   /** DAG edges: upstream step ids (the run's execution DAG). */
   inputs?: string[]
@@ -346,6 +363,7 @@ export interface WorkflowStep {
   cost_credits?: number | null
   started_at: string | null
   finished_at: string | null
+  production_stages?: ProductionStage[]
 }
 
 /** The project graph (ADR-057) — the persistent, mutable product object the

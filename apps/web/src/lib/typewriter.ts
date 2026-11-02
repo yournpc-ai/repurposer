@@ -56,9 +56,12 @@ export function createTypewriter(
     if (!buffer) return
     // Base pace ~2 chars per tick; a growing backlog releases faster to
     // catch up, so a long reply never lags far behind the model.
-    const n = Math.max(2, Math.ceil(buffer.length / 10))
-    append(buffer.slice(0, n))
-    buffer = buffer.slice(n)
+    // Pace in Unicode code points, the same unit as Stop's visible frontier;
+    // never expose a lone surrogate half while an emoji is being typed.
+    const points = Array.from(buffer)
+    const n = Math.max(2, Math.ceil(points.length / 10))
+    append(points.slice(0, n).join(""))
+    buffer = points.slice(n).join("")
     settleDrain()
   }
 
@@ -82,6 +85,20 @@ export function createTypewriter(
       return new Promise((resolve) => {
         drainWaiters.push(resolve)
       })
+    },
+    /** Discard everything unreleased and stop the clock (explicit Stop). */
+    discard() {
+      if (idleTimer) {
+        clearTimeout(idleTimer)
+        idleTimer = null
+      }
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+      buffer = ""
+      setActive(false)
+      settleDrain()
     },
     /** Release everything remaining and stop the clock. */
     flush() {

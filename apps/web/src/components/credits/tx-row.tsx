@@ -85,18 +85,20 @@ export function TransactionRow({
     .join(" · ")
 
   return (
-    <div className={cn("flex items-center gap-2 py-1.5", className)}>
+    <div className={cn("flex items-start gap-4 py-1.5", className)}>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs text-foreground">{title}</p>
+        <p className="truncate text-sm leading-5 text-foreground">{title}</p>
         {/* Row meta is plain muted — text-meta (uppercase eyebrow) is the
             section header's register, never a per-row voice. */}
         {meta && (
-          <p className="truncate text-[11px] text-muted-foreground">{meta}</p>
+          <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
+            {meta}
+          </p>
         )}
       </div>
       <span
         className={cn(
-          "shrink-0 text-xs tabular-nums",
+          "shrink-0 text-sm leading-5 font-medium tabular-nums",
           item.amount >= 0 ? "text-foreground" : "text-muted-foreground",
         )}
       >

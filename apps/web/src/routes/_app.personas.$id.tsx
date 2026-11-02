@@ -338,7 +338,7 @@ function PersonaDetailPage() {
           jumps sideways on tab switch. */}
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-4">
-          <Button variant="ghost" size="icon" nativeButton={false} render={<Link to="/personas" />}>
+          <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link to="/personas" />}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </div>
@@ -414,6 +414,7 @@ function PersonaDetailPage() {
                   <CardDescription>{t("personaDetail.personaDesc")}</CardDescription>
                 </div>
                 <Button
+                  size="sm"
                   onClick={handleGeneratePersona}
                   disabled={generating || materials.length === 0}
                 >
@@ -537,7 +538,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={saving}>
+                    <Button type="submit" size="sm" disabled={saving}>
                       <Save className="mr-2 h-4 w-4" />
                       {saving ? t("common.saving") : t("personaDetail.saveChanges")}
                     </Button>
@@ -561,7 +562,7 @@ function PersonaDetailPage() {
                   <CardTitle>{t("personaDetail.pastMaterials")}</CardTitle>
                   <CardDescription>{t("personaDetail.pastMaterialsDesc")}</CardDescription>
                 </div>
-                <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
+                <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
                   <Upload className="mr-2 h-4 w-4" />
                   {uploading ? t("personaDetail.uploading") : t("common.upload")}
                 </Button>
@@ -607,7 +608,7 @@ function PersonaDetailPage() {
                         <div className="flex shrink-0 items-center gap-1">
                           <Button
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             aria-label={t("personaDetail.rename")}
                             onClick={() => openRename(asset)}
                           >
@@ -615,7 +616,7 @@ function PersonaDetailPage() {
                           </Button>
                           <Button
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             aria-label={t("common.delete")}
                             onClick={() => setDeleteTarget(asset)}
                           >
@@ -664,10 +665,10 @@ function PersonaDetailPage() {
             autoFocus
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+            <Button variant="outline" size="sm" onClick={() => setRenameTarget(null)}>
               {t("common.cancel")}
             </Button>
-            <Button disabled={!renameValue.trim() || renameBusy} onClick={handleRename}>
+            <Button size="sm" disabled={!renameValue.trim() || renameBusy} onClick={handleRename}>
               {renameBusy ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
@@ -689,10 +690,10 @@ function PersonaDetailPage() {
             {deleteTarget && t("personaDetail.deleteDesc", { title: assetTitle(deleteTarget) })}
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
               {t("common.cancel")}
             </Button>
-            <Button variant="destructive" disabled={deleteBusy} onClick={handleDeleteMaterial}>
+            <Button variant="destructive" size="sm" disabled={deleteBusy} onClick={handleDeleteMaterial}>
               {deleteBusy ? t("common.loading") : t("common.delete")}
             </Button>
           </DialogFooter>

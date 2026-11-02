@@ -21,6 +21,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。它服务两类�
 | 候选 | 为什么不是 | 正确通道 |
 |---|---|---|
 | 配方 recipe | 点卡已经选择了一个 prompt 捷径，再插 chip 不会增加执行语义 | **配方 = 提示词**：预填模板原文即全部发射载荷；无 `recipe_id` transport、服务端播种、overlay 发射或第二意图面 |
+| 视频 Skill | 它是首版创作方法与版本的单选绑定，不是素材引用或修订指认；专用 `/` 选择与单 Skill 约束比 @ 多实体语义更准确 | 专用 Skill picker → 可见 Skill chip + 统一 Skill 引用 → 唯一 `POST /chat`；合同归 VIDEO_PROJECT §7.4，不进入 `MENTION_REGISTRY` |
 | 产出类型（clips / post / article…） | 大白话推断已够准；且 `@output` 已被指认族占用（引用已有产物），同词两义禁 | intent_router 链推断 |
 | 参数（语言 / 数量 / 画幅…） | mention 不是表单控件，预设空间无界 | 预填文案改字（发送前）/ chat 修订（发送后，恒胜） |
 | 人设 persona | 身份是挂载，不是点名 | composer Persona 块 / `persona_id` 载荷 |
@@ -34,7 +35,7 @@ mention = 用户与 AI 交流时对**实体**的点名机制。它服务两类�
 
 - **双端职责**：前端 `MENTION_REGISTRY` 注册 picker/chip 的候选源、icon 与 i18n；服务端 `chat/context.py:build_context` 统一注入上下文，修订写门对 output pin 做确定性 target 解算并覆盖模型转述。新增类型必须同时登记前端候选/渲染与服务端机械效果，不能只加 chip 或一次性 prompt 分支。
 - **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（Home composer / ChatDock 两形态）；跨形态不得 remount 丢草稿。候选源差异走 `MentionContext`，禁每面各起 textarea / 自养 picker。产物指认 = @output；旧 `focus_output` 只读历史，不恢复写入。
-- **chip 三律**：可见（内联 chip 带 ×）/ 发送即消费 / × 即纯化（无状态跨发送残留）。
+- **chip 三律**：可见（内联 chip，无 ×）/ 发送即消费 / 文本删除即纯化（Backspace / Delete / 选区删除，无状态跨发送残留）。
 - **服务端解析唯一发生地**：mention 的机械效果（上下文富化、指认注入）只在服务端发生；前端永不构建 prior。
 - **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。`@output` 候选行以右侧 `vN` 标示真实内容版本，插入 chip 使用「名称 vN」；当前项目与跨项目候选一致。名称只用于显示与筛选，修订目标始终由 pinned `output_id` 解算。
 - **段落级指认（ADR-069——`quote` 是 output mention 的字段，不是新类型）**：文本产物卡（post/article）上划选段落 → 「引用这段」pill → dock 落**带引文的 @output chip**（序列化 = `@label "quote"`，chip 内联渲染截断引文；出生截断 200 字，上下文注入截断 500 字）。语义 = **引文即修订范围**（prompt 规则钉死：agent 修订那一段，永不盲目重写全文）。§3 闸门关系：quote 不是新 mention 类型——它是 output 指认的粒度细化，类型表不动。transcript 文档卡不开此口（其选区 = 未来剪辑 primitive）。
@@ -54,4 +55,5 @@ mention = 用户与 AI 交流时对**实体**的点名机制。它服务两类�
 |---|---|
 | `CHAT_ARCHITECTURE.md` | mention 的运行时语义（context 注入、edit ops 指认通道）——"怎么跑"归它，"该不该是 mention"归本文 |
 | `RECIPES.md` | 配方 = prompt-only 发射与卡片层架构；配方为什么不是 mention |
+| `VIDEO_PROJECT.md` | 视频 Skill 的首版创作绑定、专用 Skill chip 与统一 Chat 载荷；为什么不混入 @ registry |
 | `NAMING.md` | mention type 词汇表座位 |

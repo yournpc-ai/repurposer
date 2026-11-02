@@ -403,10 +403,11 @@ GET /api/v1/runs/{run_id}/events
 
 Server-Sent Events stream of a run's database state, not an event bus. On connect the server sends `run.snapshot` `{run, steps}`; while active it tails `workflow_steps` once per second and pushes changed `step.updated` and `run.updated` frames.
 
-- `run` / `run.updated` contains `id`, `status`, `progress`, `error`, `created_at`; there is no terminal aggregate `summary` field.
+- `run` / `run.updated` contains `id`, `status`, `progress`, `error`, `created_at`, and `upload_retry_count`; there is no terminal aggregate `summary` field. `upload_retry_count` is the persistent same-run recovery identity also carried by delivery refs as `upload-retry-N`.
 - Each step frame is the full current `StepResponse` serialization, including its current credits read projection where applicable.
 - A `: heartbeat` comment is sent every 15s; the stream closes after a terminal state.
 - There is no event store, replay or delivery guarantee. Reconnect uses a fresh snapshot. Use `@microsoft/fetch-event-source` when an `Authorization` header is required; native `EventSource` cannot set it.
+- An explicit same-run `retry_upload` reattachment creates a client attachment epoch and a fresh subscription even though the Run id is unchanged. Callbacks from an older epoch are ignored. `upload_retry_count` and the delivery's `ref` determine which delivery belongs to the current recovery; timestamps and neighbouring messages do not.
 
 `WorkflowRun.context` stores the run's typed `TaskSpec` and authorization/provenance facts. Task entries use `tool`:
 
@@ -629,13 +630,41 @@ Request (common fields):
 
 **Streaming**: the endpoint content-negotiates on `Accept`. Plain callers receive one-shot JSON `ChatResponse` (201). `Accept: text/event-stream` streams the current tool-loop turn:
 
-- `assistant.delta` `{"text":"..."}` carries assistant prose verbatim in order, alongside the current tool/activity frames. It is not an extractor for a verdict-JSON stream.
+- `assistant.delta` `{"text":"...","message_id":"uuid"}` carries assistant prose verbatim in order, alongside the current tool/activity frames. Chat's `message_id` identifies the server-owned trailing `partial` message; the answer stream omits it (client value `null`). It is not an extractor for a verdict-JSON stream.
+- `assistant.interim_prose` carries `{"text","at","message_id","seq","turn_id"}`. The server commits the `intent.type="interim_prose"` row before emitting this frame; its message id is the only valid prose identity for Stop. `assistant.checkpoint` and `intent.type="checkpoint"` are not accepted aliases.
 - The 15-second quiet-frame is `assistant.thinking` with `{}`. It is a keepalive/phase fact, not a reasoning channel; reasoning fragments and provider think text never belong on the user wire.
 - The terminal envelope is authoritative: `turn.completed` carries the full `ChatResponse`; `turn.failed` carries the failure detail and may include a `persisted` flag.
 - Failure does **not** mean “nothing committed.” The user row commits before the agent turn; failure stamps, authored failure rows and activity rows may survive. Clients must not roll back a durable user row or fabricate a successful assistant answer.
 - Do not auto-reconnect the POST: a retry can persist another user message. Reconciliation uses the conversation/read endpoints and the terminal envelope rules in `CHAT_ARCHITECTURE.md`.
 
 `prior_intent` and `persona_id` are plan-path transports, not message fields persisted as chat content. `prior_intent` carries the currently presented task chain after panel edits; the router re-proposes the whole chain with the user's revisions winning. `persona_id` rides the first composer message, is stored when a plan docks, and is pinned into `run.context.persona_id` at `create_run`. `surface`/`canvas_available` describe the client environment; they do not authorize work.
+
+Chat delivery messages own their exact `intent.output_refs`; a missing or empty field on an existing delivery never falls back to the Run or a neighbouring message. A separate, narrow zero-delivery display fallback is allowed only when the Run has no delivery message at all: live Runs first exhaust the bounded review wait (cancelled Runs need none), while historical hydration settles immediately. That RunBlock-only surface reads the current Run steps and actual delivered `clip` / `film` / `video` Outputs; any later delivery disables it and restores message-only ownership without duplicate cards. Chat cards, the shared Chat Output viewer and `@output` candidates admit only delivered video Outputs. These display gates do not change the domain delivery semantics of non-video Outputs.
+
+### Stop an In-flight Turn
+
+```http
+POST /api/v1/chat/turns/{turn_id}/stop
+Content-Type: application/json
+
+{
+  "prose": [{"message_id": "uuid", "visible_chars": 17}],
+  "activity_ids": ["uuid"],
+  "structure_ids": ["uuid"]
+}
+```
+
+`turn_id` is the opening user message id from `turn.started`. All arrays are optional and capped at 128 entries; ids must address server-owned rows in this Turn. `visible_chars` is the prefix actually released by the client typewriter, measured in Unicode code points. Received/buffered text is not visible. The server clamps prefixes to its own stored content; clients never upload replacement prose.
+
+The control endpoint atomically records the Stop decision and visible boundary before the client aborts SSE:
+
+- No visible prose, Activity or structure: delete the whole Turn and return `{"accepted":true,"turn_state":"retracted"}`. The client restores its draft, mentions and existing attachment chips; history cannot resurrect the Turn.
+- Some visible content: retain only the reported prefixes/facts, remove unseen rows, cancel visible active Activity rows and return `{"accepted":true,"turn_state":"cancelled"}`.
+- If settlement already won, return the existing terminal state; the client must not abort or rewrite that Turn.
+
+Independent interim/partial/Activity writes and the final assistant/Run/hold commit fence on the same opening-row lock. Every such lock read refreshes an already-loaded ORM row (`populate_existing`): acquiring the row lock alone does not update the session's identity map after a competing commit. A Start nested in the Chat Turn takes this opening-row fence before locking the pending question, then only flushes its answer/Run/hold; the outer final fence owns the sole commit. Direct answer requests and presentation-ACK auto-Start retain their own commit. A Stop that wins therefore rolls back the uncommitted final transaction and cannot leave a new Run, hold or capture.
+
+If the SSE quiet-closes while Stop is still in flight, the client waits for the Stop control promise before choosing halt versus ordinary drain/failure, so response-before-close and close-before-response apply the frontier exactly once. Stop-pending UI state is owned by that Turn: late cleanup from an old stream/control response cannot clear or wedge its successor. Disconnect cleanup is idempotent and never reverses the control result. OPTIONS answer streams do not use this prompt-Turn Stop endpoint.
 
 **Outcomes**: plan-path turns can dock/refine a plan, ask a question, answer, or enter Start. Projects with runs use the current proposal/edit tools and their scope/authorization adjudication; a proposal does not automatically imply a new run, and a run is never created merely because the client supplied `tasks`. `answered_question` identifies a question settled by deterministic autoResume. Response variants and dock payloads follow `ChatResponse` and the current tool registry, not a retired fixed four-state `task_list/edit_ops/ask/answer` union.
 
@@ -805,15 +834,15 @@ The public card catalogue: each recipe's public projection (base structure / flo
 
 ## 19. Payments (Stripe credit packages)
 
-Hosted Checkout and order/webhook semantics are defined by `docs/PAYMENTS.md`. An empty environment Price hides its package; clients never submit prices, currencies, credits, or arbitrary Stripe Price IDs.
+Hosted Checkout and order/webhook semantics are defined by `docs/PAYMENTS.md`. Amount presets and custom amounts both use server-owned inline `price_data`; presets only prefill the current frontend's amount input. The server's registry and custom policy own amounts, currencies, credits, and limits. Clients never submit currencies, credits, or Stripe Price IDs.
 
-### List Active Credit Packages
+### List Amount Presets
 
 ```http
 GET /api/v1/payments/packages
 ```
 
-Requires the caller's JWT. Returns `{ "items": [{ "key", "credits", "amount_minor", "currency" }] }`. `amount_minor` is the integer minor currency unit (EUR cents for the current starter package).
+Requires the caller's JWT. Returns `{ "items": [{ "key", "credits", "amount_minor", "currency" }], "custom": { "currency", "min_amount_minor", "max_amount_minor", "credits_per_major" } }`. `amount_minor` is the integer minor currency unit (EUR cents for the current catalog). The custom policy is the sole source for the input limits and conversion preview.
 
 ### Create Checkout Session
 
@@ -821,16 +850,18 @@ Requires the caller's JWT. Returns `{ "items": [{ "key", "credits", "amount_mino
 POST /api/v1/payments/checkout-sessions
 Content-Type: application/json
 
-{ "package_key": "starter" }
+{ "amount_minor": 1250 }
+// Compatibility for existing callers:
+// { "package_key": "starter" }
 ```
 
-Validates the Stripe Price as active, one-time, and exactly matched to the server's amount/currency before creating and committing an internal `pending` order, then creates a card-only Stripe `mode=payment` Checkout Session. Returns:
+The current frontend always submits `amount_minor`; the server also accepts exactly one of `package_key` and `amount_minor` for compatibility. Both forms resolve through the server-owned registry or custom policy and create the same inline one-time `price_data` item. A custom amount must be inside the advertised server policy; the server computes its credits. Both paths commit an internal `pending` order before creating a card-only Stripe `mode=payment` Checkout Session. Returns:
 
 ```json
 { "order_id": "uuid", "checkout_url": "https://checkout.stripe.com/..." }
 ```
 
-Unknown/inactive packages return 404 `payments.package_not_found`; missing server configuration returns 503 `payments.not_configured`; Stripe creation failure returns 502 `payments.checkout_failed`. The browser must open `checkout_url`; no card data crosses this API.
+Unknown packages return 404 `payments.package_not_found`; an out-of-range custom amount returns 422 `payments.amount_invalid`; missing server configuration returns 503 `payments.not_configured`; Stripe creation failure returns 502 `payments.checkout_failed`. The browser must open `checkout_url`; no card data crosses this API.
 
 ### Read Payment Order
 

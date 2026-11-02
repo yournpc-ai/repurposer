@@ -169,6 +169,7 @@ async def claim_ready_node(db: AsyncSession) -> UUID | None:
                     FROM workflow_steps pn2
                     JOIN workflow_runs r ON r.id = pn2.run_id
                     WHERE pn2.status = 'pending'
+                      AND r.status <> 'CANCELLED'
                       AND pn2.kind NOT IN ({_runtime_fanout_sql()})
                       AND NOT EXISTS (
                         SELECT 1
@@ -261,6 +262,24 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
                         "WHERE bs.status <> 'done'))"
                     )
                 )
+                # A stale executor may insert an Output AFTER its Run was
+                # cancelled. A run-barriered row with only cancelled owners
+                # must never acquire a fresh render claim; a later live Run
+                # or a run-less re-pend remains eligible.
+                .where(
+                    text(
+                        "(render_barrier IS NULL OR NOT EXISTS ("
+                        "SELECT 1 FROM workflow_steps cancelled_step "
+                        "JOIN workflow_runs cancelled_run ON cancelled_run.id = cancelled_step.run_id "
+                        "WHERE cancelled_step.spec->>'output_id' = CAST(outputs.id AS text) "
+                        "AND cancelled_run.status = 'CANCELLED' "
+                        "AND NOT EXISTS ("
+                        "SELECT 1 FROM workflow_steps other_step "
+                        "JOIN workflow_runs other_run ON other_run.id = other_step.run_id "
+                        "WHERE other_step.spec->>'output_id' = CAST(outputs.id AS text) "
+                        "AND other_run.status <> 'CANCELLED')))"
+                    )
+                )
                 .order_by(Output.created_at)
                 .with_for_update(skip_locked=True)
                 .limit(1)
@@ -304,17 +323,44 @@ async def claim_pending_render(db: AsyncSession) -> UUID | None:
             )
             .returning(Output.id)
         )
-        # Mirror the fan-out node (if any) to running.
-        await db.execute(
-            text(
-                f"UPDATE workflow_steps SET status = 'running', started_at = now(), "
-                "updated_at = now() "
-                f"WHERE kind IN ({_runtime_fanout_sql()}) AND status = 'pending' "
-                "AND spec->>'output_id' = :oid"
-            ),
-            {"oid": str(output_id)},
-        )
+        # Mirror the fan-out node (if any) to running. The render owner lives
+        # on Output, so its claim token and attempt become the mirror's fence too.
+        claimed_steps = (
+            await db.execute(
+                text(
+                    f"UPDATE workflow_steps SET status = 'running', started_at = now(), "
+                    "attempt = attempt + 1, "
+                    "claim_token = (SELECT render_claim_token FROM outputs WHERE id = CAST(:oid AS uuid)), "
+                    "updated_at = now() "
+                    f"WHERE kind IN ({_runtime_fanout_sql()}) AND status = 'pending' "
+                    "AND spec->>'output_id' = :oid "
+                    "RETURNING id, run_id, attempt, claim_token, spec"
+                ),
+                {"oid": str(output_id)},
+            )
+        ).mappings().all()
         await db.commit()
+        # A queue request is not execution. Only now, after the Output claim
+        # committed, may a fenced mirror record its real render/upload start.
+        from app.tools.video.production.stages import (  # deferred: registry door
+            ProductionStages,
+            render_stage_kind,
+        )
+
+        for step in claimed_steps:
+            claim_token = step["claim_token"]
+            if claim_token is None:
+                continue
+            spec = step["spec"] if isinstance(step["spec"], dict) else {}
+            stages = ProductionStages(
+                run_id=step["run_id"],
+                step_id=step["id"],
+                attempt=step["attempt"],
+                claim_token=claim_token,
+            )
+            await stages.start(
+                render_stage_kind(upload_only=spec.get("upload_only") is True)
+            )
         return output_id
 
 

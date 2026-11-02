@@ -127,7 +127,7 @@ class TestDeferredFrames:
 
     @pytest.mark.asyncio
     async def test_mid_turn_flush_replays_each_frame_exactly_once(self) -> None:
-        """④'s process-internal half: the checkpoint channel's flush-first
+        """④'s process-internal half: the interim_prose channel's flush-first
         replays the queue once and STAYS armed — later frames queue fresh,
         never a double replay of the pre-flush ones."""
         calls: list[tuple] = []
@@ -139,7 +139,7 @@ class TestDeferredFrames:
         on_delta = deferred.wrap("delta")
         assert on_delta is not None
         await on_delta("先读一段")
-        await deferred.flush()  # the checkpoint's flush-first
+        await deferred.flush()  # the interim_prose's flush-first
         assert calls == [("先读一段",)]
         assert deferred.armed
         await on_delta("收口")

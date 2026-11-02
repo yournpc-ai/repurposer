@@ -10,12 +10,12 @@
  * range really says) + the speaker when the ASR named one. Default three recommendations + expand-all (推荐样本，不是只能
  * 选 3 个). Selection state = the row highlight only (bg-accent token step)
  * — the rows are display, never buttons: selection rides chat language
- * (「第二个」「都做」), the surface just reflects it. No playback (候选试听
- * 无此能力, v4.2 事实校正).
+ * (「第二个」「都做」), the surface just reflects it. Transcript candidates
+ * have no playback; complete audio members use the dedicated audio surface.
  *
  * The card is self-contained (its payload carries every rendered fact), so
  * a deleted source asset leaves nothing dangling — an off-shape payload
- * simply never reaches here (historyReplay's read tolerance). Data chain:
+ * simply never reaches here (timeline/history's read tolerance). Data chain:
  * live SSE `assistant.candidates` frames + the candidates_log intent dump
  * (record_candidates_log) — message-borne end to end, no endpoint. */
 
@@ -25,7 +25,16 @@ import { ChevronDown } from "lucide-react"
 
 import { Message, MessageContent } from "@/components/ui/message"
 import { cn } from "@/lib/utils"
-import type { CandidateSurface } from "./historyReplay"
+import {
+  AudioCandidateSurface,
+  isAudioCandidateSurface,
+} from "./video/AudioCandidateSurface"
+import type { CandidateSurface } from "./timeline/types"
+import { shouldAnimateEntrance } from "./timeline/reveal"
+import {
+  useStructureVisibilityRegistration,
+  type RegisterStructureVisibility,
+} from "./structureVisibility"
 
 /** 默认 3 推荐 + 全量可展开 (C8-c: a recommended SAMPLE, never a cap). */
 const VISIBLE_COUNT = 3
@@ -39,8 +48,40 @@ function formatRange(start: number, end: number): string {
   return `${stamp(start)}–${stamp(end)}`
 }
 
-export function CandidateSurfaceCard({ surface }: { surface: CandidateSurface }) {
+export function CandidateSurfaceCard(props: {
+  surface: CandidateSurface
+  hydrated?: boolean
+  serverMessageId?: string
+  turnId?: string
+  onStructureVisible?: RegisterStructureVisibility
+}) {
+  if (isAudioCandidateSurface(props.surface)) {
+    return <AudioCandidateSurface {...props} />
+  }
+  return <TranscriptCandidateSurfaceCard {...props} />
+}
+
+function TranscriptCandidateSurfaceCard({
+  surface,
+  hydrated,
+  serverMessageId,
+  turnId,
+  onStructureVisible,
+}: {
+  surface: CandidateSurface
+  hydrated?: boolean
+  serverMessageId?: string
+  turnId?: string
+  onStructureVisible?: RegisterStructureVisibility
+}) {
   const { t } = useTranslation()
+  useStructureVisibilityRegistration({
+    open: surface.members.length > 0,
+    history: hydrated,
+    serverMessageId,
+    turnId,
+    register: onStructureVisible,
+  })
   const [expanded, setExpanded] = useState(false)
   const members = surface.members
   const overflow = members.length - VISIBLE_COUNT
@@ -52,7 +93,11 @@ export function CandidateSurfaceCard({ surface }: { surface: CandidateSurface })
         {/* Register parity with AnsweredQuestion: an in-flow bg-muted block
             hugging its content (fill-first — no ring, no shadow), the same
             entrance beat. */}
-        <div className="w-fit max-w-[85%] rounded-lg bg-muted py-1.5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
+        <div className={cn(
+          "w-fit max-w-[85%] rounded-lg bg-muted py-1.5",
+          shouldAnimateEntrance(hydrated) &&
+            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+        )}>
           <div
             className={cn(
               "flex flex-col",

@@ -364,7 +364,7 @@ def _compile_clip(
             "url": media["storage_key"],
             "digest": media["digest"],
         }
-        if clip.object.runtime == "drawing-v1":
+        if clip.object.runtime in {"drawing-v1", "component-v1"}:
             out["source"].update({
                 "start_frame": 0,
                 "end_frame": out["end_frame"] - out["start_frame"],

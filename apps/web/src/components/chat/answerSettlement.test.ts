@@ -11,7 +11,7 @@ import {
   planEnvelopePacing,
   spliceAnswerEnvelope,
 } from "./answerSettlement"
-import type { OverlayMessage, QuestionMessage } from "./historyReplay"
+import type { OverlayMessage, QuestionMessage } from "./timeline/types"
 
 function followUp(overrides: Partial<QuestionMessage>): QuestionMessage {
   return {
@@ -187,6 +187,60 @@ describe("spliceAnswerEnvelope", () => {
     })
   })
 
+  it("carries follow-up storyboard blocks onto the same drained preview row", () => {
+    const block = {
+      kind: "video_storyboard" as const,
+      composition_id: "composition-1",
+      composition_version_id: "version-2",
+      version: 2,
+    }
+    const withBirthKey = base.map((row) =>
+      row.id === "prev1" ? { ...row, birthKey: "birth-preview" } : row,
+    )
+    const out = spliceAnswerEnvelope(withBirthKey, {
+      optimisticId: "opt1",
+      previewId: "prev1",
+      answeredRow,
+      followUp: followUp({
+        content: "Here is the current board.",
+        blocks: [block],
+        turn_id: "turn-1",
+      }),
+    })
+    expect(out.map((row) => row.content)).toEqual(base.map((row) => row.id === "prev1" ? "Here is the current board." : row.content))
+    expect(out[2]).toMatchObject({
+      id: "prev1",
+      birthKey: "birth-preview",
+      blocks: [block],
+      turnId: "turn-1",
+      streaming: false,
+    })
+    expect(out[2].proseDrainedAtMs).toEqual(expect.any(Number))
+  })
+
+  it("an authoritative block-less follow-up cannot inherit a previous version's blocks", () => {
+    const versioned = base.map((row) =>
+      row.id === "prev1"
+        ? {
+            ...row,
+            blocks: [{
+              kind: "video_storyboard" as const,
+              composition_id: "composition-1",
+              composition_version_id: "version-1",
+              version: 1,
+            }],
+          }
+        : row,
+    )
+    const out = spliceAnswerEnvelope(versioned, {
+      optimisticId: "opt1",
+      previewId: "prev1",
+      answeredRow,
+      followUp: followUp({ content: "Plain reply", blocks: [] }),
+    })
+    expect(out[2].blocks).toBeUndefined()
+  })
+
   it("flip reconciliation: the envelope's prose REPLACES a divergent typed text", () => {
     const out = spliceAnswerEnvelope(base, {
       optimisticId: "opt1",
@@ -239,6 +293,35 @@ describe("spliceAnswerEnvelope", () => {
     })
     expect(out[2].content).toBe("Here is the")
     expect(out[2].streaming).toBe(false)
+  })
+
+  it("releases pending candidates once behind the settled follow-up", () => {
+    const pending = [flowRow({
+      id: "live-cand-set-1",
+      turnId: "turn-answer",
+      candidates: {
+        candidateSetId: "set-1",
+        topic: "Source picks",
+        assetId: null,
+        members: [],
+        selected: [],
+      },
+    })]
+    const out = spliceAnswerEnvelope(base, {
+      optimisticId: "opt1",
+      previewId: "prev1",
+      answeredRow,
+      followUp: followUp({ content: "Three candidates are ready.", turn_id: "turn-answer" }),
+      pendingCandidates: pending,
+    })
+    expect(out.map((row) => row.id)).toEqual([
+      "u1",
+      "opt1",
+      "prev1",
+      "live-cand-set-1",
+    ])
+    expect(out.filter((row) => row.candidates)).toHaveLength(1)
+    expect(out[3]).toBe(pending[0])
   })
 
   it("missing rows are tolerated (a zero-delta turn may never birth the preview bubble)", () => {

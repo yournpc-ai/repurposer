@@ -2,7 +2,7 @@
 # TanStack Intent - before editing files, run the matching guidance command.
 
 > **Project conventions for this web app are documented in `/CLAUDE.md` at the repo root.**
-> Key rules: shadcn components use `render` (not `asChild`), icons come from `lucide-react`, all user-facing text goes through `useTranslation`, theme code must stay SSR-safe, and product copy follows the Europe knowledge-assetization positioning (LinkedIn/multi-language/GDPR).
+> Key rules: shadcn components use `render` (not `asChild`), icons come from `lucide-react`, all user-facing text goes through `useTranslation`, theme code must stay SSR-safe, and product copy follows the Europe knowledge-assetization positioning (LinkedIn/multi-language/GDPR). SFX candidates and audio Inspector read root CLAUDE + Video Project D5 and share the real `WaveformPlayer`; deterministic identity-seeded bars and the existing `motion/react` package are allowed for visual projection, while transport/progress must remain driven by the real audio element. Do not import a voice recorder, CSS modules, random-remount waveforms, or a second Chat write path.
 
 tanstackIntent:
   - id: "@tanstack/devtools#devtools-app-setup"

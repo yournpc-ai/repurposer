@@ -1,30 +1,22 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { Zap } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { apiFetch } from "@/lib/api"
-import {
-  createCheckoutSession,
-  fetchCreditPackages,
-  fetchPaymentOrder,
-  formatMoney,
-  type CreditPackage,
-} from "@/lib/payments"
-import { useSettingsDialog } from "@/components/settings/SettingsDialog"
+import { fetchPaymentOrder } from "@/lib/payments"
+import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
   formatCredits,
   TransactionRow,
   type WalletTransaction,
 } from "@/components/credits/tx-row"
 
-/** Credits management seat: real balance, hosted-Checkout packages, and the
- * shared semantic ledger. A browser return never announces a top-up; only the
- * server-side paid order can do that (PAYMENTS §7). */
+/** Credits management seat: real balance, a top-up dialog entry, hosted-
+ * Checkout return confirmation, and the semantic ledger. A browser return
+ * never announces a top-up; only a server-side paid order can do that. */
 
 interface WalletState {
   balance: number
@@ -39,14 +31,13 @@ type ReturnNotice = "confirming" | "pending" | null
 
 export function CreditsSection() {
   const { t, i18n } = useTranslation()
-  const { checkoutReturn, clearCheckoutReturn } = useSettingsDialog()
+  const { checkoutReturn, clearCheckoutReturn, openCreditTopup } = useSettingsDialog()
   const [wallet, setWallet] = useState<WalletState | null>(null)
   const [items, setItems] = useState<WalletTransaction[] | null>(null)
-  const [packages, setPackages] = useState<CreditPackage[] | null>(null)
   const [expanded, setExpanded] = useState(false)
-  const [purchasingKey, setPurchasingKey] = useState<string | null>(null)
   const [returnNotice, setReturnNotice] = useState<ReturnNotice>(null)
   const [pollNonce, setPollNonce] = useState(0)
+  const activityRef = useRef<HTMLElement>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -70,17 +61,6 @@ export function CreditsSection() {
 
   useEffect(() => {
     void refresh()
-    let cancelled = false
-    void fetchCreditPackages()
-      .then((value) => {
-        if (!cancelled) setPackages(value)
-      })
-      .catch(() => {
-        if (!cancelled) setPackages([])
-      })
-    return () => {
-      cancelled = true
-    }
   }, [refresh])
 
   useEffect(() => {
@@ -133,135 +113,108 @@ export function CreditsSection() {
     }
   }, [checkoutReturn, clearCheckoutReturn, i18n.language, pollNonce, refresh, t])
 
-  const buy = async (packageKey: string) => {
-    setPurchasingKey(packageKey)
-    try {
-      const result = await createCheckoutSession(packageKey)
-      if (result) {
-        window.location.assign(result.checkout_url)
-        return
-      }
-    } catch {
-      // apiFetch already reported the network/server failure through the toast.
-    }
-    setPurchasingKey(null)
-  }
-
   const visible = expanded ? items : items?.slice(0, COLLAPSED_COUNT)
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("credits.subtitle")}</p>
-
-      <Card className="gap-0 px-4 py-2">
-        <p className="pb-1 pt-2 text-[11px] text-meta">{t("credits.overview")}</p>
-        <div className="flex h-9 items-center gap-2">
-          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-foreground">{t("credits.balance")}</span>
-          <span className="ml-auto text-base font-semibold tabular-nums">
-            {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
-          </span>
+    <div className="space-y-6">
+      {returnNotice && (
+        <div
+          className="flex items-center gap-2 rounded-md bg-muted px-3 py-2"
+          role="status"
+        >
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+            {t(`credits.return.${returnNotice}`)}
+          </p>
+          {returnNotice === "pending" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReturnNotice("confirming")
+                setPollNonce((value) => value + 1)
+              }}
+            >
+              {t("credits.checkAgain")}
+            </Button>
+          )}
         </div>
-        {wallet != null && wallet.held > 0 && (
-          <div className="flex h-9 items-center gap-2">
-            <span className="h-3.5 w-3.5" aria-hidden />
-            <span className="text-xs text-foreground">{t("credits.held")}</span>
-            <span className="ml-auto text-sm tabular-nums text-muted-foreground">
-              {formatCredits(wallet.held, i18n.language)}
-            </span>
+      )}
+
+      <section>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">{t("credits.available")}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
+            </p>
+            {wallet != null && wallet.held > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t("credits.held")} · {formatCredits(wallet.held, i18n.language)}
+              </p>
+            )}
           </div>
-        )}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => activityRef.current?.scrollIntoView({ block: "start" })}
+            >
+              {t("credits.recent")}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => openCreditTopup()}
+            >
+              {t("credits.buyTitle")}
+            </Button>
+          </div>
+        </div>
         {wallet != null && wallet.balance < 0 && (
-          <p className="pb-1.5 text-[11px] leading-snug text-muted-foreground">
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             {t("credits.negativeNote")}
           </p>
         )}
-      </Card>
+      </section>
 
-      <Card className="gap-0 px-4 py-2">
-        <p className="pb-1 pt-2 text-[11px] text-meta">{t("credits.buyTitle")}</p>
-        {packages === null ? (
-          <p className="py-1.5 text-xs text-muted-foreground">…</p>
-        ) : packages.length === 0 ? (
-          <p className="py-1.5 text-xs text-muted-foreground">
-            {t("credits.packagesUnavailable")}
-          </p>
-        ) : (
-          packages.map((item) => (
-            <div key={item.key} className="flex min-h-9 items-center gap-2 py-1">
-              <span className="text-xs text-foreground">
-                {t("credits.packageCredits", {
-                  count: formatCredits(item.credits, i18n.language),
-                })}
-              </span>
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                {formatMoney(item.amount_minor, item.currency, i18n.language)}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                className="h-9"
-                disabled={purchasingKey !== null}
-                onClick={() => void buy(item.key)}
-              >
-                {purchasingKey === item.key
-                  ? t("credits.buying")
-                  : t("credits.buy")}
-              </Button>
-            </div>
-          ))
-        )}
-        {returnNotice && (
-          <div className="flex items-center gap-2 pb-1.5 pt-1">
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              {t(`credits.return.${returnNotice}`)}
+      <section ref={activityRef} className="border-t border-subtle pt-6">
+        <div className="flex items-center gap-3">
+          <h4 className="min-w-0 flex-1 text-sm font-semibold">
+            {t("credits.recent")}
+          </h4>
+          {items != null && items.length > COLLAPSED_COUNT && !expanded && (
+            <button
+              type="button"
+              className="rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setExpanded(true)}
+            >
+              {t("credits.viewAll")}
+            </button>
+          )}
+        </div>
+        <div className="mt-2">
+          {items === null ? (
+            <p className="py-3 text-xs text-muted-foreground">…</p>
+          ) : items.length === 0 ? (
+            <p className="py-3 text-xs text-muted-foreground">
+              {t("credits.tx.empty")}
             </p>
-            {returnNotice === "pending" && (
-              <button
-                type="button"
-                className="ml-auto shrink-0 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => {
-                  setReturnNotice("confirming")
-                  setPollNonce((value) => value + 1)
-                }}
-              >
-                {t("credits.checkAgain")}
-              </button>
-            )}
-          </div>
-        )}
-      </Card>
-
-      <Card className="gap-0 px-4 py-2">
-        <p className="pb-1 pt-2 text-[11px] text-meta">{t("credits.recent")}</p>
-        {items === null ? (
-          <p className="py-1.5 text-xs text-muted-foreground">…</p>
-        ) : items.length === 0 ? (
-          <p className="py-1.5 text-xs text-muted-foreground">{t("credits.tx.empty")}</p>
-        ) : (
-          <>
-            {(visible ?? []).map((item) => (
-              <TransactionRow key={item.id} item={item} />
-            ))}
-            <div className="flex items-center justify-between pt-1.5">
-              <span className="text-[11px] text-meta">
-                {t("credits.showingRecent", {
-                  count: expanded ? items.length : COLLAPSED_COUNT,
-                })}
-              </span>
-              {items.length > COLLAPSED_COUNT && !expanded && (
-                <button
-                  type="button"
-                  className="rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => setExpanded(true)}
-                >
-                  {t("credits.viewAll")}
-                </button>
-              )}
+          ) : (
+            <div>
+              {(visible ?? []).map((item) => (
+                <TransactionRow
+                  key={item.id}
+                  item={item}
+                  className="border-b border-subtle py-3 last:border-0"
+                />
+              ))}
             </div>
-          </>
-        )}
-      </Card>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 /** 锚卡投影 (flora-parity-ui ③ · ADR-118 §2 chat 自足律首个构造物):
- * 终态收据行下的静态产物数组 —— 只读消息载荷既有 output_refs
- * (types.ts WorkflowStep) × dock 既有 outputs 读数（零新 SSE 订阅、零
+ * 终态收据行下的静态产物数组 —— 只读各 delivery 消息自己的
+ * `intent.output_refs` × dock 既有 outputs 读数（零新 SSE 订阅、零
  * 新拉取）。纯函数 = vitest 缝；渲染在 AnchorCards.tsx。 */
 
 import type { Output, WorkflowStep } from "@/lib/types"
@@ -29,12 +29,6 @@ export interface AnchorCardData {
   language: string | null
 }
 
-/** The run's produced output ids — the receipt's own payload (steps carry
- * output_refs when they land a product; order = step order, deduped). */
-export function runOutputRefs(steps: WorkflowStep[]): string[] {
-  return [...new Set(steps.flatMap((s) => s.output_refs ?? []))]
-}
-
 /** Whether this row may appear as a delivered product card.
  *
  * A render-contracted row is not a playable product until BOTH the render
@@ -45,6 +39,10 @@ export function runOutputRefs(steps: WorkflowStep[]): string[] {
 export function isDeliveredOutput(output: Output): boolean {
   if (output.type !== "clip" && output.type !== "film" && output.type !== "video") return true
   return output.render_status === "completed" && Boolean(output.files.video)
+}
+
+export function isChatVideoOutput(output: Output): boolean {
+  return isDeliveredOutput(output) && ["clip", "film", "video"].includes(output.type)
 }
 
 /** One output row → its anchor card facts (读容忍: a row without media
@@ -85,30 +83,38 @@ export function anchorCardOf(output: Output): AnchorCardData {
   }
 }
 
-/** The receipt's anchor array (N 产物 = 数组平铺): refs resolve against
- * the dock's outputs read; unresolved refs (the fetch still in flight)
- * simply drop out — the frame is static, never a skeleton. */
-export function deliveredOutputsForRun(
-  steps: WorkflowStep[],
+/** One delivery message's exact products, in its persisted ref order. */
+export function deliveredOutputsForRefs(
+  refs: readonly string[],
   outputs: Output[],
 ): Output[] {
-  const byId = new Map(outputs.map((o) => [o.id, o]))
-  const stepIds = new Set(steps.map((step) => step.id))
-  const refs = [...new Set([
-    ...runOutputRefs(steps),
-    ...outputs.filter((output) => output.workflow_step_id && stepIds.has(output.workflow_step_id)).map((output) => output.id),
-  ])]
-  return refs
+  const byId = new Map(outputs.map((output) => [output.id, output]))
+  return [...new Set(refs)]
     .map((id) => byId.get(id))
-    .filter((o): o is Output => o != null)
-    .filter(isDeliveredOutput)
+    .filter((output): output is Output => output != null)
+    .filter(isChatVideoOutput)
 }
 
-export function anchorCardsForRun(
-  steps: WorkflowStep[],
-  outputs: Output[],
-): AnchorCardData[] {
-  return deliveredOutputsForRun(steps, outputs).map(anchorCardOf)
+/** Narrow zero-delivery read: the current Run has produced real videos but no
+ * delivery message exists at all. Live terminal rows must first exhaust their
+ * bounded review wait; any delivery (even empty refs) disables this surface. */
+export function zeroDeliveryVideoOutputs({
+  steps,
+  outputs,
+  terminal,
+  reviewSettled,
+  hasDelivery,
+}: {
+  steps: WorkflowStep[]
+  outputs: Output[]
+  terminal: boolean
+  reviewSettled: boolean
+  hasDelivery: boolean
+}): Output[] {
+  if (!terminal || !reviewSettled || hasDelivery) return []
+  const refs = steps.flatMap((step) => step.output_refs ?? [])
+  return deliveredOutputsForRefs(refs, outputs)
+    .filter((output) => isChatVideoOutput(output) && isDeliveredOutput(output))
 }
 
 /** 名缺回退 (零模板回填): 类型词 + 规格（时长 / 画幅 / 字数 —— 世界自

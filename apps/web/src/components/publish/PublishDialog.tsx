@@ -168,8 +168,8 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                 <div
                   key={platform}
                   className={cn(
-                    "rounded-md p-3 ring-1 ring-border",
-                    isSelected && "ring-2 ring-primary"
+                    "rounded-md p-3 border border-subtle",
+                    isSelected && "outline-2 outline-primary"
                   )}
                 >
                   <div className="flex items-center justify-between">

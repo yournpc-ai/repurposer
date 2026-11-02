@@ -274,11 +274,14 @@ trigger_agent = ToolLoopAgent(
     assemble=_assemble_trigger_turn,
     # run_failed / craft_decompiled keep the perception reads plus the ONE
     # terminal. design_storyboard is filtered OUT: a system-initiated beat
-    # never launches the minutes-long design beat. run_completed uses the
-    # separate readless delivery_agent below.
+    # never launches the minutes-long design beat. User-driven SFX search and
+    # import are likewise excluded; run_completed uses the separate readless
+    # delivery_agent below.
     tools=[
         WRAP_UP,
-        *(t for t in CHAT_READ_TOOLS if t.name != "design_storyboard"),
+        *(t for t in CHAT_READ_TOOLS if t.name not in {
+            "design_storyboard", "search_sfx", "import_sfx",
+        }),
     ],
     max_iterations=6,
 )
@@ -351,17 +354,18 @@ def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str |
 
 
 def _trigger_dump(
-    trigger: str, ref: str, suggestions: list[SuggestionItem]
+    trigger: str,
+    ref: str,
+    suggestions: list[SuggestionItem],
+    output_refs: list[str] | None = None,
 ) -> dict[str, Any]:
-    """The assistant row's self-describing dump — the dedup guard reads
-    (trigger, ref) off these keys; ``suggestions`` keeps the option labels
-    for forensics (the dock itself rebuilds from the row's ``question``
-    payload, never from here)."""
+    """Persist the delivery's own products beside its trigger identity."""
     return {
         "type": TRIGGER_DUMP_TYPE,
         "trigger": trigger,
         "ref": ref,
         "suggestions": [item.label for item in suggestions],
+        "output_refs": output_refs or [],
     }
 
 
@@ -388,17 +392,29 @@ async def _already_spoke(
     return existing is not None
 
 
-async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
-    """The closing audit's fact block (iter-3 S5, ADR-088 §8 R21 / N-58):
-    the deterministic 兑现事实清单 for the run_completed turn — the world's
-    self-evidence (the run's Confirmed Scope Snapshot, the landed outputs'
-    baked specs), adjudicated by ``run_review``'s PURE core and bounded by
-    its rendering caps. Zero LLM here; the branch-specific prose law lives
-    in ``delivery_system.j2``. Spend is never a closing-beat fact, so no
-    capture query rides here. Any read failure degrades to the empty block;
-    the delivery turn then gives only the plain receipt fallback and never
-    invents unseen details."""
-    from app.pipeline.run_review import (  # deferred: pipeline weight
+def _new_delivery_output_refs(
+    history: list[Message], run_id: UUID, refs: list[str]
+) -> list[str]:
+    """Remove products already owned by an earlier delivery of this Run."""
+    previous = {
+        str(ref)
+        for message in history
+        if message.workflow_run_id == run_id
+        and (message.intent or {}).get("type") == TRIGGER_DUMP_TYPE
+        and isinstance((message.intent or {}).get("output_refs"), list)
+        for ref in message.intent["output_refs"]
+    }
+    return [ref for ref in refs if ref not in previous]
+
+
+async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list[str], list[str]]:
+    """Build deterministic closing facts and the delivery's exact Output refs.
+
+    The snapshot is taken with the terminal event's own review, before any
+    later recovery can change the Run's aggregate refs. Zero LLM here.
+    """
+    from app.pipeline.outputs import delivered_output_refs  # deferred: pipeline weight
+    from app.pipeline.run_review import (
         compute_run_review,
         landed_fact,
         review_fact_lines,
@@ -440,7 +456,7 @@ async def _run_review_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
         landed=[landed_fact(o, film_confirmed=film_confirmed,
                             video_confirmed=ctx.get("version_ref")) for o in outputs],
     )
-    return review_fact_lines(review)
+    return review_fact_lines(review), delivered_output_refs(steps, outputs)
 
 
 def _with_upload_retry_suggestion(
@@ -496,7 +512,7 @@ def _failure_fact_lines(
 
 async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     """Fetch the failed run's steps and project the FAILURE FACTS block
-    (ADR-135). Zero LLM here, same doctrine as ``_run_review_lines``; the
+    (ADR-135). Zero LLM here, same doctrine as ``_run_review_snapshot``; the
     prose law lives in ``trigger_system.j2``."""
     from app.pipeline.graph import runtime_fanout_kinds  # deferred: pipeline weight
 
@@ -613,15 +629,16 @@ async def run_trigger_turn(
             )
             language = _trigger_language(run, history, conversation)
             upload_retry_available = False
+            delivery_output_refs: list[str] = []
             if trigger == TRIGGER_RUN_COMPLETED:
                 assert run is not None
-                # 交付收敛 (修复批 B): the event line IS the delivery's
-                # whole record (the deterministic fact block rides it —
-                # the world's self-evidence, bounded by review_fact_lines'
-                # own caps) and the readless delivery_agent writes once.
-                event_line = _delivery_event_line(
-                    str(run_id), await _run_review_lines(db, run)
+                # One terminal snapshot feeds both the speech facts and the
+                # message's own product association.
+                review_lines, delivered_refs = await _run_review_snapshot(db, run)
+                delivery_output_refs = _new_delivery_output_refs(
+                    history, run.id, delivered_refs
                 )
+                event_line = _delivery_event_line(str(run_id), review_lines)
             elif trigger == TRIGGER_RUN_FAILED:
                 assert run is not None
                 event_line = (
@@ -755,7 +772,9 @@ async def run_trigger_turn(
                     conversation_id,
                     speech,
                     _suggestions_payload(suggestions, chrome_language),
-                    intent=_trigger_dump(trigger, ref, suggestions),
+                    intent=_trigger_dump(
+                        trigger, ref, suggestions, delivery_output_refs
+                    ),
                 )
                 if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
                     message.workflow_run_id = run_id
@@ -780,7 +799,9 @@ async def run_trigger_turn(
                         if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED)
                         else None
                     ),
-                    intent=_trigger_dump(trigger, ref, suggestions),
+                    intent=_trigger_dump(
+                        trigger, ref, suggestions, delivery_output_refs
+                    ),
                 )
                 await db.commit()
             logger.info(

@@ -29,17 +29,27 @@ SOURCE_TIMEBASE = 90000
 DEFAULT_TIMEBASE = SOURCE_TIMEBASE
 
 
+def quantize_ticks(value: Fraction | int) -> int:
+    """The single integer-tick rounding seat: exact rational round-half-up.
+
+    Temporal transforms keep every coordinate rational until this seat; no
+    per-clip rounded result feeds another clip's transform.
+    """
+    x = Fraction(value)
+    return (2 * x.numerator + x.denominator) // (2 * x.denominator)
+
+
 def seconds_to_ticks(seconds: float | int | str, rate: int = DEFAULT_TIMEBASE) -> int:
     """Seconds → ticks, exact rational round-half-up.
 
     The float goes through ``str()`` first so decimal inputs (0.3) parse as
     exact rationals instead of binary dust. Times are non-negative by domain
-    rule — enforced here. The formula below is floor(x + 1/2) for x ≥ 0.
+    rule — enforced here.
     """
     x = Fraction(str(seconds)) * rate
     if x < 0:
         raise ValueError("seconds must be non-negative")
-    return (2 * x.numerator + x.denominator) // (2 * x.denominator)
+    return quantize_ticks(x)
 
 
 def ticks_to_seconds(ticks: int, rate: int = DEFAULT_TIMEBASE) -> Fraction:
@@ -64,7 +74,7 @@ def frames_to_ticks(frame: int, rate: int, fps_num: int, fps_den: int = 1) -> in
     if frame < 0:
         raise ValueError("frame must be non-negative")
     x = Fraction(frame * fps_den * rate, fps_num)
-    return (2 * x.numerator + x.denominator) // (2 * x.denominator)
+    return quantize_ticks(x)
 
 
 def source_ticks_to_output_ticks(
@@ -79,4 +89,11 @@ def source_ticks_to_output_ticks(
     if source_ticks < 0:
         raise ValueError("source ticks must be non-negative")
     x = Fraction(source_ticks, SOURCE_TIMEBASE) * version_timebase
-    return (2 * x.numerator + x.denominator) // (2 * x.denominator)
+    return quantize_ticks(x)
+
+
+def output_ticks_to_source_ticks(output_ticks: int, version_timebase: int) -> int:
+    """Output-time ticks → source-time ticks for an explicit 1× source crop."""
+    if output_ticks < 0:
+        raise ValueError("output ticks must be non-negative")
+    return quantize_ticks(Fraction(output_ticks, version_timebase) * SOURCE_TIMEBASE)

@@ -11,14 +11,14 @@ tool executions:
   the right tool; rootless after the topic was asked → an accept carrying
   the code-composed draft-from-persona declaration);
 - ``start_run`` still runs through ``answer_question`` → ``create_run`` —
-  the only run birthplace, zero bypass, its transaction untouched;
+  the only run birthplace, zero bypass, with the outer Turn owning its commit;
 - chain adjudication (``validate_task_list`` / ``check_transform_targets``)
   rejections ARE the loop's feedback — the retired funnel repair round's
   seat, now one bounded iteration each.
 
 A rejected call writes nothing. An accepted call's writes are flush-only —
-the caller commits (except ``start_run``, where ``answer_question`` commits,
-unchanged). The envelope absorb (declared-material promotion + brief merge +
+the caller commits, including ``start_run``: its deferred answer/Run/hold writes
+pass the outer opening-row Stop fence before the one final commit. The envelope absorb (declared-material promotion + brief merge +
 the pending-slot handshake) is idempotent per turn: it may run on several
 iterations, it writes at most once, and every gate reads the ONE merged
 brief (出书决策只看 brief).
@@ -77,7 +77,7 @@ from app.chat.service import (
     _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
-    _checkpoint_callback,
+    _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
     _derive_chat_caption_mode,
@@ -90,7 +90,10 @@ from app.chat.service import (
     _estimate_tail,
     _reminder_tail,
     _safe_task_estimate,
+    _sfx_import_failure_text,
     _topic_gate_question,
+    _video_capability_text,
+    _video_review_failure_text,
     answer_question,
     is_pending_plan,
     latest_pending_question,
@@ -111,6 +114,7 @@ from app.models.schemas import (
     DesignVideoArgs,
     FilmStoryboard,
     InferredIntent,
+    ImportSfxArgs,
     MaterialUnderstanding,
     PendingPlan,
     PlanAnswerArgs,
@@ -120,6 +124,8 @@ from app.models.schemas import (
     QuestionProposal,
     ReviewVideoArgs,
     ReviseVideoArgs,
+    SearchSfxArgs,
+    SkillReference,
     StartAnswerRequest,
     StartRunArgs,
     resolve_recommended_id,
@@ -174,16 +180,22 @@ class PlanTurn:
         conversation,
         project: Project,
         request: ChatRequest,
+        skill: SkillReference | None = None,
+        skill_ambiguity: list[str] | None = None,
         on_phase=None,
         on_activity=None,
         on_candidates=None,
         on_row_append=None,
+        turn_id: UUID | None = None,
     ) -> None:
         self.db = db
         self.user_id = user_id
+        self.turn_id = turn_id
         self.conversation_id = UUID(str(conversation.id))
         self.project = project
         self.request = request
+        self.skill = skill
+        self.skill_ambiguity = skill_ambiguity or []
         self.on_phase = on_phase
         # 工作会话里程碑通道 (iter-2 ⑥): the SSE pump's projector feed —
         # called at the exploration door's successes; None = the one-shot
@@ -501,7 +513,7 @@ class PlanTurn:
             # WAITER line only — you haven't seen the content, so no
             # proposals, no direction suggestions, no question ride it; the
             # plan talk comes after the read, never before. (The line lands
-            # as its own checkpoint segment — tool_loop's iteration-0 seat.)
+            # as its own interim_prose segment — tool_loop's iteration-0 seat.)
             material_pending_line = (
                 f"Material status: {processing_count} uploaded file(s) are "
                 "STILL PROCESSING — their content is not readable yet. If "
@@ -523,7 +535,10 @@ class PlanTurn:
 
         recent_lines: list[str] = []
         from app.chat.video_turn_seats import video_context_lines
-        recent_lines.extend(await video_context_lines(db, project, request.mentions))
+        recent_lines.extend(await video_context_lines(
+            db, project, request.mentions,
+            skill=self.skill, skill_ambiguity=self.skill_ambiguity,
+        ))
         for m in recent or []:
             attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
             if not m.content and not attached:
@@ -830,7 +845,7 @@ class PlanTurn:
             await self._resolve_deferred()
         return result
 
-    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation:
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal:
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "present_plan":
@@ -849,6 +864,18 @@ class PlanTurn:
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
             return await review_video_seat(project=self.project, args=params)
+        if name == "search_sfx":
+            assert isinstance(params, SearchSfxArgs)
+            from app.chat.video_turn_seats import search_sfx_seat
+            return await search_sfx_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "import_sfx":
+            assert isinstance(params, ImportSfxArgs)
+            from app.chat.video_turn_seats import import_sfx_seat
+            return await import_sfx_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
@@ -952,13 +979,15 @@ class PlanTurn:
             project=self.project,
             args=params,
             request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
+            skill=self.skill,
+            skill_ambiguity=self.skill_ambiguity,
         )
         if read is None:
             return feedback
         self._video_presentation_pending = read
         return feedback
 
-    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation:
+    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation | TerminalRefusal:
         """revise_video → the targeted-revision beat (ADR-145 phase B):
         the shared seat applies the ops through the write door (own
         session); the observation carries the system-computed change set +
@@ -1037,7 +1066,7 @@ class PlanTurn:
             )
         db, project = self.db, self.project
         stored = self._current_pending()
-        # Non-terminal checkpoint law: with an on_checkpoint channel, the
+        # Non-terminal interim_prose law: with an on_interim_prose channel, the
         # framing prose has already been emitted and is deliberately absent
         # from the execute speech. Empty prose here is legal, never a
         # "missing explanation" rejection.
@@ -2178,6 +2207,8 @@ class PlanTurn:
             user_id=self.user_id,
             conversation_id=self.conversation_id,
             project=project,
+            turn_id=self.turn_id,
+            defer_start_commit=True,
         )
         if auto is not None:
             answered_q, auto_run_id = auto
@@ -2483,6 +2514,8 @@ class PlanTurn:
             user_id=self.user_id,
             conversation_id=self.conversation_id,
             project=project,
+            turn_id=self.turn_id,
+            defer_start_commit=True,
         )
         if auto is not None:
             answered_q, auto_run_id = auto
@@ -2687,6 +2720,8 @@ class PlanTurn:
             user_id=self.user_id,
             conversation_id=self.conversation_id,
             project=project,
+            turn_id=self.turn_id,
+            defer_start_commit=True,
         )
         if auto is not None:
             answered_q, auto_run_id = auto
@@ -2951,11 +2986,11 @@ class PlanTurn:
 
     async def _start_run(self, params: StartRunArgs, prose: str) -> str | None:
         """start → the docked plan is answered kind=start (G-1 path: the
-        run comes from the only birthplace, answer_question — which commits;
-        zero bypass). The turn's speech (the work-start line, ADR-093 §2)
-        lands as a plain assistant row first — created before the run
-        births, so its stamp orders before the task list by construction,
-        and answer_question's commit lands it atomically with the run."""
+        run comes from the only birthplace, answer_question; zero bypass).
+        The turn's speech (the work-start line, ADR-093 §2) lands as a plain
+        assistant row first — created before the run births, so its stamp
+        orders before the task list by construction. The outer Turn's final
+        Stop-fenced commit lands speech, answer and Run atomically."""
         db = self.db
         stored = self._current_pending()
         pending_question = await latest_pending_question(db, self.conversation_id)
@@ -3027,9 +3062,11 @@ class PlanTurn:
                 # ④ snapshot channel (N-57): the confirmation arrived as a
                 # chat reply (the start_run tool), not the dock pill.
                 confirmed_via="chat_reply",
+                turn_id=self.turn_id or pending_question.turn_id,
+                defer_start_commit=True,
             )
-            # answer_question commits — the run, the answer and the cleared
-            # pending brief land in one transaction.
+            # The outer Chat Turn's final Stop fence commits the run, answer
+            # and cleared pending brief in one transaction.
             self.outcome = (
                 start_message or answered,
                 UUID(str(answered.workflow_run_id)),
@@ -3140,15 +3177,24 @@ class PlanTurn:
             )
             return assistant_message, None, self.settled_pending, []
         if result.ended_by is not None:
-            # The deterministic close (begin 锁存): the model spent its one
-            # honest-close chance on a re-entry, so the loop ended on the
-            # TerminalRefusal and the CODE line speaks the true failure
-            # class — a blocked design start, never a capability refusal.
+            # A deterministic refusal ends the loop without another model
+            # roll. Video capability facts have their own honest close; the
+            # design begin latch retains its distinct state-conflict meaning.
+            facts = result.refusal_facts or {}
+            content = (
+                _sfx_import_failure_text(self.text)
+                if facts.get("kind") == "sfx_import_failure"
+                else _video_review_failure_text(self.text, facts)
+                if facts.get("kind") == "video_review_failure"
+                else _video_capability_text(self.text, facts)
+                if facts.get("kind") == "video_capability"
+                else _design_blocked_text(self.text, self._design_begin_refusal)
+            )
             assistant_message = await _create_message(
                 self.db,
                 self.conversation_id,
                 "assistant",
-                _design_blocked_text(self.text, self._design_begin_refusal),
+                content,
             )
             return assistant_message, None, self.settled_pending, []
         if not result.exhausted:
@@ -3255,17 +3301,20 @@ async def run_plan_turn(
     conversation,
     project: Project,
     request: ChatRequest,
+    skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
     recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    turn_id: UUID | None = None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -3273,13 +3322,18 @@ async def run_plan_turn(
     into a 502 with the localized provider line. on_delta streams the prose
     channel (it IS the reply now); on_tool_call/on_tool_ready carry the
     structure frames (the phase beat / the question preview); on_phase labels
-    the real phase switches; on_checkpoint (ADR-085) is the checkpoint
-    channel's SSE seat — the runner wraps it with persistence (the checkpoint
-    row is this turn's own message, intent type 'checkpoint'). None = the
+    the real phase switches; on_interim_prose (ADR-085) is the interim_prose
+    channel's SSE seat — the runner wraps it with persistence (the interim_prose
+    row is this turn's own message, intent type 'interim_prose'). None = the
     one-shot path. ``on_row_append`` is the generic persisted-row channel
     (currently unused by this path — the design beat's program-markdown
     publication retired with the 2026-10-18 裁决)."""
-    turn = PlanTurn(db, user_id, conversation, project, request, on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates, on_row_append=on_row_append)
+    turn = PlanTurn(
+        db, user_id, conversation, project, request,
+        skill=skill, skill_ambiguity=skill_ambiguity,
+        on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
+        on_row_append=on_row_append, turn_id=turn_id,
+    )
     await turn.assemble(recent)
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path
     # every turn arms the terminal buffer — iteration 0 is the only
@@ -3292,7 +3346,7 @@ async def run_plan_turn(
     # channel) and the phase-clear is liveness chrome, never adjudication-
     # dependent speech. The rejection seat is the wrapped on_loop_event:
     # any ToolRejected retracts the stale queue at once (RETRY re-arms by
-    # construction) and marks the turn frame-silent; the checkpoint channel
+    # construction) and marks the turn frame-silent; the interim_prose channel
     # flushes the queue FIRST (prose spoken before a read lands before the
     # read EXECUTES — the emission seat sits pre-execute, ADR-104 发射时点
     # 修订, so a waiting read never holds the waiter line hostage), then
@@ -3311,28 +3365,39 @@ async def run_plan_turn(
                 await base_on_loop_event(event)
 
         on_loop_event = on_loop_event_with_retract
-        base_on_checkpoint = _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+        base_on_interim_prose = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
 
-        async def on_checkpoint_after_flush(text: str) -> None:
+        async def on_interim_prose_after_flush(text: str) -> None:
             if deferred.armed:
                 await deferred.flush()
-            await base_on_checkpoint(text)
+            await base_on_interim_prose(text)
 
-        checkpoint_hook = on_checkpoint_after_flush
+        interim_prose_hook = on_interim_prose_after_flush
     else:
-        checkpoint_hook = _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+        interim_prose_hook = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
     result = await intent_router.call_loop(
         turn.execute,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
-        on_checkpoint=checkpoint_hook,
+        on_interim_prose=interim_prose_hook,
         on_loop_event=on_loop_event,
         should_stop_rejection=film_rejection_stop,
         **turn.infer_kwargs,
     )
-    return await turn.finish(result)
+    outcome = await turn.finish(result)
+    if (
+        outcome[0] is not None
+        and turn_id is not None
+        and outcome[0] is not outcome[2]
+    ):
+        # Every newly-created terminal row shape (plain reply, dock, start
+        # speech) carries the opening-user association. A prose-less Start
+        # returns the OLD answered plan row as its echo; that row keeps its
+        # original turn instead of being re-parented.
+        outcome[0].turn_id = turn_id
+    return outcome
 
 
 __all__ = ["run_plan_turn", "PlanTurn", "PlanTurnOutcome"]

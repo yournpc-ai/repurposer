@@ -118,6 +118,8 @@ async def build_context(
     pending: Message | None,
     canvas_available: bool | None = None,
     confirmation: tuple[str, str] | None = None,
+    skill=None,
+    skill_ambiguity: list[str] | None = None,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
@@ -142,7 +144,9 @@ async def build_context(
         f"Project: {project.title} (id={project.id}, default_language={project.language}; not the delivered content language)",
     ]
     from app.chat.video_turn_seats import video_context_lines
-    lines.extend(await video_context_lines(db, project, mentions))
+    lines.extend(await video_context_lines(
+        db, project, mentions, skill=skill, skill_ambiguity=skill_ambiguity,
+    ))
     if confirmation is not None:
         # The FACT seat — the mode-conditional LAW stays in the static
         # system template (一法一座; the static prompt's prefix cache

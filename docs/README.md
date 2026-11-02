@@ -1,6 +1,6 @@
 # Repurposer Docs 索引
 
-> Status: Active navigation（2026-10-29）。
+> Status: Active navigation（2026-10-30）。
 >
 > 文档治理原则：**单一事实源**——每类信息只有一个家，其他文档只引用、不复述。
 > **两类职责**：现行规范回答“现在必须怎样工作”；PROGRESS 与局部 progress 回答“做到哪、下一步做什么”。不维护历史、归档或逐轮报告，清理规则以 CLAUDE.md 为准。
@@ -15,6 +15,7 @@
 |---|---|
 | 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/video-project-implementation.md` 当前阶段/§9 接手入口 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1，综合验收作品读施工合同 §5.1；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
+| Chat TurnBlock 四阶段施工 | `CHAT_ARCHITECTURE.md` §8.10 → `tasks/chat-turn-block-implementation.md` 当前阶段 → `VIDEO_PROJECT.md` §12 目标目录；视频接缝再读 §10 与 Video Project 施工合同 B7 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
 | 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
 | 模块 / 表 / 队列 / worker | `MODULE_ARCHITECTURE.md` §4 / §5 / §7 的对应小节；迁移再加 `DATABASE_MIGRATIONS.md` |
@@ -61,7 +62,7 @@
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
-| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。当前状态只见 PROGRESS §0 与施工合同；Generator 是 B-IV/V 目标，不因命名已登记而视为已实现 |
+| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；施工文档只载四阶段范围、代码接缝与验收。当前状态只见 PROGRESS §0 与施工合同；drawing-v1/image-v1 已接不代表 D5 component-v1、SFX 与 Gallery 已实现 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | 支付 / 法币订单 / Stripe | `PAYMENTS.md` | 公司账号凭据、本地 CLI 与公网 Docker 拓扑、积分包白名单、payment_orders、Checkout/webhook、入账幂等与上线门只住这里；首批欠账归 `tasks/stripe-credit-topup.md` |
@@ -93,7 +94,7 @@
 | `DECISION_MATRIX.md` | 竞品能力 → 采纳/改造/不做矩阵 | 活跃 | 评估竞品功能时 |
 | `DISTRIBUTION.md` | 分发模块设计：数据模型 / 状态机 / OAuth / 发布对话框 / 通知 / 回流边界 | 直发链路代码已落；平台凭据、审批与真实联调随 R1.1 挂起 | 动 Distribution 前 |
 | `NAMING.md` | 命名宪法：八条 + 词汇表 + 判例库 | 活跃 | 任何新名字（表/字段/包/skill/API）前；命名争议仲裁 |
-| `CHAT_ARCHITECTURE.md` | Agent Interface 层 + **chat/画布行为唯一事实源**：tool registry / plan path / QuestionDock / SSE / 打字机律 / Candidate Surface / 两形态机 / mentions / 词表 v3 / 相机律 / 修订边界 | 活跃；live 验收欠账归当前任务合同 | 动 chat / dock / 画布行为 / registry / 进度推送前 |
+| `CHAT_ARCHITECTURE.md` | Agent Interface 层 + **chat/画布行为唯一事实源**：tool registry / plan path / QuestionDock / SSE / 打字机律 / Candidate Surface / TurnBlock 与渐进揭示 / 两形态机 / mentions / 词表 v3 / 相机律 / 修订边界 | 活跃；live 验收欠账归当前任务合同 | 动 chat / dock / 画布行为 / registry / 进度推送前 |
 | `JOURNEYS.md` | **用户旅程母文档**：四条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（ADR-077/078 与 ADR-088/089 的立项依据） | 活跃 | 新功能或体验改动前读对应旅程与缺口；技术评审倒查「让哪条旅程哪一拍变好」，不要求通读全部旅程 |
 | `MENTIONS.md` | @ 提及体系方针：请求 / 指认两族（当前 asset / output / workflow_step）+ 排除清单（配方、产出类型、自由参数、人设不新建成 mention）+ 判定三问 + @tool 立案方针 | 活跃 | 任何新 mention 类型立案前 |
 | `RECIPES.md` | 配方与 Home 货架母文档：prompt-only 发射、服务端 registry 与前端货架职责、caption catalog、dub/reframe/quote 链、样片证据分级与 R5 延期边界 | 当前规范；Home 真片/占位片与验收状态归 `tasks/home-creation-entry-refresh.md` | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前 |

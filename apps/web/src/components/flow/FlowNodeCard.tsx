@@ -199,7 +199,7 @@ function MediaToolbar({
   onAction: (action: string) => void
 }) {
   return (
-    <div className="dock-surface flex items-center gap-1 rounded-lg p-1 ring-1 ring-foreground/10">
+    <div className="dock-surface flex items-center gap-1 rounded-lg p-1 border border-subtle">
       {badge && (
         <span className="mx-1 rounded bg-muted px-1.5 py-0.5 text-[10px] whitespace-nowrap text-muted-foreground">
           {badge}
@@ -281,7 +281,7 @@ function VersionPager({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="dock-surface flex items-center gap-0.5 rounded-lg p-1 ring-1 ring-foreground/10">
+    <div className="dock-surface flex items-center gap-0.5 rounded-lg p-1 border border-subtle">
       <button
         type="button"
         aria-label={t("results.canvas.versionPrev")}
@@ -669,7 +669,7 @@ function TranscriptSection({
                 e.stopPropagation()
                 void saveDraft(null)
               }}
-              className="nodrag absolute right-1 bottom-1 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
+              className="nodrag absolute right-1 bottom-1 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-accent/70"
             >
               {t("results.canvas.resetToSource")}
             </button>
@@ -918,7 +918,7 @@ function NleAxis({
                       setChip(null)
                       onLineageHover?.(null)
                     }}
-                    className="nodrag absolute top-0 bottom-0 flex items-center overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground ring-1 ring-inset ring-track-video-foreground/25 transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
+                    className="nodrag absolute top-0 bottom-0 flex items-center overflow-hidden rounded-md bg-track-video px-2 text-left text-track-video-foreground transition-[filter] hover:brightness-[0.96] dark:hover:brightness-110"
                     style={{
                       left: pct(block.out_start),
                       // 分段分界: a block that doesn't touch the axis's end
@@ -963,7 +963,7 @@ function NleAxis({
                     )
                   }
                   onMouseLeave={() => setChip(null)}
-                  className="nodrag absolute top-0 bottom-0 rounded-md bg-muted ring-1 ring-inset ring-foreground/10 transition-colors hover:bg-accent"
+                  className="nodrag absolute top-0 bottom-0 rounded-md bg-muted transition-colors hover:bg-accent"
                   style={{
                     left: pct(block.out_start),
                     // 分段分界 — same law as the video lane: a block that
@@ -1107,7 +1107,7 @@ function ThumbCard({
           (flex-1 against the section's fixed anatomy — the frame math pins
           it, never a mid-life squeeze); object-cover = zero letterbox, the
           display-class bucket bounds the crop. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card border border-subtle">
         {medialess ? null : (
           <div
             className={cn(
@@ -1252,7 +1252,7 @@ function ThumbCard({
 
 function StepCard({ node }: { node: FlowNode }) {
   return (
-    <div className="flex h-full w-full items-center gap-2 rounded-md bg-card px-2.5 py-1.5 ring-foreground/10 ring-1">
+    <div className="flex h-full w-full items-center gap-2 rounded-md bg-card px-2.5 py-1.5 border-subtle border">
       <span className="h-5 w-5 shrink-0 rounded-full bg-muted" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs leading-snug">{node.label}</p>
@@ -1329,7 +1329,7 @@ function DocumentCard({
   return (
     <div className="flex h-full w-full flex-col">
       <NodeCaption label={node.label} Icon={FileText} />
-      <div className="dock-surface relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl ring-foreground/10 ring-1">
+      <div className="dock-surface relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-subtle border">
         {/* 公用 loading (2026-09-28 用户拍板): running = 左到右擦除 (封顶
             96%) + 入边 packet——卡面零自养 loading 表达。 */}
         {running && <span aria-hidden className="node-fill-wipe" />}
@@ -1514,7 +1514,7 @@ function MediaProductRegion({
           Always on under (hover: none) — touch has no reveal gesture. */}
       {variants.length > 1 && (
         <div className="pointer-events-none absolute -top-1 left-1/2 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/media:opacity-100 [@media(hover:none)]:opacity-100">
-          <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-xl p-1.5 ring-1 ring-foreground/10">
+          <div className="dock-surface pointer-events-auto flex items-center gap-1 rounded-xl p-1.5 border border-subtle">
             {variants.map((variant, vi) => (
               <button
                 key={vi}
@@ -1528,7 +1528,7 @@ function MediaProductRegion({
                 className={cn(
                   "flex h-8 w-8 items-center justify-center overflow-hidden rounded-md text-[11px] font-medium transition-opacity",
                   vi === (variantIndex < variants.length ? variantIndex : 0)
-                    ? "ring-2 ring-foreground/60"
+                    ? "outline-2 outline-foreground/60"
                     : "opacity-60 hover:opacity-100",
                   !variant.thumbUrl && "bg-muted text-muted-foreground",
                 )}
@@ -1902,7 +1902,7 @@ function TextProductRegion({
             setQuoteSelection(null)
             window.getSelection()?.removeAllRanges()
           }}
-          className="nodrag absolute right-2 bottom-2 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent/70"
+          className="nodrag absolute right-2 bottom-2 rounded-md bg-accent px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-accent/70"
         >
           {t("results.canvas.quotePassage")}
         </button>
@@ -2406,8 +2406,8 @@ function GraphCard({
       <NodeCaption label={node.label} Icon={TypeIcon} />
       <div
         className={cn(
-          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card ring-1",
-          selected ? "ring-2 ring-foreground/40" : "ring-foreground/10",
+          "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card",
+          selected ? "outline-2 outline-foreground/40" : "border border-subtle",
         )}
       >
         {/* The FLORA wipe (CSS 封顶 96% 律继承 — never a fraction claim):
@@ -2734,7 +2734,7 @@ export function FlowNodeCard({ data }: NodeProps<FlowCardNode>) {
         node.status === "skipped" && "opacity-40",
         (node.status === "running" || nodeRenderActive(node)) &&
           "flow-node-running",
-        selected && !isGraphCard && "rounded-md ring-2 ring-foreground/40",
+        selected && !isGraphCard && "rounded-md outline-2 outline-foreground/40",
       )}
     >
       {/* 锚点测量律 (批C1 提前, 2026-09-13 演示走查): the root stays STATIC —

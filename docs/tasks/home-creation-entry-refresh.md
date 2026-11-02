@@ -22,8 +22,8 @@
 
 ## 3. 交互合同
 
-- 卡片点击唯一归宿是 composer 预填 `promptTemplate`/demo prompt；不自动发送、不建项目/run、不打开模板编辑器。
-- 草稿为空或仍等于上次预填原文时，点另一卡可替换预填；已有用户文字或 @-mention 时保留原文并换行追加，不静默清空。
+- 非 Skill Recipe/demo 卡片点击唯一归宿是 composer 预填 `promptTemplate`/demo prompt；视频 Skill 卡点击形成与 `/skill` 相同的可见 Skill chip + 可编辑 prompt，并复用同一 `POST /chat` 载荷。两类卡片都不自动发送、不建项目/run、不打开模板编辑器；未注册或未声明能力的 Skill 不伪装成可点击卡。
+- 草稿为空或仍等于上次预填原文时，点另一张同类卡可替换预填；已有用户文字或 @-mention 时保留原文并换行追加，不静默清空。一次创作至多一个 Skill chip，另选 Skill 只替换绑定，Backspace / Delete / 选区删除移除绑定，二者都不清空用户文字。
 - prompt 是完整用户口吻需求，不暴露工具/spec/版本，不锁死用户未要求的画幅、幕数、时长或配音；卡片明确写出的制作要求仍可编辑，后续 chat 修改优先，缺素材由正常 Chat 补问。
 - `product-demo-zymix` 与 `product-demo-highlights` 的 prompt 使用网站入口，按 Film 的网站 capture 合同执行与验收；AgentVeil 第二卡预填明确“说明字幕 + 无旁白 + 适度运镜和文字动画”，对应该样片的制作请求。其余 Product Promo 的 prompt 只承诺使用用户上传的视频/录屏，不承诺自动打开网站录屏。
 - Demo 视频静音循环；IntersectionObserver 离屏暂停、回视口恢复，声音遵循全局单例互斥。每个货架独立滚动，画幅按真实文件，不拉伸。

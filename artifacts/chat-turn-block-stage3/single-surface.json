@@ -1,0 +1,441 @@
+{
+  "page": "http://localhost:3000/projects/2f875e94-8163-4bb6-9be3-d10203ab0319",
+  "initial": {
+    "title": "Repurposer",
+    "headers": [
+      {
+        "index": 0,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -11502.7
+      },
+      {
+        "index": 1,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -11027
+      },
+      {
+        "index": 2,
+        "text": "工作了 4s",
+        "expanded": "false",
+        "top": -10182
+      },
+      {
+        "index": 3,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -9414
+      },
+      {
+        "index": 4,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -8646
+      },
+      {
+        "index": 5,
+        "text": "工作了 15s",
+        "expanded": "false",
+        "top": -8000
+      },
+      {
+        "index": 6,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -7686
+      },
+      {
+        "index": 7,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -7302
+      },
+      {
+        "index": 8,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -6534
+      },
+      {
+        "index": 9,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -6150
+      },
+      {
+        "index": 10,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -5382
+      },
+      {
+        "index": 11,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4998
+      },
+      {
+        "index": 12,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4230
+      },
+      {
+        "index": 13,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3462
+      },
+      {
+        "index": 14,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3078
+      },
+      {
+        "index": 15,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2310
+      },
+      {
+        "index": 16,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1926
+      },
+      {
+        "index": 17,
+        "text": "2 项操作",
+        "expanded": "false",
+        "top": -687
+      },
+      {
+        "index": 18,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": 168.5
+      },
+      {
+        "index": 19,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": 239.3
+      },
+      {
+        "index": 20,
+        "text": "工作了 28s",
+        "expanded": "false",
+        "top": 607.3
+      }
+    ],
+    "outputs": [
+      {
+        "id": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+        "visible": true
+      },
+      {
+        "id": "b5deb79f-7c7d-4909-b82a-53d94de27c42",
+        "visible": true
+      },
+      {
+        "id": "b6a6e87c-4631-4721-8516-34df206a4b20",
+        "visible": true
+      },
+      {
+        "id": "6462e261-661a-4344-a9ba-24ee4cbd9431",
+        "visible": true
+      }
+    ],
+    "qa": [
+      "问\n\n接下来做什么？\n\n答\n\n请按当前已确认的 v13 原样重试上一次制作，不修改内容，不重新设计，不生成旁白。",
+      "问\n\n标题语言用中文还是英文？\n\n答\n\n英文"
+    ],
+    "bodyHasUploaded": false,
+    "bodyHasLegacyUploaded": false,
+    "itemCount": 90,
+    "scroll": {
+      "top": 14284,
+      "height": 684,
+      "scrollHeight": 14968,
+      "remaining": 0
+    },
+    "trailingBlank": 32,
+    "animations": [
+      {
+        "name": "scroll-fade-reveal-t",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "spin",
+        "className": "[object SVGAnimatedString]"
+      }
+    ],
+    "activeAnimations": [
+      {
+        "name": "scroll-fade-reveal-t",
+        "playState": "finished"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "playState": "finished"
+      }
+    ]
+  },
+  "toggles": [
+    {
+      "before": {
+        "top": 607.25,
+        "scrollTop": 14284,
+        "expanded": "false",
+        "text": "工作了 28s"
+      },
+      "after": {
+        "top": 607.25,
+        "scrollTop": 14284,
+        "expanded": "true"
+      },
+      "deltaTop": 0
+    },
+    {
+      "before": {
+        "top": 571.25,
+        "scrollTop": 14320,
+        "expanded": "true",
+        "text": "工作了 28s"
+      },
+      "after": {
+        "top": 607.25,
+        "scrollTop": 14284,
+        "expanded": "false"
+      },
+      "deltaTop": 36
+    },
+    {
+      "before": {
+        "top": 776.75,
+        "scrollTop": 2348,
+        "expanded": "false",
+        "text": "工作了 13s"
+      },
+      "after": {
+        "top": 776.75,
+        "scrollTop": 2348,
+        "expanded": "true"
+      },
+      "deltaTop": 0
+    }
+  ],
+  "scrollAway": {
+    "before": 11353,
+    "after": 11353,
+    "remaining": 500
+  },
+  "returnedToBottom": {
+    "top": 11853,
+    "remaining": 0
+  },
+  "expandedHistory": {
+    "bodyHasUploaded": false,
+    "bodyHasLegacyUploaded": false,
+    "headers": [
+      {
+        "index": 0,
+        "text": "工作了 13s",
+        "expanded": "true",
+        "top": -8761.2
+      },
+      {
+        "index": 1,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -7813.5
+      },
+      {
+        "index": 2,
+        "text": "工作了 4s",
+        "expanded": "false",
+        "top": -6750.7
+      },
+      {
+        "index": 3,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -6269.2
+      },
+      {
+        "index": 4,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -5508.5
+      },
+      {
+        "index": 5,
+        "text": "工作了 15s",
+        "expanded": "false",
+        "top": -5074.2
+      },
+      {
+        "index": 6,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4664.2
+      },
+      {
+        "index": 7,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4553.5
+      },
+      {
+        "index": 8,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4105.5
+      },
+      {
+        "index": 9,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3994.7
+      },
+      {
+        "index": 10,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3546.7
+      },
+      {
+        "index": 11,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3436
+      },
+      {
+        "index": 12,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2988
+      },
+      {
+        "index": 13,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2517.2
+      },
+      {
+        "index": 14,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2406.5
+      },
+      {
+        "index": 15,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1981.2
+      },
+      {
+        "index": 16,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1870.5
+      },
+      {
+        "index": 17,
+        "text": "2 项操作",
+        "expanded": "false",
+        "top": -720.2
+      },
+      {
+        "index": 18,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": 135.3
+      },
+      {
+        "index": 19,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": 206
+      },
+      {
+        "index": 20,
+        "text": "工作了 28s",
+        "expanded": "true",
+        "top": 574
+      }
+    ]
+  },
+  "detached": {
+    "opened": true,
+    "outputId": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+    "src": "https://repurposer.tos-ap-southeast-1.volces.com/52037604-9321-4b70-9212-445ccf5ade60/outputs/projects/2f875e94-8163-4bb6-9be3-d10203ab0319/97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1-1793256303.mp4",
+    "readyState": 4,
+    "duration": 8.064,
+    "error": null,
+    "play": {
+      "attempted": true,
+      "currentTime": 3.17645,
+      "paused": false
+    }
+  },
+  "refreshed": {
+    "itemCount": 90,
+    "outputs": [
+      {
+        "id": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+        "visible": true
+      },
+      {
+        "id": "b5deb79f-7c7d-4909-b82a-53d94de27c42",
+        "visible": true
+      },
+      {
+        "id": "b6a6e87c-4631-4721-8516-34df206a4b20",
+        "visible": true
+      },
+      {
+        "id": "6462e261-661a-4344-a9ba-24ee4cbd9431",
+        "visible": true
+      }
+    ],
+    "trailingBlank": 32,
+    "animations": [
+      {
+        "name": "scroll-fade-reveal-b",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "scroll-fade-reveal-t",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "spin",
+        "className": "[object SVGAnimatedString]"
+      }
+    ],
+    "activeAnimations": [
+      {
+        "name": "scroll-fade-reveal-t",
+        "playState": "finished"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "playState": "finished"
+      }
+    ],
+    "scroll": {
+      "top": 14284,
+      "height": 684,
+      "scrollHeight": 14968,
+      "remaining": 0
+    }
+  },
+  "consoleEvents": []
+}

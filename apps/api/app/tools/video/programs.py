@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -321,13 +322,19 @@ async def _cached_manifest(obj: GeneratorObject, *, verify_media: bool) -> dict[
     return manifest
 
 
-async def ensure_generator_clip(clip: Clip) -> dict[str, Any]:
+async def ensure_generator_clip(
+    clip: Clip,
+    *,
+    on_reuse: Callable[[bool], None] | None = None,
+) -> dict[str, Any]:
     """Reuse or produce the exact program; return its fixed execution facts."""
     obj = clip.object
     if not isinstance(obj, GeneratorObject) or obj.runtime != "drawing-v1":
         raise ProgramError(f"clip {clip.clip_id} is not a drawing-v1 GeneratorObject")
     cached = await _cached_manifest(obj, verify_media=True)
     if cached is not None:
+        if on_reuse is not None:
+            on_reuse(True)
         return {**cached, "clip_id": clip.clip_id, "object_id": obj.object_id}
 
     frames = await _execute_program(obj)
@@ -352,6 +359,8 @@ async def ensure_generator_clip(clip: Clip) -> dict[str, Any]:
     key = _manifest_key(obj.program_digest())
     if await storage.exists(key):
         cached = _validate_cached_manifest(json.loads(await storage.read(key)), obj)
+        if on_reuse is not None:
+            on_reuse(False)
         return {**cached, "clip_id": clip.clip_id, "object_id": obj.object_id}
     await storage.save(
         key,
@@ -360,6 +369,8 @@ async def ensure_generator_clip(clip: Clip) -> dict[str, Any]:
         ).encode("utf-8"),
         content_type="application/json",
     )
+    if on_reuse is not None:
+        on_reuse(False)
     return {**manifest, "clip_id": clip.clip_id, "object_id": obj.object_id}
 
 
@@ -369,8 +380,9 @@ async def prepare_generator_media(
     execution_id: str | None = None,
     composition_id: str | None = None,
     regenerate_media: bool = False,
+    on_reuse: Callable[[bool], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Prepare drawing previews freely; model media requires an authorized Run."""
+    """Prepare local program/component previews; model media requires an authorized Run."""
     from app.tools.video.generated_images import ensure_generated_image_clip
 
     prepared: dict[str, dict[str, Any]] = {}
@@ -379,13 +391,22 @@ async def prepare_generator_media(
             if not isinstance(clip.object, GeneratorObject):
                 continue
             if clip.object.runtime == "drawing-v1":
-                prepared[clip.object.object_id] = await ensure_generator_clip(clip)
+                prepared[clip.object.object_id] = await ensure_generator_clip(
+                    clip, on_reuse=on_reuse
+                )
+            elif clip.object.runtime == "component-v1":
+                from app.tools.video.components import ensure_component_clip
+
+                prepared[clip.object.object_id] = await ensure_component_clip(
+                    clip, on_reuse=on_reuse
+                )
             elif execution_id is not None:
                 prepared[clip.object.object_id] = await ensure_generated_image_clip(
                     clip,
                     execution_id=execution_id,
                     composition_id=composition_id,
                     regenerate=regenerate_media,
+                    on_reuse=on_reuse,
                 )
     return prepared
 
@@ -403,13 +424,19 @@ def _generator_clips(read: dict[str, Any]) -> list[dict[str, Any]]:
 async def _preview_manifests(read: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for clip in _generator_clips(read):
-        if clip.get("runtime") != "drawing-v1":
+        runtime = clip.get("runtime")
+        if runtime == "drawing-v1":
+            key = _manifest_key(clip["program_digest"])
+        elif runtime == "component-v1":
+            from app.tools.video.components import component_manifest_key
+
+            key = component_manifest_key(clip["program_digest"])
+        else:
             continue
-        key = _manifest_key(clip["program_digest"])
         if not await storage.exists(key):
             continue
         manifest = json.loads(await storage.read(key))
-        if manifest.get("program_digest") != clip["program_digest"]:
+        if manifest.get("program_digest") != clip["program_digest"] or manifest.get("runtime") != runtime:
             raise ProgramError("preview identity does not match the saved program")
         rows.append((clip, manifest))
     return rows

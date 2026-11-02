@@ -1,0 +1,461 @@
+{
+  "run": {
+    "id": "26865913-8207-4b3d-8a21-719c55ada9e1",
+    "project_id": "2f875e94-8163-4bb6-9be3-d10203ab0319",
+    "status": "FAILED",
+    "progress": 100,
+    "error": "视频已生成，但上传失败，请重试上传",
+    "context": {
+      "target_language": "zh",
+      "instruction": "请把当前保存并已完整展示的 version 21 直接再制作一次，仅复用现有版本，不修改内容、不新建版本、不重新设计、不生成图片或旁白。本轮已获一次真实渲染授权，预算上限 ¥10。",
+      "tone_settings": null,
+      "persona_id": null,
+      "scope": "full",
+      "operation": "regenerate",
+      "target_id": null,
+      "tasks": [
+        {
+          "tool": "produce_video",
+          "params": {
+            "version_ref": {
+              "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+              "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+              "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+            }
+          }
+        }
+      ],
+      "ui_language": "en",
+      "caption_mode": null,
+      "name": "访谈混剪成片",
+      "source_asset_id": null,
+      "exemplar_asset_id": null,
+      "video_authorized_by": "c12d172e-816b-490d-9434-bf47be17eb41",
+      "version_ref": {
+        "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+        "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+        "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+      },
+      "regenerate_media": false,
+      "narration_policy": {
+        "min_speed": 1.0,
+        "max_speed": 1.35,
+        "max_attempts": 2,
+        "fit_margin": 1.08,
+        "max_tts_characters": 0
+      },
+      "video_presentation": {
+        "kind": "video_storyboard",
+        "version": 21,
+        "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+        "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef",
+        "presentation_digest": "b6cb479bb2629b88a0d7d68b2e30437aee95656802477feddc7ff0f93b91b338",
+        "presented_message_id": "755b65b7-7b53-46d0-a2de-b1ffcb4653d8",
+        "presentation_complete": true,
+        "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13"
+      },
+      "confirmed_scope": {
+        "confirmation_id": "0c74475c-b4ae-47f9-baef-2556c2772e35",
+        "confirmed_at": "2026-11-01T08:47:05.965576+00:00",
+        "confirmed_via": "auto",
+        "plans": [],
+        "compiled_scope": [
+          {
+            "tool": "produce_video",
+            "params": {
+              "version_ref": {
+                "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+                "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+                "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+              }
+            }
+          }
+        ],
+        "quote": {
+          "total": [
+            16,
+            16
+          ],
+          "per_task": [
+            [
+              16,
+              16
+            ]
+          ]
+        },
+        "settings": {
+          "confirm_execution": "auto",
+          "confirm_credits": "auto",
+          "billing.always_confirm_above": 5000
+        }
+      },
+      "execution_digest": "08554e3514132201a66d501761f66ccecfc4f39d55599cea97c9111015d4fb2b",
+      "execution_manifest": {
+        "version_ref": {
+          "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+          "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+          "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+        },
+        "narration_policy": {
+          "min_speed": 1.0,
+          "max_speed": 1.35,
+          "max_attempts": 2,
+          "fit_margin": 1.08,
+          "max_tts_characters": 0
+        },
+        "generator_media": {},
+        "speech_media": {},
+        "render_spec": {
+          "family": "video",
+          "format": 1,
+          "fps": {
+            "num": 30,
+            "den": 1
+          },
+          "width": 1920,
+          "height": 1080,
+          "background": "#000000",
+          "sample_rate": 48000,
+          "duration_frames": 240,
+          "fonts": [
+            {
+              "font_id": "noto-sans-sc",
+              "font_set_digest": "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d272b3",
+              "family": "Noto Emoji",
+              "weight": 400,
+              "format": "truetype",
+              "url": "fonts/noto-sans-sc/988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8.ttf",
+              "digest": "988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8",
+              "unicode_range": "U+2190-21FF, U+2300-23FF, U+25A0-25FF, U+2600-27BF, U+2B00-2BFF, U+1F000-1FAFF, U+FE0F"
+            },
+            {
+              "font_id": "noto-sans-sc",
+              "font_set_digest": "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d272b3",
+              "family": "Noto Sans SC",
+              "weight": 700,
+              "format": "opentype",
+              "url": "fonts/noto-sans-sc/c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0.otf",
+              "digest": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0"
+            }
+          ],
+          "tracks": [
+            {
+              "track_id": "trk_background",
+              "kind": "visual",
+              "role": "main",
+              "order": 0,
+              "clips": []
+            },
+            {
+              "track_id": "trk_video",
+              "kind": "visual",
+              "role": "main",
+              "order": 1,
+              "clips": [
+                {
+                  "clip_id": "clp_video",
+                  "start_frame": 0,
+                  "end_frame": 115,
+                  "scene_id": "scn_mixed",
+                  "source": {
+                    "url": "source-snapshots/bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671.mp4",
+                    "digest": "bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671",
+                    "start_frame": 30,
+                    "end_frame": 145
+                  },
+                  "object": {
+                    "kind": "video",
+                    "object_id": "obj_video",
+                    "layout": {
+                      "x": 0.0,
+                      "y": 0.0,
+                      "width": 1920.0,
+                      "height": 1080.0
+                    },
+                    "fit": "cover",
+                    "transform": {
+                      "x": 0.0,
+                      "y": 0.0,
+                      "scale": 1.0,
+                      "rotation": 0.0,
+                      "origin": "center"
+                    },
+                    "opacity": 1.0,
+                    "gain_db": -10.0,
+                    "muted": false
+                  },
+                  "animations": []
+                },
+                {
+                  "clip_id": "clp_8325d597944f55fbaa0a125995baae4d",
+                  "start_frame": 97,
+                  "end_frame": 225,
+                  "scene_id": "scn_mixed",
+                  "source": {
+                    "url": "source-snapshots/bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671.mp4",
+                    "digest": "bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671",
+                    "start_frame": 169,
+                    "end_frame": 297
+                  },
+                  "object": {
+                    "kind": "video",
+                    "object_id": "obj_8325d597944f55fbaa0a125995baae4d",
+                    "layout": {
+                      "x": 0.0,
+                      "y": 0.0,
+                      "width": 1920.0,
+                      "height": 1080.0
+                    },
+                    "fit": "cover",
+                    "transform": {
+                      "x": 0.0,
+                      "y": 0.0,
+                      "scale": 1.0,
+                      "rotation": 0.0,
+                      "origin": "center"
+                    },
+                    "opacity": 1.0,
+                    "gain_db": -10.0,
+                    "muted": false
+                  },
+                  "animations": []
+                }
+              ]
+            },
+            {
+              "track_id": "trk_title",
+              "kind": "visual",
+              "role": "title",
+              "order": 2,
+              "clips": [
+                {
+                  "clip_id": "clp_title",
+                  "start_frame": 0,
+                  "end_frame": 240,
+                  "scene_id": "scn_mixed",
+                  "source": null,
+                  "object": {
+                    "kind": "text",
+                    "object_id": "obj_title",
+                    "text": "Every cut matters X",
+                    "layout": {
+                      "x": 153.6,
+                      "y": 48.6,
+                      "width": 1612.8,
+                      "height": 118.8
+                    },
+                    "style": {
+                      "font_size": 77,
+                      "color": "#F8FAFC",
+                      "background": null,
+                      "weight": 700,
+                      "align": "center",
+                      "line_height": 1.15,
+                      "letter_spacing": 0.0,
+                      "font": {
+                        "font_id": "noto-sans-sc",
+                        "digest": "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d272b3"
+                      }
+                    },
+                    "transform": {
+                      "x": 0.0,
+                      "y": 0.0,
+                      "scale": 1.0,
+                      "rotation": 0.0,
+                      "origin": "center"
+                    },
+                    "opacity": 1.0,
+                    "segmentation_version": "scalar-grapheme-v1",
+                    "layout_version": "explicit-line-inline-v1",
+                    "parts": [
+                      {
+                        "part_id": "line:0:19:3670c44094819bd6",
+                        "kind": "line",
+                        "text": "Every cut matters X",
+                        "text_range": {
+                          "start": 0,
+                          "end": 19
+                        },
+                        "layout_range": {
+                          "start": 0,
+                          "end": 19
+                        }
+                      }
+                    ]
+                  },
+                  "animations": []
+                }
+              ]
+            },
+            {
+              "track_id": "trk_caption",
+              "kind": "visual",
+              "role": "caption",
+              "order": 3,
+              "clips": []
+            },
+            {
+              "track_id": "trk_music",
+              "kind": "audio",
+              "role": "music",
+              "order": 0,
+              "clips": [
+                {
+                  "clip_id": "clp_music_0",
+                  "start_frame": 0,
+                  "end_frame": 240,
+                  "scene_id": null,
+                  "source": {
+                    "url": "source-snapshots/ce9b85cb627118d241ff91bda2fd956ad1a59dc820f5337bcd2e691599614449.mp3",
+                    "digest": "ce9b85cb627118d241ff91bda2fd956ad1a59dc820f5337bcd2e691599614449",
+                    "start_frame": 0,
+                    "end_frame": 240
+                  },
+                  "object": {
+                    "kind": "audio",
+                    "object_id": "obj_music_0",
+                    "gain_db": -20.0
+                  },
+                  "animations": [
+                    {
+                      "animation_id": "anm_music_0_gain",
+                      "target_object_id": "obj_music_0",
+                      "target_text_part_id": null,
+                      "property": "audio.gain",
+                      "keyframes": [
+                        {
+                          "at": 0,
+                          "value": 0.0,
+                          "easing": {
+                            "kind": "linear"
+                          }
+                        },
+                        {
+                          "at": 30,
+                          "value": 1.0,
+                          "easing": {
+                            "kind": "cubic_bezier",
+                            "params": [
+                              0.16,
+                              1.0,
+                              0.3,
+                              1.0
+                            ]
+                          }
+                        },
+                        {
+                          "at": 180,
+                          "value": 1.0,
+                          "easing": {
+                            "kind": "linear"
+                          }
+                        },
+                        {
+                          "at": 240,
+                          "value": 0.0,
+                          "easing": {
+                            "kind": "linear"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "transitions": [
+            {
+              "transition_id": "trn_a4303e462dbe5e7ca23a11ada8def467",
+              "kind": "crossfade",
+              "from_clip_id": "clp_video",
+              "to_clip_id": "clp_8325d597944f55fbaa0a125995baae4d",
+              "start_frame": 97,
+              "end_frame": 115,
+              "cut_frame": 106
+            }
+          ],
+          "provenance": {
+            "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+            "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+            "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+          }
+        }
+      }
+    },
+    "created_at": "2026-11-01 08:47:05.944249+00:00",
+    "updated_at": "2026-11-01 08:47:27.034719+00:00"
+  },
+  "steps": [
+    {
+      "id": "8e2e7d1d-5a0e-4c9f-9154-ad1b0dc039ac",
+      "kind": "produce_video",
+      "status": "done",
+      "seq": 10,
+      "error": null,
+      "attempt": 1,
+      "output_refs": [
+        "2925e6be-a936-4e6e-8867-b7d6cad666e2"
+      ],
+      "started_at": "2026-11-01 08:47:07.920089+00:00",
+      "finished_at": "2026-11-01 08:47:08.711982+00:00"
+    },
+    {
+      "id": "12db207c-30f9-4dfb-b990-fd167eea11d9",
+      "kind": "render",
+      "status": "failed",
+      "seq": 11,
+      "error": "视频已生成，但上传失败，请重试上传",
+      "attempt": 1,
+      "output_refs": [],
+      "started_at": "2026-11-01 08:47:10.000201+00:00",
+      "finished_at": "2026-11-01 08:47:27.014124+00:00"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "2925e6be-a936-4e6e-8867-b7d6cad666e2",
+      "type": "video",
+      "status": "generated",
+      "render_status": "FAILED",
+      "render_error": "视频已生成，但上传失败，请重试上传",
+      "files": {},
+      "created_at": "2026-11-01 08:47:08.686315+00:00"
+    }
+  ],
+  "messages": [
+    {
+      "id": "0c74475c-b4ae-47f9-baef-2556c2772e35",
+      "role": "assistant",
+      "workflow_run_id": "26865913-8207-4b3d-8a21-719c55ada9e1",
+      "turn_state": null,
+      "refs": null,
+      "trigger": null,
+      "content": "Version 21 confirmed as the current saved version: title \"Every cut matters X\", two full-canvas cover segments with the 0.6s crossfade, original audio at −10dB, music beat grid at 66.3 BPM, narration off. Reusing this exact version for the render, with no redesign and no content changes.\n\n（估价 16–16 ",
+      "created_at": "2026-11-01 08:47:05.913310+00:00"
+    }
+  ],
+  "ledger": [
+    {
+      "kind": "hold",
+      "amount": -16,
+      "balance_after": 93196,
+      "ref": {
+        "run_id": "26865913-8207-4b3d-8a21-719c55ada9e1"
+      },
+      "note": "Run estimate hold",
+      "created_at": "2026-11-01 08:47:05.960572+00:00"
+    },
+    {
+      "kind": "release",
+      "amount": 16,
+      "balance_after": 93212,
+      "ref": {
+        "run_id": "26865913-8207-4b3d-8a21-719c55ada9e1"
+      },
+      "note": "Run hold release",
+      "created_at": "2026-11-01 08:47:27.041426+00:00"
+    }
+  ],
+  "balance": 93212
+}

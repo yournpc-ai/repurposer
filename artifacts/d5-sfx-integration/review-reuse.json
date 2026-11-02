@@ -1,0 +1,70 @@
+{
+  "reused_saved_report": true,
+  "output_id": "7828dec4-7a27-4874-8c28-9a1edd8ce228",
+  "reviewed_at": "2026-10-31T19:28:58.919622+00:00",
+  "video_sha256": "6f9bd3a4cd589d8a1a98814367cd8b0a5cb365e1a308cba4c99fe9511b064d7e",
+  "frames": [
+    {
+      "frame": 15,
+      "digest": "887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217",
+      "frame_id": "F01",
+      "scene_id": null,
+      "storage_key": "video-review/887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217.jpg",
+      "time_seconds": 0.5
+    },
+    {
+      "frame": 90,
+      "digest": "b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18",
+      "frame_id": "F02",
+      "scene_id": null,
+      "storage_key": "video-review/b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18.jpg",
+      "time_seconds": 3.0
+    },
+    {
+      "frame": 165,
+      "digest": "c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49",
+      "frame_id": "F03",
+      "scene_id": null,
+      "storage_key": "video-review/c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49.jpg",
+      "time_seconds": 5.5
+    }
+  ],
+  "findings": [],
+  "scope": {
+    "audio_signal_checked": true,
+    "actual_output_decoded": true,
+    "static_frames_checked": true,
+    "audio_and_av_sync_checked": false,
+    "deterministic_output_checks": true,
+    "sampled_frame_signals_checked": true,
+    "motion_and_transitions_checked": false
+  },
+  "receipt": {
+    "kind": "video_review",
+    "frames": [
+      {
+        "frame_id": "F01",
+        "time_seconds": 0.5
+      },
+      {
+        "frame_id": "F02",
+        "time_seconds": 3.0
+      },
+      {
+        "frame_id": "F03",
+        "time_seconds": 5.5
+      }
+    ],
+    "findings": [],
+    "output_issue_codes": [],
+    "scope": {
+      "actual_output_decoded": true,
+      "static_frames_checked": true,
+      "deterministic_output_checks": true,
+      "sampled_frame_signals_checked": true,
+      "audio_signal_checked": true,
+      "motion_and_transitions_checked": false,
+      "audio_and_av_sync_checked": false
+    }
+  }
+}

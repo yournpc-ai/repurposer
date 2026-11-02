@@ -24,12 +24,13 @@ export function LanguageSwitcher() {
         render={
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
+            className="size-7"
             aria-label={t("common.language")}
           />
         }
       >
-        <Globe className="h-5 w-5" />
+        <Globe className="size-3.5" />
       </PopoverTrigger>
       <PopoverContent className="w-40 p-1" align="end">
         <div className="flex flex-col gap-0.5">

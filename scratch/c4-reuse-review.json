@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "output_id": "7468027d-e763-467f-afa4-82b74b0250a0",
+  "composition_id": "8ad8b601-f242-4cb1-8d7b-d363cf94cc94",
+  "composition_version_id": "4056529e-26a4-473d-893a-e15ad93505aa",
+  "content_digest": "73a81ba82a1c9b6ea0df579ea0ae23bfdafa276a60066022f0bfb0546238badb",
+  "execution_digest": null,
+  "video_sha256": "b04df5ef742f67e3e3658c5fc3f6246f184d557fd83b260463a899fe866c162b",
+  "reviewed_at": "2026-10-30T20:39:38.510497+00:00",
+  "requirements": "Reuse the blur-slide method with the new title 'Grow your audience / share boldly' and subtitle 'Turn your hard earned expertise into stories worth following', on a dark background with light text. Keep the word-by-word reveal; all final text must be legible and uncropped. No narration or soundtrack is required.",
+  "at_seconds": [
+    0.4,
+    0.8,
+    1.5,
+    3.5
+  ],
+  "summary": "The sampled frames show the exact requested title and subtitle on a dark background with light text. F01 and F02 demonstrate a progressive blur-and-reveal treatment, while F03 and F04 show all final text sharp, legible, fully framed, and uncropped. No visible issues were found in the provided frames.",
+  "scope": {
+    "actual_output_decoded": true,
+    "static_frames_checked": true,
+    "deterministic_output_checks": true,
+    "sampled_frame_signals_checked": true,
+    "audio_signal_checked": true,
+    "motion_and_transitions_checked": false,
+    "audio_and_av_sync_checked": false
+  },
+  "limitations": [
+    "Findings are based on the listed decoded still frames, not continuous motion playback.",
+    "Flat or repeated sampled frames are candidates for inspection, not proof of a defect.",
+    "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+    "RMS and peak dBFS are not BS.1770 integrated LUFS."
+  ],
+  "media_inspection": {
+    "checker_version": "output-checks-v1",
+    "visual": {
+      "sampled_frames": 4,
+      "flat_frame_candidates": [],
+      "repeated_frame_groups": []
+    },
+    "audio": {
+      "expected": false,
+      "present": true,
+      "decode_ok": true,
+      "scope": "full_stream",
+      "sample_rate": 22050,
+      "samples": 89376,
+      "duration_seconds": 4.053333,
+      "rms_dbfs": -240.0,
+      "peak_dbfs": -240.0,
+      "clipped_sample_ratio": 0.0,
+      "integrated_lufs": null
+    },
+    "issues": []
+  },
+  "frames": [
+    {
+      "frame_id": "F01",
+      "time_seconds": 0.4,
+      "frame": 12,
+      "scene_id": null,
+      "storage_key": "video-review/bd899edca987fabb6d10a3ae5594fc10808502a32524c537719d17ffab5d0f42.jpg",
+      "digest": "bd899edca987fabb6d10a3ae5594fc10808502a32524c537719d17ffab5d0f42"
+    },
+    {
+      "frame_id": "F02",
+      "time_seconds": 0.8,
+      "frame": 24,
+      "scene_id": null,
+      "storage_key": "video-review/075d75c7ad349b1d4dd5069cf9d26013c298d2f74871960bc7edf323e36a7881.jpg",
+      "digest": "075d75c7ad349b1d4dd5069cf9d26013c298d2f74871960bc7edf323e36a7881"
+    },
+    {
+      "frame_id": "F03",
+      "time_seconds": 1.5,
+      "frame": 45,
+      "scene_id": null,
+      "storage_key": "video-review/c91af544e3aac88da49d12fc865ae9ab1a8ecdd376dacd775d38d5cda16b4405.jpg",
+      "digest": "c91af544e3aac88da49d12fc865ae9ab1a8ecdd376dacd775d38d5cda16b4405"
+    },
+    {
+      "frame_id": "F04",
+      "time_seconds": 3.5,
+      "frame": 105,
+      "scene_id": null,
+      "storage_key": "video-review/eb11a9e25617265f2919ca9cffe07b454873c0d7ee4649d30255ca6929081786.jpg",
+      "digest": "eb11a9e25617265f2919ca9cffe07b454873c0d7ee4649d30255ca6929081786"
+    }
+  ],
+  "findings": []
+}

@@ -51,6 +51,9 @@ class _StubResult:
     def scalars(self):
         return self
 
+    def __iter__(self):
+        return iter(self._rows)
+
     def all(self):
         return self._rows
 

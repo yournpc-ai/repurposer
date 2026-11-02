@@ -41,7 +41,7 @@ preview == 成片 是结构性的，不是测试出来的。
 
 **Speech 当前边界（B-VI 首个 MG 消费者）**：SpeechObject 永不进入 video-spec；授权 Run 先固定实际音频、解码时长与 MiniMax 逐句时间，再编译成普通 audio Clip。派生字幕按真实句级 cue 展开成普通 TextClip，手改后的独立字幕保持原 Clip；音频与 cue 均不得越过已审阅固定窗口。renderer 不调用模型、不理解 Speech，也不重新对齐字幕。
 
-**Generator 当前边界（drawing-v1 / image-v1 已接）**：创作层的 drawing-v1 在上游受限 Node 进程中执行 Agent 的 `render(ctx)`，经 Pillow/PyAV 固定 MP4/PNG；image-v1 只在授权 produce Run 内请求 MiniMax image-01，校验后固定为不可变图片。编译按来源与执行 manifest 取已准备媒体，drawing-v1 在 video-spec 中表现为普通 muted video，image-v1 表现为无源窗的普通静态 image；renderer 与 adapter 不执行程序或模型请求，也不知道 prompt/provider/model。来源、预览、缓存、明确重生成和 resume 复用合同归 [VIDEO_PROJECT §4.3.2/§8.1.1](VIDEO_PROJECT.md#432-generatorobject可再次生产的画面drawing-v1--image-v1-已接)。ShapeObject 则以 renderer-neutral 几何进入 spec，由当前 Remotion adapter 用 SVG 绘制。
+**Generator 当前边界（drawing-v1 / image-v1 已接）**：创作层的 drawing-v1 在上游受限 Node 进程中执行 Agent 的 `render(ctx)`，经 Pillow/PyAV 固定 MP4/PNG；image-v1 只在授权 produce Run 内请求 MiniMax image-01，校验后固定为不可变图片。编译按来源与执行 manifest 取已准备媒体，drawing-v1 在 video-spec 中表现为普通 muted video，image-v1 表现为无源窗的普通静态 image；renderer 与 adapter 不执行程序或模型请求，也不知道 prompt/provider/model。D5 的 component-v1 只允许在分离的上游 bake 入口执行受控 TSX，最终仍按普通 muted video 编译，上述 renderer 不变量不变。来源、预览、缓存、明确重生成和 resume 复用合同归 [VIDEO_PROJECT §4.3.2/§8.1.1](VIDEO_PROJECT.md#432-generatorobject可再次生产的画面drawing-v1--image-v1-已接)。ShapeObject 则以 renderer-neutral 几何进入 spec，由当前 Remotion adapter 用 SVG 绘制。
 
 ## 2. 四个包与一个 API 侧
 

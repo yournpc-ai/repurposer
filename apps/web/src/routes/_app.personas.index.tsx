@@ -86,7 +86,7 @@ function PersonasPage() {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger
               render={
-                <Button>
+                <Button size="sm">
                   <Plus className="mr-2 h-4 w-4" />
                   {t("personas.new")}
                 </Button>
@@ -126,7 +126,7 @@ function PersonasPage() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit">{t("common.create")}</Button>
+                  <Button type="submit" size="sm">{t("common.create")}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -139,7 +139,7 @@ function PersonasPage() {
             title={t("personas.emptyTitle")}
             description={t("personas.emptyDesc")}
             action={
-              <Button onClick={() => setOpen(true)}>
+              <Button size="sm" onClick={() => setOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("personas.new")}
               </Button>
@@ -152,7 +152,7 @@ function PersonasPage() {
                 key={persona.id}
                 to="/personas/$id"
                 params={{ id: persona.id }}
-                className="group rounded-xl bg-card p-5 ring-1 ring-foreground/10 transition-colors hover:bg-accent"
+                className="group rounded-xl bg-card p-5 border border-subtle transition-colors hover:bg-accent"
               >
                 <div className="flex items-center gap-3">
                   <Avatar className="h-11 w-11">

@@ -1,0 +1,28 @@
+[
+  {
+    "output_id": "b7b562f2-ae31-40ed-8670-6f83ffdefbbc",
+    "composition_id": "f372ae17-b351-4abf-8a3f-ac46fcdfc27c",
+    "composition_version_id": "8aa96258-a37a-4b2b-9860-b36fd89b051c",
+    "render_status": "completed",
+    "duration_seconds": 4.0,
+    "files": {
+      "video": "52037604-9321-4b70-9212-445ccf5ade60/outputs/projects/2f875e94-8163-4bb6-9be3-d10203ab0319/b7b562f2-ae31-40ed-8670-6f83ffdefbbc-1793392602.mp4"
+    },
+    "quality": null,
+    "charged_credits": 0,
+    "charge_scope": "run-less adapter render; no Run or render mirror"
+  },
+  {
+    "output_id": "7468027d-e763-467f-afa4-82b74b0250a0",
+    "composition_id": "8ad8b601-f242-4cb1-8d7b-d363cf94cc94",
+    "composition_version_id": "4056529e-26a4-473d-893a-e15ad93505aa",
+    "render_status": "completed",
+    "duration_seconds": 4.0,
+    "files": {
+      "video": "52037604-9321-4b70-9212-445ccf5ade60/outputs/projects/2f875e94-8163-4bb6-9be3-d10203ab0319/7468027d-e763-467f-afa4-82b74b0250a0-1793392602.mp4"
+    },
+    "quality": null,
+    "charged_credits": 0,
+    "charge_scope": "run-less adapter render; no Run or render mirror"
+  }
+]

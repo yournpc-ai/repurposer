@@ -41,6 +41,7 @@ from app.models.schemas import (
     ChatMention,
     ChatMessageResponse,
     ChatRequest,
+    ChatTurnStopRequest,
     ConversationResponse,
     MessageListResponse,
 )
@@ -53,6 +54,7 @@ from app.chat.activity import (
 )
 from app.chat.turn_tools import make_tool_echo_delta_filter
 from app.chat.service import (
+    TurnStopped,
     answer_question,
     append_activity_row,
     chat,
@@ -62,8 +64,11 @@ from app.chat.service import (
     record_activity_forensics,
     record_candidates_log,
     settle_activity_row,
+    persist_partial_prose,
+    settle_interrupted_turn,
     stamp_turn_failed,
     persist_turn_failed_line,
+    stop_turn_at_visible_frontier,
 )
 from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
@@ -147,16 +152,18 @@ def _question_preview_frame(payload: dict) -> str:
 _HEARTBEAT_SECONDS = 15
 
 
-def _make_delta_hook(queue: asyncio.Queue):
-    """The prose channel → ``assistant.delta`` frames, verbatim (ADR-077
-    判词②: prose is the content channel now — every fragment is reply text,
-    dialect-stripped at the client seam; the extractor's JSON-sifting and
-    the non-prose keepalive both retired with the action payload). The
-    tool-echo filter gates the raw stream first (2026-09-30 拍板 — bare
-    '[tool]' echo lines never flash live; the persistence strip is the
-    same law's other seat)."""
+def _make_delta_hook(queue: asyncio.Queue, persist=None):
+    """The prose channel → ``assistant.delta`` frames, verbatim.
+
+    Chat's optional persister returns the server-owned trailing partial row id;
+    the answer stream keeps the same text channel without a Stop frontier.
+    """
     async def on_delta(fragment: str) -> None:
-        await queue.put(_sse("assistant.delta", json.dumps({"text": fragment})))
+        message_id = await persist(fragment) if persist is not None else None
+        payload = {"text": fragment}
+        if message_id is not None:
+            payload["message_id"] = message_id
+        await queue.put(_sse("assistant.delta", json.dumps(payload)))
 
     return make_tool_echo_delta_filter(on_delta)
 
@@ -233,6 +240,7 @@ def _row_payload(message: Message) -> dict:
         "conversation_id": str(message.conversation_id),
         "role": message.role,
         "content": message.content or "",
+        "turn_id": str(message.turn_id) if message.turn_id else None,
         "seq": message.seq,
         "intent": message.intent,
         "blocks": message.blocks or [],
@@ -240,11 +248,16 @@ def _row_payload(message: Message) -> dict:
     }
 
 
-def _make_activity_persister(queue: asyncio.Queue, projector: ActivityProjector, conversation_id: UUID):
+def _make_activity_persister(
+    queue: asyncio.Queue,
+    projector: ActivityProjector,
+    conversation_id: UUID,
+    turn_id: UUID | None = None,
+):
     """每帧一行 + SSE 镜像 (ADR-108 §2/§3/§5)。
 
     Append seats: a READ span's row appends at EXECUTE ENTRY (ReadExecuting
-    — after the checkpoint seat, so 服务员话 → 读活动 的数组序天然成立),
+    — after the interim_prose seat, so 服务员话 → 读活动 的数组序天然成立),
     never at name_known; born-terminal frames (repair terminals, explore
     milestones) append at emission. Settle = the SAME row's in-place UPDATE
     (the array position never moves; the open-time ``at`` stays the birth
@@ -261,10 +274,14 @@ def _make_activity_persister(queue: asyncio.Queue, projector: ActivityProjector,
             from app.models.database import AsyncSessionLocal
 
             async with AsyncSessionLocal() as db:
-                row = await append_activity_row(db, conversation_id, frame)
+                row = await append_activity_row(
+                    db, conversation_id, frame, turn_id=turn_id
+                )
                 await db.commit()
             open_rows[frame["activity_id"]] = (row.id, frame)
             await queue.put(_row_frame("append", {"row": _row_payload(row)}))
+        except TurnStopped:
+            raise
         except Exception as e:  # noqa: BLE001 — additive history is best-effort
             logger.warning(
                 "activity_row_append_failed",
@@ -318,6 +335,8 @@ def _make_activity_persister(queue: asyncio.Queue, projector: ActivityProjector,
                 await settle_activity_row(db, row_id, merged)
                 await db.commit()
             await queue.put(_row_frame("update", {"id": str(row_id), "frame": merged}))
+        except TurnStopped:
+            raise
         except Exception as e:  # noqa: BLE001 — additive history is best-effort
             logger.warning(
                 "activity_row_settle_failed",
@@ -337,6 +356,8 @@ def _make_activity_persister(queue: asyncio.Queue, projector: ActivityProjector,
                 async with AsyncSessionLocal() as db:
                     await settle_activity_row(db, row_id, merged)
                     await db.commit()
+            except TurnStopped:
+                continue
             except Exception as e:  # noqa: BLE001 — best-effort on teardown
                 logger.warning("activity_row_cancel_failed", error=str(e))
         open_rows.clear()
@@ -372,7 +393,11 @@ def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector, mirr
     return on_activity
 
 
-def _make_candidates_hook(queue: asyncio.Queue, sink: list[dict]):
+def _make_candidates_hook(
+    queue: asyncio.Queue,
+    sink: list[dict],
+    turn_id: UUID | None = None,
+):
     """The Candidate Surface channel's SSE seat (Workspace 合同 v4.2 C8-c,
     2026-09-26): the exploration doors' payloads (a candidate set's members,
     a selection's repaint) stream as ``assistant.candidates`` frames the
@@ -383,11 +408,37 @@ def _make_candidates_hook(queue: asyncio.Queue, sink: list[dict]):
     no endpoint."""
     async def on_candidates(payload: dict) -> None:
         sink.append(payload)
+        wire = {
+            **payload,
+            "turn_id": str(turn_id) if turn_id is not None else None,
+        }
         await queue.put(
-            _sse("assistant.candidates", json.dumps(payload, ensure_ascii=False))
+            _sse("assistant.candidates", json.dumps(wire, ensure_ascii=False))
         )
 
     return on_candidates
+
+
+def _interim_prose_frame(
+    text: str,
+    at: str | None,
+    message_id: str,
+    seq: int | None,
+    turn_id: UUID | None,
+) -> str:
+    """Interim prose carries its persisted row identity and Turn identity."""
+    return _sse(
+        "assistant.interim_prose",
+        json.dumps(
+            {
+                "text": text,
+                "at": at,
+                "message_id": message_id,
+                "seq": seq,
+                "turn_id": str(turn_id) if turn_id is not None else None,
+            }
+        ),
+    )
 
 
 async def _sweep_activities(queue: asyncio.Queue, projector: ActivityProjector, outcome: str, mirror=None) -> None:
@@ -430,7 +481,10 @@ async def _persist_activity_forensics(
 
 
 async def _persist_candidates_log(
-    conversation_id: UUID, ref: str, events: list[dict]
+    conversation_id: UUID,
+    ref: str,
+    events: list[dict],
+    turn_id: UUID | None = None,
 ) -> None:
     """Candidate surface 持久化 (v4.2 C8-c): the turn's emitted
     ``assistant.candidates`` payloads land as ONE candidates_log message row
@@ -443,7 +497,9 @@ async def _persist_candidates_log(
         from app.models.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as db:
-            await record_candidates_log(db, conversation_id, events, ref=ref)
+            await record_candidates_log(
+                db, conversation_id, events, ref=ref, turn_id=turn_id
+            )
             await db.commit()
     except Exception as e:  # noqa: BLE001 — additive history is best-effort
         logger.warning(
@@ -489,11 +545,13 @@ async def _sse_pump(
     the stream with ``completed_event`` / ``failed_event``, a quiet client
     gets bare-{} thinking keepalives (client-visible liveness — see the
     TimeoutError branch), and a disconnect cancels the turn task — which
-    lands in the task's ``finally`` BEFORE its commit, so the session
-    teardown rolls the turn back ("a failed turn persists nothing").
+    lands in the task's ``finally`` BEFORE its commit, so the main Turn
+    transaction rolls back while independently committed user, Activity,
+    interim_prose and partial rows survive as the honest transcript.
 
     Queue protocol (turn-specific bodies only push tuples):
-    ``("completed", <JSON-able payload>)`` / ``("failed", <detail str|dict>)``
+    ``("completed", <JSON-able payload>)`` /
+    ``("failed", <detail str|dict>[, <persisted bool|None>, <turn_id str|None>])``
     — a dict detail is a typed failure payload (credits.insufficient), sent
     as the frame's ``detail`` object verbatim.
     """
@@ -514,6 +572,8 @@ async def _sse_pump(
                 continue
             if isinstance(item, str):
                 yield item
+            elif item[0] == "stopped":
+                return
             elif item[0] == "completed":
                 yield _sse(completed_event, json.dumps(item[1]))
                 return
@@ -521,10 +581,15 @@ async def _sse_pump(
                 # A 3-tuple's third element is the turn-durability flag
                 # (交互完整性批 A): the user row survived the failure — the
                 # client keeps the bubble instead of rolling it back. The
-                # answer stream's 2-tuples simply omit it (their failure
-                # semantics are unchanged).
-                payload = {"detail": item[1]}
-                if len(item) > 2:
+                # answer stream uses None there (its failure semantics are
+                # unchanged). The optional fourth element is the opening-turn
+                # identity; every failure frame carries it explicitly, null
+                # included, so the client never guesses from adjacent rows.
+                payload = {
+                    "detail": item[1],
+                    "turn_id": item[3] if len(item) > 3 else None,
+                }
+                if len(item) > 2 and item[2] is not None:
                     payload["persisted"] = item[2]
                 yield _sse(failed_event, json.dumps(payload))
                 return
@@ -550,8 +615,10 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
 
     A client disconnect cancels the response, which lands in the pump's
     ``finally`` (see ``_sse_pump``): the turn task is cancelled before its
-    commit, the session teardown rolls back — preserving the "a failed turn
-    persists nothing" contract the frontend rollback relies on. (No
+    commit, the main Turn transaction rolls back; the durable opening user
+    row and independently committed transcript facts survive. An explicit
+    Stop then settles cancelled/retracted, while an accidental disconnect
+    follows the existing failed/recovery path. (No
     ``request.is_disconnected()`` polling: the middleware's receive-channel
     bookkeeping breaks it.)
     """
@@ -578,14 +645,42 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 # after the turn's session has torn down.
                 turn_user_message_id = prepared.user_message.id
                 turn_conversation_id = prepared.conversation_id
-                append_open_read, mirror, cancel_open = _make_activity_persister(
-                    queue, projector, UUID(str(turn_conversation_id))
+                await queue.put(
+                    _sse(
+                        "turn.started",
+                        json.dumps({"turn_id": str(turn_user_message_id)}),
+                    )
                 )
-                on_delta = _make_delta_hook(queue)
+                append_open_read, mirror, cancel_open = _make_activity_persister(
+                    queue,
+                    projector,
+                    UUID(str(turn_conversation_id)),
+                    turn_user_message_id,
+                )
+                partial_message_id = None
+
+                async def persist_delta(fragment: str) -> str | None:
+                    nonlocal partial_message_id
+                    if fragment:
+                        async with AsyncSessionLocal() as partial_db:
+                            partial = await persist_partial_prose(
+                                partial_db,
+                                UUID(str(turn_conversation_id)),
+                                turn_user_message_id,
+                                fragment,
+                                message_id=partial_message_id,
+                            )
+                            await partial_db.commit()
+                        partial_message_id = partial.id
+                    return str(partial_message_id) if partial_message_id else None
+
+                on_delta = _make_delta_hook(queue, persist_delta)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
-                on_candidates = _make_candidates_hook(queue, candidate_events)
+                on_candidates = _make_candidates_hook(
+                    queue, candidate_events, turn_user_message_id
+                )
 
 
                 async def on_reasoning(_fragment: str) -> None:
@@ -605,19 +700,20 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
 
-                async def on_checkpoint(text: str, at: str | None = None) -> None:
-                    # The checkpoint channel (ADR-085): a quiet iteration's
-                    # grounded result statement after an eligible read. The
-                    # row is persisted runner-side (flush-only, the turn's
-                    # one commit lands it); this frame carries the full text
-                    # live — the client finalizes the current bubble segment
-                    # and types the checkpoint into a new one (the typewriter
-                    # law holds: quiet iterations stream nothing, the frame
-                    # paces out client-side). ``at`` is the row's created_at
-                    # (服务端钟锚定 — the live bubble sorts by the same clock
-                    # the replay walk does).
+                async def on_interim_prose(
+                    text: str,
+                    at: str,
+                    message_id: str,
+                    seq: int | None,
+                ) -> None:
+                    nonlocal partial_message_id
+                    # The persisted interim row replaces the trailing partial;
+                    # later deltas birth a fresh partial with its own server id.
+                    partial_message_id = None
                     await queue.put(
-                        _sse("assistant.checkpoint", json.dumps({"text": text, "at": at}))
+                        _interim_prose_frame(
+                            text, at, message_id, seq, turn_user_message_id
+                        )
                     )
 
                 async def on_row_append(message: Message) -> None:
@@ -635,7 +731,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
@@ -647,9 +743,18 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     turn_conversation_id, str(turn_user_message_id), projector
                 )
                 await _persist_candidates_log(
-                    turn_conversation_id, str(turn_user_message_id), candidate_events
+                    turn_conversation_id,
+                    str(turn_user_message_id),
+                    candidate_events,
+                    turn_user_message_id,
                 )
             await queue.put(("completed", response.model_dump(mode="json")))
+        except TurnStopped:
+            # The Stop control response is the only outcome. No failure line,
+            # terminal envelope or second durable-reply decision follows it.
+            if cancel_open is not None:
+                await cancel_open()
+            await queue.put(("stopped",))
         except Exception as exc:  # noqa: BLE001 — terminal frame, not a crash
             # Server-side truth seat: the full stack + turn identifiers land
             # in the log BEFORE anything else (a failed turn must never again
@@ -672,6 +777,12 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # flow keeps the bubble instead of rolling the user's own words
             # back. A prepare-stage rejection (entry caps) never persisted —
             # persisted=False keeps the old rollback for those.
+            interrupted_state = None
+            if turn_user_message_id is not None and turn_conversation_id is not None:
+                interrupted_state = await settle_interrupted_turn(
+                    turn_user_message_id,
+                    turn_conversation_id,
+                )
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
             detail = _failure_detail(exc, ui_language)
@@ -679,15 +790,26 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # (fresh session inside) so a refresh keeps the failure's stage
             # and next step; a STRUCTURED detail (typed credits shortfall)
             # stays frame-only — its seat is the dock's typed row.
-            if isinstance(detail, str) and turn_conversation_id is not None:
-                await persist_turn_failed_line(turn_conversation_id, detail)
+            if (
+                isinstance(detail, str)
+                and turn_conversation_id is not None
+                and interrupted_state not in {"cancelled", "retracted"}
+            ):
+                await persist_turn_failed_line(
+                    turn_conversation_id, detail, turn_user_message_id
+                )
             await _sweep_activities(queue, projector, "failed", mirror)
             if turn_conversation_id is not None and turn_user_message_id is not None:
                 await _persist_activity_forensics(
                     turn_conversation_id, str(turn_user_message_id), projector
                 )
             await queue.put(
-                ("failed", detail, turn_user_message_id is not None)
+                (
+                    "failed",
+                    detail,
+                    turn_user_message_id is not None,
+                    str(turn_user_message_id) if turn_user_message_id else None,
+                )
             )
         except BaseException:
             # Cancel (the client disconnected mid-turn): same durability
@@ -696,6 +818,11 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # claims a read is still in flight forever (ADR-108 §5).
             if cancel_open is not None:
                 await cancel_open()
+            if turn_user_message_id is not None and turn_conversation_id is not None:
+                await settle_interrupted_turn(
+                    turn_user_message_id,
+                    turn_conversation_id,
+                )
             if turn_user_message_id is not None:
                 await stamp_turn_failed(turn_user_message_id)
             raise
@@ -731,24 +858,31 @@ async def _answer_stream(
         mirror = None
         cancel_open = None
         conversation_id = None  # bound inside the try; the failure seat guards
+        answer_turn_id = None
         try:
             async with AsyncSessionLocal() as db:
-                # The answer turn's conversation resolves from the question
-                # row up front — the activity persister (ADR-108) needs it
-                # before the turn's first frame.
-                conversation_id = (
+                # The answer continuation inherits the question's persisted
+                # opening-turn association; it never invents a user row.
+                conversation_id, answer_turn_id = (
                     await db.execute(
-                        select(Message.conversation_id).where(Message.id == message_id)
+                        select(Message.conversation_id, Message.turn_id).where(
+                            Message.id == message_id
+                        )
                     )
-                ).scalar_one()
+                ).one()
                 append_open_read, mirror, cancel_open = _make_activity_persister(
-                    queue, projector, UUID(str(conversation_id))
+                    queue,
+                    projector,
+                    UUID(str(conversation_id)),
+                    answer_turn_id,
                 )
                 on_delta = _make_delta_hook(queue)
                 on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
-                on_candidates = _make_candidates_hook(queue, candidate_events)
+                on_candidates = _make_candidates_hook(
+                    queue, candidate_events, answer_turn_id
+                )
 
 
                 async def on_phase(phase: str | None) -> None:
@@ -756,16 +890,14 @@ async def _answer_stream(
                         _sse("assistant.thinking", json.dumps({"phase": phase}))
                     )
 
-                async def on_checkpoint(text: str, at: str | None = None) -> None:
-                    # The checkpoint channel (the chat turn's seat, mirrored):
-                    # an answer continuation can open with expectation prose
-                    # before the design beat — the row persists runner-side,
-                    # this frame carries the full text live so the client
-                    # settles the current bubble segment and paces the
-                    # checkpoint into its own (the answer path's ordering
-                    # matches the chat path's: 服务员话 → 活动行 → 读后回复).
+                async def on_interim_prose(
+                    text: str,
+                    at: str,
+                    message_id: str,
+                    seq: int | None,
+                ) -> None:
                     await queue.put(
-                        _sse("assistant.checkpoint", json.dumps({"text": text, "at": at}))
+                        _interim_prose_frame(text, at, message_id, seq, answer_turn_id)
                     )
 
                 async def on_row_append(message: Message) -> None:
@@ -787,7 +919,7 @@ async def _answer_stream(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
@@ -798,7 +930,10 @@ async def _answer_stream(
                 UUID(str(conversation_id)), str(message_id), projector
             )
             await _persist_candidates_log(
-                message.conversation_id, str(message.id), candidate_events
+                message.conversation_id,
+                str(message.id),
+                candidate_events,
+                answer_turn_id,
             )
             await queue.put(
                 (
@@ -826,9 +961,18 @@ async def _answer_stream(
             # Same durable failure line as the chat pump's seat — a refresh
             # after a failed answer continuation keeps the honest row.
             if isinstance(detail, str) and conversation_id is not None:
-                await persist_turn_failed_line(UUID(str(conversation_id)), detail)
+                await persist_turn_failed_line(
+                    UUID(str(conversation_id)), detail, answer_turn_id
+                )
             await _sweep_activities(queue, projector, "failed", mirror)
-            await queue.put(("failed", detail))
+            await queue.put(
+                (
+                    "failed",
+                    detail,
+                    None,
+                    str(answer_turn_id) if answer_turn_id else None,
+                )
+            )
         except BaseException:
             # Cancel (client disconnected): appended-but-open activity rows
             # settle CANCELLED (ADR-108 §5), then propagate.
@@ -880,6 +1024,30 @@ async def send_chat_message(
     )
 
 
+@chat_router.post("/turns/{turn_id}/stop")
+async def stop_chat_turn(
+    turn_id: UUID,
+    data: ChatTurnStopRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Settle Stop once, atomically, at the client-visible frontier."""
+    message = await db.get(Message, turn_id)
+    conversation = (
+        await db.get(Conversation, message.conversation_id) if message else None
+    )
+    if (
+        message is None
+        or message.role != "user"
+        or message.turn_id != turn_id
+        or conversation is None
+        or conversation.user_id != current_user.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Turn not found")
+    state = await stop_turn_at_visible_frontier(db, turn_id, data)
+    return {"accepted": True, "turn_state": state}
+
+
 @chat_router.get("/conversations/{id}/messages", response_model=MessageListResponse)
 async def list_chat_messages(
     id: UUID,
@@ -897,6 +1065,18 @@ async def list_chat_messages(
     return MessageListResponse(items=[ChatMessageResponse.model_validate(m) for m in messages])
 
 
+@chat_router.get("/skills")
+async def list_chat_skills(
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Selectable video Skills; creative bodies stay server-side."""
+    from app.skills.resolution import list_available_skills
+
+    options = await list_available_skills(db, owner_id=UUID(str(current_user.id)))
+    return {"items": [option.model_dump(mode="json") for option in options]}
+
+
 @chat_router.get("/references")
 async def list_chat_references(
     db: DBDep,
@@ -904,14 +1084,13 @@ async def list_chat_references(
 ) -> dict:
     """The existing mention picker gets a small owner-scoped global feed."""
     from app.models.tables import Asset, CompositionVersion, Output
-    from app.pipeline.outputs import visible_outputs_stmt
-    from app.pipeline.run_review import output_is_delivered
+    from app.pipeline.outputs import is_chat_video_output, visible_outputs_stmt
     assets = (await db.scalars(select(Asset).where(Asset.user_id == current_user.id)
         .order_by(Asset.created_at.desc()).limit(100))).all()
     outputs = (await db.scalars(visible_outputs_stmt().join(Project, Output.project_id == Project.id)
         .where(Project.user_id == current_user.id)
         .order_by(Output.created_at.desc()).limit(100))).all()
-    delivered = [output for output in outputs if output_is_delivered(output)]
+    delivered = [output for output in outputs if is_chat_video_output(output)]
     version_ids = list(dict.fromkeys(
         output.composition_version_id for output in delivered
         if output.composition_version_id is not None

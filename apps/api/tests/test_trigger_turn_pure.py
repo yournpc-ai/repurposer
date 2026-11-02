@@ -37,6 +37,7 @@ from app.chat.trigger_turn import (
     TRIGGER_DUMP_TYPE,
     _chrome_language,
     _failure_fact_lines,
+    _new_delivery_output_refs,
     _suggestions_payload,
     _trigger_admission,
     _trigger_dump,
@@ -97,11 +98,14 @@ def test_tool_set_is_the_reads_plus_one_terminal() -> None:
     by_name = {t.name: t for t in trigger_agent.tools}
     # The trigger set filters CHAT_READ_TOOLS (import-time built): the
     # deployment-gated media discovery read (list_project_media) rides only
-    # when the film edit capability's gate was ON at process start — the
+    # when the film edit capability's gate was ON at process start. The
+    # user-driven SFX actions stay out of system-initiated turns. The
     # expectation keys off the same source, never a frozen registry dump.
     expected = {
         "wrap_up",
-        *(t.name for t in CHAT_READ_TOOLS if t.name != "design_storyboard"),
+        *(t.name for t in CHAT_READ_TOOLS if t.name not in {
+            "design_storyboard", "search_sfx", "import_sfx",
+        }),
     }
     assert set(by_name) == expected
     assert by_name["wrap_up"].terminal
@@ -337,6 +341,24 @@ def test_trigger_dump_is_self_describing() -> None:
     # Labels ride for forensics only — the dock rebuilds from the row's
     # question payload, never from the dump.
     assert dump["suggestions"] == ["做一个法语版"]
+    assert dump["output_refs"] == []
+    delivered = _trigger_dump(
+        TRIGGER_RUN_COMPLETED, "run-1:upload-retry-1", [], ["output-b"]
+    )
+    assert delivered["output_refs"] == ["output-b"]
+
+
+def test_recovery_delivery_owns_only_products_not_already_delivered() -> None:
+    run_id = UUID("00000000-0000-0000-0000-000000000001")
+    history = [
+        Message(
+            workflow_run_id=run_id,
+            intent={"type": "trigger_review", "output_refs": ["output-a"]},
+        )
+    ]
+    assert _new_delivery_output_refs(history, run_id, ["output-a", "output-b"]) == [
+        "output-b"
+    ]
 
 
 class TestTriggerLanguage:

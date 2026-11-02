@@ -1,6 +1,6 @@
 # PAYMENTS — 支付、订单与 Stripe 接入架构
 
-> Status: 当前规范（2026-10-29）。Stripe 一次性积分充值首批已落码，migration、测试套件与真实联调未运行；剩余范围与验收欠账归 `tasks/stripe-credit-topup.md`，积分、钱包与扣费语义归 `BILLING.md`，排期归 `PROGRESS.md`。
+> Status: 当前规范（2026-11-02）。Stripe 一次性积分充值首批已落码，本地真实 Checkout → webhook → paid/purchase → UI 主旅程已验证且订单仅有一条入账台账；预设与自由金额已统一为服务端 `price_data` 下单，该改动后的真实联调、重放、并发等剩余验收、测试套件与公网联调未运行。剩余范围与验收欠账归 `tasks/stripe-credit-topup.md`，积分、钱包与扣费语义归 `BILLING.md`，排期归 `PROGRESS.md`。
 
 ## 0. 边界与目标形态
 
@@ -19,7 +19,7 @@ SettingsDialog 积分 section
 ```
 
 - **Checkout 托管收银台 + 服务端 webhook 是唯一支付链路**。不使用 Payment Link 代替产品内订单，不自建银行卡表单，不引入 Stripe.js，不在前端暴露 secret key。
-- 首批只支持**一次性积分包、EUR、银行卡、`mode=payment`**。Checkout 显式限制为 `card`，不开放延迟到账支付方式。
+- 首批只支持**一次性积分包、EUR、银行卡、`mode=payment`**。Checkout 用 `allowed_payment_method_types=["card"]` 过滤 Dashboard 动态可用的支付方式，不开放延迟到账支付方式；Dashboard 必须启用 card。
 - 成功 URL 只是浏览器返回信号，**永不产生入账**。只有签名有效且满足全部订单校验的 webhook 可以入账。
 - 三个事实源各管一层：Stripe = 收款事实；`payment_orders` = 内部购买订单；`credit_transactions` = 积分余额变动事实。任何一层都不是另外两层的副本。
 - 订阅、周期额度、升级/降级、Customer Portal、自动退款、VAT/发票定制与 Landing 订阅卡接线不是首批能力；启动条件见 §8。
@@ -32,12 +32,11 @@ SettingsDialog 积分 section
 |---|---|---|---|
 | `STRIPE_SECRET_KEY` | 公司 Stripe 账号的 test/live secret | 后端创建 Checkout Session 等 Stripe API 调用 | 仅服务端 secret store |
 | `STRIPE_WEBHOOK_SECRET` | 本地 CLI 或 Dashboard webhook endpoint | 验证 `Stripe-Signature` | 仅对应环境的服务端 |
-| `STRIPE_PRICE_*` | 公司 Stripe Dashboard 的 Product / Price | 服务端可售积分包白名单 | 后端配置；Price ID 可出现在服务端响应，但不由客户端任意指定 |
 | `WEB_PUBLIC_URL` | 本项目公网 Web origin | 生成 Checkout success/cancel URL | 现有部署配置 |
 
 公司 `sk_test_...` 只代表公司账号的 **test mode**，不代表已经取得 webhook secret 或 live 收款能力。本地不需要注册个人 Stripe 账号，也不需要 `stripe login`；CLI 直接读取公司 test key。
 
-test 与 live 的 API key、webhook secret、Product / Price ID 全部独立。live key 由有权限的管理者直接写入生产 secret store，不通过聊天、工单、Git 或前端传递。疑似泄漏的 key 必须轮换。
+test 与 live 的 API key、webhook secret 全部独立。live key 由有权限的管理者直接写入生产 secret store，不通过聊天、工单、Git 或前端传递。疑似泄漏的 key 必须轮换。预设与自定义金额都由服务端 policy 决定，不需要在 Stripe Dashboard 建 Product / Price。
 
 ### 1.2 环境变量
 
@@ -46,10 +45,9 @@ test 与 live 的 API key、webhook secret、Product / Price ID 全部独立。l
 ```dotenv
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_STARTER=
 ```
 
-当前只实现 `starter`：test 配置为 **1000 最小货币单位（€10）= 10,000 积分**，不是 live 定价承诺。缺少 Price 时 packages 返回空列表，新增档位必须同批扩展 Settings、registry、env example 与部署变量。`apps/api/app/config.py` 负责类型化读取，`docker-compose.yml` 只把变量传进 `api` 容器；`web` 与首批 `worker` 不需要支付 secret。
+当前预设 registry 为 `starter = €10 / 10,000 积分`、`topup_20 = €20 / 20,000 积分`、`topup_50 = €50 / 50,000 积分`，不代表 live 定价承诺。预设与自定义金额都使用服务端 `price_data`，没有 `STRIPE_PRICE_*` 配置或按环境隐藏档位的规则。自定义金额的 EUR 汇率与上下限由服务端 `CUSTOM_TOPUP_POLICY` 定义并随 packages 响应下发。`docker-compose.yml` 只把 API key 与 webhook secret 传进 `api` 容器；`web` 与首批 `worker` 不需要支付 secret。
 
 ### 1.3 本地 Stripe CLI
 
@@ -59,7 +57,7 @@ CLI 只是本地事件转发器，不是应用运行时依赖，不进 Docker、
 ./scripts/stripe_webhook_dev.sh
 ```
 
-脚本只接受 test key，验证 `.env` 的 API key 与 Price 配置；缺少 CLI signing secret 时通过 `--print-secret` 生成并写入 `.env`，已有但不一致则报错，不会静默覆盖。已有匹配 listener 时只确认，多个 listener 会报错，未运行时才后台启动并等待 Ready。输出不打印密钥；API 不可达会单独警告。
+脚本只接受 test key，验证 `.env` 的 API key；缺少 CLI signing secret 时通过 `--print-secret` 生成并写入 `.env`，已有但不一致则报错，不会静默覆盖。已有匹配 listener 时只确认，多个 listener 会报错，未运行时才后台启动并等待 Ready。输出不打印密钥；API 不可达会单独警告。
 
 需要手工诊断时才直接运行 CLI：
 
@@ -97,19 +95,20 @@ CLI 输出的 `whsec_...` 填本地 `STRIPE_WEBHOOK_SECRET`。它与 Dashboard �
 
 ## 3. 积分包与金额事实
 
-可售积分包由后端 `PACKAGE_REGISTRY` 白名单定义，首批一张表都不需要用于商品目录。每个条目包含：
+可售预设由后端 `PACKAGE_REGISTRY` 定义，首批一张表都不需要用于商品目录。每个条目包含：
 
 ```text
-package_key       稳定内部 key，如 starter
-stripe_price_id   当前环境 Settings 中的 Price ID
-amount_minor      预期收款金额（最小货币单位）
+package_key       稳定内部 key，如 starter / topup_20 / topup_50
+amount_minor      预设收款金额（最小货币单位）
 currency          eur
 credits           支付成功授予的积分
-active            是否可售
 ```
 
-- 客户端只提交 `package_key`，永不提交或决定 `amount`、`currency`、`credits`、`price_id`。
-- Stripe Price 是实际收款价格，服务端 registry 是允许销售与应授积分的白名单；创建订单时保存金额/币种/积分快照，webhook 再核对 Stripe Session，任何不一致都不入账。
+自定义金额由服务端 `CUSTOM_TOPUP_POLICY` 单独约束：当前 **€1 = 1,000 积分**，单次 **€1–€1,000**，使用 `package_key=custom` 作为内部订单类型。
+
+- **当前前端只有一条下单路径**：预设按钮只回填金额 input，提交始终为 `{amount_minor}`。为兼容既有调用，服务端仍接受 `{package_key}` 或 `{amount_minor}` 二选一；两者都在服务端解析为金额/币种/积分快照，客户端永不提交或决定 `currency`、`credits`。
+- 两种金额来源统一以 Stripe `price_data` 创建一次性价格，不读取或依赖预建 Product / Price。前端展示的预设与积分只是服务端 registry / policy 的预览，不是入账参数。
+- 创建订单时保存金额/币种/积分快照，webhook 再核对 Stripe Session，任何不一致都不入账。
 - 积分包的购买换算与 `credits.per_cost_usd` 消耗比例完全解耦。调整消耗比例不重写已购买订单或台账。
 - 前端展示数字来自服务端 packages 读面；名称与动作文案走现有 i18n，不复制第二份价格表到前端。
 
@@ -123,7 +122,7 @@ active            是否可售
 |---|---|---|
 | `id` | `UUID PK` | 内部订单 ID；写入 Checkout metadata |
 | `user_id` | `UUID FK users.id NOT NULL` | 购买用户；与 `created_at` 建组合索引 |
-| `package_key` | `String(40) NOT NULL` | 下单时的 registry key |
+| `package_key` | `String(40) NOT NULL` | 金额解析结果的内部类型；兼容 `package_key` 下单时为 registry key，`amount_minor` 下单恒 `custom` |
 | `provider` | `String(20) NOT NULL` | 当前恒 `stripe` |
 | `livemode` | `Boolean NOT NULL` | 下单环境；webhook 必须匹配 |
 | `amount_minor` | `BigInteger NOT NULL` | 金额最小单位；禁止 float |
@@ -164,17 +163,17 @@ ref = {
 
 | 方法与路径 | 认证 | 职责 |
 |---|---|---|
-| `GET /payments/packages` | 用户登录 | 返回当前 active 积分包的 `key / credits / amount_minor / currency` |
-| `POST /payments/checkout-sessions` | 用户登录 | body 仅 `{package_key}`；创建内部订单与 Checkout，返回 `{order_id, checkout_url}` |
+| `GET /payments/packages` | 用户登录 | 返回当前 active 固定档位的 `items`，以及自定义金额的 `custom` policy（币种、上下限、每单位法币积分） |
+| `POST /payments/checkout-sessions` | 用户登录 | body 为 `{package_key}` 或 `{amount_minor}` 二选一；创建内部订单与 Checkout，返回 `{order_id, checkout_url}` |
 | `GET /payments/orders/{order_id}` | 用户登录 + owner | 返回订单状态与展示快照；永不触发入账 |
 | `POST /payments/stripe/webhook` | Stripe 签名 | 处理支付确认与过期事件 |
 
 Checkout 创建顺序：
 
-1. 校验 registry 与登录用户，并读取 Stripe Price，确认 `active`、`one_time`、金额与币种全部匹配；任何配置错误都在用户可付款前拒绝。
+1. 校验请求二选一、registry / custom policy 与登录用户。服务端把 `package_key` 或 `amount_minor` 解析成金额、币种与积分快照；自定义金额校验范围，预设读取 registry。任何配置或金额错误都在用户可付款前拒绝。
 2. 创建并提交 `pending` 订单，确保 webhook 到达前订单已可查。
 3. 以内部 `order_id` 派生 Stripe API idempotency key，同一内部订单至多创建一个 Checkout Session。
-4. 使用 `mode=payment`、显式 `card`、服务端 Price、`client_reference_id=user_id` 与 `metadata.order_id`。
+4. 所有订单统一使用 `mode=payment`、`allowed_payment_method_types=["card"]`、服务端生成的 `price_data`、`client_reference_id=user_id` 与 `metadata.order_id`；支付方式由 Dashboard 决定动态 eligible 集，再由服务端白名单过滤，不能传已退役的 `payment_method_types`。
 5. success/cancel URL 由 `WEB_PUBLIC_URL` 派生到 `/settings`，携带内部 `order_id` 与返回状态；保存 Session ID 后返回托管 URL。
 6. Stripe 创建失败将订单标为 `failed` 并走统一 API 错误；未支付重复订单不代表重复收款，用户只有在不同 Session 分别付款才分别购买。
 
@@ -209,8 +208,8 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 
 ## 7. 前端座位与返回行为
 
-- `components/settings/CreditsSection.tsx` 是唯一套餐购买面：保留余额/held/语义台账，新增积分包列表与购买按钮，替换付费套餐占位。按钮 pending 时禁止重复点击；不在 Dialog 内嵌银行卡表单或再开支付 Dialog。
-- `components/credits/CreditsPill.tsx` 只新增“购买积分 / Add credits”入口，调用 `openSettings("credits")`；不复制套餐面板。
+- `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、预设按钮、换算 tooltip、取消与 Checkout 跳转都在该轻量弹窗内完成。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
+- `components/settings/CreditsSection.tsx` 只承载余额/held、购买入口、支付返回确认与语义台账，不内嵌金额选择或支付表单。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
 - `lib/payments.ts` 统一 packages / checkout / order 的 wire types 与 `apiFetch`；金额用 `Intl.NumberFormat` 按 EUR 与当前语言格式化，积分沿用 `formatCredits`。
 - `routes/_app.settings.tsx` 复用为 Checkout return shim：接收 `checkout=success|cancelled&order_id=...`，打开积分 section 后回 `/home`；不新建支付设置页。
 - 返回 success 只显示“正在确认付款”，有界轮询订单（2 秒一次、至多 30 秒）。只有服务端 `paid` 才显示充值成功并刷新 wallet/transactions；超时仍 pending 显示稍后刷新，不重复下单。
@@ -231,12 +230,12 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 ### 公网 test mode
 
 - 部署代码与 migration，确认公网 webhook 到达本项目 API。
-- Dashboard 创建 test endpoint 并配置对应 `whsec_...`，验证 test Price 与 registry 一致。
+- Dashboard 创建 test endpoint 并配置对应 `whsec_...`；一次性充值不需要创建或核验 Stripe Product / Price。
 - 完成真实 Checkout 测试付款、重放、并发、过期、返回页与权限验收。
 
 ### live mode
 
-- 管理者直接配置 `sk_live`、live webhook secret 与 live Price IDs；test/live 配置不得混用。
+- 管理者直接配置 `sk_live` 与 live webhook secret；test/live 配置不得混用。一次性充值沿用服务端金额 registry / policy，无需 live Price IDs。
 - 明确商品价格是否含税、VAT/发票、退款与拒付处理、客服与监控责任人。
 - 完成小额真实付款及按已拍板政策的退款演练；test 通过不等于 live 通过。
 
@@ -245,4 +244,4 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 - 每个 paid 订单恰好一条 `credit_transaction_id`，其 `kind=purchase`、`amount=orders.credits`、owner 与订单一致。
 - 每个 pending/expired/failed 订单没有 purchase 台账。
 - Stripe 已付款但内部未 paid 的 Session 可由 Session ID 对账；不得通过手工改余额修复，必须重放/补走同一入账写门。
-- 日志只记内部订单、Stripe Session/Event/PaymentIntent ID、状态与校验码，不记 secret、完整 payload 或银行卡资料。
+- 日志只记内部订单、Stripe Session/Event/PaymentIntent ID、状态、校验码与 provider 错误诊断（错误类型、code、param、短消息），不记 secret、完整 payload 或银行卡资料。

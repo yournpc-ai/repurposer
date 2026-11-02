@@ -1,0 +1,190 @@
+{
+  "sent": true,
+  "baselineRunId": "6215b2ce-7b4a-4232-9041-1195d9ea1c7f",
+  "chatResponses": [
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat"
+    }
+  ],
+  "presentationAcks": [],
+  "transitions": [
+    {
+      "at": "2026-10-31T04:25:17.735Z",
+      "run": null,
+      "output": null
+    },
+    {
+      "at": "2026-10-31T04:25:29.942Z",
+      "run": {
+        "id": "a0191d5f-62e3-499b-bc26-e5aef2dfe140",
+        "status": "pending",
+        "progress": 0,
+        "error": null,
+        "context": {
+          "version_ref": {
+            "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+            "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+            "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+          },
+          "video_presentation": {
+            "version": 21,
+            "review_hold": true,
+            "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+            "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef",
+            "presentation_digest": "b6cb479bb2629b88a0d7d68b2e30437aee95656802477feddc7ff0f93b91b338",
+            "presented_message_id": "755b65b7-7b53-46d0-a2de-b1ffcb4653d8",
+            "presentation_complete": true,
+            "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13"
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "at": "2026-10-31T04:25:31.973Z",
+      "run": {
+        "id": "a0191d5f-62e3-499b-bc26-e5aef2dfe140",
+        "status": "failed",
+        "progress": 100,
+        "error": "这一步出了意外错误",
+        "context": {
+          "version_ref": {
+            "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+            "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+            "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+          },
+          "video_presentation": {
+            "version": 21,
+            "review_hold": true,
+            "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+            "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef",
+            "presentation_digest": "b6cb479bb2629b88a0d7d68b2e30437aee95656802477feddc7ff0f93b91b338",
+            "presented_message_id": "755b65b7-7b53-46d0-a2de-b1ffcb4653d8",
+            "presentation_complete": true,
+            "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13"
+          }
+        }
+      },
+      "output": null
+    }
+  ],
+  "terminal": {
+    "run": {
+      "id": "a0191d5f-62e3-499b-bc26-e5aef2dfe140",
+      "status": "failed",
+      "progress": 100,
+      "error": "这一步出了意外错误",
+      "cost": null,
+      "created_at": "2026-10-31T04:25:29.731411Z",
+      "updated_at": "2026-10-31T04:25:31.853362Z",
+      "context": {
+        "version_ref": {
+          "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+          "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+          "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+        },
+        "video_presentation": {
+          "version": 21,
+          "review_hold": true,
+          "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+          "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef",
+          "presentation_digest": "b6cb479bb2629b88a0d7d68b2e30437aee95656802477feddc7ff0f93b91b338",
+          "presented_message_id": "755b65b7-7b53-46d0-a2de-b1ffcb4653d8",
+          "presentation_complete": true,
+          "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13"
+        },
+        "confirmed_scope": {
+          "confirmation_id": "a1727dc9-20e4-4882-96ab-b5103753a853",
+          "confirmed_at": "2026-10-31T04:25:29.752635+00:00",
+          "confirmed_via": "auto",
+          "plans": [],
+          "compiled_scope": [
+            {
+              "tool": "produce_video",
+              "params": {
+                "version_ref": {
+                  "composition_id": "37733138-8c04-4290-be93-aa41f1dc1446",
+                  "composition_version_id": "2716649a-2031-44fb-b32f-75ae01f34c13",
+                  "content_digest": "da7698f217fd3e29a92bdfc6287c0fc9c083dd87ab3bd7b085a173c292bf55ef"
+                }
+              }
+            }
+          ],
+          "quote": {
+            "total": [
+              16,
+              16
+            ],
+            "per_task": [
+              [
+                16,
+                16
+              ]
+            ]
+          },
+          "settings": {
+            "confirm_execution": "auto",
+            "confirm_credits": "auto",
+            "billing.always_confirm_above": 5000
+          }
+        }
+      },
+      "steps": [
+        {
+          "id": "8321bdda-7ecd-4898-b991-3c9edbee7105",
+          "kind": "produce_video",
+          "status": "failed",
+          "summary": "准备短片",
+          "error": "这一步出了意外错误",
+          "cost": null,
+          "cost_credits": null,
+          "output_refs": [],
+          "started_at": "2026-10-31T04:25:31.174702Z",
+          "finished_at": "2026-10-31T04:25:31.834831Z",
+          "production_stages": [
+            {
+              "event_id": "8321bdda-7ecd-4898-b991-3c9edbee7105:1:validate",
+              "kind": "validate",
+              "run_id": "a0191d5f-62e3-499b-bc26-e5aef2dfe140",
+              "step_id": "8321bdda-7ecd-4898-b991-3c9edbee7105",
+              "attempt": 1,
+              "seq": 0,
+              "status": "completed",
+              "started_at": "2026-10-31T04:25:31.214420Z",
+              "finished_at": "2026-10-31T04:25:31.224762Z",
+              "reused": null,
+              "item_count": null,
+              "reused_count": null
+            },
+            {
+              "event_id": "8321bdda-7ecd-4898-b991-3c9edbee7105:1:fonts",
+              "kind": "fonts",
+              "run_id": "a0191d5f-62e3-499b-bc26-e5aef2dfe140",
+              "step_id": "8321bdda-7ecd-4898-b991-3c9edbee7105",
+              "attempt": 1,
+              "seq": 1,
+              "status": "completed",
+              "started_at": "2026-10-31T04:25:31.227692Z",
+              "finished_at": "2026-10-31T04:25:31.808824Z",
+              "reused": null,
+              "item_count": 3,
+              "reused_count": 3
+            }
+          ]
+        }
+      ]
+    },
+    "output": null
+  },
+  "consoleEvents": [],
+  "state": {
+    "body": "Temporal editing in one work\n项目\n93,308\n\n把当前作品标题改为 \"Every cut matters IX\"，只改标题文字，其他内容、8 秒时长、画面、音乐和旁白关闭都保持不变。只保存为新版本，不要制作。\n\n先读回这条片子当前保存的版本，确认标题片段的真实 id 和它现在的文案，再只改这一处。\n\n工作了 1s\n\n标题片段的真实 id 是 clp_title，现在只改它的文字。\n\n工作了 1s\n\n标题已经改好，保存为 version 20，改动只落在标题这一层。\n\n标题文字：从 \"Every cut matters VIII\" 改成 \"Every cut matters IX\"，字号 77、颜色 #F8FAFC、居中，位置和占满 0.000–8.000s 的时间窗保持原样\n画面：左段 0.000–3.533s（源 1.00–4.53s）、右段 3.533–7.500s（源 5.93–9.90s），两段满屏 cover，中间 0.6 秒居中交叉溶解，切口仍在 66.3 BPM 的拍点上\n声音与时长：原声 -10dB、背景音乐、旁白关闭、8 秒时长全部未动\n\n这一版只是保存，没有启动制作。要出片的话说一声，我拿当前这一版直接渲染。\n\n把当前作品标题改为 \"Every cut matters X\"，只改标题文字，其他内容、8 秒时长、画面、音乐和旁白关闭都保持不变。只保存为新版本，不要制作。\n\n我先读回这条片子当前保存的 version 20，确认标题片段的真实 id 和它现在的文案，再只改这一处。\n\n工作了 1s\n\n标题片段的 id 是 clp_title，现在只改它的文字。\n\n工作了 1s\n\n标题已经改好，保存为 version 21，改动只落在标题这一层。\n\n标题文字：从 \"Every cut matters IX\" 改成 \"Every cut matters X\"，字号 77、颜色 #F8FAFC、居中，位置和占满 0.000–8.000s 的时间窗都保持原样\n画面：左段 0.000–3.533s（源 1.00–4.53s）、右段 3.533–7.500s（源 5.93–9.90s），两段满屏 cover，中间 0.6 秒居中交叉溶解\n声音与音乐：原声 -10dB，背景音乐拍点仍冻结在 66.3 BPM，旁白保持关闭\n\n没有启动制作，成片尚未渲染；等你确认后我再拿这一版去出片。\n\n只读回当前保存的 version 21 并完整展示它的创作概览，不修改任何内容，不保存新版本，也不要制作或渲染。\n\n先读回这条片子当前保存的 version 21，把故事板逐项读出来，再完整复述它的创作概览。\n\n工作了 1s\n\n读回的结果：version 21 就是当前保存的那一版，「Every cut matters X」，画面、声音、节奏、叠化都与你之前确认的一致。我没有改动、没有存新版本，也没有制作或渲染。\n\n创作概览\n\n整体方向\n\n一条 8 秒的单场景片子，画布 1920×1080（30fps）。它把一段 16:9 的科技主题访谈录屏当作唯一视觉素材，主题落在「每一刀都很重要」这件事上：录屏被切成两段满屏铺满的 cover 画面，中间用一段 0.6 秒的居中交叉溶解接起来，切口仍然钉在背景音乐的拍点上。整体气质是冷静、专业，靠低音量音乐和现场原声撑住。\n\n画面怎么走\n\n前约 3.5 秒：录屏第一段满屏铺满画面，无边不留地裁到 1920×1080。\n约 3.5 秒到 7.5 秒：溶解落到第二段录屏，同样满屏 cover 铺满，第二段的取材位置落在原素材的后半段。\n最后约半秒：右段画面在 7.5 秒结束，只剩纯色背景上独立的一行标题收尾。\n\n文字\n\n画面上有一行独立标题，压在顶部安全区，横跨整条片子：\"Every cut matters X\"，字号 77、颜色 #F8FAFC、居中，从 0.000s 一直挂到 8.000s。\n\n声音\n\n现场原声：两段录屏的原始声音都保留着，音量压到 -10dB，压在音乐下面不抢话。\n背景音乐：一条全局音乐床铺满全片，拍点网格冻结在 66.3 BPM，所以那个溶解切口是被节拍吸住的位置，不是随手切的。\n旁白：关闭，没有旁白。\n\n要动哪一处，说一声就行。\n\n请把刚才已经完整展示的 version 21 直接制作成成片，不重新设计、不修改任何内容。确认在 ¥10 预算内执行一次真实渲染。\n\n先读回这条片子当前保存的版本，确认要制作的正是你刚看完的那一版。\n\n工作了 3s\n\n（估价 16–16 积分——开始时按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）\n\n正在整理制作结果…\n准备短片 — 这一步出了意外错误\n保存版与执行输入校验\n字体资源准备 · 3 项中复用 3 项\nScroll to end\n\nRepurposer 可能出错，发布前请检查。",
+    "visibility": "visible",
+    "videos": []
+  }
+}

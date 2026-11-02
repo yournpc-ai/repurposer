@@ -93,17 +93,25 @@ const en = {
     held: "Held in active runs",
     /** The pill hero's inline held mention (meta row: "Credits · 12 held"). */
     heldInline: "{{count}} held",
-    recent: "Recent activity",
+    recent: "Activity",
     /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
      * balance + ledger full-view seat, same two endpoints as the pill. */
     title: "Credits",
     subtitle: "Your balance, top-ups, and recent activity.",
-    overview: "Overview",
+    available: "Available credits",
+    amount: "Top-up amount",
     buyTitle: "Add credits",
     packageCredits: "{{count}} credits",
     buy: "Buy credits",
+    pay: "Pay",
     buying: "Opening…",
-    packagesUnavailable: "Credit packages aren't available yet.",
+    conversion: "{{unit}} = {{credits}} credits",
+    amountRange: "Enter {{min}}–{{max}} per top-up.",
+    rateInfo: "Credit conversion and amount limits",
+    oneTime: "One-time payment. No subscription.",
+    topupSubtitle: "Enter an amount or choose a preset.",
+    packagesLoadFailed: "Couldn't load top-up options.",
+    retry: "Try again",
     topupSuccess: "{{count}} credits added.",
     checkAgain: "Check again",
     return: {
@@ -112,8 +120,7 @@ const en = {
       cancelled: "Checkout cancelled — no credits were added.",
       failed: "This payment didn't complete — no credits were added.",
     },
-    showingRecent: "Latest {{count}}",
-    viewAll: "View all →",
+    viewAll: "View all",
     tx: {
       empty: "No transactions yet",
       /** The semantic fold (ADR-057 K4): the user面 only ever sees three
@@ -153,41 +160,110 @@ const en = {
       features: "Features",
       pricing: "Pricing",
       faq: "FAQ",
+      roadmap: "Roadmap",
       menus: {
         features: {
           items: {
-            clips: {
-              label: "Vertical clips",
-              description: "Auto-cut, captioned, on-brand",
+            conversation: {
+              title: "Conversational creation",
+              description: "Describe your goal; the assistant handles the storyboard, production, and delivery.",
             },
-            languages: {
-              label: "Multi-language versions",
-              description: "Native in six European languages",
+            animation: {
+              title: "Motion graphics & text animation",
+              description: "Combine text, graphics, animation, and sound into a video.",
+            },
+            mixedMedia: {
+              title: "Mixed media",
+              description: "Bring web captures, footage, and images into the same video.",
+            },
+            revision: {
+              title: "Ongoing revisions",
+              description: "Refine through conversation while keeping editable versions.",
             },
           },
-          promo: {
-            title: "How it works",
-            description: "From raw material to published, in four steps.",
+          aside: {
+            label: "How you create",
+            title: "From goal to finished video",
+            description: "You provide the brief and feedback; the assistant handles creation and production.",
+            note: "No tracks, nodes, or professional editing software to learn.",
+          },
+        },
+        pricing: {
+          items: {
+            topup: {
+              title: "One-time top-ups",
+              description: "Add credits when you need them, without a subscription.",
+            },
+            balance: {
+              title: "A clear balance",
+              description: "See available and held credits in one place.",
+            },
+            history: {
+              title: "Activity history",
+              description: "Review purchases, usage, and releases in Settings.",
+            },
+            packages: {
+              title: "Current packages",
+              description: "See available packs and prices in Settings → Credits.",
+            },
+          },
+          aside: {
+            label: "Pricing",
+            title: "Pay for what you make",
+            description: "Video generation and production use credits. Conversation itself is not charged.",
+            note: "Current packages and prices are shown in the app.",
           },
         },
         faq: {
           items: {
-            data: {
-              label: "Where is my data stored?",
-              description: "GDPR-ready — nothing trains third-party models",
+            inputs: {
+              title: "What can I start with?",
+              description: "Start with text, images, a website, or an existing video.",
             },
-            upload: {
-              label: "What can I upload?",
-              description: "Video, audio, slides, photos, or a transcript",
+            revision: {
+              title: "Can I revise a video?",
+              description: "Keep using conversation to adjust the storyboard, text, visuals, and sound.",
             },
-            languages: {
-              label: "Which languages are supported?",
-              description: "EN, FR, DE, ES, IT, NL — written natively",
+            videoTypes: {
+              title: "What can I make?",
+              description: "Website promos, text animation, motion graphics, and mixed-media videos.",
             },
-            autoPublish: {
-              label: "Does anything get published automatically?",
-              description: "No — nothing ships without your approval",
+            download: {
+              title: "Can I preview and download?",
+              description: "Preview the delivered result and download the video when production is complete.",
             },
+          },
+          aside: {
+            label: "How it works",
+            title: "Say what you want to make",
+            description: "Start with a specific request, such as “Make a promo video for my website.”",
+            note: "You don’t need to learn editing first. Review the result, then decide what to change.",
+          },
+        },
+        roadmap: {
+          items: {
+            a: {
+              title: "Videos & versions",
+              description: "A foundation for editable videos, scenes, assets, and versions.",
+            },
+            b: {
+              title: "Creation, end to end",
+              description: "From storyboard to delivery, combining web, text, footage, graphics, and sound.",
+            },
+            c: {
+              title: "Reusable methods",
+              description: "Save and reuse your creative process, structure, and preferences.",
+            },
+            d: {
+              title: "Refine & extend",
+              description: "Polish the experience and expand short-form editing and precise review.",
+            },
+          },
+          aside: {
+            label: "Current focus",
+            title: "B. Creation, end to end",
+            description: "Refining the path from storyboard and revisions to production and delivery.",
+            note: "Stages show our development direction, not committed release dates.",
           },
         },
       },
@@ -197,20 +273,10 @@ const en = {
     entry: {
       navigation: "Main navigation",
       community: "Join the community",
-      roadmap: "Roadmap",
       preview: "Preview",
       communityTitle: "Build with us.",
       communityDescription: "Share what you’re creating, exchange ideas, and help shape Repurposer.",
       communityNote: "Community preview — an invite link will be added here.",
-      roadmapTitle: "Where we’re headed.",
-      roadmapDescription: "From making one piece of content to keeping your content moving.",
-      roadmapNote: "Illustrative roadmap. Release plans are not confirmed.",
-      create: "Create",
-      createDescription: "Plan, create, and refine through conversation.",
-      publish: "Publish",
-      publishDescription: "Connect your channels and publish with your approval.",
-      improve: "Improve",
-      improveDescription: "Use feedback to inform what you create next.",
     },
     heroTitle1: "Your content",
     heroTitle2: "creation agent",
@@ -599,7 +665,7 @@ const en = {
         },
         "product-demo-zymix": {
           prompt:
-            "Turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
+            "Use this skill to help me turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
         },
         // Website-source demos use the capture flow; video-source entries keep
         // upload-based prompts.
@@ -609,7 +675,7 @@ const en = {
         },
         "product-demo-highlights": {
           prompt:
-            "Turn this website into a product demo that presents its key features, with concise explanatory subtitles, no voiceover, and subtle camera moves and text animations that guide attention: {{placeholder}}",
+            "Use this skill to help me turn this website into a product demo that presents its key features, with concise explanatory subtitles, no voiceover, and subtle camera moves and text animations that guide attention: {{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
@@ -695,6 +761,14 @@ const en = {
     },
   },
   // @-mention system (MENTIONS §4): picker copy and type names.
+  skills: {
+    external: "External Skill",
+    builtin: {
+      "launch-film": {
+        description: "Turn a captured website into a guided product film.",
+      },
+    },
+  },
   mentions: {
     pickerEmpty: "No matches",
     remove: "Remove mention",
@@ -1361,6 +1435,12 @@ const en = {
       more: "{{count}} more",
       less: "Show less",
     },
+    sfx: {
+      play: "Play sound",
+      pause: "Pause sound",
+      seek: "Seek audio",
+      previewUnavailable: "Audio preview unavailable",
+    },
     /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
      * frame carries the progressive form and the completed frame the
      * past-tense form. Failed rows keep their honest active-form key;
@@ -1407,6 +1487,32 @@ const en = {
       videoReview: "Reviewing the delivered video…",
       videoReviewDone: "Reviewed the delivered video",
     },
+    activityReceipt: {
+      sampledFrames: "Sampled frames",
+      observed_issue: "Observed issue · {{frame}}",
+      aesthetic_suggestion: "Aesthetic suggestion · {{frame}}",
+      noFindings: "No content findings in the sampled frames",
+      audioIssues: "Audio issues",
+      checkedScope: "Review scope",
+      checked: "Checked",
+      notChecked: "Not checked",
+      audio: {
+        AUDIO_MISSING: "Expected audio is missing",
+        AUDIO_DECODE_FAILED: "Audio could not be fully decoded",
+        AUDIO_SILENT: "Expected audio is silent",
+        AUDIO_QUIET: "Audio is quiet",
+        AUDIO_CLIPPED: "Audio contains clipped samples",
+      },
+      scope: {
+        actual_output_decoded: "Exact delivered video decoded",
+        static_frames_checked: "Sampled still frames checked",
+        deterministic_output_checks: "Deterministic output checks run",
+        sampled_frame_signals_checked: "Sampled-frame signals checked",
+        audio_signal_checked: "Audio signal checked",
+        motion_and_transitions_checked: "Motion and transitions checked",
+        audio_and_av_sync_checked: "Audio and audio-visual sync checked",
+      },
+    },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
      * meta line (the duration joins inline, formatElapsed is the ONE copy). */
@@ -1421,6 +1527,7 @@ const en = {
      * `actionCount` is the honest fallback when no wall clock exists. */
     activityFold: {
       worked: "Worked for {{elapsed}}",
+      failed: "Couldn't finish this time · {{elapsed}}",
       actionCount: "{{count}} actions",
     },
     /** Video presentation companions: activity labels and the optional real
@@ -1514,6 +1621,23 @@ const en = {
       quotes: "Quote card",
       article: "Article",
       carousel: "Carousel",
+    },
+    legacyStepSummaries: {
+      uploaded: "Uploaded",
+    },
+    productionStages: {
+      validate: "Saved version and input validation",
+      fonts: "Font resource preparation",
+      generator_media: "Generator media preparation",
+      speech_media: "Narration media preparation",
+      compile_spec: "Video specification compilation",
+      output_preparation: "Output preparation",
+      output_resume: "Prepared output reuse",
+      render_queue: "Render queue request",
+      render: "Render",
+      upload: "Upload",
+      delivery: "Delivery check",
+      reuseSummary: "{{reused}} of {{total}} reused",
     },
     stepKinds: {
       preprocess: "Analyzing your uploads…",
@@ -1629,25 +1753,11 @@ const en = {
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",
-    // FAUNA-parity mechanics placeholder (2026-09-06 user ruling, final
-    // cut — @ verified working in product): FAUNA's form verbatim minus
-    // the '/' clause, minus "your" (single-line nowrap ellipsis at the
-    // inherited 14px: the 57-char original clips in the 480px panel's
-    // input; 46 chars fits). "nodes" is honest here: the @ picker's
-    // candidates (assets / outputs) ARE canvas nodes. NO '/' — chat has
-    // no slash-command system; advertising it would be a false promise
-    // (the 虚构 SKU 货架 ban applies to placeholder copy too). The '/'
-    // half earns its seat only if slash commands ever ship. ADR-117: the
-    // old "confirms with you before starting" clause left with the
-    // ask-default regime — static copy describes the default (auto) truth:
-    // presentation IS the authorization.
-    chatPlaceholder: "Describe your changes — drag or paste files, or type @ to mention nodes.",
-    // The full form's sibling (2026-09-13 user ruling): pre-first-run the
-    // canvas doesn't exist yet, so there are no "nodes" to point at — the
-    // @ picker's candidates are assets only. Copy follows the world's
-    // truth per form; the nodes version returns once the canvas lands
-    // (panel / dock forms).
-    chatPlaceholderAssets: "Describe what you want to make — drag or paste files, or type @ to mention assets.",
+    // The editing state's @ candidates include assets and outputs; the first-
+    // creation state has assets only. Both states expose the same / Skill picker.
+    chatPlaceholder: "Use '@' to mention assets or outputs, '/' to use skills.",
+    // Full form before the first run: the @ picker's candidates are assets only.
+    chatPlaceholderAssets: "Use '@' to mention assets, '/' to use skills.",
     attachFiles: "Attach files",
     retryUpload: "Retry upload",
     removeAttachment: "Remove attachment",

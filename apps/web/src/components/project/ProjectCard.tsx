@@ -87,16 +87,16 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
       >
         {/* Flat at rest (Flora 式): the thumbnail's own fill is the only
             separation from the page — no card shell, no hairline (填充优先,
-            §4)。hover 语言 = 媒体区 ring-1·/30 交互环 + 浮动钮（非 bg 座——
+            §4)。hover 语言 = 媒体区 border·/30 交互环 + 浮动钮（非 bg 座——
             accent 在 6px padding 缝里读作糊框；环直接抱住媒体区，空井/视频
-            通吃）；选中 = 常驻 ring-2·/60（宽度+深度两档差，与实心勾选圈
+            通吃）；选中 = 常驻 outline-2·/60（宽度+深度两档差，与实心勾选圈
             同族），盖住 hover 档。 */}
         <div className="rounded-xl p-1.5">
           <div
             className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
               selected
-                ? "ring-2 ring-foreground/60"
-                : "group-hover:ring-1 group-hover:ring-foreground/30"
+                ? "outline-2 outline-foreground/60"
+                : "group-hover:outline-1 group-hover:outline-foreground/30"
             } ${
               // Neutral base for the live mist — bg-primary/10 would leak hue
               // through it; the tinted base is only for the settled thumbnail.
@@ -120,7 +120,7 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
                 className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full transition-opacity ${
                   selected
                     ? "bg-foreground text-background opacity-100"
-                    : "bg-background text-transparent opacity-0 ring-1 ring-foreground/20 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100"
+                    : "bg-background text-transparent opacity-0 border border-foreground/20 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100"
                 }`}
               >
                 <Check className="h-3.5 w-3.5" />

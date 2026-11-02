@@ -2,8 +2,9 @@
 
 The reviewer sees decoded pixels from the Output's own media, never a fresh
 render or the Composition's current head. ``render_probe`` remains the media
-file's hard-check seat; this module adds only the first subjective read. Its
-report is advisory and lives on that Output's existing quality read face.
+file's hard-check seat; this module adds advisory content review and separate
+deterministic sampled-frame/audio-signal observations. Its report lives on
+that Output's existing quality read face.
 """
 from __future__ import annotations
 
@@ -27,13 +28,28 @@ from app.editing.service import format_storyboard_text, video_version_read
 from app.models.schemas import MediaInput, MediaInputType, ReviewVideoArgs
 from app.models.tables import Output, Project
 from app.providers import storage
+from app.providers.llm.base import LLMError
+from app.tools.video.output_checks import (
+    OUTPUT_CHECKER_VERSION,
+    FrameSample,
+    inspect_output_media,
+)
 
 _MAX_SCENE_FRAMES = 16
 _FRAME_LONG_EDGE = 1280
+_REVIEW_SCHEMA_VERSION = 2
 
 
 class ReviewError(ValueError):
     """An honest review refusal (wrong identity, undelivered or undecodable)."""
+
+
+class ReviewAttemptFailed(ReviewError):
+    """The reviewer exhausted its bounded repair without a legal report."""
+
+    def __init__(self, *, previous_report: dict[str, Any] | None) -> None:
+        super().__init__("the reviewer did not produce a valid content report")
+        self.previous_report = previous_report
 
 
 class ReviewFinding(BaseModel):
@@ -328,6 +344,9 @@ def _reusable_report(
         and isinstance(saved, dict)
         and saved.get("output_id") == str(output_id)
         and saved.get("requirements") == args.requirements
+        and saved.get("schema_version") == _REVIEW_SCHEMA_VERSION
+        and (saved.get("media_inspection") or {}).get("checker_version")
+        == OUTPUT_CHECKER_VERSION
         # Older reports have no sampling metadata: they cannot prove that
         # they cover this request, so they are never reused by implication.
         and "at_seconds" in saved
@@ -335,6 +354,19 @@ def _reusable_report(
     ):
         return saved
     return None
+
+
+def _previous_review_facts(report: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Carry earlier world facts forward without recycling prose as evidence."""
+    if report is None:
+        return None
+    return {
+        "requirements": report.get("requirements"),
+        "at_seconds": report.get("at_seconds"),
+        "reviewed_at": report.get("reviewed_at"),
+        "scope": report.get("scope"),
+        "media_inspection": report.get("media_inspection"),
+    }
 
 
 async def review_video(
@@ -375,6 +407,11 @@ async def review_video(
     read = await video_version_read(db, owner_id=owner_id, output_id=output.id)
     video = await storage.read(video_key)
     frames = await _extract_frames(video, spec, args.at_seconds)
+    inspection = inspect_output_media(
+        video,
+        spec,
+        [FrameSample(frame.frame, frame.time_seconds, frame.jpeg) for frame in frames],
+    )
     output_facts = {
         "output_id": str(output.id),
         **pinned,
@@ -385,15 +422,32 @@ async def review_video(
     }
     from app.tools.video.agents import video_reviewer  # deferred: declaration/import cycle
 
-    answer = await video_reviewer.call(
-        requirements=args.requirements,
-        output_facts=json.dumps(output_facts, ensure_ascii=False),
-        storyboard=format_storyboard_text(read),
-        frame_facts=_frame_facts(frames, spec),
-        frames=_media_inputs(frames),
+    saved_report = (output.quality or {}).get("content_review")
+    previous_report = (
+        saved_report
+        if isinstance(saved_report, dict)
+        and saved_report.get("output_id") == str(output.id)
+        and saved_report.get("video_sha256") == output_facts["video_sha256"]
+        else None
     )
+    try:
+        answer = await video_reviewer.call(
+            requirements=args.requirements,
+            output_facts=json.dumps(output_facts, ensure_ascii=False),
+            storyboard=format_storyboard_text(read),
+            frame_facts=_frame_facts(frames, spec),
+            deterministic_checks=json.dumps(inspection.model_dump(mode="json"), ensure_ascii=False),
+            previous_review_facts=json.dumps(
+                _previous_review_facts(previous_report), ensure_ascii=False
+            ),
+            frames=_media_inputs(frames),
+        )
+    except LLMError as exc:
+        # A failed focused recheck must not erase or inherit the earlier report's
+        # success. The shared seat closes from these real world facts instead.
+        raise ReviewAttemptFailed(previous_report=previous_report) from exc
     report = {
-        "schema_version": 1,
+        "schema_version": _REVIEW_SCHEMA_VERSION,
         "output_id": str(output.id),
         **pinned,
         "execution_digest": output_facts["execution_digest"],
@@ -405,13 +459,21 @@ async def review_video(
         "scope": {
             "actual_output_decoded": True,
             "static_frames_checked": True,
+            "deterministic_output_checks": True,
+            "sampled_frame_signals_checked": True,
+            "audio_signal_checked": inspection.audio.decode_ok,
             "motion_and_transitions_checked": False,
             "audio_and_av_sync_checked": False,
         },
         "limitations": [
-            "Findings are based on the listed decoded still frames, not continuous motion playback.",
-            "Audio, music, transitions and audio-visual synchronization were not reviewed.",
+            "Findings are based on the listed decoded still frames, "
+            "not continuous motion playback.",
+            "Flat or repeated sampled frames are candidates for inspection, not proof of a defect.",
+            "Audio stream presence and PCM levels are measured; perceived mix quality and "
+            "audio-visual synchronization are not reviewed.",
+            "RMS and peak dBFS are not BS.1770 integrated LUFS.",
         ],
+        "media_inspection": inspection.model_dump(mode="json"),
         "frames": [
             {
                 "frame_id": frame.frame_id,

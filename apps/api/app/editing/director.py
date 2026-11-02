@@ -225,6 +225,10 @@ class ProgramDirection(BaseModel):
     code: str = Field(min_length=1, max_length=24000)
 
 
+class ComponentDirection(ProgramDirection):
+    """One Agent-authored controlled TSX visual plus optional native title."""
+
+
 class GeneratedImageDirection(BaseModel):
     """The first model-image consumer: one background request plus native copy."""
 

@@ -1,17 +1,25 @@
 "use client"
 
 import {
-  createContext,
   useCallback,
-  useContext,
+  useId,
   useMemo,
+  useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from "react"
+import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useReducedMotion,
+} from "motion/react"
 import { useTranslation } from "react-i18next"
 import { Cpu, PanelsTopLeft, Share2, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import type { CreditTopupRequest } from "@/lib/credits"
 import {
   Dialog,
   DialogContent,
@@ -21,27 +29,22 @@ import { AssistantSection } from "@/components/settings/AssistantSection"
 import { ChannelsSection } from "@/components/settings/ChannelsSection"
 import { CreditsSection } from "@/components/settings/CreditsSection"
 import { GeneralSection } from "@/components/settings/GeneralSection"
+import { CreditTopupDialog } from "@/components/credits/CreditTopupDialog"
+import {
+  SettingsDialogContext,
+  type CheckoutReturn,
+  type SettingsSectionId,
+} from "@/components/settings/settings-dialog-context"
 
-/** Settings as a shared DIALOG, never a page (MiniMax / FLORA pattern): one
- * modal — left section nav + right content — that ANY entry point summons
- * via `useSettingsDialog().openSettings(section)` (the account console's
- * settings row; the CreditsPill popover's full-ledger deep link). The
- * provider seats at the ROOT route so root-level pages (the project page)
- * reach it too. The retired `/settings` page survives only as the channels
- * OAuth callback shim (it toasts, opens this dialog, and bounces home). New
- * deep surfaces register as SECTIONS entries below, never as routes. */
-
-export type SettingsSectionId = "channels" | "general" | "assistant" | "credits"
-
-export interface CheckoutReturn {
-  orderId: string
-  outcome: "success" | "cancelled"
-}
+/** Settings as a shared DIALOG, never a page: one continuous surface with a
+ * subtle aside divider, then one scrolling pane whose header and section share
+ * a vertical rhythm. The same root also hosts the short credit top-up path. */
 
 interface SettingsSectionDef {
   id: SettingsSectionId
   icon: typeof Share2
   labelKey: string
+  descriptionKey: string
   render: () => ReactNode
 }
 
@@ -50,56 +53,57 @@ const SECTIONS: SettingsSectionDef[] = [
     id: "channels",
     icon: Share2,
     labelKey: "channels.title",
+    descriptionKey: "channels.subtitle",
     render: () => <ChannelsSection />,
   },
   {
     id: "general",
     icon: PanelsTopLeft,
     labelKey: "general.title",
+    descriptionKey: "general.subtitle",
     render: () => <GeneralSection />,
   },
   {
     id: "assistant",
     icon: Cpu,
     labelKey: "assistant.title",
+    descriptionKey: "assistant.subtitle",
     render: () => <AssistantSection />,
   },
   {
     id: "credits",
     icon: Zap,
     labelKey: "credits.title",
+    descriptionKey: "credits.subtitle",
     render: () => <CreditsSection />,
   },
 ]
-
-interface SettingsDialogHandle {
-  openSettings: (section?: SettingsSectionId, checkoutReturn?: CheckoutReturn) => void
-  checkoutReturn: CheckoutReturn | null
-  clearCheckoutReturn: () => void
-}
-
-const SettingsDialogContext = createContext<SettingsDialogHandle | null>(null)
-
-export function useSettingsDialog(): SettingsDialogHandle {
-  const ctx = useContext(SettingsDialogContext)
-  if (!ctx)
-    throw new Error("useSettingsDialog must be used within SettingsDialogProvider")
-  return ctx
-}
 
 export function SettingsDialogProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState<SettingsSectionId>("channels")
   const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturn | null>(null)
+  const [topupOpen, setTopupOpen] = useState(false)
+  const [topupRequest, setTopupRequest] = useState<CreditTopupRequest | null>(null)
 
   const openSettings = useCallback(
     (s: SettingsSectionId = "channels", checkout?: CheckoutReturn) => {
       setSection(s)
       setCheckoutReturn(checkout ?? null)
+      setTopupOpen(false)
+      setTopupRequest(null)
       setOpen(true)
     },
     [],
   )
+  const openCreditTopup = useCallback((shortfall?: CreditTopupRequest) => {
+    setTopupRequest(shortfall ?? null)
+    setTopupOpen(true)
+  }, [])
+  const closeCreditTopup = useCallback(() => {
+    setTopupOpen(false)
+    setTopupRequest(null)
+  }, [])
   const clearCheckoutReturn = useCallback(() => setCheckoutReturn(null), [])
   const onOpenChange = useCallback((next: boolean) => {
     setOpen(next)
@@ -107,8 +111,8 @@ export function SettingsDialogProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const handle = useMemo(
-    () => ({ openSettings, checkoutReturn, clearCheckoutReturn }),
-    [openSettings, checkoutReturn, clearCheckoutReturn],
+    () => ({ openSettings, openCreditTopup, checkoutReturn, clearCheckoutReturn }),
+    [openSettings, openCreditTopup, checkoutReturn, clearCheckoutReturn],
   )
 
   return (
@@ -119,6 +123,11 @@ export function SettingsDialogProvider({ children }: { children: ReactNode }) {
         onOpenChange={onOpenChange}
         section={section}
         onSectionChange={setSection}
+      />
+      <CreditTopupDialog
+        open={topupOpen}
+        shortfall={topupRequest}
+        onClose={closeCreditTopup}
       />
     </SettingsDialogContext.Provider>
   )
@@ -136,52 +145,110 @@ function SettingsDialog({
   onSectionChange: (section: SettingsSectionId) => void
 }) {
   const { t } = useTranslation()
+  const reduce = useReducedMotion()
+  const headingId = useId()
+  const scroller = useRef<HTMLDivElement>(null)
+  const navButtons = useRef<(HTMLButtonElement | null)[]>([])
   const active = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0]
+
+  const onNavKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const steps: Record<string, number> = {
+      ArrowDown: 1,
+      ArrowRight: 1,
+      ArrowUp: -1,
+      ArrowLeft: -1,
+    }
+    const next = event.key in steps
+      ? (index + steps[event.key] + SECTIONS.length) % SECTIONS.length
+      : event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? SECTIONS.length - 1
+          : -1
+    if (next < 0) return
+    event.preventDefault()
+    navButtons.current[next]?.focus()
+    onSectionChange(SECTIONS[next].id)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Frosted overlay chrome is baked into DialogContent (overlay-surface).
-          Fixed height with one internal scrollport (the content column) —
-          the nav never scrolls. */}
-      <DialogContent className="h-[min(600px,85svh)] gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        {/* a11y: the dialog's accessible name (the visual header below is the
-            same copy, so this stays visually hidden). */}
+      <DialogContent className="h-[min(680px,88svh)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
         <div className="flex h-full min-h-0">
-          {/* Left section nav — with multiple sections the rail is real
-              navigation, visible at every width (labels collapse to icons
-              on the smallest screens). Selected = the nav law: accent fill
-              + foreground text. */}
-          <nav className="flex w-12 flex-none flex-col gap-0.5 p-2 sm:w-48 sm:p-3">
-            <p className="hidden px-2 pb-2 text-sm font-semibold sm:block">{t("settings.title")}</p>
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onSectionChange(s.id)}
-                title={t(s.labelKey)}
-                className={cn(
-                  "flex h-9 items-center justify-center gap-2 rounded-md px-2 text-xs transition-colors sm:justify-start",
-                  s.id === active.id
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <s.icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{t(s.labelKey)}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* Right content: section title header (clear of the × at
-              top-right) + the only scrollport. */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <p className="px-5 pt-4 pb-1 pr-10 text-sm font-semibold">
-              {t(active.labelKey)}
+          <aside className="flex w-12 flex-none flex-col border-r border-subtle p-2 sm:w-60 sm:p-4">
+            <p className="hidden px-2 pb-5 pt-1 text-xl font-semibold sm:block">
+              {t("settings.title")}
             </p>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-2 thin-scroll">
-              {open ? active.render() : null}
-            </div>
+            <nav aria-label={t("settings.title")}>
+              <LayoutGroup id="settings-dialog-sections">
+                <ul className="flex flex-col gap-1">
+                  {SECTIONS.map((s, index) => (
+                    <li key={s.id}>
+                      <button
+                        ref={(node) => { navButtons.current[index] = node }}
+                        type="button"
+                        onClick={() => onSectionChange(s.id)}
+                        onKeyDown={(event) => onNavKey(event, index)}
+                        title={t(s.labelKey)}
+                        aria-current={s.id === active.id ? "page" : undefined}
+                        className={cn(
+                          "relative flex h-10 w-full items-center justify-center gap-2 rounded-md px-2.5 text-sm transition-colors hover:bg-accent hover:text-foreground sm:justify-start",
+                          s.id === active.id
+                            ? "text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {s.id === active.id && (
+                          <motion.span
+                            layoutId="settings-section-highlight"
+                            className="absolute inset-0 rounded-md bg-accent"
+                            transition={{ duration: reduce ? 0 : 0.18 }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        <s.icon className="relative z-10 h-4.5 w-4.5" />
+                        <span className="relative z-10 hidden sm:inline">
+                          {t(s.labelKey)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </LayoutGroup>
+            </nav>
+          </aside>
+
+          <div
+            ref={scroller}
+            role="region"
+            aria-labelledby={headingId}
+            className="min-w-0 flex-1 overflow-y-auto thin-scroll"
+          >
+            <AnimatePresence
+              mode="wait"
+              initial={false}
+              onExitComplete={() => scroller.current?.scrollTo({ top: 0 })}
+            >
+              <motion.div
+                key={active.id}
+                className="flex flex-col gap-6 p-5 sm:p-8"
+                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: reduce ? 0 : 0.16 }}
+              >
+                <header className="pr-8">
+                  <h3 id={headingId} className="text-xl font-semibold">
+                    {t(active.labelKey)}
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                    {t(active.descriptionKey)}
+                  </p>
+                </header>
+                {open ? active.render() : null}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </DialogContent>

@@ -36,6 +36,10 @@ class PaymentPackageNotFound(PaymentError):
     code = "payments.package_not_found"
 
 
+class PaymentAmountInvalid(PaymentError):
+    code = "payments.amount_invalid"
+
+
 class PaymentProviderError(PaymentError):
     code = "payments.checkout_failed"
 
@@ -47,11 +51,9 @@ class InvalidStripeSignature(PaymentError):
 @dataclass(frozen=True)
 class CreditPackage:
     key: str
-    stripe_price_id: str
     amount_minor: int
     currency: str
     credits: int
-    active: bool
 
 
 @dataclass(frozen=True)
@@ -61,35 +63,68 @@ class _PackageSpec:
     credits: int
 
 
-# Test-first commercial catalog. A missing environment Price makes the package
-# inactive, never a zero-priced offer. Values are minor units and credits.
+@dataclass(frozen=True)
+class CustomTopupPolicy:
+    currency: str
+    min_amount_minor: int
+    max_amount_minor: int
+    credits_per_major: int
+
+
+# Server-defined presets and custom amounts share the same inline-price path.
+# Values are minor units and credits; no Stripe Product/Price config exists.
 PACKAGE_REGISTRY = {
     "starter": _PackageSpec(amount_minor=1000, currency="eur", credits=10000),
+    "topup_20": _PackageSpec(amount_minor=2000, currency="eur", credits=20000),
+    "topup_50": _PackageSpec(amount_minor=5000, currency="eur", credits=50000),
 }
 
+CUSTOM_TOPUP_KEY = "custom"
+CUSTOM_TOPUP_CREDITS_PER_MINOR = 10
+CUSTOM_TOPUP_POLICY = CustomTopupPolicy(
+    currency="eur",
+    min_amount_minor=100,
+    max_amount_minor=100000,
+    credits_per_major=CUSTOM_TOPUP_CREDITS_PER_MINOR * 100,
+)
 
-def _price_id(package_key: str) -> str:
-    if package_key == "starter":
-        return settings.stripe_price_starter.strip()
-    return ""
+
+def _custom_package(amount_minor: int) -> CreditPackage:
+    policy = CUSTOM_TOPUP_POLICY
+    if not policy.min_amount_minor <= amount_minor <= policy.max_amount_minor:
+        raise PaymentAmountInvalid()
+    return CreditPackage(
+        key=CUSTOM_TOPUP_KEY,
+        amount_minor=amount_minor,
+        currency=policy.currency,
+        credits=amount_minor * CUSTOM_TOPUP_CREDITS_PER_MINOR,
+    )
+
+
+def _checkout_line_items(package: CreditPackage) -> list[dict[str, Any]]:
+    return [
+        {
+            "price_data": {
+                "currency": package.currency,
+                "unit_amount": package.amount_minor,
+                "product_data": {"name": f"{package.credits} credits"},
+            },
+            "quantity": 1,
+        }
+    ]
 
 
 def list_credit_packages() -> list[CreditPackage]:
-    """Active packages only; the frontend never receives a second price list."""
-    packages: list[CreditPackage] = []
-    for key, spec in PACKAGE_REGISTRY.items():
-        price_id = _price_id(key)
-        packages.append(
-            CreditPackage(
-                key=key,
-                stripe_price_id=price_id,
-                amount_minor=spec.amount_minor,
-                currency=spec.currency,
-                credits=spec.credits,
-                active=bool(price_id),
-            )
+    """Server-defined presets; the frontend never receives a second price list."""
+    return [
+        CreditPackage(
+            key=key,
+            amount_minor=spec.amount_minor,
+            currency=spec.currency,
+            credits=spec.credits,
         )
-    return [package for package in packages if package.active]
+        for key, spec in PACKAGE_REGISTRY.items()
+    ]
 
 
 def _package(package_key: str) -> CreditPackage:
@@ -108,43 +143,23 @@ def _configured_livemode() -> bool:
     raise PaymentConfigurationError()
 
 
-def price_mismatch(package: CreditPackage, price: dict[str, Any]) -> str | None:
-    """Reject a mismatched Stripe Price before a customer can pay it."""
-    if not price.get("active"):
-        return "price_inactive"
-    if price.get("type") != "one_time":
-        return "price_not_one_time"
-    if price.get("unit_amount") != package.amount_minor:
-        return "amount_mismatch"
-    if str(price.get("currency") or "").lower() != package.currency:
-        return "currency_mismatch"
-    return None
-
-
 async def create_checkout_session(
-    db: AsyncSession, *, user: User, package_key: str
+    db: AsyncSession,
+    *,
+    user: User,
+    package_key: str | None = None,
+    amount_minor: int | None = None,
 ) -> tuple[PaymentOrder, str]:
     """Persist the order before exposing a payable Checkout Session."""
-    package = _package(package_key)
+    if (package_key is None) == (amount_minor is None):
+        raise PaymentAmountInvalid()
+    if amount_minor is not None:
+        package = _custom_package(amount_minor)
+    else:
+        assert package_key is not None
+        package = _package(package_key)
     livemode = _configured_livemode()
     stripe.api_key = settings.stripe_secret_key.strip()
-    try:
-        price = await stripe.Price.retrieve_async(package.stripe_price_id)
-    except stripe.error.StripeError as e:
-        logger.warning(
-            "stripe_price_read_failed",
-            package_key=package.key,
-            error_type=type(e).__name__,
-        )
-        raise PaymentProviderError() from e
-    mismatch = price_mismatch(package, price.to_dict_recursive())
-    if mismatch:
-        logger.warning(
-            "stripe_package_misconfigured",
-            package_key=package.key,
-            reason=mismatch,
-        )
-        raise PaymentConfigurationError()
 
     order = PaymentOrder(
         user_id=user.id,
@@ -164,8 +179,8 @@ async def create_checkout_session(
     try:
         session = await stripe.checkout.Session.create_async(
             mode="payment",
-            payment_method_types=["card"],
-            line_items=[{"price": package.stripe_price_id, "quantity": 1}],
+            allowed_payment_method_types=["card"],
+            line_items=_checkout_line_items(package),
             client_reference_id=str(user.id),
             customer_email=user.email,
             metadata=metadata,
@@ -183,6 +198,9 @@ async def create_checkout_session(
             "stripe_checkout_failed",
             order_id=str(order.id),
             error_type=type(e).__name__,
+            error_code=e.code,
+            error_param=e.param,
+            error_message=str(e),
         )
         raise PaymentProviderError() from e
     except PaymentProviderError:
@@ -262,7 +280,7 @@ async def process_stripe_webhook(
     except (stripe.error.SignatureVerificationError, ValueError) as e:
         raise InvalidStripeSignature() from e
 
-    data = event.to_dict_recursive()
+    data = event.to_dict()
     event_id = str(data.get("id") or "")
     event_type = str(data.get("type") or "")
     if not event_id:

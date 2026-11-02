@@ -7,10 +7,11 @@ import { ChevronLeft, ChevronRight, Maximize2, Volume2, VolumeX } from "lucide-r
 import { RecipeCard } from "@/components/home/RecipeCard"
 import { Button } from "@/components/ui/button"
 import type { ShelfDemo, ShelfItem } from "./recipeFamilies"
+import type { SkillOption } from "@/lib/skills"
 
 /**
  * 横滑货架 (D5, prototype 屏① .shelf): one shelf = a title + a white
- * container (bg-card, 发丝线, rounded-lg — in-flow surface, NO shadow)
+ * container (bg-card, border-subtle, rounded-lg — in-flow surface, NO shadow)
  * holding a horizontal scroll track (no-scrollbar). Cards:
  * - recipe items reuse RecipeCard (the schematic cover + three text rows);
  * - demo items are real rendered videos, autoplay loop/muted; hover/focus
@@ -22,8 +23,8 @@ import type { ShelfDemo, ShelfItem } from "./recipeFamilies"
  *
  * The ‹ › pagers are honest chrome (禁死按钮): each renders ONLY while there
  * is more to page to in its direction, one viewport-ish step per click.
- * Circular icon buttons = the rounded-full law's first exception; same-fill
- * boundary on the white shelf = the hairline ring's legal seat.
+ * Circular icon buttons = the rounded-full law's first exception; quiet
+ * borderless controls over the shelf.
  */
 export function RecipeShelf({
   title,
@@ -36,7 +37,7 @@ export function RecipeShelf({
 }: {
   title: string
   items: ShelfItem[]
-  onPrefill: (prefillKey: string) => void
+  onPrefill: (prefillKey: string, skill?: SkillOption) => void
   /** Index of the item that carries the `home-recipes` tour anchor (the
    * Ads family's first demo card — Tour skips the step when the anchor
    * renders nothing). Demo cards stamp the anchor on their primary Use-prompt
@@ -75,7 +76,7 @@ export function RecipeShelf({
   return (
     <section className="w-full min-w-0 max-w-full">
       <h3 className="mb-2.5 text-base font-medium">{title}</h3>
-      <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg bg-card p-3.5 ring-1 ring-foreground/10">
+      <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-lg bg-card p-3.5 border border-subtle">
         <div
           ref={trackRef}
           className="flex w-full min-w-0 max-w-full gap-3 overflow-x-auto no-scrollbar"
@@ -87,7 +88,7 @@ export function RecipeShelf({
                 data-tour={index === tourAnchorIndex ? "home-recipes" : undefined}
                 className="w-56 flex-none sm:w-64"
               >
-                <RecipeCard card={item.card} onSelect={() => onPrefill(item.prefillKey)} />
+                <RecipeCard card={item.card} onSelect={() => onPrefill(item.prefillKey, item.skill)} />
               </div>
             ) : (
               // data-tour mirror of the recipe branch — tour step 3 anchors
@@ -96,7 +97,7 @@ export function RecipeShelf({
               <div key={item.demo.id} className="flex-none">
                 <DemoCard
                   demo={item.demo}
-                  onSelect={() => onPrefill(item.prefillKey)}
+                  onSelect={() => onPrefill(item.prefillKey, item.skill)}
                   tourAnchor={index === tourAnchorIndex}
                   soundActive={soundOwner === item.demo.id}
                   onSoundStart={onSoundStart}
@@ -116,7 +117,7 @@ export function RecipeShelf({
                 behavior: "smooth",
               })
             }
-            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent"
+            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground transition-colors hover:bg-accent"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -131,7 +132,7 @@ export function RecipeShelf({
                 behavior: "smooth",
               })
             }
-            className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent"
+            className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card text-foreground transition-colors hover:bg-accent"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -297,7 +298,7 @@ function DemoCard({
         onClick={handleSelect}
         aria-label={t("recipes.shelf.usePrompt")}
         data-tour={tourAnchor ? "home-recipes" : undefined}
-        className="block h-full w-full cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="block h-full w-full cursor-pointer text-left outline-none focus-visible:outline-2 focus-visible:outline-ring/40"
       >
         <video
           ref={videoRef}
@@ -321,10 +322,10 @@ function DemoCard({
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Button
               type="button"
-              variant="secondary"
+              variant="default"
               size="lg"
               onClick={handleSelect}
-              className="pointer-events-auto h-9 px-3.5 text-sm font-normal ring-1 ring-foreground/10"
+              className="pointer-events-auto h-9 px-3.5 text-sm font-normal"
             >
               {t("recipes.shelf.usePrompt")}
             </Button>
@@ -339,7 +340,7 @@ function DemoCard({
               event.stopPropagation()
               toggleSound()
             }}
-            className="absolute bottom-2 left-2 size-9 rounded-full ring-1 ring-foreground/10"
+            className="absolute bottom-2 left-2 size-9 rounded-full"
           >
             {muted ? <VolumeX className="size-4.5" /> : <Volume2 className="size-4.5" />}
           </Button>
@@ -347,7 +348,7 @@ function DemoCard({
               card's single Use-prompt action. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute bottom-2 right-2 flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground ring-1 ring-foreground/10"
+            className="pointer-events-none absolute bottom-2 right-2 flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground"
           >
             <Maximize2 className="size-4.5" />
           </div>

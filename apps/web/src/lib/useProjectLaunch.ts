@@ -7,8 +7,10 @@ import { toast } from "sonner"
 
 import { apiFetch } from "@/lib/api"
 import { inferAssetType } from "@/lib/asset-type"
+import { chatAttachmentFromAsset } from "@/lib/chatAttachments"
 import { useAuth } from "@/lib/auth-context"
 import type { ChatMention } from "@/lib/mentions"
+import type { SkillOption, SkillReference } from "@/lib/skills"
 import type { StagingUpload } from "@/lib/stagingUploads"
 
 /**
@@ -38,6 +40,8 @@ import type { StagingUpload } from "@/lib/stagingUploads"
 export interface LaunchInput {
   prompt: string
   mentions: ChatMention[]
+  skill?: SkillReference
+  skillOption?: SkillOption
   /** Already-uploaded staging items (useStagingUploads). Launch refuses to
    * fire while any item is mid-flight or failed — Generate never waits on
    * the wire and never silently drops a file. */
@@ -103,7 +107,7 @@ export function useProjectLaunch() {
           // prompt-only send creates NO asset: pasted text is promoted
           // server-side in the chat plan path when it IS the user's content
           // (LLM-judged, never a length heuristic).
-          await Promise.all(
+          const attachedAssets = await Promise.all(
             input.staged.map(async (s) => {
               const assetRes = await apiFetch(
                 `/api/v1/projects/${project.id}/assets/from-staging`,
@@ -118,6 +122,19 @@ export function useProjectLaunch() {
                 },
               )
               if (!assetRes.ok) throw new Error("Failed to attach staged asset")
+              return assetRes.json() as Promise<{
+                id: string
+                type: string
+                file_url: string | null
+                stream_url?: string | null
+                title: string | null
+              }>
+            }),
+          )
+          const attachments = attachedAssets.map((asset, index) =>
+            chatAttachmentFromAsset(asset, {
+              name: input.staged[index].file.name,
+              size: input.staged[index].file.size,
             }),
           )
 
@@ -132,7 +149,10 @@ export function useProjectLaunch() {
               firstMessage: {
                 text,
                 mentions: input.mentions,
+                skill: input.skill,
+                skillOption: input.skillOption,
                 personaId: input.personaId || undefined,
+                attachments,
               },
             } as Record<string, unknown>,
           })

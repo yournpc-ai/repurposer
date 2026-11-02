@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { QuestionMessage } from "@/components/chat/historyReplay"
+import type { QuestionMessage } from "@/components/chat/timeline/types"
 
 import { reconcileStartAfterAbort, type StartRecoveryDeps } from "./startRecovery"
 

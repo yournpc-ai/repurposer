@@ -5,16 +5,23 @@ import { toast } from "sonner"
 
 import { PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
 import { useChannels } from "@/lib/channels"
-import { useSettingsDialog } from "@/components/settings/SettingsDialog"
+import { useSettingsDialog, type CheckoutReturn } from "@/components/settings/settings-dialog-context"
 
 import type { ChannelPlatform } from "@/lib/types"
+
+interface SettingsSearch {
+  connected?: string
+  error?: string
+  checkout?: CheckoutReturn["outcome"]
+  order_id?: string
+}
 
 /** NOT a page — the shared SettingsDialog is the surface. This shim handles
  * channel OAuth and hosted Checkout returns, opens the matching section, and
  * bounces home. Checkout=success is only a browser return: CreditsSection must
  * still read the server's paid order before announcing a top-up. */
 export const Route = createFileRoute("/_app/settings")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): SettingsSearch => ({
     connected: typeof search.connected === "string" ? search.connected : undefined,
     error: typeof search.error === "string" ? search.error : undefined,
     checkout:

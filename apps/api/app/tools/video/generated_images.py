@@ -14,6 +14,7 @@ import binascii
 import hashlib
 import io
 import json
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -159,6 +160,7 @@ async def ensure_generated_image_clip(
     execution_id: str | None,
     composition_id: str | None = None,
     regenerate: bool = False,
+    on_reuse: Callable[[bool], None] | None = None,
 ) -> dict[str, Any]:
     """Return exact fixed image facts, generating only on an authorized miss."""
     obj = _image_object(clip)
@@ -172,6 +174,8 @@ async def ensure_generated_image_clip(
     if cached is not None:
         if pointer is not None:
             await _save_manifest(pointer, cached)
+        if on_reuse is not None:
+            on_reuse(True)
         return {**cached, "clip_id": clip.clip_id, "object_id": obj.object_id}
 
     # Persist the possibility of submission before the non-idempotent POST.
@@ -238,4 +242,6 @@ async def ensure_generated_image_clip(
         # The current work reuses its latest fixed generation after native edits;
         # another Composition's regeneration cannot move this pointer.
         await _save_manifest(pointer, cached)
+    if on_reuse is not None:
+        on_reuse(False)
     return {**cached, "clip_id": clip.clip_id, "object_id": obj.object_id}

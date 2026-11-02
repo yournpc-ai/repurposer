@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "output_id": "b7b562f2-ae31-40ed-8670-6f83ffdefbbc",
+  "composition_id": "f372ae17-b351-4abf-8a3f-ac46fcdfc27c",
+  "composition_version_id": "8aa96258-a37a-4b2b-9860-b36fd89b051c",
+  "content_digest": "fd9cdf04d90f29274cd0928f74484547f5fc0d2a83e6c53d279b1afa905f9fda",
+  "execution_digest": null,
+  "video_sha256": "cb22d2750e709cedd6bee9079aa81360ee2a764db464b5b7929448cb3f0e8a96",
+  "reviewed_at": "2026-10-30T20:39:29.251158+00:00",
+  "requirements": "Revise the existing blur-slide to a dark background with light text. Change the first title to 'Turn every insight' and the subtitle to 'Your research and expertise shaped into content people remember'; keep 'move clearly' and the word-by-word reveal. All final text must be legible and uncropped. No narration or soundtrack is required.",
+  "at_seconds": [
+    0.4,
+    0.8,
+    1.5,
+    3.5
+  ],
+  "summary": "The supplied decoded frames show the requested dark background, light text, and staged blur/word-by-word reveal. By F04, “Turn every insight,” “move clearly,” and “Your research and expertise shaped into content people remember” are all visible, legible, and uncropped, matching the requested copy and saved composition.",
+  "scope": {
+    "actual_output_decoded": true,
+    "static_frames_checked": true,
+    "deterministic_output_checks": true,
+    "sampled_frame_signals_checked": true,
+    "audio_signal_checked": true,
+    "motion_and_transitions_checked": false,
+    "audio_and_av_sync_checked": false
+  },
+  "limitations": [
+    "Findings are based on the listed decoded still frames, not continuous motion playback.",
+    "Flat or repeated sampled frames are candidates for inspection, not proof of a defect.",
+    "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+    "RMS and peak dBFS are not BS.1770 integrated LUFS."
+  ],
+  "media_inspection": {
+    "checker_version": "output-checks-v1",
+    "visual": {
+      "sampled_frames": 4,
+      "flat_frame_candidates": [],
+      "repeated_frame_groups": []
+    },
+    "audio": {
+      "expected": false,
+      "present": true,
+      "decode_ok": true,
+      "scope": "full_stream",
+      "sample_rate": 22050,
+      "samples": 89376,
+      "duration_seconds": 4.053333,
+      "rms_dbfs": -240.0,
+      "peak_dbfs": -240.0,
+      "clipped_sample_ratio": 0.0,
+      "integrated_lufs": null
+    },
+    "issues": []
+  },
+  "frames": [
+    {
+      "frame_id": "F01",
+      "time_seconds": 0.4,
+      "frame": 12,
+      "scene_id": null,
+      "storage_key": "video-review/f1afb097c70cbff992a753c0f4d5ba883f5cd6687e172fab85d3cb78f2bd90e3.jpg",
+      "digest": "f1afb097c70cbff992a753c0f4d5ba883f5cd6687e172fab85d3cb78f2bd90e3"
+    },
+    {
+      "frame_id": "F02",
+      "time_seconds": 0.8,
+      "frame": 24,
+      "scene_id": null,
+      "storage_key": "video-review/8f423cd31652370ce9e38a8c0f3db810b33ec5a553b5114a78b7eb1c8caa1599.jpg",
+      "digest": "8f423cd31652370ce9e38a8c0f3db810b33ec5a553b5114a78b7eb1c8caa1599"
+    },
+    {
+      "frame_id": "F03",
+      "time_seconds": 1.5,
+      "frame": 45,
+      "scene_id": null,
+      "storage_key": "video-review/ac732646a37b1de6cd097fe46988fe698cf65e534939a5e2f7c65d18d3fb9a6b.jpg",
+      "digest": "ac732646a37b1de6cd097fe46988fe698cf65e534939a5e2f7c65d18d3fb9a6b"
+    },
+    {
+      "frame_id": "F04",
+      "time_seconds": 3.5,
+      "frame": 105,
+      "scene_id": null,
+      "storage_key": "video-review/1423d2ec947cc59f09d7ea2e882fa5cc34adad2961d1af76474ffe3b41557df1.jpg",
+      "digest": "1423d2ec947cc59f09d7ea2e882fa5cc34adad2961d1af76474ffe3b41557df1"
+    }
+  ],
+  "findings": []
+}

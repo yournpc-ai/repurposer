@@ -1,115 +1,59 @@
-/** RunCard — the DAG's linear projection inside a chat message (chat-loop-v2).
- *
- * The run's work segment renders through the shared RunTaskList (SSE via
- * useRunEvents — snapshot first, so historical messages rehydrate through
- * the exact same path): the live checklist collapses into the one Worked
- * receipt row, expandable back to the step details. Replay has no delivery
- * seal, so the segment honestly settles on the run's observable step span
- * (runWorkElapsedMs fallback). Terminal also inlines the produced outputs
- * as the same cards the results page uses. Never renders the graph itself
- * ("用户不见图").
- */
+/** Detached Run data adapter. The sole presentation implementation lives in
+ * RunBlock; this component only owns the historical Run subscription. */
 
-import { useEffect, useRef, useState } from "react"
-import { Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
-import { apiFetch } from "@/lib/api"
-import { deliveredOutputsForRun } from "@/lib/anchorCards"
-import { useRunEvents } from "@/lib/use-run-events"
+import { zeroDeliveryVideoOutputs } from "@/lib/anchorCards"
 import type { Output } from "@/lib/types"
+import { useRunEvents } from "@/lib/use-run-events"
 
-import { OutputChatCard } from "./OutputChatCard"
-import { RunTaskList } from "./RunTaskList"
+import { RunBlock } from "./blocks/RunBlock"
 
 interface RunCardProps {
   runId: string
-  projectId: string
-  deliveryOutputs: Output[]
-  /** Fired once when the run reaches a terminal state (outputs loaded). */
-  onDone?: () => void
-  /** Every delivery entrance opens the one Chat-hosted Output viewer. */
+  /** Delivery rows bound the render history needed for an honest Worked span. */
+  renderAttemptCount: number
+  availableOutputs: Output[]
+  hasDelivery: boolean
   onOpen: (outputId: string) => void
 }
 
-export function RunCard({ runId, deliveryOutputs, onDone, onOpen }: RunCardProps) {
+export function RunCard({
+  runId,
+  renderAttemptCount,
+  availableOutputs,
+  hasDelivery,
+  onOpen,
+}: RunCardProps) {
   const { t } = useTranslation()
-  const [outputs, setOutputs] = useState<Output[] | null>(null)
-  const onDoneRef = useRef(onDone)
-  onDoneRef.current = onDone
-
   const { steps, status, createdAt, terminal } = useRunEvents(runId)
+  // Detached rows are historical hydration: there is no live 60-second review
+  // to replay. Any real delivery row keeps ownership on that message instead.
+  const outputs = zeroDeliveryVideoOutputs({
+    steps,
+    outputs: availableOutputs,
+    terminal,
+    reviewSettled: terminal,
+    hasDelivery,
+  })
 
-  // Terminal → inline the produced outputs (from steps' output_refs). Fires
-  // once; `outputs !== null` guards the loaded state (empty list included).
-  useEffect(() => {
-    if (!terminal || outputs !== null) return
-    const refs = [...new Set(steps.flatMap((s) => s.output_refs ?? []))]
-    const load = async () => {
-      if (refs.length === 0) {
-        setOutputs([])
-        onDoneRef.current?.()
-        return
-      }
-      const fetched = await Promise.all(
-        refs.map(async (id) => {
-          const res = await apiFetch(`/api/v1/outputs/${id}`, { toast: false })
-          return res.ok ? ((await res.json()) as Output) : null
-        }),
-      )
-      setOutputs(fetched.filter((o): o is Output => o !== null))
-      onDoneRef.current?.()
-    }
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terminal])
-
-  const failed = status === "failed"
-  const deliveredOutputs = terminal
-    ? deliveredOutputsForRun(steps, [...(outputs ?? []), ...deliveryOutputs])
-    : null
-
+  // A detached stream still connecting must not flash a live-looking row.
+  if (steps.length === 0 && !terminal) return null
   return (
-    <div className="flex w-full flex-col gap-1.5">
-      {/* Quiet until the first snapshot lands — a stream still connecting
-          must not flash a live-looking row on every historical run. */}
-      {(steps.length > 0 || terminal) && (
-        <RunTaskList
-          steps={steps}
-          title=""
-          runStartedAt={createdAt}
-          terminal={terminal}
-          failed={failed}
-          reviewPending={false}
-          workEndedAtMs={null}
-          narrativeFallback={t("results.stepper.queued")}
-          hasUploads={false}
-        />
-      )}
-
-      {terminal && outputs === null && (
-        <Marker>
-          <MarkerIcon>
-            <Loader2 className="animate-spin text-primary" />
-          </MarkerIcon>
-          <MarkerContent>…</MarkerContent>
-        </Marker>
-      )}
-
-      {deliveredOutputs && deliveredOutputs.length > 0 && (
-        <div className="flex flex-wrap items-start gap-4 pt-3">
-          {deliveredOutputs.map((output) => (
-            <OutputChatCard key={output.id} output={output} onOpen={onOpen} />
-          ))}
-        </div>
-      )}
-
-      {failed && (
-        <Marker variant="border" className="pt-1.5 text-destructive">
-          <MarkerContent>{t("chat.runFailed")}</MarkerContent>
-        </Marker>
-      )}
-    </div>
+    <RunBlock
+      steps={steps}
+      title=""
+      runStartedAt={createdAt}
+      terminal={terminal}
+      cancelled={status === "cancelled"}
+      failed={status === "failed"}
+      reviewPending={false}
+      workEndedAtMs={null}
+      renderAttemptCount={renderAttemptCount}
+      narrativeFallback={t("results.stepper.queued")}
+      hasUploads={false}
+      outputs={outputs}
+      onOpen={onOpen}
+    />
   )
 }

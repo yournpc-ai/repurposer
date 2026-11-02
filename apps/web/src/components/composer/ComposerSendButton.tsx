@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef, type ComponentProps } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, Square } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -12,13 +12,15 @@ import { Button } from "@/components/ui/button"
  * control row (h-9 / 36px), one glyph size (size-4.5, matching the circle
  * icon buttons), one spinner recipe. The two shells keep their own disabled
  * logic (home: launching only; dock: empty-text-no-attachments / uploads in
- * flight) and pass the verdict in — the leaf owns no policy. The dock's
- * stop button is a separate control (secondary variant), not this leaf. */
+ * flight) and pass the verdict in — the leaf owns no policy. The dock may
+ * switch this same seat to its stop action while an abortable stream is active. */
 interface ComposerSendButtonProps
   extends Omit<ComponentProps<typeof Button>, "children"> {
   /** Spinner state (launch/stream in flight). */
   generating?: boolean
-  /** aria-label (chat.send / composer send copy). */
+  /** Stop state for the dock's current abortable stream. */
+  stop?: boolean
+  /** aria-label (chat.send / chat.stop / composer send copy). */
   label: string
 }
 
@@ -26,7 +28,7 @@ export const ComposerSendButton = forwardRef<
   HTMLButtonElement,
   ComposerSendButtonProps
 >(function ComposerSendButton(
-  { generating, label, className, ...props },
+  { generating, stop, label, className, ...props },
   ref,
 ) {
   return (
@@ -37,7 +39,9 @@ export const ComposerSendButton = forwardRef<
       className={cn("h-9 w-9 shrink-0 rounded-full transition-colors", className)}
       {...props}
     >
-      {generating ? (
+      {stop ? (
+        <Square className="size-4.5 fill-current" />
+      ) : generating ? (
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
       ) : (
         <ArrowUp className="size-4.5" />

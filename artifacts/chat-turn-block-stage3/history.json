@@ -1,0 +1,402 @@
+{
+  "page": "http://localhost:3000/projects/2f875e94-8163-4bb6-9be3-d10203ab0319",
+  "initial": {
+    "title": "Repurposer",
+    "headers": [
+      {
+        "index": 0,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -9535.5
+      },
+      {
+        "index": 1,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -9059.7
+      },
+      {
+        "index": 2,
+        "text": "工作了 4s",
+        "expanded": "false",
+        "top": -8214.7
+      },
+      {
+        "index": 3,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -7446.7
+      },
+      {
+        "index": 4,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -6678.7
+      },
+      {
+        "index": 5,
+        "text": "工作了 15s",
+        "expanded": "false",
+        "top": -6032.7
+      },
+      {
+        "index": 6,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -5718.7
+      },
+      {
+        "index": 7,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -5334.7
+      },
+      {
+        "index": 8,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4566.7
+      },
+      {
+        "index": 9,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4182.7
+      },
+      {
+        "index": 10,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3414.7
+      },
+      {
+        "index": 11,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3030.7
+      },
+      {
+        "index": 12,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2262.7
+      },
+      {
+        "index": 13,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1494.7
+      },
+      {
+        "index": 14,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1248
+      },
+      {
+        "index": 15,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -822.7
+      },
+      {
+        "index": 16,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -712
+      },
+      {
+        "index": 17,
+        "text": "8秒访谈混剪成片",
+        "expanded": "false",
+        "top": 268.5
+      }
+    ],
+    "outputs": [
+      {
+        "id": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+        "visible": true
+      },
+      {
+        "id": "b5deb79f-7c7d-4909-b82a-53d94de27c42",
+        "visible": true
+      },
+      {
+        "id": "b6a6e87c-4631-4721-8516-34df206a4b20",
+        "visible": true
+      },
+      {
+        "id": "6462e261-661a-4344-a9ba-24ee4cbd9431",
+        "visible": true
+      }
+    ],
+    "qa": [],
+    "bodyHasUploaded": false,
+    "bodyHasLegacyUploaded": false,
+    "itemCount": 76,
+    "scroll": {
+      "top": 11774,
+      "height": 684,
+      "scrollHeight": 12458,
+      "remaining": 0
+    },
+    "trailingBlank": 32,
+    "animations": [
+      {
+        "name": "shimmer-sweep",
+        "className": "min-w-0 truncate transition-colors shimmer group-hover/row:text-foreground"
+      },
+      {
+        "name": "scroll-fade-reveal-t",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      }
+    ],
+    "activeAnimations": [
+      {
+        "name": "scroll-fade-reveal-t",
+        "playState": "finished"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "playState": "finished"
+      }
+    ]
+  },
+  "toggles": [
+    {
+      "before": {
+        "top": 268.5,
+        "scrollTop": 11638,
+        "expanded": "false",
+        "text": "8秒访谈混剪成片"
+      },
+      "after": {
+        "top": 268.5,
+        "scrollTop": 11638,
+        "expanded": "true"
+      },
+      "deltaTop": 0
+    },
+    {
+      "before": {
+        "top": 341.5,
+        "scrollTop": 11565,
+        "expanded": "true",
+        "text": "8秒访谈混剪成片"
+      },
+      "after": {
+        "top": 341.5,
+        "scrollTop": 11565,
+        "expanded": "false"
+      },
+      "deltaTop": 0
+    },
+    {
+      "before": {
+        "top": 800.25,
+        "scrollTop": 1897,
+        "expanded": "false",
+        "text": "工作了 13s"
+      },
+      "after": {
+        "top": 800.25,
+        "scrollTop": 1897,
+        "expanded": "true"
+      },
+      "deltaTop": 0
+    }
+  ],
+  "scrollAway": {
+    "before": 9800,
+    "after": 9800,
+    "remaining": 500
+  },
+  "returnedToBottom": {
+    "top": 10300,
+    "remaining": 0
+  },
+  "expandedHistory": {
+    "bodyHasUploaded": true,
+    "bodyHasLegacyUploaded": false,
+    "headers": [
+      {
+        "index": 0,
+        "text": "工作了 13s",
+        "expanded": "true",
+        "top": -7487.7
+      },
+      {
+        "index": 1,
+        "text": "工作了 13s",
+        "expanded": "false",
+        "top": -6540
+      },
+      {
+        "index": 2,
+        "text": "工作了 4s",
+        "expanded": "false",
+        "top": -5477.2
+      },
+      {
+        "index": 3,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4995.7
+      },
+      {
+        "index": 4,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -4235
+      },
+      {
+        "index": 5,
+        "text": "工作了 15s",
+        "expanded": "false",
+        "top": -3800.7
+      },
+      {
+        "index": 6,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3390.7
+      },
+      {
+        "index": 7,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -3280
+      },
+      {
+        "index": 8,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2832
+      },
+      {
+        "index": 9,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2721.2
+      },
+      {
+        "index": 10,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2273.2
+      },
+      {
+        "index": 11,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -2162.5
+      },
+      {
+        "index": 12,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1714.5
+      },
+      {
+        "index": 13,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1243.7
+      },
+      {
+        "index": 14,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -1133
+      },
+      {
+        "index": 15,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -707.7
+      },
+      {
+        "index": 16,
+        "text": "工作了 1s",
+        "expanded": "false",
+        "top": -597
+      },
+      {
+        "index": 17,
+        "text": "8秒访谈混剪成片",
+        "expanded": "true",
+        "top": 383.5
+      }
+    ]
+  },
+  "detached": {
+    "opened": true,
+    "outputId": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+    "src": "https://repurposer.tos-ap-southeast-1.volces.com/52037604-9321-4b70-9212-445ccf5ade60/outputs/projects/2f875e94-8163-4bb6-9be3-d10203ab0319/97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1-1793256303.mp4",
+    "readyState": 4,
+    "duration": 8.064,
+    "error": null,
+    "play": {
+      "attempted": true,
+      "currentTime": 1.735251,
+      "paused": false
+    }
+  },
+  "refreshed": {
+    "itemCount": 76,
+    "outputs": [
+      {
+        "id": "97dcdebd-91ec-4ff7-8b8c-de57c52fc6e1",
+        "visible": true
+      },
+      {
+        "id": "b5deb79f-7c7d-4909-b82a-53d94de27c42",
+        "visible": true
+      },
+      {
+        "id": "b6a6e87c-4631-4721-8516-34df206a4b20",
+        "visible": true
+      },
+      {
+        "id": "6462e261-661a-4344-a9ba-24ee4cbd9431",
+        "visible": true
+      }
+    ],
+    "trailingBlank": 32,
+    "animations": [
+      {
+        "name": "shimmer-sweep",
+        "className": "min-w-0 truncate transition-colors shimmer group-hover/row:text-foreground"
+      },
+      {
+        "name": "scroll-fade-reveal-t",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "className": "size-full min-h-0 min-w-0 scrollbar-thin overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent scroll-fade-y thin-scroll"
+      }
+    ],
+    "activeAnimations": [
+      {
+        "name": "scroll-fade-reveal-t",
+        "playState": "finished"
+      },
+      {
+        "name": "scroll-fade-reveal-b",
+        "playState": "finished"
+      }
+    ],
+    "scroll": {
+      "top": 11774,
+      "height": 684,
+      "scrollHeight": 12458,
+      "remaining": 0
+    }
+  },
+  "consoleEvents": []
+}

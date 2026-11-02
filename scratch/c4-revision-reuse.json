@@ -1,0 +1,649 @@
+{
+  "base": {
+    "composition_id": "f372ae17-b351-4abf-8a3f-ac46fcdfc27c",
+    "version_id": "5a112f13-3458-4ae3-aa50-cfab8a67f9bf",
+    "content_digest": "ef4e082022980e2e15c63670dfcea2f0437dcb0cde3529dd722d41388351b5e2"
+  },
+  "revision": {
+    "composition_id": "f372ae17-b351-4abf-8a3f-ac46fcdfc27c",
+    "version_id": "8aa96258-a37a-4b2b-9860-b36fd89b051c",
+    "version": 2,
+    "base_version_id": "5a112f13-3458-4ae3-aa50-cfab8a67f9bf",
+    "content_digest": "fd9cdf04d90f29274cd0928f74484547f5fc0d2a83e6c53d279b1afa905f9fda",
+    "skill_provenance": {
+      "shot": "blur-slide",
+      "scope": "word-reveal-core",
+      "skill": "video-shotcraft",
+      "adapter": "native-text-v1",
+      "excluded": [
+        "editorial_furniture",
+        "brand_marks",
+        "background_folio",
+        "group_push",
+        "accent_paint",
+        "punctuation_joined_words",
+        "external_scripts"
+      ],
+      "source_hash": "00f484c2bd13b11c1df9a7582801c3e56f10044991bb9f581d8117a4788ddb0a",
+      "source_revision": "1266a3ec4831289c4d893d42dd5102723658039a"
+    },
+    "change_set": {
+      "settings": {
+        "background": {
+          "before": "#F7F6F2",
+          "after": "#101418"
+        }
+      },
+      "scenes": {
+        "added": [],
+        "removed": [],
+        "moved": []
+      },
+      "clips": {
+        "added": [],
+        "removed": [],
+        "updated": [
+          {
+            "clip_id": "clp_blur_title_b",
+            "changes": [
+              "object"
+            ],
+            "fields": [
+              {
+                "path": "object.style.color",
+                "before": "#17202A",
+                "after": "#F5F3EE"
+              }
+            ]
+          },
+          {
+            "clip_id": "clp_blur_subtitle",
+            "changes": [
+              "object",
+              "animations"
+            ],
+            "fields": [
+              {
+                "path": "animations",
+                "before": [
+                  {
+                    "animation_id": "anm_blur_subtitle_opacity",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a4e5c3fdff85992",
+                        "word:5:13:cf40d049129810b7",
+                        "word:14:22:4d7728305a82c029",
+                        "word:23:29:f9f91e1228a077d4",
+                        "word:30:34:ac48911d4d22ebc7",
+                        "word:35:38:0cb72fc6119914fe",
+                        "word:39:46:dfd9026051e57933",
+                        "word:47:50:57e9b1c00281a021",
+                        "word:51:55:efc27d3449be4f3a"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "opacity",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": 1.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_subtitle_position",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a4e5c3fdff85992",
+                        "word:5:13:cf40d049129810b7",
+                        "word:14:22:4d7728305a82c029",
+                        "word:23:29:f9f91e1228a077d4",
+                        "word:30:34:ac48911d4d22ebc7",
+                        "word:35:38:0cb72fc6119914fe",
+                        "word:39:46:dfd9026051e57933",
+                        "word:47:50:57e9b1c00281a021",
+                        "word:51:55:efc27d3449be4f3a"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "transform.position",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": [
+                          0.0,
+                          26.0
+                        ],
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": [
+                          0.0,
+                          0.0
+                        ],
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_subtitle_blur",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a4e5c3fdff85992",
+                        "word:5:13:cf40d049129810b7",
+                        "word:14:22:4d7728305a82c029",
+                        "word:23:29:f9f91e1228a077d4",
+                        "word:30:34:ac48911d4d22ebc7",
+                        "word:35:38:0cb72fc6119914fe",
+                        "word:39:46:dfd9026051e57933",
+                        "word:47:50:57e9b1c00281a021",
+                        "word:51:55:efc27d3449be4f3a"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "filter.blur",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": 9.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "after": [
+                  {
+                    "animation_id": "anm_blur_subtitle_opacity",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a51de3fdffb6c4f",
+                        "word:5:13:1764f3c4e0cdd962",
+                        "word:14:17:9d642ccbee0ce4c1",
+                        "word:18:27:d94bdd5aecea2000",
+                        "word:28:34:4dc7eae054f9ee22",
+                        "word:35:39:ec4da7187549ab84",
+                        "word:40:47:f83b5b89a811c6c7",
+                        "word:48:54:ecfda6b6196406c6",
+                        "word:55:63:ae755215d7adec60"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "opacity",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": 1.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_subtitle_position",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a51de3fdffb6c4f",
+                        "word:5:13:1764f3c4e0cdd962",
+                        "word:14:17:9d642ccbee0ce4c1",
+                        "word:18:27:d94bdd5aecea2000",
+                        "word:28:34:4dc7eae054f9ee22",
+                        "word:35:39:ec4da7187549ab84",
+                        "word:40:47:f83b5b89a811c6c7",
+                        "word:48:54:ecfda6b6196406c6",
+                        "word:55:63:ae755215d7adec60"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "transform.position",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": [
+                          0.0,
+                          26.0
+                        ],
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": [
+                          0.0,
+                          0.0
+                        ],
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_subtitle_blur",
+                    "target_object_id": "obj_blur_subtitle",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:2a51de3fdffb6c4f",
+                        "word:5:13:1764f3c4e0cdd962",
+                        "word:14:17:9d642ccbee0ce4c1",
+                        "word:18:27:d94bdd5aecea2000",
+                        "word:28:34:4dc7eae054f9ee22",
+                        "word:35:39:ec4da7187549ab84",
+                        "word:40:47:f83b5b89a811c6c7",
+                        "word:48:54:ecfda6b6196406c6",
+                        "word:55:63:ae755215d7adec60"
+                      ],
+                      "stagger": 7200
+                    },
+                    "property": "filter.blur",
+                    "keyframes": [
+                      {
+                        "at": 102000,
+                        "value": 9.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 162000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "object.style.color",
+                "before": "#3E4650",
+                "after": "#C7D0D8"
+              },
+              {
+                "path": "object.text",
+                "before": "Your existing material shaped into the content you name",
+                "after": "Your research and expertise shaped into content people remember"
+              }
+            ]
+          },
+          {
+            "clip_id": "clp_blur_title_a",
+            "changes": [
+              "object",
+              "animations"
+            ],
+            "fields": [
+              {
+                "path": "animations",
+                "before": [
+                  {
+                    "animation_id": "anm_blur_title_a_opacity",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:f06c6039aece3f4d",
+                        "word:5:10:de0cc68ba6dd16b7",
+                        "word:11:15:371a588ffdd75d66"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "opacity",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": 1.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_title_a_position",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:f06c6039aece3f4d",
+                        "word:5:10:de0cc68ba6dd16b7",
+                        "word:11:15:371a588ffdd75d66"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "transform.position",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": [
+                          0.0,
+                          64.0
+                        ],
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": [
+                          0.0,
+                          0.0
+                        ],
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_title_a_blur",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:f06c6039aece3f4d",
+                        "word:5:10:de0cc68ba6dd16b7",
+                        "word:11:15:371a588ffdd75d66"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "filter.blur",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": 18.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "after": [
+                  {
+                    "animation_id": "anm_blur_title_a_opacity",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:31cf54b3460d0e0d",
+                        "word:5:10:de0cb98ba6dd00a0",
+                        "word:11:18:3d522fe7696902b8"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "opacity",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": 1.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_title_a_position",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:31cf54b3460d0e0d",
+                        "word:5:10:de0cb98ba6dd00a0",
+                        "word:11:18:3d522fe7696902b8"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "transform.position",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": [
+                          0.0,
+                          64.0
+                        ],
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": [
+                          0.0,
+                          0.0
+                        ],
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "animation_id": "anm_blur_title_a_blur",
+                    "target_object_id": "obj_blur_title_a",
+                    "text_part": {
+                      "kind": "word",
+                      "part_ids": [
+                        "word:0:4:31cf54b3460d0e0d",
+                        "word:5:10:de0cb98ba6dd00a0",
+                        "word:11:18:3d522fe7696902b8"
+                      ],
+                      "stagger": 12000
+                    },
+                    "property": "filter.blur",
+                    "keyframes": [
+                      {
+                        "at": 30000,
+                        "value": 18.0,
+                        "easing": {
+                          "kind": "cubic_bezier",
+                          "params": [
+                            0.22,
+                            1.0,
+                            0.36,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "at": 96000,
+                        "value": 0.0,
+                        "easing": {
+                          "kind": "linear",
+                          "params": null
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "object.style.color",
+                "before": "#17202A",
+                "after": "#F5F3EE"
+              },
+              {
+                "path": "object.text",
+                "before": "Make every idea",
+                "after": "Turn every insight"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "second_product": {
+    "composition_id": "8ad8b601-f242-4cb1-8d7b-d363cf94cc94",
+    "version_id": "4056529e-26a4-473d-893a-e15ad93505aa",
+    "version": 1,
+    "content_digest": "73a81ba82a1c9b6ea0df579ea0ae23bfdafa276a60066022f0bfb0546238badb",
+    "skill_provenance": {
+      "skill": "video-shotcraft",
+      "source_revision": "1266a3ec4831289c4d893d42dd5102723658039a",
+      "source_hash": "00f484c2bd13b11c1df9a7582801c3e56f10044991bb9f581d8117a4788ddb0a",
+      "shot": "blur-slide",
+      "adapter": "native-text-v1",
+      "scope": "word-reveal-core",
+      "excluded": [
+        "editorial_furniture",
+        "brand_marks",
+        "background_folio",
+        "group_push",
+        "accent_paint",
+        "punctuation_joined_words",
+        "external_scripts"
+      ]
+    },
+    "texts": {
+      "clp_blur_title_a": "Grow your audience",
+      "clp_blur_title_b": "share boldly",
+      "clp_blur_subtitle": "Turn your hard earned expertise into stories worth following"
+    },
+    "background": "#101418"
+  },
+  "paid_rendering_started": false
+}

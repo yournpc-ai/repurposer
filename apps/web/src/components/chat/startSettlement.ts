@@ -7,7 +7,7 @@
  * client-visible message flow can.
  */
 
-import type { OverlayMessage } from "./historyReplay"
+import type { OverlayMessage } from "./timeline/types"
 
 export function shouldPaceStartEnvelopeProse(opts: {
   content: string

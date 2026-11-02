@@ -11,7 +11,8 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
-import type { VideoStoryboardBlock } from "../historyReplay"
+import type { VideoStoryboardBlock } from "../timeline/types"
+import { presentationAckReady } from "../timeline/reveal"
 
 interface GeneratorPreview {
   clip_id: string
@@ -31,7 +32,9 @@ export function StoryboardCard({
   block,
   messageId,
   prosePresented,
+  allowPresentationAck,
   onRunStarted,
+  onReady,
 }: {
   block: VideoStoryboardBlock
   messageId: string
@@ -39,7 +42,13 @@ export function StoryboardCard({
    * release. Blocks are stamped after finalization on the live path; history
    * rows are already static. */
   prosePresented: boolean
+  /** Live first presentation, or the server's exact pending/authorized
+   * delayed-start recovery. Ordinary history passes false. */
+  allowPresentationAck: boolean
   onRunStarted?: (id: string) => void
+  /** Real read/preview settlement for the outer reveal gate. Preview failure
+   * opens the honest error surface but never satisfies the ACK gate below. */
+  onReady?: (ready: boolean) => void
 }) {
   const { t } = useTranslation()
   const [read, setRead] = useState<VideoVersionRead | null>(null)
@@ -79,9 +88,22 @@ export function StoryboardCard({
 
   const previews = read?.generator_previews ?? []
   const previewsReady = previews.every((preview) => readyPreviews.includes(preview.clip_id))
+  const previewsSettled = previews.every(
+    (preview) =>
+      readyPreviews.includes(preview.clip_id) || failedPreviews.includes(preview.clip_id),
+  )
 
   useEffect(() => {
-    if (!read || !prosePresented || !previewsReady) return
+    onReady?.(failed || (read !== null && previewsSettled))
+  }, [failed, onReady, previewsSettled, read])
+
+  useEffect(() => {
+    if (!read || !presentationAckReady({
+      allowed: allowPresentationAck,
+      dtoReady: read !== null,
+      prosePresented,
+      previewsReady,
+    })) return
     let cancelled = false
     void new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -110,6 +132,7 @@ export function StoryboardCard({
     read,
     prosePresented,
     previewsReady,
+    allowPresentationAck,
     messageId,
     block.presented_message_id,
     block.composition_version_id,

@@ -14,6 +14,7 @@ import { ProjectHeader } from "@/components/project/ProjectHeader"
 import { PublishDialog } from "@/components/publish/PublishDialog"
 import { apiDelete, apiFetch, apiPost, downloadFile, toAbsoluteUrl } from "@/lib/api"
 import { outputMentionLabel } from "@/lib/mentions"
+import type { FirstMessageHandoff } from "@/lib/chatAttachments"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { canvasCapableFor } from "@/lib/canvasVisibility"
 import { useWorkspaceLayout } from "@/hooks/use-workspace-layout"
@@ -34,7 +35,7 @@ interface AssetStatusEntry {
 interface WorkflowRun {
   id: string
   project_id: string
-  status: "pending" | "running" | "completed" | "failed"
+  status: "pending" | "running" | "waiting_human" | "completed" | "failed" | "cancelled"
   progress: number
   error: string | null
   context: {
@@ -124,13 +125,7 @@ function ProjectDetailPage() {
   // is ALWAYS canvas + dock (ADR-051) — the ?overlay= route params and the
   // fullscreen shell are retired; project state drives the dock's form.
   const firstMessage = (
-    location.state as {
-      firstMessage?: {
-        text: string
-        mentions?: { type: string; id: string; label: string }[]
-        personaId?: string
-      }
-    }
+    location.state as { firstMessage?: FirstMessageHandoff }
   ).firstMessage
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [loading, setLoading] = useState(true)
@@ -245,7 +240,7 @@ function ProjectDetailPage() {
   // anonymous viewers fall through to the legacy interval.
   const runActive =
     latestRun != null &&
-    (latestRun.status === "pending" || latestRun.status === "running")
+    (latestRun.status === "pending" || latestRun.status === "running" || latestRun.status === "waiting_human")
   const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
   const sseActive = runActive && sse.steps.length > 0
 
@@ -525,7 +520,7 @@ function ProjectDetailPage() {
     // further — stop polling regardless of what the step statuses say.
     // Renders proceed independently of the run, so keep polling only while
     // any are active.
-    if ((status === "completed" || status === "failed") && !hasRenderingOutputs) {
+    if ((status === "completed" || status === "failed" || status === "cancelled") && !hasRenderingOutputs) {
       return
     }
 
@@ -754,10 +749,24 @@ function ProjectDetailPage() {
             ? {
                 text: firstMessage.text,
                 mentions: firstMessage.mentions ?? [],
+                skill: firstMessage.skill,
+                skillOption: firstMessage.skillOption,
                 personaId: firstMessage.personaId,
+                attachments: firstMessage.attachments ?? [],
               }
             : null
         }
+        onFirstMessageRetracted={() => {
+          // The retracted opening row no longer exists to suppress the mount
+          // handoff. Remove that handoff with the same atomic Stop projection;
+          // the restored composer draft must never auto-POST after a refresh.
+          void navigate({
+            to: "/projects/$id",
+            params: { id: projectId },
+            replace: true,
+            state: {} as Record<string, unknown>,
+          })
+        }}
         initialIntent={dockInitialIntent}
         initialRunId={
           // A node-originated run (ADR-058 — the card-face edit's

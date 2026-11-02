@@ -10,8 +10,8 @@
 ### 0.1 里程碑状态
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 最小基座已落地；B 按基础闭环、官网片、混合合成、程序画面、生成媒体、旁白余项分批实施，批次合同见施工文档 §2.5；C 为个人 Skill，D 为发布清理与独立扩展门。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
-- **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码、尚未完成真实验收，范围与合同见 §0.3；落码不代表已联调或可 live 收款。
+- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 最小基座已落地；B 按基础闭环、官网片、混合合成、程序画面、生成媒体、旁白余项分批实施，批次合同见施工文档 §2.5；C 为外部 Skill 持久化、加载与领域策略，D 为发布清理与独立扩展门，D5 在现有本体上扩展 SFX、component-v1 与真实 Gallery。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
+- **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项
 
@@ -20,28 +20,32 @@
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
 | **当前** | **Video Project 新架构** | **B 各限定能力及 B-UI 已贯通，完整 B 未封板。**当前收口覆盖 Chat/工具活动/呈现及全部 Use prompt 入口：已盘点14项（6可点击、6禁用族、2隐藏）；本次已有两条文字短片与一条网站片交付，字幕定位与另一网站片已授权制作但最终交付待数据库恢复核验，上传操作演示仍欠完整旅程。修复工具说明/字段差异、MG背景与微推近、文字布局参数及交付语言来源；历史展示 hash 未精确复现，不写成完全归因。原¥10窗口已记录约¥6.87及未知项保留；本次另授权¥20，已返回供应商用量约¥4.73，含失败与worker。当前 Docker/数据库连接异常、浏览器上传受阻，已请求恢复；完整调用与回答合并在 artifacts/video-project-b/b-vi-temporal/chat-journey-review.md。完整视听、接缝、剧本矩阵及其他多轮方差保留；C可基于稳定已声明能力推进，D发布门未完成 | [目标架构](VIDEO_PROJECT.md) / [施工与事实](tasks/video-project-implementation.md) §2.0、§2.4、§2.5 |
-| **当前** | **Stripe 一次性积分充值** | 单档 test `starter = €10 / 10,000 积分`、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；本地 CLI、公司 test Price 与 webhook secret 已配置且 listener Ready；真实付款、migration 执行、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
-| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张占位卡仍待用户选定对应链真片。网页 Film 相机、默认字幕落点与强调标记渲染修复待 prompt/live/render 复验，既有 AgentVeil demo 未重渲染。配方点击只预填 composer，货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
+| **当前** | **B-VII 通用时间线编辑内核** | 通用 `EditTarget` × move/trim/delete/time_map × ripple/source policy 已落码；首轮真实 Chat 暴露的端点 1 tick 越界、能力拒绝反复重试和成功后额外补版已分别修为输出网格同量化、首次能力拒绝结构终态、命名范围满足后停止，复验均未运行。`revise_video` 原子落一版并保留 provenance；纯函数、过期 base_ref DB、S13 两回合与 S14 Speech 拒绝旅程已写待跑，pytest/check_gates/prompt_gate/真实 Chat 复验不得写成通过 | [领域合同](VIDEO_PROJECT.md#66-编辑目标时间变换与联动) / [施工与验收](tasks/video-project-implementation.md#254-b-vii通用时间线编辑内核修复已落码真实-chat-复验未运行) |
+| **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；统一金额链改动后的真实联调、€20/€50、重放/并发/取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
+| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张占位卡仍待用户选定对应链真片。网页 Film 相机、默认字幕落点与强调标记渲染修复待 prompt/live/render 复验，既有 AgentVeil demo 未重渲染。视频 Skill 卡与 `/skill` 统一 Skill chip + prompt 的目标归 C2，非 Skill Recipe 继续预填；货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
+| **当前** | **Chat TurnBlock 与可见 Stop 收口** | 当前修复上下半批已落码；当前完整 API 1447 pytest、Web 352 tests、Web tsc、check_gates 均已通过。正常交付只读各消息自己的 `output_refs`；同 Run retry_upload 以 attachment epoch 重订阅并用 `upload_retry_count` / trigger ref 隔离旧 delivery，恢复后重进 active 与 Send=Stop，第二次 delivery 正常进入 live；零 delivery 仅在有界 review 落定或历史水合后展示真实 delivered 视频，迟到 delivery 不留双卡；QA echo refs、历史 settled 与初始慢历史 server id alias 已接线。连续工作段的 failed 在原段收口，用户气泡到 assistant 开场为 24px。Stop visible frontier、retract/cancelled 与写口 fence 不变。待走真实浏览器中的同 Run 恢复、第二次 delivery、零 delivery 迟到归属、QA 水合、慢历史、Stop/刷新旅程；完整 DB 与付费制作验收未做，全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
 | 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
 | 开放 | Agent Working Loop 持续闭环 | 代码层已落，六段 live 验收、Candidate Surface live/replay、CJK 长素材检索与探索存储真实 DB 迁移仍待完成；验收后才可按覆盖映射、当前矩阵、无回归证据与生产引用清点执行 `edit_graph` 退役小提交 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
 | 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟、chat `retry_upload`、确定性重传建议与缓存 miss 失败闭已落码，新增/更新测试尚未运行；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
 | 开放 | Agent 交互与画布确认迁移 | DeferredFrames 现行规则已归 CHAT；仍需真实 rejected-turn 浏览器证据：零客户端散文/预览、零服务端 commit/dock 残片，并保留有序原始事件。ADR-111 仍欠等待态节点面原型与 live 走查；相机 fit 缩放夹、capture 前估价面和刷新重建面须在同一份新合同中定清；跨轮防复读需可复现证据后再升级 | CHAT §8；现行决策 ADR-099/111 |
-| 开放 | 消息回放与素材检视 | seq/首回合事务、checkpoint五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
+| 开放 | 消息回放与素材检视 | seq/首回合事务、interim_prose 五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
 | 开放 | 素材理解与对话面验收 | prompt_gate、全量剧本和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
 | 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置) |
 | 开放 | 新视频视听与现有 UI 验收 | 网页/MG双源、逐字保真、默认字幕/章节/reveal、严格slide与音轨要求归新视频B；纯Chat/锚卡/声音互斥/移动端/双主题仍需真实走查。旧实现测试与事故工单退出不代表新能力已通过 | [视频要求](VIDEO_PROJECT.md#15-新链必须承接的产品语义与验收缺口) / [UI验收](VERIFICATION.md#57-现有-ui-自足与锚卡) |
-| 开放 | B 支撑：按需采集与内容审片 | 增强网页采集首个静态镜头与首个真实静帧审片 → 局部修订 → 制作 → 同点复核均已通过，只代表两个最小切片；截断状态已冻结并单独送入 Director。长页补读、空底板、交互状态及运动/声音等完整检查按后续镜头与作品需要保留，B-UI 已有代表旅程证据；D4 时间点编辑按独立消费者实施，不先建共享帧平台 | [施工与验收](tasks/video-project-implementation.md#253-b-支撑增量按需采集与内容质检两个首个最小闭环已通过完整能力待扩) / VIDEO_PROJECT §8.5、§9.2 |
-| 开放 | C：真实加载 video-shotcraft 与最终自我介绍视频 | 待施工；C4 固定外部来源、选择声明镜头范围，真实加载并换产品素材复用；仅导入指令或报告缺口不算本消费者通过。最终产物为产品自我介绍视频，展示真实创作、审片与修订；不代替各阶段及 D 发布门 | [C4 与验收](tasks/video-project-implementation.md#3-阶段-c个人-skill-保存调用与外部导入) / 同文 §5.1 |
+| 开放 | B 支撑：按需采集与内容审片 | 增强网页采集首个静态镜头与首个真实静帧审片 → 局部修订 → 制作 → 同点复核均已通过，只代表两个最小切片；截断状态已冻结并单独送入 Director。`output-checks-v1` 已接入 `review_video`，定向纯测试、`check_gates` 及首条 B + 四条 C4 真实 Output 的付费审片/复用通过；音频 RMS/峰值与采样帧候选已覆盖，无声音要求的合法静音不误报，连续运动、主观听感、integrated LUFS、音画同步及其他完整检查仍开放。长页补读、空底板、交互状态按后续镜头与作品需要保留；D4 时间点编辑按独立消费者实施，不先建共享帧平台 | [施工与验收](tasks/video-project-implementation.md#253-b-支撑增量按需采集与内容质检两个首个最小闭环已通过完整能力待扩) / VIDEO_PROJECT §8.5、§9.2 |
+| **当前** | C：外部 Skill 持久化、held-out 创作与正常用户旅程 | C1/C3/C4 领域出口已通过：原始 video-shotcraft 固定包导入并保存不可变 SkillVersion，owner/幂等/不可变与 Strict/Adaptive 底座已验证；未适配的 `marker-underline-title` 经通用加载由真实 Agent 创作 drawing-v1，完成 Generator 参数及原生标题修订，最终 run-less Output `a7186f7d-5c0b-4ff6-ae65-58653681c242` 的版本/digest 与实际帧通过。完整 API 1453 tests、聚焦 lint、`check_gates` 和 diff check 通过；prompt_gate 十探针均通过（A/G 11/12，其余 12/12；G 首轮因 provider 连接错误无效后复跑），未调阈。仅声明该 held-out 镜头，未支持全镜头库/外部脚本。C2/C5 基础接线已落码：内置/外部统一版本引用、picker/chip、Home 同载荷、消息持久化及 SSE/刷新回放均复用唯一 Chat/设计/生产链，Skill 不进入修订或 worker；本批未运行 pytest/Web/tsc/真实 Chat/Run，正常授权计费旅程、恶意 Skill 综合验收与最终自我介绍长片仍未完成，外部 Chat 绑定暂为 instructions-only。通用时间编辑归 B-VII，不在 C 复制 | [C 合同与证据](tasks/video-project-implementation.md#3-阶段-c外部-skill-持久化加载与领域策略) / 同文 §5.1 |
+
+| **当前** | **D5：SFX、component、Chat 工作证据与真实 Gallery** | 三个限定切片按施工合同 §4.5 并行：SFX 负责 CC0 检索/真实试听/固定资产/原生音频修订，component-v1 负责 Agent 按真实内容编写受控 TSX 并上游烘焙，Chat 工作证据先以现有 `review_video` 打通 typed receipt → Worked 展开 → 结果型正文 → 历史回放；随后统一 revision、SFX/component 与 Chat/Run 集成，再固化 launch-film SFX、文字视频和旁白视频三种内置 Skill。所有创作共用 CompositionVersion 与唯一写口，不新增作品根、SfxObject、HTML runtime、第二生产链或第二活动协议。Gallery 必须具有对应真实样片、完整音轨及制作/修订/动态视听验收；SFX 两回合候选身份已接入现有 `candidates_log` → `video_context_lines` → 服务端解算链，prompt 只在用户明确请求音效时搜索、下一回合选择后导入；Activity 复用现有投影。真实事故修复已落码但未运行验证：接受 `mp3`/`mp3float` 且保留真实帧解码；导入失败走 TerminalRefusal，重搜/改选等用户下一回合；候选在所属最终回复 drain 后揭示，selection 只重绘原卡；卡面隐藏 provider chrome 且保留持久 provenance；搜索观察与 prompt 不再诱导来源/未试听评价；播放器改为稳定 candidate-seeded bars + 真实 audio + 现有 motion；MiniMax content 中的工具方言残片在 provider 边界过滤。相关 API/Web 纯测试已写，pytest/Web/tsc/check_gates/prompt_gate/真实 Chat 复验均未运行；真实候选/导入/落轨/制作、浏览器试听和真实 Chat review 仍未验收。`FREESOUND_API_KEY` 缺失已得到真实 provider 错误；Gallery 真实证据仍不足 | [目标架构](VIDEO_PROJECT.md#0-核心决策) / [D5 施工合同](tasks/video-project-implementation.md#45-d5创作能力扩展与商业化-gallery) |
 
 ### 0.3 R1.1 — Commercial / Distribution（支付首批 ACTIVE，其余排期挂起）
 
-Stripe 一次性积分充值首批已落码，migration、测试套件与真实联调尚未运行；本地 CLI、公司 test Price 和 webhook secret 已就绪，公网 API origin/反代与 Dashboard endpoint 是当前外部待办。其余商业化与分发仍按外部凭据、平台审批和后续排期启动，不倒灌成 Video Project 当前主线的结束条件。
+Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 主旅程且仅有一条入账台账；€10/€20/€50 预设与自由金额现已统一为前端提交 `amount_minor`、服务端 `price_data` 下单，无 Stripe Price 配置依赖。统一金额链改动后的真实联调、测试套件、重放/并发等剩余验收尚未运行。公网 API origin/反代与 Dashboard endpoint 是当前外部待办。其余商业化与分发仍按外部凭据、平台审批和后续排期启动，不倒灌成 Video Project 当前主线的结束条件。
 
 | Batch | 范围 | 状态 | 依赖 | 合同 |
 |---|---|---|---|---|
 | B4b | hold GC：资格谓词与 claim 谓词语义镜像 | PLANNED | B4a | [合同](tasks/r1-1-batch-4b-hold-gc.md) |
-| B5a | Stripe 一次性积分充值：公司 test 账号、CLI/公网 webhook、Checkout、支付订单、purchase 台账与 Settings 购买面 | ACTIVE | 本地 test 配置已就绪；真实付款与测试验收、公网 API origin/反代和 Dashboard endpoint 待完成；live 配置另行 | [支付架构](PAYMENTS.md) / [施工合同](tasks/stripe-credit-topup.md) |
+| B5a | Stripe 一次性积分充值：公司 test 账号、CLI/公网 webhook、固定/自定义金额 Checkout、支付订单、purchase 台账与 Settings 购买面 | ACTIVE | 固定档位本地真实付款主链已验证且仅一条 purchase 台账；自定义金额真实联调、剩余资金/权限验收、测试套件、公网 API origin/反代和 Dashboard endpoint 待完成；live 配置另行 | [支付架构](PAYMENTS.md) / [施工合同](tasks/stripe-credit-topup.md) |
 | B5 | 订阅/权益/计费中心/agent_calls、渠道联调与已发布产物删除边界 | PLANNED | R1 + B2 + B5a | [合同](tasks/r1-1-batch-5-commercial-distribution.md) |
 | C1 | skeleton cache identity；不阻塞其他 milestone | PLANNED | 无 | [合同](tasks/r1-1-batch-c1-cache-identity.md) |
 
@@ -89,7 +93,7 @@ R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位�
 
 ### 1.2 商业化与分发（支付首批 ACTIVE，其余排期挂起）
 
-Stripe 一次性积分充值已落码，剩余外部配置与真实验收见 §0.3 B5a、`PAYMENTS.md` 和对应施工合同。订阅、权益、用户计费中心、渠道联调及 hold GC / cache identity 仍按对应合同挂起，支付商、平台开发者权限和公司主体审批是外部前置。
+Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩余资金/权限验收、测试套件与外部公网配置见 §0.3 B5a、`PAYMENTS.md` 和对应施工合同。订阅、权益、用户计费中心、渠道联调及 hold GC / cache identity 仍按对应合同挂起，支付商、平台开发者权限和公司主体审批是外部前置。
 
 ### 1.3 法务、合规与上线准备（PLANNED）
 
@@ -147,7 +151,7 @@ Stripe 一次性积分充值已落码，剩余外部配置与真实验收见 §0
 | `media_text_fallback` × repair 组合漂移 | P2 | agent 调用台账提供 funnel 取证 | 媒体降级应在 attempt 内发生；schema 拒收不能既消耗 repair 轮又保留未降级的 parts payload。修正后核对 clips 与 registry 两处 `media_text_fallback=True` |
 | 步骤级 LLM 命名（per-task `name`） | P2 | ADR-058；排期窗口待指认 | `name` 进入 TaskItem 与 builder 写口，RunTaskList/打勾流读取；`taskLabel` 推导只作回退，手改仍撤名 |
 | stub 塌缩（“No source material”行） | P2 | 无 | 无素材 writer-only run 的 stub 行不渲染 |
-| mobile OutputChatCard 核对 | P2 | 无 | 核对移动端产物卡在 `runTitle` 章名与当前锚卡机制下的读法一致性 |
+| mobile OutputDeliveryCard 核对 | P2 | 无 | 核对移动端产物卡在 `runTitle` 章名与当前锚卡机制下的读法一致性 |
 | MG 与代码画面创作 | P2 | 已归 Video Project B-I～IV | 原生对象动画与 Generator 程序画面沿 design_video/revise_video/produce_video 共链；范围与出口见施工合同，不另建 generate_motion_graphics 产品链 |
 | 刀 A overlay 词汇扩展 | P2 | 现有 ASR / speaker_map / beat_map 与 overlay 契约；逐项验收后上架 | 按“一行扩展配方类型”增加词汇，不把 film-spec 的全幅生成链复制成第二套 overlay 系统 |
 | Film 帧级精细估价 | P2 | 当前秒级简式估价与确定性帧分配 | 报价使用实际帧/复用范围，保留 NULL 不可报价与守卫线；不得为精确总价伪报未出生的渲染 fanout |

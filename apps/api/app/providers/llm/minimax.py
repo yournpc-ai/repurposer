@@ -337,6 +337,74 @@ class _ThinkStripper:
         return out
 
 
+_MINIMAX_SENTINEL = "]<]minimax[>["
+_MINIMAX_TOOL_MARKERS = ("<tool_call", "</tool_call", "<invoke", "</invoke")
+
+
+def _minimax_tool_markup_start(text: str) -> int:
+    """Locate only MiniMax's native-tool dialect, never arbitrary '<' text."""
+    starts = [text.find(marker) for marker in _MINIMAX_TOOL_MARKERS]
+    starts = [index for index in starts if index >= 0]
+    sentinel = text.find(_MINIMAX_SENTINEL)
+    if sentinel >= 0 and text[sentinel + len(_MINIMAX_SENTINEL):].startswith(
+        _MINIMAX_TOOL_MARKERS
+    ):
+        starts.append(sentinel)
+    return min(starts, default=-1)
+
+
+def _strip_minimax_tool_markup(text: str) -> str:
+    """Remove a malformed provider tool tail while preserving ordinary prose."""
+    start = _minimax_tool_markup_start(text)
+    return text if start < 0 else text[:start]
+
+
+class _MiniMaxToolMarkupStripper:
+    """Tag-split-safe streaming twin of ``_strip_minimax_tool_markup``.
+
+    Once the provider's tool dialect starts, its payload is not assistant
+    prose. Short suffixes that may become a marker stay buffered until the
+    next fragment proves them literal text or provider markup.
+    """
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._discarding = False
+
+    def feed(self, fragment: str) -> str:
+        if self._discarding:
+            return ""
+        self._buf += fragment
+        start = _minimax_tool_markup_start(self._buf)
+        if start >= 0:
+            out = self._buf[:start]
+            self._buf = ""
+            self._discarding = True
+            return out
+        markers = (*_MINIMAX_TOOL_MARKERS, _MINIMAX_SENTINEL)
+        held = 0
+        for size in range(1, min(len(self._buf), max(map(len, markers))) + 1):
+            suffix = self._buf[-size:]
+            if any(marker.startswith(suffix) and len(suffix) < len(marker) for marker in markers):
+                held = size
+        if held:
+            out, self._buf = self._buf[:-held], self._buf[-held:]
+            return out
+        out, self._buf = self._buf, ""
+        return out
+
+    def finish(self) -> str:
+        if self._discarding:
+            return ""
+        tail, self._buf = self._buf, ""
+        if len(tail) > 1 and any(
+            marker.startswith(tail)
+            for marker in (*_MINIMAX_TOOL_MARKERS, _MINIMAX_SENTINEL)
+        ):
+            return ""
+        return tail
+
+
 def _parse_tool_arguments(name: str, raw: str, finish_reason: str | None) -> dict:
     """Parse one tool call's accumulated argument text (ONE parse law for the
     non-streaming object form and the streaming fragment form alike).
@@ -871,7 +939,9 @@ class MiniMaxClient:
         finish_reason = choice.get("finish_reason")
         # Prose is the content channel here — strip the reasoning dialect
         # (start-only rule, same as _clean_json) but never markdown fences.
-        content = _THINK_BLOCK.sub("", message.get("content") or "").strip()
+        content = _strip_minimax_tool_markup(
+            _THINK_BLOCK.sub("", message.get("content") or "").strip()
+        )
         calls = [
             _tool_call_from_object(tc, finish_reason)
             for tc in message.get("tool_calls") or []
@@ -955,6 +1025,7 @@ class MiniMaxClient:
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
             stripper = _ThinkStripper()
+            tool_markup_stripper = _MiniMaxToolMarkupStripper()
             accumulator = _ToolCallAccumulator()
             usage: dict | None = None
             finish_reason: str | None = None
@@ -1014,7 +1085,7 @@ class MiniMaxClient:
                             if fragment:
                                 accumulated += fragment
                                 if on_delta is not None:
-                                    clean = stripper.feed(fragment)
+                                    clean = tool_markup_stripper.feed(stripper.feed(fragment))
                                     if clean:
                                         emitted = True
                                         result = on_delta(clean)
@@ -1055,6 +1126,12 @@ class MiniMaxClient:
                 raise last_exc
             raise LLMError(str(last_exc), user_key="provider_unreachable")
 
+        clean_tail = tool_markup_stripper.finish()
+        if clean_tail and on_delta is not None:
+            result = on_delta(clean_tail)
+            if result is not None:
+                await result
+
         logger.info(
             "llm_response",
             model=settings.minimax_model,
@@ -1072,7 +1149,9 @@ class MiniMaxClient:
         _log_usage(usage)
         await record_usage(usage)
 
-        content = _THINK_BLOCK.sub("", accumulated).strip()
+        content = _strip_minimax_tool_markup(
+            _THINK_BLOCK.sub("", accumulated).strip()
+        )
         # The truncation signature raises HERE (after the stream drained):
         # schema class, so the harness's repair round answers it with
         # feedback — never a blind client-side re-roll.

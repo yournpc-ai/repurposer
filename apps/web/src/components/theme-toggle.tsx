@@ -11,14 +11,15 @@ export function ThemeToggle() {
   return (
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-sm"
+      className="size-7"
       aria-label={t("common.toggleTheme")}
       onClick={(e) => toggleTheme({ clientX: e.clientX, clientY: e.clientY })}
     >
       {resolved === "dark" ? (
-        <Moon className="h-5 w-5" />
+        <Moon className="size-3.5" />
       ) : (
-        <Sun className="h-5 w-5" />
+        <Sun className="size-3.5" />
       )}
     </Button>
   )

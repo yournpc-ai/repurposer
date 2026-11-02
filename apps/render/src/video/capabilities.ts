@@ -15,6 +15,8 @@ export const VIDEO_CAPABILITIES = {
     "transform.position",
     "transform.scale",
     "transform.rotation",
+    "filter.blur",
+    "text.letter_spacing",
     "audio.gain",
   ],
   easings: ["linear", "hold", "cubic_bezier"],

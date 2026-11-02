@@ -5,6 +5,9 @@ import { outputViewerItems } from "./outputViewer"
 
 const output = (id: string, version = 1) => ({
   id,
+  type: "film",
+  render_status: "completed",
+  files: { video: `/${id}.mp4` },
   composition_version_number: version,
 }) as Output
 
@@ -27,6 +30,12 @@ describe("B-UI shared Output identity and order", () => {
     const entries = [{ output_id: "current", output: current }]
     expect(outputViewerItems(entries, "fresh", null).map((item) => item.output_id)).toEqual(["current"])
     expect(outputViewerItems(entries, "fresh", fresh).map((item) => item.output_id)).toEqual(["current", "fresh"])
+  })
+
+  it("never reopens a non-video Output in the Chat viewer", () => {
+    const post = { ...output("post"), type: "post", files: {} } as Output
+    const items = outputViewerItems([{ output_id: "post", output: post }], "post", post)
+    expect(items).toEqual([])
   })
 
   it("keeps an unavailable exact historical ref instead of substituting another Output", () => {

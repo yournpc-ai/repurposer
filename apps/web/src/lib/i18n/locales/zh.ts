@@ -82,17 +82,25 @@ const zh: Resources = {
     held: "预占中",
     /** pill hero meta 行的预占内联提及（"积分 · 12 预占中"）。 */
     heldInline: "{{count}} 预占中",
-    recent: "最近变动",
+    recent: "消耗记录",
     /** SettingsDialog「积分」section（BILLING §7 展示主轴）——余额与台账
      * 的全貌座位，与 pill 同两个端点。 */
     title: "积分",
     subtitle: "余额、充值与消耗记录。",
-    overview: "概览",
+    available: "可用积分",
+    amount: "充值金额",
     buyTitle: "购买积分",
     packageCredits: "{{count}} 积分",
     buy: "购买积分",
+    pay: "支付",
     buying: "正在打开…",
-    packagesUnavailable: "暂时没有可购买的积分包。",
+    conversion: "{{unit}} = {{credits}} 积分",
+    amountRange: "单次充值 {{min}}–{{max}}。",
+    rateInfo: "积分换算与金额限制",
+    oneTime: "一次性付款，不自动续费。",
+    topupSubtitle: "输入金额，或选择充值档位。",
+    packagesLoadFailed: "充值选项加载失败。",
+    retry: "重试",
     topupSuccess: "已充值 {{count}} 积分。",
     checkAgain: "重新查询",
     return: {
@@ -101,8 +109,7 @@ const zh: Resources = {
       cancelled: "已取消付款，积分未增加。",
       failed: "付款未完成，积分未增加。",
     },
-    showingRecent: "显示最近 {{count}} 条",
-    viewAll: "查看全部记录 →",
+    viewAll: "查看全部记录",
     tx: {
       empty: "暂无变动",
       /** 语义账本塌缩（ADR-057 K4）：用户面只显三族——花费 / 赠送 / 充值；
@@ -140,41 +147,110 @@ const zh: Resources = {
       features: "功能",
       pricing: "定价",
       faq: "常见问题",
+      roadmap: "开发计划",
       menus: {
         features: {
           items: {
-            clips: {
-              label: "竖屏短片",
-              description: "自动剪辑、配好字幕、带上品牌",
+            conversation: {
+              title: "对话创作",
+              description: "说明目标，由助手完成分镜、制作与交付。",
             },
-            languages: {
-              label: "多语言版本",
-              description: "六种欧洲语言，母语级写作",
+            animation: {
+              title: "动态图形与文字动画",
+              description: "把文字、图形、动画和声音组合成视频。",
+            },
+            mixedMedia: {
+              title: "混合素材",
+              description: "把网页画面、实拍视频和图片组合进同一部作品。",
+            },
+            revision: {
+              title: "持续修订",
+              description: "通过对话修改内容，并保留可继续编辑的版本。",
             },
           },
-          promo: {
-            title: "它是怎么工作的",
-            description: "从原始素材到发布，只要四步。",
+          aside: {
+            label: "创作方式",
+            title: "从目标到成片",
+            description: "你提出要求和反馈，助手处理创作与制作。",
+            note: "不需要理解轨道、节点或专业剪辑软件。",
+          },
+        },
+        pricing: {
+          items: {
+            topup: {
+              title: "一次性充值",
+              description: "按需购买积分，不绑定订阅。",
+            },
+            balance: {
+              title: "余额清楚",
+              description: "在同一处查看可用与预占积分。",
+            },
+            history: {
+              title: "消耗记录",
+              description: "在设置中查看充值、消耗和返还记录。",
+            },
+            packages: {
+              title: "当前积分包",
+              description: "在「设置 → 积分」查看可售积分包与价格。",
+            },
+          },
+          aside: {
+            label: "计费方式",
+            title: "按创作实际用量付费",
+            description: "视频生成与制作消耗积分，对话本身不收费。",
+            note: "当前积分包与价格以应用内展示为准。",
           },
         },
         faq: {
           items: {
-            data: {
-              label: "我的数据存在哪里？",
-              description: "GDPR 就绪——绝不用于训练第三方模型",
+            inputs: {
+              title: "可以从什么开始？",
+              description: "文字、图片、网页或现有视频都可以作为创作起点。",
             },
-            upload: {
-              label: "可以上传什么？",
-              description: "视频、音频、幻灯片、照片，或一份文字稿",
+            revision: {
+              title: "生成后还能修改吗？",
+              description: "可以继续通过对话调整分镜、文字、画面与声音。",
             },
-            languages: {
-              label: "支持哪些语言？",
-              description: "EN / FR / DE / ES / IT / NL，母语级写作",
+            videoTypes: {
+              title: "能制作哪些视频？",
+              description: "网页宣传片、文字动画、动态图形和混合素材视频。",
             },
-            autoPublish: {
-              label: "会自动发布内容吗？",
-              description: "不会——没有你确认，什么都不会发出",
+            download: {
+              title: "可以预览和下载吗？",
+              description: "制作完成后可以预览交付结果并下载视频。",
             },
+          },
+          aside: {
+            label: "使用方式",
+            title: "说清你想做什么",
+            description: "从一条具体要求开始，例如“给我的网站做一支宣传视频”。",
+            note: "不需要先学会剪辑，先看结果，再决定改什么。",
+          },
+        },
+        roadmap: {
+          items: {
+            a: {
+              title: "作品与版本",
+              description: "建立可持续修改的影片、镜头、素材和版本基础。",
+            },
+            b: {
+              title: "对话创作闭环",
+              description: "从分镜到制作与交付，组合网页、文字、实拍、图形与声音。",
+            },
+            c: {
+              title: "个人创作方法",
+              description: "保存并复用你的创作流程、结构和偏好。",
+            },
+            d: {
+              title: "完善与扩展",
+              description: "打磨使用体验，扩展短片编辑与精确修订能力。",
+            },
+          },
+          aside: {
+            label: "当前重点",
+            title: "B. 对话创作闭环",
+            description: "完善从分镜、修改到制作与交付的完整体验。",
+            note: "阶段展示建设方向，具体上线时间尚未确定。",
           },
         },
       },
@@ -184,20 +260,10 @@ const zh: Resources = {
     entry: {
       navigation: "主导航",
       community: "加入社群",
-      roadmap: "查看开发计划",
       preview: "预览",
       communityTitle: "一起打造 Repurposer",
       communityDescription: "交流创作想法、分享作品，参与产品的打磨。",
       communityNote: "社群预览，邀请链接待接入。",
-      roadmapTitle: "我们要去哪里",
-      roadmapDescription: "从完成一件内容，到持续完成内容工作。",
-      roadmapNote: "此处为路线示意，具体发布计划尚未确认。",
-      create: "做出来",
-      createDescription: "通过对话完成内容策划、创作与修改。",
-      publish: "发出去",
-      publishDescription: "连接内容渠道，经你授权后发布。",
-      improve: "持续做",
-      improveDescription: "结合反馈，决定下一条做什么。",
     },
     heroTitle1: "你的内容",
     heroTitle2: "创作 Agent",
@@ -577,7 +643,7 @@ const zh: Resources = {
         },
         "product-demo-zymix": {
           prompt:
-            "把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
+            "使用这个 Skill 帮我把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
         },
         // 网站来源的 demo 使用 capture 链；视频素材入口保留上传素材提示词。
         "product-demo-walkthrough": {
@@ -586,7 +652,7 @@ const zh: Resources = {
         },
         "product-demo-highlights": {
           prompt:
-            "把这个网站做成一支产品演示，展示主要功能，配上简洁的说明字幕，不要旁白；用适度的镜头运动和文字动画引导视线：{{placeholder}}",
+            "使用这个 Skill 帮我把这个网站做成一支产品演示，展示主要功能，配上简洁的说明字幕，不要旁白；用适度的镜头运动和文字动画引导视线：{{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
@@ -666,6 +732,14 @@ const zh: Resources = {
     },
   },
   // @-提及系统（MENTIONS §4）：picker 文案与类型名。
+  skills: {
+    external: "外部 Skill",
+    builtin: {
+      "launch-film": {
+        description: "把已采集的网站内容制作成有叙事引导的产品片。",
+      },
+    },
+  },
   mentions: {
     pickerEmpty: "没有匹配项",
     remove: "移除提及",
@@ -1295,6 +1369,12 @@ const zh: Resources = {
       more: "另外还有 {{count}} 个",
       less: "收起",
     },
+    sfx: {
+      play: "播放音效",
+      pause: "暂停音效",
+      seek: "调整播放进度",
+      previewUnavailable: "音频预览不可用",
+    },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
      * 帧带完成态；failed 保留诚实的进行态键，cancelled 尝试从可见时间线
      * 退役，不变成删除线历史。 */
@@ -1328,6 +1408,32 @@ const zh: Resources = {
       videoReview: "正在检查成片…",
       videoReviewDone: "已检查成片",
     },
+    activityReceipt: {
+      sampledFrames: "采样帧",
+      observed_issue: "发现的问题 · {{frame}}",
+      aesthetic_suggestion: "画面建议 · {{frame}}",
+      noFindings: "采样帧中没有内容发现",
+      audioIssues: "音频问题",
+      checkedScope: "实际检查范围",
+      checked: "已检查",
+      notChecked: "未检查",
+      audio: {
+        AUDIO_MISSING: "应有音频缺失",
+        AUDIO_DECODE_FAILED: "音频未能完整解码",
+        AUDIO_SILENT: "应有音频为静音",
+        AUDIO_QUIET: "音频音量偏低",
+        AUDIO_CLIPPED: "音频存在削波样本",
+      },
+      scope: {
+        actual_output_decoded: "解码指定的已交付成片",
+        static_frames_checked: "检查采样静帧",
+        deterministic_output_checks: "运行确定性输出检查",
+        sampled_frame_signals_checked: "检查采样帧信号",
+        audio_signal_checked: "检查音频信号",
+        motion_and_transitions_checked: "检查运动与转场",
+        audio_and_av_sync_checked: "检查音频与音画同步",
+      },
+    },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
     activityMeta: {
@@ -1339,6 +1445,7 @@ const zh: Resources = {
      * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
     activityFold: {
       worked: "工作了 {{elapsed}}",
+      failed: "这次没能完成 · {{elapsed}}",
       actionCount: "{{count}} 项操作",
     },
     /** 视频呈现随行件：活动标签与可选的真实 Generator 预览。
@@ -1421,6 +1528,23 @@ const zh: Resources = {
       quotes: "金句卡",
       article: "文章",
       carousel: "轮播图",
+    },
+    legacyStepSummaries: {
+      uploaded: "已上传",
+    },
+    productionStages: {
+      validate: "保存版与执行输入校验",
+      fonts: "字体资源准备",
+      generator_media: "生成媒体准备",
+      speech_media: "旁白媒体准备",
+      compile_spec: "视频规格编译",
+      output_preparation: "产物准备",
+      output_resume: "复用已准备产物",
+      render_queue: "渲染排队请求",
+      render: "渲染",
+      upload: "上传",
+      delivery: "交付检查",
+      reuseSummary: "{{total}} 项中复用 {{reused}} 项",
     },
     stepKinds: {
       preprocess: "正在分析上传的素材…",
@@ -1535,18 +1659,11 @@ const zh: Resources = {
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
-    // OriginCut 同位 mechanics placeholder（2026-09-24 用户拍板，2026-10 改
-    // 一句连读：先动作，逗号接机制——拖拽/粘贴 + @ 引用）。「节点」措辞成立：
-    // @ 选择器候选（素材 / 产物）本就是画布节点。对外词 = 助手（N-25），不用
-    // Agent。ADR-117：「确认后再开工」从句随 ask 默认档退市——静态文案写默认
-    // （auto）档的真相：方案呈现即开工。
-    chatPlaceholder: "描述你的修改想法，可拖拽或粘贴文件，输入 @ 引用节点。",
-    // full 形态（首次 run 前、画布未生）专用（2026-09-13 用户拍板）：画布
-    // 还不存在时没有「节点」可指——@ 候选只有素材；措辞走世界真相不走
-    // 一句通用。画布落地后（panel / dock 形态）回到上面的 nodes 版。
-    // 一句连读（2026-10 用户拍板）：先动作，逗号接机制——两个句号两个
-    // 大写/顿断的双句组合读感像说明书。
-    chatPlaceholderAssets: "描述你想做什么，可拖拽或粘贴文件，输入 @ 引用素材。",
+    // 修改态的 @ 候选包括素材与产物；首次创作态只有素材。两种形态都提供
+    // 同一个 / Skill picker，不宣传不存在的 # 入口。
+    chatPlaceholder: "输入 @ 引用素材或产物，输入 / 使用 Skill。",
+    // full 形态（首次 run 前）专用：@ 候选只有素材。
+    chatPlaceholderAssets: "描述你想做什么，输入 @ 引用素材，输入 / 使用 Skill。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

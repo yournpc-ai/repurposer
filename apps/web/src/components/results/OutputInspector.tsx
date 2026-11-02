@@ -109,7 +109,7 @@ export function OutputInspector({
       role="dialog"
       aria-label={title}
       className={cn(
-        "overlay-surface max-h-[min(560px,calc(100dvh-160px))] w-[320px] overflow-y-auto rounded-xl p-4 ring-1 ring-foreground/10 thin-scroll",
+        "overlay-surface max-h-[min(560px,calc(100dvh-160px))] w-[320px] overflow-y-auto rounded-xl p-4 border border-subtle thin-scroll",
         className,
       )}
     >

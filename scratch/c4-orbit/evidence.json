@@ -1,0 +1,394 @@
+{
+  "project_id": "69dc424f-8705-4483-83f8-2fcab246fdac",
+  "owner_id": "52037604-9321-4b70-9212-445ccf5ade60",
+  "image_asset": {
+    "asset_id": "a99355c1-f7c8-473d-b8ee-8627e5554647",
+    "title": "Repurposer brand icon (project-owned)",
+    "authorized_source": "apps/web/public/icon-512.png",
+    "sha256": "07ed07a59388d8baf89a6dd509a7c53e1a8cdc253a025e2e167992a5e2072ee4",
+    "width": 512,
+    "height": 512,
+    "snapshot_id": "13d44079-5c29-56c6-9b73-8b467aba6790",
+    "snapshot_digest": "07ed07a59388d8baf89a6dd509a7c53e1a8cdc253a025e2e167992a5e2072ee4"
+  },
+  "scope": "Direct domain-tool consumer; no Chat presentation, Run, production authorization or credits are fabricated.",
+  "agent_preflight_failures": [
+    {
+      "diagnostic": "Initial Agent candidate: schema repair corrected overlong prose; bounded preview then rejected six line commands with 145 points (cap 128).",
+      "version_saved": false
+    }
+  ],
+  "agent_observations": [
+    {
+      "request": {
+        "text": "Ideas in motion",
+        "focus": null,
+        "instruction": "Create a refined decorative background with at least three concentric circular orbit tracks around an open central area. Each orbit must have a clearly different radius and angular speed, and at least one orbit must rotate in the opposite direction. Put small geometric satellites and symbols (circles, diamonds, plus signs or star-like polygons) on every orbit, with fine rings and a few subtle radial markers. Keep the lower central area visually calm for a separate native title. Use a dark navy field with cyan, violet and warm coral accents. Expose meaningful scalar parameters including exactly speed_multiplier, orbit_scale and accent_color, and make the program actually read them. The motion must be continuous and deterministic.",
+        "language": "en",
+        "target_seconds": 6.0
+      },
+      "returned_direction": {
+        "name": "Counterpoint Orbits",
+        "language": "en",
+        "title": "Ideas in motion",
+        "intent": "A refined counter-rotating orbital field with an open center and a quiet lower area for the native title.",
+        "visual_description": "Fine cyan, violet, and coral rings surround a dark open center. Circles, diamonds, plus signs, stars, and rings orbit each track at distinct speeds; the middle counter-rotates. Turning outer ticks add depth. The native title sits below.",
+        "duration_seconds": 6.0,
+        "background": "#071426",
+        "parameters": {
+          "speed_multiplier": 1.0,
+          "orbit_scale": 1.0,
+          "accent_color": "#FF786B"
+        },
+        "code": "function render(ctx) {\n  const p = ctx.parameters || {};\n  const speedMultiplier = Number.isFinite(p.speed_multiplier) ? Math.max(0.25, Math.min(2.5, p.speed_multiplier)) : 1;\n  const orbitScale = Number.isFinite(p.orbit_scale) ? Math.max(0.75, Math.min(1.2, p.orbit_scale)) : 1;\n  const accentInput = p.accent_color;\n  const accentColor = typeof accentInput === 'string' && /^#[0-9A-Fa-f]{6}$/.test(accentInput) ? accentInput : '#FF786B';\n  const width = Math.max(1, Number(ctx.width));\n  const height = Math.max(1, Number(ctx.height));\n  const timeValue = Number.isFinite(Number(ctx.time)) ? Number(ctx.time) : 0;\n  const unit = Math.min(width, height);\n  const cx = width * 0.5;\n  const cy = height * 0.37;\n  const tau = Math.PI * 2;\n  const time = timeValue * speedMultiplier;\n  const baseRadius = unit * 0.285 * orbitScale;\n  const radii = [baseRadius * 0.38, baseRadius * 0.66, baseRadius];\n  const cyan = '#43D9E8';\n  const violet = '#A98BFA';\n  const coralLight = '#FF9A82';\n  const orbitColors = [cyan, violet, accentColor];\n  const directions = [1, -1, 1];\n  const phases = [time * 0.23, time * -0.36, time * 0.16];\n  const commands = [];\n\n  commands.push({ kind: 'rect', x: 0, y: 0, width: width, height: height, fill: '#071426' });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.44, y: cy - unit * 0.30, width: unit * 0.88, height: unit * 0.60, fill: '#0A1D32', opacity: 0.42 });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.34, y: cy - unit * 0.23, width: unit * 0.68, height: unit * 0.46, fill: '#0C2239', opacity: 0.22 });\n\n  function ringPoints(radius, segments) {\n    const points = [];\n    for (let i = 0; i <= segments; i++) {\n      const angle = i / segments * tau;\n      points.push([cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius]);\n    }\n    return points;\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 4.5 - orbit * 0.6, opacity: 0.07 });\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 0.75 + orbit * 0.18, opacity: 0.62 });\n  }\n\n  for (let marker = 0; marker < 8; marker++) {\n    const angle = phases[2] + marker * tau / 8;\n    const length = unit * (marker % 2 === 0 ? 0.010 : 0.007);\n    const innerRadius = radii[2] + unit * 0.005;\n    const outerRadius = innerRadius + length;\n    commands.push({\n      kind: 'line',\n      points: [\n        [cx + Math.cos(angle) * innerRadius, cy + Math.sin(angle) * innerRadius],\n        [cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius]\n      ],\n      stroke: marker % 3 === 0 ? cyan : accentColor,\n      stroke_width: 0.9,\n      opacity: marker % 2 === 0 ? 0.24 : 0.15\n    });\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let bead = 1; bead <= 2; bead++) {\n      const angle = phases[orbit] - directions[orbit] * bead * 0.038;\n      const diameter = unit * (0.0038 - bead * 0.0008) * (1 + orbit * 0.1);\n      commands.push({\n        kind: 'ellipse',\n        x: cx + Math.cos(angle) * radii[orbit] - diameter / 2,\n        y: cy + Math.sin(angle) * radii[orbit] - diameter / 2,\n        width: diameter,\n        height: diameter,\n        fill: orbitColors[orbit],\n        opacity: 0.20 - bead * 0.06\n      });\n    }\n  }\n\n  function addSatellite(kind, x, y, size, color, rotation, opacity) {\n    const cosA = Math.cos(rotation);\n    const sinA = Math.sin(rotation);\n    if (kind === 'circle') {\n      commands.push({ kind: 'ellipse', x: x - size / 2, y: y - size / 2, width: size, height: size, fill: color, stroke: '#071426', stroke_width: Math.max(0.7, size * 0.1), opacity: opacity });\n      return;\n    }\n    if (kind === 'ring') {\n      const diameter = size * 1.18;\n      commands.push({ kind: 'ellipse', x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter, fill: '#071426', stroke: color, stroke_width: Math.max(1, size * 0.09), opacity: opacity });\n      return;\n    }\n    if (kind === 'diamond') {\n      const local = [[0, -size * 0.58], [size * 0.38, 0], [0, size * 0.58], [-size * 0.38, 0]];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    if (kind === 'plus') {\n      const thick = size * 0.30;\n      const arm = size * 0.52;\n      const local = [\n        [-thick / 2, -arm], [thick / 2, -arm], [thick / 2, -thick / 2], [arm, -thick / 2],\n        [arm, thick / 2], [thick / 2, thick / 2], [thick / 2, arm], [-thick / 2, arm],\n        [-thick / 2, thick / 2], [-arm, thick / 2], [-arm, -thick / 2], [-thick / 2, -thick / 2]\n      ];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    const points = [];\n    for (let i = 0; i < 8; i++) {\n      const angle = rotation + i * Math.PI / 4;\n      const radius = i % 2 === 0 ? size * 0.62 : size * 0.22;\n      points.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);\n    }\n    commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n  }\n\n  const counts = [4, 5, 6];\n  const offsets = [0.2, 1.1, 2.3];\n  const sizes = [unit * 0.0105, unit * 0.0115, unit * 0.0125];\n  const kinds = ['circle', 'diamond', 'plus', 'star', 'ring', 'circle'];\n  const satelliteColors = [cyan, violet, accentColor];\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let index = 0; index < counts[orbit]; index++) {\n      const angle = phases[orbit] + offsets[orbit] + index * tau / counts[orbit];\n      const x = cx + Math.cos(angle) * radii[orbit];\n      const y = cy + Math.sin(angle) * radii[orbit];\n      const size = sizes[orbit] * (0.88 + 0.12 * Math.cos(index * 1.7 + orbit * 0.9));\n      const kind = kinds[(index + orbit) % kinds.length];\n      let color = satelliteColors[orbit];\n      if (orbit === 2 && index % 2 === 1) color = coralLight;\n      addSatellite(kind, x, y, size, color, angle + Math.PI * 0.25, 0.96);\n    }\n  }\n\n  return commands;\n}"
+      }
+    }
+  ],
+  "v1": {
+    "composition_id": "c9c6f500-5004-43d9-9140-a2e5fe532fc2",
+    "composition_version_id": "55126b42-c2fd-4083-bd16-6736d2c98f46",
+    "content_digest": "d84ccfb8cd9c430e8d40438bc36232bebb323837978f5336aa0af9b64851b4cd",
+    "version": 1,
+    "clips": [
+      {
+        "clip_id": "clp_generator",
+        "object_id": "obj_generator",
+        "object_kind": "generator",
+        "runtime": "drawing-v1",
+        "program_digest": "c44fd520c8877fa6f6a083d1e8495edf602d28c7d16d5c8d7f4906dd67c79a8b",
+        "parameters": {
+          "speed_multiplier": 1.0,
+          "orbit_scale": 1.0,
+          "accent_color": "#FF786B"
+        },
+        "output": {
+          "width": 960,
+          "height": 540,
+          "fps": 15,
+          "duration_frames": 90,
+          "background": "#0B1020"
+        },
+        "code": "function render(ctx) {\n  const p = ctx.parameters || {};\n  const speedMultiplier = Number.isFinite(p.speed_multiplier) ? Math.max(0.25, Math.min(2.5, p.speed_multiplier)) : 1;\n  const orbitScale = Number.isFinite(p.orbit_scale) ? Math.max(0.75, Math.min(1.2, p.orbit_scale)) : 1;\n  const accentInput = p.accent_color;\n  const accentColor = typeof accentInput === 'string' && /^#[0-9A-Fa-f]{6}$/.test(accentInput) ? accentInput : '#FF786B';\n  const width = Math.max(1, Number(ctx.width));\n  const height = Math.max(1, Number(ctx.height));\n  const timeValue = Number.isFinite(Number(ctx.time)) ? Number(ctx.time) : 0;\n  const unit = Math.min(width, height);\n  const cx = width * 0.5;\n  const cy = height * 0.37;\n  const tau = Math.PI * 2;\n  const time = timeValue * speedMultiplier;\n  const baseRadius = unit * 0.285 * orbitScale;\n  const radii = [baseRadius * 0.38, baseRadius * 0.66, baseRadius];\n  const cyan = '#43D9E8';\n  const violet = '#A98BFA';\n  const coralLight = '#FF9A82';\n  const orbitColors = [cyan, violet, accentColor];\n  const directions = [1, -1, 1];\n  const phases = [time * 0.23, time * -0.36, time * 0.16];\n  const commands = [];\n\n  commands.push({ kind: 'rect', x: 0, y: 0, width: width, height: height, fill: '#071426' });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.44, y: cy - unit * 0.30, width: unit * 0.88, height: unit * 0.60, fill: '#0A1D32', opacity: 0.42 });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.34, y: cy - unit * 0.23, width: unit * 0.68, height: unit * 0.46, fill: '#0C2239', opacity: 0.22 });\n\n  function ringPoints(radius, segments) {\n    const points = [];\n    for (let i = 0; i <= segments; i++) {\n      const angle = i / segments * tau;\n      points.push([cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius]);\n    }\n    return points;\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 4.5 - orbit * 0.6, opacity: 0.07 });\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 0.75 + orbit * 0.18, opacity: 0.62 });\n  }\n\n  for (let marker = 0; marker < 8; marker++) {\n    const angle = phases[2] + marker * tau / 8;\n    const length = unit * (marker % 2 === 0 ? 0.010 : 0.007);\n    const innerRadius = radii[2] + unit * 0.005;\n    const outerRadius = innerRadius + length;\n    commands.push({\n      kind: 'line',\n      points: [\n        [cx + Math.cos(angle) * innerRadius, cy + Math.sin(angle) * innerRadius],\n        [cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius]\n      ],\n      stroke: marker % 3 === 0 ? cyan : accentColor,\n      stroke_width: 0.9,\n      opacity: marker % 2 === 0 ? 0.24 : 0.15\n    });\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let bead = 1; bead <= 2; bead++) {\n      const angle = phases[orbit] - directions[orbit] * bead * 0.038;\n      const diameter = unit * (0.0038 - bead * 0.0008) * (1 + orbit * 0.1);\n      commands.push({\n        kind: 'ellipse',\n        x: cx + Math.cos(angle) * radii[orbit] - diameter / 2,\n        y: cy + Math.sin(angle) * radii[orbit] - diameter / 2,\n        width: diameter,\n        height: diameter,\n        fill: orbitColors[orbit],\n        opacity: 0.20 - bead * 0.06\n      });\n    }\n  }\n\n  function addSatellite(kind, x, y, size, color, rotation, opacity) {\n    const cosA = Math.cos(rotation);\n    const sinA = Math.sin(rotation);\n    if (kind === 'circle') {\n      commands.push({ kind: 'ellipse', x: x - size / 2, y: y - size / 2, width: size, height: size, fill: color, stroke: '#071426', stroke_width: Math.max(0.7, size * 0.1), opacity: opacity });\n      return;\n    }\n    if (kind === 'ring') {\n      const diameter = size * 1.18;\n      commands.push({ kind: 'ellipse', x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter, fill: '#071426', stroke: color, stroke_width: Math.max(1, size * 0.09), opacity: opacity });\n      return;\n    }\n    if (kind === 'diamond') {\n      const local = [[0, -size * 0.58], [size * 0.38, 0], [0, size * 0.58], [-size * 0.38, 0]];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    if (kind === 'plus') {\n      const thick = size * 0.30;\n      const arm = size * 0.52;\n      const local = [\n        [-thick / 2, -arm], [thick / 2, -arm], [thick / 2, -thick / 2], [arm, -thick / 2],\n        [arm, thick / 2], [thick / 2, thick / 2], [thick / 2, arm], [-thick / 2, arm],\n        [-thick / 2, thick / 2], [-arm, thick / 2], [-arm, -thick / 2], [-thick / 2, -thick / 2]\n      ];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    const points = [];\n    for (let i = 0; i < 8; i++) {\n      const angle = rotation + i * Math.PI / 4;\n      const radius = i % 2 === 0 ? size * 0.62 : size * 0.22;\n      points.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);\n    }\n    commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n  }\n\n  const counts = [4, 5, 6];\n  const offsets = [0.2, 1.1, 2.3];\n  const sizes = [unit * 0.0105, unit * 0.0115, unit * 0.0125];\n  const kinds = ['circle', 'diamond', 'plus', 'star', 'ring', 'circle'];\n  const satelliteColors = [cyan, violet, accentColor];\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let index = 0; index < counts[orbit]; index++) {\n      const angle = phases[orbit] + offsets[orbit] + index * tau / counts[orbit];\n      const x = cx + Math.cos(angle) * radii[orbit];\n      const y = cy + Math.sin(angle) * radii[orbit];\n      const size = sizes[orbit] * (0.88 + 0.12 * Math.cos(index * 1.7 + orbit * 0.9));\n      const kind = kinds[(index + orbit) % kinds.length];\n      let color = satelliteColors[orbit];\n      if (orbit === 2 && index % 2 === 1) color = coralLight;\n      addSatellite(kind, x, y, size, color, angle + Math.PI * 0.25, 0.96);\n    }\n  }\n\n  return commands;\n}",
+        "layout": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1920.0,
+          "height": 1080.0
+        },
+        "fit": "cover"
+      },
+      {
+        "clip_id": "clp_program_title",
+        "object_id": "obj_program_title",
+        "object_kind": "text",
+        "text": "Ideas in motion",
+        "layout": {
+          "x": 153.6,
+          "y": 820.8,
+          "width": 1612.8,
+          "height": 172.8
+        }
+      }
+    ],
+    "generator_previews": [
+      {
+        "clip_id": "clp_generator",
+        "object_id": "obj_generator",
+        "program_digest": "c44fd520c8877fa6f6a083d1e8495edf602d28c7d16d5c8d7f4906dd67c79a8b",
+        "video_url": "https://repurposer.tos-ap-southeast-1.volces.com/source-snapshots/93d69b62bc1e346cbb59cd61b813abf13b434292c157c0382f6fde1055c9e832.mp4",
+        "poster_url": "https://repurposer.tos-ap-southeast-1.volces.com/source-snapshots/80eb69f508009088be9cf62fe1daf01e64d59911d0dd80ff78ba9208fa19e37d.png",
+        "media_digest": "93d69b62bc1e346cbb59cd61b813abf13b434292c157c0382f6fde1055c9e832",
+        "output": {
+          "background": "#0B1020",
+          "duration_frames": 90,
+          "fps": 15,
+          "height": 540,
+          "width": 960
+        },
+        "diagnostics": {
+          "command_cap_per_frame": 512,
+          "encoder": "libx264",
+          "frames": 90,
+          "unique_frames": 90
+        }
+      }
+    ],
+    "preview_model_inputs": [
+      {
+        "caption": "Exact preview for clp_generator at program digest c44fd520c8877fa6f6a083d1e8495edf602d28c7d16d5c8d7f4906dd67c79a8b; representative middle frame, not an aesthetic approval.",
+        "mime": "image/jpeg",
+        "sha256": "60ad79a5619af135f42ed84202b8d16e58d5b61c9c0effba1effe941dfe64c9e",
+        "bytes": 20340
+      }
+    ]
+  },
+  "v2": {
+    "composition_version_id": "498027f2-ce80-4438-a8ed-be9d0351ebe0",
+    "content_digest": "14c5bc0ab99c6a48b200992f8070d10c55d4be35a087a385c9b5b29037dfd12a",
+    "version": 2
+  },
+  "speed_revision": {
+    "parameter": "speed_multiplier",
+    "before": 1.0,
+    "after": 1.6,
+    "code_unchanged": true,
+    "old_program_digest": "c44fd520c8877fa6f6a083d1e8495edf602d28c7d16d5c8d7f4906dd67c79a8b",
+    "new_program_digest": "788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c",
+    "change_set": {
+      "settings": {},
+      "scenes": {
+        "added": [],
+        "removed": [],
+        "moved": []
+      },
+      "clips": {
+        "added": [],
+        "removed": [],
+        "updated": [
+          {
+            "clip_id": "clp_generator",
+            "changes": [
+              "object"
+            ],
+            "fields": [
+              {
+                "path": "object.parameters.speed_multiplier",
+                "before": 1.0,
+                "after": 1.6
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "v3": {
+    "composition_id": "c9c6f500-5004-43d9-9140-a2e5fe532fc2",
+    "composition_version_id": "d73449a7-660b-4200-bbf8-a06e59b9d55a",
+    "content_digest": "cc8fcf883d1d98227f304bfa88669c0476a5b00ddd05abb648e95d2aa73c3c33",
+    "version": 3,
+    "clips": [
+      {
+        "clip_id": "clp_generator",
+        "object_id": "obj_generator",
+        "object_kind": "generator",
+        "runtime": "drawing-v1",
+        "program_digest": "788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c",
+        "parameters": {
+          "orbit_scale": 1.0,
+          "accent_color": "#FF786B",
+          "speed_multiplier": 1.6
+        },
+        "output": {
+          "width": 960,
+          "height": 540,
+          "fps": 15,
+          "duration_frames": 90,
+          "background": "#0B1020"
+        },
+        "code": "function render(ctx) {\n  const p = ctx.parameters || {};\n  const speedMultiplier = Number.isFinite(p.speed_multiplier) ? Math.max(0.25, Math.min(2.5, p.speed_multiplier)) : 1;\n  const orbitScale = Number.isFinite(p.orbit_scale) ? Math.max(0.75, Math.min(1.2, p.orbit_scale)) : 1;\n  const accentInput = p.accent_color;\n  const accentColor = typeof accentInput === 'string' && /^#[0-9A-Fa-f]{6}$/.test(accentInput) ? accentInput : '#FF786B';\n  const width = Math.max(1, Number(ctx.width));\n  const height = Math.max(1, Number(ctx.height));\n  const timeValue = Number.isFinite(Number(ctx.time)) ? Number(ctx.time) : 0;\n  const unit = Math.min(width, height);\n  const cx = width * 0.5;\n  const cy = height * 0.37;\n  const tau = Math.PI * 2;\n  const time = timeValue * speedMultiplier;\n  const baseRadius = unit * 0.285 * orbitScale;\n  const radii = [baseRadius * 0.38, baseRadius * 0.66, baseRadius];\n  const cyan = '#43D9E8';\n  const violet = '#A98BFA';\n  const coralLight = '#FF9A82';\n  const orbitColors = [cyan, violet, accentColor];\n  const directions = [1, -1, 1];\n  const phases = [time * 0.23, time * -0.36, time * 0.16];\n  const commands = [];\n\n  commands.push({ kind: 'rect', x: 0, y: 0, width: width, height: height, fill: '#071426' });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.44, y: cy - unit * 0.30, width: unit * 0.88, height: unit * 0.60, fill: '#0A1D32', opacity: 0.42 });\n  commands.push({ kind: 'ellipse', x: cx - unit * 0.34, y: cy - unit * 0.23, width: unit * 0.68, height: unit * 0.46, fill: '#0C2239', opacity: 0.22 });\n\n  function ringPoints(radius, segments) {\n    const points = [];\n    for (let i = 0; i <= segments; i++) {\n      const angle = i / segments * tau;\n      points.push([cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius]);\n    }\n    return points;\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 4.5 - orbit * 0.6, opacity: 0.07 });\n    commands.push({ kind: 'line', points: ringPoints(radii[orbit], 96), stroke: orbitColors[orbit], stroke_width: 0.75 + orbit * 0.18, opacity: 0.62 });\n  }\n\n  for (let marker = 0; marker < 8; marker++) {\n    const angle = phases[2] + marker * tau / 8;\n    const length = unit * (marker % 2 === 0 ? 0.010 : 0.007);\n    const innerRadius = radii[2] + unit * 0.005;\n    const outerRadius = innerRadius + length;\n    commands.push({\n      kind: 'line',\n      points: [\n        [cx + Math.cos(angle) * innerRadius, cy + Math.sin(angle) * innerRadius],\n        [cx + Math.cos(angle) * outerRadius, cy + Math.sin(angle) * outerRadius]\n      ],\n      stroke: marker % 3 === 0 ? cyan : accentColor,\n      stroke_width: 0.9,\n      opacity: marker % 2 === 0 ? 0.24 : 0.15\n    });\n  }\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let bead = 1; bead <= 2; bead++) {\n      const angle = phases[orbit] - directions[orbit] * bead * 0.038;\n      const diameter = unit * (0.0038 - bead * 0.0008) * (1 + orbit * 0.1);\n      commands.push({\n        kind: 'ellipse',\n        x: cx + Math.cos(angle) * radii[orbit] - diameter / 2,\n        y: cy + Math.sin(angle) * radii[orbit] - diameter / 2,\n        width: diameter,\n        height: diameter,\n        fill: orbitColors[orbit],\n        opacity: 0.20 - bead * 0.06\n      });\n    }\n  }\n\n  function addSatellite(kind, x, y, size, color, rotation, opacity) {\n    const cosA = Math.cos(rotation);\n    const sinA = Math.sin(rotation);\n    if (kind === 'circle') {\n      commands.push({ kind: 'ellipse', x: x - size / 2, y: y - size / 2, width: size, height: size, fill: color, stroke: '#071426', stroke_width: Math.max(0.7, size * 0.1), opacity: opacity });\n      return;\n    }\n    if (kind === 'ring') {\n      const diameter = size * 1.18;\n      commands.push({ kind: 'ellipse', x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter, fill: '#071426', stroke: color, stroke_width: Math.max(1, size * 0.09), opacity: opacity });\n      return;\n    }\n    if (kind === 'diamond') {\n      const local = [[0, -size * 0.58], [size * 0.38, 0], [0, size * 0.58], [-size * 0.38, 0]];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    if (kind === 'plus') {\n      const thick = size * 0.30;\n      const arm = size * 0.52;\n      const local = [\n        [-thick / 2, -arm], [thick / 2, -arm], [thick / 2, -thick / 2], [arm, -thick / 2],\n        [arm, thick / 2], [thick / 2, thick / 2], [thick / 2, arm], [-thick / 2, arm],\n        [-thick / 2, thick / 2], [-arm, thick / 2], [-arm, -thick / 2], [-thick / 2, -thick / 2]\n      ];\n      const points = [];\n      for (let i = 0; i < local.length; i++) {\n        points.push([x + local[i][0] * cosA - local[i][1] * sinA, y + local[i][0] * sinA + local[i][1] * cosA]);\n      }\n      commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n      return;\n    }\n    const points = [];\n    for (let i = 0; i < 8; i++) {\n      const angle = rotation + i * Math.PI / 4;\n      const radius = i % 2 === 0 ? size * 0.62 : size * 0.22;\n      points.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);\n    }\n    commands.push({ kind: 'polygon', points: points, fill: color, stroke: '#071426', stroke_width: 0.7, opacity: opacity });\n  }\n\n  const counts = [4, 5, 6];\n  const offsets = [0.2, 1.1, 2.3];\n  const sizes = [unit * 0.0105, unit * 0.0115, unit * 0.0125];\n  const kinds = ['circle', 'diamond', 'plus', 'star', 'ring', 'circle'];\n  const satelliteColors = [cyan, violet, accentColor];\n\n  for (let orbit = 0; orbit < 3; orbit++) {\n    for (let index = 0; index < counts[orbit]; index++) {\n      const angle = phases[orbit] + offsets[orbit] + index * tau / counts[orbit];\n      const x = cx + Math.cos(angle) * radii[orbit];\n      const y = cy + Math.sin(angle) * radii[orbit];\n      const size = sizes[orbit] * (0.88 + 0.12 * Math.cos(index * 1.7 + orbit * 0.9));\n      const kind = kinds[(index + orbit) % kinds.length];\n      let color = satelliteColors[orbit];\n      if (orbit === 2 && index % 2 === 1) color = coralLight;\n      addSatellite(kind, x, y, size, color, angle + Math.PI * 0.25, 0.96);\n    }\n  }\n\n  return commands;\n}",
+        "layout": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1920.0,
+          "height": 1080.0
+        },
+        "fit": "cover"
+      },
+      {
+        "clip_id": "clp_program_title",
+        "object_id": "obj_program_title",
+        "object_kind": "text",
+        "text": "Ideas in motion",
+        "layout": {
+          "x": 153.6,
+          "y": 820.8,
+          "width": 1612.8,
+          "height": 172.8
+        }
+      },
+      {
+        "clip_id": "clp_authorized_image",
+        "object_id": "obj_authorized_image",
+        "object_kind": "image",
+        "layout": {
+          "x": 1560.0,
+          "y": 90.0,
+          "width": 220.0,
+          "height": 220.0
+        },
+        "snapshot_id": "13d44079-5c29-56c6-9b73-8b467aba6790"
+      }
+    ],
+    "generator_previews": [
+      {
+        "clip_id": "clp_generator",
+        "object_id": "obj_generator",
+        "program_digest": "788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c",
+        "video_url": "https://repurposer.tos-ap-southeast-1.volces.com/source-snapshots/58f428aee2f154751c6426140bdd5575dd62d475b94b721174a83b1a9cf3ca50.mp4",
+        "poster_url": "https://repurposer.tos-ap-southeast-1.volces.com/source-snapshots/9f994118e2b579c6108f299fc377c2d3457dead0553628a5bf12289bccfff63a.png",
+        "media_digest": "58f428aee2f154751c6426140bdd5575dd62d475b94b721174a83b1a9cf3ca50",
+        "output": {
+          "background": "#0B1020",
+          "duration_frames": 90,
+          "fps": 15,
+          "height": 540,
+          "width": 960
+        },
+        "diagnostics": {
+          "command_cap_per_frame": 512,
+          "encoder": "libx264",
+          "frames": 90,
+          "unique_frames": 90
+        }
+      }
+    ],
+    "preview_model_inputs": [
+      {
+        "caption": "Exact preview for clp_generator at program digest 788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c; representative middle frame, not an aesthetic approval.",
+        "mime": "image/jpeg",
+        "sha256": "c742ba742fec697368467f82a03e76924c9d22918cd58e8309686d48d403a2c9",
+        "bytes": 20338
+      }
+    ]
+  },
+  "output_id": "7828dec4-7a27-4874-8c28-9a1edd8ce228",
+  "production": {
+    "run_less": true,
+    "workflow_step_id": null,
+    "composition_digest": "cc8fcf883d1d98227f304bfa88669c0476a5b00ddd05abb648e95d2aa73c3c33",
+    "generator_media": {
+      "obj_generator": {
+        "diagnostics": {
+          "command_cap_per_frame": 512,
+          "encoder": "libx264",
+          "frames": 90,
+          "unique_frames": 90
+        },
+        "media": {
+          "digest": "58f428aee2f154751c6426140bdd5575dd62d475b94b721174a83b1a9cf3ca50",
+          "storage_key": "source-snapshots/58f428aee2f154751c6426140bdd5575dd62d475b94b721174a83b1a9cf3ca50.mp4"
+        },
+        "output": {
+          "background": "#0B1020",
+          "duration_frames": 90,
+          "fps": 15,
+          "height": 540,
+          "width": 960
+        },
+        "preview_frame": {
+          "digest": "9f994118e2b579c6108f299fc377c2d3457dead0553628a5bf12289bccfff63a",
+          "storage_key": "source-snapshots/9f994118e2b579c6108f299fc377c2d3457dead0553628a5bf12289bccfff63a.png"
+        },
+        "program_digest": "788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c",
+        "resources": [],
+        "runtime": "drawing-v1",
+        "schema_version": 1,
+        "clip_id": "clp_generator",
+        "object_id": "obj_generator"
+      }
+    },
+    "execution_digest": null,
+    "render_spec_provenance": {
+      "composition_id": "c9c6f500-5004-43d9-9140-a2e5fe532fc2",
+      "composition_version_id": "d73449a7-660b-4200-bbf8-a06e59b9d55a",
+      "content_digest": "cc8fcf883d1d98227f304bfa88669c0476a5b00ddd05abb648e95d2aa73c3c33"
+    },
+    "render_status": "completed",
+    "files": {
+      "video": "52037604-9321-4b70-9212-445ccf5ade60/outputs/projects/69dc424f-8705-4483-83f8-2fcab246fdac/7828dec4-7a27-4874-8c28-9a1edd8ce228-1793474773.mp4"
+    },
+    "duration_seconds": 6.0,
+    "retry_preparation_reused_exact_media": true,
+    "retry_program_digest": "788c23bf7b2277eb8d441a26b8024ece771d80ad7c549f46e2e73b43a74c148c",
+    "agent_authoring_calls_total": 2,
+    "video_sha256": "6f9bd3a4cd589d8a1a98814367cd8b0a5cb365e1a308cba4c99fe9511b064d7e"
+  },
+  "frames": [
+    {
+      "requested_seconds": 0.5,
+      "actual_seconds": 0.5,
+      "frame": 15,
+      "path": "/Users/sylas/repurposer/scratch/c4-orbit/final-0.5s.png",
+      "sha256": "a33b304466fa540a5fd75be04415188ac106980c34e8f3220006ab98f375413d"
+    },
+    {
+      "requested_seconds": 3.0,
+      "actual_seconds": 3.0,
+      "frame": 90,
+      "path": "/Users/sylas/repurposer/scratch/c4-orbit/final-3.0s.png",
+      "sha256": "b13359881dbe5933a550e5104e390c1fe06b26227ec62165d729d9e2a3070bea"
+    },
+    {
+      "requested_seconds": 5.5,
+      "actual_seconds": 5.5,
+      "frame": 165,
+      "path": "/Users/sylas/repurposer/scratch/c4-orbit/final-5.5s.png",
+      "sha256": "50dede36e6d3123612f89c773984b3756c057accba5ac4a3c7028a1f67f0eb13"
+    }
+  ],
+  "review": {
+    "paid_model_calls": 1,
+    "same_request_exact_reuse": true,
+    "summary": "F01–F03 show three concentric orbit tracks with geometric satellites in differing positions, matching the required decorative composition. The exact title “Ideas in motion” is clearly legible, uncropped, and unobstructed in every sampled frame. The project-owned brand image at the upper right is complete and uncropped. No visible mismatch was found.",
+    "findings": [],
+    "frames": [
+      {
+        "frame_id": "F01",
+        "time_seconds": 0.5,
+        "frame": 15,
+        "scene_id": null,
+        "storage_key": "video-review/887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217.jpg",
+        "digest": "887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217"
+      },
+      {
+        "frame_id": "F02",
+        "time_seconds": 3.0,
+        "frame": 90,
+        "scene_id": null,
+        "storage_key": "video-review/b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18.jpg",
+        "digest": "b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18"
+      },
+      {
+        "frame_id": "F03",
+        "time_seconds": 5.5,
+        "frame": 165,
+        "scene_id": null,
+        "storage_key": "video-review/c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49.jpg",
+        "digest": "c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49"
+      }
+    ],
+    "scope": {
+      "actual_output_decoded": true,
+      "static_frames_checked": true,
+      "deterministic_output_checks": true,
+      "sampled_frame_signals_checked": true,
+      "audio_signal_checked": true,
+      "motion_and_transitions_checked": false,
+      "audio_and_av_sync_checked": false
+    },
+    "media_inspection": {
+      "checker_version": "output-checks-v1",
+      "visual": {
+        "sampled_frames": 3,
+        "flat_frame_candidates": [],
+        "repeated_frame_groups": []
+      },
+      "audio": {
+        "expected": false,
+        "present": true,
+        "decode_ok": true,
+        "scope": "full_stream",
+        "sample_rate": 22050,
+        "samples": 133594,
+        "duration_seconds": 6.058685,
+        "rms_dbfs": -240.0,
+        "peak_dbfs": -240.0,
+        "clipped_sample_ratio": 0.0,
+        "integrated_lufs": null
+      },
+      "issues": []
+    },
+    "path": "/Users/sylas/repurposer/scratch/c4-orbit/review.json"
+  }
+}

@@ -19,6 +19,12 @@ import {
 import i18n from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { MentionPicker } from "@/components/mentions/MentionPicker"
+import {
+  SKILL_CHIP_CLASS_NAME,
+  skillChipLabel,
+} from "@/components/composer/SkillChip"
+import { SkillPicker } from "@/components/composer/SkillPicker"
+import { skillTriggerQuery, type SkillOption } from "@/lib/skills"
 
 /**
  * 提及编辑器 (MentionEditor) — the full-form mention input (docs/tasks/
@@ -32,6 +38,8 @@ import { MentionPicker } from "@/components/mentions/MentionPicker"
  * funnels into `syncNow`, which derives `{text, mentions}` from the DOM and
  * reports them up. Mentions serialize into the text as `@label` (the LLM
  * reads a natural sentence; the structured pin rides the mentions array).
+ * Skill chips stay inline too, but serialize to nothing: their exact
+ * reference rides selectedSkill, never a second prompt token.
  */
 
 /** An "@" at line start or after whitespace opens the picker; the capture
@@ -49,7 +57,7 @@ export interface MentionEditorHandle {
   /** Select the first occurrence of plain text (recipe prefill placeholders).
    * Returns whether the text was found. */
   selectText: (text: string) => boolean
-  clear: () => void
+  clear: (options?: { preserveSkill?: boolean }) => void
   focus: () => void
   /** The content's intrinsic height (the editable's scrollHeight) — for
    * hosts whose band grows with the draft (the home composer's
@@ -57,7 +65,7 @@ export interface MentionEditorHandle {
   getContentHeight: () => number
 }
 
-interface MentionEditorProps {
+export interface MentionEditorProps {
   placeholder?: string
   disabled?: boolean
   onChange: (text: string, mentions: ChatMention[]) => void
@@ -66,18 +74,30 @@ interface MentionEditorProps {
   /** Live surface data for registry candidate feeds (keep referentially
    * stable — e.g. useMemo — or the picker reloads every render). */
   mentionContext?: MentionContext
+  /** Controlled, optional single Skill binding. The option supplies the exact
+   * reference for POST /chat plus the DTO display name for the chip. */
+  selectedSkill?: SkillOption | null
+  onSkillChange?: (option: SkillOption | null) => void
   className?: string
   "data-tour"?: string
   ref?: Ref<MentionEditorHandle>
 }
 
 const MENTION_ATTR = "data-mention-type"
+const SKILL_ATTR = "data-skill-chip"
+
+function skillKey(option: SkillOption): string {
+  const reference = option.reference
+  return reference.kind === "builtin"
+    ? `builtin:${reference.skill_id}:${reference.version}`
+    : `external:${reference.skill_version_id}`
+}
 
 /** An "empty" editable usually isn't: focusing inserts a browser placeholder
  * <br>, and anything appended lands AFTER it (the ghost first line). Treat
  * placeholder-only content as truly empty before programmatic inserts. */
 function normalizeEmpty(el: HTMLElement) {
-  if (!el.textContent?.trim() && !el.querySelector(`[${MENTION_ATTR}]`)) {
+  if (!el.textContent?.trim() && !el.querySelector(`[${MENTION_ATTR}],[${SKILL_ATTR}]`)) {
     el.innerHTML = ""
   }
 }
@@ -89,6 +109,7 @@ function normalizeEmpty(el: HTMLElement) {
 function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ""
   if (!(node instanceof HTMLElement)) return ""
+  if (node.hasAttribute(SKILL_ATTR)) return ""
   if (node.dataset.mentionType) {
     const base = `@${node.dataset.mentionLabel ?? ""}`
     const quote = node.dataset.mentionQuote
@@ -106,14 +127,18 @@ export function MentionEditor({
   onChange,
   onSubmit,
   mentionContext,
+  selectedSkill,
+  onSkillChange,
   className,
   "data-tour": dataTour,
   ref,
 }: MentionEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
-  const [picker, setPicker] = useState<{ query: string; rect: DOMRect } | null>(
-    null,
-  )
+  const [picker, setPicker] = useState<{
+    kind: "mention" | "skill"
+    query: string
+    rect: DOMRect
+  } | null>(null)
 
   /** DOM → state: the single sync funnel every edit path calls. */
   const syncNow = useCallback(() => {
@@ -126,7 +151,7 @@ export function MentionEditor({
     // placeholderless even with an empty value). Reset to a truly empty
     // DOM at the funnel so the placeholder comes back; the guard mirrors
     // normalizeEmpty but never eats intentional whitespace (no trim).
-    if (!el.textContent && !el.querySelector(`[${MENTION_ATTR}]`)) {
+    if (!el.textContent && !el.querySelector(`[${MENTION_ATTR}],[${SKILL_ATTR}]`)) {
       el.innerHTML = ""
     }
     const text = Array.from(el.childNodes)
@@ -144,11 +169,14 @@ export function MentionEditor({
       ...(node.dataset.mentionQuote ? { quote: node.dataset.mentionQuote } : {}),
     }))
     onChange(text, mentions)
-  }, [onChange])
+    if (selectedSkill && !el.querySelector(`[${SKILL_ATTR}]`)) {
+      onSkillChange?.(null)
+    }
+  }, [onChange, onSkillChange, selectedSkill])
 
-  /** The inline chip node: `@label` + × in one contenteditable=false span.
+  /** The inline chip node: `@label` in one contenteditable=false span.
    * Text-only (no icon) — the @ prefix makes it self-describing in the
-   * sentence; the registry icon stays on the static chip (message bubbles). */
+   * sentence; deletion uses the editor's ordinary text-editing gestures. */
   const buildChip = useCallback(
     (mention: ChatMention): HTMLSpanElement => {
       const chip = document.createElement("span")
@@ -175,25 +203,13 @@ export function MentionEditor({
         chip.appendChild(quote)
       }
 
-      const remove = document.createElement("button")
-      remove.type = "button"
-      remove.textContent = "×"
-      remove.setAttribute("aria-label", i18n.t("mentions.remove"))
-      remove.className = "text-muted-foreground hover:text-foreground"
-      remove.addEventListener("mousedown", (e) => e.preventDefault())
-      remove.addEventListener("click", () => {
-        chip.remove()
-        syncNow()
-        editorRef.current?.focus()
-      })
-      chip.appendChild(remove)
       return chip
     },
-    [syncNow],
+    [],
   )
 
-  /** Track the "@" trigger against the live selection: query = text between
-   * the "@" and the caret; the picker anchors to the caret rect. */
+  /** Track the "@" and "/" triggers against the live selection: query = text
+   * between the trigger and the caret; either picker anchors to the caret. */
   const updatePicker = useCallback(() => {
     const el = editorRef.current
     const sel = window.getSelection()
@@ -208,16 +224,64 @@ export function MentionEditor({
       setPicker(null)
       return
     }
-    const match = (sel.anchorNode.textContent ?? "")
-      .slice(0, sel.anchorOffset)
-      .match(MENTION_TRIGGER)
-    if (!match) {
+    const beforeCaret = (sel.anchorNode.textContent ?? "").slice(
+      0,
+      sel.anchorOffset,
+    )
+    const mentionMatch = beforeCaret.match(MENTION_TRIGGER)
+    const skillQuery = mentionMatch ? null : skillTriggerQuery(beforeCaret)
+    if (!mentionMatch && skillQuery === null) {
       setPicker(null)
       return
     }
     const rect = sel.getRangeAt(0).getBoundingClientRect()
-    setPicker({ query: match[1], rect })
+    setPicker(
+      mentionMatch
+        ? { kind: "mention", query: mentionMatch[1], rect }
+        : { kind: "skill", query: skillQuery ?? "", rect },
+    )
   }, [])
+
+  /** Skill is also an inline non-editable node, but its green slash family is
+   * deliberately different from @. Serialization ignores the whole node: the
+   * structured reference rides selectedSkill, never the prompt or mentions. */
+  const buildSkillChip = useCallback(
+    (option: SkillOption): HTMLSpanElement => {
+      const chip = document.createElement("span")
+      chip.contentEditable = "false"
+      chip.dataset.skillChip = skillKey(option)
+      chip.className = SKILL_CHIP_CLASS_NAME
+
+      const label = document.createElement("span")
+      label.textContent = skillChipLabel(option, i18n.t("skills.external"))
+      label.className = "max-w-56 truncate"
+      chip.appendChild(label)
+      return chip
+    },
+    [],
+  )
+
+  const insertSkillChipAt = useCallback(
+    (range: Range, option: SkillOption) => {
+      const el = editorRef.current
+      el?.querySelectorAll(`[${SKILL_ATTR}]`).forEach((node) => node.remove())
+      range.deleteContents()
+      const chip = buildSkillChip(option)
+      range.insertNode(chip)
+      const spacer = document.createTextNode(" ")
+      chip.after(spacer)
+      const sel = window.getSelection()
+      if (sel) {
+        const after = document.createRange()
+        after.setStartAfter(spacer)
+        after.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(after)
+      }
+      syncNow()
+    },
+    [buildSkillChip, syncNow],
+  )
 
   /** Insert a chip node at `range` (replacing its contents) and park the
    * caret after a trailing space so typing continues separated from the chip. */
@@ -307,12 +371,54 @@ export function MentionEditor({
     [syncNow],
   )
 
-  const clear = useCallback(() => {
+  const selectSkill = useCallback(
+    (option: SkillOption) => {
+      const el = editorRef.current
+      if (!el) return
+      el.focus()
+      normalizeEmpty(el)
+      const sel = window.getSelection()
+      let range: Range | null = null
+      if (
+        sel &&
+        sel.rangeCount > 0 &&
+        el.contains(sel.anchorNode) &&
+        sel.anchorNode?.nodeType === Node.TEXT_NODE
+      ) {
+        const node = sel.anchorNode as Text
+        const beforeCaret = (node.textContent ?? "").slice(0, sel.anchorOffset)
+        const query = skillTriggerQuery(beforeCaret)
+        if (query !== null) {
+          range = document.createRange()
+          range.setStart(node, sel.anchorOffset - query.length - 1)
+          range.setEnd(node, sel.anchorOffset)
+        }
+      }
+      if (!range) {
+        range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+      }
+      insertSkillChipAt(range, option)
+      onSkillChange?.(option)
+      setPicker(null)
+      el.focus()
+    },
+    [insertSkillChipAt, onSkillChange],
+  )
+
+  const clear = useCallback((options?: { preserveSkill?: boolean }) => {
     const el = editorRef.current
+    const preserved = options?.preserveSkill
+      ? el?.querySelector<HTMLElement>(`[${SKILL_ATTR}]`)
+      : null
+    preserved?.remove()
     if (el) el.innerHTML = ""
+    if (el && preserved) el.append(preserved, document.createTextNode(" "))
     setPicker(null)
+    if (!options?.preserveSkill) onSkillChange?.(null)
     syncNow()
-  }, [syncNow])
+  }, [onSkillChange, syncNow])
 
   /** Select a literal text run inside the editable (the recipe prefill's
    * visible blank). The DOM walker keeps this honest for the plain-text
@@ -380,6 +486,31 @@ export function MentionEditor({
     if (text) document.execCommand("insertText", false, text)
   }
 
+  // Reconcile external bindings (Home card / rollback) without remounting or
+  // moving the caret. Picker selection has already inserted its exact node.
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    const existing = el.querySelector<HTMLElement>(`[${SKILL_ATTR}]`)
+    if (!selectedSkill) {
+      if (existing) {
+        existing.remove()
+        syncNow()
+      }
+      return
+    }
+    if (existing?.dataset.skillChip === skillKey(selectedSkill)) return
+    const chip = buildSkillChip(selectedSkill)
+    if (existing) {
+      existing.replaceWith(chip)
+    } else {
+      // A card-born binding leads the prefill: `/Skill prompt`. Do not move
+      // the selection — recipe placeholder selection belongs to the caller.
+      el.prepend(chip, document.createTextNode(" "))
+    }
+    syncNow()
+  }, [buildSkillChip, selectedSkill, syncNow])
+
   // Close the picker when the selection leaves the editor entirely.
   useEffect(() => {
     const handler = () => {
@@ -393,7 +524,7 @@ export function MentionEditor({
 
   return (
     <>
-      {picker && (
+      {picker?.kind === "mention" && (
         <MentionPicker
           query={picker.query}
           position={picker.rect}
@@ -405,7 +536,15 @@ export function MentionEditor({
           onClose={() => setPicker(null)}
         />
       )}
-      {/* React renders NO children here — the DOM owns the content. */}
+      {picker?.kind === "skill" && (
+        <SkillPicker
+          query={picker.query}
+          position={picker.rect}
+          onSelect={selectSkill}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {/* React renders NO children here — the DOM owns text and inline chips. */}
       <div
         ref={editorRef}
         contentEditable={!disabled}
@@ -421,7 +560,7 @@ export function MentionEditor({
         onMouseUp={updatePicker}
         onPaste={handlePaste}
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none thin-scroll",
+          "min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent p-2 text-base break-words whitespace-pre-wrap outline-none thin-scroll",
           disabled && "pointer-events-none opacity-60",
           className,
         )}

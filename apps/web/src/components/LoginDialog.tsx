@@ -202,7 +202,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
         disabled={loading !== null}
         aria-label={t("login.digitLabel", { index: index + 1, total: CODE_LENGTH })}
         className={cn(
-          "h-12 w-10 rounded-md border bg-background text-center text-lg font-semibold tabular-nums text-foreground outline-none transition-colors focus:border-foreground focus:ring-4 focus:ring-foreground/10 sm:w-11",
+          "h-12 w-10 rounded-md border bg-background text-center text-lg font-semibold tabular-nums text-foreground outline-none transition-colors focus:border-foreground focus:outline-4 focus:outline-foreground/10 sm:w-11",
           digits[index]
             ? "border-foreground"
             : "border-input hover:border-muted-foreground/50"

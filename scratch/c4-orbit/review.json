@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "output_id": "7828dec4-7a27-4874-8c28-9a1edd8ce228",
+  "composition_id": "c9c6f500-5004-43d9-9140-a2e5fe532fc2",
+  "composition_version_id": "d73449a7-660b-4200-bbf8-a06e59b9d55a",
+  "content_digest": "cc8fcf883d1d98227f304bfa88669c0476a5b00ddd05abb648e95d2aa73c3c33",
+  "execution_digest": null,
+  "video_sha256": "6f9bd3a4cd589d8a1a98814367cd8b0a5cb365e1a308cba4c99fe9511b064d7e",
+  "reviewed_at": "2026-10-31T19:28:58.919622+00:00",
+  "requirements": "A six-second decorative background with three concentric orbit tracks, different radii and moving geometric satellites. The exact native title \"Ideas in motion\" must remain legible and uncropped, and the project-owned brand image at the upper right must remain complete and uncropped. No narration or soundtrack is required.",
+  "at_seconds": [
+    0.5,
+    3.0,
+    5.5
+  ],
+  "summary": "F01–F03 show three concentric orbit tracks with geometric satellites in differing positions, matching the required decorative composition. The exact title “Ideas in motion” is clearly legible, uncropped, and unobstructed in every sampled frame. The project-owned brand image at the upper right is complete and uncropped. No visible mismatch was found.",
+  "scope": {
+    "actual_output_decoded": true,
+    "static_frames_checked": true,
+    "deterministic_output_checks": true,
+    "sampled_frame_signals_checked": true,
+    "audio_signal_checked": true,
+    "motion_and_transitions_checked": false,
+    "audio_and_av_sync_checked": false
+  },
+  "limitations": [
+    "Findings are based on the listed decoded still frames, not continuous motion playback.",
+    "Flat or repeated sampled frames are candidates for inspection, not proof of a defect.",
+    "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+    "RMS and peak dBFS are not BS.1770 integrated LUFS."
+  ],
+  "media_inspection": {
+    "checker_version": "output-checks-v1",
+    "visual": {
+      "sampled_frames": 3,
+      "flat_frame_candidates": [],
+      "repeated_frame_groups": []
+    },
+    "audio": {
+      "expected": false,
+      "present": true,
+      "decode_ok": true,
+      "scope": "full_stream",
+      "sample_rate": 22050,
+      "samples": 133594,
+      "duration_seconds": 6.058685,
+      "rms_dbfs": -240.0,
+      "peak_dbfs": -240.0,
+      "clipped_sample_ratio": 0.0,
+      "integrated_lufs": null
+    },
+    "issues": []
+  },
+  "frames": [
+    {
+      "frame_id": "F01",
+      "time_seconds": 0.5,
+      "frame": 15,
+      "scene_id": null,
+      "storage_key": "video-review/887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217.jpg",
+      "digest": "887252da3a191e8cf09c8698ac57e8f3775f698ab3e3944156d1405f9f0be217"
+    },
+    {
+      "frame_id": "F02",
+      "time_seconds": 3.0,
+      "frame": 90,
+      "scene_id": null,
+      "storage_key": "video-review/b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18.jpg",
+      "digest": "b74295f0abe80b795dad0d9991ea17c16270061010c46bbdcd58e18f13cb0a18"
+    },
+    {
+      "frame_id": "F03",
+      "time_seconds": 5.5,
+      "frame": 165,
+      "scene_id": null,
+      "storage_key": "video-review/c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49.jpg",
+      "digest": "c4e6291918e5fe8d8b0158d9998b7d825295adcab0c1a5b6f2eae3b96ad29c49"
+    }
+  ],
+  "findings": []
+}

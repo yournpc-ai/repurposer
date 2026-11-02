@@ -5,13 +5,14 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.dependencies import DBDep, get_current_user_required
 from app.models.tables import PaymentOrder, User
 from app.platform import payments
 from app.platform.payments import (
     InvalidStripeSignature,
+    PaymentAmountInvalid,
     PaymentConfigurationError,
     PaymentPackageNotFound,
     PaymentProviderError,
@@ -27,12 +28,27 @@ class CreditPackageResponse(BaseModel):
     currency: str
 
 
+class CustomTopupResponse(BaseModel):
+    currency: str
+    min_amount_minor: int
+    max_amount_minor: int
+    credits_per_major: int
+
+
 class PaymentPackagesResponse(BaseModel):
     items: list[CreditPackageResponse]
+    custom: CustomTopupResponse
 
 
 class CreateCheckoutSessionRequest(BaseModel):
-    package_key: str = Field(min_length=1, max_length=40)
+    package_key: str | None = Field(default=None, min_length=1, max_length=40)
+    amount_minor: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def exactly_one_amount_source(self) -> "CreateCheckoutSessionRequest":
+        if (self.package_key is None) == (self.amount_minor is None):
+            raise ValueError("exactly one of package_key or amount_minor is required")
+        return self
 
 
 class CheckoutSessionResponse(BaseModel):
@@ -80,7 +96,13 @@ async def list_packages(
                 currency=package.currency,
             )
             for package in payments.list_credit_packages()
-        ]
+        ],
+        custom=CustomTopupResponse(
+            currency=payments.CUSTOM_TOPUP_POLICY.currency,
+            min_amount_minor=payments.CUSTOM_TOPUP_POLICY.min_amount_minor,
+            max_amount_minor=payments.CUSTOM_TOPUP_POLICY.max_amount_minor,
+            credits_per_major=payments.CUSTOM_TOPUP_POLICY.credits_per_major,
+        ),
     )
 
 
@@ -92,8 +114,13 @@ async def create_checkout_session(
 ) -> CheckoutSessionResponse:
     try:
         order, checkout_url = await payments.create_checkout_session(
-            db, user=user, package_key=data.package_key
+            db,
+            user=user,
+            package_key=data.package_key,
+            amount_minor=data.amount_minor,
         )
+    except PaymentAmountInvalid as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.code) from e
     except PaymentPackageNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=e.code) from e
     except PaymentConfigurationError as e:

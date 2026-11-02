@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { RecipePublic } from "@/lib/recipes"
+import type { SkillOption } from "@/lib/skills"
 import {
   RECIPE_CARD_FAMILY,
   RECIPE_FAMILIES,
@@ -174,6 +175,36 @@ describe("resolveFamilies — 预填载荷(卡片点击唯一归宿 = composer �
       kind: "demo",
       prefillKey: "recipes.shelf.demos.launch-film.prompt",
     })
+  })
+
+  it("视频 Skill 卡与手动 picker 共用同一 reference；无声明能力或普通 demo 不伪造绑定", () => {
+    const skill: SkillOption = {
+      reference: { kind: "builtin", skill_id: "launch-film", version: "1.3.0" },
+      skill_id: "launch-film",
+      name: "launch-film",
+      description: "",
+      capabilities: ["website_capture"],
+    }
+    const items = resolveRecipeFamilies([], [skill])
+      .flatMap((family) => family.subs)
+      .flatMap((sub) => sub.shelves)
+      .flatMap((shelf) => shelf.items)
+    const zymix = items.find(
+      (item) => item.kind === "demo" && item.demo.id === "product-demo-zymix",
+    )
+    const textShort = items.find(
+      (item) => item.kind === "demo" && item.demo.id === "text-short-genesis",
+    )
+    expect(zymix?.skill?.reference).toEqual(skill.reference)
+    expect(zymix?.prefillKey).toBe("recipes.shelf.demos.product-demo-zymix.prompt")
+    expect(textShort?.skill).toBeUndefined()
+
+    const withoutDeclaration = resolveRecipeFamilies([])
+      .flatMap((family) => family.subs)
+      .flatMap((sub) => sub.shelves)
+      .flatMap((shelf) => shelf.items)
+      .find((item) => item.kind === "demo" && item.demo.id === "product-demo-zymix")
+    expect(withoutDeclaration?.skill).toBeUndefined()
   })
 })
 

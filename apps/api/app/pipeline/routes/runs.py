@@ -23,11 +23,17 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import WorkflowStatus
 from app.models.tables import Project, User, WorkflowRun, WorkflowStep
 from app.pipeline.outputs import workflow_step_to_response
+from app.pipeline.orchestrator import cancel_run
 from app.platform.configs import get_config
+from app.platform.project_context import get_project_for_user
 
 router = APIRouter()
 
-_TERMINAL = {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}
+_TERMINAL = {
+    WorkflowStatus.COMPLETED,
+    WorkflowStatus.FAILED,
+    WorkflowStatus.CANCELLED,
+}
 _TAIL_INTERVAL = 1.0
 _HEARTBEAT_INTERVAL = 15.0
 
@@ -54,6 +60,9 @@ def _run_frame(run: WorkflowRun) -> dict:
         # (#5: the stream keeps chronological order), so the run needs its
         # anchor in every frame.
         "created_at": run.created_at.isoformat() if run.created_at else None,
+        # Same-run upload recovery is a real attachment boundary for clients;
+        # trigger refs use this same persistent counter.
+        "upload_retry_count": int((run.context or {}).get("upload_retry_count") or 0),
     }
     return frame
 
@@ -81,6 +90,26 @@ async def _load(run_id: UUID) -> tuple[WorkflowRun | None, list[WorkflowStep], i
         # Detach from the session — frames are read-only snapshots.
         db.expunge_all()
         return run, nodes, ratio
+
+
+@router.post("/{run_id}/cancel")
+async def cancel_workflow_run(
+    run_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    run = await db.get(WorkflowRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
+    project = await get_project_for_user(db, run.project_id, current_user.id)
+    # Match create_run's lock order (project → run) so cancellation cannot
+    # deadlock against a concurrent start/finalize.
+    await db.refresh(project, with_for_update=True)
+    run = await db.get(WorkflowRun, run_id, with_for_update=True)
+    if run is None or run.project_id != project.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
+    run = await cancel_run(db, run, project)
+    return {"run_id": str(run.id), "status": run.status.value}
 
 
 @router.get("/{run_id}/events")

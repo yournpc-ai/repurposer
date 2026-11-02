@@ -1,0 +1,28 @@
+{
+  "sent": true,
+  "found": true,
+  "options": [
+    {
+      "text": "1\n英文\n沿用现有的 \"Every cut matters\"，只是确认语言，文案不动",
+      "disabled": false
+    },
+    {
+      "text": "2\n中文\n标题改成中文，例如「每一刀都很重要」",
+      "disabled": false
+    }
+  ],
+  "clicked": true,
+  "live": {
+    "qaCount": 0,
+    "duplicateUserRows": 0,
+    "qaText": [],
+    "pendingOptions": []
+  },
+  "history": {
+    "qaCount": 0,
+    "duplicateUserRows": 0,
+    "qaText": [],
+    "pendingOptions": []
+  },
+  "consoleEvents": []
+}

@@ -533,7 +533,7 @@ function GroupFrames({
             key={group.id}
             aria-hidden
             className={cn(
-              "absolute rounded-3xl ring-foreground/10 ring-1",
+              "absolute rounded-3xl border-subtle border",
               born && "flow-node-born",
             )}
             style={{
@@ -630,7 +630,7 @@ function FlowControls({
               type="button"
               aria-label={t("results.canvas.zoomMenu")}
               title={t("results.canvas.zoomMenu")}
-              className="dock-surface flex h-9 items-center gap-1 rounded-md px-3 text-muted-foreground text-xs tabular-nums ring-foreground/10 ring-1 transition-colors hover:bg-accent hover:text-foreground"
+              className="dock-surface flex h-9 items-center gap-1 rounded-md px-3 text-muted-foreground text-xs tabular-nums border-subtle border transition-colors hover:bg-accent hover:text-foreground"
             />
           }
         >

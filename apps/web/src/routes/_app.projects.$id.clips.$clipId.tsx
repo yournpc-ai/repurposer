@@ -379,7 +379,7 @@ function ClipEditorPage() {
         <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             nativeButton={false}
             aria-label={t('clipEditor.back')}
             render={<Link to="/projects/$id" params={{ id }} />}
@@ -434,7 +434,7 @@ function ClipEditorPage() {
           </div>
 
           {clip?.files.video ? (
-            <div className="space-y-2 rounded-xl bg-card p-3 ring-1 ring-border">
+            <div className="space-y-2 rounded-xl bg-card p-3 border border-subtle">
               <p className="text-xs font-medium text-muted-foreground">{t('clipEditor.rendered')}</p>
               <video src={toAbsoluteUrl(clip.files.video) ?? undefined} controls className="w-full rounded-md" />
               <div className="flex gap-2">
@@ -472,7 +472,7 @@ function ClipEditorPage() {
         {/* Right: settings + transcript */}
         <div className="space-y-6">
           {spec ? (
-            <div className="grid grid-cols-1 gap-4 rounded-xl bg-card p-6 ring-1 ring-border sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 rounded-xl bg-card p-6 border border-subtle sm:grid-cols-2">
               <label className="flex items-center justify-between gap-3 text-sm">
                 <span className="text-muted-foreground">{t('clipEditor.aspect')}</span>
                 <Select
@@ -686,7 +686,7 @@ function ClipEditorPage() {
             </div>
           ) : null}
 
-          <div className="space-y-3 rounded-xl bg-card p-6 ring-1 ring-border">
+          <div className="space-y-3 rounded-xl bg-card p-6 border border-subtle">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">{t('clipEditor.transcript')}</h2>
               <span className="text-xs text-muted-foreground">{t('clipEditor.transcriptHint')}</span>

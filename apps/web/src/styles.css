@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist";
 /* Streamdown (assistant markdown in chat surfaces): base styles + Tailwind
  * v4 source scan so its utility classes are generated. */
 @import "streamdown/styles.css";
@@ -12,37 +13,20 @@
 
 /*
  * Shared surface for all floating layers (Popover / DropdownMenu / Dialog /
- * Select / Sheet): frosted glass whose luminosity is supplied by the
- * BACKLIGHT, not by its own fill — the tint is a low-alpha mid-tone and the
- * blur is heavy enough that no texture behind survives (only color and light
- * melt through). Components still merge `className` last, so callers can
- * override per instance.
- *
- * Per-theme recipe: light = white 75% + blur(48px) saturate(1.6) — over the
- * pure-white canvas the glass reads via content bleed + the whisper shadow;
- * dark = neutral 0.33 gray 55% + blur(64px) saturate(1.3) — the tint sits
- * ABOVE the panel tones (canvas 0.12 / card 0.21) so the composite lands
- * lighter than the surfaces it floats over: a lit fog slab, not smoked glass.
- *
- * Shadow law (ADR-046): shadows belong to floating layers ONLY — this
- * utility carries the whisper shadow-xl in light (it lifts the glass off the
- * content beneath); dark casts nothing (brightness + the hairline do the
- * separating). In-flow surfaces never carry shadow-*; consumers of this
- * utility therefore take NO shadow-* class of their own.
+ * Select / Sheet): the raised surface token, restrained frost and the Arc
+ * floating shadow. Components merge `className` last, so callers can override
+ * per instance. The high-opacity tint preserves the raised tonal step while
+ * the blur lets immediate context melt through.
  */
 @utility overlay-surface {
-  background-color: color-mix(in oklch, var(--popover) 75%, transparent);
-  -webkit-backdrop-filter: blur(48px) saturate(1.6);
-  backdrop-filter: blur(48px) saturate(1.6);
-  box-shadow:
-    0 20px 25px -5px oklch(0 0 0 / 0.1),
-    0 8px 10px -6px oklch(0 0 0 / 0.1);
+  background-color: color-mix(in oklch, var(--popover) 92%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: var(--arc-shadow-floating);
 
   @variant dark {
-    background-color: oklch(0.33 0 0 / 0.55);
-    -webkit-backdrop-filter: blur(64px) saturate(1.3);
-    backdrop-filter: blur(64px) saturate(1.3);
-    box-shadow: none;
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    backdrop-filter: blur(28px) saturate(1.4);
   }
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -125,35 +109,72 @@
   letter-spacing: 0.08em;
 }
 
-/* shimmer — the ai-elements companion utility (the registry installs the
- * component files only; the docs list this as a manual globals.css step).
- * A soft light sweep across live text — the thinking/status labels and
- * attachment processing placeholders. Same mechanics as upstream's Shimmer
- * component (background-clip: text, 250% band, backgroundPosition sweep),
- * token ink only so dark mode follows. NOTE: background-clip:text pins the
- * visible ink to this gradient — a shimmered label ignores text-* color
- * overrides (e.g. hover brightening) for the duration. */
+/* shimmer — shadcn's text-clipped light sweep for live labels and processing
+ * attachments. currentColor keeps the base ink on the owner's semantic text
+ * token; only the highlight changes by theme. Reduced motion keeps plain text. */
+@property --shimmer-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 20deg;
+}
+@property --shimmer-image {
+  syntax: "*";
+  inherits: false;
+}
+@property --shimmer-text-fill {
+  syntax: "*";
+  inherits: false;
+}
+
 @utility shimmer {
-  background-image: linear-gradient(
-    90deg,
-    var(--muted-foreground) 0%,
-    var(--muted-foreground) 40%,
-    var(--foreground) 50%,
-    var(--muted-foreground) 60%,
-    var(--muted-foreground) 100%
+  --_spread: var(--shimmer-spread, calc(3ch + 40px));
+  --_base: currentColor;
+  --_highlight: var(
+    --shimmer-color,
+    oklch(from currentColor l c h / calc(alpha * 0.2))
   );
-  background-size: 250% 100%;
+
+  background-image: var(
+    --shimmer-image,
+    linear-gradient(
+      calc(90deg + var(--shimmer-angle)),
+      var(--_base) calc(50% - var(--_spread)),
+      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
+        calc(50% - var(--_spread) * 0.5),
+      var(--_highlight) 50%,
+      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
+        calc(50% + var(--_spread) * 0.5),
+      var(--_base) calc(50% + var(--_spread))
+    )
+  );
+  background-repeat: no-repeat;
+  background-size: calc(200% + var(--_spread) * 2) 100%;
+  background-position: 0 0;
   background-clip: text;
-  color: transparent;
-  animation: shimmer-sweep 2s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--shimmer-text-fill, transparent);
+  animation: shimmer-sweep var(--shimmer-duration, 2s) linear infinite;
+
+  @variant dark {
+    --_highlight: var(
+      --shimmer-color,
+      oklch(from currentColor max(0.8, calc(l + 0.4)) c h / calc(alpha + 0.4))
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 @keyframes shimmer-sweep {
   from {
-    background-position: 100% center;
+    background-position: 100% 0;
   }
   to {
-    background-position: 0% center;
+    background-position: 0 0;
   }
 }
 
@@ -529,10 +550,29 @@ body {
 }
 
 @theme inline {
+  --font-sans: var(--arc-font-body);
+  --font-heading: var(--arc-font-display);
+  --text-xs: var(--arc-text-xs);
+  --text-sm: var(--arc-text-sm);
+  --text-base: var(--arc-text-base);
+  --text-lg: var(--arc-text-lg);
+  --text-xl: var(--arc-text-xl);
+  --text-2xl: var(--arc-text-2xl);
+  --text-3xl: var(--arc-text-3xl);
+  --text-4xl: var(--arc-text-4xl);
+  --text-5xl: var(--arc-text-5xl);
+  --tracking-display: var(--arc-tracking-display);
+  --tracking-body: var(--arc-tracking-body);
+  --leading-display: var(--arc-leading-display);
+  --leading-body: var(--arc-leading-body);
+  --ease-enter: var(--arc-ease-enter);
+  --spacing: var(--arc-space-1);
+  --shadow-resting: var(--arc-shadow-resting);
+  --shadow-raised: var(--arc-shadow-raised);
+  --shadow-floating: var(--arc-shadow-floating);
+  --shadow-control-thumb: var(--arc-control-thumb-shadow);
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
-  --font-heading: var(--font-sans);
-  --font-sans: 'Inter Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -549,6 +589,15 @@ body {
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-control-on: var(--arc-control-on);
+  --color-control-glyph: var(--arc-control-glyph);
+  --color-control-track: var(--arc-control-track);
+  --color-control-track-hover: var(--arc-control-track-hover);
+  --color-control-thumb: var(--arc-control-thumb);
+  --color-control-thumb-on: var(--arc-control-thumb-on);
+  --color-control-fill: var(--arc-control-fill);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-icon-chip: var(--icon-chip);
@@ -557,6 +606,9 @@ body {
   --color-track-video-foreground: var(--track-video-foreground);
   --color-track-audio: var(--track-audio);
   --color-track-audio-foreground: var(--track-audio-foreground);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -574,56 +626,144 @@ body {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.375rem;
+  --radius-4xl: 1.625rem;
+  --radius-control: 0.5rem;
+  --radius-panel: 0.625rem;
+  --radius-surface: 1rem;
+  --radius-pill: 9999px;
 }
 
 :root {
-  /* Native chrome (scrollbars, form controls) follows the theme — without
-   * this the dark studio keeps light-theme scrollbars. */
   color-scheme: light;
-  /* Gray ladder: the studio canvas is PURE WHITE. Four surface steps, no
-   * more — cards are also white and separate from the canvas via the
-   * ring-foreground/10 hairline + whitespace; the gray fills zone content
-   * INSIDE cards: muted 0.95 (chips / badges / secondary) → inset 0.92
-   * (wells, doubles as accent hover) → border 0.90 (strokes). Page-level
-   * chips that must read against the canvas use a gray fill (e.g. bg-muted),
-   * never white-on-white. In-flow surfaces cast NO shadow; shadows belong to
-   * floating layers (see overlay-surface). Surface hierarchy comes from
-   * these steps, never from one-off alpha fills (bg-muted/50 & co. are
-   * retired). Three text tiers:
-   * foreground → muted-foreground (subtitles) → meta-foreground (caps meta). */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.24 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.95 0 0);
-  --inset: oklch(0.92 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --meta-foreground: oklch(0.68 0 0);
-  --accent: oklch(0.92 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.708 0 0);
-  /* Disabled is its own color role (ADR-046): an inset-fill well + meta
-   * glyph — never an opacity knockdown of the enabled state. */
+
+  /* Arc foundation. Components consume the semantic aliases below, not these
+   * source tokens directly. Neutral surfaces and text are zero-chroma OKLCH. */
+  --arc-neutral-0: oklch(1 0 0);
+  --arc-neutral-1: oklch(0.99 0 0);
+  --arc-neutral-2: oklch(0.978 0 0);
+  --arc-neutral-3: oklch(0.958 0 0);
+  --arc-neutral-4: oklch(0.915 0 0);
+  --arc-neutral-5: oklch(0.84 0 0);
+  --arc-neutral-6: oklch(0.72 0 0);
+  --arc-neutral-7: oklch(0.59 0 0);
+  --arc-neutral-8: oklch(0.46 0 0);
+  --arc-neutral-9: oklch(0.34 0 0);
+  --arc-neutral-10: oklch(0.23 0 0);
+  --arc-neutral-11: oklch(0.15 0 0);
+  --arc-background: var(--arc-neutral-0);
+  --arc-surface: var(--arc-neutral-0);
+  --arc-surface-raised: var(--arc-neutral-0);
+  --arc-surface-muted: var(--arc-neutral-2);
+  --arc-foreground: var(--arc-neutral-11);
+  --arc-text-secondary: var(--arc-neutral-8);
+  --arc-text-muted: var(--arc-neutral-7);
+  --arc-border: oklch(0.935 0 0);
+  --arc-border-subtle: oklch(0.965 0 0);
+  --arc-border-strong: oklch(0.82 0 0);
+  --arc-accent: oklch(0.33 0 0);
+  --arc-accent-strong: oklch(0.24 0 0);
+  --arc-accent-subtle: oklch(0.33 0 0 / 0.1);
+  --arc-accent-foreground: var(--arc-background);
+  --arc-focus-ring: transparent;
+  --arc-control-on: oklch(0.23 0 0);
+  --arc-control-glyph: oklch(1 0 0);
+  --arc-control-track: oklch(0.895 0 0);
+  --arc-control-track-hover: oklch(0.86 0 0);
+  --arc-control-thumb: oklch(1 0 0);
+  --arc-control-thumb-on: oklch(1 0 0);
+  --arc-control-fill: var(--arc-control-on);
+  --arc-control-on-subtle: color-mix(in oklab, var(--arc-control-on) 10%, transparent);
+  --arc-control-thumb-shadow:
+    0 0 0.5px oklch(0 0 0 / 0.07),
+    0 1px 2px oklch(0 0 0 / 0.14),
+    0 2px 6px oklch(0 0 0 / 0.06);
+  --arc-success: oklch(0.49 0.19 150);
+  --arc-success-subtle: oklch(0.95 0.025 150);
+  --arc-warning: oklch(0.58 0.18 75);
+  --arc-danger: oklch(0.54 0.21 25);
+  --arc-shadow-resting: 0 1px 2px oklch(0 0 0 / 0.035);
+  --arc-shadow-raised:
+    0 6px 18px oklch(0 0 0 / 0.065),
+    0 1px 3px oklch(0 0 0 / 0.035);
+  --arc-shadow-floating:
+    0 20px 48px oklch(0 0 0 / 0.105),
+    0 3px 10px oklch(0 0 0 / 0.045);
+  --arc-series-1: #1f7def;
+  --arc-series-2: #7128a5;
+  --arc-series-3: #e58f00;
+  --arc-series-4: #009e84;
+  --arc-gradient-from: oklch(0.9 0.045 300);
+  --arc-gradient-to: oklch(0.92 0.045 65);
+  --arc-gradient: linear-gradient(100deg, var(--arc-gradient-from), var(--arc-gradient-to));
+  --arc-gradient-foreground: oklch(0.22 0.01 300);
+  --arc-gradient-soft: linear-gradient(135deg, oklch(0.975 0.016 300), oklch(0.98 0.016 65));
+  --arc-gradient-line: linear-gradient(100deg, oklch(0.83 0.06 300), oklch(0.86 0.06 65));
+  --arc-gradient-ink: linear-gradient(100deg, oklch(0.47 0.1 300), oklch(0.5 0.09 55));
+  --arc-space-1: 0.25rem;
+  --arc-space-2: 0.5rem;
+  --arc-space-3: 0.75rem;
+  --arc-space-4: 1rem;
+  --arc-space-5: 1.25rem;
+  --arc-space-6: 1.5rem;
+  --arc-space-8: 2rem;
+  --arc-space-10: 2.5rem;
+  --arc-space-12: 3rem;
+  --arc-space-16: 4rem;
+  --arc-space-20: 5rem;
+  --arc-space-24: 6rem;
+  --arc-font-display: "Geist Variable", sans-serif;
+  --arc-font-body: "Inter Variable", sans-serif;
+  --arc-text-xs: 0.75rem;
+  --arc-text-sm: 0.875rem;
+  --arc-text-base: 1rem;
+  --arc-text-lg: 1.125rem;
+  --arc-text-xl: 1.375rem;
+  --arc-text-2xl: 1.75rem;
+  --arc-text-3xl: 2.25rem;
+  --arc-text-4xl: 3.25rem;
+  --arc-text-5xl: 4.5rem;
+  --arc-tracking-display: -0.03em;
+  --arc-tracking-body: -0.01em;
+  --arc-leading-display: 1.1;
+  --arc-leading-body: 1.4;
+  --arc-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* shadcn semantic roles. Quiet fills share surface-muted: hover states,
+   * wells, chips and secondary surfaces intentionally speak one tonal step. */
+  --background: var(--arc-background);
+  --foreground: var(--arc-foreground);
+  --card: var(--arc-surface);
+  --card-foreground: var(--arc-foreground);
+  --popover: var(--arc-surface-raised);
+  --popover-foreground: var(--arc-foreground);
+  --primary: var(--arc-control-on);
+  --primary-foreground: var(--arc-control-glyph);
+  --secondary: var(--arc-surface-muted);
+  --secondary-foreground: var(--arc-foreground);
+  --muted: var(--arc-surface-muted);
+  --inset: var(--arc-surface-muted);
+  --muted-foreground: var(--arc-text-secondary);
+  --meta-foreground: var(--arc-text-muted);
+  --accent: var(--arc-surface-muted);
+  --accent-foreground: var(--arc-foreground);
+  --success: var(--arc-success);
+  --success-subtle: var(--arc-success-subtle);
+  --warning: var(--arc-warning);
+  --destructive: var(--arc-danger);
+  --border: var(--arc-border);
+  --border-subtle: var(--arc-border-subtle);
+  --border-strong: var(--arc-border-strong);
+  --input: var(--arc-border);
+  --ring: var(--arc-border-strong);
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
-  /* Icon chip: the small tile behind type glyphs in chips / file rows. */
-  --icon-chip: oklch(1 0 0);
+  --icon-chip: var(--arc-surface);
   /* Lineage cross-highlight (ADR-113 §6): the canvas's ONE hue — hovering a
    * deliverable card's video-lane block lights the source asset card's
    * overlapping strip blocks / cue rows in amber. Semantic token, both
@@ -636,100 +776,74 @@ body {
   --track-video-foreground: oklch(0.42 0.16 290);
   --track-audio: oklch(0.87 0.07 350);
   --track-audio-foreground: oklch(0.45 0.15 350);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: var(--arc-series-1);
+  --chart-2: var(--arc-series-2);
+  --chart-3: var(--arc-series-3);
+  --chart-4: var(--arc-series-4);
+  --chart-5: var(--arc-text-muted);
   --radius: 0.625rem;
-  --sidebar: oklch(0.98 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.24 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.92 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  /* The rail↔canvas boundary is a FILL step (--sidebar vs --background) plus
-     this whisper seam — the line accents the tonal difference, it never
-     carries separation alone. */
-  --sidebar-border: oklch(0.94 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  /* Inverse panel (Material's "inverse surface"): dark slab used by the
-   * landing's highlighted pricing tier + final CTA. */
-  --inverse: oklch(0.155 0 0);
-  --inverse-foreground: oklch(1 0 0);
+  --sidebar: var(--arc-background);
+  --sidebar-foreground: var(--arc-foreground);
+  --sidebar-primary: var(--arc-accent);
+  --sidebar-primary-foreground: var(--arc-accent-foreground);
+  --sidebar-accent: var(--arc-surface-muted);
+  --sidebar-accent-foreground: var(--arc-foreground);
+  --sidebar-border: var(--arc-border-subtle);
+  --sidebar-ring: var(--arc-border-strong);
+  --inverse: var(--arc-neutral-11);
+  --inverse-foreground: var(--arc-neutral-0);
 }
 
 .dark {
   color-scheme: dark;
-  /* Dark system (2026-08-05 reference pass): the canvas is NEAR-BLACK and
-   * elevation speaks glass, not ladder — floating layers are translucent
-   * (overlay-surface 68% + blur 28px), hover is a white veil (--accent, NOT a
-   * lighter solid step), and inset wells are a BLACK VEIL (relative darkening,
-   * not an absolute step) so a well carved into a glass layer sinks BELOW the
-   * glass's composite brightness instead of dropping to a fixed 0.15 pit. */
-  --background: oklch(0.12 0 0);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.21 0 0);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.21 0 0);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.9 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.24 0 0);
-  --inset: oklch(0 0 0 / 0.25);
-  --muted-foreground: oklch(0.63 0 0);
-  /* Whisper tier — FLORA-measured (2026-09-06 user ruling): their dock
-   * disclaimer renders #606060 ≈ 0.42; the whole dark whisper register
-   * (meta labels, disabled, the honesty line) moves with it. Was 0.52. */
-  --meta-foreground: oklch(0.42 0 0);
-  --accent: oklch(1 0 0 / 8%);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  /* Same roles as light — the references resolve against the dark ladder
-   * (inset black-veil well, meta 0.42 whisper glyph); the icon chip speaks
-   * glass. */
-  --disabled: var(--inset);
-  --disabled-foreground: var(--meta-foreground);
-  --icon-chip: oklch(1 0 0 / 10%);
-  /* Lineage cross-highlight (ADR-113 §6): the same amber signal, spoken as
-   * a translucent veil per the dark glass doctrine. */
+  --arc-background: oklch(0.19 0 0);
+  --arc-surface: oklch(0.215 0 0);
+  --arc-surface-raised: oklch(0.24 0 0);
+  --arc-surface-muted: oklch(0.26 0 0);
+  --arc-foreground: oklch(0.96 0 0);
+  --arc-text-secondary: oklch(0.77 0 0);
+  --arc-text-muted: oklch(0.64 0 0);
+  --arc-border: oklch(0.29 0 0);
+  --arc-border-subtle: oklch(0.25 0 0);
+  --arc-border-strong: oklch(0.4 0 0);
+  --arc-accent: oklch(0.8 0 0);
+  --arc-accent-strong: oklch(0.91 0 0);
+  --arc-accent-subtle: oklch(0.8 0 0 / 0.13);
+  --arc-control-on: oklch(0.93 0 0);
+  --arc-control-glyph: oklch(0.19 0 0);
+  --arc-control-track: oklch(0.33 0 0);
+  --arc-control-track-hover: oklch(0.37 0 0);
+  --arc-control-thumb: oklch(0.97 0 0);
+  --arc-control-thumb-on: oklch(0.19 0 0);
+  --arc-control-fill: oklch(0.62 0 0);
+  --arc-control-thumb-shadow:
+    0 0 0.5px oklch(0 0 0 / 0.3),
+    0 1px 2px oklch(0 0 0 / 0.35),
+    0 2px 6px oklch(0 0 0 / 0.2);
+  --arc-success: oklch(0.78 0.18 150);
+  --arc-success-subtle: oklch(0.29 0.035 150);
+  --arc-warning: oklch(0.83 0.17 80);
+  --arc-danger: oklch(0.76 0.2 25);
+  --arc-shadow-resting: 0 1px 2px oklch(0 0 0 / 0.18);
+  --arc-shadow-raised: 0 8px 22px oklch(0 0 0 / 0.22);
+  --arc-shadow-floating: 0 22px 55px oklch(0 0 0 / 0.34);
+  /* Same categorical hues as light, re-stepped for the dark surface. */
+  --arc-series-2: #8c46c3;
+  --arc-series-3: #d07b00;
+  --arc-gradient-from: oklch(0.38 0.05 300);
+  --arc-gradient-to: oklch(0.4 0.045 60);
+  --arc-gradient-foreground: oklch(0.96 0.005 300);
+  --arc-gradient-soft: linear-gradient(135deg, oklch(0.235 0.016 300), oklch(0.24 0.014 65));
+  --arc-gradient-line: linear-gradient(100deg, oklch(0.48 0.06 300), oklch(0.52 0.055 65));
+  --arc-gradient-ink: linear-gradient(100deg, oklch(0.82 0.07 300), oklch(0.86 0.065 70));
+  --icon-chip: var(--arc-surface-muted);
   --lineage: oklch(0.85 0.13 90 / 22%);
-  /* NLE 检视轴道块 (ADR-115): the same lavender/pink lanes, spoken deep in
-   * dark mode — the fill sinks, the foreground lifts. */
-  --track-video: oklch(0.40 0.08 293);
+  --track-video: oklch(0.4 0.08 293);
   --track-video-foreground: oklch(0.86 0.08 293);
   --track-audio: oklch(0.42 0.08 350);
   --track-audio-foreground: oklch(0.87 0.08 350);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  /* The rail floats half a step ABOVE the near-black canvas (0.12): layout
-     surfaces separate by FILL first (the 填充优先 law at layout scale), the
-     seam line only accents the tonal step. (Light mode sinks the rail
-     instead — 0.98 on white; each mode follows its reference direction.) */
-  --sidebar: oklch(0.17 0 0);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.24 0 0);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  /* Inverse panel: stays a dark slab in dark mode, just lifted off bg. */
-  --inverse: oklch(0.32 0 0);
-  --inverse-foreground: oklch(0.985 0 0);
-  /* Night rule: cast shadows die in dark — routing the shadow COLOR to
-   * transparent makes every shadow-* utility a no-op in one switch. Focus
-   * rings survive (they compose via --tw-ring-shadow, not the shadow color),
-   * and 1px stroke simulations via shadow-[0_0_0_1px] literals keep working. */
-  --tw-shadow-color: transparent;
+  --inverse: var(--arc-surface-muted);
+  --inverse-foreground: var(--arc-foreground);
 }
 
 @layer base {
@@ -738,6 +852,14 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--arc-font-body);
+    letter-spacing: var(--arc-tracking-body);
+    line-height: var(--arc-leading-body);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--arc-font-display);
+    letter-spacing: var(--arc-tracking-display);
+    line-height: var(--arc-leading-display);
   }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -790,7 +912,7 @@ body {
   }
 }
 .home-dock-in {
-  animation: home-dock-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: home-dock-in 0.22s var(--arc-ease-enter) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .home-dock-in {
@@ -827,10 +949,10 @@ body {
   }
 }
 .placeholder-roll-in {
-  animation: placeholder-roll-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: placeholder-roll-in 0.5s var(--arc-ease-enter) both;
 }
 .placeholder-roll-out {
-  animation: placeholder-roll-out 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: placeholder-roll-out 0.5s var(--arc-ease-enter) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .placeholder-roll-in {
@@ -862,7 +984,7 @@ body {
   }
 }
 .dock-panel-in {
-  animation: dock-panel-in 450ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation: dock-panel-in 450ms var(--arc-ease-enter) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .dock-panel-in {

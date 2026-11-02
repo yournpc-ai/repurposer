@@ -1,19 +1,19 @@
 # UI Guidelines — Studio 视觉与交互设计系统
 
-> Status: 当前规范（2026-10-25；视觉与交互形态全文唯一家）
+> Status: 当前规范（2026-10-30；视觉与交互形态全文唯一家）
 > **Scope**：studio（`_app` 路由 + 共享组件）。落地页（`/` + `components/landing/`）是营销面，自有视觉语言，其 `rounded-full` / `border-border` / `font-medium` 用法是模板原生，不受本文约束。
 > 行为层规格（chat 回合 / dock 状态机 / 画布数据面）归 `CHAT_ARCHITECTURE.md`；本文只管视觉与交互形态。整体风格：克制、轻量、统一。
 
 ## 1. 圆角与按钮
 
-- **统一小圆角**：按钮、输入框、卡、pill、下拉触发器用默认 `rounded-md`（卡 / 面板可 `rounded-lg`）。
+- **统一小圆角**：`rounded-sm` = 6px；`rounded-md` = control 8px（按钮、输入、菜单行）；`rounded-lg` = panel 10px（卡与浮层面板）；`rounded-xl` = 14px、`rounded-2xl` = 18px；大型 composer 的 `rounded-surface` = 16px。stadium 用 `rounded-full` / `rounded-pill`。
 - **`rounded-full` 例外清单**（除此之外禁用）：
   1. 真圆形图标按钮（如输入框右下角发送箭头 `h-9 w-9 rounded-full`）；
   2. 状态徽章 / 红点（通知角标）；
-  3. home composer 钉底后的**单行探索条**（stadium / 半高圆角；展开的 composer 保持 `rounded-2xl`）——stadium 只属于真单行盒，dock 输入组全形态恒 `rounded-xl`；
+  3. home composer 钉底后的**单行探索条**（stadium / 半高圆角；展开的 composer 为 16px surface 圆角）——stadium 只属于真单行盒，dock 输入组全形态恒 `rounded-xl`；
   4. home 配方货架的**一级 family pill 轨**（stadium pills 坐在 `bg-muted` 轨槽上：active = `bg-foreground` 深底 pill，inactive = 透明文字态 + `hover:bg-accent`）。
 - shadcn `Badge` 基座是 `rounded-full`——用于元数据标签（时长 / 画幅 / 标签）时恒 `className="rounded-md"` 覆盖。
-- **同排控件中心线对齐**：动作区控件统一 `h-9`，与发送钮同高；composer 底排整排 `h-9`（圆钮 / cost-confirm pill / send 同高，glyph 统一 `size-4.5`）。
+- **控件三档**：sm / md / lg = `h-9` 36px / `h-11` 44px / `h-12.5` 50px；icon 按钮对应 `size-9` / `size-11` / `size-12.5`。同排控件用同档并保持中心线对齐；composer 底排用 sm（`h-9`），圆钮 / cost-confirm pill / send 同高，glyph 统一 `size-4.5`。**尺寸只用标准 spacing utilities**，不用自定义 `h-control-*`：CVA 默认档必须能被 `className` 经 `tailwind-merge` 正确覆盖，避免同卡左右按钮或局部紧凑覆盖失效。
 - pill / 下拉触发器**文字不加粗**（禁 `font-medium`），保持轻量。
 - **Button 内图标用 `size-*`，不用 `h-* w-*`**：每个 button variant 钉了 `[&_svg:not([class*='size-'])]:size-N`（`size="icon"` 钉 3.5 = 14px）——`h-5 w-5` 不匹配 `:not()` 守卫，会被静默覆盖成 14px；`size-5` 含 `size-` 字样因此豁免。
 
@@ -31,54 +31,56 @@
 - 选项的「当前选中」用 `Check` 图标；底部浮层记得 `side="top"` 向上弹出。
 - 表单里的纯下拉用 `Select`；prompt 动作条的参数选择用 pill 模式——两套风格不混。
 
-## 4. 卡面纵深：发丝线 + 柔影，无可见描边
+## 4. 卡面纵深：灰阶 + 柔影，禁 ring
 
-- **基座 `Card` 自带 `ring-foreground/10` 发丝线**（dark：白 10%，读作玻璃边）。light 主题页面是 **0.96 中性灰底**，白卡只靠填充步浮起，**无 shadow**。**高程律（双主题，ADR-046）：浮起面 = 深底上的更浅填充**——light：page 0.96 → card 1.0；dark：page 0.12 → card 0.21。
-- **shadow 只属于浮层**——in-flow 面（卡 / composer / 媒体 tile）永不带 `shadow-*`，双主题同律。light 浮层（`overlay-surface` 冰霜族）带耳语级 `shadow-xl`（把玻璃从底下内容上抬起）；dark 保持无影传统（`styles.css` 一个开关让 `.dark` 下一切 `shadow-*` 编译为透明；focus ring 幸免——它经 `--tw-ring-shadow` 组合）。
-- **禁可见描边**：`border` + `border-border`、`ring-1 ring-border`、强于 /10 的 `ring-foreground/*` 全禁。/10 发丝线只在浮层上可与 shadow 共存；in-flow 卡既不带可见描边也不带 shadow。（`border-dashed` dropzone 与 `border-transparent` variant 基座合法；focus ring 是交互不是描边。）
-- 分区隔离来自留白与 token 填充步（`bg-muted` / `bg-inset`），永不画分隔线。
-- **填充优先——发丝线是兜底不是默认**：填充已能区分前后（`bg-muted` chip 在 `bg-card` 面板上、媒体内容在页面上）→ 零环零边。`ring-foreground/10` 只为同 fill 边界存在（白卡在白页上、冰霜 modal 在 backdrop wash 上）。同 fill 元素需要分离时，优先**调它的填充阶**，不画线。**发丝线是 outset box-shadow——向边框盒外突出 1px**：与不透明面（`bg-background` / `bg-card` 的 sticky 栏、浮层）纵向齐平相接时，那 1px 会被对方背景压盖（深色下填充阶还在分界所以隐形，浅色下整条边消失）；带发丝线的面与不透明邻居之间恒留透明空气（如 `mt-0.5`），或让不透明面退到 `-z-*` 之后。
-- **Hero 面 = 完全平**：home composer = 灰页上的白平卡（发丝线、无 shadow）。**Composer 卡禁用 `backdrop-filter`**——祖先 backdrop-filter 会成为 Backdrop Root，后代 MentionPicker 的 blur 只采样其子树（无物可 blur → 退化为纯染色）。
-- 媒体 / 示意图 tile 无环无影（填充步分离）。gallery 封面 tile = **`bg-card` 浮起面**（页面已有灰底，封面是白卡：light 0.96→1.0 / dark 0.12→0.21 高程步）；hover chrome = **仅右上 expand 钮**（`bg-accent` token 步）——整卡 cursor-pointer + expand 已足够表达可点；线条吃 `foreground` alpha。
-- **媒体列表项 = 平时扁平，hover 才出交互态**（Flora 式，先例 `/projects` 网格的 ProjectCard）：rest 零壳零环零填充（缩略图自身填充就是与页面的唯一分离）；**hover = 媒体区 `ring-1 ring-foreground/30` 交互环 + 浮动钮显形，非 bg 座**——accent 座是列表行语言，贴在媒体上只沿 padding 缝显形（糊框），环直接抱住媒体区（空井/视频通吃）；交互环归 focus ring 同族（交互不是描边），/10 发丝线禁令不适用于此座。行内动作钮（⋯ / 选择圈族）rest 隐身，`group-hover` / `group-has-[:focus-visible]` / 菜单 open 三态显形（opacity 互换非 display——保键盘可达与槽位几何；**键盘触及只认 `:focus-visible`，禁 `group-focus-within`**——鼠标点击后按钮保有焦点，focus-within 会把显形粘到鼠标移走之后）。**多选解剖**：缩略图左上选择圈（rest 隐身同 ⋯ 律；选中 = `bg-foreground` 实底 + Check——筛选 pill active 同 token）+ **选中媒体区常驻 `ring-2 ring-foreground/60`**（宽度+深度与 hover 档拉开两档差，与实心勾选圈同族，选中态扫读网格一眼可读），底部多选条 = 视口底中锚定的 `overlay-surface` 浮层（计数 + 批量动作 + × 清选），批量动作只放真实存在的（禁虚构货架）。
+- **基座 `Card` = `bg-card` + `shadow-resting`**；确有结构边界时使用 `border-subtle`。light 页面与白卡同为 1.0，靠柔影、细分隔线与留白分层；dark 高程为 page 0.19 → card 0.215 → raised 0.24 → muted 0.26。
+- **阴影分级**：`shadow-resting` = 卡片静止层，`shadow-raised` = 抬升面板，`shadow-floating` = 菜单 / Dialog 等浮层，`shadow-control-thumb` = Switch 拇指；双主题都使用对应语义 token，禁逐实例手写阴影色值。composer 与媒体 tile 显式保持无影。
+- **全站禁用 `ring-*`**：静态发丝线、按钮装饰环、媒体交互环、focus / invalid ring 均不得回魂。可见 `border-border` 仍禁；结构分隔与确需边界只用 `border-subtle`（`border-dashed` dropzone 与 `border-transparent` variant 基座合法）。**键盘焦点、媒体选中与表单校验统一用 `outline-*`**，焦点可见性不得删除。
+- 分区隔离优先来自留白与 token 填充步（`bg-muted` / `bg-inset`）；导航栏、设置行等真实结构分隔使用 `border-subtle`，不以大面积底色差代替。
+- **填充优先**：填充已能区分前后（`bg-muted` chip 在 `bg-card` 面板上、媒体内容在页面上）→ 不加边界。相同填充需要分离时，优先调整填充阶或留白；只有真实结构边界才使用 `border-subtle`，禁以 box-shadow 模拟描边。
+- **Hero 面 = 完全平**：home composer = 白页上的白平卡（`border-subtle`、无 shadow）。**Composer 卡禁用 `backdrop-filter`**——祖先 backdrop-filter 会成为 Backdrop Root，后代 MentionPicker 的 blur 只采样其子树（无物可 blur → 退化为纯染色）。
+- 媒体 / 示意图 tile 无影（填充步分离）。gallery 封面 tile = **`bg-card` 浮起面**（light 为 1.0 白面，dark 为 0.19→0.215 高程步）；hover chrome = **仅右上 expand 钮**（`bg-accent` token 步）——整卡 cursor-pointer + expand 已足够表达可点；线条吃 `foreground` alpha。
+- **媒体列表项 = 平时扁平，hover 才出交互态**（Flora 式，先例 `/projects` 网格的 ProjectCard）：rest 零壳零填充（缩略图自身填充就是与页面的唯一分离）；**hover = 媒体区 `outline-1 outline-foreground/30` + 浮动钮显形，非 bg 座**——accent 座是列表行语言，贴在媒体上只沿 padding 缝显形（糊框），outline 直接抱住媒体区（空井/视频通吃）。行内动作钮（⋯ / 选择圈族）rest 隐身，`group-hover` / `group-has-[:focus-visible]` / 菜单 open 三态显形（opacity 互换非 display——保键盘可达与槽位几何；**键盘触及只认 `:focus-visible`，禁 `group-focus-within`**——鼠标点击后按钮保有焦点，focus-within 会把显形粘到鼠标移走之后）。**多选解剖**：缩略图左上选择圈（rest 隐身同 ⋯ 律；选中 = `bg-foreground` 实底 + Check——筛选 pill active 同 token）+ **选中媒体区常驻 `outline-2 outline-foreground/60`**（宽度+深度与 hover 档拉开两档差，与实心勾选圈同族，选中态扫读网格一眼可读），底部多选条 = 视口底中锚定的 `overlay-surface` 浮层（计数 + 批量动作 + × 清选），批量动作只放真实存在的（禁虚构货架）。
 
 ### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
 - **卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）；MG 族货架 = demo 视频 autoplay loop/muted（标准为真渲染；占位例外见下），hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；族/子 tab/货架空即整级不渲染（无 demo 连摆位都不摆）；离屏卡片暂停解码（可见性闸），回视口恢复静音循环。**占位例外**：Product Promo 的两张复用条目在对应真实样片落地前只作纯布局占位（数据注释逐卡标注来源，界面零占位标记；占位只验证货架形态，不作为对应能力的验收产物，真片落地仅在注册表数据层换 URL）。
-- 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + 发丝线 + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
+- 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + `border-subtle` + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
+- **媒体卡悬浮动作同档**：中央 Use-prompt = 唯一 primary 实心行动（无边界），左下声音钮与右下 expand affordance = secondary 安静控件（无装饰边界）；左右容器同尺寸（当前 `size-9`），glyph 同尺寸（当前 `size-4.5`），非交互装饰钮镜像 Button 几何，不另起尺寸。中央主行动用显式紧凑覆盖，CVA 大档不得穿透它的 `h-9`。
 - **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。预填同时把 composer 带回视口（钉底态零滚动，文档流态滚内部 scrollport 至居中）并聚焦；模板必填空位 = 提示词文本内的可见占位符（当前 MG demo = 网站链接），插入后即选中，未替换发送本地拦截；占位符永不变成隐藏字段或第二个输入面。
 - 三行卡下文字 = 菜名 / promise（2 行 clamp）/ 适用素材。卡面禁画幅 badge / 类别 chip / 渠道名（卡只承载 genre）；渠道是用户点名或渠道授权后的发布/排期变量，预填模板不得把默认平台写成用户选择，chat 修改恒胜。
 
 ### 4.2 灰梯
 
-- 面层级来自阶梯 token，永不来自一次性 alpha 填充。**Light**：`--background` = **0.96 中性灰**（纯白退给落地页——营销 register 独立，见 Scope）；白 `--card`（1.0）是浮起层，靠填充步浮起不靠 shadow；卡上填充阶 = `--subtle` 0.975 → `--muted` 0.95 → `--inset` 0.92（它们活在白卡 / 面板上）。**Dark**：`--background` = **近黑**（0.12），高程说玻璃不说阶梯（浮层半透，见 §5）；`--card`/`--popover` 0.21，`--muted` 0.24（`--subtle` 并入它），**`--inset` 反转 = 0.15，比面板更暗**（kbd chip / 种子值 / 搜索输入坐在更暗的井里）。
+- 面层级来自阶梯 token，永不来自一次性 alpha 填充。**Light**：`background` / `card` / `popover` = 1.0；quiet fill（`muted` / `inset` / `accent`）= 0.978；`border` = 0.935、`border-subtle` = 0.965、`border-strong` = 0.82。**Dark**：`background` = 0.19 → `card` = 0.215 → `popover` = 0.24 → quiet fill = 0.26；`border` = 0.29、`border-subtle` = 0.25、`border-strong` = 0.40。双主题的 quiet fill 都同时服务 hover、well、chip 与 secondary surface，`inset` 与 `muted` / `accent` 同阶。
 - **`bg-muted/50`、`bg-background/60`、`bg-muted/30` 等临时 alpha 全禁**——内层块用实色 `bg-muted`，muted 卡上的嵌套块反转为 `bg-card`。
 
 ### 4.3 Hover / 高亮 = `--accent`，双主题一个 token
 
-- light = 实色 0.92 灰阶（对 0.96 页面推导；在白卡上读作清晰但安静的一步）；**dark = `oklch(1 0 0 / 8%)` 半透白纱**（永不是更亮的实色阶）。菜单行、列表 hover、picker 选中态、ghost 钮 hover 一律吃 `bg-accent`（弱档 `/50`）——一个变量回调全站 hover。
+- light = 实色 0.978，dark = 实色 0.26；两者都映射 Arc `surface-muted`。菜单行、列表 hover、picker 选中态、ghost 钮 hover 一律吃 `bg-accent`（弱档 `/50`）——一个变量回调全站 hover。
 - 禁逐实例硬编码 hover 色值（`dark:hover:bg-[oklch(…)]` 禁）。**variant 配对仍是硬要求**：`dark:bg-*` 在级联里压过裸 `hover:bg-*`——带 `dark:bg-x` 的元素必须显式带 `dark:hover:bg-accent`。
 
 ### 4.4 文字三档
 
-`foreground`（0.145 / dark 0.95）→ `muted-foreground` 副题（0.556 / dark 0.63）→ **`meta-foreground`**（0.68 / dark 0.42）用于小型全大写追踪 meta 标签（"MODEL / SEED" 式）与耳语句（dock 免责行），经 `text-meta` utility 组合（`uppercase` + `tracking-[0.08em]` + token 色）。
+`foreground`（0.15 / dark 0.96）→ `muted-foreground` 副题（0.46 / dark 0.77）→ **`meta-foreground`**（0.59 / dark 0.64）用于小型全大写追踪 meta 标签（"MODEL / SEED" 式）与耳语句（dock 免责行），经 `text-meta` utility 组合（`uppercase` + `tracking-[0.08em]` + token 色）。
 
 ## 5. 浮层冰霜：`overlay-surface`
 
-- **一切浮层**（Popover / DropdownMenu / Dialog / Select / Sheet / Tour）用 `styles.css` 的共享 `overlay-surface` utility——半透 `--popover` + `backdrop-blur` + `saturate(1.4)`，**分主题配方**：light = **92% + blur(24px)**（低不透明度让背后的深内容透出染色）；dark = **68% + blur(28px)**（近黑画布上高不透明度填充会读作实心盒，blur 无物可显）。`@supports not (backdrop-filter)` 下实色兜底。影律（ADR-046）：utility 在 light 带耳语 `shadow-xl`，dark 无影。
+- **一切浮层**（Popover / DropdownMenu / Dialog / Select / Sheet / Tour）用 `styles.css` 的共享 `overlay-surface` utility——92% `--popover` + `backdrop-blur` + `saturate(1.4)` + `shadow-floating`；light = blur(24px)，dark = blur(28px)。`@supports not (backdrop-filter)` 下实色兜底，双主题都保留对应浮层阴影。
 - 浮层组件**禁回加 `bg-popover`**；**逐实例 frost 补丁（如 `dark:bg-white/10`）禁**——调共享配方；实例确需不同不透明度时经 `className` 覆盖（组件最后合并它，这是开放的扩展点）。
 - Dialog / Sheet backdrop 分主题：light = `bg-background/60`（白 wash——白页上黑罩读作灰浊）+ `backdrop-blur-[2px]`；dark = `bg-black/30` + `backdrop-blur-[2px]`——冰霜面在调暗但清晰可辨的页面上读出来。
 - **Overlay chrome = Dialog primitive，禁手写**（`fixed` backdrop + glass div）：手写 backdrop 包住面板会杀死玻璃——带 `backdrop-filter` 的祖先成为 Backdrop Root，后代面板的 `overlay-surface` blur 只采样该子树（无物可 blur）→ 静默退化为平染色。primitive 把 overlay 与 content 并排 portal，这是唯一正确结构。
-- **`DialogContent` 经 `-translate-1/2` 居中**——带 transform 的弹窗会成为 `fixed` 后代的包含块，把视口锚浮层传送走。视口锚浮层因此 portal 到 `document.body`（`MentionPicker` 先例），免疫祖先 transform 与 backdrop-filter；必须宿主**非 portal** fixed 浮层的弹窗，手组 `DialogPortal` + `DialogOverlay` + `DialogPrimitive.Popup` 并用 `inset-0 m-auto` 居中（无 transform）。**手组弹窗必须镜像 `DialogContent` chrome**：`overlay-surface` + `ring-1 ring-foreground/10` 发丝 + `shadow-xl` + `rounded-xl`——缺发丝线时 light 主题玻璃会溶进白 backdrop wash。
+- **`DialogContent` 经 `-translate-1/2` 居中**——带 transform 的弹窗会成为 `fixed` 后代的包含块，把视口锚浮层传送走。视口锚浮层因此 portal 到 `document.body`（`MentionPicker` 先例），免疫祖先 transform 与 backdrop-filter；必须宿主**非 portal** fixed 浮层的弹窗，手组 `DialogPortal` + `DialogOverlay` + `DialogPrimitive.Popup` 并用 `inset-0 m-auto` 居中（无 transform）。**手组弹窗必须镜像 `DialogContent` chrome**：`overlay-surface` + `border-subtle` + `shadow-floating` + `rounded-xl`——light 主题用细边界与浮层阴影保持玻璃面和 backdrop wash 的分离。
 - tooltip 与 sonner toast 有意排除（小型瞬态标签保持实色）。
 - **滚动渐隐**（`scroll-fade-y` / `scroll-fade-x`，styles.css）：让 scrollport 边缘在内容抵达浮动 chrome 前溶解的 mask utility（先例：overlay chat 视口）。**按面施用**，每个渐隐区与该面自身的内容 padding 配对——**永不进共享 primitive**：primitive 里闲置的类名会在同名 `@utility` 定义出现的那一刻活过来。
 
 ## 6. Composer / 输入卡
 
-- **质感配方**：大圆角（`rounded-2xl`）+ 内部空气（`p-5`、输入区 `h-24`）+ **耳语级中控区**——底排控件一律 `variant="ghost"` 纯文字 + 小图标，send 是唯一深色实心锚点。**填充灰（`bg-muted`/`bg-inset`）只给内容容器（inset 块、信息 pill、badge），永不给操作按钮**。
-- **结构**：shell = shadcn `InputGroup`（`MentionEditor` 根挂 `data-slot="input-group-control"`）重涂卡律——`border-0` + `bg-card` + `ring-foreground/10` 发丝 + **无 shadow**；保留 block-start / block-end addon 解剖 + focus-within 环 + cursor-text 点击聚焦。**密度活在 addon 上不在容器上**：padding asymmetric（20/20/12）；折叠带同动画过渡 maxHeight 与单边 padding（flex item 的 padding 在 `max-height:0` 下不裁剪——静态 padding 类禁用）。
+- **质感配方**：16px surface 圆角（`rounded-surface`）+ 内部空气（`p-5`、输入区 `h-24`）+ **耳语级中控区**——底排控件一律 `variant="ghost"` 纯文字 + 小图标，send 是唯一深色实心锚点。**填充灰（`bg-muted`/`bg-inset`）只给内容容器（inset 块、信息 pill、badge），永不给操作按钮**。
+- **结构**：shell = shadcn `InputGroup`（`MentionEditor` 根挂 `data-slot="input-group-control"`）重涂卡律——`border` + `border-subtle` + `bg-card` + **无 shadow**；保留 block-start / block-end addon 解剖 + focus-within `outline` + cursor-text 点击聚焦。**密度活在 addon 上不在容器上**：padding asymmetric（20/20/12）；折叠带同动画过渡 maxHeight 与单边 padding（flex item 的 padding 在 `max-height:0` 下不裁剪——静态 padding 类禁用）。
 - 三带：① 顶 = 资产 chips（视频缩略+时长 / 音频波形+时长 / 文档 icon+格式；page count 走 pdf.js 不上 chip；上传中 spinner+%；× 删且删资产）② 中 = `MentionEditor` 带 ③ 底 = 控制行。
+- **Skill chip = 行内绿色斜杠族**：与 @ mention 一样插在 caret / 首条预填内容内的 `contenteditable=false` 节点，显示 `/名称` 并使用 `text-success` + `bg-success-subtle` 淡绿底；@ 保持中性色，Skill 不得另起输入框外行。结构化 reference 仍由 `selectedSkill` 承载，chip 节点不序列化进 prompt 或 mentions；picker 保持中性，绿色只属于输入框内已选 Skill 与已发送消息中的同一 chip。mention 与 Skill 都不带 ×，Backspace / Delete / 选区删除、发送消费与 Stop 恢复都同步同一绑定，跨形态不 remount。
 - **Home 形变（钉底律）**：hero 簇（一行问句 + composer 卡）= 纯 in-flow 内容，随滚动自然离场，**顶部零吸附**；tabs 轨吸顶（plain `sticky top-0`，零测量）。composer 的滚动坍缩 morph 保留：scroll-linked `dockP`（槽位滚出视口前最后 140px 纯函数），**禁时钟过渡**；槽位完全滚出后**同一 DOM 翻成 `fixed` 视口底部 stadium 条**（§1 例外 3）——零 reparent（MentionEditor 永不 unmount），槽位在翻转瞬间钉等高占位（几何零变化 = scrollTop 钳位反馈环结构性死亡，标题抖动族的修法）；入场动画 `home-dock-in` 只走 transform/opacity（离散翻转的时钟动画合法，scroll-linked morph 自身永禁）。属性 = 插值（padding 20→16、editor 带 = **内容驱动高**（rest = 80 floor / 136 cap〔4 行〕随稿长定高，超出 editor 自滚——固定高裁两行稿的坑永禁）→56、chips/控制行折叠、radius 16→40、send 锚点）。**半径走内联 style**（绕开 `has-data-[align=*]` 的 `:has()` 优先级）。钉底条的 attach 面板 / tooltip 向上开（`side="top"`）；mention picker 视口自适应无需改。rest offset = `h-[20vh]` spacer 兄弟节点。
 - **Entity 钮**（底排左）：`Assets`（Plus 图标）= **纯圆形图标钮**（`variant="ghost"` `h-9 w-9` 36px + `size-4.5` 18px glyph + `rounded-full` + 功能 Tooltip；实现 = 共享叶子 `components/composer/ComposerPanelButton`），**完全无状态**——无计数、无 Auto/人名 value 文本，选中态只在各自弹窗面板里读（钉底条同样无文件计数）；暂存文件的可见性 = 既有 chips 带。`Persona` 钮隐藏（`SHOW_PERSONA` 旗标留座，随定位/memory 运营端迭代回归）。
 - **glyph 左缘对齐律**：左钮组带 `-ml-[9px]`——18px glyph 居中于 36px 钮内（左偏 9px），负边距让首个 glyph 左缘与编辑器文字左缘像素级对齐（hover 圆底向左溢出属正常；测量锚 = `data-tour="composer-assets"` 的扩态钮，钉底条隐藏 attach 钮会污染测量）。dock 的 12px rail 对应 `ml-[3px]`/`mr-[3px]`——同一法律两个取值。
@@ -95,14 +97,14 @@
 
 - `SidebarProvider` + `Sidebar collapsible="icon"`；PC rest 为图标 rail，**可展开**：展开入口 = 折叠 rail 的 **hover-logo 槽位**（24px LogoMark 槽 hover/focus-within 交叉淡入成 PanelLeft 展开钮 + tooltip `a11y.openSidebar`，opacity 互换非 display——保键盘可达与槽位几何）+ 全端 `Cmd/Ctrl+B` hotkey。展开/折叠状态**持久化**——primitive 的 `setOpen` 写 `sidebar_state` cookie，`_app.tsx` loader 读回喂 `SidebarProvider defaultOpen`（SSR 首帧与 hydrate 一致；cookie 名从 `ui/sidebar.tsx` 的 `SIDEBAR_COOKIE_NAME` export 复用，禁硬编码）。
 - **Rail = 一个顶层栈，logo 不是独立组**：折叠 PC **无 SidebarHeader**（`group-data-[state=collapsed]:md:hidden`；header 只在展开态出现 = lockup + 右侧 collapse 钮，全端同形）。logo 槽（**24×24 rail 档**；hover 展开钮同槽同步 24px + `size-4` glyph，形变零位移）是 `SidebarContent` 栈的**第一个成员**；栈 `group-data-[state=collapsed]:gap-5 pt-4`（logo→菜单组 = 20px，gap-5 是容器间距不是项间距），`SidebarMenu` 恒 `gap-1`（项间 40px 中心距）。
-- 菜单项：cva `group-data-[collapsible=icon]:size-9!`（36×36，18px glyph 居中，active/hover 吃 `bg-sidebar-accent`）；rest 文字/图标 = `text-sidebar-foreground/70`（安静 rest 态；hover/active 经 cva 既有 `text-sidebar-accent-foreground` 转全色）。rail 宽 **52px**（`SIDEBAR_WIDTH_ICON = "3.25rem"`）。
+- 菜单项：cva `group-data-[collapsible=icon]:size-9!`（36×36，18px glyph 居中，active/hover 吃 `bg-sidebar-accent`）；rest 文字/图标 = `text-sidebar-foreground/70`（安静 rest 态；hover/active 经 cva 既有 `text-sidebar-accent-foreground` 转全色）。展开宽 **240px**，rail 宽 **64px**（`SIDEBAR_WIDTH = "15rem"` / `SIDEBAR_WIDTH_ICON = "4rem"`），36px 菜单 tile 两侧各留 14px 空气。
 - 导航项用 `SidebarMenuButton` + `render={<Link to="..." />}`，禁 `asChild`。
-- **右发丝线**：`Sidebar` 保留 primitive 的 `border-r` 并显式发 `border-sidebar-border`（Tailwind v4 默认 border 色 = currentColor，必须显式 token；light oklch(0.9) / dark 白 10%）；`--sidebar == --background` 的填充融合不变（same fill + hairline）。
+- **右发丝线与同底分层**：`Sidebar` 保留 primitive 的 `border-r` 并显式发 `border-sidebar-border`（Tailwind v4 默认 border 色 = currentColor，必须显式 token）。`--sidebar == --background`，不为导航区永久另起底色；层级由选中/hover 的 `sidebar-accent`、留白、内容表面与发丝线共同承担。
 - 结构：
   - **Header**：只在展开形态渲染（PC 展开 + 移动 off-canvas）= logo lockup + 尾部 collapse 钮（全端，无 `md:hidden`）。无 "Invite members" 入口——无明确产品决策不得复活。
   - **Content**：扁平导航（无组标题）：Home、My projects（`/projects`）。Personas（`/personas`）入口隐藏（路由存活，随定位/memory 运营端迭代回归；composer 的 Persona 钮同批隐藏）。项目网格住 `/projects`，不在 home（home = composer + 配方货架）。
-  - **Footer**：用户头像开 **account console**——`Popover`，永不 `DropdownMenu`（它承载内联控件）：身份头（avatar + name + email）→ inset **账户块——只放 value surface**（plan / credits 槽位 / 订阅；settings 永不混进账户块；plan 行带文字**升级链接**）→ **偏好**行（标签行 + 尾部控件——theme / language 尾部 segmented：`bg-inset` track + `bg-card` thumb，theme 纯图标 pill；Settings chevron 行开**共享 `SettingsDialog`**，永不建站：左 section 导航 + 右内容，任何处可经 `useSettingsDialog().openSettings(section)` 唤起；section 在 `components/settings/SettingsDialog.tsx` 注册，channels 居首。`/settings` 只作 channels OAuth 回调 shim 存活——toast、开 dialog、bounce 回 home）→ 帮助区（replay tour——sessionStorage flag + `repurposer:replay-tour` 事件双通道送达，HomeComposer 消费先到者）→ logout。
-  - **展开态 footer 行解剖**：`[avatar + name/免费版 两行][升级 pill]`——**一个容器持有 hover/open 填充**，但 **pill hover 时行底色让位**（`:has()` 守卫：`group-data-[state=expanded]:not-has-[[data-slot=button]:hover]:hover:bg-sidebar-accent`；open 态底色由 consoleOpen 驱动——pill 与头像区永不得读作两个独立视觉单元，且 pill 是独立交互目标）；trigger = **PopoverTrigger 原生 button 直挂类名**（不经 Button 组件——ghost variant 自带的 hover/aria-expanded 填充会与容器底色打架）；pill 是独立 `Button variant="outline"`（hover 补 `bg-accent`）`render={<Link to="/" hash="pricing" />}`，**永不嵌进 PopoverTrigger**；折叠 = 仅头像圆（+ tooltip，trigger 自带 `group-data-[state=collapsed]:hover:bg-sidebar-accent`）。升级目的地 = 落地页 pricing 锚，直到 W11 应用内购买入口落地。
+  - **Footer**：用户头像开 **account console**——`Popover`，永不 `DropdownMenu`（它承载内联控件）：身份头（avatar + name + email）→ inset **账户块——只放 value surface**（plan / credits 槽位 / 订阅；settings 永不混进账户块；订阅未开放时 plan 只展示 Free，不显示升级入口）→ **偏好**行（标签行 + 尾部控件——theme / language 尾部 segmented：`bg-inset` track + `bg-card` thumb，theme 纯图标 pill；Settings chevron 行开**共享 `SettingsDialog`**，永不建站：左 aside 与右主区共享 Dialog 的 `overlay-surface` 连续底色（禁 `bg-muted` / `bg-card` 大面积分区），aside 只以 `border-r border-subtle` 划分结构；导航 rest 透明，hover / active 为滑动 `bg-accent` 局部填充（无环无影），右主区透明，header 与 section 同在唯一 scroller 内，pane `flex flex-col gap-6`。General / Assistant 等偏好使用扁平行与 `divide-border-subtle`，不逐组套 `Card`；Channels 这类独立实体列表才保留卡片。任何处可经 `useSettingsDialog().openSettings(section)` 唤起；section 在 `components/settings/SettingsDialog.tsx` 注册，channels 居首。`/settings` 只作 channels OAuth 回调 shim 存活——toast、开 dialog、bounce 回 home）→ 帮助区（replay tour——sessionStorage flag + `repurposer:replay-tour` 事件双通道送达，HomeComposer 消费先到者）→ logout。
+  - **展开态 footer 行解剖**：`[avatar + name/免费版 两行]`——**一个容器持有 hover/open 填充**；trigger = **PopoverTrigger 原生 button 直挂类名**（不经 Button 组件——ghost variant 自带的 hover/aria-expanded 填充会与容器底色打架）；折叠 = 仅头像圆（+ tooltip，trigger 自带 `group-data-[state=collapsed]:hover:bg-sidebar-accent`）。订阅未开放时不显示升级 pill 或 pricing 链接。
 - **无全局 AppHeader（ADR-046，适用 md+）**：studio 桌面端无常驻顶栏——工具件住 account console（theme / language），**通知铃 = 内容区右上角唯一浮动 chrome chip**（圆角方块 chip + 未读点；右上角槽位全站保留——页面级控件永不占那个角）。**移动端（<md）例外 = MobileHeader**：玻璃（dock-surface + 发丝线，无 shadow——钉顶常驻 chrome 与 results dock 的停泊玻璃同种，overlay-surface 的浮层投影在通栏顶栏上是错误物种）sticky 顶栏全收编——左品牌锁up（点击回 /home），右 Projects / 铃（bare 无自带玻璃）/ 头像（同一个 AccountConsole popover）；两条导航条目不配底部 tab 栏，浮动触发器与浮动铃在 <md 双撤，侧栏抽屉不再可达。header 走 stacked 落位（SidebarInset 的首个 in-flow 子级），window-scroll 页内容自然从玻璃下滑过；**home 是唯一刻意例外**——scrollport 用 `-mt-14` 上探到玻璃下（根仍 `h-svh`），让 hero/卡片滚动时磨砂透影 read 出来，其钉顶 tabs 栏在 <md 读 `top-14` 补偿。**项目页（/projects/$id）例外 = ProjectHeader**：画布世界是 ChatDock fixed overlay（z-50），stacked 在它之下不可见，故项目页顶栏为 fixed z-[60] **透明裸栏**（无玻璃无发丝线——玻璃条在深色画布上读成异色带；聊天舞台 scroller 以 `pt-14` 从栏下开始，内容永不入栏区，背景无事可做）——左 = 两形态机（pre-run 裸返回钮 ↔ worldLive 裸 ProjectMenu crossfade），右 = CreditsPill（裸件，全断点全形态可见）；栏内控件一律 bare；画布右上 chrome（zoom pill / inspector dossier）在 FlowView 默认座位下移到栏下（64/68px、108/112px），panel 贴边形态 dock 在栏下（top-14）；<md 时视觉替代被 overlay 盖住的 MobileHeader。
 - 导航 / 账户图标统一 `h-4.5 w-4.5`；`sidebarMenuButtonVariants` 里展开 `[&_svg]:size-4.5`、折叠 `group-data-[collapsible=icon]:[&_svg]:size-4.5`，保持一致。
 - **折叠态居中对齐**：Header / Footer 里放的按钮（如头像）必须居中——容器加 `group-data-[state=collapsed]:items-center`，按钮自身折叠态用 `w-12` 方形；**不要**把这些按钮放进 `SidebarMenu`（列表 padding 会限宽，折叠态偏移 4px）。
@@ -134,12 +136,16 @@
 
 ## 10. 颜色与字重
 
-- 只用 shadcn 主题变量（`bg-background` / `text-foreground` / `text-muted-foreground` / `bg-card` / `ring-border` 等），禁硬编码色值（如 `#333`）。
+- 组件只用语义主题变量（`bg-background` / `text-foreground` / `text-muted-foreground` / `bg-card` / `border-subtle` / `outline-ring` 等），禁硬编码色值（如 `#333`）。`--arc-*` 是 `styles.css` 内的基础值层，不作为组件类名或逐实例样式使用。
+- 状态色 = `success` / `warning` / `destructive`，双主题分别取值；需要状态浅底时使用对应的语义 subtle 阶（当前 `success-subtle`），不在组件内写透明色；状态必须同时有文字或图标，不只靠颜色。
+- 图表分类色固定按 `chart-1` 蓝 → `chart-2` 紫 → `chart-3` 橙 → `chart-4` 青分配，`chart-5` 为中性色；深色紫/橙使用同色相的独立明度阶。多系列必须有图例，四条以内同时提供选择性直接标签，并提供表格视图；筛选不重排实体颜色。
+- 正文字体 = Inter Variable，展示标题 = Geist Variable；body 使用 `tracking-body` / `leading-body`，展示标题使用 `tracking-display` / `leading-display`。文字尺寸吃全局 `text-xs`～`text-5xl` token，不在组件里另建平行字号体系。
+- 间距以 4px 为基步；圆角与控件高度见 §1。入场动效统一 `ease-enter = cubic-bezier(0.16, 1, 0.3, 1)`，并继续遵守 `prefers-reduced-motion`。
 - 正文与控件保持常规字重；pill / 次级按钮文字不加粗。
 - **数据 vs 文案**：一切 UI 文案走 i18n；用户数据（人设名、项目标题等）原样显示——别因为中文就当「未国际化」；但**默认值不得回退到某个具体数据条目**（如 Persona 默认显示本地化占位，让用户主动选）。
 
 ## 现有素材与成片检视面
 
-素材卡以 media/divider/transcript 共用 rounded-lg ring-foreground/10，medialess 不造空槽；StageSkin 底缘3px、cue/停顿/播放针与真实源时间一致，点击只 seek 不自动发声；overlay 时隐藏不可靠时间皮、恢复原文回归。成片NLE轴是检视面：34px视频道、22px连续字幕道、26px修饰道，字幕块不塞残字；NLE_AXIS_PX=116 与 graph_store 镜像、port base/lanes/handles 同批。L0结构常驻、L1唯一HoverChip portal/overlay-surface且不遮挡、L2既有inspector；空间不足用折叠点击，不用hover藏结构。血缘只cross-highlight，视频边锚视频道中心，不新建子元素边。
+素材卡以 media/divider/transcript 共用 rounded-lg border-subtle，medialess 不造空槽；StageSkin 底缘3px、cue/停顿/播放针与真实源时间一致，点击只 seek 不自动发声；overlay 时隐藏不可靠时间皮、恢复原文回归。成片NLE轴是检视面：34px视频道、22px连续字幕道、26px修饰道，字幕块不塞残字；NLE_AXIS_PX=116 与 graph_store 镜像、port base/lanes/handles 同批。L0结构常驻、L1唯一HoverChip portal/overlay-surface且不遮挡、L2既有inspector；空间不足用折叠点击，不用hover藏结构。血缘只cross-highlight，视频边锚视频道中心，不新建子元素边。
 
 这些是现有 Clip 检视合同，不要求新视频建设自由NLE或强制Canvas。环境只读唯一canvasAvailable/canvasVisible，锚卡挂真实终态收据、稳定数组/去重，无独立订阅或合集卡；切布局不remount MentionEditor、不以背景更新移动相机。Chat 交付入口使用 `OutputDeliveryCard` 真实封面：横屏约 340px、竖屏有界高度，媒体 contain 不裁；名称与真实内容版本号在封面下，时长只在封面角出现一次，卡片不内嵌常态播放器。点击由 ChatDock 按 exact `output_id` 打开共用 `MediaLightbox` 查看器，播放、翻页、缩略导航、下载、@ 引用与继续修改都针对当前 Output；不再使用消息行局部 MediaLightbox 或 44px 文件胶囊。新 Composition 预览走 VIDEO_PROJECT §10，现有面剩余验收归 VERIFICATION §5.4/§5.7。

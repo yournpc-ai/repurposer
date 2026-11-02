@@ -1,0 +1,298 @@
+{
+  "sent": true,
+  "historyProbes": 0,
+  "probes": [],
+  "storyboardResponses": [
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/5309afa0-d32d-44cd-97b8-9c096697c0b1/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/73254d28-4162-4ddf-97db-3c5f315a4e38/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4564a375-1555-459c-9c31-a610c8eb2a20/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/184f5249-0120-487c-89c0-d9c37001b190/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/bb247fab-863c-4c26-9377-f4f07f6605fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/faa09d7a-c71c-47a0-8eb4-370fe3614920/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/60a533f4-271b-4641-8fc3-ccc9196e716c/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b91659bc-6340-4070-947e-fc7e693ccafe/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/40a57957-b940-44a1-831e-00166027ebcd/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b48a6a14-6d37-441c-aeb5-25776ddaf1e7/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/8a922dd0-9c9d-48ac-bbd6-f1df89c89480/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/eeca2485-8a59-4311-8cb2-4d5073049856/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/371e93ec-f336-4dc1-8d34-72530fd6b7a5/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/3bd7eada-ee87-4698-9a0d-7488aa880abf/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4be2a363-ff45-4cf2-80b9-d53f81ab09fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b620f965-9012-4a04-8b56-2bfb469d941b/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/bb247fab-863c-4c26-9377-f4f07f6605fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/faa09d7a-c71c-47a0-8eb4-370fe3614920/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/60a533f4-271b-4641-8fc3-ccc9196e716c/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b91659bc-6340-4070-947e-fc7e693ccafe/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/40a57957-b940-44a1-831e-00166027ebcd/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/5309afa0-d32d-44cd-97b8-9c096697c0b1/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/73254d28-4162-4ddf-97db-3c5f315a4e38/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b48a6a14-6d37-441c-aeb5-25776ddaf1e7/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4564a375-1555-459c-9c31-a610c8eb2a20/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/8a922dd0-9c9d-48ac-bbd6-f1df89c89480/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/eeca2485-8a59-4311-8cb2-4d5073049856/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/371e93ec-f336-4dc1-8d34-72530fd6b7a5/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/3bd7eada-ee87-4698-9a0d-7488aa880abf/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4be2a363-ff45-4cf2-80b9-d53f81ab09fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b620f965-9012-4a04-8b56-2bfb469d941b/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/184f5249-0120-487c-89c0-d9c37001b190/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/faa09d7a-c71c-47a0-8eb4-370fe3614920/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/bb247fab-863c-4c26-9377-f4f07f6605fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/60a533f4-271b-4641-8fc3-ccc9196e716c/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b91659bc-6340-4070-947e-fc7e693ccafe/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b48a6a14-6d37-441c-aeb5-25776ddaf1e7/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/8a922dd0-9c9d-48ac-bbd6-f1df89c89480/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/40a57957-b940-44a1-831e-00166027ebcd/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/eeca2485-8a59-4311-8cb2-4d5073049856/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/371e93ec-f336-4dc1-8d34-72530fd6b7a5/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/3bd7eada-ee87-4698-9a0d-7488aa880abf/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4be2a363-ff45-4cf2-80b9-d53f81ab09fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b620f965-9012-4a04-8b56-2bfb469d941b/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/5309afa0-d32d-44cd-97b8-9c096697c0b1/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/73254d28-4162-4ddf-97db-3c5f315a4e38/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4564a375-1555-459c-9c31-a610c8eb2a20/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/184f5249-0120-487c-89c0-d9c37001b190/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/faa09d7a-c71c-47a0-8eb4-370fe3614920/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/bb247fab-863c-4c26-9377-f4f07f6605fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/60a533f4-271b-4641-8fc3-ccc9196e716c/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b91659bc-6340-4070-947e-fc7e693ccafe/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b48a6a14-6d37-441c-aeb5-25776ddaf1e7/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/8a922dd0-9c9d-48ac-bbd6-f1df89c89480/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/40a57957-b940-44a1-831e-00166027ebcd/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/eeca2485-8a59-4311-8cb2-4d5073049856/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/371e93ec-f336-4dc1-8d34-72530fd6b7a5/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/3bd7eada-ee87-4698-9a0d-7488aa880abf/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/4be2a363-ff45-4cf2-80b9-d53f81ab09fb/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/b620f965-9012-4a04-8b56-2bfb469d941b/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/video/versions/2716649a-2031-44fb-b32f-75ae01f34c13/storyboard"
+    }
+  ],
+  "ackRequests": [
+    {
+      "method": "OPTIONS",
+      "url": "http://localhost:8000/api/v1/chat/messages/755b65b7-7b53-46d0-a2de-b1ffcb4653d8/video-presentation"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:8000/api/v1/chat/messages/755b65b7-7b53-46d0-a2de-b1ffcb4653d8/video-presentation",
+      "body": "{\"composition_version_id\":\"2716649a-2031-44fb-b32f-75ae01f34c13\",\"presentation_digest\":\"b6cb479bb2629b88a0d7d68b2e30437aee95656802477feddc7ff0f93b91b338\"}"
+    }
+  ],
+  "ackResponses": [
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/messages/755b65b7-7b53-46d0-a2de-b1ffcb4653d8/video-presentation"
+    },
+    {
+      "status": 200,
+      "url": "http://localhost:8000/api/v1/chat/messages/755b65b7-7b53-46d0-a2de-b1ffcb4653d8/video-presentation"
+    }
+  ],
+  "consoleEvents": [],
+  "state": {
+    "body": "Temporal editing in one work\n项目\n93,308\n工作了 1s\n\n标题已经改好，保存为 version 19，改动只落在标题这一层。\n\n标题文字：从 \"Every cut matters VII\" 改成 \"Every cut matters VIII\"，字号 77、颜色 #F8FAFC、居中，位置和占满 0.000–8.000s 的时间窗保持原样\n画面：左段 0.000–3.533s（源 1.00–4.53s）、右段 3.533–7.500s（源 5.93–9.90s），两段满屏 cover，中间 0.6 秒居中交叉溶解\n声音与时长：原声 -10dB，背景音乐拍点仍在 66.3 BPM，总长 8 秒，旁白关闭\n\n这一版只是保存，还没有渲染成片；你要制作的话说一声，我直接拿 version 19 去跑。\n\n把当前作品标题改为 \"Every cut matters IX\"，只改标题文字，其他内容、8 秒时长、画面、音乐和旁白关闭都保持不变。只保存为新版本，不要制作。\n\n先读回这条片子当前保存的版本，确认标题片段的真实 id 和它现在的文案，再只改这一处。\n\n工作了 1s\n\n标题片段的真实 id 是 clp_title，现在只改它的文字。\n\n工作了 1s\n\n标题已经改好，保存为 version 20，改动只落在标题这一层。\n\n标题文字：从 \"Every cut matters VIII\" 改成 \"Every cut matters IX\"，字号 77、颜色 #F8FAFC、居中，位置和占满 0.000–8.000s 的时间窗保持原样\n画面：左段 0.000–3.533s（源 1.00–4.53s）、右段 3.533–7.500s（源 5.93–9.90s），两段满屏 cover，中间 0.6 秒居中交叉溶解，切口仍在 66.3 BPM 的拍点上\n声音与时长：原声 -10dB、背景音乐、旁白关闭、8 秒时长全部未动\n\n这一版只是保存，没有启动制作。要出片的话说一声，我拿当前这一版直接渲染。\n\n把当前作品标题改为 \"Every cut matters X\"，只改标题文字，其他内容、8 秒时长、画面、音乐和旁白关闭都保持不变。只保存为新版本，不要制作。\n\n我先读回这条片子当前保存的 version 20，确认标题片段的真实 id 和它现在的文案，再只改这一处。\n\n工作了 1s\n\n标题片段的 id 是 clp_title，现在只改它的文字。\n\n工作了 1s\n\n标题已经改好，保存为 version 21，改动只落在标题这一层。\n\n标题文字：从 \"Every cut matters IX\" 改成 \"Every cut matters X\"，字号 77、颜色 #F8FAFC、居中，位置和占满 0.000–8.000s 的时间窗都保持原样\n画面：左段 0.000–3.533s（源 1.00–4.53s）、右段 3.533–7.500s（源 5.93–9.90s），两段满屏 cover，中间 0.6 秒居中交叉溶解\n声音与音乐：原声 -10dB，背景音乐拍点仍冻结在 66.3 BPM，旁白保持关闭\n\n没有启动制作，成片尚未渲染；等你确认后我再拿这一版去出片。\n\n只读回当前保存的 version 21 并完整展示它的创作概览，不修改任何内容，不保存新版本，也不要制作或渲染。\n\n先读回这条片子当前保存的 version 21，把故事板逐项读出来，再完整复述它的创作概览。\n\n工作了 24s\n\n读回的结果：version 21 就是当前保存的那一版，「Every cut matters X」，画面、声音、节奏、叠化都与你之前确认的一致。我没有改动、没有存新版本，也没有制作或渲染。\n\n创作概览\n\n整体方向\n\n一条 8 秒的单场景片子，画布 1920×1080（30fps）。它把一段 16:9 的科技主题访谈录屏当作唯一视觉素材，主题落在「每一刀都很重要」这件事上：录屏被切成两段满屏铺满的 cover 画面，中间用一段 0.6 秒的居中交叉溶解接起来，切口仍然钉在背景音乐的拍点上。整体气质是冷静、专业，靠低音量音乐和现场原声撑住。\n\n画面怎么走\n\n前约 3.5 秒：录屏第一段满屏铺满画面，无边不留地裁到 1920×1080。\n约 3.5 秒到 7.5 秒：溶解落到第二段录屏，同样满屏 cover 铺满，第二段的取材位置落在原素材的后半段。\n最后约半秒：右段画面在 7.5 秒结束，只剩纯色背景上独立的一行标题收尾。\n\n文字\n\n画面上有一行独立标题，压在顶部安全区，横跨整条片子：\"Every cut matters X\"，字号 77、颜色 #F8FAFC、居中，从 0.000s 一直挂到 8.000s。\n\n声音\n\n现场原声：两段录屏的原始声音都保留着，音量压到 -10dB，压在音乐下面不抢话。\n背景音乐：一条全局音乐床铺满全片，拍点网格冻结在 66.3 BPM，所以那个溶解切口是被节拍吸住的位置，不是随手切的。\n旁白：关闭，没有旁白。\n\n要动哪一处，说一声就行。\n\nScroll to end\n\nRepurposer 可能出错，发布前请检查。",
+    "visibility": "visible",
+    "ackProbes": []
+  }
+}

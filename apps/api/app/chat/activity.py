@@ -81,6 +81,7 @@ from app.agents.tool_loop import (
     TerminalAccepted,
     ToolRejected,
 )
+from app.chat.activity_receipts import VideoReviewReceipt
 from app.chat.exploration_tools import EXPLORATION_TOOLS
 from app.chat.perception import PERCEPTION_TOOLS
 
@@ -110,7 +111,7 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # beat is a plain tool call whose drafting happens INSIDE execute (the
 # film_director call + validation are real server work) — a draft-kind span
 # that OPENS at execute entry (``_on_executing``; its name_known slot stays
-# silent so the framing checkpoint lands first) and whose settle DOES persist
+# silent so the framing interim_prose lands first) and whose settle DOES persist
 # with its honest duration (the carve-outs below), breaking the draft
 # family's 落定即退役 default: no docked plan card absorbs this beat — the
 # markdown message IS the deliverable, and the settled "Worked for Xs" row is
@@ -123,7 +124,15 @@ STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
 # name_known (the arguments are still streaming at that beat).
 _DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard", "design_video", "revise_video", "review_video"})
 _RUN_TOOLS = frozenset({"start_run", "retry_upload"})
-_CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
+_CONVERSATION_TOOLS = frozenset({
+    "ask_user",
+    "answer",
+    # SFX candidates/assets already have their own typed surfaces. They use
+    # the existing 1→0 projection until dedicated activity copy is integrated;
+    # no second activity protocol or raw tool-result row is introduced.
+    "search_sfx",
+    "import_sfx",
+})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
 # face is the milestone frame (``explore_milestone`` below) + the canvas
 # card + the decision package dock — never a per-call activity (the
@@ -241,7 +250,7 @@ def frame_persistence(frame: ActivityFrame) -> str | None:
     - ``None`` — live-only: draft/run spans (落定即退役 — the docked plan
       card / the run receipt is their settled evidence) and the read's
       ACTIVE frame (the row appends at ReadExecuting, never at name_known —
-      appending there would seat the row before the waiter checkpoint's).
+      appending there would seat the row before the waiter interim_prose's).
     """
     if frame.kind == KIND_READ:
         return None if frame.status == STATUS_ACTIVE else "settle"
@@ -275,14 +284,16 @@ def all_known_tool_names() -> frozenset[str]:
 class ActivityFrame:
     """One user-safe activity frame (the SSE ``assistant.activity`` payload).
     Field whitelist is the contract: id / seq / kind / status / key — never
-    params, results, or reasoning text (简报 Prohibited #2, T11). Iter-2 ⑥
+    params, raw results, or reasoning text (简报 Prohibited #2, T11). Iter-2 ⑥
     (N-57) extends the whitelist by ONE key: ``count`` — the work-session
     milestone's pure artifact count, present only on milestone frames.
     Iter-3 S7 (E7) extends it by TWO more: ``at`` — the frame's birth stamp
     (ISO UTC, EVERY frame — the web timeline interleaves activity rows with
     messages by real moments) and ``duration_ms`` — the real elapsed of a
     span that was genuinely ACTIVE, present only on its settling frame (a
-    born-completed milestone is an instant fact — it carries no fake zero)."""
+    born-completed milestone is an instant fact — it carries no fake zero).
+    An accepted, settled video review may additionally carry its typed
+    evidence receipt; all other tools and statuses remain result-free."""
 
     activity_id: str
     seq: int
@@ -292,6 +303,10 @@ class ActivityFrame:
     count: int | None = None
     at: str = ""
     duration_ms: int | None = None
+    # Typed evidence is an accepted review settle's only result-bearing
+    # exception to the no-params/no-results whitelist. It never carries the
+    # raw report, model prose, storage fields, or media metrics.
+    receipt: VideoReviewReceipt | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -306,6 +321,8 @@ class ActivityFrame:
             d["count"] = self.count
         if self.duration_ms is not None:
             d["duration_ms"] = self.duration_ms
+        if self.receipt is not None:
+            d["receipt"] = self.receipt.model_dump(mode="json")
         return d
 
 
@@ -364,11 +381,13 @@ class ActivityProjector:
         *,
         count: int | None = None,
         duration_ms: int | None = None,
+        receipt: VideoReviewReceipt | None = None,
     ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
             activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key,
             count=count, at=datetime.now(UTC).isoformat(), duration_ms=duration_ms,
+            receipt=receipt,
         )
 
     def _start(self, kind: str, key: str | None) -> tuple[str, ActivityFrame]:
@@ -377,7 +396,14 @@ class ActivityProjector:
         self._active[activity_id] = (kind, key, time.monotonic())
         return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key)
 
-    def _settle(self, activity_id: str, status: str, key: str | None) -> ActivityFrame:
+    def _settle(
+        self,
+        activity_id: str,
+        status: str,
+        key: str | None,
+        *,
+        receipt: VideoReviewReceipt | None = None,
+    ) -> ActivityFrame:
         kind, active_key, started = self._active.pop(activity_id)
         # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
         # Read / repair spans cover real server work (the query, the rework
@@ -401,7 +427,14 @@ class ActivityProjector:
             if kind in (KIND_READ, KIND_REPAIR) or _is_storyboard_key(active_key)
             else None
         )
-        frame = self._frame(activity_id, kind, status, key, duration_ms=duration_ms)
+        receipt = (
+            receipt
+            if status == STATUS_COMPLETED and key == _VIDEO_REVIEW_KEYS[1]
+            else None
+        )
+        frame = self._frame(
+            activity_id, kind, status, key, duration_ms=duration_ms, receipt=receipt
+        )
         # 落定即退役 (2026-09-28 用户拍板; 2026-09-29 扩到 run 跨度): a
         # draft/run span's settle rides the live wire (the row leaves the
         # now-line at the right beat) but NEVER persists — the docked plan
@@ -435,6 +468,8 @@ class ActivityProjector:
             return _VIDEO_DESIGN_KEYS[1]
         if active_key == _VIDEO_REVISE_KEYS[0]:
             return _VIDEO_REVISE_KEYS[1]
+        if active_key == _VIDEO_REVIEW_KEYS[0]:
+            return _VIDEO_REVIEW_KEYS[1]
         if _is_storyboard_key(active_key):
             return _STORYBOARD_KEYS[1]
         pair = _ACTIVITY_KEYS.get(kind)
@@ -461,7 +496,7 @@ class ActivityProjector:
         Opens the call slot; starts the call's activity when the name maps
         to a user-semantic kind. ONE silence carve-out: the storyboard span
         never opens here — a tool NAME recognized mid-stream is not the work
-        starting (the framing checkpoint hasn't even landed yet); its open
+        starting (the framing interim_prose hasn't even landed yet); its open
         seat is execute entry (``_on_executing``), so the user reads
         Thinking → 开场白 → 「正在设计分镜」, never an inverted early
         Designing that the prose then hides."""
@@ -578,6 +613,17 @@ class ActivityProjector:
                 kind, key, _started = self._active[activity_id]
                 if (
                     isinstance(event, ReadAccepted)
+                    and event.tool_name == "review_video"
+                    and (
+                        not event.ok
+                        or not isinstance(event.receipt, VideoReviewReceipt)
+                    )
+                ):
+                    # A review without its validated report receipt is not a
+                    # completed review. Keep the existing quiet failure shape.
+                    frames.append(self._settle(activity_id, STATUS_FAILED, key))
+                elif (
+                    isinstance(event, ReadAccepted)
                     and not event.ok
                     and kind == KIND_READ
                     and key is not None
@@ -594,8 +640,20 @@ class ActivityProjector:
                         )
                     )
                 else:
+                    receipt = (
+                        event.receipt
+                        if isinstance(event, ReadAccepted)
+                        and event.tool_name == "review_video"
+                        and isinstance(event.receipt, VideoReviewReceipt)
+                        else None
+                    )
                     frames.append(
-                        self._settle(activity_id, STATUS_COMPLETED, self._done_key(kind, key))
+                        self._settle(
+                            activity_id,
+                            STATUS_COMPLETED,
+                            self._done_key(kind, key),
+                            receipt=receipt,
+                        )
                     )
             self._open_call = None
         return frames
@@ -603,14 +661,14 @@ class ActivityProjector:
     def _on_executing(self, event: ReadExecuting) -> list[ActivityFrame]:
         """开工戳 (execute entry — ADR-108 数组位置律): the ONE seat where a
         non-terminal call's work visibly starts. Emitted after the
-        checkpoint seat, before execute — sequential same-process stamps.
+        interim_prose seat, before execute — sequential same-process stamps.
 
         - A READ span re-anchors its honest-duration start here: name_known
           births the span mid-generation (liveness); anchoring the duration
           THERE would make the persisted row's ``at``/``duration_ms``
           measure LLM generation time instead of the real read work.
         - The STORYBOARD span OPENS here (its silent name_known slot gets
-          its activity now): the framing checkpoint has landed, so the
+          its activity now): the framing interim_prose has landed, so the
           「正在设计分镜」 line and its duration both measure the real draft
           — never the speech before it. Returns the open frame so the wire
           sees the birth at this exact beat. The compose/patch VARIANT is
@@ -710,7 +768,7 @@ class ActivityProjector:
         the row-append seat's descriptor (ADR-108 §2): the SSE route appends
         the read span's array row at EXECUTE ENTRY (ReadExecuting), never at
         name_known — appending at name_known would seat the row BEFORE the
-        waiter checkpoint's row and invert 服务员话 → 读活动 的数组序."""
+        waiter interim_prose's row and invert 服务员话 → 读活动 的数组序."""
         if self._open_call is None:
             return None
         _name, activity_id = self._open_call

@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import io
 import json
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -268,6 +269,7 @@ async def prepare_speech_media(
     user_id: UUID,
     execution_id: str | None,
     policy: NarrationPolicy,
+    on_reuse: Callable[[bool], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Prepare every SpeechClip inside its fixed window, with no blind paid replay."""
     from app.metering import record_media_usage
@@ -290,6 +292,7 @@ async def prepare_speech_media(
     prepared: dict[str, dict[str, Any]] = {}
     spent = 0
     for clip in clips:
+        generated = False
         speech = clip.object
         assert isinstance(speech, SpeechObject)
         key = _manifest_key(execution_id, clip.clip_id)
@@ -297,6 +300,8 @@ async def prepare_speech_media(
         if manifest is not None and manifest.get("state") == "done":
             prepared[speech.object_id] = manifest
             spent += _usage(manifest)
+            if on_reuse is not None:
+                on_reuse(True)
             continue
 
         if manifest is not None and manifest.get("state") == "aligning":
@@ -315,6 +320,8 @@ async def prepare_speech_media(
             await _save_manifest(key, manifest)
             prepared[speech.object_id] = manifest
             spent += _usage(manifest)
+            if on_reuse is not None:
+                on_reuse(True)
             continue
 
         if manifest is None:
@@ -334,6 +341,7 @@ async def prepare_speech_media(
                         result = await asyncio.to_thread(
                             synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
                         )
+                        generated = True
                     except Exception as exc:
                         await mark_outcome_unknown(
                             user_id, speech, execution_id=execution_id, error=str(exc)
@@ -411,6 +419,8 @@ async def prepare_speech_media(
             }
             await _save_manifest(key, manifest)
             prepared[speech.object_id] = manifest
+            if on_reuse is not None:
+                on_reuse(not generated)
             continue
 
         required = float(original["duration_s"]) / max(window, 1 / 30) * policy.fit_margin
@@ -432,6 +442,7 @@ async def prepare_speech_media(
             result = await asyncio.to_thread(
                 synthesize_detailed, normalized, speech.voice_id, speech.language, speed
             )
+            generated = True
         except Exception as exc:
             raise NarrationOutcomeUnknown(
                 f"clip {clip.clip_id}: adapted narration outcome is unconfirmed: {exc}"
@@ -488,5 +499,7 @@ async def prepare_speech_media(
         }
         await _save_manifest(key, manifest)
         prepared[speech.object_id] = manifest
+        if on_reuse is not None:
+            on_reuse(not generated)
         spent += result.usage_characters
     return prepared

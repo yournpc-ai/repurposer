@@ -13,6 +13,7 @@ on models+editing imports only; what arrives here is already prepared.
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import Any, Awaitable, Callable
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 
@@ -22,7 +23,9 @@ from app.editing.edits import (
     AddClip,
     AddTrack,
     apply_ops,
+    BindSource,
     EditError,
+    EditTarget,
     MoveScene,
     Op,
     RemoveClip,
@@ -33,12 +36,14 @@ from app.editing.edits import (
     UpdateClip,
     UpdateScene,
     SplitClip,
+    TemporalEdit,
     TrimClip,
     SetTransition,
     RemoveTransition,
 )
 from app.editing.schemas import (
     Animation,
+    AudioObject,
     Clip,
     ClipSource,
     CompositionContent,
@@ -66,11 +71,21 @@ from app.editing.store import (
 from app.editing.grounding import resolve_focus
 from app.editing.storyboard import storyboard_payload
 from app.editing.templates import ClipBlueprint, ViewFact, _camera_animations
-from app.editing.timing import SOURCE_TIMEBASE, seconds_to_ticks
+from app.editing.timing import (
+    SOURCE_TIMEBASE,
+    seconds_to_ticks,
+    source_ticks_to_output_ticks,
+)
 from app.models.schemas import (
     ReviseVideoArgs,
+    VideoEditAddAudio,
+    VideoEditUpdateAudio,
     VideoEditSplitClip,
     VideoEditTrimClip,
+    VideoEditDelete,
+    VideoEditMove,
+    VideoEditTimeMap,
+    VideoEditTrim,
     VideoEditTransition,
     VideoEditRemoveTransition,
     VideoEditSnapCut,
@@ -172,7 +187,7 @@ _ADD_TEXT_LAYOUT = {
 }
 _ADD_TEXT_SIZE = {
     "title": {"small": 48, "medium": 96, "large": 140},
-    "caption": {"small": 28, "medium": 36, "large": 48},
+    "caption": {"small": 28, "medium": 34, "large": 48},
 }
 _EASE_OUT = (0.16, 1.0, 0.3, 1.0)
 
@@ -329,10 +344,11 @@ def _translate_add_text(content: CompositionContent, op: VideoEditAddText, token
     )
     style = TextStyle(
         font_size=_ADD_TEXT_SIZE[op.track][op.size],
-        color=op.color or "#F8FAFC",
-        background="#111827" if op.track == "caption" else None,
+        color=op.color or ("#FFFFFF" if op.track == "caption" else "#F8FAFC"),
+        background="#000000" if op.track == "caption" else None,
         weight=700 if op.track == "title" else 600,
         align=op.align,
+        line_height=1.3 if op.track == "caption" else 1.2,
     )
     clip = Clip(
         clip_id=clip_id,
@@ -428,6 +444,143 @@ def _translate_update_video(content: CompositionContent, op: VideoEditUpdateVide
             source_range=source_range,
         )
     return UpdateClip.model_validate(kwargs)
+
+
+def _audio_snapshot_facts(
+    snapshots: dict[UUID, dict[str, Any]] | None,
+    snapshot_id: UUID,
+) -> dict[str, Any]:
+    facts = (snapshots or {}).get(snapshot_id)
+    if facts is None or facts.get("kind") != "audio":
+        raise VideoServiceError(f"snapshot {snapshot_id} is not a resolved audio source")
+    if not isinstance(facts.get("duration_ticks"), int) or facts["duration_ticks"] <= 0:
+        raise VideoServiceError(f"audio snapshot {snapshot_id} has no probed duration")
+    if not isinstance(facts.get("digest"), str):
+        raise VideoServiceError(f"audio snapshot {snapshot_id} has no immutable digest")
+    return facts
+
+
+def _translate_add_audio(
+    content: CompositionContent,
+    op: VideoEditAddAudio,
+    *,
+    snapshots: dict[UUID, dict[str, Any]] | None,
+    token: str,
+) -> list[Op]:
+    facts = _audio_snapshot_facts(snapshots, op.snapshot_id)
+    source_start = seconds_to_ticks(op.source_start_seconds or 0, SOURCE_TIMEBASE)
+    source_duration = (
+        seconds_to_ticks(op.duration_seconds, SOURCE_TIMEBASE)
+        if op.duration_seconds is not None
+        else facts["duration_ticks"] - source_start
+    )
+    source_end = source_start + source_duration
+    if source_duration <= 0 or source_end > facts["duration_ticks"]:
+        raise VideoServiceError(
+            "the requested audio source window exceeds the snapshot's real duration; "
+            "no looping or implicit shortening is applied"
+        )
+    output_start = seconds_to_ticks(op.at_seconds, content.settings.timebase)
+    output_duration = source_ticks_to_output_ticks(
+        source_duration, content.settings.timebase
+    )
+    if output_duration <= 0:
+        raise VideoServiceError("the audio window is shorter than one output tick")
+    if op.scene_id is not None:
+        _find_scene(content, op.scene_id)
+    source = ClipSource(
+        snapshot_id=op.snapshot_id,
+        snapshot_digest=facts["digest"],
+        source_range=TimeRange(start=source_start, end=source_end),
+    )
+    clip = Clip(
+        clip_id=f"clp_aud_{token}",
+        range=TimeRange(start=output_start, end=output_start + output_duration),
+        scene_id=op.scene_id,
+        source=source,
+        object=AudioObject(
+            kind="audio",
+            object_id=f"obj_aud_{token}",
+            gain_db=op.gain_db if op.gain_db is not None else 0.0,
+        ),
+    )
+    ops: list[Op] = []
+    if not any(binding.snapshot_id == op.snapshot_id for binding in content.sources):
+        ops.append(BindSource(op="bind_source", snapshot_id=op.snapshot_id))
+    track = next(
+        (
+            candidate
+            for candidate in content.timeline.tracks
+            if candidate.kind == "audio"
+            and candidate.role == "effect"
+            and all(
+                existing.range.end <= clip.range.start
+                or existing.range.start >= clip.range.end
+                for existing in candidate.clips
+            )
+        ),
+        None,
+    )
+    if track is None:
+        track = Track(
+            track_id=f"trk_aud_{token}",
+            kind="audio",
+            role="effect",
+            order=max(
+                (item.order for item in content.timeline.tracks if item.kind == "audio"),
+                default=-1,
+            )
+            + 1,
+        )
+        ops.append(AddTrack(op="add_track", track=track))
+    ops.append(AddClip(op="add_clip", track_id=track.track_id, clip=clip))
+    return ops
+
+
+def _translate_update_audio(
+    content: CompositionContent,
+    op: VideoEditUpdateAudio,
+    *,
+    snapshots: dict[UUID, dict[str, Any]] | None,
+) -> list[Op]:
+    if op.snapshot_id is None and op.gain_db is None:
+        raise VideoServiceError("update_audio needs a replacement snapshot or gain_db")
+    clip = _find_clip(content, op.clip_id)
+    if not isinstance(clip.object, AudioObject):
+        raise VideoServiceError(
+            f"clip {op.clip_id!r} is a {clip.object.kind} clip, not fixed audio"
+        )
+    obj = clip.object.model_copy(deep=True)
+    if op.gain_db is not None:
+        obj.gain_db = op.gain_db
+    kwargs: dict[str, Any] = {
+        "op": "update_clip",
+        "clip_id": clip.clip_id,
+        "object": obj,
+    }
+    ops: list[Op] = []
+    if op.snapshot_id is not None:
+        if clip.source is None or clip.source.source_range is None:
+            raise VideoServiceError("the audio clip has no replaceable source window")
+        facts = _audio_snapshot_facts(snapshots, op.snapshot_id)
+        if not any(binding.snapshot_id == op.snapshot_id for binding in content.sources):
+            ops.append(BindSource(op="bind_source", snapshot_id=op.snapshot_id))
+        # Keep the original complete source window and 1× output window. A
+        # shorter replacement fails instead of retaining old-source tail media.
+        start = clip.source.source_range.start
+        end = start + clip.source.source_range.duration
+        if end > facts["duration_ticks"]:
+            raise VideoServiceError(
+                "the replacement snapshot cannot cover the clip's complete original "
+                "source window; choose a longer source or trim explicitly afterwards"
+            )
+        kwargs["source"] = ClipSource(
+            snapshot_id=op.snapshot_id,
+            snapshot_digest=facts["digest"],
+            source_range=TimeRange(start=start, end=end),
+        )
+    ops.append(UpdateClip.model_validate(kwargs))
+    return ops
 
 
 def _translate_update_shape(content: CompositionContent, op: VideoEditUpdateShape) -> Op:
@@ -630,6 +783,16 @@ def _translate_focus_web(
     return UpdateClip(op="update_clip", clip_id=clip.clip_id, animations=animations)
 
 
+def revision_snapshot_ids(args: ReviseVideoArgs) -> set[UUID]:
+    """New audio snapshots that must resolve alongside the base version's facts."""
+    return {
+        edit.snapshot_id
+        for edit in args.edits
+        if isinstance(edit, (VideoEditAddAudio, VideoEditUpdateAudio))
+        and edit.snapshot_id is not None
+    }
+
+
 def translate_revision(
     content: CompositionContent,
     args: ReviseVideoArgs,
@@ -640,8 +803,13 @@ def translate_revision(
     """The LLM-facing revision vocabulary → the write door's op batch. Any
     failure rejects the WHOLE batch with a model-readable reason."""
     ops: list[Op] = []
+    bound_digests = {
+        snapshot_id: facts["digest"]
+        for snapshot_id, facts in (snapshots or {}).items()
+        if isinstance(facts.get("digest"), str)
+    }
     for index, edit in enumerate(args.edits):
-        current = apply_ops(content, ops, {})
+        current = apply_ops(content, ops, bound_digests)
         if isinstance(edit, VideoEditUpdateText):
             ops.append(_translate_update_text(current, edit))
         elif isinstance(edit, VideoEditUpdateSpeech):
@@ -655,6 +823,11 @@ def translate_revision(
             ops.append(_translate_remove_clip(current, edit))
         elif isinstance(edit, VideoEditUpdateVideo):
             ops.append(_translate_update_video(current, edit))
+        elif isinstance(edit, VideoEditAddAudio):
+            token = uuid5(NAMESPACE_URL, f"video-audio:{request_id}:{index}").hex if request_id else uuid4().hex
+            ops.extend(_translate_add_audio(current, edit, snapshots=snapshots, token=token))
+        elif isinstance(edit, VideoEditUpdateAudio):
+            ops.extend(_translate_update_audio(current, edit, snapshots=snapshots))
         elif isinstance(edit, VideoEditSplitClip):
             token = uuid5(NAMESPACE_URL, f"split:{request_id}:{index}").hex if request_id else uuid4().hex
             ops.append(SplitClip(op="split_clip", clip_id=edit.clip_id,
@@ -664,6 +837,33 @@ def translate_revision(
             ops.append(TrimClip(op="trim_clip", clip_id=edit.clip_id,
                 range=TimeRange(start=seconds_to_ticks(edit.start_seconds, content.settings.timebase),
                                 end=seconds_to_ticks(edit.end_seconds, content.settings.timebase))))
+        elif isinstance(edit, (VideoEditMove, VideoEditTrim, VideoEditDelete, VideoEditTimeMap)):
+            target = EditTarget.model_validate(edit.target.model_dump(mode="json"))
+            if isinstance(edit, VideoEditMove):
+                ops.append(TemporalEdit(
+                    op="temporal_edit", action="move", target=target,
+                    start=seconds_to_ticks(edit.start_seconds, current.settings.timebase),
+                    ripple=edit.ripple,
+                ))
+            elif isinstance(edit, VideoEditTrim):
+                ops.append(TemporalEdit(
+                    op="temporal_edit", action="trim", target=target,
+                    start=seconds_to_ticks(edit.start_seconds, current.settings.timebase),
+                    end=seconds_to_ticks(edit.end_seconds, current.settings.timebase),
+                    ripple=edit.ripple, source_policy=edit.source_policy,
+                ))
+            elif isinstance(edit, VideoEditDelete):
+                ops.append(TemporalEdit(
+                    op="temporal_edit", action="delete", target=target,
+                    ripple="forward" if edit.mode == "ripple" else "none",
+                ))
+            else:
+                ops.append(TemporalEdit(
+                    op="temporal_edit", action="time_map", target=target,
+                    scale=edit.scale,
+                    offset=str(Fraction(str(edit.offset_seconds)) * current.settings.timebase),
+                    ripple=edit.ripple, source_policy=edit.source_policy,
+                ))
         elif isinstance(edit, VideoEditTransition):
             token = uuid5(NAMESPACE_URL, f"crossfade:{edit.from_clip_id}:{edit.to_clip_id}").hex
             ops.append(SetTransition(op="set_transition", transition=Transition(
@@ -739,8 +939,9 @@ async def revise_video(
     system-computed change set. The caller supplies a DEDICATED session —
     the write door commits; a chat turn's own transaction never rides it.
 
-    Rejections (stale base, unknown handles, validator problems) raise —
-    the turn seats map them to model-facing repair feedback verbatim.
+    Repairable rejections (stale base, unknown handles, validator problems)
+    raise for ordinary model-facing feedback; deterministic media capability
+    errors retain their type so the turn seat can end the revision loop.
     """
     composition, base_version = await get_video_version(
         db,
@@ -753,14 +954,26 @@ async def revise_video(
             "re-read the version with get_video_version and echo its base_ref"
         )
     base_content = content_of(base_version)
-    facts = await snapshot_facts(db, {b.snapshot_id for b in base_content.sources})
+    new_snapshot_ids = revision_snapshot_ids(args)
+    facts = await snapshot_facts(
+        db,
+        {b.snapshot_id for b in base_content.sources} | new_snapshot_ids,
+    )
+    for snapshot_id in new_snapshot_ids:
+        if snapshot_id not in facts:
+            raise VideoServiceError(f"snapshot {snapshot_id} does not exist")
+        if facts[snapshot_id]["owner_id"] != owner_id:
+            raise VideoServiceError(f"snapshot {snapshot_id} belongs to another user")
     ops = translate_revision(
         base_content, args, request_id=request_id, snapshots=facts
     )
+    bound_digests = {
+        snapshot_id: fact["digest"] for snapshot_id, fact in facts.items()
+    }
     if prepare_candidate is not None:
         # The tools layer may execute a bounded preflight (Generator preview)
         # against the pure candidate; only the write door below persists it.
-        candidate = apply_ops(base_content, ops, {})
+        candidate = apply_ops(base_content, ops, bound_digests)
         await prepare_candidate(candidate)
     _, version, replayed = await apply_composition_edits(
         db,
@@ -770,6 +983,7 @@ async def revise_video(
         base_digest=args.base_ref.content_digest,
         ops=ops,
         request_id=request_id,
+        skill_provenance=base_version.skill_provenance,
     )
     new_content = content_of(version)
     facts = await snapshot_facts(db, {b.snapshot_id for b in new_content.sources})
@@ -1060,6 +1274,7 @@ def format_revision_text(read: dict[str, Any]) -> str:
 
     return json.dumps({
         "version": read["version"],
+        "duration_seconds": read["storyboard"]["duration_seconds"],
         "base_ref": read["base_ref"],
         "change_set": read.get("change_set") or {},
     }, ensure_ascii=False, indent=1)

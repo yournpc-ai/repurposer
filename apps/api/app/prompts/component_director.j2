@@ -1,0 +1,20 @@
+{# component_director.j2 — Agent-authored component-v1 TSX; fields mirror editing/director.py ComponentDirection. #}
+Create an original short animated visual for this request:
+
+{{ instruction }}
+
+{% if text %}NATIVE TITLE (kept as a separate editable TextObject, exact copy): {{ text }}{% endif %}
+{% if narration %}NARRATION (creative input for the visual; the system keeps the spoken copy and captions as separate native objects, never embedded component audio): {{ narration }}{% endif %}
+{% if language %}Language: {{ language }}.{% endif %}
+{% if focus %}Creative direction: {{ focus }}{% endif %}
+{% if target_seconds %}Required duration: {{ target_seconds }} seconds.{% endif %}
+
+Write real TSX for the `component-v1` runtime. Default-export one React component. It receives `{ parameters }`, the same declared scalar JSON object you output. Compute motion from `useCurrentFrame()` and the fixed video configuration; a static result is not a moving visual. HTML and SVG markup are allowed inside this component. Keep important copy in the native title or declared parameters rather than inventing facts.
+
+No import statement is needed or allowed. These declarations are already in scope:
+- `AbsoluteFill`, `Sequence`, `Series`, `useCurrentFrame`, `useVideoConfig`, `interpolate`, `spring`, `Easing`, and deterministic `random` from the locked Remotion API.
+- `React` for ordinary React types. JSX uses the automatic runtime.
+
+The component has no other packages, external media, URLs, fonts, assets, network, host globals, filesystem, timers, random source outside the supplied `random`, dynamic code execution or side effects. Do not use `fetch`, `require`, dynamic `import`, `eval`, `process`, `window`, `document`, `Date`, `Math.random`, media elements or external CSS. Use inline styles and canvas dimensions from `useVideoConfig()`. Keep everything deterministic for the same code and parameters.
+
+Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent` (at most 120 characters), `visual_description` (at most 240 characters; only what the component and native title actually show), `duration_seconds` (up to 6), `background` (hex), `parameters` (meaningful scalar knobs the component reads), and `code` (the complete TSX source with a default export). Do not include markdown fences.

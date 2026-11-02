@@ -8,26 +8,12 @@ import type { Output, WorkflowStep } from "@/lib/types"
 
 import {
   anchorCardOf,
-  anchorCardsForRun,
   anchorLabel,
   approxWordCount,
+  deliveredOutputsForRefs,
   isDeliveredOutput,
-  runOutputRefs,
+  zeroDeliveryVideoOutputs,
 } from "./anchorCards"
-
-function step(partial: Partial<WorkflowStep>): WorkflowStep {
-  return {
-    id: "s1",
-    kind: "render",
-    status: "done",
-    seq: 1,
-    error: null,
-    cost: null,
-    started_at: null,
-    finished_at: null,
-    ...partial,
-  }
-}
 
 function output(partial: Partial<Output>): Output {
   return {
@@ -53,58 +39,86 @@ function output(partial: Partial<Output>): Output {
   }
 }
 
-describe("runOutputRefs — 收据载荷的 output_refs 收集", () => {
-  it("按步骤顺序收集,跨步骤去重", () => {
-    const steps = [
-      step({ id: "a", output_refs: ["o1", "o2"] }),
-      step({ id: "b", output_refs: ["o2", "o3"] }),
-      step({ id: "c" }), // 无 refs 的步骤不贡献
-      step({ id: "d", output_refs: [] }),
-    ]
-    expect(runOutputRefs(steps)).toEqual(["o1", "o2", "o3"])
-  })
+function step(output_refs: string[]): WorkflowStep {
+  return {
+    id: "step-1",
+    kind: "render",
+    status: "done",
+    seq: 1,
+    error: null,
+    cost: null,
+    started_at: null,
+    finished_at: null,
+    output_refs,
+  }
+}
 
-  it("零 refs → 零锚卡(空数组,收据行独存)", () => {
-    expect(runOutputRefs([step({ id: "a" })])).toEqual([])
+describe("delivery-message Output refs", () => {
+  it("resolves only the message's own deliverable products in ref order", () => {
+    const rows = [
+      output({ id: "a", type: "film", render_status: "completed", files: { video: "/a.mp4" } }),
+      output({ id: "b", type: "film", render_status: "completed", files: { video: "/b.mp4" } }),
+      output({ id: "pending", type: "film", render_status: "rendering" }),
+      output({ id: "post", type: "post", payload: { content: "正文" } }),
+      output({ id: "quote", type: "quotes", files: { image: "/q.png" } }),
+    ]
+    expect(deliveredOutputsForRefs(["b", "pending", "post", "quote", "a", "b"], rows).map((row) => row.id)).toEqual(["b", "a"])
+    expect(deliveredOutputsForRefs([], rows)).toEqual([])
   })
 })
 
-describe("anchorCardsForRun — N 产物 = 数组平铺投影", () => {
-  const steps = [
-    step({ id: "a", output_refs: ["o1", "o2", "gone"] }),
-    step({ id: "b", output_refs: ["o3"] }),
+describe("zero-delivery video fallback", () => {
+  const rows = [
+    output({ id: "ready", type: "video", render_status: "completed", files: { video: "/ready.mp4" } }),
+    output({ id: "pending", type: "video", render_status: "rendering" }),
+    output({ id: "empty", type: "video", render_status: "completed", files: {} }),
+    output({ id: "post", type: "post", payload: { content: "正文" } }),
   ]
-  const outputs = [
-    output({ id: "o1", type: "clip", render_status: "completed", files: { video: "/v1.mp4" } }),
-    output({ id: "o2", type: "quotes", files: { image: "/q1.png" } }),
-    output({ id: "o3", type: "article", payload: { content: "正文" } }),
-  ]
+  const steps = [step(["ready", "pending", "empty", "post", "ready"])]
 
-  it("refs 顺序即数组顺序;解析不到的 ref 静默掉落(拉取在途 ≠ 骨架)", () => {
-    const cards = anchorCardsForRun(steps, outputs)
-    expect(cards.map((c) => c.outputId)).toEqual(["o1", "o2", "o3"])
+  it("never appears between live terminal and bounded review settlement", () => {
+    expect(zeroDeliveryVideoOutputs({
+      steps,
+      outputs: rows,
+      terminal: true,
+      reviewSettled: false,
+      hasDelivery: false,
+    })).toEqual([])
+    expect(zeroDeliveryVideoOutputs({
+      steps,
+      outputs: rows,
+      terminal: false,
+      reviewSettled: true,
+      hasDelivery: false,
+    })).toEqual([])
   })
 
-  it("媒体族映射: video > image > text(读容忍降级)", () => {
-    const cards = anchorCardsForRun(steps, outputs)
-    expect(cards.map((c) => c.kind)).toEqual(["video", "image", "text"])
+  it("shows only real delivered chat videos after settlement, without empty cards", () => {
+    expect(zeroDeliveryVideoOutputs({
+      steps,
+      outputs: rows,
+      terminal: true,
+      reviewSettled: true,
+      hasDelivery: false,
+    }).map((row) => row.id)).toEqual(["ready"])
+    expect(zeroDeliveryVideoOutputs({
+      steps: [step(["pending", "empty", "post"])],
+      outputs: rows,
+      terminal: true,
+      reviewSettled: true,
+      hasDelivery: false,
+    })).toEqual([])
   })
 
-  it("未交付的 film/clip 不进入产物卡;文本产物不受影响", () => {
-    const deliverySteps = [
-      step({ id: "delivery", output_refs: ["failed", "pending", "empty", "ready", "post"] }),
-    ]
-    const rows = [
-      output({ id: "failed", type: "film", render_status: "failed" }),
-      output({ id: "pending", type: "clip", render_status: "rendering" }),
-      output({ id: "empty", type: "film", render_status: "completed", files: {} }),
-      output({ id: "ready", type: "film", render_status: "completed", files: { video: "/film.mp4" } }),
-      output({ id: "post", type: "post", payload: { content: "正文" } }),
-    ]
-    expect(anchorCardsForRun(deliverySteps, rows).map((c) => c.outputId)).toEqual([
-      "ready",
-      "post",
-    ])
+  it("any delivery disables the Run surface; late ownership leaves one card", () => {
+    expect(zeroDeliveryVideoOutputs({
+      steps,
+      outputs: rows,
+      terminal: true,
+      reviewSettled: true,
+      hasDelivery: true,
+    })).toEqual([])
+    expect(deliveredOutputsForRefs(["ready"], rows).map((row) => row.id)).toEqual(["ready"])
   })
 })
 

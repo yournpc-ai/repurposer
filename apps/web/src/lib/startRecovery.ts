@@ -36,7 +36,7 @@
  * recovery's own reads and re-create the stuck composer); the deadline
  * timer is cleared the moment the decision lands. */
 
-import type { QuestionMessage } from "@/components/chat/historyReplay"
+import type { QuestionMessage } from "@/components/chat/timeline/types"
 
 export type StartRecovery =
   | { state: "started"; runId: string }

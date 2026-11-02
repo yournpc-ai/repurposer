@@ -13,10 +13,12 @@ from uuid import UUID
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from pydantic import ValidationError
 
 from app.models.schemas import (
     INTERNAL_OUTPUT_TYPES,
     OutputResponse,
+    ProductionStage,
     StepResponse,
     RunResponse,
     is_null_token,
@@ -91,58 +93,61 @@ async def archive_outputs(db: AsyncSession, ids: list[UUID]) -> None:
     )
 
 
-def chat_delivery_output_ids(messages: list, steps: list, outputs: list = ()) -> list[UUID]:
-    """Flatten delivered refs by their persisted transcript seats, then step order."""
-    seats: dict[UUID, tuple[int, bool]] = {}
-    for index, message in enumerate(messages):
-        run_id = message.workflow_run_id
-        if run_id is None:
-            continue
-        intent = message.intent or {}
-        is_delivery = (
-            intent.get("type") == "trigger_review"
-            and intent.get("trigger") in {"run_completed", "run_failed"}
-        )
-        previous = seats.get(run_id)
-        if previous is None or (is_delivery and not previous[1]):
-            # A spoken delivery owns the exact delivery position. If proactive
-            # speech was legitimately silent, the persisted Run receipt remains
-            # the historical card's transcript seat instead of losing the Output.
-            seats[run_id] = (index, is_delivery)
-    run_order = [run_id for run_id, _ in sorted(seats.items(), key=lambda item: item[1][0])]
+def chat_delivery_output_ids(messages: list) -> list[UUID]:
+    """Flatten only the exact refs persisted on each delivery message.
 
-    refs_by_run: dict[UUID, list[UUID]] = {run_id: [] for run_id in run_order}
-    materialized: dict[UUID, list[UUID]] = {}
-    for output in outputs:
-        materialized.setdefault(output.workflow_step_id, []).append(output.id)
-    for step in sorted(steps, key=lambda item: item.seq):
-        refs = refs_by_run.get(step.run_id)
-        if refs is not None:
-            refs.extend(UUID(str(ref)) for ref in (step.output_refs or []))
-            # Older quote-card writers materialized images under the producing
-            # step without returning their ids. Their persisted ownership is
-            # still a delivery fact, including after the images are archived.
-            if materialized:
-                refs.extend(materialized.get(step.id, []))
-
+    Run steps and neighbouring messages never manufacture Chat ownership.
+    """
     ordered: list[UUID] = []
     seen: set[UUID] = set()
-    for run_id in run_order:
-        for output_id in refs_by_run[run_id]:
+    for message in messages:
+        intent = message.intent or {}
+        if (
+            message.workflow_run_id is None
+            or intent.get("type") != "trigger_review"
+            or intent.get("trigger") not in {"run_completed", "run_failed"}
+            or not isinstance(intent.get("output_refs"), list)
+        ):
+            continue
+        for raw_ref in intent["output_refs"]:
+            try:
+                output_id = UUID(str(raw_ref))
+            except (TypeError, ValueError):
+                continue
             if output_id not in seen:
                 seen.add(output_id)
                 ordered.append(output_id)
     return ordered
 
 
+def delivered_output_refs(steps: list, outputs: list) -> list[str]:
+    """Snapshot actually deliverable refs in persisted step order."""
+    by_id = {str(output.id): output for output in outputs}
+    refs: list[str] = []
+    seen: set[str] = set()
+    for step in sorted(steps, key=lambda item: item.seq):
+        for raw_ref in step.output_refs or []:
+            ref = str(raw_ref)
+            output = by_id.get(ref)
+            if ref not in seen and output is not None and is_delivered_output(output):
+                seen.add(ref)
+                refs.append(ref)
+    return refs
+
+
 def is_delivered_output(output: Output) -> bool:
-    """Mirror the user-facing delivery gate, including archived exact reads."""
+    """Domain delivery semantics shared by review, billing and Chat."""
     if output.type in INTERNAL_OUTPUT_TYPES:
         return False
     if output.type not in {"clip", "film", "video"}:
         return True
     render_status = getattr(output.render_status, "value", output.render_status)
     return render_status == "completed" and bool((output.files or {}).get("video"))
+
+
+def is_chat_video_output(output: Output) -> bool:
+    """Chat's display gate: only delivered video Outputs enter its surfaces."""
+    return output.type in {"clip", "film", "video"} and is_delivered_output(output)
 
 
 def output_to_response(
@@ -222,11 +227,21 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
             credits_at_ratio(usd_low, ratio),
             credits_at_ratio(usd_high, ratio),
         ]
+    production_stages = []
+    raw_stages = (node.spec or {}).get("production_stages")
+    if isinstance(raw_stages, list):
+        for raw in raw_stages:
+            try:
+                production_stages.append(ProductionStage.model_validate(raw))
+            except (ValidationError, TypeError):
+                # A malformed/legacy entry cannot take down the whole Run read.
+                continue
     return StepResponse(
         id=node.id,
         kind=node.kind,
         status=node.status,
         seq=node.seq,
+        attempt=node.attempt,
         error=node.error,
         cost=node.cost,
         stage=(node.spec or {}).get("stage"),
@@ -240,6 +255,7 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         ),
         started_at=node.started_at,
         finished_at=node.finished_at,
+        production_stages=production_stages,
     )
 
 

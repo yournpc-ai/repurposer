@@ -31,7 +31,6 @@ export function ChannelsSection() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("channels.subtitle")}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         {PLATFORMS.map((platform) => {
           const account = accountFor(platform)

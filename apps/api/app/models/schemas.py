@@ -224,6 +224,7 @@ class WorkflowStatus(StrEnum):
     WAITING_HUMAN = "waiting_human"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ChatAttachment(BaseModel):
@@ -288,6 +289,44 @@ class ChatMention(BaseModel):
     # never guesses which sentence). Absent = the whole output is the referent
     # (the pre-quote behavior; old rows read tolerantly).
     quote: str | None = None
+
+
+class BuiltInSkillReference(BaseModel):
+    """A deployed, versioned video Skill; never a hidden recipe id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["builtin"]
+    skill_id: str = Field(min_length=1, max_length=128)
+    version: str = Field(min_length=1, max_length=32)
+
+
+class ExternalSkillReference(BaseModel):
+    """An immutable owner-scoped SkillVersion, pinned before design begins."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["external"]
+    skill_version_id: UUID
+
+
+SkillReference = Annotated[
+    BuiltInSkillReference | ExternalSkillReference,
+    Field(discriminator="kind"),
+]
+
+
+class SkillOption(BaseModel):
+    """Picker metadata around the exact reference sent by composer/Home."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reference: SkillReference
+    skill_id: str
+    name: str
+    description: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    version_number: int | None = None
 
 
 class FocusRef(BaseModel):
@@ -462,6 +501,22 @@ class ChatMessageResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_skill_reference(cls, data: Any) -> Any:
+        """Skill rides the user row's existing JSONB metadata, not mentions."""
+        if isinstance(data, dict):
+            if data.get("role") == "user" and data.get("skill") is None:
+                skill = (data.get("intent") or {}).get("skill")
+                if skill is not None:
+                    return {**data, "skill": skill}
+            return data
+        if getattr(data, "role", None) == "user" and getattr(data, "skill", None) is None:
+            skill = (getattr(data, "intent", None) or {}).get("skill")
+            if skill is not None:
+                return {**getattr(data, "__dict__", {}), "skill": skill}
+        return data
+
     @field_validator("question", mode="before")
     @classmethod
     def _normalize_question_kind(cls, q: Any) -> Any:
@@ -478,8 +533,13 @@ class ChatMessageResponse(BaseModel):
     content: str | None = None
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
+    skill: SkillReference | None = None
     focus_output: FocusRef | None = None
     workflow_run_id: UUID | None = None
+    # Opening user-message identity for rows born in that turn; NULL on old
+    # rows and independent world facts.
+    turn_id: UUID | None = None
+    turn_state: str | None = None
     intent: dict | None = None
     question: dict | None = None
     answer: dict | None = None
@@ -1109,9 +1169,9 @@ class DesignVideoArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["auto", "motion_graphics", "program", "image"] = Field(
+    mode: Literal["auto", "motion_graphics", "program", "image", "component"] = Field(
         default="auto",
-        description="Use program for Agent-authored drawing-v1 motion, image for one MiniMax image-01 still background, motion_graphics for native text/shapes; auto preserves the material-based default.",
+        description="Use program for Agent-authored drawing-v1 motion, component for an Agent-authored controlled TSX visual, image for one MiniMax image-01 still background, motion_graphics for native text/shapes; auto preserves the material-based default.",
     )
     scene_count: int | None = Field(default=None, ge=1, le=6, description="MG: exact scene count when the user names it.")
     target_seconds: float | None = Field(default=None, gt=0, le=118, description="MG: exact total duration when named.")
@@ -1127,11 +1187,11 @@ class DesignVideoArgs(BaseModel):
     narration: str | None = Field(
         default=None,
         max_length=9000,
-        description="MG only: exact spoken copy to pace across scenes. Supplying it explicitly enables narration; the voice is resolved and pinned by code, never synthesized during design.",
+        description="MG/component: exact spoken copy. MG paces it across scenes; component uses it as creative input while native Speech/Text objects retain the editable narration and captions. Supplying it explicitly enables narration; the voice is resolved and pinned by code, never synthesized during design.",
     )
     narration_enabled: bool | None = Field(
         default=None,
-        description="MG only: true ONLY when the user explicitly asks for spoken narration; false explicitly turns it off. Null inherits a redraft's setting and defaults a fresh design to off.",
+        description="MG/component: true ONLY when the user explicitly asks for spoken narration; false explicitly turns it off. Null inherits a redraft's setting and defaults a fresh design to off.",
     )
 
     @model_validator(mode="before")
@@ -1190,14 +1250,16 @@ class DesignVideoArgs(BaseModel):
             raise ValueError("text and media materials never mix — use an MG video or a media composition")
         if self.narration_enabled is False and self.narration is not None:
             raise ValueError("narration text and narration_enabled=false conflict")
-        if (self.narration is not None or self.narration_enabled is True) and not self.text:
+        if self.mode != "component" and (
+            self.narration is not None or self.narration_enabled is True
+        ) and not self.text:
             raise ValueError("the first narration consumer is an MG design with exact on-screen text")
         if self.composition_id is None and self.narration_enabled and not self.narration:
             raise ValueError("a fresh narrated design needs the exact spoken copy")
         if self.mode in {"program", "image"} and (
             self.narration is not None or self.narration_enabled is True
         ):
-            raise ValueError("narration currently belongs to the MG design path")
+            raise ValueError("narration currently belongs to the MG and component design paths")
         if self.mode == "program":
             if self.composition_id is not None:
                 raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
@@ -1205,6 +1267,13 @@ class DesignVideoArgs(BaseModel):
                 raise ValueError("the first drawing-v1 program consumer takes no media materials")
             if not self.specific_instruction:
                 raise ValueError("a visual program needs the requested picture in specific_instruction")
+        if self.mode == "component":
+            if self.composition_id is not None:
+                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
+            if self.material_urls or self.material_asset_ids or self.material_output_ids:
+                raise ValueError("the first component-v1 consumer takes no media materials")
+            if not self.specific_instruction:
+                raise ValueError("a visual component needs the requested picture in specific_instruction")
         if self.mode == "image":
             if self.composition_id is not None:
                 raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
@@ -1370,6 +1439,107 @@ class VideoEditTrimClip(BaseModel):
     end_seconds: float = Field(gt=0, description="Keep this output subrange; no ripple of other clips.")
 
 
+class VideoEditTarget(BaseModel):
+    """Stable-id addressing for the generic temporal editing algebra."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["clip", "scene", "track", "selection", "timeline"]
+    id: str | None = Field(default=None, min_length=1, max_length=64)
+    clip_ids: list[str] = Field(default_factory=list, max_length=256)
+    scene_ids: list[str] = Field(default_factory=list, max_length=256)
+    track_ids: list[str] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "id", "clip_ids", "scene_ids", "track_ids")
+
+    @model_validator(mode="after")
+    def _address_matches_kind(self) -> VideoEditTarget:
+        if self.kind == "selection":
+            if self.id is not None or not (self.clip_ids or self.scene_ids or self.track_ids):
+                raise ValueError("a selection needs explicit clip/scene/track ids and no singular id")
+        else:
+            if self.clip_ids or self.scene_ids or self.track_ids:
+                raise ValueError("selection id lists belong only to a selection target")
+            if self.kind == "timeline":
+                if self.id is not None:
+                    raise ValueError("the timeline target takes no id")
+            elif self.id is None:
+                raise ValueError(f"{self.kind} target needs its stable id")
+        return self
+
+
+class VideoEditMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["move"]
+    target: VideoEditTarget
+    start_seconds: float = Field(ge=0, description="New output start of the resolved target set.")
+    ripple: Literal["none", "forward"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "ripple")
+
+
+class VideoEditTrim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["trim"]
+    target: VideoEditTarget
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(gt=0, description="Absolute output subrange to keep.")
+    ripple: Literal["none", "forward"] = "none"
+    source_policy: Literal["crop_1x"] | None = Field(
+        default=None,
+        description="Required when fixed audio/video is cut or recropped; always 1×, never a rate change.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "ripple", "source_policy")
+
+
+class VideoEditDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["delete"]
+    target: VideoEditTarget
+    mode: Literal["lift", "ripple"] = Field(
+        default="lift", description="lift leaves a gap; ripple closes structural downstream ranges."
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "mode")
+
+
+class VideoEditTimeMap(BaseModel):
+    """Apply t′=a×t+b to one resolved target set, not a media rate change."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["time_map"]
+    target: VideoEditTarget
+    scale: float = Field(gt=0, allow_inf_nan=False, description="The single positive a term.")
+    offset_seconds: float = Field(default=0, allow_inf_nan=False, description="The signed b term in seconds.")
+    ripple: Literal["none", "forward"] = "none"
+    source_policy: Literal["crop_1x"] | None = Field(
+        default=None,
+        description="Required for fixed audio whose output duration changes; crops/extends its 1× source window.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "offset_seconds", "ripple", "source_policy")
+
+
 class VideoEditTransition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     op: Literal["set_transition"]
@@ -1491,6 +1661,49 @@ class VideoEditRemoveScene(BaseModel):
     scene_id: str = Field(min_length=1)
 
 
+class VideoEditAddAudio(BaseModel):
+    """Add one fixed audio snapshot to an effect track at exact 1× speed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["add_audio"]
+    snapshot_id: UUID
+    at_seconds: float = Field(ge=0, allow_inf_nan=False)
+    source_start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    gain_db: float | None = Field(default=None, ge=-60, le=12, allow_inf_nan=False)
+    scene_id: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(
+            data, "source_start_seconds", "duration_seconds", "gain_db", "scene_id"
+        )
+
+
+class VideoEditUpdateAudio(BaseModel):
+    """Replace an audio clip's source or gain without changing its identity/window."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["update_audio"]
+    clip_id: str = Field(min_length=1)
+    snapshot_id: UUID | None = None
+    gain_db: float | None = Field(default=None, ge=-60, le=12, allow_inf_nan=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "snapshot_id", "gain_db")
+
+    @model_validator(mode="after")
+    def _at_least_one_change(self) -> "VideoEditUpdateAudio":
+        if self.snapshot_id is None and self.gain_db is None:
+            raise ValueError("update_audio needs a replacement snapshot or gain_db")
+        return self
+
+
 class VideoEditBackground(BaseModel):
     model_config = ConfigDict(extra="forbid")
     op: Literal["set_background"]
@@ -1504,8 +1717,14 @@ VideoEditOp = Annotated[
     | VideoEditAddText
     | VideoEditRemoveClip
     | VideoEditUpdateVideo
+    | VideoEditAddAudio
+    | VideoEditUpdateAudio
     | VideoEditSplitClip
     | VideoEditTrimClip
+    | VideoEditMove
+    | VideoEditTrim
+    | VideoEditDelete
+    | VideoEditTimeMap
     | VideoEditTransition
     | VideoEditRemoveTransition
     | VideoEditSnapCut
@@ -1549,6 +1768,35 @@ class ReviseVideoArgs(BaseModel):
         default="none",
         description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
+
+
+class SearchSfxArgs(BaseModel):
+    """Search real Freesound CC0 candidates; candidates persist only at turn settle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=200)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class ImportSfxArgs(BaseModel):
+    """Import one settled candidate by identity only, never by URL or provider metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
 
 
 class GetVideoVersionParams(BaseModel):
@@ -2052,6 +2300,30 @@ class AnswerResponse(BaseModel):
     follow_up: ChatMessageResponse | None = None
 
 
+class VisibleProseFrontier(BaseModel):
+    """One server-owned assistant row and its actually displayed prefix."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: UUID
+    visible_chars: int = Field(ge=0, description="Visible prefix length in Unicode code points")
+
+
+class ChatTurnStopRequest(BaseModel):
+    """The client-visible frontier at the user's Stop gesture.
+
+    IDs only address rows already persisted in this Turn. The server clamps
+    each prefix to its own stored content; clients never upload replacement
+    prose.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    prose: list[VisibleProseFrontier] = Field(default_factory=list, max_length=128)
+    activity_ids: list[UUID] = Field(default_factory=list, max_length=128)
+    structure_ids: list[UUID] = Field(default_factory=list, max_length=128)
+
+
 class ChatRequest(BaseModel):
     """Send a message to the project's chat.
 
@@ -2069,6 +2341,9 @@ class ChatRequest(BaseModel):
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)
+    # One explicit first-design Skill binding. It rides the same intent
+    # surface as the prompt; revision and production tools never accept it.
+    skill: SkillReference | None = None
     # 建议点选 provenance (ADR-099 §4): present only when this message IS a
     # suggestion pick — persisted on the user row, resolved at the turn's
     # assembly (the stale check + the provenance note; a pick is never
@@ -3512,6 +3787,7 @@ class RenderStatus(StrEnum):
     RENDERING = "rendering"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 # ---------------------------------------------------------------------------
@@ -5387,6 +5663,23 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 
+class ProductionStage(BaseModel):
+    """User-safe, replayable production work inside one fenced step attempt."""
+
+    event_id: str
+    kind: str
+    run_id: UUID
+    step_id: UUID
+    attempt: int = Field(ge=0)
+    seq: int = Field(ge=0)
+    status: Literal["running", "completed", "failed"]
+    started_at: datetime
+    finished_at: datetime | None = None
+    reused: bool | None = None
+    item_count: int | None = Field(default=None, ge=0)
+    reused_count: int | None = Field(default=None, ge=0)
+
+
 class StepResponse(BaseModel):
     """One node of a run's execution plan — the user-facing step (ADR-028).
 
@@ -5401,6 +5694,7 @@ class StepResponse(BaseModel):
     kind: str
     status: str
     seq: int
+    attempt: int = 0
     error: str | None = None
     cost: dict | None = None
     stage: str | None = None
@@ -5426,6 +5720,7 @@ class StepResponse(BaseModel):
     cost_credits: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    production_stages: list[ProductionStage] = Field(default_factory=list)
 
 
 class ModelFact(BaseModel):

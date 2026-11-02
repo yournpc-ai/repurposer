@@ -258,7 +258,7 @@ function ProjectsPage() {
             title={t("projects.emptyTitle")}
             description={t("projects.emptyDesc")}
             action={
-              <Button render={<Link to="/home" />}>{t("projects.new")}</Button>
+              <Button size="sm" render={<Link to="/home" />}>{t("projects.new")}</Button>
             }
           />
         ) : (

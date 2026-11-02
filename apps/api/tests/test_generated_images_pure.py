@@ -164,9 +164,11 @@ async def test_fixed_media_usage_regeneration_and_latest_reuse(monkeypatch):
     clip = _clip()
     composition_id = str(uuid4())
     first_run = str(uuid4())
+    reuse = []
 
     first = await generated.ensure_generated_image_clip(
-        clip, execution_id=first_run, composition_id=composition_id
+        clip, execution_id=first_run, composition_id=composition_id,
+        on_reuse=reuse.append,
     )
     assert len(http.posts) == 1
     assert usage == [{"images": 1.0}]
@@ -178,7 +180,8 @@ async def test_fixed_media_usage_regeneration_and_latest_reuse(monkeypatch):
     # Same-Run recovery and ordinary production both reuse the fixed bytes.
     for run_id in (first_run, str(uuid4())):
         resumed = await generated.ensure_generated_image_clip(
-            clip, execution_id=run_id, composition_id=composition_id
+            clip, execution_id=run_id, composition_id=composition_id,
+            on_reuse=reuse.append,
         )
         assert resumed["media"] == first["media"]
     assert len(http.posts) == 1
@@ -190,6 +193,7 @@ async def test_fixed_media_usage_regeneration_and_latest_reuse(monkeypatch):
         execution_id=regeneration_run,
         composition_id=composition_id,
         regenerate=True,
+        on_reuse=reuse.append,
     )
     assert len(http.posts) == 2
     assert usage == [{"images": 1.0}, {"images": 1.0}]
@@ -202,11 +206,14 @@ async def test_fixed_media_usage_regeneration_and_latest_reuse(monkeypatch):
         execution_id=regeneration_run,
         composition_id=composition_id,
         regenerate=True,
+        on_reuse=reuse.append,
     )
     assert regenerated_retry["media"] == regenerated["media"]
     latest = await generated.ensure_generated_image_clip(
-        clip, execution_id=str(uuid4()), composition_id=composition_id
+        clip, execution_id=str(uuid4()), composition_id=composition_id,
+        on_reuse=reuse.append,
     )
     assert latest["media"] == regenerated["media"]
     assert len(http.posts) == 2
     assert usage == [{"images": 1.0}, {"images": 1.0}]
+    assert reuse == [False, True, True, False, True, True]

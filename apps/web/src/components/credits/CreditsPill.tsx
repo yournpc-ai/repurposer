@@ -1,17 +1,18 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Zap } from "lucide-react"
+import { ArrowRight, Zap } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
+import { Button } from "@/components/ui/button"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { apiFetch } from "@/lib/api"
-import { useSettingsDialog } from "@/components/settings/SettingsDialog"
+import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
   formatCredits,
   TransactionRow,
@@ -30,12 +31,11 @@ interface WalletState {
  * Bare anatomy (the MobileHeader bell's law): controls inside glass carry
  * no tile of their own.
  *
- * The popover is the GLANCE seat: the trigger already carries the balance,
- * so the panel answers "什么操作扣了多少" — the latest three rows for
- * spend-point confirmation, with held / negative notes as a conditional
- * strip. The ledger's full view lives in the SettingsDialog credits
- * section — the "View all" row deep-links there via the shared
- * openSettings("credits").
+ * The popover is the GLANCE seat: a compact wallet summary makes the current
+ * balance explicit, Add credits is the one primary action, and the latest
+ * three semantic rows answer "什么操作扣了多少". Held / negative notes appear
+ * only when they exist. The ledger's full view lives in the SettingsDialog
+ * credits section — "View all" deep-links there via openSettings("credits").
  *
  * Data contract mirrors the account console (防双报 discipline): silent
  * fetch failures keep "—", never a toast. Refreshes on mount, on
@@ -44,7 +44,7 @@ interface WalletState {
 export function CreditsPill({ refreshKey }: { refreshKey: string }) {
   const { t, i18n } = useTranslation()
   const { isAuthenticated } = useAuth()
-  const { openSettings } = useSettingsDialog()
+  const { openSettings, openCreditTopup } = useSettingsDialog()
   const [wallet, setWallet] = useState<WalletState | null>(null)
   const [items, setItems] = useState<WalletTransaction[] | null>(null)
   const [open, setOpen] = useState(false)
@@ -113,12 +113,30 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
         sideOffset={8}
         className="w-80 gap-0 p-0"
       >
-        {/* The trigger already carries the balance — the popover is the
-            "what happened" surface, so no hero repeat. Held / negative
-            notes surface as a quiet strip only when they exist. */}
-        <div className="flex flex-col p-2">
+        <div className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">
+                {t("credits.available")}
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="flex-none"
+              onClick={() => {
+                setOpen(false)
+                openCreditTopup()
+              }}
+            >
+              {t("credits.buyTitle")}
+            </Button>
+          </div>
           {wallet != null && (wallet.held > 0 || wallet.balance < 0) && (
-            <div className="flex flex-col gap-0.5 px-2 pb-1.5 pt-1">
+            <div className="mt-2 space-y-1">
               {wallet.held > 0 && (
                 <p className="text-[11px] text-muted-foreground">
                   {t("credits.heldInline", {
@@ -133,46 +151,38 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
               )}
             </div>
           )}
-          {/* Recent rows (ADR-057 K4 语义账本塌缩): one row per run event /
-              grant / top-up — the ledger's hold/capture/release machinery
-              folds server-side and never renders here. */}
-          <p className="px-2 pb-1 pt-1 text-[11px] text-meta">
+        </div>
+
+        <div className="border-t border-subtle px-4 py-3">
+          <p className="text-xs text-muted-foreground">
             {t("credits.recent")}
           </p>
-          {items === null ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">…</p>
-          ) : items.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t("credits.tx.empty")}
-            </p>
-          ) : (
-            items.map((item) => (
-              <TransactionRow key={item.id} item={item} className="px-2" />
-            ))
-          )}
-          {/* Purchase selection stays in the management seat; this is only an
-              entry, never a second package panel. */}
+          <div className="mt-1">
+            {items === null ? (
+              <p className="py-2 text-xs text-muted-foreground">…</p>
+            ) : items.length === 0 ? (
+              <p className="py-2 text-xs text-muted-foreground">
+                {t("credits.tx.empty")}
+              </p>
+            ) : (
+              items.map((item) => (
+                <TransactionRow key={item.id} item={item} />
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-subtle p-1.5">
           <button
             type="button"
-            className="mt-0.5 flex h-8 w-full items-center rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+            className="flex h-8 w-full items-center justify-between rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={() => {
               setOpen(false)
               openSettings("credits")
             }}
           >
-            {t("credits.buyTitle")}
-          </button>
-          {/* Full-ledger deep link — the management seat is the
-              SettingsDialog credits section. */}
-          <button
-            type="button"
-            className="mt-0.5 flex h-8 w-full items-center rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => {
-              setOpen(false)
-              openSettings("credits")
-            }}
-          >
-            {t("credits.viewAll")}
+            <span>{t("credits.viewAll")}</span>
+            <ArrowRight className="size-3.5" />
           </button>
         </div>
       </PopoverContent>

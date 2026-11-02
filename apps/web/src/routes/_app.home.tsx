@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { apiFetch } from "@/lib/api"
 import { fetchRecipeCards, type RecipePublic } from "@/lib/recipes"
 import type { ChatMention } from "@/lib/mentions"
+import { fetchChatSkills, type SkillOption } from "@/lib/skills"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecipeTabs } from "@/components/home/RecipeTabs"
@@ -45,6 +46,8 @@ function Home() {
   // through `editorRef`.
   const [prompt, setPrompt] = useState("")
   const [mentions, setMentions] = useState<ChatMention[]>([])
+  const [skillOptions, setSkillOptions] = useState<SkillOption[]>([])
+  const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null)
   const editorRef = useRef<MentionEditorHandle>(null)
   // Demo sound is a HOME-GLOBAL singleton: every video keeps playing, but
   // only the hovered/focused card may be audible; claiming sound mutes the
@@ -179,9 +182,11 @@ function Home() {
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []),
       fetchRecipeCards().catch(() => []),
-    ]).then(([s, rc]) => {
+      fetchChatSkills().catch(() => ({ items: [] })),
+    ]).then(([s, rc, skills]) => {
       setPersonas((s as Persona[]) || [])
       setCards(rc)
+      setSkillOptions(skills.items)
     })
   }, [])
 
@@ -214,24 +219,26 @@ function Home() {
   // selection (selectText no-ops on a missing needle).
   const lastPrefillRef = useRef<string | null>(null)
   const handlePrefill = useCallback(
-    (prefillKey: string) => {
+    (prefillKey: string, skill?: SkillOption) => {
       const placeholder = t("recipes.shelf.urlPlaceholder")
       const text = t(prefillKey, { placeholder })
+      const previousSkill = selectedSkill
       const draft = prompt.trim()
       const replaceable =
         mentions.length === 0 &&
         (draft === "" || draft === lastPrefillRef.current)
       if (replaceable) {
-        editorRef.current?.clear()
+        editorRef.current?.clear({ preserveSkill: true })
         editorRef.current?.insertText(text)
       } else {
         editorRef.current?.insertText(`\n\n${text}`)
       }
       lastPrefillRef.current = text.trim()
+      setSelectedSkill(skill ?? previousSkill)
       editorRef.current?.selectText(placeholder)
       if (!docked) scrollComposerIntoView()
     },
-    [t, prompt, mentions, docked, scrollComposerIntoView],
+    [t, prompt, mentions, selectedSkill, docked, scrollComposerIntoView],
   )
 
   // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal
@@ -239,7 +246,10 @@ function Home() {
   // renders (上架纪律: 无真 demo 不上架). The selection is the route's; the
   // per-family sub memory survives family hops (prototype parity), and an
   // invalidated selection (cards refetch) falls back to the first seat.
-  const families = useMemo(() => resolveRecipeFamilies(cards), [cards])
+  const families = useMemo(
+    () => resolveRecipeFamilies(cards, skillOptions),
+    [cards, skillOptions],
+  )
   const [activeFamilyId, setActiveFamilyId] = useState<string | null>(null)
   const [subByFamily, setSubByFamily] = useState<Record<string, string>>({})
   const activeFamily =
@@ -381,6 +391,8 @@ function Home() {
                     onPromptChange={setPrompt}
                     mentions={mentions}
                     onMentionsChange={setMentions}
+                    selectedSkill={selectedSkill}
+                    onSkillChange={setSelectedSkill}
                     editorRef={editorRef}
                   />
                 </div>
@@ -399,12 +411,8 @@ function Home() {
             videos as muted autoplay loops with hover sound/action veils.
             Every card click prefills the composer — the ONLY destination
             (禁则 8, 永不是模板编辑器).
-            mt-0.5 = ring air: the composer's hairline is an OUTSET
-            box-shadow ring protruding 1 CSS px below its border box, and the
-            sticky bar's opaque bg-background starts flush at that exact line
-            (its z-20 paints over the ring). The transparent margin keeps the
-            bottom edge visible; the top/side rings never needed it (their
-            neighbors are transparent).
+            mt-0.5 = a small structural gap between the composer and the
+            recipe section.
             min-h = scroll RUNWAY, structural not a magic number: the dock
             flip needs scrollTop > pin + slotH, i.e. the content below the
             slot must exceed one viewport. min-h-[calc(100svh+96px)] on the
@@ -419,7 +427,7 @@ function Home() {
                   now (the composer docks at the BOTTOM), so no measured
                   offset is needed. Below md it pins at top-14, flush under
                   the glass MobileHeader that overlays the scrollport. In-flow
-                  face: page fill, no ring, no shadow; the 16px mask fade
+                  face: page fill, no border, no shadow; the 16px mask fade
                   dissolves whatever scrolls under. */}
               <div
                 ref={tabsBarRef}

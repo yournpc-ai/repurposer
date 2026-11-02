@@ -209,7 +209,7 @@ function OptionForm({
                 placeholder={t("chat.choicePlaceholder")}
                 aria-label={t("chat.choicePlaceholder")}
                 disabled={answering || freeformDisabled}
-                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none dark:bg-transparent"
               />
             </div>
           ) : null}

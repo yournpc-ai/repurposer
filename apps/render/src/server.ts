@@ -10,6 +10,12 @@ import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts
 import type { Artifacts } from "./artifacts";
 import { uploadFile, UploadError } from "./upload";
 import { renderVideo } from "./video";
+import {
+  bakeComponent,
+  componentBakeEnabled,
+  ComponentBakeError,
+} from "./component-runtime/bake";
+import { componentBakeRequestSchema } from "./component-runtime/contract";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
@@ -71,6 +77,39 @@ function failureBody(err: unknown) {
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Upstream controlled Generator bake. This is deliberately separate from the
+// renderer-neutral /render endpoint: authored TSX never enters a video-spec.
+// Static source diagnostics are not a security boundary, so the route is
+// fail-closed until a deployment supplies actual runner isolation.
+app.post("/component-bake", async (req, res) => {
+  if (!componentBakeEnabled()) {
+    res.status(503).json({
+      error: "component-v1 bake is unavailable: no verified isolated component runner",
+      code: "COMPONENT_RUNNER_UNAVAILABLE",
+    });
+    return;
+  }
+  const parsed = componentBakeRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
+      code: "INVALID_COMPONENT_REQUEST",
+    });
+    return;
+  }
+  try {
+    const result = await bakeComponent(parsed.data);
+    res.json(result);
+  } catch (error) {
+    console.error("component_bake_failed", { program_digest: parsed.data.program_digest, error });
+    const message = error instanceof Error ? error.message.slice(-4000) : "Component bake failed";
+    res.status(error instanceof ComponentBakeError ? 422 : 500).json({
+      error: message,
+      code: "COMPONENT_BAKE_FAILED",
+    });
+  }
 });
 
 /**

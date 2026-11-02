@@ -95,7 +95,7 @@ from app.chat.service import (
     _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
-    _checkpoint_callback,
+    _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
     _create_run_from_tasks,
@@ -109,6 +109,9 @@ from app.chat.service import (
     _resume_ack_line,
     _reminder_tail,
     _safe_task_estimate,
+    _sfx_import_failure_text,
+    _video_capability_text,
+    _video_review_failure_text,
     latest_pending_question,
     resolve_confirmation_need,
     resolve_suggestion_note,
@@ -128,6 +131,7 @@ from app.models.schemas import (
     EditOutputArgs,
     FilmStoryboard,
     InferredIntent,
+    ImportSfxArgs,
     PendingPlan,
     PlanEstimate,
     ProposeTasksArgs,
@@ -138,6 +142,8 @@ from app.models.schemas import (
     ReviewVideoArgs,
     ReviseOutputArgs,
     ReviseVideoArgs,
+    SearchSfxArgs,
+    SkillReference,
     SuggestionRef,
     WiringProposal,
     edit_kind_for_params,
@@ -256,13 +262,17 @@ class ChatTurn:
         conversation,
         project: Project | None,
         text: str,
+        skill: SkillReference | None = None,
+        skill_ambiguity: list[str] | None = None,
         on_phase=None,
         on_activity=None,
         on_candidates=None,
         on_row_append=None,
+        turn_id: UUID | None = None,
     ) -> None:
         self.db = db
         self.user_id = user_id
+        self.turn_id = turn_id
         self.conversation_id = UUID(str(conversation.id))
         # 环境能力位 (ADR-118 §6 双键): the conversation-stamped client
         # capability (prepare_chat_turn 的 last-wins 盖章, ui_language 同律
@@ -271,6 +281,8 @@ class ChatTurn:
         self.canvas_available = conversation.canvas_available
         self.project = project
         self.text = text
+        self.skill = skill
+        self.skill_ambiguity = skill_ambiguity or []
         self.on_phase = on_phase
         # 工作会话里程碑通道 (iter-3 S2 — the plan path's iter-2 ⑥ channel,
         # threaded here for the post-run discovery chain's door successes;
@@ -385,6 +397,8 @@ class ChatTurn:
                 db, project, recent, mentions, pending,
                 canvas_available=self.canvas_available,
                 confirmation=confirmation,
+                skill=self.skill,
+                skill_ambiguity=self.skill_ambiguity,
             )
             if project
             else {"text": ""}
@@ -519,7 +533,7 @@ class ChatTurn:
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
         if await self._settle_by_disposition(disposition):
-            result: str | None | ToolObservation = None  # the parked interrupt's wake IS the continuation
+            result: str | None | ToolObservation | TerminalRefusal = None  # the parked interrupt's wake IS the continuation
         else:
             result = await self._dispatch(name, params, prose)
         # The speech-commit resolution (言语提交协议): a terminal accept
@@ -532,7 +546,7 @@ class ChatTurn:
             await self._resolve_deferred()
         return result
 
-    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation:
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal:
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "propose_tasks":
@@ -551,6 +565,18 @@ class ChatTurn:
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
             return await review_video_seat(project=self.project, args=params)
+        if name == "search_sfx":
+            assert isinstance(params, SearchSfxArgs)
+            from app.chat.video_turn_seats import search_sfx_seat
+            return await search_sfx_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "import_sfx":
+            assert isinstance(params, ImportSfxArgs)
+            from app.chat.video_turn_seats import import_sfx_seat
+            return await import_sfx_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
         if name == "edit_graph":
             assert isinstance(params, EditGraphArgs)
             return await self._edit_graph(params, prose)
@@ -721,13 +747,15 @@ class ChatTurn:
             project=self.project,
             args=params,
             request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
+            skill=self.skill,
+            skill_ambiguity=self.skill_ambiguity,
         )
         if read is None:
             return feedback
         self._video_presentation_pending = read
         return feedback
 
-    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation:
+    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation | TerminalRefusal:
         """revise_video → the targeted-revision beat (ADR-145 phase B, the
         plan path's mirror): the shared seat applies the ops through the
         write door; the observation carries the system-computed change set
@@ -804,8 +832,8 @@ class ChatTurn:
             )
         db, project = self.db, self.project
         assert project is not None
-        # Non-terminal checkpoint law (the plan path's mirror): with an
-        # on_checkpoint channel, the framing prose has already been emitted
+        # Non-terminal interim_prose law (the plan path's mirror): with an
+        # on_interim_prose channel, the framing prose has already been emitted
         # and is deliberately absent from the execute speech. Empty prose
         # here is legal, never a "missing explanation" rejection.
         from app.tools.film.storyboard import (  # deferred: tool seam
@@ -1769,6 +1797,8 @@ class ChatTurn:
             user_id=self.user_id,
             conversation_id=self.conversation_id,
             project=project,
+            turn_id=self.turn_id,
+            defer_start_commit=True,
         )
         if auto is not None:
             _answered_q, auto_run_id = auto
@@ -2804,16 +2834,23 @@ class ChatTurn:
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
             elif result is not None and result.ended_by is not None:
-                # The deterministic close (begin 锁存, the plan path's
-                # mirror): the loop ended on the TerminalRefusal — the
-                # model spent its one honest-close chance on a re-entry —
-                # so the CODE line speaks the true failure class (a blocked
-                # design start, never a capability refusal).
+                # Mirror the plan path: a media-capability refusal closes
+                # with its standing-version facts, not the design-begin text.
+                facts = result.refusal_facts or {}
+                content = (
+                    _sfx_import_failure_text(self.text)
+                    if facts.get("kind") == "sfx_import_failure"
+                    else _video_review_failure_text(self.text, facts)
+                    if facts.get("kind") == "video_review_failure"
+                    else _video_capability_text(self.text, facts)
+                    if facts.get("kind") == "video_capability"
+                    else _design_blocked_text(self.text, self._design_begin_refusal)
+                )
                 assistant_message = await _create_message(
                     self.db,
                     self.conversation_id,
                     "assistant",
-                    _design_blocked_text(self.text, self._design_begin_refusal),
+                    content,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
             elif result is None or result.exhausted:
@@ -2877,17 +2914,20 @@ async def run_propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
     suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    turn_id: UUID | None = None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
     mapping. Provider failure keeps its retired posture: the ask-back line is
@@ -2896,9 +2936,12 @@ async def run_propose_turn(
     never the ask-back line. ``on_row_append`` is the generic persisted-row
     channel (currently unused by this path — the design beat's
     program-markdown publication retired with the 2026-10-18 裁决)."""
-    turn = ChatTurn(db, user_id, conversation, project, text, on_phase=on_phase,
-                    on_activity=on_activity, on_candidates=on_candidates,
-                    on_row_append=on_row_append)
+    turn = ChatTurn(
+        db, user_id, conversation, project, text,
+        skill=skill, skill_ambiguity=skill_ambiguity,
+        on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
+        on_row_append=on_row_append, turn_id=turn_id,
+    )
     await turn.assemble(mentions, recent, suggestion_ref)
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7, the plan path's
     # mirror): on the SSE path every turn arms the terminal buffer —
@@ -2910,7 +2953,7 @@ async def run_propose_turn(
     # own undeferred channel) and the phase-clear is liveness chrome, never
     # adjudication-dependent speech. The rejection seat is the wrapped
     # on_loop_event (any ToolRejected retracts the stale queue at once;
-    # RETRY re-arms by construction); the checkpoint channel flushes the
+    # RETRY re-arms by construction); the interim_prose channel flushes the
     # queue FIRST, then streams live — the buffer stays armed through it.
     if on_delta is not None:
         deferred = DeferredFrames({"delta": on_delta, "tool_ready": on_tool_ready})
@@ -2926,25 +2969,25 @@ async def run_propose_turn(
                 await base_on_loop_event(event)
 
         on_loop_event = on_loop_event_with_retract
-        base_on_checkpoint = (
-            _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+        base_on_interim_prose = (
+            _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
             if turn.project is not None
             else None
         )
 
-        async def on_checkpoint_after_flush(text: str) -> None:
+        async def on_interim_prose_after_flush(text: str) -> None:
             if deferred.armed:
                 await deferred.flush()
-            if base_on_checkpoint is not None:
-                await base_on_checkpoint(text)
+            if base_on_interim_prose is not None:
+                await base_on_interim_prose(text)
 
-        checkpoint_hook = on_checkpoint_after_flush
+        interim_prose_hook = on_interim_prose_after_flush
     else:
-        # ADR-085: the checkpoint channel (persist + SSE forward) — a
+        # ADR-085: the interim_prose channel (persist + SSE forward) — a
         # project-less defensive turn has no conversation to persist into,
         # so the channel stays closed there.
-        checkpoint_hook = (
-            _checkpoint_callback(db, turn.conversation_id, on_checkpoint)
+        interim_prose_hook = (
+            _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
             if turn.project is not None
             else None
         )
@@ -2962,7 +3005,7 @@ async def run_propose_turn(
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
-            on_checkpoint=checkpoint_hook,
+            on_interim_prose=interim_prose_hook,
             should_stop_rejection=film_rejection_stop,
         )
     except LLMError as exc:
@@ -2972,7 +3015,14 @@ async def run_propose_turn(
         if capabilities is None or not capabilities.supports_native_tools:
             raise  # the tier gate fails loud, never the ask-back line
         result = None
-    return await turn.finish(result)
+    outcome = await turn.finish(result)
+    if (
+        outcome[0] is not None
+        and turn_id is not None
+        and outcome[0] is not outcome[3]
+    ):
+        outcome[0].turn_id = turn_id
+    return outcome
 
 
 __all__ = ["run_propose_turn", "ChatTurn", "ProposeTurnOutcome"]

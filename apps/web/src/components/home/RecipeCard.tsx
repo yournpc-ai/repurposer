@@ -50,12 +50,12 @@ export function RecipeCard({
         live ? "cursor-pointer" : ""
       }`}
     >
-      {/* The tile — white card on the white shelf, separated by the base
-          hairline alone (no shadow: in-flow surface). 16:10 carries the
+      {/* The tile — card surface on the shelf, separated by a subtle border
+          alone (no shadow: in-flow surface). 16:10 carries the
           schematic; the inline SVG is the only content. Hover plays the
           schematic's process animation (styles.css `rc-*` keyframes, gated
           by `.group:hover`) — the tile carries no chrome. */}
-      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground ring-1 ring-foreground/10">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-card text-foreground border border-subtle">
         {Cover ? (
           <Cover />
         ) : (

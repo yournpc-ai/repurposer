@@ -33,6 +33,7 @@ from app.models.schemas import (
     IntentSlot,
     ProjectStatus,
     PlanEstimate,
+    RenderStatus,
     TaskItem,
     WorkflowStatus,
 )
@@ -1283,7 +1284,10 @@ async def execute_step(node_id: UUID) -> None:
             else:
                 mine = node.claim_token
             run = await db.get(WorkflowRun, node.run_id)
-            if run is not None and run.status == WorkflowStatus.PENDING:
+            if run is None or run.status == WorkflowStatus.CANCELLED:
+                await db.rollback()
+                return
+            if run.status == WorkflowStatus.PENDING:
                 run.status = WorkflowStatus.RUNNING
             await db.commit()
 
@@ -1292,6 +1296,12 @@ async def execute_step(node_id: UUID) -> None:
             async with AsyncSessionLocal() as db:
                 node = await db.get(WorkflowStep, node_id)
                 run = await db.get(WorkflowRun, node.run_id)
+                if (
+                    run is None
+                    or run.status == WorkflowStatus.CANCELLED
+                    or node.claim_token != mine
+                ):
+                    return
                 project = await db.get(Project, run.project_id)
                 executor = NODE_KINDS[node.kind]
                 bound = bind_workflow_step(node.id)
@@ -1820,6 +1830,94 @@ async def bail_waiting_interrupt(
     return node
 
 
+async def cancel_run(
+    db: AsyncSession,
+    run: WorkflowRun,
+    project: Project,
+) -> WorkflowRun:
+    """Cancel an owned active Run using the existing step/render fences.
+
+    The caller locks project then run. This transaction revokes every active
+    claim and releases only the unconsumed hold; completed Outputs, previous
+    deliveries and captures are deliberately left untouched. No completion or
+    failure trigger is emitted for CANCELLED.
+    """
+    if run.status in {
+        WorkflowStatus.COMPLETED,
+        WorkflowStatus.FAILED,
+        WorkflowStatus.CANCELLED,
+    }:
+        return run
+
+    nodes = list((
+        await db.execute(
+            select(WorkflowStep)
+            .where(WorkflowStep.run_id == run.id)
+            .with_for_update()
+        )
+    ).scalars().all())
+    output_ids = {
+        UUID(str(output_id))
+        for node in nodes
+        for output_id in [
+            *(node.output_refs or []),
+            *((node.spec or {}).get("output_id"),),
+        ]
+        if output_id
+    }
+    now = datetime.now(UTC)
+    for node in nodes:
+        if node.status in {"pending", "running", "waiting"}:
+            node.status = "cancelled"
+            node.claim_token = None
+            node.finished_at = now
+            node.updated_at = now
+
+    outputs = list((
+        await db.execute(select(Output).where(Output.id.in_(output_ids)).with_for_update())
+    ).scalars().all()) if output_ids else []
+    any_landed = any(output_is_delivered(output) for output in outputs)
+    for output in outputs:
+        if output.render_status in {RenderStatus.PENDING, RenderStatus.RENDERING}:
+            output.render_status = RenderStatus.CANCELLED
+            output.render_claim_token = None
+
+    # A cancelled direction checkpoint must not rebuild as a pending dock on
+    # refresh. It settles through the existing answer payload, not a new UI
+    # control or message model.
+    pending_questions = list((
+        await db.execute(
+            select(Message).where(
+                Message.workflow_run_id == run.id,
+                Message.role == "assistant",
+                Message.question.is_not(None),
+                Message.answer.is_(None),
+            )
+        )
+    ).scalars().all())
+    for message in pending_questions:
+        message.answer = AnswerPayload(
+            kind="bail", text="cancelled", answered_at=now
+        ).model_dump(mode="json")
+
+    run.status = WorkflowStatus.CANCELLED
+    run.error = None
+    run.updated_at = now
+    settled = sum(
+        node.status in {"done", "failed", "skipped", "cancelled"} for node in nodes
+    )
+    run.progress = int(settled / len(nodes) * 100) if nodes else 100
+    project.status = ProjectStatus.REVIEW if any_landed else ProjectStatus.DRAFT
+    project.updated_at = now
+    for node in nodes:
+        if node.status == "cancelled":
+            await sync_graph_node_for_step(db, node)
+    await release_run(db, user_id=project.user_id, run_id=run.id)
+    await db.commit()
+    logger.info("run_cancelled", run_id=str(run.id), project_id=str(project.id))
+    return run
+
+
 async def _release_orphaned_hold(db: AsyncSession, run_id: UUID) -> None:
     """Settle a hold whose run (or project) row is already gone — orphan-hold
     recovery (BILLING §8 known boundary → 支付批前落地).
@@ -1873,6 +1971,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         if run.status in (
             WorkflowStatus.COMPLETED,
             WorkflowStatus.FAILED,
+            WorkflowStatus.CANCELLED,
         ):
             return
 

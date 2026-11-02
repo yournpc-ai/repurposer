@@ -8,6 +8,7 @@ this module never touches the DB.
 
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from app.editing.animation import derive_text_parts
@@ -39,6 +40,19 @@ def _fail(problems: list[str], msg: str) -> None:
     problems.append(msg)
 
 
+def _validate_component_source(obj: GeneratorObject, clip_id: str, problems: list[str]) -> None:
+    # Python owns source size/schema, declared parameters, output and basic
+    # structure only. TSX syntax/capability diagnostics belong to the single
+    # controlled runner; matching words across JSX text or comments here is
+    # neither correct validation nor a security boundary.
+    code = obj.code or ""
+    if not re.search(r"\bexport\s+default\b", code):
+        _fail(problems, f"clip {clip_id}: component-v1 needs a default component export")
+    for key, value in obj.parameters.items():
+        if isinstance(value, str) and re.search(r"https?://|\bdata:", value, re.IGNORECASE):
+            _fail(problems, f"clip {clip_id}: component parameter {key!r} is not a fixed resource")
+
+
 def _validate_clip_source(
     clip: Clip, content: CompositionContent, snapshots: SnapshotFacts, problems: list[str]
 ) -> None:
@@ -47,7 +61,7 @@ def _validate_clip_source(
     if isinstance(obj, GeneratorObject):
         if src is not None:
             _fail(problems, f"clip {clip.clip_id}: generator sources are prepared, not bound media")
-        if obj.runtime == "drawing-v1":
+        if obj.runtime in {"drawing-v1", "component-v1"}:
             expected_ticks = obj.output.duration_frames * content.settings.timebase // obj.output.fps
             if (
                 expected_ticks * obj.output.fps != obj.output.duration_frames * content.settings.timebase
@@ -57,6 +71,8 @@ def _validate_clip_source(
                     problems,
                     f"clip {clip.clip_id}: program output frames/fps must exactly match its output window",
                 )
+            if obj.runtime == "component-v1":
+                _validate_component_source(obj, clip.clip_id, problems)
         return
     if isinstance(obj, (TextObject, ShapeObject)):
         if src is not None:
@@ -177,6 +193,8 @@ def _validate_animation(
         )
     if anim.property == "audio.gain" and not isinstance(obj, (AudioObject, SpeechObject, VideoObject)):
         _fail(problems, f"animation {anim.animation_id}: audio.gain on a non-audio object")
+    if anim.property in {"filter.blur", "text.letter_spacing"} and not isinstance(obj, TextObject):
+        _fail(problems, f"animation {anim.animation_id}: {anim.property} on a non-text object")
     if anim.property != "audio.gain" and isinstance(obj, (AudioObject, SpeechObject)):
         _fail(problems, f"animation {anim.animation_id}: visual property on an audio object")
 
@@ -203,6 +221,13 @@ def _validate_animation(
                 _fail(problems, f"animation {anim.animation_id}: scale out of (0, 10]")
             elif anim.property == "audio.gain" and not 0 <= kf.value <= 4:
                 _fail(problems, f"animation {anim.animation_id}: gain out of [0, 4]")
+            elif anim.property == "filter.blur" and not 0 <= kf.value <= 100:
+                _fail(problems, f"animation {anim.animation_id}: blur out of [0, 100] px")
+            elif anim.property == "text.letter_spacing" and not -0.2 <= kf.value <= 0.5:
+                _fail(
+                    problems,
+                    f"animation {anim.animation_id}: letter spacing out of [-0.2, 0.5] em",
+                )
 
     shifts = [0]
     if anim.text_part is not None:

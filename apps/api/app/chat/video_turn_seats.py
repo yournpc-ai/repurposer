@@ -9,15 +9,99 @@ turn only carries the presentation receipt (pending_brief's
 video_presentation slice) and the storyboard block on the presenting row.
 """
 
+import re
 from typing import Any
 from uuid import UUID
 
-from app.agents.tool_loop import ToolObservation
-from app.models.schemas import DesignVideoArgs, PendingPlan, ReviewVideoArgs, ReviseVideoArgs
+from app.agents.tool_loop import TerminalRefusal, ToolObservation
+from app.models.schemas import (
+    DesignVideoArgs,
+    ImportSfxArgs,
+    PendingPlan,
+    ReviewVideoArgs,
+    ReviseVideoArgs,
+    SearchSfxArgs,
+    SkillReference,
+)
 from app.models.tables import Message, Project
 
 
-async def video_context_lines(db, project, mentions=()):
+def _sfx_display_title(title: str) -> str:
+    """Model-facing title; the raw provider title stays persisted for audit."""
+    return re.sub(r"\.[A-Za-z][A-Za-z0-9]{0,15}$", "", title)
+
+
+def sfx_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[str]:
+    """Project persisted SFX sets and selections into model-facing facts.
+
+    Candidate rows have empty prose by design, so the ordinary recent-message
+    projection cannot carry their identities into the selection turn. This is
+    a read-only projection of the same candidates_log archive used by import;
+    it never chooses a set on the user's behalf.
+    """
+    import json
+
+    sets: dict[str, dict[str, Any]] = {}
+    for log in candidate_logs:
+        events = log.get("events") if isinstance(log, dict) else None
+        if not isinstance(events, list):
+            continue
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            set_id = event.get("candidate_set_id")
+            if not isinstance(set_id, str) or not set_id:
+                continue
+            if event.get("kind") == "set":
+                members = event.get("members")
+                if (
+                    event.get("asset_id") is not None
+                    or not isinstance(members, list)
+                    or not members
+                    or not all(
+                        isinstance(member, dict)
+                        and member.get("provider") == "freesound"
+                        for member in members
+                    )
+                ):
+                    continue
+                sets[set_id] = {
+                    "candidate_set_id": set_id,
+                    "topic": event.get("topic"),
+                    "members": [
+                        {
+                            "member_index": index,
+                            "ordinal": index + 1,
+                            "title": (
+                                _sfx_display_title(title)
+                                if isinstance((title := member.get("title")), str)
+                                else title
+                            ),
+                            "duration_seconds": member.get("duration_seconds"),
+                        }
+                        for index, member in enumerate(members)
+                    ],
+                    "selected": [],
+                }
+            elif event.get("kind") == "selection" and set_id in sets:
+                selected = event.get("selected")
+                if isinstance(selected, list):
+                    sets[set_id]["selected"] = [
+                        index for index in selected
+                        if isinstance(index, int) and not isinstance(index, bool)
+                    ]
+    if not sets:
+        return []
+    return [
+        "Persisted SFX candidate sets (internal references for a later selection turn):",
+        *(json.dumps(item, ensure_ascii=False) for item in sets.values()),
+    ]
+
+
+async def video_context_lines(
+    db, project, mentions=(), *, skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
+):
     """Identity-level material digest; full content is still read on demand."""
     import json
     from app.config import settings
@@ -25,12 +109,34 @@ async def video_context_lines(db, project, mentions=()):
         return []
     from sqlalchemy import select
     from app.models.schemas import AssetStatus, AssetType
-    from app.models.tables import Asset, Composition, CompositionVersion, Output
+    from app.models.tables import Asset, Composition, CompositionVersion, Conversation, Output
+    candidate_logs = list((await db.execute(
+        select(Message.intent)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.project_id == project.id,
+            Conversation.user_id == project.user_id,
+            Message.intent["type"].astext == "candidates_log",
+        )
+        .order_by(Message.seq)
+    )).scalars())
+    lines = sfx_candidate_context_lines(candidate_logs)
     rows = (await db.execute(select(Composition, CompositionVersion)
         .join(CompositionVersion, Composition.current_version_id == CompositionVersion.id)
         .where(Composition.owner_id == project.user_id, Composition.origin_project_id == project.id)
         .order_by(Composition.created_at.desc()).limit(16))).all()
-    lines = ["Saved video works (ids are internal references, never user-facing prose):"] if rows else []
+    if skill is not None:
+        lines.append(
+            "Server-pinned Skill for this turn's FIRST design only: "
+            + json.dumps(skill.model_dump(mode="json"), ensure_ascii=False)
+        )
+    if skill_ambiguity:
+        lines.append(
+            "The user's Skill name is ambiguous between "
+            + ", ".join(skill_ambiguity)
+            + "; ask which exact Skill/version they mean before designing."
+        )
+    lines += ["Saved video works (ids are internal references, never user-facing prose):"] if rows else []
     for composition, version in rows:
         lines.append(json.dumps({"name": composition.name, "composition_id": str(composition.id),
             "composition_version_id": str(version.id), "content_digest": version.content_digest,
@@ -97,7 +203,7 @@ async def read_video_for_presentation(db, project, params):
     )
 
 
-async def review_video_seat(*, project: Project, args: ReviewVideoArgs) -> str | ToolObservation:
+async def review_video_seat(*, project: Project, args: ReviewVideoArgs) -> str | ToolObservation | TerminalRefusal:
     """Decode and review the exact Output; persist its advisory report."""
     from app.config import settings
 
@@ -105,17 +211,30 @@ async def review_video_seat(*, project: Project, args: ReviewVideoArgs) -> str |
         return "review_video is not available in this deployment — no frames were decoded."
     import json
     from app.models.database import AsyncSessionLocal
-    from app.tools.video.review import ReviewError, review_video
+    from app.tools.video.review import ReviewAttemptFailed, ReviewError, review_video
 
     try:
         async with AsyncSessionLocal() as video_db:
             report = await review_video(video_db, owner_id=project.user_id, args=args)
+    except ReviewAttemptFailed as exc:
+        return TerminalRefusal(
+            str(exc),
+            facts={
+                "kind": "video_review_failure",
+                "output_id": str(args.output_id),
+                "at_seconds": args.at_seconds,
+                "previous_report": exc.previous_report,
+            },
+        )
     except (ReviewError, ValueError) as exc:
         return f"review_video rejected: {exc}"
+    from app.chat.activity_receipts import video_review_receipt
+
     return ToolObservation(
         "Content review saved on the exact reviewed Output. These are the persisted report facts "
         "(advisory still-frame findings, not a delivery gate):\n"
-        + json.dumps(report, ensure_ascii=False)
+        + json.dumps(report, ensure_ascii=False),
+        receipt=video_review_receipt(report),
     )
 
 
@@ -240,6 +359,8 @@ async def design_video_seat(
     project: Project,
     args: DesignVideoArgs,
     request_id: str,
+    skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
 ) -> tuple[dict[str, Any] | None, str | ToolObservation]:
     """design_video (非终态): capture/snapshot (fresh web path only — a
     redraft reuses the base version's bound snapshots), direct, instantiate
@@ -263,12 +384,24 @@ async def design_video_seat(
     from app.tools.video.design import DesignError, design_video  # deferred: tool seam
     from app.tools.video.programs import enrich_generator_previews, generator_preview_images
 
+    if skill_ambiguity:
+        return None, (
+            "design_video held: the named Skill is ambiguous between "
+            + ", ".join(skill_ambiguity)
+            + ". Ask which exact Skill/version the user means; no version was designed."
+        )
+    if skill is not None and args.composition_id is not None:
+        return None, (
+            "design_video rejected: an explicit Skill binds only a new first version. "
+            "Use revise_video with the existing version's base_ref; do not reload the Skill."
+        )
     try:
         read = await design_video(
             owner_id=project.user_id,
             project_id=project.id,
             args=args,
             request_id=request_id,
+            skill_reference=skill,
         )
     except (CompositionNotFound, PermissionDenied):
         return None, (
@@ -312,11 +445,12 @@ async def revise_video_seat(
     project: Project,
     args: ReviseVideoArgs,
     request_id: str,
-) -> tuple[dict[str, Any] | None, str | ToolObservation]:
-    """revise_video (非终态): explicit base_ref → translated ops → the
-    write door (own session) → the new version's canonical read + the
-    system-computed change set. The revision alone never starts
-    production."""
+) -> tuple[dict[str, Any] | None, str | ToolObservation | TerminalRefusal]:
+    """revise_video: explicit base_ref → translated ops → the write door
+    (own session) → the new version's canonical read + system change set.
+    A successful revision never starts production; a deterministic media
+    capability refusal carries the standing read through TerminalRefusal,
+    while repairable argument errors remain ordinary loop feedback."""
     from app.config import settings  # deferred: config leaf
 
     if not settings.video_project_enabled:
@@ -328,7 +462,9 @@ async def revise_video_seat(
     from app.editing.service import (  # deferred: editing seam
         format_revision_text,
         revise_video,
+        video_version_read,
     )
+    from app.editing.temporal import TemporalCapabilityError
     from app.editing.store import (  # deferred: write door
         CompositionNotFound,
         PermissionDenied,
@@ -355,6 +491,22 @@ async def revise_video_seat(
             "the current version with get_video_version and echo its "
             "base_ref verbatim"
         )
+    except TemporalCapabilityError as exc:
+        standing = await video_version_read(
+            video_db,
+            owner_id=project.user_id,
+            version_id=args.base_ref.composition_version_id,
+        )
+        return None, TerminalRefusal(
+            f"video capability boundary: {exc}",
+            facts={
+                "kind": "video_capability",
+                "medium": exc.medium,
+                "version": standing["version"],
+                "duration_seconds": standing["storyboard"]["duration_seconds"],
+                "is_current": standing.get("is_current", False),
+            },
+        )
     except (EditError, ValueError) as exc:
         return None, f"revise_video rejected: {exc}"
     read["previous_version_ref"] = args.base_ref.model_dump(mode="json")
@@ -374,6 +526,98 @@ async def revise_video_seat(
         + format_revision_text(read)
         + preview_note,
         images=preview_images,
+    )
+
+
+async def search_sfx_seat(
+    *,
+    project: Project,
+    args: SearchSfxArgs,
+    on_candidates,
+) -> ToolObservation:
+    """Emit real CC0 candidates; only the settled turn makes them importable."""
+    from app.config import settings
+
+    if not settings.video_project_enabled:
+        return ToolObservation("search_sfx is not available in this deployment; no search ran.")
+    import json
+    from app.providers.freesound import FreesoundError
+    from app.tools.video.sfx import SfxError, search_sfx_candidates
+
+    try:
+        payload = await search_sfx_candidates(args.query)
+    except (SfxError, FreesoundError) as exc:
+        return ToolObservation(f"search_sfx failed honestly: {exc}")
+    await on_candidates(payload)
+    selection_facts = {
+        "candidate_set_id": payload["candidate_set_id"],
+        "topic": payload["topic"],
+        "members": [
+            {
+                "member_index": index,
+                "ordinal": index + 1,
+                "title": _sfx_display_title(member["title"]),
+                "duration_seconds": member["duration_seconds"],
+            }
+            for index, member in enumerate(payload["members"])
+        ],
+    }
+    return ToolObservation(
+        "World facts: the candidates were emitted; no asset or video version was written. "
+        "The response facts are the candidate count, display titles and durations. "
+        "The candidate cards provide actual playback for the user to audition and choose "
+        "by ordinal; this search observation contains no listening result.\n"
+        + json.dumps(selection_facts, ensure_ascii=False)
+    )
+
+
+async def import_sfx_seat(
+    *,
+    project: Project,
+    args: ImportSfxArgs,
+    on_candidates,
+) -> ToolObservation | TerminalRefusal:
+    """Resolve a settled candidate, freeze its MP3 and repaint its selection."""
+    from app.config import settings
+
+    if not settings.video_project_enabled:
+        return TerminalRefusal(
+            "import_sfx is not available in this deployment; nothing was imported.",
+            facts={"kind": "sfx_import_failure"},
+        )
+    import json
+    from app.models.database import AsyncSessionLocal
+    from app.providers.freesound import FreesoundError
+    from app.tools.video.sfx import SfxError, import_sfx_candidate
+
+    try:
+        async with AsyncSessionLocal() as video_db:
+            facts = await import_sfx_candidate(video_db, project=project, args=args)
+    except (SfxError, FreesoundError, ValueError, PermissionError) as exc:
+        return TerminalRefusal(
+            f"the selected SFX import failed deterministically: {exc}; no revision was made",
+            facts={"kind": "sfx_import_failure"},
+        )
+    await on_candidates({
+        "kind": "selection",
+        "candidate_set_id": str(args.candidate_set_id),
+        "selected": [args.member_index],
+    })
+    selection_facts = {
+        key: facts[key]
+        for key in (
+            "asset_id",
+            "snapshot_id",
+            "snapshot_digest",
+            "duration_seconds",
+            "title",
+        )
+    }
+    selection_facts["title"] = _sfx_display_title(facts["title"])
+    return ToolObservation(
+        "World facts: the selected MP3 is a completed audio asset with this immutable "
+        "SourceSnapshot; no CompositionVersion changed. Use revise_video for add_audio/update_audio.\n"
+        + json.dumps(selection_facts, ensure_ascii=False)
     )
 
 

@@ -33,6 +33,7 @@ import type { LucideIcon } from "lucide-react"
 import { LayoutGrid } from "lucide-react"
 
 import type { RecipePublic } from "@/lib/recipes"
+import type { SkillOption } from "@/lib/skills"
 
 /** One demo video card on a MG family shelf (autoplay muted loop + hover
  * sound veil; the render itself is the evidence). */
@@ -49,6 +50,8 @@ export interface ShelfDemo {
   /** Card frame: "wide" = 16:9, "vertical" = 3/4 (prototype .vcard / .v).
    * Always the file's real aspect — never stretch a placeholder. */
   orientation: "wide" | "vertical"
+  /** Optional built-in Skill identity; resolved against live picker options. */
+  skillId?: string
 }
 
 export interface RecipeShelfDef {
@@ -141,6 +144,7 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 // ZYMIX 产品演示 + 独立屏上说明字幕 — real render from the
                 // current film chain (project 8577f1ff, output 8beb17c9).
                 id: "product-demo-zymix",
+                skillId: "launch-film",
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-zymix-one-way-in-41a917c7.mp4",
                 orientation: "wide",
               },
@@ -149,6 +153,7 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
                 // the current film chain (project b7530c00, output 8cac9bf1),
                 // 81.0s / 16:9.
                 id: "product-demo-highlights",
+                skillId: "launch-film",
                 url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-28f35353.mp4",
                 orientation: "wide",
               },
@@ -222,8 +227,8 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
 /** One card on a resolved shelf — the discriminated union the shelf
  * renders; `prefillKey` is the click's entire payload (composer 预填). */
 export type ShelfItem =
-  | { kind: "recipe"; card: RecipePublic; prefillKey: string }
-  | { kind: "demo"; demo: ShelfDemo; prefillKey: string }
+  | { kind: "recipe"; card: RecipePublic; prefillKey: string; skill?: SkillOption }
+  | { kind: "demo"; demo: ShelfDemo; prefillKey: string; skill?: SkillOption }
 
 export interface ResolvedShelf {
   id: string
@@ -250,6 +255,7 @@ export interface ResolvedFamily {
 export function resolveFamilies(
   families: RecipeFamilyDef[],
   cards: RecipePublic[],
+  skills: SkillOption[] = [],
 ): ResolvedFamily[] {
   const cardsByFamily = new Map<string, RecipePublic[]>()
   for (const card of cards) {
@@ -279,11 +285,21 @@ export function resolveFamilies(
                       card,
                       prefillKey: `recipes.${card.id}.promptTemplate`,
                     }))
-                  : (shelf.demos ?? []).map((demo) => ({
-                      kind: "demo" as const,
-                      demo,
-                      prefillKey: `recipes.shelf.demos.${demo.id}.prompt`,
-                    })),
+                  : (shelf.demos ?? []).map((demo) => {
+                      const skill = demo.skillId
+                        ? skills.find(
+                            (option) =>
+                              option.reference.kind === "builtin" &&
+                              option.reference.skill_id === demo.skillId,
+                          )
+                        : undefined
+                      return {
+                        kind: "demo" as const,
+                        demo,
+                        prefillKey: `recipes.shelf.demos.${demo.id}.prompt`,
+                        skill,
+                      }
+                    }),
             }))
             .filter((shelf) => shelf.items.length > 0),
         }))
@@ -292,6 +308,9 @@ export function resolveFamilies(
     .filter((family) => family.subs.length > 0)
 }
 
-export function resolveRecipeFamilies(cards: RecipePublic[]): ResolvedFamily[] {
-  return resolveFamilies(RECIPE_FAMILIES, cards)
+export function resolveRecipeFamilies(
+  cards: RecipePublic[],
+  skills: SkillOption[] = [],
+): ResolvedFamily[] {
+  return resolveFamilies(RECIPE_FAMILIES, cards, skills)
 }

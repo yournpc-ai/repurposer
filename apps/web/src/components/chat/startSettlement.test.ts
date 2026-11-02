@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import type { OverlayMessage } from "./historyReplay"
+import type { OverlayMessage } from "./timeline/types"
 import { shouldPaceStartEnvelopeProse } from "./startSettlement"
 
 function row(overrides: Partial<OverlayMessage> & { id: string }): OverlayMessage {
@@ -36,7 +36,7 @@ describe("shouldPaceStartEnvelopeProse", () => {
     expect(
       gate({
         messages: [
-          row({ id: "checkpoint", content: "I chose the quiet piano track." }),
+          row({ id: "interim_prose", content: "I chose the quiet piano track." }),
           row({ id: "activity", content: "" }),
         ],
       }),

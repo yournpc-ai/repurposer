@@ -33,6 +33,7 @@ from app.models.schemas import (
     DesignVideoArgs,
     EditGraphArgs,
     EditOutputArgs,
+    ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
     PresentPlanArgs,
@@ -41,6 +42,7 @@ from app.models.schemas import (
     ReviewVideoArgs,
     ReviseOutputArgs,
     ReviseVideoArgs,
+    SearchSfxArgs,
     StartRunArgs,
 )
 
@@ -477,7 +479,9 @@ _REVISE_VIDEO_DESCRIPTION = (
     "VERBATIM from a get_video_version read or an earlier saved-version observation, "
     "plus the edits (change a scene's on-screen text, add/remove a "
     "text object, change native shape paint/geometry or an existing animation's "
-    "keyframes, rewrite a GeneratorObject's actual code/parameters, move/remove a "
+    "keyframes, add a frozen audio snapshot at an exact cue, replace an audio "
+    "clip's snapshot/gain without changing its output window, rewrite a "
+    "GeneratorObject's actual code/parameters, move/remove a "
     "scene, update one video clip's layout/source window/original audio, "
     "split or trim a clip without ripple, add/change/remove a supported "
     "fixed-media crossfade, or snap an existing cut to frozen music beats "
@@ -521,6 +525,33 @@ _REVIEW_VIDEO_TOOL = ChatTool(
 )
 
 
+_SEARCH_SFX_TOOL = ChatTool(
+    name="search_sfx",
+    terminal=False,
+    description=(
+        "Search Freesound for up to three real CC0 MP3 sound-effect candidates. "
+        "The candidates appear for playback and persist when this turn settles; "
+        "no asset or video version is written. Present the candidates and close "
+        "this turn. Never import a candidate born in this same turn. Metadata "
+        "ranking is not listening; do not claim you heard the sounds."
+    ),
+    params_model=SearchSfxArgs,
+)
+_IMPORT_SFX_TOOL = ChatTool(
+    name="import_sfx",
+    terminal=False,
+    description=(
+        "Import a sound the user chose from a PREVIOUS settled turn's candidate "
+        "card. Supply only its candidate_set_id and zero-based member_index; "
+        "never supply or invent a URL, title, author, provider id or license. "
+        "The server re-resolves the persisted member, rechecks CC0, downloads "
+        "its real MP3 preview and returns the frozen snapshot_id. Then place or "
+        "replace it through revise_video add_audio/update_audio with base_ref."
+    ),
+    params_model=ImportSfxArgs,
+)
+
+
 def _video_project_tools() -> list[ChatTool]:
     """The video family's wire seats ride the deployment gate
     (settings.video_project_enabled, internal-test while the journey
@@ -538,6 +569,8 @@ def _video_project_tools() -> list[ChatTool]:
         _DESIGN_VIDEO_TOOL,
         _REVISE_VIDEO_TOOL,
         _REVIEW_VIDEO_TOOL,
+        _SEARCH_SFX_TOOL,
+        _IMPORT_SFX_TOOL,
         *perception_chat_tools("get_video_version"),
     ]
 
@@ -699,7 +732,7 @@ CHAT_TOOLS = [
 # discovery chain births are plan-path rows too, and revise_selects (its
 # edit-prep reader) lives on both paths.
 # design_storyboard (ADR-129 非终态) rides BOTH paths' NON-terminal sets:
-# the design beat observes and iterates like a read — the loop's checkpoint
+# the design beat observes and iterates like a read — the loop's interim_prose
 # seat carries its framing speech, the observation carries the design facts,
 # the model answers or enters the proposal tools afterwards.
 def _film_composite_read_tools() -> list[ChatTool]:

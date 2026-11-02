@@ -134,6 +134,7 @@ stacking
 3. **示例真实且有辨识度**：输入与输出属于同一当前制作链。
 4. **能力可兑现**：技能、spec、报价、授权、失败与交付路径真实存在。
 5. **全旅程独立验收**：预填 → Chat → 方案 → 授权 → 制作 → 交付 → 修订通过，不能只验卡面。
+6. **完整视听证据**：实际 Output 含所承诺的音乐、SFX、旁白与原声，动态观看和实际试听通过；Home 静音自动播放不等于成片无声，静音或仅 run-less 样片不能上架。
 
 未满足时使用 reserved/disabled/hidden 或保持未注册；不得用占位样片绕过门槛。
 
@@ -144,6 +145,8 @@ stacking
 - `STOCK_VOICES` 注册表、系统音色目录与试听仍是 deferred。不得写成已经上线，也不得声称多语言 stock 覆盖已核实。
 - R5 缺声纹时不得静默换 stock；是否阻塞、提问或采用用户明确选择，按该任务合同与当前授权机器执行。
 - 语速、发音纠正与固定术语读法属于后续术语表/声音能力，不由配方卡另建参数面板。
+- SFX 与 voice 分家：统一复用 AudioObject / effect Track / SourceSnapshot，不新增音频作品类型。固定风格可声明默认 SFX cue 与审核资产，用户替换经 `search_sfx → import_sfx → revise_video`；候选必须真实可试听并显示来源/许可证，不能让模型凭元数据声称已听过。具体施工与验收归 Video Project D5。
+- 固定风格视频 Demo 使用视频 Skill chip + 可编辑 prompt 确定性绑定；prompt 不携带隐藏模板参数，也不靠意图识别猜测是否复刻风格。
 
 ## 6. 分镜与素材事实
 
@@ -163,14 +166,19 @@ stacking
 - 可翻译文本走 en/zh i18n；en 是源语言，zh 必须满足同一 `Resources` 类型。
 - demo 资源必须公开可读，不能使用登录态 asset 端点。
 - 前端 `RECIPE_CARD_FAMILY` 决定 RecipeCard 归属；未映射项进入 `templates`。
-- RecipeCard 预填 key = `recipes.<id>.promptTemplate`；demo 预填 key = `recipes.shelf.demos.<id>.prompt`。
+- 非 Skill RecipeCard 预填 key = `recipes.<id>.promptTemplate`；非 Skill demo 预填 key = `recipes.shelf.demos.<id>.prompt`。视频 Skill 卡不使用 Recipe 发射载荷，而与 `/skill` 共用 Skill chip + 可编辑 prompt，版本化解算归 VIDEO_PROJECT §7.4。
 - 未来真实 Gallery 若复用配方数据包，必须先登记公开性、素材权限、来源谱系与再制作边界；不能默认公开用户项目。
 
 ### 7.2 点击与发送
 
 ```text
-点击 live 卡 / demo
+点击非 Skill Recipe / demo
   → composer 预填 prompt
+
+点击视频 Skill 卡
+  → composer 形成 Skill chip + 可编辑 prompt
+
+两种入口
   → 用户可修改、上传或补充素材
   → 用户点击发送
   → 正常建项目/上传/POST /chat 主链
@@ -178,10 +186,10 @@ stacking
   → 当前图与 worker 执行
 ```
 
-- 空草稿或仍等于上次预填原文时，另一卡可替换预填；已有用户文字或 mention 时按当前 composer 合同保留并追加，不静默清空。
+- 空草稿或仍等于上次预填原文时，另一张同类卡可替换预填；已有用户文字或 @-mention 时按当前 composer 合同保留并追加，不静默清空。一次创作至多一个 Skill chip，另选 Skill 只替换 Skill 绑定，不清空用户文字；Backspace / Delete / 选区删除按统一 Chip 律移除绑定。
 - 选文件本身不发送；只有 send 消费上传 chips。
 - 预填不暴露工具、spec、版本或内部配方 id，不锁死用户未要求的画幅、幕数、时长或配音。
-- 配方永不出现在 @ picker，不建立模板编辑器、第二发送钮或专用意图端点。
+- 配方永不出现在 @ picker，不建立模板编辑器、第二发送钮或专用意图端点。视频 Skill 经专用 Skill picker 形成 Skill chip，不混入 @-entity registry。
 
 ### 7.3 布局与播放
 

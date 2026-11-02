@@ -14,6 +14,8 @@ fixture/CRUD needs of this batch, not the full future grammar):
                           pinned into the version)
 - unbind_source           remove a binding (must be unreferenced)
 - add_scene / update_scene / move_scene / remove_scene
+- temporal_edit         generic stable-id target × move/trim/delete/time_map ×
+                          ripple/source policy (legacy temporal ops route here too)
 - add_track / remove_track (remove requires an empty track — explicit clip
                           removal first, never a silent cascade)
 - add_clip / update_clip / remove_clip
@@ -31,11 +33,12 @@ scene speech references keep pointing at the original clip.
 from __future__ import annotations
 
 import copy
+from fractions import Fraction
 from typing import Annotated, Literal
 from uuid import UUID
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.editing.schemas import (
     Animation,
@@ -43,6 +46,7 @@ from app.editing.schemas import (
     Clip,
     ClipSource,
     CompositionContent,
+    EditTarget,
     Object,
     Scene,
     SourceBinding,
@@ -181,8 +185,53 @@ class SplitClip(BaseModel):
     new_object_id: str
 
 
+class TemporalEdit(BaseModel):
+    """One target × operation × linkage/source-policy temporal edit.
+
+    All coordinates are resolved against the SAME candidate version. ``start``
+    and ``end`` are output ticks; ``offset`` is the exact rational ``b`` term
+    of ``time_map(t′=a×t+b)`` in output ticks, quantized only with the final
+    mapped coordinates.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["temporal_edit"]
+    action: Literal["move", "trim", "delete", "time_map"]
+    target: EditTarget
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, gt=0)
+    scale: float | None = Field(default=None, gt=0)
+    offset: str = "0"
+    ripple: Literal["none", "forward"] = "none"
+    source_policy: Literal["crop_1x"] | None = None
+
+    @model_validator(mode="after")
+    def _operation_arguments(self) -> TemporalEdit:
+        try:
+            offset = Fraction(self.offset)
+        except (ValueError, ZeroDivisionError) as exc:
+            raise ValueError("time_map offset must be an exact rational tick value") from exc
+        if self.action == "move" and self.start is None:
+            raise ValueError("move needs a target output start")
+        if self.action == "trim" and (self.start is None or self.end is None):
+            raise ValueError("trim needs an output subrange")
+        if self.action == "time_map" and self.scale is None:
+            raise ValueError("time_map needs a positive scale")
+        if self.action != "trim" and self.end is not None:
+            raise ValueError(f"{self.action} does not take an end")
+        if self.action != "time_map" and (self.scale is not None or offset):
+            raise ValueError("scale/offset belong only to time_map")
+        if self.action not in {"move", "trim"} and self.start is not None:
+            raise ValueError(f"{self.action} does not take a start")
+        if self.action not in {"trim", "time_map"} and self.source_policy is not None:
+            raise ValueError("source_policy belongs only to trim/time_map")
+        return self
+
+
 Op = Annotated[
     SetSettings
+    | TemporalEdit
     | BindSource
     | UnbindSource
     | AddScene
@@ -232,11 +281,24 @@ def _invalidate_visual_description(content: CompositionContent, scene_id: str | 
     scene.visual_description = None
 
 
+def _apply_temporal_in_place(content: CompositionContent, op: TemporalEdit) -> None:
+    """Route legacy and generic temporal ops through the same pure candidate."""
+    from app.editing.temporal import apply_temporal_edit
+
+    updated = apply_temporal_edit(content, op)
+    content.settings = updated.settings
+    content.sources = updated.sources
+    content.scenes = updated.scenes
+    content.timeline = updated.timeline
+
+
 def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, str]) -> None:
     """Apply one op in place. ``bound_digests`` maps snapshot_id → digest as
     resolved from the snapshot rows by the store (the version pins THAT
     digest, never a caller-supplied one)."""
-    if isinstance(op, SetSettings):
+    if isinstance(op, TemporalEdit):
+        _apply_temporal_in_place(content, op)
+    elif isinstance(op, SetSettings):
         if content.settings != op.settings:
             for scene in content.scenes:
                 scene.visual_description = None
@@ -276,32 +338,15 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
                 raise EditError("scene has clips: use move_scene; resizing populated scenes is unsupported")
             scene.range = op.range
     elif isinstance(op, MoveScene):
-        scene = _find_scene(content, op.scene_id)
-        delta = op.start - scene.range.start
-        scene.range = TimeRange(start=op.start, end=scene.range.end + delta)
-        for track in content.timeline.tracks:
-            for clip in track.clips:
-                if clip.scene_id == op.scene_id:
-                    if clip.range.start + delta < 0:
-                        raise EditError("moving the scene would put a clip before output time zero")
-                    clip.range = TimeRange(
-                        start=clip.range.start + delta, end=clip.range.end + delta,
-                    )
-        # Clip-local animations and source windows remain unchanged. The
-        # store validates overlaps/ranges before the whole batch can land.
+        _apply_temporal_in_place(content, TemporalEdit(
+            op="temporal_edit", action="move",
+            target=EditTarget(kind="scene", id=op.scene_id), start=op.start,
+        ))
     elif isinstance(op, RemoveScene):
-        _find_scene(content, op.scene_id)
-        removed_ids = {
-            clip.clip_id for track in content.timeline.tracks for clip in track.clips
-            if clip.scene_id == op.scene_id
-        }
-        content.scenes = [s for s in content.scenes if s.scene_id != op.scene_id]
-        content.timeline.transitions = [t for t in content.timeline.transitions
-                                       if t.from_clip_id not in removed_ids and t.to_clip_id not in removed_ids]
-        for track in content.timeline.tracks:
-            track.clips = [clip for clip in track.clips if clip.clip_id not in removed_ids]
-        for scene in content.scenes:
-            scene.speech_clip_ids = [ref for ref in scene.speech_clip_ids if ref not in removed_ids]
+        _apply_temporal_in_place(content, TemporalEdit(
+            op="temporal_edit", action="delete",
+            target=EditTarget(kind="scene", id=op.scene_id),
+        ))
     elif isinstance(op, AddTrack):
         for clip in op.track.clips:
             _invalidate_visual_description(content, clip.scene_id)
@@ -346,49 +391,46 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
             _invalidate_visual_description(content, _find_clip(content, clip_id).scene_id)
     elif isinstance(op, RemoveTransition):
         content.timeline.transitions = [t for t in content.timeline.transitions if t.transition_id != op.transition_id]
-    elif isinstance(op, (TrimClip, SplitClip)):
-        from app.editing.temporal import slice_clip
+    elif isinstance(op, TrimClip):
+        _apply_temporal_in_place(content, TemporalEdit(
+            op="temporal_edit", action="trim",
+            target=EditTarget(kind="clip", id=op.clip_id),
+            start=op.range.start, end=op.range.end, source_policy="crop_1x",
+        ))
+    elif isinstance(op, SplitClip):
+        from app.editing.temporal import resolve_temporal_target, slice_clip
 
         target = _find_clip(content, op.clip_id)
-        members = [clip for track in content.timeline.tracks for clip in track.clips
-                   if clip.clip_id == target.clip_id or
-                   (target.linked_group_id is not None and clip.linked_group_id == target.linked_group_id)]
+        resolved = resolve_temporal_target(
+            content, EditTarget(kind="clip", id=target.clip_id), action="split"
+        )
+        members = [target] + [
+            clip for track in content.timeline.tracks for clip in track.clips
+            if clip.clip_id != target.clip_id and clip.clip_id in resolved.clip_ids
+        ]
         for clip in members:
             _invalidate_visual_description(content, clip.scene_id)
-            if isinstance(op, TrimClip):
-                kept = slice_clip(content, clip, op.range)
-                clip.range, clip.source, clip.animations = kept.range, kept.source, kept.animations
-            else:
-                left = slice_clip(content, clip, TimeRange(start=clip.range.start, end=op.at))
-                right = slice_clip(content, clip, TimeRange(start=op.at, end=clip.range.end))
-                token = uuid5(NAMESPACE_URL, f"split:{op.new_clip_id}:{clip.clip_id}").hex
-                right.clip_id = op.new_clip_id if clip is target else f"clp_{token}"
-                right.object.object_id = op.new_object_id if clip is target else f"obj_{token}"
-                for animation in right.animations:
-                    animation.animation_id = uuid5(NAMESPACE_URL, f"split:{token}:{animation.animation_id}").hex
-                    animation.target_object_id = right.object.object_id
-                if clip.linked_group_id:
-                    right.linked_group_id = uuid5(NAMESPACE_URL, f"split-group:{op.new_clip_id}").hex
-                clip.range, clip.source, clip.animations = left.range, left.source, left.animations
-                track = next(track for track in content.timeline.tracks if clip in track.clips)
-                track.clips.append(right)
-                for transition in content.timeline.transitions:
-                    if transition.from_clip_id == clip.clip_id:
-                        transition.from_clip_id = right.clip_id
+            left = slice_clip(content, clip, TimeRange(start=clip.range.start, end=op.at))
+            right = slice_clip(content, clip, TimeRange(start=op.at, end=clip.range.end))
+            token = uuid5(NAMESPACE_URL, f"split:{op.new_clip_id}:{clip.clip_id}").hex
+            right.clip_id = op.new_clip_id if clip is target else f"clp_{token}"
+            right.object.object_id = op.new_object_id if clip is target else f"obj_{token}"
+            for animation in right.animations:
+                animation.animation_id = uuid5(NAMESPACE_URL, f"split:{token}:{animation.animation_id}").hex
+                animation.target_object_id = right.object.object_id
+            if clip.linked_group_id:
+                right.linked_group_id = uuid5(NAMESPACE_URL, f"split-group:{op.new_clip_id}").hex
+            clip.range, clip.source, clip.animations = left.range, left.source, left.animations
+            track = next(track for track in content.timeline.tracks if clip in track.clips)
+            track.clips.append(right)
+            for transition in content.timeline.transitions:
+                if transition.from_clip_id == clip.clip_id:
+                    transition.from_clip_id = right.clip_id
     elif isinstance(op, RemoveClip):
-        clip = _find_clip(content, op.clip_id)
-        _invalidate_visual_description(content, clip.scene_id)
-        content.timeline.transitions = [t for t in content.timeline.transitions
-                                       if op.clip_id not in (t.from_clip_id, t.to_clip_id)]
-        for track in content.timeline.tracks:
-            track.clips = [c for c in track.clips if c.clip_id != op.clip_id]
-        # Scene speech references to the removed clip die with it — a
-        # dangling reference is never left behind.
-        for scene in content.scenes:
-            if op.clip_id in scene.speech_clip_ids:
-                scene.speech_clip_ids = [
-                    r for r in scene.speech_clip_ids if r != op.clip_id
-                ]
+        _apply_temporal_in_place(content, TemporalEdit(
+            op="temporal_edit", action="delete",
+            target=EditTarget(kind="clip", id=op.clip_id),
+        ))
     else:  # pragma: no cover — the Op union is exhaustive
         raise EditError(f"unknown op {type(op).__name__}")
 

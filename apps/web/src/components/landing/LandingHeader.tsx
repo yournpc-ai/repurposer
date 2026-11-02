@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { ArrowRight, ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import {
   useEffect,
@@ -12,83 +12,71 @@ import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
-import { LandingInfoDialog } from "@/components/landing/LandingInfoDialog"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useReducedMotion } from "@/components/landing/motion"
 import { LogoMark } from "@/components/LogoMark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 
-/**
- * Hover mega-menu pattern adapted from the finance reference header:
- * portal-mounted panel positioned under the trigger, 100ms close delay so
- * the pointer can cross the gap, chevron rotation, shared open state at the
- * header level for smooth cross-item travel. Styled to our conventions:
- * overlay-surface (no border), rounded-lg panel, regular-weight triggers.
- */
-// The long-form menus stay available with the hidden landing sections.
-const SHOW_LONG_FORM_NAV = false
-
 const MENU_EASE = [0.23, 1, 0.32, 1] as const
 
-type NavMenu = {
-  items: { key: string; href: string }[]
-  promo?: { href: string }
-}
+type MenuId = "features" | "pricing" | "faq" | "roadmap"
+type MenuItem = { key: string; marker?: string }
+type NavMenu = { id: MenuId; items: MenuItem[] }
 
-type NavEntry = {
-  id: string
-  labelKey: string
-  menu?: NavMenu
-}
-
-const NAV_ITEMS: NavEntry[] = [
+const NAV_MENUS: NavMenu[] = [
   {
     id: "features",
-    labelKey: "landing.nav.features",
-    menu: {
-      items: [
-        { key: "clips", href: "#features" },
-        { key: "languages", href: "#channels" },
-      ],
-      promo: { href: "#how-it-works" },
-    },
+    items: [
+      { key: "conversation" },
+      { key: "animation" },
+      { key: "mixedMedia" },
+      { key: "revision" },
+    ],
   },
-  { id: "pricing", labelKey: "landing.nav.pricing" },
+  {
+    id: "pricing",
+    items: [
+      { key: "topup" },
+      { key: "balance" },
+      { key: "history" },
+      { key: "packages" },
+    ],
+  },
   {
     id: "faq",
-    labelKey: "landing.nav.faq",
-    menu: {
-      items: [
-        { key: "data", href: "#faq" },
-        { key: "upload", href: "#faq" },
-        { key: "languages", href: "#faq" },
-        { key: "autoPublish", href: "#faq" },
-      ],
-    },
+    items: [
+      { key: "inputs" },
+      { key: "revision" },
+      { key: "videoTypes" },
+      { key: "download" },
+    ],
+  },
+  {
+    id: "roadmap",
+    items: [
+      { key: "a", marker: "A" },
+      { key: "b", marker: "B" },
+      { key: "c", marker: "C" },
+      { key: "d", marker: "D" },
+    ],
   },
 ]
 
-function NavDropdown({
+function NavHoverMenu({
   id,
-  labelKey,
-  menu,
+  items,
   isOpen,
   onOpen,
   onClose,
-  onSelect,
-}: {
-  id: string
-  labelKey: string
-  menu: NavMenu
+}: NavMenu & {
   isOpen: boolean
   onOpen: () => void
   onClose: () => void
-  onSelect: () => void
 }): ReactNode {
   const { t } = useTranslation()
   const prefersReducedMotion = useReducedMotion()
-  const triggerRef = useRef<HTMLAnchorElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [position, setPosition] = useState<{ top: number; left: number } | null>(
     null
   )
@@ -108,17 +96,23 @@ function NavDropdown({
   const shown = prefersReducedMotion
     ? { opacity: 1 }
     : { opacity: 1, y: 0, scale: 1 }
+  const panelId = `landing-${id}-panel`
 
   return (
     <div onMouseEnter={onOpen} onMouseLeave={onClose}>
-      <a
+      <button
         ref={triggerRef}
-        href={`#${id}`}
+        type="button"
         className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
         aria-expanded={isOpen}
-        aria-haspopup="true"
+        aria-controls={panelId}
+        onFocus={onOpen}
+        onBlur={onClose}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onClose()
+        }}
       >
-        {t(labelKey)}
+        {t(`landing.nav.${id}`)}
         <motion.span
           className="inline-flex"
           animate={{ rotate: isOpen ? 180 : 0 }}
@@ -126,7 +120,7 @@ function NavDropdown({
         >
           <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
         </motion.span>
-      </a>
+      </button>
       {typeof window !== "undefined" &&
         createPortal(
           <AnimatePresence>
@@ -142,52 +136,52 @@ function NavDropdown({
                 onMouseLeave={onClose}
               >
                 <motion.div
+                  id={panelId}
                   initial={hidden}
                   animate={shown}
                   exit={hidden}
                   transition={{ duration: 0.2, ease: MENU_EASE }}
                   className="overlay-surface flex items-stretch gap-2 overflow-hidden rounded-lg p-2 shadow-lg"
                 >
-                  <div className="min-w-64">
-                    {menu.items.map((item) => (
-                      <a
-                        key={item.key}
-                        href={item.href}
-                        onClick={onSelect}
-                        className="block rounded-md px-4 py-3 transition-colors hover:bg-muted"
-                      >
-                        <div className="text-sm text-foreground">
-                          {t(`landing.nav.menus.${id}.items.${item.key}.label`)}
+                  <div className="w-80">
+                    {items.map((item) => (
+                      <div key={item.key} className="rounded-md px-4 py-3">
+                        <div className="flex items-baseline gap-2">
+                          {item.marker && (
+                            <span className="w-4 shrink-0 text-xs text-muted-foreground">
+                              {item.marker}
+                            </span>
+                          )}
+                          <p className="text-sm text-foreground">
+                            {t(`landing.nav.menus.${id}.items.${item.key}.title`)}
+                          </p>
                         </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
+                        <p
+                          className={`mt-0.5 text-xs leading-relaxed text-muted-foreground ${item.marker ? "ml-6" : ""}`}
+                        >
                           {t(
                             `landing.nav.menus.${id}.items.${item.key}.description`
                           )}
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                  {menu.promo && (
-                    <a
-                      href={menu.promo.href}
-                      onClick={onSelect}
-                      className="group flex w-52 flex-col justify-between rounded-md bg-muted p-4"
-                    >
-                      <div>
-                        <h3 className="text-sm font-semibold">
-                          {t(`landing.nav.menus.${id}.promo.title`)}
-                        </h3>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          {t(`landing.nav.menus.${id}.promo.description`)}
                         </p>
                       </div>
-                      <div className="mt-4 flex justify-start">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-background transition-colors group-hover:bg-background/70">
-                          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                        </div>
-                      </div>
-                    </a>
-                  )}
+                    ))}
+                  </div>
+                  <div className="flex w-52 flex-col justify-between rounded-md bg-muted p-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {t(`landing.nav.menus.${id}.aside.label`)}
+                      </p>
+                      <h3 className="mt-1 text-sm font-semibold">
+                        {t(`landing.nav.menus.${id}.aside.title`)}
+                      </h3>
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {t(`landing.nav.menus.${id}.aside.description`)}
+                      </p>
+                    </div>
+                    <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+                      {t(`landing.nav.menus.${id}.aside.note`)}
+                    </p>
+                  </div>
                 </motion.div>
               </div>
             )}
@@ -201,10 +195,10 @@ function NavDropdown({
 export function LandingHeader() {
   const { t } = useTranslation()
   const { isAuthenticated, setLoginOpen } = useAuth()
-  const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [activeMenu, setActiveMenu] = useState<MenuId | null>(null)
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const openMenu = (id: string) => {
+  const openMenu = (id: MenuId) => {
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current)
       closeTimeoutRef.current = null
@@ -213,15 +207,8 @@ export function LandingHeader() {
   }
 
   const scheduleClose = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     closeTimeoutRef.current = setTimeout(() => setActiveMenu(null), 100)
-  }
-
-  const closeNow = () => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
-    setActiveMenu(null)
   }
 
   useEffect(() => {
@@ -234,7 +221,7 @@ export function LandingHeader() {
     <header className="relative z-50 shrink-0 backdrop-blur-md">
       {/* Equal flex-1 side slots keep the nav optically centered — no
           absolute left-1/2 hack, so centering holds at any content width. */}
-      <div className="mx-auto flex min-h-16 w-full max-w-[1440px] flex-wrap items-center gap-y-1 py-2 px-5 sm:px-8 lg:px-10">
+      <div className="mx-auto flex min-h-16 w-full max-w-[1440px] flex-wrap items-center gap-y-1 px-5 py-2 sm:px-8 lg:px-10">
         <div className="flex flex-1 items-center">
           <a href="#top" className="flex items-center gap-2">
             <LogoMark />
@@ -242,42 +229,28 @@ export function LandingHeader() {
           </a>
         </div>
 
-        <nav aria-label={t("landing.entry.navigation")} className="order-last flex w-full items-center justify-center gap-1 md:order-none md:w-auto">
-          {SHOW_LONG_FORM_NAV ? NAV_ITEMS.map((item) =>
-            item.menu ? (
-              <NavDropdown
-                key={item.id}
-                id={item.id}
-                labelKey={item.labelKey}
-                menu={item.menu}
-                isOpen={activeMenu === item.id}
-                onOpen={() => openMenu(item.id)}
-                onClose={scheduleClose}
-                onSelect={closeNow}
-              />
-            ) : (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {t(item.labelKey)}
-              </a>
-            )
-          ) : (
-            <>
-              <LandingInfoDialog kind="roadmap" className="inline-flex h-9 items-center rounded-md px-3 text-sm text-muted-foreground transition-colors hover:text-foreground" />
-            </>
-          )}
+        <nav
+          aria-label={t("landing.entry.navigation")}
+          className="hidden items-center gap-1 md:flex"
+        >
+          {NAV_MENUS.map((menu) => (
+            <NavHoverMenu
+              key={menu.id}
+              {...menu}
+              isOpen={activeMenu === menu.id}
+              onOpen={() => openMenu(menu.id)}
+              onClose={scheduleClose}
+            />
+          ))}
         </nav>
 
         <div className="flex flex-1 items-center justify-end gap-2">
           <ThemeToggle />
           <LanguageSwitcher />
           {isAuthenticated ? (
-            <Button render={<Link to="/home" />}>{t("landing.openStudio")}</Button>
+            <Button size="sm" className="h-7" render={<Link to="/home" />}>{t("landing.openStudio")}</Button>
           ) : (
-            <Button onClick={() => setLoginOpen(true)}>{t("landing.openStudio")}</Button>
+            <Button size="sm" className="h-7" onClick={() => setLoginOpen(true)}>{t("landing.openStudio")}</Button>
           )}
         </div>
       </div>

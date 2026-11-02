@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from app.agents.base import Agent, AssembleResult
 from app.editing.director import (
+    ComponentDirection,
     GeneratedImageDirection,
     LaunchFilmDirection,
     MgDirection,
@@ -158,6 +159,7 @@ def _assemble_visual_request(
     instruction: str,
     language: str | None,
     target_seconds: float | None,
+    narration: str | None = None,
 ) -> AssembleResult:
     return (
         {
@@ -166,6 +168,7 @@ def _assemble_visual_request(
             "instruction": instruction,
             "language": language,
             "target_seconds": target_seconds,
+            "narration": narration,
         },
         [],
     )
@@ -179,6 +182,23 @@ program_director: Agent[ProgramDirection] = Agent(
         "You are a creative graphics programmer. Author an original deterministic "
         "drawing-v1 visual program for the user's requested moving picture; never "
         "substitute a preset name or pseudocode. Output valid JSON, no commentary."
+    ),
+    temperature=0.6,
+    assemble=_assemble_visual_request,
+    stream=True,
+    timeout_s=300,
+)
+
+
+component_director: Agent[ComponentDirection] = Agent(
+    name="component_director",
+    prompt="component_director.j2",
+    schema=ComponentDirection,
+    system=(
+        "You are a creative visual-component author. Write an original deterministic "
+        "controlled TSX component for the user's requested moving picture; never "
+        "substitute a preset, imports, arbitrary dependencies or pseudocode. "
+        "Output valid JSON, no commentary."
     ),
     temperature=0.6,
     assemble=_assemble_visual_request,
@@ -209,6 +229,8 @@ def _assemble_review(
     output_facts: str,
     storyboard: str,
     frame_facts: str,
+    deterministic_checks: str,
+    previous_review_facts: str,
     frames: list | None = None,
 ) -> AssembleResult:
     return (
@@ -217,6 +239,8 @@ def _assemble_review(
             "output_facts": output_facts,
             "storyboard": storyboard,
             "frame_facts": frame_facts,
+            "deterministic_checks": deterministic_checks,
+            "previous_review_facts": previous_review_facts,
         },
         list(frames or []),
     )
@@ -227,9 +251,11 @@ video_reviewer: Agent[ContentReviewAnswer] = Agent(
     prompt="video_reviewer.j2",
     schema=ContentReviewAnswer,
     system=(
-        "You are a video content reviewer. Judge only the actual decoded frames "
-        "attached to the request against the saved content and the user's "
-        "requirements. Output valid JSON, no commentary."
+        "You are a video content reviewer. Base new visual findings only on "
+        "the actual decoded frames attached to the request; use the supplied "
+        "deterministic media checks for audio facts, and treat earlier review "
+        "facts as historical scope rather than new frames. Output valid JSON, "
+        "no commentary."
     ),
     temperature=0.2,
     assemble=_assemble_review,
@@ -241,6 +267,7 @@ video_reviewer: Agent[ContentReviewAnswer] = Agent(
 
 
 __all__ = [
+    "component_director",
     "image_director",
     "mg_director",
     "mixed_director",

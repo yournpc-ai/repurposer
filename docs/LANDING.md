@@ -1,12 +1,12 @@
 # LANDING — 落地页叙事工作文档
 
-> Status: 活跃工作文档（2026-10-29）——落地页叙事/结构的唯一事实源；排期只引用 `PROGRESS.md`。
+> Status: 活跃工作文档（2026-10-30）——落地页叙事/结构的唯一事实源；排期只引用 `PROGRESS.md`。
 
 ## 1. 当前结构
 
 首页为一屏：LandingHeader + LandingHero，保留原有 ASCII 波场、字体、主题/语言切换、按钮和入场动效。Hero 内容容器最大 1152px，说明最大 768px；桌面标题两行，每行不额外折行，小屏自适应。页面不挂载 SmoothScroll，首屏扣除导航高度。
 
-VideoShowcase、Manifesto、AppShowcase、Channels、Pricing、FAQ、FinalCta、Footer、Gallery 与 Testimonials 不挂载，组件源码保留。导航移除对应锚点，保留 App、社群和开发计划入口；社群与开发计划当前为明确标注的 mock 弹窗，真实链接待接入。App 沿用既有登录及 `/home` 链路。
+VideoShowcase、Manifesto、AppShowcase、Channels、Pricing、FAQ、FinalCta、Footer、Gallery 与 Testimonials 不挂载，组件源码保留。桌面导航为 Features / Pricing / FAQ / Roadmap 四个自承载 hover 浮层，不依赖未挂载 section：Features 展示当前创作能力，Pricing 说明一次性积分充值与应用内价格座位，FAQ 直接回答当前使用问题，Roadmap 展示 A–D 与当前 B 阶段重点且不承诺上线日期；移动端不显示第二行导航。社群仍为明确标注的 mock 弹窗，真实链接待接入。App 沿用既有登录及 `/home` 链路。
 
 ## 2. 叙事立场
 

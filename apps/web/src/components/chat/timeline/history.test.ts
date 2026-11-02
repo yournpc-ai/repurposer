@@ -1,0 +1,1025 @@
+/** History replay mapper contract (Phase 3 Batch A): the archive→flow
+ * projection's branch matrix. The load-bearing law (ADR-087 原则 2): the
+ * replay rebuilds what the live flow SHOWED and never derives lifecycle —
+ * no readiness, no plan state, no canvas signal is computed from which rows
+ * exist. Read tolerance: off-shape payloads degrade to the plain row, never
+ * a crash. */
+
+import { describe, expect, it } from "vitest"
+
+import { mapHistoryRows, type HistoryRow } from "./history"
+import { buildConversationBlocks, buildConversationUnits } from "./project"
+import type { OverlayMessage } from "./types"
+
+/** A t() that echoes the key — the QA archive's localized line is the
+ * i18n layer's business; the mapper only routes the answer kind. */
+const t = (key: string) => key
+
+function row(overrides: Partial<HistoryRow>): HistoryRow {
+  return {
+    id: "m1",
+    role: "assistant",
+    content: null,
+    question: null,
+    answer: null,
+    workflow_run_id: null,
+    ...overrides,
+  }
+}
+
+const ctx = { t }
+
+function visibleMessageIds(rows: OverlayMessage[]): string[] {
+  return buildConversationBlocks(buildConversationUnits(rows)).flatMap((block) =>
+    block.kind === "runAnchor"
+      ? []
+      : block.units.flatMap((unit) => unit.kind === "message" ? [unit.message.id] : []),
+  )
+}
+
+describe("user rows", () => {
+  it("map straight through, attachments rebuilt as completed chips", () => {
+    const [m] = mapHistoryRows(
+      [
+        row({
+          role: "user",
+          content: "make clips",
+          attachments: [{ id: "a1", name: "talk.mp4", type: "video", url: "u" }],
+        }),
+      ],
+      ctx,
+    )
+    expect(m).toMatchObject({
+      id: "m1",
+      role: "user",
+      content: "make clips",
+      assets: [
+        { id: "a1", type: "video", file_url: "u", stream_url: "u", title: "talk.mp4", processing_status: "completed" },
+      ],
+    })
+  })
+
+  it("replays the exact persisted Skill reference without resolving a newer version", () => {
+    const reference = {
+      kind: "external",
+      skill_version_id: "11111111-1111-4111-8111-111111111111",
+    } as const
+    const [message] = mapHistoryRows(
+      [row({ role: "user", content: "use the pinned method", skill: reference })],
+      ctx,
+    )
+    expect(message.skill).toEqual(reference)
+  })
+
+  it("the opener row maps straight through (归档单一源: every row renders, the opener included)", () => {
+    // The mapper's own law names this case: no prop-rendered side lane, no
+    // skip predicate — a user row whose content is the opening prompt is a
+    // plain user row like any other.
+    const out = mapHistoryRows(
+      [row({ role: "user", content: "the opening prompt" })],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "m1", role: "user", content: "the opening prompt" }),
+    ])
+  })
+  it("carries the same explicit turn id onto user, assistant and activity history rows", () => {
+    const out = mapHistoryRows(
+      [
+        row({ id: "u1", role: "user", content: "make it", turn_id: "u1" }),
+        row({
+          id: "a1",
+          content: "",
+          turn_id: "u1",
+          intent: {
+            type: "activity",
+            frame: {
+              activity_id: "a1",
+              kind: "read",
+              status: "completed",
+              key: "chat.inspectingDone.transcript",
+            },
+          },
+        }),
+        row({ id: "m2", content: "done", turn_id: "u1" }),
+      ],
+      ctx,
+    )
+    expect(out.map((message) => message.turnId)).toEqual(["u1", "u1", "u1"])
+  })
+
+})
+
+describe("answered task_book rows — echo, never a QA block", () => {
+  it("replays the echo prose as its own flow message with the run stamp", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "here is the plan",
+          question: { kind: "task_book" },
+          answer: { kind: "start" },
+          workflow_run_id: "run-1",
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({
+        id: "m1-echo",
+        role: "assistant",
+        content: "here is the plan",
+        runId: "run-1",
+      }),
+    ])
+  })
+
+  it("an empty echo pushes nothing (no ghost row)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "  ",
+          question: { kind: "task_book" },
+          answer: { kind: "start" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+describe("answered OPTIONS questions — echo first, then the QA archive", () => {
+  it("framing prose replays above the collapsed QA block", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "let me ask you something",
+          question: {
+            kind: "question",
+            question: "which language?",
+            options: [{ id: "en", label: "English" }],
+          },
+          answer: { kind: "option", option_id: "en" },
+          seq: 9,
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(2)
+    expect(out[0]).toMatchObject({ id: "m1-echo", content: "let me ask you something", seq: 9 })
+    expect(out[0].runDelivery).toBe(false)
+    expect(out[1]).toMatchObject({
+      id: "m1",
+      seq: 9,
+      qa: { question: "which language?", answer: "en", muted: false, questionId: "m1" },
+    })
+  })
+
+  it("a trigger delivery echo keeps its run identity", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "your clips are ready",
+          question: {
+            kind: "question",
+            question: "what next?",
+            options: [{ id: "a", label: "A" }],
+          },
+          answer: { kind: "option", option_id: "a" },
+          workflow_run_id: "run-delivery",
+          intent: {
+            type: "trigger_review",
+            ref: "run-delivery",
+            output_refs: ["output-a"],
+            suggestions: [{ label: "A", action: "send", text: "A" }],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0]).toMatchObject({
+      id: "m1-echo",
+      runId: "run-delivery",
+      runDelivery: true,
+      runDeliveryRef: "run-delivery",
+      outputRefs: ["output-a"],
+    })
+  })
+
+  it("replays partial and recovery Outputs at their own delivery array positions", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "delivery-a",
+          content: "A is ready",
+          workflow_run_id: "run-1",
+          intent: { type: "trigger_review", output_refs: ["output-a"] },
+        }),
+        row({
+          id: "delivery-b",
+          content: "B is ready",
+          workflow_run_id: "run-1",
+          intent: { type: "trigger_review", output_refs: ["output-b"] },
+        }),
+        row({
+          id: "missing-refs",
+          content: "old receipt",
+          workflow_run_id: "run-old",
+          intent: { type: "trigger_review" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out.map((message) => [message.id, message.outputRefs])).toEqual([
+      ["delivery-a", ["output-a"]],
+      ["delivery-b", ["output-b"]],
+      ["missing-refs", []],
+    ])
+  })
+
+  it("live and hydrated history produce the same Run anchor, message order and per-delivery refs", () => {
+    const persisted = [
+      row({ id: "birth", content: "Starting", workflow_run_id: "run-1", seq: 1 }),
+      row({
+        id: "delivery-a",
+        content: "A is ready",
+        workflow_run_id: "run-1",
+        intent: { type: "trigger_review", output_refs: ["output-a"] },
+        seq: 2,
+      }),
+      row({
+        id: "delivery-b",
+        content: "B is ready",
+        workflow_run_id: "run-1",
+        intent: { type: "trigger_review", output_refs: ["output-b"] },
+        seq: 3,
+      }),
+    ]
+    const live: OverlayMessage[] = [
+      { id: "birth", role: "assistant", content: "Starting", runId: "run-1", seq: 1 },
+      {
+        id: "delivery-a",
+        role: "assistant",
+        content: "A is ready",
+        runId: "run-1",
+        runDelivery: true,
+        independentKind: "trigger",
+        outputRefs: ["output-a"],
+        seq: 2,
+      },
+      {
+        id: "delivery-b",
+        role: "assistant",
+        content: "B is ready",
+        runId: "run-1",
+        runDelivery: true,
+        independentKind: "trigger",
+        outputRefs: ["output-b"],
+        seq: 3,
+      },
+    ]
+    const project = (messages: OverlayMessage[]) =>
+      buildConversationBlocks(buildConversationUnits(messages)).flatMap((block) =>
+        block.kind === "runAnchor"
+          ? [[`run:${block.runId}`]]
+          : block.units.flatMap((unit) =>
+              unit.kind === "message"
+                ? [[unit.message.id, ...(unit.message.outputRefs ?? [])]]
+                : [],
+            ),
+      )
+    const history = mapHistoryRows(persisted, ctx)
+    expect(project(history)).toEqual(project(live))
+    expect(project(history)).toEqual([
+      ["birth"],
+      ["run:run-1"],
+      ["delivery-a", "output-a"],
+      ["delivery-b", "output-b"],
+    ])
+    expect(history.every((message) => message.hydrated === true)).toBe(true)
+  })
+
+  it("bail answers resolve through i18n and render muted", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          question: { kind: "question", options: [{ id: "a", label: "A" }] },
+          answer: { kind: "bail" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].qa).toMatchObject({ answer: "chat.qa.cancelled", muted: true })
+  })
+
+  it("legacy rows without a bare-question field fall back to content (读容忍)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "which language?",
+          question: { kind: "question", options: [{ id: "en", label: "English" }] },
+          answer: { kind: "freeform", text: "English" },
+        }),
+      ],
+      ctx,
+    )
+    // questionEcho compares against the payload's bare-question FIELD (absent
+    // here), so the content replays as the echo row; the QA archive's Q line
+    // itself falls back to content via bareQuestion().
+    expect(out).toHaveLength(2)
+    expect(out[0]).toMatchObject({ id: "m1-echo", content: "which language?" })
+    expect(out[1].qa).toMatchObject({ question: "which language?", answer: "English" })
+  })
+})
+
+describe("OPTIONS answer single-display projection", () => {
+  const optionQuestion = (overrides: Partial<HistoryRow> = {}) => row({
+    id: "q1",
+    content: null,
+    question: {
+      kind: "question",
+      question: "Which language?",
+      options: [{ id: "en", label: "English" }],
+    },
+    answer: { kind: "option", option_id: "en", text: "English" },
+    ...overrides,
+  })
+  const followingReply = () => row({ id: "a1", content: "Got it", turn_id: "u1" })
+
+  it("uses the new explicit association and leaves the assistant in the real user Turn", () => {
+    const mapped = mapHistoryRows([
+      optionQuestion(),
+      row({
+        id: "u1",
+        role: "user",
+        content: "English",
+        turn_id: "u1",
+        intent: { answered_question_id: "q1" },
+      }),
+      followingReply(),
+    ], ctx)
+    const blocks = buildConversationBlocks(buildConversationUnits(mapped))
+    expect(visibleMessageIds(mapped)).toEqual(["q1", "a1"])
+    expect(blocks[1]).toMatchObject({ kind: "turn", turnId: "u1", key: "turn:u1" })
+    expect(mapped.find((message) => message.id === "u1")).toMatchObject({
+      role: "user",
+      turnId: "u1",
+      answeredQuestionId: "q1",
+    })
+  })
+
+  it("repairs only the old adjacent, verbatim option-label shape", () => {
+    const mapped = mapHistoryRows([
+      optionQuestion(),
+      row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      followingReply(),
+    ], ctx)
+    expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBe("q1")
+    expect(visibleMessageIds(mapped)).toEqual(["q1", "a1"])
+  })
+
+  it("keeps empty answer text as old-row read tolerance", () => {
+    const mapped = mapHistoryRows([
+      optionQuestion({ answer: { kind: "option", option_id: "en", text: "" } }),
+      row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      followingReply(),
+    ], ctx)
+    expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBe("q1")
+    expect(visibleMessageIds(mapped)).toEqual(["q1", "a1"])
+  })
+
+  it("never lets an expired machine answer inherit the legacy option fallback", () => {
+    const mapped = mapHistoryRows([
+      optionQuestion({ answer: { kind: "option", option_id: "en", text: "expired" } }),
+      row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      followingReply(),
+    ], ctx)
+    expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBeUndefined()
+    expect(visibleMessageIds(mapped)).toContain("u1")
+  })
+
+  it("never extends the legacy fallback to other answers, messages, labels or positions", () => {
+    const cases: HistoryRow[][] = [
+      [
+        optionQuestion({ answer: { kind: "freeform", text: "English" } }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+      [row({ id: "u1", role: "user", content: "English", turn_id: "u1" })],
+      [
+        optionQuestion({
+          question: { kind: "task_book", options: [{ id: "en", label: "English" }] },
+        }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion(),
+        row({ id: "between", content: "another persisted row" }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion(),
+        row({ id: "u1", role: "user", content: "Eng", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion(),
+        row({ id: "u1", role: "user", content: " English ", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion({ answer: { kind: "option", option_id: "en", text: "superseded" } }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion({ answer: { kind: "option", option_id: "en", text: "French" } }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+      [
+        optionQuestion({ answer: { kind: "bail", text: "superseded" } }),
+        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
+      ],
+    ]
+    for (const rows of cases) {
+      const mapped = mapHistoryRows(rows, ctx)
+      expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBeUndefined()
+      expect(visibleMessageIds(mapped)).toContain("u1")
+    }
+  })
+})
+
+describe("answered TEXT questions — the plain message pair", () => {
+  it("an options-empty answered question is a plain assistant message", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "what is this about?",
+          question: { kind: "question" },
+          answer: { kind: "freeform", text: "a talk" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "m1", role: "assistant", content: "what is this about?" }),
+    ])
+    expect(out[0].qa).toBeUndefined()
+  })
+})
+
+describe("pending questions", () => {
+  it("a pending TEXT question stays a plain flow message (never docks)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "what is this about?", question: { kind: "question" } })],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "m1", content: "what is this about?" }),
+    ])
+  })
+
+  it("a pending OPTIONS question replays only its framing prose (the pill revives elsewhere)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "let me ask",
+          question: {
+            kind: "question",
+            question: "which one?",
+            options: [{ id: "a", label: "A" }],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "m1-echo", content: "let me ask" }),
+    ])
+  })
+
+  it("a pending trigger delivery echo keeps its run identity", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "your clips are ready",
+          question: {
+            kind: "question",
+            question: "what next?",
+            options: [{ id: "a", label: "A" }],
+          },
+          workflow_run_id: "run-delivery",
+          intent: {
+            type: "trigger_review",
+            ref: "run-delivery:upload-retry-1",
+            output_refs: ["output-a"],
+            suggestions: [{ label: "A", action: "send", text: "A" }],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({
+        id: "m1-echo",
+        runId: "run-delivery",
+        runDelivery: true,
+        runDeliveryRef: "run-delivery:upload-retry-1",
+        outputRefs: ["output-a"],
+      }),
+    ])
+  })
+
+  it("a pending task_book row replays nothing (the dock owns the live plan)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "plan", question: { kind: "task_book" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+
+  it("a pending storyboard_echo task_book replays its echo as a flow message (the dock revives via the pending fetch)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
+          question: { kind: "task_book", storyboard_echo: true },
+          blocks: [{
+            kind: "video_storyboard",
+            presented_message_id: "m1",
+            composition_id: "composition-1",
+            composition_version_id: "version-1",
+            version: 1,
+            content_digest: "digest-1",
+          }],
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({
+        id: "m1-echo",
+        role: "assistant",
+        content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
+        blocks: [expect.objectContaining({
+          presented_message_id: "m1",
+          composition_version_id: "version-1",
+          content_digest: "digest-1",
+        })],
+      }),
+    ])
+  })
+
+  it("a pending storyboard_echo task_book with empty content pushes no echo (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: " ",
+          question: { kind: "task_book", storyboard_echo: true },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+describe("plain assistant rows + legacy trigger pills", () => {
+  it("plain rows pass through with the run stamp; trigger pills rebuild from the intent dump", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "review this",
+          workflow_run_id: "run-9",
+          seq: 7,
+          intent: {
+            type: "trigger_review",
+            suggestions: [
+              { label: "post it", action: "send", text: "post it" },
+              { label: "bad shape" }, // filtered out — off-shape
+            ],
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0]).toMatchObject({ runId: "run-9", seq: 7 })
+    expect(out[0].suggestions).toEqual([
+      { label: "post it", action: "send", text: "post it", output_id: null },
+    ])
+  })
+
+  it("off-shape intent → suggestions undefined (read tolerance, never a crash)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "hi", intent: { type: "something_else" } })],
+      ctx,
+    )
+    expect(out[0].suggestions).toBeUndefined()
+  })
+})
+
+describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
+  it("the output vocabulary carries no readiness/plan fields at all", () => {
+    // The mapper's result type is the flow's display row — if a readiness
+    // signal ever leaks into the replay (planReady/confirm/canvas), this
+    // keys-set lock names it.
+    const out = mapHistoryRows(
+      [
+        row({
+          content: "plan",
+          question: { kind: "task_book" },
+          answer: { kind: "start" },
+          workflow_run_id: "run-1",
+        }),
+        row({ role: "user", content: "go" }),
+        row({ content: "done" }),
+      ],
+      ctx,
+    )
+    const ALLOWED = new Set([
+      "id",
+      "role",
+      "content",
+      "runId",
+      // Delivery transcript ownership only — not a lifecycle/readiness signal.
+      "runDelivery",
+      // Persistent recovery identity (upload-retry-N), never a readiness stamp.
+      "runDeliveryRef",
+      // This delivery row's persisted product ids — content, not readiness.
+      "outputRefs",
+      // Turn identity + history hydration metadata — not lifecycle/readiness.
+      "turnId",
+      // Option-answer duplicate-Slot association — never turn/lifecycle derivation.
+      "answeredQuestionId",
+      "hydrated",
+      // Explicit block ownership for QA/candidate/trigger/material facts.
+      "independentKind",
+      // Persisted activity/candidate world facts replayed by the mapper.
+      "activity",
+      "candidates",
+      "seq",
+      "at",
+      "assets",
+      "streaming",
+      "qa",
+      "focus",
+      "meta",
+      "suggestions",
+      "beat",
+      "milestones",
+      "blocks",
+    ])
+    const illegalKeys = [
+      ...new Set(
+        out.flatMap((m) => Object.keys(m).filter((key) => !ALLOWED.has(key))),
+      ),
+    ]
+    expect(illegalKeys).toEqual([])
+  })
+})
+
+describe("legacy storyboard rows (dock echo 形态)", () => {
+  it("an intent.type='storyboard' block row skips silently — old projects show only the storyboard_ready markdown row", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "sb-1",
+          intent: {
+            type: "storyboard",
+            version: 1,
+            storyboard: { name: "board", scenes: [{ type: "words", seconds: 3 }] },
+            pages: ["https://example.com"],
+          },
+        }),
+        row({ id: "r1", content: "review this" }),
+      ],
+      ctx,
+    )
+    expect(out.map((m) => m.id)).toEqual(["r1"])
+  })
+
+  it("a legacy storyboard_draft_failed row's prose replays as ordinary text (no marker)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "sb-fail",
+          content: "the storyboard draft failed",
+          intent: { type: "storyboard_draft_failed" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "sb-fail", content: "the storyboard draft failed" }),
+    ])
+  })
+
+  it("an empty storyboard_draft_failed row skips (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "storyboard_draft_failed" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+
+  it("an unknown empty material beat skips — never an empty bubble", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+describe("turn_failed rows (失败行回放)", () => {
+  it("a persisted turn-failure row replays as the grey meta error row", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "tf-1",
+          content: "The storyboard took too long. No production has started; ask me to retry the storyboard.",
+          intent: { type: "turn_failed" },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toEqual([
+      expect.objectContaining({ id: "tf-1", meta: "error", content: expect.stringContaining("took too long") }),
+    ])
+  })
+
+  it("an empty turn_failed row skips (no-empty-bubble law)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "turn_failed" } })],
+      ctx,
+    )
+    expect(out).toEqual([])
+  })
+})
+
+describe("material beats (2026-09-24 素材节拍入库)", () => {
+  it("a persisted beat row replays as a settled activity payload, never a bubble", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-1",
+          created_at: "2026-09-24T10:00:00Z",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "keynote.mp4",
+            count: 1,
+            total: 2,
+            ref: "asset-1",
+          },
+        }),
+        row({
+          id: "beat-2",
+          created_at: "2026-09-24T10:03:00Z",
+          intent: {
+            type: "material_beat",
+            beat: "understanding",
+            status: "completed",
+            count: 2,
+            ref: "digest-9",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(2)
+    expect(out[0].content).toBe("")
+    expect(out[0].activity).toMatchObject({
+      kind: "read",
+      status: "completed",
+      key: "chat.material.readingDoneProgress",
+      count: 1,
+      total: 2,
+      name: "keynote.mp4",
+      at: "2026-09-24T10:00:00Z",
+    })
+    expect(out[1].activity).toMatchObject({
+      kind: "read",
+      status: "completed",
+      key: "chat.material.understandingDone",
+      count: 2,
+    })
+  })
+
+  it("a lone file drops the progress form; a failed read takes the failed key", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "a.pdf",
+            count: 1,
+            total: 1,
+            ref: "asset-1",
+          },
+        }),
+        row({
+          id: "beat-f",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "failed",
+            name: "b.mov",
+            ref: "asset-2",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].activity?.key).toBe("chat.material.readingDone")
+    expect(out[1].activity).toMatchObject({
+      status: "failed",
+      key: "chat.material.readingFailed",
+      name: "b.mov",
+    })
+  })
+
+  it("动词分叉 (批「动词」 2026-09-27): the persisted asset_type forks the verb key", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "talk.mp4",
+            ref: "asset-v",
+            asset_type: "video",
+          },
+        }),
+        row({
+          id: "beat-a",
+          intent: {
+            type: "material_beat",
+            beat: "reading",
+            status: "completed",
+            name: "podcast.mp3",
+            ref: "asset-a",
+            asset_type: "audio",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].activity?.key).toBe("chat.material.readingDone_video")
+    expect(out[1].activity?.key).toBe("chat.material.readingDone_audio")
+  })
+
+  it("an off-shape beat dump with prose degrades to a plain assistant row (read tolerance)", () => {
+    const out = mapHistoryRows(
+      [row({ content: "a note", intent: { type: "material_beat", beat: "mystery" } })],
+      ctx,
+    )
+    expect(out[0].activity).toBeUndefined()
+    expect(out[0].content).toBe("a note")
+  })
+
+  it("storyboard_drafting (legacy): a draft-kind settled beat carrying its REAL start stamp", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-sb",
+          created_at: "2026-10-16T10:01:30Z",
+          intent: {
+            type: "material_beat",
+            beat: "storyboard_drafting",
+            status: "completed",
+            ref: "q-9",
+            duration_ms: 90_000,
+            at: "2026-10-16T10:00:00Z",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out).toHaveLength(1)
+    // The draft kind with a chat.storyboard.* key survives 落定即退役's
+    // chat.activity.* filter, and the fold's clock reads the beat's own
+    // `at` (the draft's start), never the landing row's created_at.
+    expect(out[0].activity).toMatchObject({
+      kind: "draft",
+      status: "completed",
+      key: "chat.storyboard.draftingDone",
+      duration_ms: 90_000,
+      at: "2026-10-16T10:00:00Z",
+    })
+  })
+
+  it("storyboard_drafting without `at` falls back to the row's created_at (read tolerance)", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "beat-sb-legacy",
+          created_at: "2026-10-16T10:01:30Z",
+          intent: {
+            type: "material_beat",
+            beat: "storyboard_drafting",
+            status: "completed",
+            ref: "q-9",
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].activity?.kind).toBe("draft")
+    expect(out[0].activity?.at).toBe("2026-10-16T10:01:30Z")
+  })
+})
+
+describe("activity array rows (ADR-108 — 每帧一行)", () => {
+  const frame = (over: Record<string, unknown>) => ({
+    activity_id: "a1",
+    kind: "read",
+    status: "completed",
+    key: "chat.inspectingDone.searchTranscript",
+    at: "2026-09-25T10:00:00.180Z",
+    duration_ms: 820,
+    ...over,
+  })
+
+  it("a persisted activity row replays IN ITS ARRAY POSITION as an activity unit, never a bubble", () => {
+    const out = mapHistoryRows(
+      [
+        row({ id: "u1", role: "user", content: "剪哪一句" }),
+        row({
+          id: "act-1",
+          created_at: "2026-09-25T10:00:01Z",
+          intent: { type: "activity", frame: frame({}) },
+        }),
+        row({
+          id: "act-2",
+          created_at: "2026-09-25T10:00:02Z",
+          intent: {
+            type: "activity",
+            frame: frame({ activity_id: "a2", key: "chat.inspectingDone.segment" }),
+          },
+        }),
+        row({ id: "r1", content: "我推荐剪这句" }),
+      ],
+      ctx,
+    )
+    // 数组位置律: the rows render in array order — no timestamp re-sort.
+    expect(out.map((m) => m.id)).toEqual(["u1", "act-1", "act-2", "r1"])
+    expect(out[1].content).toBe("")
+    // The persisted `at` is the birth stamp (execute entry) — replay reads
+    // it verbatim, no derivation.
+    expect(out[1].activity).toMatchObject({
+      activity_id: "a1",
+      kind: "read",
+      status: "completed",
+      key: "chat.inspectingDone.searchTranscript",
+      at: "2026-09-25T10:00:00.180Z",
+      duration_ms: 820,
+    })
+    expect(out[2].activity).toMatchObject({
+      activity_id: "a2",
+      key: "chat.inspectingDone.segment",
+    })
+  })
+
+  it("an honestly-open row (a read still in flight when the stream dropped) replays active", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "act-open",
+          intent: {
+            type: "activity",
+            frame: frame({ status: "active", key: "chat.inspecting.transcript", duration_ms: undefined }),
+          },
+        }),
+      ],
+      ctx,
+    )
+    expect(out[0].activity).toMatchObject({ status: "active" })
+  })
+
+  it("a malformed frame skips the row entirely — never an empty bubble", () => {
+    const out = mapHistoryRows(
+      [row({ content: "", intent: { type: "activity", frame: { kind: "mystery" } } })],
+      ctx,
+    )
+    expect(out).toHaveLength(0)
+  })
+
+  it("never-render rows skip: the rejection forensics ledger and legacy aggregate logs", () => {
+    const out = mapHistoryRows(
+      [
+        row({
+          id: "fx",
+          intent: { type: "activity_forensics", ref: "u1", rejections: [{ reason: "x" }] },
+        }),
+        row({
+          id: "legacy",
+          intent: { type: "activity_log", ref: "u1", frames: [frame({ seq: 1 })] },
+        }),
+        row({ id: "r1", content: "answer" }),
+      ],
+      ctx,
+    )
+    expect(out.map((m) => m.id)).toEqual(["r1"])
+  })
+})

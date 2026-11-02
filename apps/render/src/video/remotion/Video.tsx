@@ -88,6 +88,10 @@ function wholeObjectStyle(clip: VideoClip, frame: number): React.CSSProperties {
     evaluateProperty(animations, obj.object_id, "opacity", frame),
     obj.opacity,
   );
+  const blur = scalar(
+    evaluateProperty(animations, obj.object_id, "filter.blur", frame),
+    0,
+  ) ?? 0;
   return {
     position: "absolute",
     left: obj.layout.x,
@@ -95,6 +99,7 @@ function wholeObjectStyle(clip: VideoClip, frame: number): React.CSSProperties {
     width: obj.layout.width,
     height: obj.layout.height,
     opacity,
+    filter: blur > 0 ? `blur(${blur}px)` : undefined,
     transformOrigin: originCss(obj.transform.origin),
     transform: `translate(${obj.transform.x + position[0]}px, ${
       obj.transform.y + position[1]
@@ -103,7 +108,7 @@ function wholeObjectStyle(clip: VideoClip, frame: number): React.CSSProperties {
 }
 
 function textPartStyle(
-  clip: VideoClip,
+  clip: VideoClip & { object: VideoTextObject },
   part: VideoTextPart,
   frame: number,
   line: boolean,
@@ -124,10 +129,24 @@ function textPartStyle(
     evaluateProperty(clip.animations, objectId, "opacity", frame, part.part_id),
     1,
   );
+  const blur = scalar(
+    evaluateProperty(clip.animations, objectId, "filter.blur", frame, part.part_id),
+    0,
+  ) ?? 0;
+  const wholeLetterSpacing = scalar(
+    evaluateProperty(clip.animations, objectId, "text.letter_spacing", frame),
+    clip.object.style.letter_spacing,
+  );
+  const letterSpacing = scalar(
+    evaluateProperty(clip.animations, objectId, "text.letter_spacing", frame, part.part_id),
+    wholeLetterSpacing,
+  );
   return {
     display: line ? "block" : "inline-block",
     whiteSpace: line ? "pre-wrap" : "pre",
     opacity,
+    filter: blur > 0 ? `blur(${blur}px)` : undefined,
+    letterSpacing: `${letterSpacing}em`,
     transformOrigin: "50% 50%",
     transform: `translate(${position[0]}px, ${position[1]}px) scale(${scale}) rotate(${rotation}deg)`,
   };
@@ -202,6 +221,10 @@ const TextObjectView: React.FC<{
   );
   const granular = partKinds.has("grapheme") ? "grapheme" : partKinds.has("word") ? "word" : null;
   const lines = object.parts.filter((part) => part.kind === "line");
+  const letterSpacing = scalar(
+    evaluateProperty(clip.animations, object.object_id, "text.letter_spacing", frame),
+    object.style.letter_spacing,
+  );
   return (
     <div
       style={{
@@ -213,6 +236,7 @@ const TextObjectView: React.FC<{
         fontSize: object.style.font_size,
         fontWeight: object.style.weight,
         textAlign: object.style.align,
+        letterSpacing: `${letterSpacing}em`,
         lineHeight: object.style.line_height,
         whiteSpace: "pre-wrap",
       }}

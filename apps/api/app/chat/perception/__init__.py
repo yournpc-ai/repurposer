@@ -73,8 +73,8 @@ class PerceptionTool:
     # slice (e.g. the film read's images, keyed to film_edits_enabled)
     # never reaches the wire while the gate is off.
     wire_view: Any = None  # Callable[[str, dict], tuple[str, dict]] | None
-    # ADR-109: checkpoint 资格已通用化——任何非终态调用前的散文都走
-    # checkpoint 座位（app/agents/tool_loop.py），注册表不再携带资格字段。
+    # ADR-109: interim_prose 资格已通用化——任何非终态调用前的散文都走
+    # interim_prose 座位（app/agents/tool_loop.py），注册表不再携带资格字段。
 
 
 def _output_spec_wire_view(description: str, parameters: dict) -> tuple[str, dict]:

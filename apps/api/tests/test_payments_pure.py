@@ -8,21 +8,21 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import settings
+from app.platform.payment_routes import CreateCheckoutSessionRequest
 from app.platform.payments import (
+    CUSTOM_TOPUP_POLICY,
     CreditPackage,
+    PaymentAmountInvalid,
     PaymentConfigurationError,
+    _checkout_line_items,
     _configured_livemode,
+    _custom_package,
     list_credit_packages,
-    price_mismatch,
     session_mismatch,
 )
-
-
-def test_missing_price_hides_package(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "stripe_price_starter", "")
-    assert list_credit_packages() == []
 
 
 @pytest.mark.parametrize(
@@ -40,49 +40,76 @@ def test_missing_secret_key_fails_closed(monkeypatch) -> None:
         _configured_livemode()
 
 
-def test_starter_package_uses_server_side_test_price_and_credits(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "stripe_price_starter", "price_test_starter")
+def test_presets_use_server_side_amounts_and_credits() -> None:
     assert [vars(package) for package in list_credit_packages()] == [
+        {"key": "starter", "amount_minor": 1000, "currency": "eur", "credits": 10000},
+        {"key": "topup_20", "amount_minor": 2000, "currency": "eur", "credits": 20000},
+        {"key": "topup_50", "amount_minor": 5000, "currency": "eur", "credits": 50000},
+    ]
+
+
+def test_custom_amount_uses_server_conversion_and_order_snapshot() -> None:
+    package = _custom_package(123)
+    assert package.key == "custom"
+    assert package.amount_minor == 123
+    assert package.currency == CUSTOM_TOPUP_POLICY.currency
+    assert package.credits == 1230
+
+
+@pytest.mark.parametrize(
+    "amount_minor",
+    [
+        CUSTOM_TOPUP_POLICY.min_amount_minor - 1,
+        CUSTOM_TOPUP_POLICY.max_amount_minor + 1,
+    ],
+)
+def test_custom_amount_outside_server_bounds_is_rejected(amount_minor: int) -> None:
+    with pytest.raises(PaymentAmountInvalid):
+        _custom_package(amount_minor)
+
+
+def test_custom_checkout_uses_server_computed_inline_price() -> None:
+    assert _checkout_line_items(_custom_package(123)) == [
         {
-            "key": "starter",
-            "stripe_price_id": "price_test_starter",
-            "amount_minor": 1000,
-            "currency": "eur",
-            "credits": 10000,
-            "active": True,
+            "price_data": {
+                "currency": "eur",
+                "unit_amount": 123,
+                "product_data": {"name": "1230 credits"},
+            },
+            "quantity": 1,
         }
     ]
 
 
-def _price_package() -> CreditPackage:
+def test_preset_checkout_uses_server_inline_price() -> None:
+    assert _checkout_line_items(_preset_package()) == [
+        {
+            "price_data": {
+                "currency": "eur",
+                "unit_amount": 1000,
+                "product_data": {"name": "10000 credits"},
+            },
+            "quantity": 1,
+        }
+    ]
+
+
+def test_checkout_request_requires_exactly_one_amount_source() -> None:
+    assert CreateCheckoutSessionRequest(package_key="starter").amount_minor is None
+    assert CreateCheckoutSessionRequest(amount_minor=123).package_key is None
+    with pytest.raises(ValidationError):
+        CreateCheckoutSessionRequest()
+    with pytest.raises(ValidationError):
+        CreateCheckoutSessionRequest(package_key="starter", amount_minor=123)
+
+
+def _preset_package() -> CreditPackage:
     return CreditPackage(
         key="starter",
-        stripe_price_id="price_test_starter",
         amount_minor=1000,
         currency="eur",
         credits=10000,
-        active=True,
     )
-
-
-def test_stripe_price_is_validated_before_checkout() -> None:
-    price = {"active": True, "type": "one_time", "unit_amount": 1000, "currency": "eur"}
-    assert price_mismatch(_price_package(), price) is None
-
-
-@pytest.mark.parametrize(
-    ("patch", "expected"),
-    [
-        ({"active": False}, "price_inactive"),
-        ({"type": "recurring"}, "price_not_one_time"),
-        ({"unit_amount": 999}, "amount_mismatch"),
-        ({"currency": "usd"}, "currency_mismatch"),
-    ],
-)
-def test_invalid_stripe_price_fails_before_customer_payment(patch, expected) -> None:
-    price = {"active": True, "type": "one_time", "unit_amount": 1000, "currency": "eur"}
-    price.update(patch)
-    assert price_mismatch(_price_package(), price) == expected
 
 
 def _order_and_session():

@@ -64,6 +64,7 @@ class _DummySession:
     paths under test."""
 
     conversation_id = None
+    turn_id = None
 
     async def __aenter__(self):
         return self
@@ -73,15 +74,19 @@ class _DummySession:
 
     async def execute(self, *args, **kwargs):
         conv_id = self.conversation_id
-        return SimpleNamespace(scalar_one=lambda: conv_id)
+        return SimpleNamespace(
+            scalar_one=lambda: conv_id,
+            one=lambda: (conv_id, self.turn_id),
+        )
 
 
 async def _noop_async(*args, **kwargs):
     return None
 
 
-def _stub_common(monkeypatch, conversation_id):
+def _stub_common(monkeypatch, conversation_id, turn_id=None):
     _DummySession.conversation_id = conversation_id
+    _DummySession.turn_id = turn_id
     monkeypatch.setattr(
         "app.models.database.AsyncSessionLocal", lambda: _DummySession()
     )
@@ -119,6 +124,7 @@ async def test_turn_stream_exception_logs_stack_and_keeps_safe_frame(monkeypatch
     payload = json.loads(terminal[0].split("data: ", 1)[1])
     assert payload["detail"] == "Internal server error"
     assert payload["persisted"] is True
+    assert payload["turn_id"] == str(msg_id)
     assert "sentinel-boom" not in terminal[0]
 
     # The server-side log carries the stack and the turn identifiers.
@@ -135,7 +141,7 @@ async def test_turn_stream_exception_logs_stack_and_keeps_safe_frame(monkeypatch
 @pytest.mark.asyncio
 async def test_answer_stream_exception_logs_stack_and_keeps_safe_frame(monkeypatch):
     user_id, conv_id, message_id = uuid4(), uuid4(), uuid4()
-    _stub_common(monkeypatch, conv_id)
+    _stub_common(monkeypatch, conv_id, turn_id=message_id)
 
     async def _boom(*args, **kwargs):
         raise RuntimeError("sentinel-boom")
@@ -154,6 +160,8 @@ async def test_answer_stream_exception_logs_stack_and_keeps_safe_frame(monkeypat
     assert terminal, f"no terminal frame in {frames!r}"
     payload = json.loads(terminal[0].split("data: ", 1)[1])
     assert payload["detail"] == "Internal server error"
+    assert payload["turn_id"] == str(message_id)
+    assert "persisted" not in payload
     assert "sentinel-boom" not in terminal[0]
 
     events = [log for log in logs if log.get("event") == "answer_turn_failed"]

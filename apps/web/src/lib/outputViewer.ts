@@ -1,4 +1,5 @@
 import type { ChatOutputEntry, Output } from "@/lib/types"
+import { isChatVideoOutput } from "@/lib/anchorCards"
 
 /** Preserve server order and id identity; only a not-yet-projected opened item
  * is appended temporarily, never inserted by timestamp or card position. */
@@ -9,11 +10,12 @@ export function outputViewerItems(
 ): ChatOutputEntry[] {
   const seen = new Set<string>()
   const items = (entries ?? []).filter((entry) => {
+    if (entry.output !== null && !isChatVideoOutput(entry.output)) return false
     if (seen.has(entry.output_id)) return false
     seen.add(entry.output_id)
     return true
   })
-  if (!seen.has(selectedId) && selectedOutput) {
+  if (!seen.has(selectedId) && selectedOutput && isChatVideoOutput(selectedOutput)) {
     items.push({ output_id: selectedId, output: selectedOutput })
   }
   return items

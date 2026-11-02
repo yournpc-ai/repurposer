@@ -30,16 +30,18 @@ import { routeStreamFrame } from "@/lib/chatStreamFrames"
 import { normalizeStreamError } from "@/lib/streamTransport"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
+import type { ChatAttachment } from "@/lib/types"
 
 // The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
 // A test seam) — re-exported here so existing import sites stay put.
 export type {
-  ActivityFramePayload,
   QuestionPreviewPayload,
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
+export type { ActivityFramePayload } from "@/components/chat/timeline/types"
+import type { ActivityFramePayload } from "@/components/chat/timeline/types"
+import type { SkillReference } from "@/lib/skills"
 import type {
-  ActivityFramePayload,
   ActivityRowFramePayload,
   QuestionPreviewPayload,
   RowAppendPayload,
@@ -50,16 +52,10 @@ export interface ChatTurnBody {
   project_id: string
   message: string
   mentions?: { type: string; id: string; label: string; quote?: string }[]
+  skill?: SkillReference
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
-  attachments?: {
-    id: string
-    name: string
-    type: "file" | "image" | "video" | "audio"
-    url?: string
-    size?: number
-    status: "uploaded"
-  }[]
+  attachments?: ChatAttachment[]
   /** The composer's persona choice, riding the first message of a fresh
    * project (ADR-038 — the single identity payload; the skin follows the
    * persona). */
@@ -82,8 +78,10 @@ export interface ChatTurnBody {
 
 export interface StreamChatOptions {
   signal: AbortSignal
+  /** Durable opening user id, emitted before Agent execution begins. */
+  onTurnStarted?: (turnId: string) => void
   /** Decoded prose fragment, in order — concatenate to render the preview. */
-  onDelta?: (text: string) => void
+  onDelta?: (text: string, messageId: string | null) => void
   /** System Status frame: fires with `{}` as a pure keepalive (reasoning
    * fragments / non-prose JSON chunks — drive the indicator, never render),
    * or with `{phase: <label>}` at a REAL macro-state switch (the surviving
@@ -106,18 +104,24 @@ export interface StreamChatOptions {
    * terminal envelope stays authoritative (envelope always wins), and a
    * flipped / failed turn rolls the preview back. */
   onQuestionPreview?: (payload: QuestionPreviewPayload) => void
-  /** A user-facing checkpoint (ADR-109 言语座位通用化): prose riding ANY
+  /** A user-facing interim_prose (ADR-109 言语座位通用化): prose riding ANY
    * non-terminal call — a phase-turn expectation sentence or a grounded
    * result statement — the FULL text in one frame (quiet iterations stream
    * nothing; the client paces it out under the typewriter law). Each
-   * checkpoint is its OWN bubble segment: finalize the current segment, type
+   * interim_prose is its OWN bubble segment: finalize the current segment, type
    * this into a new one, then the settled reply lands in a fresh segment —
-   * never merged into one message. Persisted server-side as an
-   * intent.type="checkpoint" row, so a failed turn's rollback drops the
-   * bubbles and a refresh re-renders them from history. `at` is the row's
+   * never merged into one message. Persisted server-side in a short
+   * transaction as an intent.type="interim_prose" row BEFORE this frame, so a
+   * failed/stopped turn keeps the visible interim_prose on refresh. `at` is the row's
    * server-clock created_at (display stamp only — array position carries
    * the order, ADR-108). */
-  onCheckpoint?: (text: string, at?: string) => void
+  onInterimProse?: (
+    text: string,
+    at: string | undefined,
+    turnId: string | null,
+    messageId: string,
+    seq: number | null,
+  ) => void
   /** One activity frame (ADR-087 §3 Phase 2): append-oriented milestones of
    * the agent's work — status flips arrive as new frames on the same
    * activity_id; the server's terminal sweep guarantees zero active
@@ -167,12 +171,21 @@ export class StreamTurnError extends Error {
    * False for pre-persistence rejections (entry caps) and pre-stream HTTP
    * failures, where the old rollback stays correct. */
   persisted: boolean
+  /** Opening user-turn identity from the failure frame; null on legacy or
+   * pre-prepare failures. Never inferred from the client's current turn. */
+  turnId: string | null
 
-  constructor(detail: unknown, fallback: string, persisted = false) {
+  constructor(
+    detail: unknown,
+    fallback: string,
+    persisted = false,
+    turnId: string | null = null,
+  ) {
     super(typeof detail === "string" && detail ? detail : fallback)
     this.name = "StreamTurnError"
     this.detail = detail
     this.persisted = persisted
+    this.turnId = turnId
   }
 }
 
@@ -200,20 +213,22 @@ function streamTurn<T>(
   terminal: { completed: string; failed: string },
   {
     signal,
+    onTurnStarted,
     onDelta,
     onThinking,
     onQuestionPreview,
-    onCheckpoint,
+    onInterimProse,
     onActivity,
     onCandidates,
     onRowAppend,
     onRowUpdate,
   }: {
     signal?: AbortSignal
-    onDelta?: (text: string) => void
+    onTurnStarted?: (turnId: string) => void
+    onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
-    onCheckpoint?: StreamChatOptions["onCheckpoint"]
+    onInterimProse?: StreamChatOptions["onInterimProse"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
     onRowAppend?: StreamChatOptions["onRowAppend"]
@@ -283,8 +298,11 @@ function streamTurn<T>(
             : {}),
         })
         switch (frame.kind) {
+          case "turn_started":
+            onTurnStarted?.(frame.turnId)
+            break
           case "delta":
-            onDelta?.(frame.text)
+            onDelta?.(frame.text, frame.messageId)
             break
           case "thinking":
             onThinking?.(frame.payload)
@@ -292,8 +310,8 @@ function streamTurn<T>(
           case "question_preview":
             onQuestionPreview?.(frame.payload)
             break
-          case "checkpoint":
-            onCheckpoint?.(frame.text, frame.at)
+          case "interim_prose":
+            onInterimProse?.(frame.text, frame.at, frame.turnId, frame.messageId, frame.seq)
             break
           case "activity":
             onActivity?.(frame.frame)
@@ -312,7 +330,12 @@ function streamTurn<T>(
             break
           case "failed":
             reject(
-              new StreamTurnError(frame.detail, "Stream failed", frame.persisted),
+              new StreamTurnError(
+                frame.detail,
+                "Stream failed",
+                frame.persisted,
+                frame.turnId,
+              ),
             )
             break
           case "ignored":
@@ -366,13 +389,13 @@ export function streamAnswer<T>(
      * turn's `signal` twin — answer turns share the server's keepalive
      * guarantee, so silence means a dead pipe, never a slow model). */
     signal?: AbortSignal
-    onDelta?: (text: string) => void
+    onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
     onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
-    /** The answer continuation CAN carry checkpoint prose (a pick that
+    /** The answer continuation CAN carry interim_prose prose (a pick that
      * resumes into a design beat speaks its expectation sentence first) —
      * the chat turn's segmentation law applies verbatim. */
-    onCheckpoint?: StreamChatOptions["onCheckpoint"]
+    onInterimProse?: StreamChatOptions["onInterimProse"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
     onRowAppend?: StreamChatOptions["onRowAppend"]
@@ -394,12 +417,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
+  { signal, onTurnStarted, onDelta, onThinking, onQuestionPreview, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onDelta, onThinking, onQuestionPreview, onCheckpoint, onActivity, onCandidates, onRowAppend, onRowUpdate },
+    { signal, onTurnStarted, onDelta, onThinking, onQuestionPreview, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate },
   )
 }

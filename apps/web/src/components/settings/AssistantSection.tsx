@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 
-import { Card } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -88,14 +87,8 @@ export function AssistantSection() {
     key: ConfirmKey,
     labelKey: string,
     descKey: string,
-    last: boolean,
   ) => (
-    <div
-      className={
-        "flex items-center gap-3 py-2.5" +
-        (last ? "" : " border-b border-foreground/5")
-      }
-    >
+    <div className="flex items-center gap-3 py-3">
       <div className="min-w-0 flex-1">
         <p className="text-xs text-foreground">{t(labelKey)}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -108,8 +101,9 @@ export function AssistantSection() {
         disabled={prefs === null || saving !== null}
       >
         <SelectTrigger
+          size="sm"
           aria-label={t(labelKey)}
-          className="h-8 flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
+          className="flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
         >
           {saving === key && (
             <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
@@ -125,18 +119,15 @@ export function AssistantSection() {
   )
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("assistant.subtitle")}</p>
-      <Card className="gap-0 px-4 py-2">
-        <p className="pb-1 pt-2 text-[11px] text-meta">
-          {t("assistant.permissions")}
-        </p>
-        {prefRow("confirm_execution", "assistant.execution.label", "assistant.execution.desc", false)}
-        {prefRow("confirm_credits", "assistant.spending.label", "assistant.spending.desc", true)}
-        <p className="border-t border-foreground/5 py-2.5 text-[11px] leading-relaxed text-meta">
+    <section>
+      <h4 className="text-sm font-semibold">{t("assistant.permissions")}</h4>
+      <div className="mt-3 divide-y divide-border-subtle">
+        {prefRow("confirm_execution", "assistant.execution.label", "assistant.execution.desc")}
+        {prefRow("confirm_credits", "assistant.spending.label", "assistant.spending.desc")}
+        <p className="py-3 text-[11px] leading-relaxed text-meta">
           {t("assistant.footnote")}
         </p>
-      </Card>
-    </div>
+      </div>
+    </section>
   )
 }

@@ -302,7 +302,7 @@ _build_payload(target, channel) -> dict      # 预填快照（含 channel 快照
 
 - 渠道卡三态：**已连接**（头像 + 名字 + token 健康度）/ **未连接**（Connect 按钮）/ **未配置**（presence-gating "即将上线"，§4.1）。
 - 项目页：clip/derivative 卡片上 scheduled / published Badge（平台图标 + 时间）；发布成功/失败 → 全局 sonner toast；列表轮询刷新（与 Clip.render_status 同款模式）。
-- `rounded-md` / `ring-1 ring-border` + `shadow-*`；Badge 一律 `className="rounded-md"`；平台图标：lucide 有 `Linkedin`，TikTok 走"第三方 logo 无替代"例外（手写 SVG）。
+- `rounded-md` / `border-subtle` + `shadow-*`；Badge 一律 `className="rounded-md"`；平台图标：lucide 有 `Linkedin`，TikTok 走"第三方 logo 无替代"例外（手写 SVG）。
 - 新增 i18n keys：`publishing.*`、`channels.*`（en 先行，zh 镜像）。
 
 ## 12. 分期路线（排期以 `PROGRESS.md` 为准）

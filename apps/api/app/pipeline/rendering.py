@@ -30,7 +30,7 @@ import copy
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import httpx
@@ -494,7 +494,8 @@ async def queue_upload_retry(
     step.spec = step_spec
     step.status = "pending"
     step.error = None
-    step.attempt = 0
+    # Keep the attempt monotonic: the render claim increments it, and replayable
+    # stage event ids must not collide with the failed render attempt.
     step.claim_token = None
     step.started_at = None
     step.finished_at = None
@@ -516,6 +517,76 @@ async def queue_upload_retry(
     await db.flush()
     logger.info("output_upload_retry_queued", output_id=str(output.id), run_id=str(run.id))
     return UUID(str(run.id))
+
+
+async def _settle_claimed_render_stages(
+    output_id: UUID,
+    claim_token: UUID,
+    status: Literal["completed", "failed"],
+    *,
+    kind: str | None = None,
+) -> None:
+    """Settle only mirrors still fenced by this Output claim.
+
+    Display IO is best-effort and can never change the render's terminal state.
+    """
+    try:
+        from app.tools.video.production.stages import (
+            ProductionStages,
+            render_stage_kind,
+        )
+
+        async with AsyncSessionLocal() as db:
+            nodes = list((
+                await db.execute(
+                    select(WorkflowStep).where(
+                        WorkflowStep.kind == "render",
+                        WorkflowStep.spec["output_id"].astext == str(output_id),
+                        WorkflowStep.claim_token == claim_token,
+                    )
+                )
+            ).scalars().all())
+        for node in nodes:
+            spec = node.spec or {}
+            stages = ProductionStages(
+                run_id=node.run_id,
+                step_id=node.id,
+                attempt=node.attempt,
+                claim_token=claim_token,
+            )
+            await stages.settle(
+                kind or render_stage_kind(upload_only=spec.get("upload_only") is True),
+                status,
+            )
+    except Exception as exc:  # noqa: BLE001 — display cannot change production semantics
+        logger.warning(
+            "render_stage_settle_failed",
+            output_id=str(output_id),
+            status=status,
+            error=str(exc),
+        )
+
+
+async def _record_delivery_admission(output_id: UUID, claim_token: UUID) -> None:
+    """Record delivery only when the existing admission predicate holds now."""
+    try:
+        from app.pipeline.run_review import output_is_delivered
+
+        async with AsyncSessionLocal() as db:
+            output = await db.get(Output, output_id)
+            admitted = bool(
+                output is not None
+                and output.render_claim_token == claim_token
+                and output_is_delivered(output)
+            )
+        if admitted:
+            await _settle_claimed_render_stages(
+                output_id, claim_token, "completed", kind="delivery"
+            )
+    except Exception as exc:  # noqa: BLE001 — display cannot change production semantics
+        logger.warning(
+            "delivery_stage_write_failed", output_id=str(output_id), error=str(exc)
+        )
 
 
 async def render_output(output_id: UUID) -> None:
@@ -569,6 +640,7 @@ async def render_output(output_id: UUID) -> None:
             )
             await db.commit()
             if failed.rowcount:
+                await _settle_claimed_render_stages(output_id, mine, "failed")
                 await _mirror_render_node(
                     output_id, "failed", user_line("render_failed", lang)
                 )
@@ -720,6 +792,7 @@ async def render_output(output_id: UUID) -> None:
                 )
                 await db.commit()
             if failed.rowcount:
+                await _settle_claimed_render_stages(output_id, mine, "failed")
                 await _stamp_render_failure(
                     output_id, {"stage": "probe", "codes": codes, "detail": detail}
                 )
@@ -792,6 +865,11 @@ async def render_output(output_id: UUID) -> None:
                     )
             await _mirror_superseded_node(output_id, lang)
             return
+        # The fresh artifacts passed the probe and the fenced Output write
+        # committed. Render/upload completion and delivery admission remain
+        # separate facts; neither is inferred from run terminal or Output existence.
+        await _settle_claimed_render_stages(output_id, mine, "completed")
+        await _record_delivery_admission(output_id, mine)
         await _mirror_render_node(output_id, "done")
         await _finalize_owning_run(output_id)
 
@@ -841,6 +919,17 @@ async def render_output(output_id: UUID) -> None:
             )
             await db.commit()
         if failed.rowcount:
+            if failure["stage"] == "upload" and not upload_only:
+                # The renderer's explicit upload-stage error proves rendering
+                # finished; only the upload failed. No delivery is admitted.
+                await _settle_claimed_render_stages(
+                    output_id, mine, "completed", kind="render"
+                )
+                await _settle_claimed_render_stages(
+                    output_id, mine, "failed", kind="upload"
+                )
+            else:
+                await _settle_claimed_render_stages(output_id, mine, "failed")
             await _stamp_render_failure(output_id, failure)
             await _mirror_render_node(
                 output_id, "failed", error_line

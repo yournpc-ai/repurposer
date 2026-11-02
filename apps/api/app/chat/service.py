@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,6 +84,7 @@ from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
     ChatResponse,
+    ChatTurnStopRequest,
     FilmStoryboard,
     InferredIntent,
     Option,
@@ -91,6 +92,7 @@ from app.models.schemas import (
     ProjectStatus,
     QuestionPayload,
     QuestionProposal,
+    SkillReference,
     PlanEstimate,
     StartAnswerRequest,
     SuggestionRef,
@@ -553,6 +555,7 @@ async def _create_message(
     question: dict[str, Any] | None = None,
     suggestions: list[dict[str, Any]] | None = None,
     suggestion_ref: dict[str, Any] | None = None,
+    turn_id: UUID | None = None,
 ) -> Message:
     if role == "assistant":
         # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
@@ -576,10 +579,16 @@ async def _create_message(
         question=question,
         suggestions=suggestions or [],
         suggestion_ref=suggestion_ref,
+        turn_id=turn_id,
         seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
     await db.flush()
+    if role == "user" and message.turn_id is None:
+        # The opening row is its own turn identity. This is an id assignment,
+        # not a backfill or an inference about any neighbouring row.
+        message.turn_id = message.id
+        await db.flush()
     await db.refresh(message)
     return message
 
@@ -1236,6 +1245,162 @@ def _cannot_do_text(text: str) -> str:
     )
 
 
+def _video_capability_text(text: str, facts: dict[str, Any]) -> str:
+    """Honest close for a deterministic video-media capability refusal.
+
+    The refusal carries the standing version read, not a prose draft. This
+    seat only turns those facts into the user's language; it never invents a
+    successful revision or an unrelated product suggestion.
+    """
+    version = int(facts["version"])
+    duration = float(facts["duration_seconds"])
+    duration_text = f"{duration:.3f}".rstrip("0").rstrip(".")
+    medium = str(facts.get("medium") or "")
+    is_current = bool(facts.get("is_current"))
+    if _prefers_zh(text):
+        constraint = {
+            "speech": "旁白原文和语速",
+            "generator": "待生成媒体的内容",
+            "video": "真实视频素材的内容和播放速度",
+            "audio": "音频内容和播放速度",
+        }.get(medium, "相关媒体内容")
+        standing = (
+            f"当前分镜仍是第 {version} 版，总时长 {duration_text} 秒。"
+            if is_current else
+            f"这次修改所基于的第 {version} 版分镜总时长为 {duration_text} 秒。"
+        )
+        return (
+            standing + "这次时间修改没有保存新版本，也没有开始制作。"
+            f"在必须保持{constraint}不变的前提下，这项时间修改无法完成。"
+            "可以保留现有分镜；如果你明确允许调整相关媒体内容，再重新安排时长。"
+        )
+    constraint = {
+        "speech": "the narration wording and playback speed",
+        "generator": "the pending generated media's content",
+        "video": "the video footage and playback speed",
+        "audio": "the audio content and playback speed",
+    }.get(medium, "the related media content")
+    standing = (
+        f"The current storyboard is still version {version}, {duration_text} seconds. "
+        if is_current else
+        f"The storyboard used for this edit is version {version}, {duration_text} seconds. "
+    )
+    return (
+        standing + "This timing change saved no new version and started no production. "
+        f"This timing change cannot be completed while preserving {constraint}. "
+        "You can keep the existing storyboard, or explicitly allow changes to "
+        "the related media before planning a new duration."
+    )
+
+
+def _video_review_failure_text(text: str, facts: dict[str, Any]) -> str:
+    """Close a failed recheck from the earlier report, never a generic ask-back."""
+    zh = _prefers_zh(text)
+    previous = facts.get("previous_report")
+    if not isinstance(previous, dict):
+        if zh:
+            return (
+                "这次成片检查没有完成，也没有形成新的审片报告；"
+                "没有修改或重新制作成片。是否重新检查，由你决定。"
+            )
+        return (
+            "This video review did not complete and produced no new report. "
+            "The video was not changed or produced again. You decide whether to retry."
+        )
+
+    scope = previous.get("scope") if isinstance(previous.get("scope"), dict) else {}
+    frames = previous.get("frames") if isinstance(previous.get("frames"), list) else []
+    findings = previous.get("findings") if isinstance(previous.get("findings"), list) else []
+    summary = str(previous.get("summary") or "").strip()
+    if summary and _prefers_zh(summary) != zh:
+        summary = ""
+    raw_times = facts.get("at_seconds")
+    times = [
+        f"{float(value):g}"
+        for value in (raw_times if isinstance(raw_times, list) else [])
+        if isinstance(value, int | float) and not isinstance(value, bool)
+    ]
+    observations = [
+        str(finding.get("observed") or "").strip()
+        for finding in findings
+        if isinstance(finding, dict) and str(finding.get("observed") or "").strip()
+    ]
+    finding_count = len(observations)
+    observations = [value for value in observations if _prefers_zh(value) == zh]
+
+    if zh:
+        checked = f"上一次检查已完成，实际解码并检查了 {len(frames)} 个采样帧"
+        if scope.get("audio_signal_checked"):
+            checked += "，并完成了音频流与 RMS/峰值等信号检查"
+        elif scope.get("deterministic_output_checks"):
+            checked += "，并完成了确定性媒体检查"
+        checked += "。"
+        if observations:
+            checked += "当时的发现是：" + "；".join(observations) + "。"
+        elif finding_count:
+            checked += f"当时记录了 {finding_count} 条内容发现。"
+        else:
+            checked += "当时的采样帧中没有内容发现。"
+        if summary:
+            checked += f"上一次报告摘要：{summary}"
+            if not summary.endswith(("。", "！", "？", ".", "!", "?")):
+                checked += "。"
+        focused = (
+            f"刚才针对 {'、'.join(times)} 秒的定点复查没有完成"
+            if times else "刚才的复查没有完成"
+        )
+        return (
+            checked
+            + focused + "，没有形成新的审片报告，因此不能据此更新这次定点检查的判断；"
+            "上一次报告仍只代表它自己的采样与检查范围。"
+            "连续运动、音画同步和主观听感仍未检查。"
+            "没有修改或重新制作成片。是否再次复查，由你决定。"
+        )
+
+    checked = f"The earlier review completed and checked {len(frames)} actual decoded sample frames"
+    if scope.get("audio_signal_checked"):
+        checked += ", with audio-stream and signal measurements such as RMS and peak"
+    elif scope.get("deterministic_output_checks"):
+        checked += ", with deterministic media checks"
+    checked += ". "
+    if observations:
+        checked += "Its findings were: " + "; ".join(observations) + ". "
+    elif finding_count:
+        checked += f"It recorded {finding_count} content findings. "
+    else:
+        checked += "It recorded no content findings in those sampled frames. "
+    if summary:
+        checked += f"Earlier report summary: {summary}"
+        if not summary.endswith((".", "!", "?", "。", "！", "？")):
+            checked += "."
+        checked += " "
+    focused = (
+        f"The focused recheck at {', '.join(times)} seconds did not complete"
+        if times else "The recheck did not complete"
+    )
+    return (
+        checked
+        + focused + " and produced no valid new report, so it cannot update the conclusions "
+        "for those points. The earlier report remains limited to its own samples and scope. "
+        "Continuous motion, audio-visual synchronization and perceived listening quality "
+        "remain unchecked. The video was not changed or produced again. "
+        "You decide whether to review it again."
+    )
+
+
+def _sfx_import_failure_text(text: str) -> str:
+    """Close a failed selection honestly; the next search or pick is the user's."""
+    if _prefers_zh(text):
+        return (
+            "这段音频没有导入成功，也没有修改当前作品。"
+            "你可以让我重新搜索一批候选，或选择另一个候选。"
+        )
+    return (
+        "That sound could not be imported, and the current work was not changed. "
+        "You can ask for a new search or choose a different candidate."
+    )
+
+
 def _design_blocked_text(text: str, refusal: str | None) -> str:
     """The design-beat degrade line (both intent surfaces): the turn's
     storyboard design never started because the begin was refused. The
@@ -1587,6 +1752,8 @@ async def _auto_start_docked_plan(
     user_id: UUID,
     conversation_id: UUID,
     project: Project,
+    turn_id: UUID | None = None,
+    defer_start_commit: bool = False,
 ) -> tuple[Message, UUID] | None:
     """ADR-117 §2 授权前移 — the auto regime's presentation-time start.
 
@@ -1595,7 +1762,10 @@ async def _auto_start_docked_plan(
     intent carries the ``awaiting_production`` stamp and waits here like
     any confirm-owing dock (the Start pill stays as the standing offer).
 
-    Called right after a plan docks. The dock's presentation-time stamp
+    Called right after a plan docks. Chat Turn callers pass
+    ``defer_start_commit=True`` so the outer Stop fence owns the Run/hold
+    commit; the presentation-ACK endpoint retains the default local commit.
+    The dock's presentation-time stamp
     (``requires_confirmation``/``quote_high``/``unquotable`` — computed once
     by ``resolve_confirmation_need`` at the dock) is handed back to
     ``evaluate_start_gate`` as the authorization conjunct: a dock that owes
@@ -1615,6 +1785,10 @@ async def _auto_start_docked_plan(
 
     A rejected attempt undoes the answer write it made, so the docked
     question's answer cell stays open for the user's later beat.
+
+    ``turn_id`` is supplied only by the runner that docked this plan in the
+    current user turn. Presentation-ACK recovery calls without it, so an old
+    answered plan can never be re-parented into a newer turn.
     """
     pending_question = await latest_pending_question(db, conversation_id)
     if not is_pending_plan(pending_question):
@@ -1700,6 +1874,11 @@ async def _auto_start_docked_plan(
         )
         return None
     try:
+        if turn_id is not None:
+            # This is the dock born by the current runner, not an answered
+            # plan recovered from history. Stamp it BEFORE answer_question so
+            # the start commit and any continuation inherit the same identity.
+            pending_question.turn_id = turn_id
         answered, _follow_up = await answer_question(
             db,
             user_id,
@@ -1708,6 +1887,8 @@ async def _auto_start_docked_plan(
             # The run births on standing authorization (ADR-117 §2) — the
             # snapshot records the channel, not an explicit gesture.
             confirmed_via="auto",
+            turn_id=turn_id,
+            defer_start_commit=defer_start_commit,
         )
     except HTTPException as exc:
         # Undo the answer write whatever the status family — the pre-write
@@ -1819,11 +2000,12 @@ async def _continue_chat_answer(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    turn_id: UUID | None = None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
     """The generic question-answer 续聊 continuation: the user's pick is
     their say for the next turn, and the turn's inference message carries
@@ -1898,11 +2080,12 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
+            on_interim_prose=on_interim_prose,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
             on_row_append=on_row_append,
+            turn_id=turn_id,
         )
         return follow_up, run_id, bailed, answered
     if question.slot is not None and project is not None:
@@ -1922,11 +2105,12 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
+            on_interim_prose=on_interim_prose,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
             on_row_append=on_row_append,
+            turn_id=turn_id,
         )
         return follow_up, run_id, bailed, answered
     # 选项语法统一律 (ADR-081): trigger suggestion questions land here —
@@ -1958,11 +2142,12 @@ async def _continue_chat_answer(
             on_phase=on_phase,
             on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready,
-            on_checkpoint=on_checkpoint,
+            on_interim_prose=on_interim_prose,
             on_loop_event=on_loop_event,
             on_activity=on_activity,
             on_candidates=on_candidates,
             on_row_append=on_row_append,
+            turn_id=turn_id,
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
@@ -1976,11 +2161,12 @@ async def _continue_chat_answer(
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
-        on_checkpoint=on_checkpoint,
+        on_interim_prose=on_interim_prose,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
         on_candidates=on_candidates,
         on_row_append=on_row_append,
+        turn_id=turn_id,
     )
     return follow_up, run_id, bailed, settled
 
@@ -1994,12 +2180,14 @@ async def answer_question(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
     confirmed_via: str = "dock_pill",
+    turn_id: UUID | None = None,
+    defer_start_commit: bool = False,
 ) -> tuple[Message, Message | None]:
     """Answer a pending question (``POST /chat/messages/{id}/answer``).
 
@@ -2036,7 +2224,15 @@ async def answer_question(
     stamped into the Confirmed Scope Snapshot — "dock_pill" (the typed
     answer endpoint, the default) or "chat_reply" (the plan path's
     start_run tool answered in prose, N-57).
+
+    ``defer_start_commit`` is only for a Start nested in a caller-owned Chat
+    Turn. The Run/hold/answer writes flush but do not commit until the outer
+    opening-row Stop fence passes; a worker therefore cannot claim a Run whose
+    Turn was retracted/cancelled. Direct answer endpoints keep the commit here.
     """
+    if defer_start_commit and data.kind != "start":
+        raise ValueError("defer_start_commit is valid only for task_book Start")
+
     from app.pipeline.orchestrator import (
         TaskSpec,
         bail_waiting_interrupt,
@@ -2045,13 +2241,31 @@ async def answer_question(
         resume_waiting_interrupt,
     )
 
+    # A nested Start takes the opening-row fence BEFORE the pending-question
+    # lock. Stop uses the same opening → transcript order, so the two cannot
+    # deadlock; a Stop that arrived first rejects the Start before any Run/hold.
+    # If Start arrived first, its outer commit finishes before Stop can proceed.
+    if defer_start_commit:
+        start_turn_id = turn_id
+        if start_turn_id is None:
+            turn_ref = await db.get(Message, message_id)
+            start_turn_id = turn_ref.turn_id if turn_ref is not None else None
+        if start_turn_id is not None:
+            await _lock_turn_for_transcript_write(db, start_turn_id)
+
     # Row lock to the request boundary: a double-clicked Start (or retry)
     # otherwise passes the answer-is-None check concurrently and births two
     # paid runs off one plan. The second waiter re-reads post-commit and
     # hits the 409 below.
-    message = await db.get(Message, message_id, with_for_update=True)
+    message = await db.get(
+        Message, message_id, with_for_update=True, populate_existing=True
+    )
     if message is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+    # A dock answer creates no synthetic user row. Its continuation inherits
+    # the answered question's persisted opening-turn association; an explicit
+    # caller-owned turn (chat-reply Start) wins when supplied.
+    turn_id = turn_id or message.turn_id
     conversation = await db.get(Conversation, message.conversation_id)
     if conversation is None or UUID(str(conversation.user_id)) != user_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
@@ -2487,6 +2701,7 @@ async def answer_question(
                         UUID(str(conversation.id)),
                         "assistant",
                         _resume_ack_line("", "blocked"),
+                        turn_id=turn_id,
                     )
         elif data.kind in ("option", "freeform"):
             # No parked node → this run id was the display anchor (trigger
@@ -2502,11 +2717,12 @@ async def answer_question(
                         on_phase=on_phase,
                         on_tool_call=on_tool_call,
                         on_tool_ready=on_tool_ready,
-                        on_checkpoint=on_checkpoint,
+                        on_interim_prose=on_interim_prose,
                         on_loop_event=on_loop_event,
                         on_activity=on_activity,
                         on_candidates=on_candidates,
                         on_row_append=on_row_append,
+                        turn_id=turn_id,
                     )
                 )
             await fold_conversation_usage(
@@ -2533,11 +2749,12 @@ async def answer_question(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                     on_row_append=on_row_append,
+                    turn_id=turn_id,
                 )
             )
         await fold_conversation_usage(
@@ -2589,11 +2806,12 @@ async def answer_question(
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                     on_row_append=on_row_append,
+                    turn_id=turn_id,
                 )
             await fold_conversation_usage(
                 db,
@@ -2602,12 +2820,17 @@ async def answer_question(
                 accrued=_usage_bind.accrued,
             )
 
-    await db.commit()
-    if bailed_run_ids:
-        # Bailed interrupts settle COMPLETED (never FAILED, #5); each
-        # aggregated summary carries the interrupt's "Bailed by user" line
-        # as the user-abort note.
-        await finalize_bailed_runs(bailed_run_ids)
+    if defer_start_commit:
+        # The outer Chat Turn's final opening-row fence owns the only commit.
+        # Until then this Run/hold is invisible to workers and Stop can roll it back.
+        await db.flush()
+    else:
+        await db.commit()
+        if bailed_run_ids:
+            # Bailed interrupts settle COMPLETED (never FAILED, #5); each
+            # aggregated summary carries the interrupt's "Bailed by user" line
+            # as the user-abort note.
+            await finalize_bailed_runs(bailed_run_ids)
     await db.refresh(message)
     if follow_up is not None:
         await db.refresh(follow_up)
@@ -2644,17 +2867,20 @@ async def _plan_turn(
     conversation: Conversation,
     project: Project,
     request: ChatRequest,
+    skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
     recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    turn_id: UUID | None = None,
 ) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -2666,7 +2892,7 @@ async def _plan_turn(
     degrade paths land their own shape), the started run
     id, the answered task-book question
     (for ChatResponse.answered_question), and cascade-bailed run ids. The
-    caller commits — except the start branch, where answer_question commits.
+    caller owns the single Stop-fenced commit, including the Start branch.
 
     ADR-077 判词② (2026-09-14): the dispatch retired into the tool
     loop — this body is a shim; the turn lives in ``app/chat/plan_turn.py``
@@ -2683,17 +2909,20 @@ async def _plan_turn(
         conversation,
         project,
         request,
+        skill=skill,
+        skill_ambiguity=skill_ambiguity,
         recent=recent,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
-        on_checkpoint=on_checkpoint,
+        on_interim_prose=on_interim_prose,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
         on_candidates=on_candidates,
         on_row_append=on_row_append,
+        turn_id=turn_id,
     )
 
 
@@ -2705,17 +2934,20 @@ async def _propose_turn(
     text: str,
     mentions: list[ChatMention],
     recent: list[Message],
+    skill: SkillReference | None = None,
+    skill_ambiguity: list[str] | None = None,
     suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_reasoning=None,
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    turn_id: UUID | None = None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Message | None]:
     """One assistant turn after the user input is settled (CHAT_ARCH §3).
 
@@ -2744,17 +2976,20 @@ async def _propose_turn(
         text,
         mentions,
         recent,
+        skill=skill,
+        skill_ambiguity=skill_ambiguity,
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,
         on_tool_call=on_tool_call,
         on_tool_ready=on_tool_ready,
-        on_checkpoint=on_checkpoint,
+        on_interim_prose=on_interim_prose,
         on_loop_event=on_loop_event,
         on_activity=on_activity,
         on_candidates=on_candidates,
         on_row_append=on_row_append,
+        turn_id=turn_id,
     )
 
 
@@ -2780,6 +3015,8 @@ class PreparedTurn:
     answered_question: Message | None
     interrupt_reply: Message | None
     plan_path: bool
+    skill: SkillReference | None = None
+    skill_ambiguity: list[str] | None = None
 
 
 async def prepare_chat_turn(
@@ -2837,6 +3074,46 @@ async def prepare_chat_turn(
     if request.canvas_available is not None:
         conversation.canvas_available = request.canvas_available
 
+    from app.skills.resolution import SkillResolutionError, resolve_chat_skill
+    from app.skills.store import SkillNotFoundError
+
+    prior_skill_references: list[SkillReference] | None = None
+    if request.skill is None:
+        previous_user = await db.scalar(
+            select(Message)
+            .where(Message.conversation_id == conversation_id, Message.role == "user")
+            .order_by(Message.seq.desc().nullslast(), Message.created_at.desc())
+            .limit(1)
+        )
+        raw_prior = (
+            (previous_user.intent or {}).get("skill_ambiguity")
+            if previous_user is not None
+            else None
+        )
+        if isinstance(raw_prior, list):
+            from pydantic import TypeAdapter
+
+            try:
+                prior_skill_references = TypeAdapter(
+                    list[SkillReference]
+                ).validate_python(raw_prior)
+            except ValueError:
+                prior_skill_references = None
+
+    try:
+        skill_resolution = await resolve_chat_skill(
+            db,
+            owner_id=user_id,
+            reference=request.skill,
+            message=request.message,
+            prior_references=prior_skill_references,
+        )
+    except (SkillResolutionError, SkillNotFoundError) as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "skill.unavailable", "message": str(exc)},
+        ) from None
+
     user_message = await _create_message(
         db,
         conversation_id,
@@ -2844,6 +3121,18 @@ async def prepare_chat_turn(
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
+        intent=(
+            {"skill": skill_resolution.reference.model_dump(mode="json")}
+            if skill_resolution.reference is not None
+            else {
+                "skill_ambiguity": [
+                    option.reference.model_dump(mode="json")
+                    for option in skill_resolution.ambiguous
+                ]
+            }
+            if skill_resolution.ambiguous
+            else None
+        ),
         suggestion_ref=(
             request.suggestion_ref.model_dump(mode="json")
             if request.suggestion_ref is not None
@@ -2859,7 +3148,8 @@ async def prepare_chat_turn(
     # bound to the turn's outcome (the 2026-09-16 incident: a mid-turn death
     # rolled the user's words back with everything else, and the racing
     # trigger read an empty conversation). The turn's final commit stamps
-    # 'settled'; failure/cancel paths stamp 'failed' best-effort.
+    # 'settled'; failure stamps 'failed', explicit Stop settles atomically at
+    # the client-visible frontier (cancelled/retracted).
     user_message.turn_state = "in_flight"
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
@@ -2896,6 +3186,12 @@ async def prepare_chat_turn(
                     answered_at=datetime.now(UTC),
                 ).model_dump(mode="json")
                 answered_question = pending
+                # The durable user row owns its turn; this explicit association
+                # lets live and history suppress only its duplicate option bubble.
+                user_message.intent = {
+                    **(user_message.intent or {}),
+                    "answered_question_id": str(pending.id),
+                }
             if (
                 answered_question is not None
                 and pending_payload.slot is not None
@@ -2945,6 +3241,7 @@ async def prepare_chat_turn(
             conversation_id,
             "assistant",
             _resume_ack_line(decided, outcome),
+            turn_id=user_message.id,
         )
     else:
         # Plan path dispatch (intent-surface-unification W1): this endpoint is
@@ -3009,38 +3306,281 @@ async def prepare_chat_turn(
         answered_question=answered_question,
         interrupt_reply=interrupt_reply,
         plan_path=plan_path,
+        skill=skill_resolution.reference,
+        skill_ambiguity=[
+            f"{option.name} v{option.version_number}"
+            if option.version_number is not None
+            else option.name
+            for option in skill_resolution.ambiguous
+        ] or None,
     )
 
 
-def _checkpoint_callback(db, conversation_id, on_checkpoint=None):
-    """The checkpoint channel's turn-runner seat (ADR-085 判词 2/4): the loop
-    emits a checkpoint's full prose; the runner persists it as its OWN
-    message row — ``intent={"type": "checkpoint"}`` keeps the semantic type
-    explicit (never mixed with the settled assistant message: replay renders
-    it as a progress bubble, future context may filter on the marker) —
-    flush-only, the turn's one commit lands it; then the SSE hook forwards
-    the text live. The loop writes nothing (零副作用往返 holds — this hook
-    is the runner's, not the loop's). A failed turn rolls the rows back with
-    everything else, and the client's turn.failed path drops the bubbles."""
-    async def _emit(text: str) -> None:
-        message = await _create_message(
+class TurnStopped(Exception):
+    """A Stop decision won before this transcript/final-commit write."""
+
+
+async def _lock_turn_for_transcript_write(
+    db: AsyncSession,
+    turn_id: UUID,
+    *,
+    require_in_flight: bool = False,
+) -> Message:
+    """Fence every independently committed turn-owned transcript write.
+
+    Answer continuations may legitimately append to an already settled opening
+    Turn, so only Stop is forbidden by default. Partial prose and the final
+    commit additionally require the opening Turn to remain in flight.
+    ``populate_existing`` is load-bearing: this session may have loaded the row
+    before waiting for its lock, and the post-wait database state must win.
+    """
+    row = (
+        await db.execute(
+            select(Message)
+            .where(Message.id == turn_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if (
+        row is None
+        or row.turn_state in {"cancelled", "retracted"}
+        or bool((row.intent or {}).get("stop_requested_at"))
+        or (require_in_flight and row.turn_state != "in_flight")
+    ):
+        raise TurnStopped(str(turn_id))
+    return row
+
+
+async def _lock_turn_for_final_commit(db: AsyncSession, turn_id: UUID) -> Message:
+    return await _lock_turn_for_transcript_write(
+        db, turn_id, require_in_flight=True
+    )
+
+
+async def persist_interim_prose(
+    db: AsyncSession,
+    conversation_id: UUID,
+    turn_id: UUID,
+    text: str,
+) -> Message:
+    """Persist one middle-of-Turn prose row and replace its trailing partial."""
+    await _lock_turn_for_transcript_write(db, turn_id)
+    await db.execute(
+        delete(Message).where(
+            Message.turn_id == turn_id,
+            Message.intent["type"].astext == "partial",
+        )
+    )
+    return await _create_message(
+        db,
+        conversation_id,
+        "assistant",
+        text,
+        intent={"type": "interim_prose"},
+        turn_id=turn_id,
+    )
+
+
+async def persist_partial_prose(
+    db: AsyncSession,
+    conversation_id: UUID,
+    turn_id: UUID,
+    text: str,
+    *,
+    message_id: UUID | None = None,
+) -> Message:
+    """Append an emitted delta to the Turn's one server-owned trailing row."""
+    await _lock_turn_for_transcript_write(db, turn_id, require_in_flight=True)
+    if message_id is None:
+        return await _create_message(
             db,
             conversation_id,
             "assistant",
             text,
-            intent={"type": "checkpoint"},
+            intent={"type": "partial"},
+            turn_id=turn_id,
         )
-        if on_checkpoint is not None:
-            # 服务端钟锚定 (ADR-108 数组位置律): forward the row's own
-            # created_at so the live bubble carries the same server stamp
-            # the persisted array row does — live and replay read one
-            # clock. Ordering itself comes from the row's seq, never from
-            # this stamp.
-            result = on_checkpoint(text, message.created_at.isoformat())
-            if result is not None:
-                await result
+    message = await db.get(Message, message_id)
+    if (
+        message is None
+        or message.turn_id != turn_id
+        or (message.intent or {}).get("type") != "partial"
+    ):
+        raise TurnStopped(str(turn_id))
+    message.content = (message.content or "") + text
+    await db.flush()
+    await db.refresh(message)
+    return message
+
+
+def _interim_prose_callback(
+    db, conversation_id, on_interim_prose=None, turn_id: UUID | None = None
+):
+    """Persist interim prose before exposing its stable row identity on SSE."""
+    async def _emit(text: str) -> None:
+        if on_interim_prose is None:
+            if turn_id is None:
+                await _create_message(
+                    db, conversation_id, "assistant", text,
+                    intent={"type": "interim_prose"}, turn_id=turn_id,
+                )
+            else:
+                await persist_interim_prose(db, conversation_id, turn_id, text)
+            return
+
+        from app.models.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as interim_db:
+            message = await persist_interim_prose(
+                interim_db, conversation_id, turn_id, text
+            )
+            await interim_db.commit()
+        result = on_interim_prose(
+            text,
+            message.created_at.isoformat(),
+            str(message.id),
+            message.seq,
+        )
+        if result is not None:
+            await result
 
     return _emit
+
+
+async def stop_turn_at_visible_frontier(
+    db: AsyncSession,
+    user_message_id: UUID,
+    frontier: ChatTurnStopRequest,
+) -> str:
+    """Atomically settle Stop at the client's actually visible boundary."""
+    row = (
+        await db.execute(
+            select(Message)
+            .where(Message.id == user_message_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return "retracted"
+    if row.turn_state != "in_flight":
+        # A missing state is terminal for Stop purposes: never abort or
+        # retract a Turn whose authoritative state is not explicitly in flight.
+        return row.turn_state or "failed"
+
+    # Collect the complete set BEFORE deleting anything: the self-FK must never
+    # detach a child and hide it from the retraction sweep.
+    turn_rows = list((
+        await db.execute(
+            select(Message).where(
+                or_(Message.id == user_message_id, Message.turn_id == user_message_id)
+            )
+        )
+    ).scalars().all())
+    assistant_rows = [message for message in turn_rows if message.id != user_message_id]
+    by_id = {message.id: message for message in assistant_rows}
+
+    visible_prefix: dict[UUID, int] = {}
+    for item in frontier.prose:
+        message = by_id.get(item.message_id)
+        if message is None:
+            continue
+        count = min(item.visible_chars, len(message.content or ""))
+        visible_prefix[message.id] = max(count, visible_prefix.get(message.id, 0))
+    visible_activity = {
+        message_id
+        for message_id in frontier.activity_ids
+        if (message := by_id.get(message_id)) is not None
+        and (message.intent or {}).get("type") == ACTIVITY_ROW_TYPE
+    }
+    visible_structure = {
+        message_id
+        for message_id in frontier.structure_ids
+        if (message := by_id.get(message_id)) is not None
+        and (
+            bool(message.blocks)
+            or bool(message.question)
+            or (message.intent or {}).get("type") == "candidates_log"
+        )
+    }
+    visible_prose = {
+        message_id
+        for message_id, count in visible_prefix.items()
+        if (by_id[message_id].content or "")[:count].strip()
+    }
+
+    if not visible_prose and not visible_activity and not visible_structure:
+        await db.execute(
+            delete(Message)
+            .where(Message.id.in_([message.id for message in turn_rows]))
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        return "retracted"
+
+    now = datetime.now(UTC).isoformat()
+    keep_ids = visible_prose | visible_activity | visible_structure
+    delete_ids = [message.id for message in assistant_rows if message.id not in keep_ids]
+    if delete_ids:
+        await db.execute(
+            delete(Message)
+            .where(Message.id.in_(delete_ids))
+            .execution_options(synchronize_session=False)
+        )
+    for message_id in keep_ids:
+        message = by_id[message_id]
+        prefix = visible_prefix.get(message_id, 0)
+        if message.content is not None:
+            message.content = message.content[:prefix]
+        if message_id not in visible_structure:
+            message.blocks = []
+            message.question = None
+            message.answer = None
+            message.suggestions = []
+        if message_id in visible_activity:
+            frame = dict((message.intent or {}).get("frame") or {})
+            if frame.get("status") == "active":
+                frame.update({"status": "cancelled", "cancelled_at": now})
+                message.intent = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
+    row.intent = {
+        **(row.intent or {}),
+        "stop_requested_at": now,
+        "stop_visible": frontier.model_dump(mode="json"),
+    }
+    row.turn_state = "cancelled"
+    await db.commit()
+    return "cancelled"
+
+
+async def settle_interrupted_turn(
+    user_message_id: UUID,
+    conversation_id: UUID,
+) -> str | None:
+    """Idempotently clean up an unexpected disconnect.
+
+    Stop has already been settled atomically by its control endpoint. This path
+    never re-derives cancelled versus retracted from durable database content.
+    """
+    from app.models.database import AsyncSessionLocal
+
+    try:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(Message, user_message_id, with_for_update=True)
+            if row is None:
+                return None
+            if row.turn_state != "in_flight":
+                return row.turn_state
+            row.turn_state = "failed"
+            await db.commit()
+            return "failed"
+    except Exception as e:  # noqa: BLE001 — teardown is best-effort
+        logger.warning(
+            "turn_interrupted_settle_error",
+            message_id=str(user_message_id),
+            error=str(e),
+        )
+        return None
 
 
 async def stamp_turn_failed(user_message_id) -> None:
@@ -3070,6 +3610,7 @@ async def stamp_turn_failed(user_message_id) -> None:
 async def persist_turn_failed_line(
     conversation_id,
     detail: str,
+    turn_id: UUID | None = None,
 ) -> None:
     """Persist a failed turn's honest line as ONE assistant row (intent
     ``{"type": "turn_failed"}``) — the live grey meta row's durable twin, so
@@ -3089,6 +3630,7 @@ async def persist_turn_failed_line(
                 "assistant",
                 detail,
                 intent={"type": "turn_failed"},
+                turn_id=turn_id,
             )
             await db.commit()
     except Exception as e:  # noqa: BLE001 — best-effort by contract
@@ -3108,7 +3650,7 @@ async def execute_chat_turn(
     on_phase=None,
     on_tool_call=None,
     on_tool_ready=None,
-    on_checkpoint=None,
+    on_interim_prose=None,
     on_loop_event=None,
     on_activity=None,
     on_candidates=None,
@@ -3164,17 +3706,20 @@ async def execute_chat_turn(
                     prepared.conversation,
                     prepared.project,
                     request,
+                    skill=prepared.skill,
+                    skill_ambiguity=prepared.skill_ambiguity,
                     recent=recent,
                     on_delta=on_delta,
                     on_reasoning=on_reasoning,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                     on_row_append=on_row_append,
+                    turn_id=prepared.user_message.id,
                 )
                 if plan_answered is not None:
                     prepared.answered_question = plan_answered
@@ -3192,17 +3737,20 @@ async def execute_chat_turn(
                     request.message,
                     request.mentions,
                     await recent_history_within_budget(db, prepared.history),
+                    skill=prepared.skill,
+                    skill_ambiguity=prepared.skill_ambiguity,
                     suggestion_ref=request.suggestion_ref,
                     on_delta=on_delta,
                     on_reasoning=on_reasoning,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
                     on_tool_ready=on_tool_ready,
-                    on_checkpoint=on_checkpoint,
+                    on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                     on_row_append=on_row_append,
+                    turn_id=prepared.user_message.id,
                 )
                 if chat_settled is not None:
                     # 插话判定结算 (ADR-053 R2): the agent judged this very
@@ -3224,10 +3772,16 @@ async def execute_chat_turn(
             accrued=_usage_bind.accrued,
         )
 
-    # The turn's outcome stamp rides the SAME commit as its writes (交互
-    # 完整性批 A): in_flight → settled is atomic with the assistant row /
-    # the dock / the run — "message received" and "turn converged" stay two
-    # distinct, individually truthful facts (the minimal turn contract).
+    # Stop and settlement serialize on the opening row. If Stop won, raising
+    # here rolls back every uncommitted assistant/run/hold write in this Turn.
+    turn_row = await _lock_turn_for_final_commit(db, prepared.user_message.id)
+    await db.execute(
+        delete(Message).where(
+            Message.turn_id == prepared.user_message.id,
+            Message.intent["type"].astext == "partial",
+        )
+    )
+    turn_row.turn_state = "settled"
     prepared.user_message.turn_state = "settled"
     await db.commit()
     await finalize_bailed_runs(bailed_run_ids)
@@ -3499,7 +4053,7 @@ async def resolve_suggestion_note(
 #
 # 每帧一行：a persistable activity frame lands as its OWN array row —
 # appended at execute entry (read spans; the position = work start, after
-# the checkpoint seat) or at born-terminal emission (repair terminals /
+# the interim_prose seat) or at born-terminal emission (repair terminals /
 # explore milestones), then settled by an in-place UPDATE. The per-turn
 # aggregate ``activity_log`` row is RETIRED (the replay no longer
 # re-derives interleaving — array position carries it). All writes ride
@@ -3520,14 +4074,19 @@ async def append_activity_row(
     db: AsyncSession,
     conversation_id: UUID,
     frame: dict[str, Any],
+    *,
+    turn_id: UUID | None = None,
 ) -> Message:
     """Append ONE activity row at its array position (open / born-terminal)."""
+    if turn_id is not None:
+        await _lock_turn_for_transcript_write(db, turn_id)
     message = Message(
         conversation_id=conversation_id,
         role="assistant",
         content="",
         attachments=[],
         mentions=[],
+        turn_id=turn_id,
         intent={"type": ACTIVITY_ROW_TYPE, "frame": frame},
         seq=await alloc_message_seq(conversation_id, db),
     )
@@ -3547,6 +4106,9 @@ async def settle_activity_row(
     message = await db.get(Message, message_id)
     if message is None:
         return
+    if message.turn_id is not None:
+        await _lock_turn_for_transcript_write(db, message.turn_id)
+        await db.refresh(message, with_for_update=True)
     message.intent = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
     await db.flush()
 
@@ -3603,6 +4165,7 @@ async def record_candidates_log(
     events: list[dict[str, Any]],
     *,
     ref: str,
+    turn_id: UUID | None = None,
 ) -> Message | None:
     """Persist one turn's candidate-surface events (set births + selection
     updates, in emission order) as a single message row — the same doctrine
@@ -3623,6 +4186,7 @@ async def record_candidates_log(
         content="",
         attachments=[],
         mentions=[],
+        turn_id=turn_id,
         intent={"type": CANDIDATES_LOG_TYPE, "ref": ref, "events": events},
         seq=await alloc_message_seq(conversation_id, db),
     )

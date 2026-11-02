@@ -12,15 +12,24 @@ EXACT OUTPUT AND EXECUTION IDENTITY:
 SAVED CONTENT VERSION (for comparison and reliable revision references):
 {{ storyboard }}
 
-DECODED FRAME INDEX (the active clip/object facts available at each actual frame):
+CURRENT DECODED FRAME INDEX (the active clip/object facts available at each new actual frame):
 {{ frame_facts }}
 
-Inspection rules:
-- Base every finding on something directly visible in a cited attached frame. Never claim to have watched continuous motion or heard audio.
-- Check title/caption legibility, clipping or occlusion, whether page framing contains the intended content, and whether visible content matches the saved version and user requirements.
-- Use `observed_issue` for a concrete observable mismatch or readability/framing problem; use `aesthetic_suggestion` only for an optional taste improvement and keep the difference explicit.
-- For each finding: cite one `frame_id`; state what is visible, which current requirement it affects, the visual evidence, and the smallest useful change. Fill `clip_id` / `object_id` only when the frame index makes that identity reliable; otherwise leave them null and keep the exact frame evidence.
-- `summary` states the actual checked result without a score. If no issue is visible in these frames, return an empty `findings` list and say so honestly; never invent a defect to make a review useful.
-- The server records the limited still-frame scope separately. Do not add claims about motion, transitions, music, sound or audio-visual synchronization.
+CURRENT DETERMINISTIC MEDIA CHECKS (measured independently from this exact Output's bytes; these include the real audio-stream/RMS/peak facts that still images cannot show):
+{{ deterministic_checks }}
 
-Return only the JSON object.
+EARLIER SUCCESSFUL REVIEW FACTS (the prior report's sampling scope and deterministic checks only; null when no earlier report exists):
+{{ previous_review_facts }}
+
+Evidence rules:
+- Base every visual finding on something directly visible in a cited CURRENT attached frame. Earlier scope and deterministic checks remain world facts, but they are not new frames, new visual observations, or proof of continuous motion.
+- Audio presence, decode state, RMS, peak and clipping come from the deterministic checks, not from the pixels. Those measurements do not establish perceived mix quality or audio-visual synchronization.
+- Check title/caption legibility, clipping or occlusion, whether page framing contains the intended content, and whether visible content matches the saved version and user requirements.
+- `summary` states the actual checked result without a score. If no issue is visible in these frames, return an empty `findings` list and say so honestly; never invent a defect to make a review useful.
+- The server records the limited still-frame scope separately. Do not claim to have watched continuous motion or heard audio.
+
+Return only one JSON object with this exact schema; do not rename or add fields:
+- Top level: `summary` (string or null, optional) and `findings` (array, defaults to an empty array).
+- Every finding REQUIRES `kind` (`observed_issue` or `aesthetic_suggestion`), `frame_id` (a current attached frame id), `observed` (the directly witnessed fact), and `suggestion` (the smallest useful change).
+- A finding MAY also include `requirement` (the affected current requirement), `evidence` (the visual evidence), `clip_id`, and `object_id`; each is a string or null. Fill clip/object identity only when the current frame index proves it.
+- Use `observed_issue` for a concrete observable mismatch or readability/framing problem; use `aesthetic_suggestion` only for an optional taste improvement and keep the difference explicit.

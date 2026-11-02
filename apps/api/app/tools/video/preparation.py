@@ -388,17 +388,21 @@ async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) 
     )
 
 
-async def ensure_font_resources() -> None:
+async def ensure_font_resources() -> dict[str, int]:
     """Publish the repo-pinned font bytes for local/manual production drills.
 
     This is storage preparation, not a Composition write. Existing objects are
     left untouched; the renderer still re-hashes them at execution time.
     """
+    reused_count = 0
     for item in FONT_FILES:
         data = (_FONT_ROOT / str(item["filename"])).read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest != item["digest"]:
             raise ValueError(f"pinned font {item['filename']} has unexpected digest {digest}")
         key = font_storage_key(str(item["filename"]), digest)
-        if not await storage.exists(key):
+        if await storage.exists(key):
+            reused_count += 1
+        else:
             await storage.save(key, data, content_type="font/otf")
+    return {"item_count": len(FONT_FILES), "reused_count": reused_count}

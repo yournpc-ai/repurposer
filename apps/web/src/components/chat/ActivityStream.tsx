@@ -5,17 +5,19 @@
  *   SAME timeline unit. Completed tools are facts inside that segment; their
  *   settlement never seals it. The first visible following prose fragment
  *   or a real terminal state does.
- * - ActivityRow renders a standalone terminal failure fact. Cancelled
- *   attempts retire in the timeline projection instead of leaving an error
- *   carcass; a real failure keeps one calm, honest terminal row.
+ * - ActivityRow renders an isolated terminal failure fact, or the failed
+ *   activity inside a settled segment's details. Cancelled attempts retire
+ *   in the timeline projection instead of leaving an error carcass; a real
+ *   failure keeps one calm, honest terminal row.
  *
  * Rows are the user-safe projection of the loop's internal events. They never
- * gate Canvas / Confirm / Run, never carry params / results / reasoning, and
- * resolve their copy through i18n. Tool duration_ms remains the tool's own
+ * gate Canvas / Confirm / Run and never carry params, raw results, or reasoning;
+ * the accepted video review's typed evidence is the single bounded exception.
+ * Copy resolves through i18n. Tool duration_ms remains the tool's own
  * duration; the work segment's separate client wall clock includes the model
  * wait until visible reply and freezes at that display edge. */
 
-import { useState, type ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
@@ -30,9 +32,10 @@ import {
 } from "lucide-react"
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { ActivityRowFrame } from "@/components/chat/historyReplay"
-import { activityCategoryKey, activityFailureKey, foldCategories } from "@/lib/chatTimeline"
+import type { ActivityRowFrame, VideoReviewReceipt } from "./timeline/types"
+import { activityCategoryKey, activityFailureKey, foldCategories } from "./timeline/activity"
 import { formatElapsed } from "@/components/chat/workTiming"
+import { useMessageScrollerViewportAnchor } from "@/components/ui/message-scroller"
 import { cn } from "@/lib/utils"
 
 /** Per-kind glyphs (2026-09-24 user ruling, OriginCut parity — 查看项目资源
@@ -198,6 +201,71 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
   )
 }
 
+const REVIEW_SCOPE_KEYS = [
+  "actual_output_decoded",
+  "static_frames_checked",
+  "deterministic_output_checks",
+  "sampled_frame_signals_checked",
+  "audio_signal_checked",
+  "motion_and_transitions_checked",
+  "audio_and_av_sync_checked",
+] as const
+
+function reviewFrameTime(seconds: number): string {
+  return `${Number(seconds.toFixed(3))}s`
+}
+
+/** The one result-bearing Worked detail: evidence from the exact review,
+ * never the report's storage fields, metrics, summary, or raw JSON. */
+function VideoReviewEvidence({ receipt }: { receipt: VideoReviewReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <div className="ml-5 flex flex-col gap-2 py-1 text-xs">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-meta-foreground">{t("chat.activityReceipt.sampledFrames")}</span>
+        {receipt.frames.map((frame) => (
+          <span key={frame.frame_id} className="tabular-nums text-muted-foreground">
+            {frame.frame_id} · {reviewFrameTime(frame.time_seconds)}
+          </span>
+        ))}
+      </div>
+      {receipt.findings.length === 0 ? (
+        <span className="text-muted-foreground">{t("chat.activityReceipt.noFindings")}</span>
+      ) : (
+        receipt.findings.map((finding, index) => (
+          <div key={`${finding.frame_id}:${index}`} className="flex flex-col gap-0.5">
+            <span className="text-meta-foreground">
+              {t(`chat.activityReceipt.${finding.kind}`, { frame: finding.frame_id })}
+            </span>
+            <span className="whitespace-pre-wrap text-muted-foreground">{finding.observed}</span>
+          </div>
+        ))
+      )}
+      {receipt.output_issue_codes.length > 0 && (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-meta-foreground">{t("chat.activityReceipt.audioIssues")}</span>
+          {receipt.output_issue_codes.map((code, index) => (
+            <span key={`${code}:${index}`} className="text-muted-foreground">
+              {t(`chat.activityReceipt.audio.${code}`)}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-meta-foreground">{t("chat.activityReceipt.checkedScope")}</span>
+        {REVIEW_SCOPE_KEYS.map((key) => (
+          <div key={key} className="flex items-start justify-between gap-3">
+            <span className="text-muted-foreground">{t(`chat.activityReceipt.scope.${key}`)}</span>
+            <span className="shrink-0 text-meta-foreground">
+              {t(receipt.scope[key] ? "chat.activityReceipt.checked" : "chat.activityReceipt.notChecked")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** One work segment in BOTH poses, shared by chat activities and background
  * runs. The header owns the lifecycle; each adapter owns its details. Chat
  * keeps latent tool rows while live and category rows when settled. A run
@@ -215,8 +283,8 @@ export function WorkSegmentRow({
   liveDetails,
   details,
   settledLabel,
-  settledLeading = null,
   failed = false,
+  failure = null,
 }: {
   rows?: ActivityRowFrame[]
   elapsedMs?: number | null
@@ -230,13 +298,16 @@ export function WorkSegmentRow({
   details?: ReactNode
   /** Optional read fallback when a run has no honest elapsed span. */
   settledLabel?: ReactNode
-  settledLeading?: ReactNode
   failed?: boolean
+  /** Chat's failed activity stays inside its settled segment's details. */
+  failure?: NowRowPayload | null
 }) {
   const { t } = useTranslation()
   const live = activity !== null || liveLabel != null
+  const rowRef = useRef<HTMLDivElement>(null)
+  const anchorDisclosure = useMessageScrollerViewportAnchor(rowRef, live)
   const hasLiveDetails = liveDetails != null
-  const expandable = live ? hasLiveDetails : details != null || rows.length > 0
+  const expandable = live ? hasLiveDetails : details != null || rows.length > 0 || failure != null
   const [openOverride, setOpenOverride] = useState<{
     live: boolean
     open: boolean
@@ -249,12 +320,16 @@ export function WorkSegmentRow({
   const label = live
     ? (liveLabel ?? (activity ? activityText(activity, t) : t("chat.thinking")))
     : (settledLabel ??
-      (elapsed
-        ? t("chat.activityFold.worked", { elapsed })
-        : t("chat.activityFold.actionCount", { count: rows.length })))
+      (failed
+        ? elapsed
+          ? t("chat.activityFold.failed", { elapsed })
+          : t("chat.failed")
+        : elapsed
+          ? t("chat.activityFold.worked", { elapsed })
+          : t("chat.activityFold.actionCount", { count: rows.length })))
   const cats = foldCategories(rows)
   return (
-    <div className="flex w-full flex-col gap-1">
+    <div ref={rowRef} className="flex w-full flex-col gap-1">
       <div
         className={cn(
           "-mx-1.5 -my-0.5 group/row flex items-center rounded-md px-1.5 text-xs text-muted-foreground transition-colors",
@@ -267,7 +342,10 @@ export function WorkSegmentRow({
         aria-expanded={expandable ? open : undefined}
         onClick={
           expandable
-            ? () => setOpenOverride({ live, open: !open })
+            ? (event) => {
+                anchorDisclosure(event.currentTarget)
+                setOpenOverride({ live, open: !open })
+              }
             : undefined
         }
       >
@@ -275,9 +353,7 @@ export function WorkSegmentRow({
           <span className="flex h-3 w-3 shrink-0 items-center justify-center">
             <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
           </span>
-        ) : (
-          settledLeading
-        )}
+        ) : null}
         <span
           className={cn(
             "min-w-0 truncate transition-colors",
@@ -317,22 +393,23 @@ export function WorkSegmentRow({
                       })
                     : t("chat.completed")
                   return (
-                    <div
-                      key={i}
-                      className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs"
-                    >
-                      <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {catLabel}
-                      </span>
-                      {c.repeat > 1 && (
-                        <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
-                          ×{c.repeat}
+                    <div key={i} className="flex flex-col">
+                      <div className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs">
+                        <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          {catLabel}
                         </span>
-                      )}
+                        {c.repeat > 1 && (
+                          <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
+                            ×{c.repeat}
+                          </span>
+                        )}
+                      </div>
+                      {c.receipt ? <VideoReviewEvidence receipt={c.receipt} /> : null}
                     </div>
                   )
                 })}
+                {failure ? <ActivityRow activity={failure} /> : null}
               </div>
             ))
         : null}

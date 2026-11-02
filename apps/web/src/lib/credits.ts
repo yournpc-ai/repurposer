@@ -10,6 +10,12 @@ export interface CreditsInsufficientDetail {
   required: number
 }
 
+/** Optional spend-point context for the lightweight top-up dialog. */
+export type CreditTopupRequest = Pick<
+  CreditsInsufficientDetail,
+  "balance" | "required"
+>
+
 /** Narrow a parsed error `detail` (a 422 response body, or a
  * StreamTurnError's raw detail) to the structured shortfall — null for
  * anything else (plain-string details, validation arrays, other codes). */

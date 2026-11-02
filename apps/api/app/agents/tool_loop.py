@@ -175,9 +175,9 @@ def prune_wire_parameters(parameters: dict, keys: set[str]) -> dict:
     return pruned
 
 
-# 言语账本 (T2b) 见 ``call_loop``; ADR-085 的 checkpoint 通道与其分家——
-# checkpoint 散文永不入账本。
-MAX_CHECKPOINTS_PER_TURN = 4  # ADR-109 §2: 节奏护栏（防逐调用啰嗦），非资格限制
+# 言语账本 (T2b) 见 ``call_loop``; ADR-085 的 interim_prose 通道与其分家——
+# interim_prose 散文永不入账本。
+MAX_INTERIM_PROSES_PER_TURN = 4  # ADR-109 §2: 节奏护栏（防逐调用啰嗦），非资格限制
 
 
 @dataclass
@@ -204,6 +204,9 @@ class LoopResult:
     # refusing tool's name. The caller maps it to its honest close — the
     # loop itself never words user-facing meaning.
     ended_by: str | None = None
+    # Structured world facts supplied by that refusal (for example the
+    # standing video version and duration). Never model-facing prose.
+    refusal_facts: dict[str, Any] | None = None
     # A caller-supplied rejection policy stopped a repeated, non-recovering
     # tool call before max_iterations. This is distinct from both an execute
     # TerminalRefusal and budget exhaustion so the chat layer can close with
@@ -219,12 +222,14 @@ class TerminalRefusal:
     cancels) AND the loop ends here, with no further model iteration.
 
     Seat law: only an entry that is STRUCTURALLY unrecoverable this turn
-    (the film design entry's begin latch — the hold is a cross-request
-    fact this turn must not poll) may end the loop this way; the rejection
-    echo's "one more iteration" would be a lie for it. A refused call
-    whose repair is possible keeps riding the plain feedback string."""
+    (a latched design begin or a declared media-capability boundary) may end
+    the loop this way; the rejection echo's "one more iteration" would be a
+    lie for it. A refused call whose repair is possible keeps riding the plain
+    feedback string. Optional ``facts`` carry world state for the caller's
+    honest close, never a drafted reply."""
 
     reason: str
+    facts: dict[str, Any] | None = None
 
 
 def _loop_echo(feedback: str) -> str:
@@ -294,6 +299,9 @@ class ToolObservation:
     text: str
     ok: bool = True
     images: tuple[Any, ...] = ()
+    # Opaque internal evidence for the accepted-event consumer. The loop never
+    # interprets it and never adds it to the model-facing observation wire.
+    receipt: BaseModel | None = None
 
 
 def _observation_wire_content(observation: ToolObservation) -> str | list[dict]:
@@ -369,6 +377,8 @@ class ReadAccepted:
 
     tool_name: str
     ok: bool = True
+    # Opaque sideband from ToolObservation; not part of the model wire.
+    receipt: BaseModel | None = None
 
 
 @dataclass(frozen=True)
@@ -378,7 +388,7 @@ class ReadExecuting:
     read span's honest duration here (execute entry): name_known is a
     mid-generation liveness beat, and a duration anchored there would make
     the persisted row's ``at``/``duration_ms`` measure LLM generation time
-    instead of the real read work. Emitted after the checkpoint seat and
+    instead of the real read work. Emitted after the interim_prose seat and
     before ``execute`` — sequential same-process stamps, never a clock
     race.
 
@@ -475,7 +485,7 @@ class ToolLoopAgent:
         on_tool_call: _Hook | None = None,
         on_tool_ready: _Hook | None = None,
         on_repair: _Hook | None = None,
-        on_checkpoint: _Hook | None = None,
+        on_interim_prose: _Hook | None = None,
         on_loop_event: _Hook | None = None,
         should_stop_rejection: RejectionStop | None = None,
         **ctx: Any,
@@ -511,7 +521,7 @@ class ToolLoopAgent:
           never wears the label (2026-09-17 交互完整性批 ②: the read-before-
           write journey used to light "reworking it…" right after a
           successful read — a lie about the world).
-        - ``on_checkpoint``: a CHECKPOINT was delivered (ADR-109 言语座位
+        - ``on_interim_prose``: a INTERIM_PROSE was delivered (ADR-109 言语座位
           通用化) — the prose riding ANY non-terminal call (before/after
           are the same seat: an after-report is the next iteration's prose
           meeting the same before-seat). Emitted BEFORE the call executes
@@ -519,9 +529,9 @@ class ToolLoopAgent:
           params validation, and a waiting read (ADR-102) would otherwise
           hold the speech hostage for the whole wait. Quiet iterations
           never stream — the frontend paces the full text out under the
-          typewriter law. Checkpoint speech rides its own channel: it
+          typewriter law. InterimProse speech rides its own channel: it
           never enters ``speech_parts``, so the settled reply must stand
-          alone. Fires at most ``MAX_CHECKPOINTS_PER_TURN`` times per turn;
+          alone. Fires at most ``MAX_INTERIM_PROSES_PER_TURN`` times per turn;
           beyond the cap the prose is dropped with a log (节奏护栏 — a
           breaching model loses the channel, it does not overflow it).
           None (the one-shot JSON path) keeps the ledger behavior — the
@@ -571,18 +581,18 @@ class ToolLoopAgent:
         # the LoopResult both carry the composed whole). A rejected call's
         # speech is replaced speech and never enters the parts.
         speech_parts: list[str] = []
-        # Checkpoint channel state (ADR-109 — 言语座位通用化): the seat is
-        # UNIVERSAL — prose riding any non-terminal call checkpoints, no
+        # InterimProse channel state (ADR-109 — 言语座位通用化): the seat is
+        # UNIVERSAL — prose riding any non-terminal call interim_proses, no
         # registry eligibility (白名单退役: the model's speech instinct is
         # the judge; the harness's job is to provide the seat, not to
-        # license it per tool). ``checkpoints_sent`` is the per-turn
+        # license it per tool). ``interim_proses_sent`` is the per-turn
         # anti-chatter cap (≤4 — a RHYTHM guardrail, never a license).
         # ``last_read_name`` rides for the hit-rate log (评审 2026-09-17).
         last_read_name: str | None = None
-        checkpoints_sent = 0
+        interim_proses_sent = 0
         # Turn-summary observability (ADR-085 评审 2026-09-17 — 「不需要
         # dashboard，日志里能查就够」): ONE line per turn answers the
-        # hit-rate questions — reads × checkpoints conversion (ADR-109:
+        # hit-rate questions — reads × interim_proses conversion (ADR-109:
         # the eligible axis retired with the whitelist).
         accepted_reads: list[str] = []
 
@@ -599,7 +609,7 @@ class ToolLoopAgent:
                 ),
                 iterations=result.iterations,
                 reads=accepted_reads,
-                checkpoints=checkpoints_sent,
+                interim_proses=interim_proses_sent,
             )
             return result
         # The wire continuation after an accepted read: the assistant tool_call
@@ -848,32 +858,32 @@ class ToolLoopAgent:
             #   The ONE routing rule (ADR-109 — 言语座位通用化): prose before
             #   a TERMINAL call is settled speech (the ledger — the
             #   ``not tool.terminal`` guard is what keeps the reply itself
-            #   off the checkpoint channel); prose riding ANY non-terminal
-            #   call is a CHECKPOINT — the seat is universal (白名单退役:
+            #   off the interim_prose channel); prose riding ANY non-terminal
+            #   call is a INTERIM_PROSE — the seat is universal (白名单退役:
             #   per-tool eligibility asked the registry to license speech;
             #   the model's phase-narration instinct is the judge, the
             #   harness provides the seat, the cap guards the rhythm).
-            #   It rides on_checkpoint, never the ledger. Without an
-            #   on_checkpoint channel (the one-shot JSON path) the ledger
+            #   It rides on_interim_prose, never the ledger. Without an
+            #   on_interim_prose channel (the one-shot JSON path) the ledger
             #   keeps everything; capped prose is dropped (earned, never
             #   scheduled — never merged back).
-            checkpoint_route = (
+            interim_prose_route = (
                 not tool.terminal
                 and bool(prose.strip())
-                and on_checkpoint is not None
+                and on_interim_prose is not None
             )
-            if checkpoint_route and checkpoints_sent < MAX_CHECKPOINTS_PER_TURN:
-                await _emit(on_checkpoint, prose.strip())
-                checkpoints_sent += 1
+            if interim_prose_route and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN:
+                await _emit(on_interim_prose, prose.strip())
+                interim_proses_sent += 1
                 logger.info(
-                    "tool_loop_checkpoint",
+                    "tool_loop_interim_prose",
                     agent=self.name,
                     iteration=iteration,
                     predecessor=last_read_name,
                 )
-            elif checkpoint_route:
+            elif interim_prose_route:
                 logger.info(
-                    "tool_loop_checkpoint_capped",
+                    "tool_loop_interim_prose_capped",
                     agent=self.name,
                     iteration=iteration,
                 )
@@ -883,11 +893,11 @@ class ToolLoopAgent:
             # The composed speech: a TERMINAL call gets the ledger + this
             # iteration's prose (it never entered the ledger — the guard
             # above); a read gets the LEDGER AS IS — its prose either just
-            # entered it (non-routed) or left the ledger for the checkpoint
-            # channel (routed: emitted = the checkpoint owns the words;
+            # entered it (non-routed) or left the ledger for the interim_prose
+            # channel (routed: emitted = the interim_prose owns the words;
             # capped = dropped, never merged back). Re-adding ``prose``
             # here would double the non-routed read's speech and leak
-            # checkpoint words back into the ledger (regression caught by
+            # interim_prose words back into the ledger (regression caught by
             # test_read_observation_continues_the_loop_and_keeps_speech).
             speech = _compose_speech(
                 speech_parts if not tool.terminal else [*speech_parts, prose]
@@ -895,7 +905,7 @@ class ToolLoopAgent:
             if not tool.terminal:
                 # The read's work-START stamp (ADR-108 数组位置律): the
                 # projector re-anchors the span's honest duration at
-                # execute entry — after the checkpoint seat above, so the
+                # execute entry — after the interim_prose seat above, so the
                 # waiter row is appended (and persisted) BEFORE the
                 # activity row's birth: 服务员话 → 读活动 → 读后回复 is
                 # array order, never a clock race.
@@ -941,7 +951,14 @@ class ToolLoopAgent:
                         "content": _observation_wire_content(outcome),
                     }
                 )
-                await _emit(on_loop_event, ReadAccepted(tool_name=call.name, ok=outcome.ok))
+                await _emit(
+                    on_loop_event,
+                    ReadAccepted(
+                        tool_name=call.name,
+                        ok=outcome.ok,
+                        receipt=outcome.receipt,
+                    ),
+                )
                 continue
             if isinstance(outcome, TerminalRefusal):
                 # The deterministic turn-ending refusal: the REJECTION facts
@@ -976,6 +993,7 @@ class ToolLoopAgent:
                         iterations=iteration + 1,
                         calls=calls,
                         ended_by=call.name,
+                        refusal_facts=outcome.facts,
                     )
                 )
             if outcome is None:

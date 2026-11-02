@@ -33,6 +33,7 @@ from app.editing.schemas import (
     WebObject,
 )
 from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
+from app.editing.temporal import timeline_duration
 
 
 def _kf_summary(kf: Any, timebase: int, fps_num: int, fps_den: int) -> dict[str, Any]:
@@ -238,9 +239,7 @@ def storyboard_payload(
             "fps": fps_num / fps_den,
             "background": settings.background,
         },
-        "duration_seconds": (
-            max((c.range.end for c in all_clips), default=0) / timebase
-        ),
+        "duration_seconds": timeline_duration(content) / timebase,
         "sources": [
             {
                 "snapshot_id": str(binding.snapshot_id),

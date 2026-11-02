@@ -74,7 +74,7 @@ export function AppSidebar() {
      (avatar + text + upgrade pill) reads as ONE unit; only the collapsed
      rail gives this button its own hover fill. */
   const avatarTrigger = (
-    <PopoverTrigger className="flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-start gap-3 rounded-xl px-3 text-left font-normal transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/30 group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:flex-none group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0 group-data-[state=collapsed]:hover:bg-sidebar-accent">
+    <PopoverTrigger className="flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-start gap-3 rounded-xl px-3 text-left font-normal transition-colors outline-none focus-visible:outline-2 focus-visible:outline-ring/30 group-data-[state=collapsed]:h-10 group-data-[state=collapsed]:w-10 group-data-[state=collapsed]:flex-none group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:gap-0 group-data-[state=collapsed]:p-0 group-data-[state=collapsed]:hover:bg-sidebar-accent">
       <Avatar className="h-8 w-8 rounded-full group-data-[state=collapsed]:h-6 group-data-[state=collapsed]:w-6">
         <AvatarImage src="" alt={displayName} />
         <AvatarFallback className="rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-[10px]">
@@ -182,21 +182,13 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="gap-3 p-2 group-data-[state=collapsed]:items-center">
-        {/* Account console (ADR-046 D5): the avatar opens a Popover carrying
-            inline controls (theme / language segmented, replay tour,
-            logout) — never a DropdownMenu of links. Expanded footer anatomy
-            (ChatGPT parity, 2026-09-27): ONE container owns the hover/open
-            fill — [avatar + name/plan two lines][upgrade pill] read as a
-            single row unit, the pill living INSIDE it (2026-09-27 user
-            correction: never two visually separate pieces). The pill rides
-            to the landing pricing anchor (the in-app purchase entry is
-            W11). */}
+        {/* Account console: the avatar opens one Popover. Expanded footer =
+            [avatar + name/plan] in a single hover/open container; no upgrade
+            entry while subscriptions are unavailable. */}
         <div
           className={cn(
-            // One container owns the row fill — but it YIELDS when the
-            // upgrade pill is the hover target (:has guard, 2026-09-27):
-            // hovering the pill lights the pill alone, not the whole row.
-            "flex w-full items-center rounded-xl transition-colors group-data-[state=collapsed]:justify-center group-data-[state=expanded]:not-has-[[data-slot=button]:hover]:hover:bg-sidebar-accent",
+            // One container owns the row fill.
+            "flex w-full items-center rounded-xl transition-colors group-data-[state=collapsed]:justify-center group-data-[state=expanded]:hover:bg-sidebar-accent",
             consoleOpen && "group-data-[state=expanded]:bg-sidebar-accent",
           )}
         >
@@ -225,15 +217,6 @@ export function AppSidebar() {
               <AccountConsole onClose={() => setConsoleOpen(false)} />
             </PopoverContent>
           </Popover>
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            className="mr-1.5 h-7 shrink-0 rounded-md px-2.5 text-xs hover:bg-accent group-data-[state=collapsed]:hidden"
-            render={<Link to="/" hash="pricing" />}
-          >
-            {t("common.upgrade")}
-          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>

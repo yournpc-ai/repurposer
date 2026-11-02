@@ -381,8 +381,10 @@ async def test_first_pass_fit_and_execution_resume_submit_one_original(monkeypat
     content = narrated_content()
     world = _World(monkeypatch, content)
     policy = NarrationPolicy(max_tts_characters=100)
+    reuse = []
     first = await narration.prepare_speech_media(
         content, user_id=USER_ID, execution_id=EXECUTION_ID, policy=policy,
+        on_reuse=reuse.append,
     )
     assert len(world.synth_calls) == 1
     assert first["obj_speech"]["state"] == "done"
@@ -391,10 +393,23 @@ async def test_first_pass_fit_and_execution_resume_submit_one_original(monkeypat
 
     resumed = await narration.prepare_speech_media(
         content, user_id=USER_ID, execution_id=EXECUTION_ID, policy=policy,
+        on_reuse=reuse.append,
     )
     assert resumed["obj_speech"]["media"] == first["obj_speech"]["media"]
     assert len(world.synth_calls) == 1
     assert len(world.metered) == 1
+    assert reuse == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_no_speech_objects_skip_preparation_and_reuse_reporting():
+    reuse = []
+    prepared = await narration.prepare_speech_media(
+        valid_content(), user_id=USER_ID, execution_id=None,
+        policy=NarrationPolicy(max_tts_characters=0), on_reuse=reuse.append,
+    )
+    assert prepared == {}
+    assert reuse == []
 
 
 @pytest.mark.asyncio

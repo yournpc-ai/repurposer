@@ -1,8 +1,8 @@
 # Video Project — 视频作品、Skill 与渲染目标架构
 
-> Status: 已拍板目标架构，开发中（2026-10-28）。本文是新架构唯一目标事实源；施工与验收归 [video-project-implementation](tasks/video-project-implementation.md)，当前批次归 PROGRESS §0。目标能力与单条旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
+> Status: 已拍板目标架构，开发中（2026-11-02）。本文是新架构唯一目标事实源；施工与验收归 [video-project-implementation](tasks/video-project-implementation.md)，当前批次归 PROGRESS §0。目标能力与单条旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
 >
-> 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；混合合成、程序化画面与生成媒体按施工合同分批接入；个人 Skill 随后开放；旧 Clip 高层能力内化与 Scrub Inspector 后置。**不迁移既有业务数据**；新表、新列和索引仍须走 Alembic schema migration。
+> 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；混合合成、程序化画面与生成媒体按施工合同分批接入；外部 Skill 持久化与加载随后开放；旧 Clip 高层能力内化与 Scrub Inspector 后置。**不迁移既有业务数据**；新表、新列和索引仍须走 Alembic schema migration。
 
 ## 0. 核心决策
 
@@ -15,6 +15,7 @@
 7. **video-spec 是 Film 的继任渲染契约**，renderer-neutral；迁移期是明确的新旧替换，不建设第三套永久视频架构。
 8. **不为旧 FilmStoryboard、film-spec 或旧项目数据建设迁移层**。新链验收后删除旧 Film 实现；Clip 的迁移与删除另行评估。
 9. **同一作品允许混合画面来源**：原生文字/图形动画、已有实拍/图片、模型生成媒体及程序化画面可共同参与合成。内容类型与生产方式分开；支持范围以当前能力声明为准，文字动画不冒充自由 2D/3D 创作。
+10. **所有创作来源共用一条创作循环与同一个可精修作品**：真实素材 grounding → 方法与能力选择 → CompositionVersion → 真实内容呈现 → 授权制作 → 视听检查 → 结构化修订与交付。固定 Skill、外部 Skill、自由设计和 Generator 只在创作来源上不同；出生后都展开为 Tracks / Clips / Objects / Animations / Audio / Speech / SourceSnapshots，后续修订与 worker 不再依赖 Skill。能力迭代只扩展这本体、Generator 和已注册工具，不另起作品根或生产链。
 
 ### 0.1 长期创作方针（所有阶段施工必读）
 
@@ -22,11 +23,11 @@
 
 1. **少量能力组合出丰富作品**：优先建设素材、时间、叠放、文字/图形、动画、声音与可再生产媒体等可复用能力。代表样片是阶段验收，不是永久模板上限；不为单条参考片预建完整 NLE、3D 引擎、特效库或通用插件平台。
 2. **原生内容与媒体生产互补**：需要精确独立修改的文字、图形等保留原生身份；复杂、特殊、变化快的画面可通过程序或模型生产为媒体，并保留可再次生产的来源。创作层统一用 `GeneratorObject` 表达后者，具体边界见 §4.3.2。
-3. **代码也是创作材料**：受控程序路线须允许 Agent 根据需求编写、修改视觉程序，经预览反馈改善结果，不能只调用开发者预置效果。执行图的拓扑与权限仍由系统代码裁决；允许编写画面不等于允许模型编写业务调度、计费或数据库操作。
+3. **代码也是创作材料**：受控程序路线须允许 Agent 根据需求编写、修改视觉程序，经预览反馈改善结果，不能只调用开发者预置效果。除 drawing-v1 外，`component-v1` 允许 Agent 按讲稿、文案和素材编写受控 TSX 组件，HTML/SVG 作为组件内标记；组件在上游烘焙为固定媒体，最终 video-spec 仍无 React/Remotion。执行图的拓扑与权限仍由系统代码裁决；允许编写画面不等于允许模型编写业务调度、计费、数据库操作或获得任意依赖、网络和文件能力。
 4. **创作可迭代，制作必须固定**：设计/预览可在明确的调用、资源与费用范围内迭代；确认后的制作钉版本、程序、输入与执行摘要，恢复/重试不追 current、不重新设计。复用既有内容/图/Run 唯一写口及队列、计费、渲染、交付，不新增平行生产链。
 5. **模型独立是领域边界，不是全模型已支持的声明**：作品、Skill、编辑操作不绑定某个模型品牌；文本/代码创作模型与媒体生产模型可不同，provider 能力、私有参数和用量留在适配边界。按真实消费者接入和验证，不先搭全供应商框架，也不承诺任意模型都有相同能力与质量。
 6. **分开验收表达、执行、创作、编辑**：能保存不等于能渲染，能渲染不等于 Chat 能稳定创作，媒体可播放不等于内部元素可编辑。每批说明四层的实际出口、证据与未支持项；通过动态预览和必要试听判断结果，静帧/结构检查不代替视听验收。
-7. **Skill 保存方法，扩展由真实需求驱动**：保存可复用指令、结构、参数及已支持的程序来源，不复制用户私有素材或授予额外权限。字段、函数和执行能力随首个真实消费者增补；现有 ABCD 内分批交付，不因作品复杂便预设新的 E/F/G 大阶段。
+7. **Skill 保存方法，扩展由真实需求驱动**：保存可复用指令、结构、参数及已支持的程序来源，不复制用户私有素材或授予额外权限。外部能力按形态内化：instructions → 创作方法，结构 → VideoTemplate，局部参数 → Preset，媒体 → Asset/SourceSnapshot，动作 → 注册工具/provider，视觉程序 → 受控 Generator。声明式能力可校验后加载；可执行外部代码只有经审核进入受控包才获得运行资格，原始 Skill 脚本永不直接执行。字段、函数和执行能力随首个真实消费者增补；现有 ABCD 内分批交付，不因作品复杂便预设新的 E/F/G 大阶段。
 
 基础能力能够组合出同类作品，不等于能自动复现参考视频的全部创意、素材质量、节奏和人工设计。阶段出口允许用户提供素材、反馈与多轮指导，不以世界级自动创作为当前封板条件。
 
@@ -164,7 +165,7 @@ Clip 可带可空 `scene_id` 表示叙事归属：
 
 一个 Scene 可含多个镜头和多个素材切片；“一个视频 Clip 切一刀”不自动产生新 Scene。
 
-当前原语：`move_scene(start)` 平移 Scene 及所属 Clips；`remove_scene` 删除该幕所属内容，不隐式 ripple。`update_scene.range` 不对带内容的幕做静默移动/缩放；非平移改时长当前未支持，需由后续显式编辑操作承接。
+Scene 的移动、复制、删除与时间变换都作用于显式目标集合；Scene.range 与所属 Clips 必须由同一原子操作维护，不能只改叙事标记而留下旧时间结构。`move_scene` 只表达平移，不能代替改时长。通用目标、时间变换与联动语义见 §6.6；当前已支持的操作以施工合同为准。
 
 Scene 的移动、复制和删除以同一批原子编辑维护归属 Clips、动画、旁白引用与受影响 Transition；移动不改变源区间，复制按 §4.2 重映射 ID，删除不能留下悬空引用。跨幕/全局 Clip 不因时间上与该 Scene 相交就被连带修改；跨组关联不能可靠保留时明确冲突，不隐式 ripple 或挪动其他 Scene。首批实现实际 CRUD 所需操作，不扩展成磁吸时间线编辑器。
 
@@ -286,7 +287,7 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 | 可编辑图形 MG | 原生图形/路径与 Animation | 按代表场景添加最小受支持图元，参数可编辑；不预建完整矢量设计系统 |
 | 受控 2D/3D 程序画面、模型生产画面 | GeneratorObject → 固定媒体 | 保留程序/请求与参数，显式生产后参与合成；内部修改需改来源并重新生产。当前实际 runtime 为 drawing-v1 的受限 2D 绘图命令与 image-v1 的 MiniMax image-01 单图请求 |
 
-**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `drawing-v1`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；也已接 `image-v1`：保存 MiniMax `image-01` 的 16:9 单图请求，经既有 Run 授权后真实生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；其他模型、生成视频、自由改时长和通用 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
+**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `drawing-v1`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；也已接 `image-v1`：保存 MiniMax `image-01` 的 16:9 单图请求，经既有 Run 授权后真实生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；通用 target × move/trim/delete/time_map × ripple/source policy 已落码，原生/Web 输出时间映射与固定 Audio 显式 1× 裁取复用同一写口，Speech、Generator、VideoObject 的时长映射失败闭，验证状态见施工合同。其他模型、生成视频、通用媒体 rate 和自由 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
 
 代表性出口为“动态背景 + 中央实拍 + 独立标题/定时字幕 + 原声/音乐”，经 Chat 设计、审阅、制作与局部修订完成。平台播放器按钮、账号与弹幕不属于该作品内容。不能以静态网页或纯文字片通过替代此混合合成能力。
 
@@ -307,6 +308,10 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 | 再编辑与复用 | 改来源/参数经唯一内容写口生成新版本；只重做受影响生产结果，其余已成功且输入匹配的结果复用。把既有结果当普通素材时，显式绑定其快照为 Image/VideoObject，与继续修改 Generator 来源区分 |
 
 drawing-v1 的来源字段为 `runtime/code/parameters/output`，program_digest 覆盖四者的规范 JSON；output 固定偶数尺寸、fps、duration_frames 与背景。Agent 程序只实现 `render(ctx)`，逐帧返回 rect/ellipse/polygon/line JSON 命令；独立 Node 权限进程不暴露业务数据库、调度、计费、DOM、网络或任意文件能力，限制初始化/逐帧/总执行时间、命令数与输出字节。stdout 在读取中累计，超限立即终止并回收子进程；超时、异常与取消共用同一清理路径。Pillow 光栅化、PyAV/libx264 生成 MP4 与代表帧，`video-generators/{program_digest}.json` 固定媒体、预览、输出约束和诊断；相同 digest 读取并校验既有媒体后才复用。
+
+`component-v1` 是目标 runtime：Agent 根据真实讲稿、文案、素材与 Skill 方法编写 TSX 组件，HTML/SVG 只作为组件内标记，不另建 HTML runtime。CompositionVersion 以 `code/parameters/output` 保存不可变来源，digest 另含锁定 runtime/依赖；受控上游 runner 只允许声明 API、依赖和固定素材，禁止动态安装、任意 import/eval、网络、业务文件、DB、调度与计费。预览与制作按 digest 固定同一 MP4/PNG，参数或代码修订经唯一写口产生新版本并只重做受影响媒体。需要独立精修的文字、字幕和音频仍优先生成原生对象，不把整片烘焙成一个不可编辑视频。
+
+旋转轨道消费者已验证 Agent 原创三轨道、几何符号及差速/反向运动；初版与 `speed_multiplier` 修订各有独立 program digest 和精确预览，固定媒体与原生 Text/Image 同版合成，重试准备复用同一固定媒体而不重新创作。该出口是 run-less 领域消费者证据，不代表正式 Chat/Run 计费旅程已通过。
 
 image-v1 当前只声明 `runtime/prompt/provider/model/parameters/output`，首个消费者固定 provider=`minimax`、model=`image-01`、16:9 单图，不暴露种子、参考图或任意供应商参数。设计与修订只保存请求；授权 Run 缺失媒体时先在对应执行键持久化 `submitted` 标记，再发出一次非幂等生成 POST。MiniMax 同步 image-01 接口未文档化幂等键、客户端请求 ID 或历史结果查询；传输/响应解析失败，或恢复时只读到 submitted 而没有固定媒体，均按“结果未确认”失败闭，不自动再次提交，不把未知供应商消费记成 0 或 1 张。该标记只保证同一执行键的恢复不盲重放，不承诺供应商恰好一次执行；用户明确重新生成仍须新 Run 和独立执行命名空间。
 
@@ -428,6 +433,36 @@ Transition 明确输出覆盖窗、前后 source handles 与余量不足行为�
 
 字体文件与 digest、文本切分、grapheme/word/line 寻址及排版实现版本必须可追溯。Preview/Render 用相同资源与一致求值；不同实现通过中文、英文、换行和 Emoji fixtures 对照，不能只验证时间插值。
 
+### 6.6 编辑目标、时间变换与联动
+
+Composition 的持续修订使用一套与 Skill、模板和具体影片无关的时间编辑代数。自然语言中的“整片改为 30 秒”“第三章缩短后前移后续内容”“删除这一幕并收拢”都编译为目标集合上的通用操作，不新增 `retime_composition`、官网片专用分支或按目标秒数写死的操作。
+
+**时间线总长**永远是所有 Tracks、所有 Clips 的 `max(clip.range.end)`，包括 `scene_id=null` 的跨幕音乐和其他全局 Clip；不读取 Skill 的目标时长、Scene 的最后结束时间或 Clip 数组顺序作为总长。
+
+**编辑目标 `target`** 可解算为 Clip、Scene、Track、显式选择集或整个 Timeline。服务端把目标解析为本版稳定实体 id；“当前一幕”“后续内容”必须有结构边界，不能用时间相交猜测归属，也不能用 Chat 最新产物代替目标。整个 Timeline 只是最大目标集合，不拥有另一套编辑器。
+
+**基础时间操作**共享同一目标与联动解析：
+
+| 操作 | 统一语义 |
+|---|---|
+| `move` | 平移输出时间；源窗不变，Clip-local 动画随动 |
+| `trim` | 保留输出子区间；固定媒体按显式 source policy 映射，默认不 ripple |
+| `split` | 在输出切点拆分；按 §4.2 保留/重映射身份与关联 |
+| `delete` | 删除目标；`lift` 留空与 `ripple` 收拢必须显式区分 |
+| `time_map` | 对目标输出范围应用 `t′ = a × t + b`（`a > 0`）；Transition duration 与 TextPart stagger 按 `a` 缩放，Clip-local keyframe 在所属 Clip 的输出网格量化后重新定基，不叠加输出平移 `b` |
+| `rate` | 改变动态媒体的 Source→Output 播放映射；与输出时间映射分开，仅在显式参数和 adapter 能力同时存在时开放 |
+
+`time_map` 是通用时间变换，不等于媒体变速。静态网页、Text/Image/Shape 等原生内容保持 Object、布局、属性值和来源不变，只改时间坐标；动画 keyframe 的 `at` 先随所属 Clip 映射到输出网格，量化后减去新 Clip start，使局部 0 与末尾 keyframe 分别对齐 0 和新 Clip 时长，`b` 不成为局部延迟；TextPart stagger 只按 `a` 更新，`value` 不按属性名特判。动态媒体必须逐 Clip 明确 source policy：1× 裁取、显式 `rate`，或不支持即拒绝。Music 等跨幕 AudioClip 也在目标集合内，不能因不属于 Scene 被遗漏。Speech、待生产 Generator 和其他不能保持已审阅语义的内容失败闭，不静默截断、变速或重新创作。确定性媒体能力拒绝与可修复参数错误分型：前者零新版、零制作并结束本回合修订循环，回复真实版本与时长。
+
+**联动策略与基础操作正交**：
+
+- `ripple=none|forward`：是否把操作边界之后的下游内容同步平移；默认不隐式 ripple。下游范围按 Track/Clip 结构确定，遇到重叠、Transition、跨组关联或无法保持约束时整批拒绝，不建设磁吸时间线。forward 只平移下游，不拉伸保留 Scene、延长结尾或重裁全局音频来消除音乐-only 尾部；用户点名的范围已保存后即停止，额外时间或美学调整等下一条用户消息。
+- 关联只来自 `scene_id`、显式 `linked_group_id` 和已登记的声画关系；时间相交本身不构成关联。
+- Scene 被编辑或其成员被整体变换时，Scene.range 与成员使用同一时间映射；Scene 不拥有第二套局部时间线。
+- 所有 ops 先在同一候选版本完成映射，再由唯一量化座统一取整，避免逐 Clip 累计舍入误差。
+
+每次修订仍只经 `revise_video → apply_composition_edits` 原子产生一个 CompositionVersion；保留未改实体 id、SourceSnapshot 与 `skill_provenance`，不调用 Director redraft。任一目标或媒体不支持时零新版、零部分写入。通用操作不等于承诺所有媒体能力；操作语义共享，Object/adapter 的能力矩阵独立裁决。
+
 ## 7. Skill、VideoTemplate、Preset、PromptTemplate
 
 ### 7.1 四层职责
@@ -438,6 +473,8 @@ Transition 明确输出覆盖窗、前后 source handles 与余量不足行为�
 - **Skill**：版本化创作包，组合 instructions、VideoTemplate、Presets、输入要求、能力要求与示例。
 
 VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Skill 或 Template 不暗中改变旧作品，Renderer 也不依赖 Skill 仍存在。
+
+launch-film 已是内置 Skill 的首个完整范式：SKILL.md 保存创作方法，video-template.json 保存固定 Scene/Track/Clip 结构，代码展开命名 Preset，音乐以固定 AudioClip 进入版本。固定程序组件不是所有 Skill 的必备项，只在原生对象不足以表达画面时引用；Preset 也不要求独立文件。Skill 可声明默认 SFX cue 与固定音频资产，cue 经原生 AudioClip 落轨并随所属 Scene/Clip 参与时间联动；Gallery 风格的完整声音是上架必要条件，用户明确关闭声音仍不得被默认值重开。
 
 ### 7.2 launch-film 只是内置 Skill
 
@@ -461,17 +498,23 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 无 Skill 的自由 MG 由 `design_video` 生成结构化 edits；有 Skill 的官网片由同一工具实例化模板。后续版本、CRUD、Run、Render 和交付完全同链。
 
-### 7.3 个人 Skill 与外部导入
+### 7.3 外部 Skill 持久化与加载
 
-- “保存创作方法”才生成 Skill：从 CompositionVersion **确定性抽取**结构、轨道、布局、动画和参数；LLM 只协助名称、description 与使用说明，不重新猜数值。内容槽位、固定品牌元素和可适配范围由用户审阅确认，不声称能从一次成片自动推断全部创作规律。
-- 默认排除事实文案和用户源素材，保留声明复用的结构与风格；可保存已支持的 Generator 程序来源、参数槽位与能力要求，私有参考须剥离或由新输入绑定，示例引用须有权限。
-- SkillVersion 不可变；`/skill-name + prompt` 绑定确定版本，仍走唯一 `POST /chat`，不跳过首稿审阅、制作意图或费用授权。
-- **Strict** 表示无法复现声明参数就明确冲突；**Adaptive** 只允许在声明边界内适配。不得静默变化后声称“完全一样”。
-- 外部 SKILL.md/references 可导入为草稿；`scripts/` 不自动执行，`allowed-tools` 只是依赖声明，不授予权限。
-- 新对象、动画或私有工具不受支持时列能力缺口，不伪装完整兼容。
-- 首版仅个人 Skill、单次创作一个显式用户 Skill；不做市场、团队共享或自由叠加。
-- C 的必验外部消费者为 [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft)：固定源 commit，解析其方法、镜头卡、准确实现与依赖，完成声明范围内的真实加载、换素材制作和再次复用。仅导入说明文字或给出不支持报告不足以通过此消费者验收；所选镜头缺少的受控执行能力须补齐并验收。可支持部分镜头，但明确范围，不声称整个库兼容。导入本身不授权执行仓库的安装/采集/发布脚本；适配后的视觉实现可在已支持的受控运行时生产，所需依赖按实际消费者接入，不另建业务执行链。
-- video-shotcraft 的首批可以从代表镜头开始；C 的该消费者最终验收须通过导入后的真实方法与选定实现，完成真实产品素材→多镜头视频→修订→保存并换另一产品内容复用的完整工作流。支持范围可以明确限定，不要求一次覆盖全部镜头库，但一段孤立动画不能代替完整创作包复用。
+- 用户 Skill 按 owner 隔离，SkillVersion 不可变；保存原始 instructions、references、声明输入、能力报告、Strict/Adaptive policy 与 `source_uri/source_revision/source_hash`。原始外部包无需改名或内容改写即可导入；旧作品不随后续 SkillVersion 改变。
+- **Strict** 只固定导入审阅时明确声明的必要输入、场景数、时长与 Generator runtime；这些确定性字段无法满足时给出具体冲突。参考 demo 的词数、示例文案和坐标不自动成为 Strict 产品规则。**Adaptive** 只允许在声明边界内由 Agent 适配，实际故事板、程序与参数随结果呈现。这里不发明通用约束求解器、第二套模板 DSL 或通用插件平台。
+- 唯一创作链为：SkillVersion → 有界选择 instructions/references 并作为不可信创作输入注入现有设计/Generator Agent → 普通原生编辑或受控 Generator 来源 → 预览与 `revise_video` 修订 → `apply_composition_edits` → 固定生产与 Output。不得新增第二意图入口、第二作品内容写口或第二生产链。
+- 外部 `scripts/` 不自动执行，`allowed-tools` 只是未授权依赖声明。外部内容不能覆盖系统、grounding、素材权限、报价和授权；Generator 仍无业务数据库、调度、计费、任意网络或任意文件能力。
+- 首版不做市场、团队共享、多 Skill 自由叠加，也不从自己的 CompositionVersion 形成或保存 Skill。固定源码适配器只作合同测试夹具，不是产品加载实现；产品加载链不得按包名、镜头名、仓库 URL、commit 或 digest 分支。
+- C 的真实外部消费者为 [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft)：固定源 commit，原始包完成通用导入与 SkillVersion 持久化，再选一个未参与固定适配的 held-out 镜头，用新产品文案经真实 Agent 创作、预览、修订与 run-less 精确版本 Output 验证。可只支持明确声明的镜头与能力范围，不声称兼容整个镜头库；正式 Chat/Run 用户旅程归 C2/C5 验收。
+
+### 7.4 Skill 调用与 Home 入口
+
+- `/` 打开的 Skill picker 同时接纳平台内置 Skill 与当前用户可访问的外部 SkillVersion。选中后形成可见 Skill chip，并随消息携带统一的 Skill 引用：内置 Skill 由注册表 id + 版本解算，用户 Skill 由不可变 SkillVersion id 解算；不能使用隐藏 recipe_id 或另一套发射载荷。
+- Home 的视频 Skill 卡是同一入口的卡片形态：点击形成 Skill chip + 可编辑 prompt，与手动 `/skill + prompt` 使用完全相同的 `POST /chat` 载荷。未注册或尚未声明能力的 Skill 不伪装成可点击卡；卡片不自动发送、建项目或 Start。需要固定风格的文字视频、产品宣传与旁白 Demo 必须走 Skill 绑定，prompt 只承载用户内容与要求，不能靠意图识别猜测本次是否套固定风格。
+- Gallery 只上架对应 Skill 已走完真实「预填 → 首稿 → 授权 → 制作 → 交付 → 修订」的样片；实际文件必须包含声明的音乐/SFX/旁白，完整动态观看和实际试听通过。Home 自动静音播放不改变成片音轨事实，占位、静音或仅 run-less 的领域样片不能证明可售能力。
+- 非 Skill Recipe 继续使用 PromptTemplate；Recipe 不进入 @ picker，也不借 Skill 之名获得隐藏执行参数。视频 Skill chip 是独立实体，不把既有 Recipe 改名成 Skill。
+- 自然语言明确点名时只解算唯一可访问 Skill，歧义必须询问。一次创作至多绑定一个显式 Skill，普通 Chat 未显式选择时仍可按现有设计路由使用内置默认。
+- Strict/Adaptive 只约束首版设计。CompositionVersion 出生后，后续时间、内容与 Generator 修订统一走 `revise_video`，不重新执行 Skill；`skill_provenance` 仅保留来源血缘。
 
 ## 8. Chat → CompositionVersion → Run → video-spec
 
@@ -494,7 +537,7 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 → Output(type=video)
 ```
 
-修订走 `revise_video(base_ref, edits)` 产生新 CompositionVersion；只有当前消息具备制作意图时才进入后续制作，普通修订不自动重制。
+修订走 `revise_video(base_ref, edits)` 产生新 CompositionVersion；新版本必须原样继承基版本的 `skill_provenance`，内容修订不能抹掉实例化来源。只有当前消息具备制作意图时才进入后续制作，普通修订不自动重制。
 
 ### 8.1.1 生成媒体与程序化画面的生产边界（drawing-v1 / image-v1 已接）
 
@@ -551,11 +594,11 @@ capture、SSRF、citation resolver、grounding、素材权限、容量、报价�
 
 可复用的底层保持不变：`create_run` 唯一 Run 出生地、WorkflowStep inputs/状态调度、NODE_KINDS、队列、fencing、计费、Output render ownership、render_status 认领、artifact probe 与终态写。当前设计/修订双路重复、Film 版本落 pending JSON 和 produce 缺版重设计是新链明确消除的耦合。
 
-### 8.5 基于画面证据的内容质量检查（首个静帧闭环已接，完整检查待扩）
+### 8.5 基于画面证据的内容质量检查（静帧与确定性信号检查已接，完整检查待扩）
 
 目标是让 Agent 根据真实画面发现问题、修订并复核。`render_probe` 保留媒体文件硬检查；内容 reviewer 归 `tools/video`，复用既有 Agent harness；`run_review.py` 保持事实聚合。无需先建立通用质量平台或新的审批流程。
 
-当前 `review_video` 只接受确切 delivered Output id，校验其完成文件、执行 spec 与版本血缘后直接解码该 Output 的媒体；默认按执行场景抽少量静帧，`at_seconds` 存在时只抽这些指定复核点。报告写入该 Output 的 `quality.content_review`，记录真实帧号/时间、内容寻址帧证据、检查范围与限制；finding 必须引用实际解码帧，只有该帧 active facts 能证明时才保留 clip/object 引用。无问题允许空 findings，可观察问题与审美建议分开。报告复用须匹配确切 Output、检查要求和显式持久化的 `at_seconds` 采样范围，缺采样元数据的旧报告不猜测覆盖新请求，单点复核不能代替整片场景抽样；`refresh=true` 强制重新检查。静帧实现不声称检查连续运动、转场、声音或音画同步。
+当前 `review_video` 只接受确切 delivered Output id，校验其完成文件、执行 spec 与版本血缘后直接解码该 Output 的媒体；默认按执行场景抽少量静帧，`at_seconds` 存在时只抽这些指定复核点。报告写入该 Output 的 `quality.content_review`，记录真实帧号/时间、内容寻址帧证据、检查范围与限制；finding 必须引用实际解码帧，只有该帧 active facts 能证明时才保留 clip/object 引用。无问题允许空 findings，可观察问题与审美建议分开。`output-checks-v1` 同时记录采样帧平坦/重复候选，并完整解码首个音频流测量 RMS、峰值与削波比例；候选不直接判成缺陷，只有执行 spec 明确期待声音时才把静音/低电平列为问题。音频检查覆盖流存在与 PCM 信号，不冒充主观听感。报告复用须匹配确切 Output、检查要求、当前报告/检查器版本和显式持久化的 `at_seconds` 采样范围，缺采样元数据或使用旧检查器的报告不猜测覆盖新请求，单点复核不能代替整片场景抽样；`refresh=true` 强制重新检查。当前实现不声称检查连续运动、转场、BS.1770 integrated LUFS 或音画同步。
 
 首个消费者直接从实际 Output 抽取少量关键帧，对照用户要求和对应内容版本，返回问题描述、帧号/时间与证据；能可靠解算时附 clip/object 引用。运动或声音问题再按需取短片/音频，不要求静帧检查覆盖所有质量维度。报告沿用既有质量/交付读面，说明实际检查范围；模型未能检查时如实说明。
 
@@ -613,6 +656,8 @@ Chat 内组件通过结构化 block 引用 `composition_id + composition_version
 
 Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画分组均读同一版本 DTO。提交携带 base_ref、稳定 clip/object 标识与受限 edits；Escape 取消、双击复位、键盘步进及冲突时预览回滚在 D4 实现。旧消息卡片钉旧版本，只读历史不追随 current；继续修改旧版须走 §9.1 的显式选择与当前 head 条件提交，不静默用旧卡覆盖新版。
 
+SFX 候选与音频 Inspector 共用真实 `WaveformPlayer` 的 play/pause、seek、进度和时长；语音消息形态由圆形播放钮、确定性 bars 与单时间显示组成，已播放部分通过 clip/mask 投影真实 `audio.currentTime`。bars 可以是不解码 PCM 的确定性视觉表达，但 seed 必须绑定稳定 candidate/audio identity，live/history/remount 同形，不得随机重生成；motion 只服务视觉过渡与真实进度投影，不创造第二套音频状态机。候选阶段只解算 candidate set/member，不写 Composition；落轨后的 Inspector 以 version + audio Clip 为目标，本地试听/调值只改草稿，Apply 才经 `revise_video(base_ref, edits)` 生成新版本。共享播放器与草稿交互不合并 search/import/revise 的服务端语义，也不创造第二写口。
+
 ### 10.1 Chat 创作、工具过程与交付
 
 本节为 TARGET，随 B 实施，不表示当前 Chat 已具备这些能力。通用 SSE、消息顺序、打字机、活动折叠与工作段收口继续归 CHAT_ARCHITECTURE §8；本节只定义视频旅程中的职责；呈现面的区分不要求独立渲染，可由整合 block 统一组织。
@@ -633,23 +678,23 @@ Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画
 - 设计与读取继续投影为语义活动，制作阶段投影到现有 Run 工作段，不出现两份并行进度真相。沿用 RUNNING → REVIEWING → SETTLED 与真实交付收口；Run 终态不能独自提前封口。通用 Chat live 折叠行为不因换组件而改写。
 - 失败记录定位真实阶段与可行恢复动作；可复用的准备结果不重复执行或收费。partial/failed/delivered 仍由服务端裁决，卡片与正文不另推一套状态。
 
-### 10.2 整合 block 的待选呈现方案
+### 10.2 TurnBlock / RunBlock 整合呈现
 
-UIArc 仅为调研候选，未决定采用、安装或替换组件。当前考察 [Research run](https://uiarc.dev/components/blocks/research-run)、[AI answer](https://uiarc.dev/components/blocks/ai-answer)、[Document extraction](https://uiarc.dev/components/blocks/document-extract) 等整合 block：能否把一次工作的正文、过程、来源和结果组织成连续的交互单元，替代现有 message/tool 分散拼装的视觉效果。
+视频 Chat 的一体化呈现采用 [CHAT_ARCHITECTURE §8.10](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示target)：TurnBlock 统一承载一次用户 Turn 的正文、活动、结构化组件与块级动作；RunBlock 按 `runId` 独立承载后台制作、内部阶段与交付。Research run、AI chat 与 crypto agent 仅作为工作块解剖和渐进揭示的参考，不构成安装或替换现有 Chat 机器的决定。
 
-§10.1 是语义职责划分，不要求对应四个独立 UI 组件，也不要求保留 RunTaskList/WorkSegmentRow 的具体呈现实现。可以由一个整合 block 渲染相关事实，底层仍保留版本、执行与产物各自的身份和权限。是否采用现成 block、提取其中结构或继续自建，需以真实多轮创作、版本修改、后台制作与刷新回放原型比较后决定；不先冻结新的 block schema 或引入通用 UI 编排层。组件内部 composer、状态机和自动启动行为不能形成第二意图入口或执行真相。
+§10.1 的语义职责映射为 Block 内保序 Slot，而不是平级等距消息碎片。组件只消费真实 DTO、保存版与 Output；视觉 reveal 等待必要的前序正文实际 drain，不用客户端定时器伪造生成过程。组件内部 composer、状态机和自动启动行为不能形成第二意图入口或执行真相，完整 Scrub Inspector 仍属 D4。
 
-B 的 Chat 行为与真实过程要求独立于组件选型；完整视觉改版可并行，复杂 Scrub Inspector 仍属 D4。外部示例中的流式、停止、重试与本地历史语义须核对后适配，不直接等同于服务端 Run 的取消、重做或持久记录。
+B 的 Chat 行为与真实过程要求独立于视觉改版先成立；TurnBlock/RunBlock、通用揭示、目录拆分和同源回放按 [四阶段施工合同](tasks/chat-turn-block-implementation.md) 渐进替换，不以一次性 Big Bang 阻断现有创作链。
 
 ### 10.3 与呈现组件解耦的接口与数据
 
-A 定义最小关联与 fixtures，B 实现真实读写、推送和回放。接口返回领域事实，前端可将其渲染为分散消息或整合 block；不返回 UIArc props、React 组件名、模型生成的 HTML 或预拼接进度正文。
+A 定义最小关联与 fixtures，B 实现真实读写、推送和回放。接口返回领域事实，前端将其投影为 TurnBlock/RunBlock 及内部 Slot；不返回组件 props、React 组件名、模型生成的 HTML 或预拼接进度正文。
 
 - **关联明确**：在既有 message/turn、tool activity、Run/step/attempt、CompositionVersion 和 Output 身份上补齐必要引用，使正文、活动和结果能够归于同一次用户操作。异步 Run 可跨越多个 Chat 回合，不能强塞进一个 turn 生命周期；不另建通用 Work/Task 作品根，也不靠相邻位置、时间戳或文本相似度推断关系。
 - **事实结构化**：读取/准备/制作活动提供稳定语义类型、状态与必要的安全结果摘要；内容结果通过 canonical 版本、素材/来源和 Output 引用读取。用户文案是事实的本地化或模型说明，不是让前端解析的状态协议。只读工具观察仍可供 Agent 使用，但用户 wire 不直接透传原始参数、结果或推理。
 - **快照与增量同源**：历史读取提供当前状态和必要过程记录，SSE 推送同一身份的变更；沿用既有 seq、append/update 与确认边界，明确事件顺序、去重和重连补读方式。不能只靠一次性 SSE 展示过程，也不另造与历史矛盾的 block 本地状态。具体新增字段/索引以实际代码缺口为准，不预建全量事件溯源系统。
 - **行为回到领域写口**：设计、修订、制作、确认、重试/取消若已支持，均复用各自服务端校验与幂等机制。组件的按钮只发出对应用户操作；停止前端流不等于取消后台制作，重新显示或刷新不产生新执行。
-- **验收看可替换性**：同一组后端 fixtures/真实记录能够支持既有 Chat 和一个整合 block 的呈现原型，无需改变内容模型或再加一条意图入口；重点验证多轮修改、后台 Run、失败重试、刷新与重连。该原型用于验证数据充分性，不代表采用 UIArc 或交付完整视觉改版。
+- **验收看可替换性**：同一组后端 fixtures/真实记录能够支持现有 Chat 与 TurnBlock/RunBlock 呈现，无需改变内容模型或再加一条意图入口；重点验证多轮修改、后台 Run、失败重试、刷新与重连。单项原型通过不等于四阶段施工或完整视觉改版已完成。
 
 ### 10.4 Chat 产物平铺与共享查看器
 
@@ -728,6 +773,8 @@ apps/api/
 │   │   ├── params.py                    版本引用与制作输入参数
 │   │   ├── preparation.py               素材冻结/上传、字体发布；调用 editing 快照登记
 │   │   ├── programs.py                  drawing-v1 校验、固定媒体、预览与 exact-digest 复用
+│   │   ├── components.py                component-v1 校验、受控烘焙、固定媒体与 exact-digest 复用，D5
+│   │   ├── sfx.py                       SFX 候选、导入与固定平台音效能力，D5
 │   │   ├── generated_images.py          image-v1 单图生产、执行清单与 Composition 复用指针
 │   │   ├── review.py                    首个 exact-Output 静帧审片消费者，复用既有 Agent 与媒体取帧
 │   │   ├── program_runner.mjs           无业务能力的权限受限 Node 程序入口
@@ -743,8 +790,8 @@ apps/api/
 │   ├── prompts/
 │   │   ├── video_director.j2            通用导演输入/输出合同，B
 │   │   ├── video_reviewer.j2            exact-Output 真实帧审片合同，B 支撑
-│   │   ├── mg_director.j2 / mixed_director.j2 / program_director.j2 / image_director.j2
-│   │   │                                  MG / 混合实拍 / drawing-v1 / image-v1 导演合同
+│   │   ├── mg_director.j2 / mixed_director.j2 / program_director.j2 / image_director.j2 / component_director.j2
+│   │   │                                  MG / 混合实拍 / drawing-v1 / image-v1 / component-v1 导演合同
 │   │   └── chat/                       原地收敛通用设计/修订/呈现/授权规则（B 上半批新增 _video_project.j2 门控替换 _website_film/_text_film）
 │   ├── models/tables.py                 原地新增/退役 ORM 行，不复制第二套 Base（B 上半批：messages.blocks）
 │   ├── models/schemas.py                共用 Chat/Output DTO；领域模型引用 editing
@@ -762,7 +809,8 @@ packages/video-spec/                    新 renderer-neutral 契约，A
     └── index.ts                        公开契约；golden fixtures 随包测试维护
 
 apps/render/src/
-├── server.ts / stage.ts / artifacts.ts  原地扩 video 分派；保留共享服务
+├── server.ts / stage.ts / artifacts.ts  原地扩 video 分派与受控上游 bake 入口；保留共享服务
+├── component-runtime/                 component-v1 允许 API、依赖与固定素材的上游烘焙，D5；不是最终 spec 分派
 ├── video/
 │   ├── index.ts / capabilities.ts       adapter 边界与能力声明
 │   └── remotion/                       第一实现；新 video 链的 Remotion 依赖限于此 adapter
@@ -771,12 +819,31 @@ apps/render/src/
 └── render.ts                           旧 Clip driver 保留
 
 apps/web/src/
-├── components/chat/video/
-│   ├── StoryboardCard.tsx               版本呈现回执与真实 Generator 预览，B
-│   ├── CompositionPreview.tsx           版本化最小预览，B
-│   ├── preview/                        PreviewAdapter；先复用播放器/服务端预览
-│   └── inspectors/                     完整 Clip/Object/Scrub 交互，D4
-├── components/chat/                    现有 Chat/产物卡原地接线
+├── components/chat/
+│   ├── ChatDock.tsx                   两形态外壳、组合根与 composer 恒渲染承重结构
+│   ├── ChatConversation.tsx           消息 scroller 与 Block 渲染，不拥有面板几何
+│   ├── hooks/                        可选：真实 Block 边界稳定后按消费者提取，禁止前置巨型 hook
+│   ├── timeline/                     无 React 的共享类型与纯投影
+│   │   ├── types.ts                  OverlayMessage / ConversationUnit / Block / Slot
+│   │   ├── project.ts                rows → units → blocks；保序与稳定身份
+│   │   ├── activity.ts               activity fold 与 category 聚合
+│   │   ├── history.ts                历史行读容忍适配，不决定布局
+│   │   ├── speech.ts                 多段正文所有权、received/shown 与 drain
+│   │   └── reveal.ts                 Slot 揭示判断；无 DOM / motion
+│   ├── blocks/
+│   │   ├── TurnBlock.tsx             一次用户 Turn 的工作容器与完成边界
+│   │   ├── RunBlock.tsx              runId 持有的独立制作容器
+│   │   ├── ComponentSlot.tsx         结构化事实的判别分派，无动态 UI schema
+│   │   └── RevealSlot.tsx            真实 ready + 前序 drain 后的挂载与入场
+│   ├── rows/                         UserMessage / AssistantText / Activity / WorkSegment / Meta
+│   ├── run/                          RunTaskList / RunCard / Run 纯投影
+│   └── video/
+│       ├── StoryboardCard.tsx               版本呈现回执与真实 Generator 预览，B
+│       ├── CompositionPreview.tsx           版本化最小预览，B
+│       ├── WaveformPlayer.tsx               真实音频播放/seek/进度 + identity-seeded bars，SFX 与 Inspector 共用，D5
+│       ├── AudioCandidateSurface.tsx        SFX 可试听候选，消息持久化与自然语言选择，D5
+│       ├── preview/                        PreviewAdapter；先复用播放器/服务端预览
+│       └── inspectors/                     完整 Clip/Object/Scrub 交互，D4
 ├── components/mentions/                复用 picker，不新建第二 @ 体系
 └── lib/                                版本 DTO、mentions、SSE 原地接线
 ```
@@ -805,7 +872,7 @@ apps/web/src/
 | `apps/render/src/film/`（schema/render/Root/Film/components/entry） | **重构替换后删除目录**：schema → packages/video-spec，具体画面能力 → src/video/remotion；subtitle 有效覆盖转新测试 | A 对照实现，D 无活跃消费者后删；仓库**不存在独立 packages/film-spec**，不按想象路径删除 |
 | `apps/render/src/server.ts`、`stage.ts`、`artifacts.ts`、`upload.ts` | **保留/原地修改** family 分派、资源 staging、产物验证和上传；不能随 film renderer 删除服务底座 | A/B/D；Clip 当前 render.ts 路径继续工作 |
 | `packages/clip/`、`tools/clips/`、reframe/dub/captions 等旧工具 | **保留** 当前 Clip 能力；不迁入 editing，不在 A–C 或 D1 删除 | 仅 D3 后续逐项等价验收后处理 |
-| `ChatDock.tsx`、`OutputChatCard.tsx`、`lib/chat-stream.ts`、`lib/mentions.ts`、`components/mentions/` 与现有产物 inspector/下载 | **原地接线** 新 DTO、版本、@、播放、SSE/刷新；新视频组件住 chat/video | B，保持现有外观可用；FlowView 与其他产物 UI 不整片删除 |
+| `ChatDock.tsx`、`OutputChatCard.tsx`、`lib/chat-stream.ts`、`lib/mentions.ts`、`components/mentions/` 与现有产物 inspector/下载 | **分阶段拆分并接线**：ChatDock 收敛为外壳/组合根，消息流归 §12.1 的 timeline / blocks / rows / run；新视频组件住 chat/video，DTO、版本、@、播放、SSE/刷新沿用现有事实与权限 | B；先机械拆分，再接 TurnBlock/RunBlock 与真实阶段，最后清理旧正式时间线；施工验收归 `tasks/chat-turn-block-implementation.md`，不整片替换 Chat 或 FlowView |
 | API/web/render 测试与新video fixtures | **按合同归属**：新editing/video覆盖随A/B建立；旧Film-only结构锁已退出，通用provider/配置守卫归现有通用套件，配音reuse身份守卫暂沿当前模块，B迁imports | 当前缺口归§15/VERIFICATION；D核对无旧helper悬空；共享Clip/授权/计费/身份守卫保留 |
 | `scripts/film_draft_marker_drill.py` / `film_stage_ledger.py`、render scratch/scripts | **逐项审计**：旧 marker 专属工具删；仍有诊断/对照价值的先改新事实输入或保留必要证据，不因名字删除 | D；scratch 删除前核对未跟踪成果和独有 fixtures |
 | 根/各应用 package.json、锁文件、Dockerfile、compose、环境配置 | **按实际依赖修改** 新 workspace 引用、打包/字体/资源路径；清临时开关和无消费者依赖 | A/B 接入、D 清理；Remotion/React 仍被 Clip 使用时不能全仓删除 |
@@ -835,7 +902,8 @@ apps/web/src/
 - 禁让 `visual_description` 描述不存在的元素/动画，或在视觉修改后保留失实摘要。
 - 禁把每个字符默认持久化为独立 Clip，禁文本变更后静默错配动画。
 - 禁让 Skill 执行任意脚本、授予工具权限、绕过 grounding/授权/计费或拥有第二执行链。
-- 禁让 Renderer 概念进入 CompositionVersion、VideoTemplate 或 video-spec。
+- 禁让 Renderer 概念进入通用 Track/Clip/Object、VideoTemplate 或 video-spec；唯一例外是受控 GeneratorObject 的不可变程序来源，component-v1 可保存 Agent 编写的 TSX，但只能经声明 runner 上游烘焙，最终 spec 仍只含普通媒体。
+- 禁为 SFX 新增 Object/spec/生产链，禁用确定性模拟 bars 冒充真实音频分析或真实播放进度；共享波形播放器不携带录音器、随机重生成波形或第二内容写口。
 - 禁以“未来可替换”为由把 PreviewAdapter、能力矩阵和替代实现验收省略。
 - 禁建设旧 Film 数据迁移层；也不得借“不迁移数据”提前删除仍需对照的当前实现。
 - 禁把 Recipe 改名后仍暗含执行；PromptTemplate 永远只是可见预填。

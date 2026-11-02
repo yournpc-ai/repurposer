@@ -47,7 +47,7 @@ export const FilmRoot: React.FC = () => (
     height={FILM_DIMENSIONS["16:9"].height}
     durationInFrames={FILM_FPS}
     defaultProps={{ spec: DEFAULT_SPEC }}
-    calculateMetadata={({ props }) => ({
+    calculateMetadata={({ props }: { props: { spec: FilmSpec } }) => ({
       durationInFrames: filmTotalFrames(props.spec),
       ...FILM_DIMENSIONS[props.spec.aspect ?? "16:9"],
     })}

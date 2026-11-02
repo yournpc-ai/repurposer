@@ -3,34 +3,21 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog"
 
-/** Preview destinations until the real community and public roadmap are connected. */
-export function LandingInfoDialog({ kind, className }: {
-  kind: "community" | "roadmap"
-  className?: string
-}) {
+/** Community preview until the real community destination is connected. */
+export function LandingInfoDialog({ className }: { className?: string }) {
   const { t } = useTranslation()
   return (
     <Dialog>
       <DialogTrigger className={className}>
-        {t(`landing.entry.${kind}`)}
+        {t("landing.entry.community")}
       </DialogTrigger>
       <DialogContent className="rounded-lg sm:max-w-md">
         <DialogHeader>
           <p className="text-xs text-muted-foreground">{t("landing.entry.preview")}</p>
-          <DialogTitle>{t(`landing.entry.${kind}Title`)}</DialogTitle>
-          <DialogDescription>{t(`landing.entry.${kind}Description`)}</DialogDescription>
+          <DialogTitle>{t("landing.entry.communityTitle")}</DialogTitle>
+          <DialogDescription>{t("landing.entry.communityDescription")}</DialogDescription>
         </DialogHeader>
-        {kind === "roadmap" && (
-          <ol className="space-y-4 py-2">
-            {(["create", "publish", "improve"] as const).map((stage) => (
-              <li key={stage}>
-                <p className="text-sm font-medium">{t(`landing.entry.${stage}`)}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{t(`landing.entry.${stage}Description`)}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-        <p className="text-xs text-muted-foreground">{t(`landing.entry.${kind}Note`)}</p>
+        <p className="text-xs text-muted-foreground">{t("landing.entry.communityNote")}</p>
       </DialogContent>
     </Dialog>
   )

@@ -155,11 +155,11 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 
 **错误形态**（API.md §4）：`422 {detail: {code: "credits.insufficient", balance, required}}`。
 
-**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页左下角 **CreditsPill** + 余额不足入流灰行。**生成前估价的家**：dock echo 的真实估价信息、需要确认时的 dock Start pill（服务端 `quote_high` / unquotable 标记）与画布草稿节点逐节点估价共同呈现；重型确认卡和第二总价面不再另建。执行与费用确认控件只住 dock，画布不放计划 Start/Confirm（ADR-070）；确认针对当前受影响节点、scope 与报价，不由客户端自行推导。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
+**前端四面 + 两余额读面**（ADR-057）：dock 生成前总价 / chat 修改单价 / 配方卡估价贴 / **节点卡空态估价**（草稿态产物区「运行后生成 · 约 N 积分」，逐节点 fold）+ 账户控制台 credits 槽 + 项目页 **CreditsPill** + 余额不足入流灰行及购买入口。**生成前估价的家**：dock echo 的真实估价信息、需要确认时的 dock Start pill（服务端 `quote_high` / unquotable 标记）与画布草稿节点逐节点估价共同呈现；重型确认卡和第二总价面不再另建。执行与费用确认控件只住 dock，画布不放计划 Start/Confirm（ADR-070）；确认针对当前受影响节点、scope 与报价，不由客户端自行推导。估价四面同源（同一个 fold、同一份 PRICING、同一个比例），结构性不可能不一致。
 
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
-**展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
+**展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点；轻量充值 Dialog 独占金额 input、固定档位、换算 tooltip 与 Checkout 启动（唯一 `CreditPackagePicker`），Settings 只保留余额、记录与购买入口，不在管理页内嵌支付表单。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
 
 旧 `billing.confirm_large_threshold` 不再读取，不能建立第二套确认语义；目标环境是否残留与是否实际清理须分别记录。删除前执行只读查询 `SELECT * FROM configs WHERE key='billing.confirm_large_threshold'`，按已有目标环境授权处理；文档收敛不代表已执行 SQL。确认/计量/配置的剩余检查统一归 [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置)。
 
@@ -168,7 +168,7 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 | 范围 | 当前状态 |
 |---|---|
 | 积分底座 | 三表、migration、configs reconcile、开户 grant、hold/capture/release、shortfall、钱包与多个估价读面是当前能力 |
-| 支付 | `PAYMENTS.md` 定义 Stripe adapter、公网/本地 webhook、支付订单与 purchase 写门；首批已落码，migration、测试与真实联调未运行 |
+| 支付 | `PAYMENTS.md` 定义 Stripe adapter、公网/本地 webhook、支付订单与 purchase 写门；固定档位本地真实主旅程已验证，自定义金额已落码待真实联调，其余验收见当前支付任务 |
 | 订阅 | 订阅生命周期、周期额度与套餐权益仍是 PLANNED；启动时间归 `PROGRESS.md` R1.1 |
 | 计费中心扩展 | 当前 Settings/CreditsPill 共用语义交易投影；分桶余额、周期额度、fair-use 配额与 admin configs 写面按后续商业合同实施 |
 

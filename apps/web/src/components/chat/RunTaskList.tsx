@@ -11,9 +11,9 @@ import { useTranslation } from "react-i18next"
 
 import { WorkSegmentRow } from "@/components/chat/ActivityStream"
 import { formatElapsed, useNow } from "@/components/chat/workTiming"
-import { runWorkElapsedMs, runWorkPhase } from "@/lib/runWorkSegment"
+import { runWorkElapsedMs, runWorkPhase, visibleProductionStages } from "@/lib/runWorkSegment"
 import { cn } from "@/lib/utils"
-import type { WorkflowStep } from "@/lib/types"
+import type { ProductionStage, WorkflowStep } from "@/lib/types"
 
 /** Live narrative: running step → parked interrupt → honest queued/gap
  * fallback. Copy remains builder-written; only progressive fallbacks are
@@ -45,6 +45,7 @@ export function RunTaskList({
   failed,
   reviewPending,
   workEndedAtMs,
+  renderAttemptCount = 1,
   narrativeFallback,
   hasUploads,
 }: {
@@ -54,10 +55,13 @@ export function RunTaskList({
   runStartedAt: string | null
   /** Run-world terminal, not the work segment's delivery seal. */
   terminal: boolean
+  cancelled?: boolean
   failed: boolean
   reviewPending: boolean
   /** First-visible delivery edge, or the bounded no-reply fallback. */
   workEndedAtMs: number | null
+  /** Persisted delivery rows prove how many render attempts need stage history. */
+  renderAttemptCount?: number
   narrativeFallback: string
   hasUploads: boolean
 }) {
@@ -74,7 +78,7 @@ export function RunTaskList({
   const liveLabel = phase === "reviewing" ? t("chat.closingReview") : runLabel
   const elapsedMs = live
     ? null
-    : runWorkElapsedMs(runStartedAt, steps, workEndedAtMs)
+    : runWorkElapsedMs(runStartedAt, steps, workEndedAtMs, renderAttemptCount)
 
   const runningMs = running?.started_at ? Date.parse(running.started_at) : null
   const stageElapsed =
@@ -85,7 +89,7 @@ export function RunTaskList({
   const stepDetails = steps.length > 0 ? (
     <div className="mt-2 ml-[5.5px] flex flex-col gap-1.5 border-l border-foreground/15 pl-3.5">
       {steps.map((step) => (
-        <TaskRow key={step.id} step={step} />
+        <TaskRow key={step.id} step={step} t={t} />
       ))}
     </div>
   ) : undefined
@@ -97,22 +101,17 @@ export function RunTaskList({
       liveDetails={stepDetails}
       details={stepDetails}
       elapsedMs={elapsedMs}
-      settledLabel={elapsedMs == null ? title || undefined : undefined}
-      settledLeading={
-        !live ? (
-          failed ? (
-            <X className="h-3 w-3 shrink-0 text-destructive" />
-          ) : (
-            <Check className="h-3 w-3 shrink-0" />
-          )
-        ) : null
-      }
+      settledLabel={failed
+        ? t("chat.runFailed")
+        : elapsedMs == null
+          ? title || t("chat.activityFold.actionCount", { count: steps.length })
+          : undefined}
       failed={failed}
     />
   )
 }
 
-function TaskRow({ step }: { step: WorkflowStep }) {
+function TaskRow({ step, t }: { step: WorkflowStep; t: TFunction }) {
   const noop = step.status === "skipped" || step.noop === true
   const icon =
     step.status === "running" ? (
@@ -122,28 +121,73 @@ function TaskRow({ step }: { step: WorkflowStep }) {
     ) : step.status === "waiting" ? (
       <CircleHelp className="h-3.5 w-3.5 text-primary" />
     ) : null
-  const label = step.summary ?? step.kind
+  const label = step.kind === "render" && step.summary === "Uploaded"
+    ? t("chat.legacyStepSummaries.uploaded")
+    : step.summary ?? step.kind
+  const stages = visibleProductionStages(step)
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline gap-2 text-xs">
+        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center self-center">
+          {icon}
+        </span>
+        <span
+          className={cn(
+            "min-w-0 break-words",
+            noop
+              ? "text-meta-foreground line-through decoration-foreground/25"
+              : step.status === "done"
+                ? "text-muted-foreground"
+                : step.status === "failed"
+                  ? "text-destructive"
+                  : "text-muted-foreground/70",
+            step.status === "running" && "shimmer text-muted-foreground",
+          )}
+        >
+          {step.status === "failed" && step.error
+            ? `${label} — ${step.error}`
+            : label}
+        </span>
+      </div>
+      {stages.length > 0 ? (
+        <div className="ml-5.5 flex flex-col gap-1">
+          {stages.map((stage) => (
+            <ProductionStageRow key={stage.event_id} stage={stage} t={t} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProductionStageRow({ stage, t }: { stage: ProductionStage; t: TFunction }) {
+  const label = t(`chat.productionStages.${stage.kind}`, { defaultValue: stage.kind })
+  const reused =
+    stage.reused_count != null && stage.reused_count > 0 && stage.item_count != null
+      ? t("chat.productionStages.reuseSummary", {
+          reused: stage.reused_count,
+          total: stage.item_count,
+        })
+      : null
   return (
     <div className="flex items-baseline gap-2 text-xs">
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center self-center">
-        {icon}
+      <span className="flex h-3 w-3 shrink-0 items-center justify-center self-center">
+        {stage.status === "running" ? (
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+        ) : stage.status === "failed" ? (
+          <X className="h-3 w-3 text-destructive" />
+        ) : (
+          <Check className="h-3 w-3 text-meta-foreground" />
+        )}
       </span>
       <span
         className={cn(
           "min-w-0 break-words",
-          noop
-            ? "text-meta-foreground line-through decoration-foreground/25"
-            : step.status === "done"
-              ? "text-muted-foreground"
-              : step.status === "failed"
-                ? "text-destructive"
-                : "text-muted-foreground/70",
-          step.status === "running" && "shimmer text-muted-foreground",
+          stage.status === "failed" ? "text-destructive" : "text-meta-foreground",
+          stage.status === "running" && "shimmer text-muted-foreground",
         )}
       >
-        {step.status === "failed" && step.error
-          ? `${label} — ${step.error}`
-          : label}
+        {label}{reused ? ` · ${reused}` : ""}
       </span>
     </div>
   )

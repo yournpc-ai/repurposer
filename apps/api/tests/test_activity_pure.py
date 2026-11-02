@@ -110,7 +110,7 @@ def test_t1c_ok_defaults_to_landed():
 # T1d — 排序律 (ADR-104): ReadExecuting re-anchors the read span's honest
 # duration at EXECUTE ENTRY, not at the mid-generation name_known beat — so
 # the settled row's walk key (settle − duration) lands after the waiter
-# checkpoint's created_at (服务员话 → 读活动 → 读后回复, never inverted).
+# interim_prose's created_at (服务员话 → 读活动 → 读后回复, never inverted).
 def test_t1d_read_executing_reanchors_the_honest_duration(monkeypatch):
     import app.chat.activity as activity_mod
 
@@ -278,7 +278,8 @@ def test_t10_conversation_calls_filtered():
 
 # T11 — the no-leak whitelist: every frame's dict touches exactly the
 # contracted fields (S7/E7: + ``at`` on every frame, + ``duration_ms`` only
-# on a frame settling a genuinely-active span), whatever the event sequence.
+# on a frame settling a genuinely-active span). The settled review's typed
+# ``receipt`` is the one evidence exception, never a raw result dump.
 def test_t11_frame_field_whitelist():
     p = ActivityProjector()
     frames = _feed(
@@ -289,7 +290,7 @@ def test_t11_frame_field_whitelist():
     ) + p.sweep("completed")
     for f in frames:
         assert set(f.to_dict()) <= {
-            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms",
+            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms", "receipt",
         }
         assert f.to_dict()["at"]  # every frame carries its birth stamp
         assert f.kind in ("read", "draft", "run", "repair")
@@ -569,7 +570,7 @@ def test_storyboard_span_settle_persists_with_honest_duration(monkeypatch):
     honest duration: the markdown message is the deliverable, no docked card
     absorbs the beat, and the 「Worked for Xs」 row is its receipt. The span
     OPENS at ReadExecuting (never at name_known — 开工戳座): the framing
-    checkpoint lands before any visible 「正在设计分镜」, and the duration
+    interim_prose lands before any visible 「正在设计分镜」, and the duration
     measures the draft itself, never the speech before it."""
     import app.chat.activity as activity_mod
 
@@ -596,7 +597,7 @@ def test_storyboard_span_settle_persists_with_honest_duration(monkeypatch):
 def test_storyboard_span_never_opens_at_name_known():
     """开工戳座 (2026-10-17 用户拍板): the tool NAME recognized mid-stream is
     not the work starting — name_known keeps the slot SILENT (the user reads
-    Thinking while the framing checkpoint lands), the 「正在设计分镜」 line
+    Thinking while the framing interim_prose lands), the 「正在设计分镜」 line
     appears only at execute entry. A pre-execute rejection leaves NO
     crossed-out 0s storyboard row (the span never existed)."""
     p = ActivityProjector()
@@ -905,7 +906,7 @@ async def test_route_seam_rejection_then_failed_sweep():
     ]
     for _, payload in wire:
         assert set(payload.keys()) <= {
-            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms",
+            "activity_id", "seq", "kind", "status", "key", "at", "duration_ms", "receipt",
         }
         assert payload["at"]  # S7/E7: the birth stamp rides every frame
     assert not p.has_active()

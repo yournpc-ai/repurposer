@@ -1,57 +1,70 @@
-"""The B-UI shared viewer's persisted identity and ordering projection."""
+"""Chat delivery ownership and the video-only Chat display gate."""
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
 
 from app.models.tables import Output
-from app.pipeline.outputs import chat_delivery_output_ids, is_delivered_output
+from app.pipeline.outputs import (
+    chat_delivery_output_ids,
+    delivered_output_refs,
+    is_chat_video_output,
+    is_delivered_output,
+)
 
 
-def _message(run_id, trigger):
-    return SimpleNamespace(
-        workflow_run_id=run_id,
-        intent={"type": "trigger_review", "trigger": trigger},
-    )
+def _message(run_id, trigger, refs=None):
+    intent = {"type": "trigger_review", "trigger": trigger}
+    if refs is not None:
+        intent["output_refs"] = [str(ref) for ref in refs]
+    return SimpleNamespace(workflow_run_id=run_id, intent=intent)
 
 
 def _step(run_id, seq, refs):
     return SimpleNamespace(id=uuid4(), run_id=run_id, seq=seq, output_refs=refs)
 
 
-def test_chat_outputs_follow_delivery_transcript_then_persisted_ref_order():
+def test_chat_outputs_follow_each_delivery_messages_own_ref_order():
     first_run, second_run = uuid4(), uuid4()
     first, second, repeated, other = (uuid4() for _ in range(4))
-    # The second run started earlier but delivered later; plan/start run links
-    # are not delivery seats and must not reorder the shared browser.
     messages = [
         SimpleNamespace(workflow_run_id=second_run, intent={"type": "task_book"}),
-        SimpleNamespace(workflow_run_id=first_run, intent={"type": "task_book"}),
-        _message(first_run, "run_completed"),
-        _message(second_run, "run_completed"),
-        _message(first_run, "run_completed"),
-    ]
-    steps = [
-        _step(second_run, 2, [other]),
-        _step(first_run, 2, [repeated, second]),
-        _step(first_run, 1, [first, repeated]),
-        _step(second_run, 1, [repeated]),
+        _message(first_run, "run_completed", [first, repeated]),
+        _message(second_run, "run_completed", [other]),
+        _message(first_run, "run_completed", [second, repeated]),
     ]
 
-    assert chat_delivery_output_ids(messages, steps) == [first, repeated, second, other]
+    assert chat_delivery_output_ids(messages) == [first, repeated, other, second]
 
 
-def test_silent_delivery_keeps_its_persisted_run_receipt_seat():
+def test_missing_output_refs_never_falls_back_to_run_steps():
     run_id = uuid4()
-    output_id = uuid4()
-    messages = [SimpleNamespace(workflow_run_id=run_id, intent={"type": "task_book"})]
-    assert chat_delivery_output_ids(messages, [_step(run_id, 1, [output_id])]) == [output_id]
+    messages = [
+        _message(run_id, "run_completed"),
+        SimpleNamespace(workflow_run_id=run_id, intent={"type": "task_book"}),
+    ]
+    # No Run-level collection remains: neither a step nor a neighbouring
+    # receipt can assign an Output to a message.
+    assert chat_delivery_output_ids(messages) == []
 
 
-def test_materialized_quote_images_keep_their_producing_steps_delivery_seat():
-    run_id, quotes, image = uuid4(), uuid4(), uuid4()
-    step = _step(run_id, 1, [quotes])
-    images = [SimpleNamespace(id=image, workflow_step_id=step.id)]
-    assert chat_delivery_output_ids([_message(run_id, "run_completed")], [step], images) == [quotes, image]
+def test_zero_delivery_failure_message_has_an_honest_empty_collection():
+    message = _message(uuid4(), "run_failed", [])
+    assert chat_delivery_output_ids([message]) == []
+
+
+def test_delivery_snapshot_filters_pending_failed_and_missing_media():
+    run_id = uuid4()
+    ready, pending, failed, empty = (uuid4() for _ in range(4))
+    steps = [_step(run_id, 1, [ready, pending, failed, empty])]
+    outputs = [
+        _video("completed"),
+        _video("rendering"),
+        _video("failed"),
+        _video("completed", files={}),
+    ]
+    for output, output_id in zip(outputs, [ready, pending, failed, empty], strict=True):
+        output.id = output_id
+    assert delivered_output_refs(steps, outputs) == [str(ready)]
 
 
 def _video(render_status, files=None, *, archived_at=None) -> Output:
@@ -63,9 +76,15 @@ def _video(render_status, files=None, *, archived_at=None) -> Output:
     ))
 
 
-def test_only_completed_real_media_enters_the_delivery_viewer():
-    assert is_delivered_output(_video("completed", archived_at=object()))
-    assert not is_delivered_output(_video("pending"))
-    assert not is_delivered_output(_video("failed"))
-    assert not is_delivered_output(_video("completed", files={}))
-    assert not is_delivered_output(_video("completed", files={"video": ""}))
+def test_chat_gate_admits_only_delivered_video_without_changing_domain_delivery():
+    ready = _video("completed", archived_at=object())
+    assert is_delivered_output(ready)
+    assert is_chat_video_output(ready)
+    assert not is_chat_video_output(_video("pending"))
+    assert not is_chat_video_output(_video("failed"))
+    assert not is_chat_video_output(_video("completed", files={}))
+    assert not is_chat_video_output(_video("completed", files={"video": ""}))
+
+    post = cast(Output, SimpleNamespace(type="post", render_status=None, files={}))
+    assert is_delivered_output(post)
+    assert not is_chat_video_output(post)

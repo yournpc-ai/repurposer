@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     # the CompositionVersion chain instead of design_storyboard.
     video_project_enabled: bool = False
 
+    # Upstream component bake stays fail-closed until the deployment provides
+    # real process/filesystem/egress/resource isolation. Source scanning is
+    # diagnostic only and is never the security boundary. This is a deployment
+    # guard shared by API and render, not a user-facing capability preference.
+    component_bake_enabled: bool = False
+
+    # Freesound official API for CC0 SFX search/import. Empty = honest unavailable.
+    freesound_api_key: str = ""
+
     # ASR (faster-whisper, self-hosted — EU/GDPR; CTranslate2, no torch)
     asr_model: str = "base"  # tiny/base/small/medium/large-v3
     asr_device: str = "cpu"  # cpu | cuda
@@ -140,10 +149,9 @@ class Settings(BaseSettings):
     # Public base of the web app — OAuth callbacks redirect the browser back here.
     web_public_url: str = "http://localhost:3000"
 
-    # Payments — hosted Stripe Checkout (PAYMENTS). Empty Price = package hidden.
+    # Payments — hosted Stripe Checkout; amounts and credits stay server-side.
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    stripe_price_starter: str = ""
 
     # Auth / email
     resend_api_key: str = ""
