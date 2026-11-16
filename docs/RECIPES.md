@@ -189,7 +189,7 @@ stacking
   → 当前图与 worker 执行
 ```
 
-- 空草稿或仍等于上次预填原文时，另一张同类卡可替换预填；已有用户文字或 @-mention 时按当前 composer 合同保留并追加，不静默清空。一次创作至多一个 Skill chip，另选 Skill 只替换 Skill 绑定，不清空用户文字；Backspace / Delete / 选区删除按统一 Chip 律移除绑定。
+- 首页视频案例的「开始创作」清空输入框里的文字和 @ 引用，填入该案例的提示词并绑定对应 Skill，已选附件保留。落地页传入提示词时，空草稿或仍等于上次预填原文的草稿可直接替换，已有用户文字或 @ 引用时在末尾追加。使用 Skill 选择器只替换 Skill 绑定；Backspace / Delete / 选区删除按统一 Chip 律移除绑定。
 - 选文件本身不发送；只有 send 消费上传 chips。
 - 预填不暴露工具、spec、版本或内部配方 id，不锁死用户未要求的画幅、幕数、时长或配音。
 - 配方永不出现在 @ picker，不建立模板编辑器、第二发送钮或专用意图端点。视频 Skill 经专用 Skill picker 形成 Skill chip，不混入 @-entity registry。

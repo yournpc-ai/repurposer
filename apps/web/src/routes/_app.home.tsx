@@ -4,8 +4,12 @@ import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
 import type { ChatMention } from "@/lib/mentions"
-import { fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
+import { BUILTIN_SKILL_VERSIONS, fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { consumeLandingCreate } from "@/lib/landingCreate"
+
+import { RecipeShelf } from "@/components/home/RecipeShelf"
+import { RecipeTabs } from "@/components/home/RecipeTabs"
+import { RECIPE_FAMILIES } from "@/components/home/recipeFamilies"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
@@ -45,6 +49,20 @@ function Home() {
   const [skillOptions, setSkillOptions] = useState<SkillOption[]>([])
   const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null)
   const editorRef = useRef<MentionEditorHandle>(null)
+  // Demo sound is a HOME-GLOBAL singleton: every video keeps playing, but
+  // only the hovered/focused card may be audible; claiming sound mutes the
+  // previous owner without pausing it.
+  const [demoSoundOwner, setDemoSoundOwner] = useState<string | null>(null)
+  const claimDemoSound = useCallback(
+    (id: string) => setDemoSoundOwner(id),
+    [],
+  )
+  const releaseDemoSound = useCallback(
+    (id: string) =>
+      setDemoSoundOwner((owner) => (owner === id ? null : owner)),
+    [],
+  )
+
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
   // NEVER scrolls.
   // ONE scrollport holds everything (stage spacer / hero / composer slot /
@@ -184,24 +202,21 @@ function Home() {
   }, [])
 
   // 卡片点击唯一归宿 (D5 禁则 8): composer 预填 — never a template editor.
-  // 不静默覆盖 (home 内容扩展批): the draft is REPLACED only when it's empty
-  // or still IS the previous card prefill verbatim (clicking between cards
-  // swaps the template); a draft carrying the user's own text or @-mentions
-  // is kept — the new prompt appends below on a blank line. Staged chips
-  // never ride this path (they live outside the draft). A visible
+  // Using a Home example starts with a fresh draft. A landing handoff
+  // preserves unrelated text and mentions by appending to the draft.
+  // Staged attachments live outside the editor. A visible
   // placeholder is the recipe's only blank: insert it selected so paste
   // replaces it in one gesture; prompts without the blank simply skip the
   // selection (selectText no-ops on a missing needle).
   const lastPrefillRef = useRef<string | null>(null)
   const handlePrefill = useCallback(
-    (prefillKey: string, skill?: SkillOption) => {
+    (prefillKey: string, skill: SkillOption, { replaceDraft = false } = {}) => {
       const placeholder = t("recipes.shelf.urlPlaceholder")
       const text = t(prefillKey, { placeholder })
-      const previousSkill = selectedSkill
       const draft = prompt.trim()
       const replaceable =
-        mentions.length === 0 &&
-        (draft === "" || draft === lastPrefillRef.current)
+        replaceDraft ||
+        (mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current))
       if (replaceable) {
         editorRef.current?.clear({ preserveSkill: true })
         editorRef.current?.insertText(text)
@@ -209,11 +224,11 @@ function Home() {
         editorRef.current?.insertText(`\n\n${text}`)
       }
       lastPrefillRef.current = text.trim()
-      setSelectedSkill(skill ?? previousSkill)
+      setSelectedSkill(skill)
       editorRef.current?.selectText(placeholder)
       if (!docked) scrollComposerIntoView()
     },
-    [t, prompt, mentions, selectedSkill, docked, scrollComposerIntoView],
+    [t, prompt, mentions, docked, scrollComposerIntoView],
   )
 
   // A landing product card survives the login detour and resolves against the
@@ -227,6 +242,74 @@ function Home() {
       skillOptionForReference(handoff.skill, skillOptions),
     )
   }, [handlePrefill, skillOptions])
+
+  const [activeFamilyId, setActiveFamilyId] = useState(RECIPE_FAMILIES[0].id)
+  const [subByFamily, setSubByFamily] = useState<Record<string, string>>({})
+  const activeFamily =
+    RECIPE_FAMILIES.find((family) => family.id === activeFamilyId) ?? RECIPE_FAMILIES[0]
+  const activeSubId = subByFamily[activeFamily.id] ?? activeFamily.subs[0].id
+
+  // Sub tabs are ANCHORS, not filters (Pexo-parity): every sub of the active
+  // family renders its shelves stacked below, and tapping a sub scrolls its
+  // section under the pinned tabs bar. The underline follows scroll position
+  // via the spy below (subByFamily doubles as the spy's write target, so the
+  // per-family memory semantic is unchanged).
+  const tabsBarRef = useRef<HTMLDivElement>(null)
+  const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const handleSelectSub = useCallback((familyId: string, subId: string) => {
+    setSubByFamily((m) => ({ ...m, [familyId]: subId }))
+    const scroller = scrollRef.current
+    const section = subSectionRefs.current[subId]
+    const bar = tabsBarRef.current
+    if (!scroller || !section || !bar) return
+    // The section lands under whatever pins above it: the bar's height PLUS
+    // its sticky top (0 on md+, 3.5rem below md where the glass MobileHeader
+    // overlays the scrollport). The computed-style read keeps the breakpoint
+    // single-sourced in the bar's className.
+    const barTop = parseFloat(getComputedStyle(bar).top) || 0
+    const top =
+      section.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop -
+      barTop -
+      bar.offsetHeight -
+      4
+    scroller.scrollTo({ top, behavior: "smooth" })
+  }, [])
+
+  // Scroll spy: the sub underline tracks the section riding under the pinned
+  // bar (bar bottom + slack). Only meaningful when the sub row renders at
+  // all (2+ subs — same gate as RecipeTabs). Stale ref entries from a
+  // previous family are never read: the spy only walks the active family's
+  // subs.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !activeFamily || activeFamily.subs.length < 2) return
+    const subs = activeFamily.subs
+    const familyId = activeFamily.id
+    let raf = 0
+    const spy = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const barBottom = tabsBarRef.current?.getBoundingClientRect().bottom ?? 0
+        let current = subs[0]?.id
+        for (const sub of subs) {
+          const sec = subSectionRefs.current[sub.id]
+          if (sec && sec.getBoundingClientRect().top <= barBottom + 24)
+            current = sub.id
+        }
+        if (current)
+          setSubByFamily((m) =>
+            m[familyId] === current ? m : { ...m, [familyId]: current },
+          )
+      })
+    }
+    el.addEventListener("scroll", spy, { passive: true })
+    return () => {
+      el.removeEventListener("scroll", spy)
+      cancelAnimationFrame(raf)
+    }
+  }, [activeFamily])
 
   return (
     // App-shell surface: the root is exactly the viewport tall and NEVER
@@ -306,7 +389,53 @@ function Home() {
           </div>
         </div>
 
-        <div className="min-h-[45vh]" />
+        {/* The bottom space lets the last application reach the pinned
+            tabs even when its shelf is empty. */}
+        <section className="mt-0.5 min-h-[calc(100svh+96px)] pb-[max(96px,calc(100svh-12rem))]">
+          <div
+            ref={tabsBarRef}
+            className="sticky top-0 z-20 bg-background px-4 pb-6 pt-6 [mask-image:linear-gradient(to_bottom,black_calc(100%-16px),transparent)] max-md:top-14 sm:px-6"
+          >
+            <div className="mx-auto w-full max-w-6xl">
+              <RecipeTabs
+                families={RECIPE_FAMILIES}
+                activeFamilyId={activeFamily.id}
+                activeSubId={activeSubId}
+                onSelectFamily={setActiveFamilyId}
+                onSelectSub={handleSelectSub}
+              />
+            </div>
+          </div>
+          <div className="mt-4 px-4 sm:px-6">
+            <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-10">
+              {activeFamily.subs.map((sub, index) => (
+                <div
+                  key={sub.id}
+                  ref={(el) => {
+                    subSectionRefs.current[sub.id] = el
+                  }}
+                >
+                  <RecipeShelf
+                    title={t(`recipes.shelf.subs.${sub.id}`)}
+                    items={sub.demos}
+                    onPrefill={(prefillKey) => {
+                      const skillId = activeFamily.skillId
+                      const skill = skillOptionForReference(
+                        { kind: "builtin", skill_id: skillId, version: BUILTIN_SKILL_VERSIONS[skillId] },
+                        skillOptions,
+                      )
+                      handlePrefill(prefillKey, skill, { replaceDraft: true })
+                    }}
+                    soundOwner={demoSoundOwner}
+                    onSoundStart={claimDemoSound}
+                    onSoundStop={releaseDemoSound}
+                    tourAnchorIndex={activeFamily.id === "product-promo" && index === 0 ? 0 : undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )
