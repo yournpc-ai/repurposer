@@ -338,7 +338,7 @@ const en = {
       "No complex timelines or keyframes.\nCreate animated promos and explainer videos—just by chatting.",
     earlyAccess: {
       title: "Make videos without waiting until everything is ready.",
-      description: "No tools to wrangle, no Skills to study. Describe what you want and create by asking. If a moment or frame isn't right, just say so.",
+      description: "No tools to wrangle or techniques to learn. It all happens in a Rookie Cut chat.",
       credits: "New accounts get 1,000 free credits. No card needed to sign up.",
       estimate: "See the estimated credit cost before production.",
       note: "During beta, we're continuing to improve production reliability and detailed review.",

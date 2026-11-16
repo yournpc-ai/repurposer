@@ -46,7 +46,7 @@
 
 ## 4. Final CTA（保留 Early access 锚点）
 
-FAQ 后使用简洁的单列收尾 CTA，标题为 `Make videos without waiting until everything is ready.` /「做视频，并不用等准备好一切。」。说明无需研究工具或 Skill，描述需求即可创作，并可指出具体时间与画面继续修订；不重复素材列表和 Gallery 产品类型，不使用圆角背景面板、三列图标、横向分隔线或规格表。桌面居中限宽，移动端自然换行且按钮全宽；保留 `early-access` 锚点供既有导航使用。
+FAQ 后的收尾标题为 `Make videos without waiting until everything is ready.` /「做视频，并不用等准备好一切。」。说明强调整个创作过程在 Rookie Cut 对话中进行。标题沿用 Hero 衬线，说明限宽居中，圆角主按钮和注册说明成组。移动端按钮全宽。收尾采用自然文档流，保留 `early-access` 锚点。
 
 - 主按钮为 `Create a video / 开始制作视频`，沿用登录与 `/home` 链路。
 - 按钮下说明新账号赠送 **1,000 credits**、注册无需绑卡。公开文案与运行时 `configs.wallet.signup_grant` 必须一致；修改代码默认值不会覆盖数据库已有配置。
@@ -90,4 +90,4 @@ Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权
 
 当前公开页实现完整新版结构、中英文文案、自动/手动 Tab、滚动三阶段、静态 Gallery、FAQ 与三列 Footer。既有 TypeScript 与 landingCreate 定向检查通过，但最新 Landing 视觉与演示调整尚未复跑静态检查或浏览器验收。减少动态效果、其他尺寸、完整媒体播放、登录后 handoff、双主题仍需完整旅程验收；公开 1,000 积分文案前仍须核对数据库实际配置。媒体仍为公开视觉候选；真实制作与修改回放、类别锚片与公开授权验收未关闭。Footer 未配置栏目当前仅文字，无真实链接；上线前须逐项处理。
 
-FAQ 与 Final CTA 桌面分别保留约 60svh / 50svh 的滚动停留距离，舞台 sticky 于导航下方，不拦截滚轮。FAQ 使用同名 `details` 互斥分组，展开一项会关闭其余项；展开后若内容超出可用视口，自动恢复自然文档流，保证答案可读；收起后恢复停留。手机与 reduced-motion 不固定。
+FAQ 桌面保留约 60svh 的滚动停留距离，舞台 sticky 于导航下方，不拦截滚轮。FAQ 使用同名 `details` 互斥分组，展开一项会关闭其余项；展开后若内容超出可用视口，自动恢复自然文档流，保证答案可读；收起后恢复停留。手机与 reduced-motion 不固定。
