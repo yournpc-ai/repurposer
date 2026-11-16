@@ -22,8 +22,19 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      # The host path comes from .env. Both containers use a stable mount path.
+      - &managed_skill_mount
+        type: bind
+        source: ${MANAGED_SKILL_ROOT:-./apps/api/app/skills}
+        target: /opt/repurposer/skills
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
+      - MANAGED_SKILL_ROOT=/opt/repurposer/skills
+      - MANAGED_SKILL_VERSIONS=${MANAGED_SKILL_VERSIONS:-{}}
       - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
@@ -68,8 +79,12 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     command: python -m app.worker
+    volumes:
+      - *managed_skill_mount
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
+      - MANAGED_SKILL_ROOT=/opt/repurposer/skills
+      - MANAGED_SKILL_VERSIONS=${MANAGED_SKILL_VERSIONS:-{}}
       - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
