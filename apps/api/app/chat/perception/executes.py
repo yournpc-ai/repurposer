@@ -41,6 +41,7 @@ from app.models.tables import (
     ExplorationRow,
     GraphEdge,
     GraphNode,
+    NarrationAlignment,
     Output,
     Project,
     WorkflowRun,
@@ -73,41 +74,13 @@ from app.pipeline.exploration_store import (
 # (they compile into the tool's JSON schema).
 
 
-class ViewSelector(BaseModel):
-    """One captured page view a film read attaches the screenshot of."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    page: int = Field(
-        description="0-based page index (the read's candidate view catalog)."
-    )
-    shot: int = Field(
-        description="0-based shot index within the page (0 = the fold)."
-    )
 
 
 class GetOutputSpecParams(BaseModel):
-    output_id: UUID | None = Field(
-        default=None,
+    output_id: UUID = Field(
         description=(
-            "The output's id (from the context's Current outputs list or an "
-            "@-mention). Omit to read the film's CURRENT storyboard version "
-            "(the live draft when one stands, else the latest delivered "
-            "film) — the re-read seat before continuing a targeted edit in "
-            "a later turn."
-        ),
-    )
-    views: list[ViewSelector] | None = Field(
-        default=None,
-        description=(
-            "Film reads only: name specific captured views (page/shot pairs "
-            "from the read's candidate view catalog) to attach their "
-            "screenshots AND camera-target inventories (the legal element "
-            "ids an update_scene focus may name — never guess one) — at "
-            "most 12 per read; naming exactly ONE view reads it back in "
-            "high resolution. Omit to attach every candidate view; an "
-            "over-budget read answers with an explicit error (never a "
-            "silently partial set, never an implied-complete element list)."
+            "The output's id from the context's Current outputs list or an "
+            "@-mention."
         ),
     )
 
@@ -465,7 +438,7 @@ async def understanding_observation(db: AsyncSession, project: Project) -> tuple
         kick_warm_inline,
     )
     from app.pipeline.step_context import asset_digest, list_assets
-    from app.providers.llm.minimax import minimax_client
+    from app.providers.llm import get_llm_client
 
     assets = await list_assets(db, project.id)
     if not assets:
@@ -493,7 +466,7 @@ async def understanding_observation(db: AsyncSession, project: Project) -> tuple
                 if a.processing_status
                 in (AssetStatus.PENDING, AssetStatus.PROCESSING)
             ]
-            if pending and not minimax_client.capabilities.understands_video_audio:
+            if pending and not get_llm_client().capabilities.understands_video_audio:
                 await _stamp_processing_requested(project.id)
             stamped = True
         await asyncio.sleep(_READINESS_POLL_SECONDS)
@@ -577,43 +550,6 @@ async def output_spec_observation(
     captured page views, never frames of the rendered film."""
     from app.agents.contexts import output_one_liner  # deferred: assembly layer
 
-    if params.output_id is None:
-        # 当前版本读取座 (the edit model's re-read of the WORK IN PROGRESS —
-        # 待产稿可重读): no output id = the film's CURRENT storyboard
-        # version — the live pending draft when one stands, else the latest
-        # delivered film's version (the revision-base seat's own priority
-        # law). The same fact table, the same base_ref mint, the same view
-        # catalog and images as an output read — a patch formed against a
-        # stale delivered read while a newer draft stands is how
-        # consecutive edit turns deadlock, so the draft itself is readable.
-        # Film-only: clip/post reads still name their output.
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            resolve_film_revision_base,
-        )
-
-        base = await resolve_film_revision_base(db, project)
-        if base is None or not getattr(base, "film_storyboard", None):
-            return (
-                "No film storyboard version exists in this project yet — "
-                "design one first (design_storyboard). To read a clip or "
-                "post output, name its id from the context's Current "
-                "outputs list or an @-mention.",
-                [],
-            )
-        lines = [
-            "Current film storyboard version (no output id named — the "
-            "live draft when one stands, else the latest delivered film's "
-            "version):"
-        ]
-        film_lines, images = await _film_observation(
-            db,
-            project,
-            base=base,
-            head_lines=lines,
-            params=params,
-            with_images=with_images,
-        )
-        return "\n".join(film_lines), images
 
     output = await db.get(Output, params.output_id)
     if output is None or str(output.project_id) != str(project.id):
@@ -630,28 +566,6 @@ async def output_spec_observation(
     one_liner = output_one_liner(output)
     if one_liner:
         lines.append(f"- First line: {one_liner}")
-    if output.type == "film":
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            resolve_film_revision_base,
-        )
-
-        base = await resolve_film_revision_base(db, project, output_id=output.id)
-        if base is None:
-            lines.append(
-                "- This film's storyboard version is unrecoverable (no "
-                "parseable provenance) — a redesign through "
-                "design_storyboard (no edits) is the honest path."
-            )
-            return "\n".join(lines), []
-        film_lines, images = await _film_observation(
-            db,
-            project,
-            base=base,
-            head_lines=lines,
-            params=params,
-            with_images=with_images,
-        )
-        return "\n".join(film_lines), images
     spec = output.render_spec or {}
     if spec:
         # Clip outputs: the clip-spec's CURRENT settings, raw-dict read
@@ -684,13 +598,6 @@ async def output_spec_observation(
     if isinstance(body, str) and body.strip():
         lines.append(f"- Body (excerpt): {body.strip()[:600]}")
     return "\n".join(lines), []
-
-
-# The film read's image budget (总设计 §7.2 读取座): one read attaches at
-# most 12 thumbnails (long edge ~640px — enough for a creative judgment,
-# never a pixel-peep); a read naming exactly ONE view re-reads it in high
-# resolution (1280px). Over budget is an explicit error naming the remedy —
-# the image set is NEVER silently partial.
 _FILM_VIEW_IMAGE_MAX = 12
 _FILM_VIEW_THUMB_PX = 640
 _FILM_VIEW_DETAIL_PX = 1280
@@ -722,523 +629,12 @@ def _page_view_count(page) -> int:
     return 1 if getattr(page, "screenshot_key", None) else 0
 
 
-async def _film_view_image(
-    key: str, max_px: int, caption: str
-) -> MediaInput | None:
-    """One view screenshot's compressed media input (the seam tests patch —
-    the storage download + resize lives in step_context's one seat)."""
-    from app.pipeline.step_context import media_input_for_image  # deferred: pipeline edge
-
-    return await media_input_for_image(key, caption=caption, max_px=max_px)
 
 
-def _film_music_pick(canonical: dict) -> str:
-    """The params row's music segment — the user's SELECTION, never the
-    outcome: a named mood is the pick, ``off`` is the explicit close, and an
-    UNSET mood is not a state at all (the resolution chain still decides —
-    the Music line below carries what the version actually carries)."""
-    from app.tools.film.storyboard import FILM_MUSIC_OFF  # deferred: tool seam
-
-    mood = canonical.get("music_mood")
-    if mood == FILM_MUSIC_OFF:
-        return 'music "off" (explicitly closed)'
-    if isinstance(mood, str):
-        return f'music mood "{mood}"'
-    return "music unset (not off — the Music line below reports what the version actually carries)"
 
 
-def _film_music_fact_line(
-    canonical: dict,
-    *,
-    cut_state_hint: str | None,
-    spec_music: Any,
-    execution: Any,
-) -> str:
-    """The film bed's FACT line (the pick is the params row's job — this is
-    what the version's own records carry). Sources by the version's state:
-
-    - an EXECUTED version (cut_state "spec"): the DELIVERED render spec's
-      music block — the landed truth (a spec without the block proves no
-      bed landed; ``build_film_spec`` writes the key whenever a bed went
-      in). The design-time snapshot's mood joins only when its track IS
-      the delivered one (same track id — never a mismatched mashup);
-    - a draft/frozen version: the design-time execution snapshot's
-      resolved bed (the plan, frozen with the version);
-    - an unreadable executed record or a snapshot-less legacy version:
-      UNCONFIRMABLE — missing records never default to "off".
-    """
-    from app.tools.film.storyboard import FILM_MUSIC_OFF  # deferred: tool seam
-
-    mood = canonical.get("music_mood")
-    snap_music = execution.get("music") if isinstance(execution, dict) else None
-    snap_mood = snap_music.get("mood") if isinstance(snap_music, dict) else None
-    snap_track = snap_music.get("track_id") if isinstance(snap_music, dict) else None
-
-    if cut_state_hint == "spec":
-        if isinstance(spec_music, dict):
-            parts: list[str] = []
-            # The mood is a design-time record — report it only when the
-            # snapshot's track IS the delivered one (the spec's url carries
-            # the track id; a mismatch would mash up two records).
-            spec_url = spec_music.get("url")
-            if (
-                isinstance(snap_mood, str)
-                and isinstance(snap_track, str)
-                and isinstance(spec_url, str)
-                and snap_track in spec_url
-            ):
-                parts.append(f'mood "{snap_mood}"')
-            bpm = spec_music.get("bpm")
-            if isinstance(bpm, (int, float)):
-                parts.append(f"{bpm:g} BPM")
-            gain = spec_music.get("gain_db")
-            if isinstance(gain, (int, float)):
-                parts.append(f"gain {gain:g} dB")
-            detail = " · ".join(parts) if parts else "details unrecorded"
-            return (
-                f"- Music: a bed LANDED in the delivered render ({detail} — "
-                "the executed record's own entry)"
-            )
-        if mood == FILM_MUSIC_OFF:
-            return (
-                "- Music: off — the user switched the bed OFF, and the "
-                "delivered render carries none (as confirmed)"
-            )
-        return (
-            "- Music: no bed in the delivered render (the executed record "
-            "carries none)"
-        )
-    if cut_state_hint == "unreadable":
-        return (
-            "- Music: unconfirmable — the version was executed but its "
-            "delivered record is unreadable (never read that as no music)"
-        )
-    # draft / kept / legacy-no-state: the version's frozen PLAN.
-    if isinstance(snap_music, dict) and snap_track:
-        parts = []
-        if isinstance(snap_mood, str):
-            parts.append(f'mood "{snap_mood}"')
-        bpm = snap_music.get("bpm")
-        if isinstance(bpm, (int, float)):
-            parts.append(f"{bpm:g} BPM")
-        detail = " · ".join(parts) if parts else "track resolved"
-        return (
-            f"- Music: bed planned ({detail}) — frozen into this version's "
-            "execution record at design time; the run renders this grid"
-        )
-    if mood == FILM_MUSIC_OFF:
-        return "- Music: off — the user switched the bed OFF (no bed planned)"
-    if isinstance(mood, str):
-        return (
-            f'- Music: unconfirmable — the picked mood "{mood}" has no '
-            "resolved track in this version's frozen record"
-        )
-    if isinstance(execution, dict):
-        return (
-            "- Music: no bed in this version's frozen execution record "
-            "(none resolved at design time)"
-        )
-    return (
-        "- Music: unconfirmable — this version predates the frozen "
-        "execution record (never read that as off)"
-    )
 
 
-async def _film_observation(
-    db: AsyncSession,
-    project: Project,
-    *,
-    base,
-    head_lines: list[str],
-    params: GetOutputSpecParams,
-    with_images: bool,
-) -> tuple[list[str], list[MediaInput]]:
-    """The film branch (编辑模型的眼睛): version identity + per-scene facts
-    (view reference, camera text, narration) + the timeline's provenance +
-    — while the edit gate is on — the read-time ``base_ref``, the candidate
-    view catalog and the view screenshots. ``base`` is the already-resolved
-    revision base (an output read pins its film's run; a no-id read takes
-    the current version — live pending first). Pages come from the SAME
-    seat the edit validator uses (``load_storyboard_pages`` — capture
-    order), so a scene's (page, shot) reference means the same view here
-    as in a patch. A missing page/shot/asset is marked honestly, never
-    invented — and the version's OWN snapshot pages prove each reference's
-    material identity, so materials that drifted since the design are
-    named as drift, never passed off as the version's original views."""
-    from app.config import settings  # deferred: config leaf
-    from app.models.schemas import FilmStoryboard  # deferred: schemas edge
-    from app.tools.film.edits import (  # deferred: tool seam
-        ensure_scene_ids,
-        film_base_cut,
-        film_version_identity_digest,
-    )
-    from app.tools.film.storyboard import (  # deferred: tool seam
-        FILM_FPS,
-        canonical_film_params,
-        execution_frames,
-        film_scene_content,
-        load_storyboard_media,
-        load_storyboard_pages,
-        ui_focus_moves,
-    )
-
-    lines = head_lines
-    board = ensure_scene_ids(
-        FilmStoryboard.model_validate(base.film_storyboard)
-    )
-    base_params = base.film_storyboard_params or {}
-    canonical = canonical_film_params(base_params)
-    gate = settings.film_edits_enabled
-    pages = await load_storyboard_pages(db, project)
-    # ADR-140 read seat: the composite scenes' media universe — NO duration
-    # probing here (a read never downloads bytes; unknown durations report
-    # as unknown).
-    media = await load_storyboard_media(db, project, board)
-
-    # 素材身份核对 (版本快照 vs 当前材料): the board's (page, shot)
-    # references mean the SNAPSHOT's pages, frozen at design time. When the
-    # project's current materials drifted since (a page deleted, replaced,
-    # or re-captured), the same index now names a DIFFERENT asset — the
-    # read never passes the current page off as the version's original
-    # view: drifted indices mark the scene's view line as unrecoverable
-    # and drop out of the used-by mapping (the candidate catalog still
-    # lists the CURRENT materials an edit may name — the drift line keeps
-    # the two apart). Snapshot-less (legacy) versions skip the check.
-    drifted_pages: set[int] = set()
-    execution = getattr(base, "film_storyboard_execution", None)
-    snapshot_pages = (
-        execution.get("pages") if isinstance(execution, dict) else None
-    )
-    if isinstance(snapshot_pages, list):
-        for i, sp in enumerate(snapshot_pages):
-            if not isinstance(sp, dict):
-                continue
-            snap_asset = sp.get("asset_id")
-            if snap_asset is None:
-                continue
-            if i >= len(pages) or str(pages[i].asset_id) != str(snap_asset):
-                drifted_pages.add(i)
-    if drifted_pages:
-        drift_list = ", ".join(str(i) for i in sorted(drifted_pages))
-        lines.append(
-            f"- Materials drift: page(s) {drift_list} changed or were "
-            "removed since this version was designed — scenes referencing "
-            "them show their ORIGINAL (page, shot) reference, which the "
-            "current materials no longer stand behind (the original view "
-            "is unrecoverable); re-ground those scenes with an "
-            "update_scene edit naming a current view."
-        )
-
-    # Media identity drift (ADR-140): the snapshot's composite media pins
-    # (asset id + storage key) against the CURRENT project assets — a
-    # deleted or replaced asset is named, never silently re-resolved.
-    snapshot_media = (
-        execution.get("media") if isinstance(execution, dict) else None
-    )
-    drifted_media: list[str] = []
-    if isinstance(snapshot_media, list):
-        for pin in snapshot_media:
-            if not isinstance(pin, dict):
-                continue
-            aid = pin.get("asset_id")
-            if aid is None:
-                continue
-            entry = media.assets.get(str(aid))
-            if entry is None or entry.key != pin.get("key"):
-                drifted_media.append(str(aid))
-    if drifted_media:
-        lines.append(
-            f"- Media drift: asset(s) {', '.join(drifted_media)} changed or "
-            "were removed since this version was designed — composite "
-            "scenes citing them cannot re-render as designed; address "
-            "current assets with update_element edits."
-        )
-
-    digest = getattr(base, "film_storyboard_content_digest", None)
-    lines.append(
-        f"- Storyboard version: {base.film_storyboard_version}"
-        + (
-            f" (created via {base.film_created_via})"
-            if getattr(base, "film_created_via", None)
-            else ""
-        )
-        + (f" · content digest {digest[:12]}" if isinstance(digest, str) else "")
-    )
-    if gate:
-        lines.append(
-            f"- base_ref: {film_version_identity_digest(board, base_params, version=base.film_storyboard_version, cut=film_base_cut(base))}"
-        )
-    lines.append(
-        f"- params: aspect {canonical['aspect']}, voiceover "
-        f"{'on' if canonical['voiceover'] else 'off'}, "
-        f"{_film_music_pick(canonical)}"
-    )
-    lines.append(
-        _film_music_fact_line(
-            canonical, cut_state_hint=getattr(base, "film_cut_state", None),
-            spec_music=getattr(base, "film_render_spec_music", None),
-            execution=getattr(base, "film_storyboard_execution", None),
-        )
-    )
-
-    # The timeline's PROVENANCE (冻结时间轴 = 版本状态 — the read never
-    # recomputes a cut on its own): an executed version's frames are the
-    # delivered spec's (flex-baked truth); a frozen version's are its kept
-    # frames; a plain draft's are its PRESENTED plan timeline recomputed by
-    # the ONE frame seat on the version's own music grid; an unreadable cut
-    # is named, never replaced by a guess. Two clocks are NEVER mixed on one
-    # line: ``seconds`` stays the AUTHORED design value, the timeline
-    # duration derives from the authoritative frames ÷ the project's fixed
-    # fps (a unit conversion, never a re-allocation).
-    cut_state = getattr(base, "film_cut_state", None)
-    cut_frames = getattr(base, "film_cut_frames", None)
-    frames: list[int] | None = None
-    state_word: str | None = None
-    if cut_state == "spec":
-        state_word = "actual"
-        lines.append(
-            "- Timeline: executed cut (the delivered render spec's per-scene "
-            "frames — the rendered truth)"
-        )
-        frames = cut_frames
-    elif cut_state == "kept":
-        state_word = "frozen"
-        lines.append(
-            "- Timeline: frozen cut (kept from the base version's "
-            "established frames)"
-        )
-        frames = cut_frames
-    elif cut_state == "unreadable":
-        lines.append(
-            "- Timeline: UNREADABLE — the version was executed but its spec "
-            "is missing/corrupt; the actual cut is unrecoverable (per-scene "
-            "durations stay absent — the authored seconds below are design "
-            "values, never the actual cut)"
-        )
-    else:
-        # "draft" (or a legacy base carrying no cut state): the presented
-        # plan timeline — same formula the presentation and the run share,
-        # on the version's own snapshot music grid.
-        state_word = "planned"
-        snapshot = getattr(base, "film_storyboard_execution", None)
-        beats = None
-        if isinstance(snapshot, dict):
-            music = snapshot.get("music")
-            if isinstance(music, dict) and isinstance(music.get("beats"), list):
-                beats = music["beats"]
-        frames = execution_frames(board, beats)
-        lines.append(
-            "- Timeline: planned (never executed — allocate+snap on the "
-            "version's music grid; the run's rendered cut may shift within "
-            "the narration flex bounds)"
-        )
-    if frames is not None and len(frames) != len(board.scenes):
-        # A corrupt cut (frame count off the scene count) is named, never
-        # zipped past its length.
-        lines.append(
-            "- The cut's frame count does not match the scene count — "
-            "per-scene durations omitted (the stored timeline reads as "
-            "corrupt)."
-        )
-        frames = None
-        state_word = None
-    if frames is not None:
-        total = sum(frames)
-        lines[-1] += f" · total {round(total / FILM_FPS, 1):g}s ({total}f)"
-
-    used_by: dict[tuple[int, int], list[str]] = {}
-    for s in board.scenes:
-        # Drifted references drop out of the used-by mapping — under
-        # materials drift the (page, shot) index no longer names the asset
-        # the scene was designed on, so a "used by" label would pass the
-        # CURRENT page off as the scene's original view.
-        if s.type == "ui" and s.page not in drifted_pages:
-            used_by.setdefault((s.page, s.shot), []).append(str(s.scene_id))
-
-    # The image plan comes BEFORE the catalog: a view whose screenshot the
-    # read attaches also gets its camera-target inventory printed (the legal
-    # element ids an update_scene focus may name) — image set and element
-    # detail are ONE set, so a summary-only catalog never reads as if the
-    # ids were all known. ``targets=None`` after an explicit budget error.
-    targets: list[tuple[int, int]] | None = None
-    budget_error: str | None = None
-    if gate and with_images:
-        if params.views is not None:
-            targets = [(v.page, v.shot) for v in params.views]
-            if len(targets) > _FILM_VIEW_IMAGE_MAX:
-                budget_error = (
-                    f"- Image budget: {len(targets)} named views exceed the "
-                    f"{_FILM_VIEW_IMAGE_MAX}-image read budget — no images "
-                    f"attached (never a silent partial set). Name at most "
-                    f"{_FILM_VIEW_IMAGE_MAX} views per read; a scoped read "
-                    "carries the views' screenshots AND camera-target "
-                    "inventories (the element ids)."
-                )
-                targets = None
-        else:
-            targets = [
-                (p, si)
-                for p, page in enumerate(pages)
-                for si in range(_page_view_count(page))
-            ]
-            if len(targets) > _FILM_VIEW_IMAGE_MAX:
-                budget_error = (
-                    f"- Image budget: this project has {len(targets)} "
-                    f"captured views, over the {_FILM_VIEW_IMAGE_MAX}-image "
-                    "read budget — no images attached (never a silent "
-                    "partial set). Re-read naming the views you need with "
-                    "views (page/shot pairs from the catalog, at most "
-                    f"{_FILM_VIEW_IMAGE_MAX}); a scoped read carries the "
-                    "views' screenshots AND camera-target inventories (the "
-                    "element ids), and naming exactly one reads it in high "
-                    "resolution."
-                )
-                targets = None
-    target_set = set(targets) if targets else set()
-
-    lines.append(
-        "- Scenes (id · type · authored seconds · timeline duration · "
-        "view · content · narration):"
-    )
-    for i, s in enumerate(board.scenes):
-        head = f"  [{s.scene_id}] {s.type} · authored {s.seconds:g}s"
-        if frames is not None and state_word is not None:
-            start_f = sum(frames[:i])
-            head += (
-                f" · {state_word} {round(frames[i] / FILM_FPS, 1):g}s "
-                f"({frames[i]}f) · at {round(start_f / FILM_FPS, 1):g}–"
-                f"{round((start_f + frames[i]) / FILM_FPS, 1):g}s"
-            )
-        if s.type == "ui":
-            if s.page in drifted_pages:
-                # Materials drift (版本快照核对): the current page at this
-                # index is NOT the asset the scene was designed on — the
-                # original view is unrecoverable from the current
-                # materials, and resolving the heading/camera against the
-                # wrong page would fabricate facts.
-                head += (
-                    f" · view: page {s.page} shot {s.shot} (materials "
-                    "changed — the version's original view is "
-                    "unrecoverable)"
-                )
-            elif 0 <= s.page < len(pages):
-                view = _page_view(pages[s.page], s.shot)
-                if view is None:
-                    head += f" · view: page {s.page} shot {s.shot} (no such captured view)"
-                else:
-                    head += f' · view: page {s.page} shot {s.shot} "{view[1]}"'
-            else:
-                head += f" · view: page {s.page} shot {s.shot} (page not captured)"
-            if s.page not in drifted_pages:
-                head += " · browser frame" if s.frame else " · full-bleed"
-                moves = ui_focus_moves(s, pages, with_ids=True)
-                if moves:
-                    head += " · camera: wide → " + " → ".join(moves) + " → settle"
-        else:
-            content = film_scene_content(
-                s,
-                frames[i] if frames is not None and i < len(frames) else None,
-                media,
-            )
-            if content:
-                head += f" · shows: {content}"
-        narration = getattr(s, "narration", None)
-        head += f' · narration: "{narration}"' if narration else " · silent"
-        head += " · subtitle_track: " + (
-            s.subtitle_track.model_dump_json() if s.subtitle_track else "none"
-        )
-        lines.append(head)
-
-    if not gate:
-        return lines, []
-
-    # The candidate view catalog (the edit model's view menu) + the view
-    # screenshots. Gate-on only: the catalog's framing and the images exist
-    # for targeted edits, and the wire image form is gated with them.
-    lines.append(
-        "- Candidate views (the page views an update_scene edit may name):"
-    )
-    for p, page in enumerate(pages):
-        title = (page.research.title or "").strip()
-        host = f'{page.host} "{title}"' if title else page.host
-        lines.append(f"  page {p} — {host} (asset {page.asset_id}):")
-        if _page_view_count(page) == 0:
-            lines.append(
-                "    (no captured views — the capture's visual half degraded)"
-            )
-            continue
-        shots = getattr(page, "shots", None) or ()
-        for si in range(_page_view_count(page)):
-            view = _page_view(page, si)
-            assert view is not None  # the count seat bounds the range
-            if shots:
-                entry = (
-                    f'    shot {si} "{view[1]}" · '
-                    f"{len(shots[si].elements)} elements"
-                )
-            else:
-                entry = f'    shot {si} "{view[1]}" (fold only — no element inventory)'
-            users = used_by.get((p, si))
-            if users:
-                entry += f" · used by [{', '.join(users)}]"
-            if shots and (p, si) in target_set:
-                entry += " · camera targets:"
-            lines.append(entry)
-            if shots and (p, si) in target_set:
-                for el in shots[si].elements:
-                    el_line = f"      {el.id} · {el.kind}"
-                    if el.text:
-                        el_line += f' · "{el.text}"'
-                    if el.covered:
-                        el_line += " (covered — occluded at capture)"
-                    lines.append(el_line)
-    if not pages:
-        lines.append("  (no captured pages in this project)")
-
-    if budget_error is not None:
-        lines.append(budget_error)
-        return lines, []
-    if targets is None:
-        return lines, []
-
-    max_px = _FILM_VIEW_DETAIL_PX if len(targets) == 1 else _FILM_VIEW_THUMB_PX
-    images: list[MediaInput] = []
-    for p, si in targets:
-        ref = f"page {p} shot {si}"
-        if not (0 <= p < len(pages)):
-            lines.append(f"- {ref}: no such captured view (see the catalog above).")
-            continue
-        view = _page_view(pages[p], si)
-        if view is None:
-            lines.append(f"- {ref}: no such captured view (see the catalog above).")
-            continue
-        key, heading = view
-        page = pages[p]
-        users = used_by.get((p, si))
-        caption = f'page {p} · shot {si} "{heading}" · {page.host}'
-        caption += (
-            f" · used by scene [{', '.join(users)}]"
-            if users
-            else " · not used by any scene"
-        )
-        if not key:
-            lines.append(
-                f"- {ref}: no screenshot stored (the capture's visual half "
-                "degraded) — the catalog facts above still stand."
-            )
-            continue
-        try:
-            image = await _film_view_image(key, max_px, caption)
-        except Exception:  # noqa: BLE001 — a storage hiccup is per-view news
-            image = None
-        if image is None:
-            lines.append(
-                f"- {ref}: the stored screenshot could not be read — the "
-                "catalog facts above still stand."
-            )
-            continue
-        images.append(image)
-    return lines, images
 
 
 # A node's program is LLM-written and short in practice — the cap is the
@@ -1381,7 +777,7 @@ async def search_music(db: AsyncSession, project: Project, params: SearchMusicPa
     lines = [header + (", first 8:" if len(matches) > 8 else ":")]
     for m in shown:
         duration = f"{m.duration_seconds}s" if m.duration_seconds else "?s"
-        lines.append(f"- {m.title} — mood: {m.mood} · {duration} · id={m.id}")
+        lines.append(f"- {m.title} — mood: {m.mood} · {duration} · music_id={m.id} (Music library, not Asset)")
     return "\n".join(lines)
 
 
@@ -1418,6 +814,18 @@ async def get_run_status(db: AsyncSession, project: Project, params) -> str:
     if progress:
         lines.append("Steps:")
         lines.extend(progress)
+    preparation = (latest_run.context or {}).get("narration_preparation") or {}
+    result = preparation.get("result") or {}
+    alignment_id = result.get("alignment_id")
+    if alignment_id:
+        alignment = await db.get(NarrationAlignment, UUID(str(alignment_id)))
+        if alignment is not None and alignment.owner_id == project.user_id:
+            lines.append(
+                f"Narration alignment {alignment.id}: status={alignment.status} "
+                f"audio_snapshot_id={alignment.audio_snapshot_id}"
+            )
+        else:
+            lines.append(f"Narration alignment {alignment_id}: unavailable")
     return "\n".join(lines)
 
 
@@ -1856,7 +1264,54 @@ _MEDIA_NOT_A_VIEWING_TRAILER = (
     "when the request depends on the content ('the part where the button "
     "is clicked'), ask for the time range instead of guessing it."
 )
+MEDIA_LISTING_CAP = 40
 
+
+async def _project_media_candidates(
+    db: AsyncSession,
+    project: Project,
+    *,
+    pinned_ids: list[str] | None = None,
+) -> list[dict]:
+    rows = list((
+        await db.execute(
+            select(Asset)
+            .where(
+                Asset.project_id == project.id,
+                Asset.type.in_((AssetType.VIDEO, AssetType.IMAGE)),
+            )
+            .order_by(Asset.created_at.desc())
+            .execution_options(populate_existing=True)
+        )
+    ).scalars().all())
+    candidates = []
+    for row in rows:
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        duration = float(row.duration_seconds) if row.duration_seconds is not None else None
+        probed = meta.get("probed_duration_seconds")
+        if isinstance(probed, (int, float)) and not isinstance(probed, bool):
+            duration = float(probed)
+        candidates.append({
+            "id": str(row.id),
+            "kind": row.type.value,
+            "title": row.display_name,
+            "duration_seconds": duration,
+            "width": meta.get("width") if isinstance(meta.get("width"), int) else None,
+            "height": meta.get("height") if isinstance(meta.get("height"), int) else None,
+            "usable": bool(row.file_url),
+            "processing": row.processing_status.value if row.processing_status else None,
+        })
+    if pinned_ids:
+        by_id = {candidate["id"]: candidate for candidate in candidates}
+        pinned = [
+            by_id[asset_id]
+            for asset_id in dict.fromkeys(str(item) for item in pinned_ids)
+            if asset_id in by_id
+        ]
+        if pinned:
+            pinned_set = {candidate["id"] for candidate in pinned}
+            candidates = pinned + [c for c in candidates if c["id"] not in pinned_set]
+    return candidates
 
 async def list_project_media(db: AsyncSession, project: Project, params) -> str:
     """The film-material discovery read (ADR-140): the project's
@@ -1875,10 +1330,7 @@ async def list_project_media(db: AsyncSession, project: Project, params) -> str:
     not — with unknown/foreign ids named honestly; project scoping never
     relaxes: the ids resolve through the project-scoped listing seat,
     never against arbitrary storage)."""
-    from app.tools.film.storyboard import (  # deferred: tool seam
-        MEDIA_LISTING_CAP,
-        project_media_candidates,
-    )
+    project_media_candidates = _project_media_candidates
 
     ids = [str(i) for i in (getattr(params, "ids", None) or [])]
     offset = max(0, int(getattr(params, "offset", 0) or 0))
@@ -2206,16 +1658,57 @@ async def get_video_version(db: AsyncSession, project: Project, params: GetVideo
     from app.editing.store import CompositionNotFound, PermissionDenied
 
     try:
-        read = await video_version_read(
-            db,
-            owner_id=project.user_id,
-            version_id=params.version_id,
-            composition_id=params.composition_id,
-            output_id=params.output_id,
-        )
+        if params.purpose == "edit":
+            from app.editing.store import content_of, get_video_version
+            import json
+
+            composition, version = await get_video_version(
+                db, owner_id=project.user_id, composition_id=params.composition_id
+            )
+            content = content_of(version)
+            clips = [
+                clip for track in content.timeline.tracks for clip in track.clips
+                if (params.clip_id is None or clip.clip_id == params.clip_id)
+                and (params.scene_id is None or clip.scene_id == params.scene_id)
+            ]
+            read = {
+                "base_ref": {
+                    "composition_id": str(composition.id),
+                    "composition_version_id": str(version.id),
+                    "content_digest": version.content_digest,
+                },
+                "scenes": [
+                    scene.model_dump(mode="json") for scene in content.scenes
+                    if params.scene_id is None or scene.scene_id == params.scene_id
+                ],
+                "clips": [clip.model_dump(mode="json") for clip in clips],
+            }
+            observation = json.dumps(read, ensure_ascii=False)
+            version_id, digest = str(version.id), version.content_digest
+        else:
+            read = await video_version_read(
+                db,
+                owner_id=project.user_id,
+                version_id=params.version_id,
+                composition_id=params.composition_id,
+                output_id=params.output_id,
+            )
+            observation = format_storyboard_text(read)
+            version_id = read.get("composition_version_id")
+            digest = read.get("content_digest")
     except (CompositionNotFound, PermissionDenied):
         return (
             "No such video version in your works — name a version_id or "
             "composition_id from a storyboard card or an earlier read."
         )
-    return format_storyboard_text(read)
+    from app.agents.tool_loop import ToolObservation
+
+    return ToolObservation(
+        observation,
+        context_lifetime="project",
+        context_keys=(f"composition:{version_id}:{digest}",) if version_id and digest else (),
+        project_text=(
+            "The exact saved version is in CURRENT PROJECT EVIDENCE with base_ref and "
+            "clip_targets; recover this full observation by its context item id when needed."
+        ),
+    )

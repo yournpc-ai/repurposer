@@ -23,13 +23,33 @@ from app.models.schemas import (
     SkillReference,
 )
 from app.models.tables import SkillVersion, UserSkill
-from app.skills import SKILL_REGISTRY
+from app.skills import SKILL_REGISTRY, SkillValidationError, _parse_skill_md
 from app.skills.store import get_skill_version
 
 # Only packs with a real design_video consumer are selectable video Skills.
 # The broader instruction-pack registry also contains writers and other crafts.
 _BUILTIN_VIDEO_CAPABILITIES = {
-    "launch-film": ("website_capture", "launch_film_template"),
+    "launch-film": ("website_capture", "launch_film_template", "mixed_real_media"),
+    "promo-video": (
+        "website_capture",
+        "mixed_real_media",
+        "native_motion_graphics",
+        "remotion_project",
+        "progressive_skill_package",
+    ),
+    "talking-head-video": ("mixed_real_video", "timed_captions"),
+    "text-animation": ("native_motion_graphics",),
+    "knowledge-explainer": ("narration_alignment", "drawing_v1", "remotion_project"),
+}
+
+# Display names live in the web locales; these aliases are the deterministic
+# natural-language binding face for the same exact built-in references.
+_BUILTIN_SKILL_ALIASES = {
+    "launch-film": ("Website launch film", "网站发布视频", "Product promo video", "产品宣传视频制作"),
+    "promo-video": ("Promotional video", "宣传视频制作"),
+    "talking-head-video": ("Talking-head motion video", "口播动效视频制作"),
+    "text-animation": ("Text animation video", "文字动画视频制作"),
+    "knowledge-explainer": ("Knowledge explainer video", "知识讲解视频制作"),
 }
 
 
@@ -43,15 +63,31 @@ class SkillResolution:
     ambiguous: tuple[SkillOption, ...] = ()
 
 
-def get_builtin_skill_option(skill_id: str) -> SkillOption:
+def get_builtin_skill_option(skill_id: str, *, version: str | None = None) -> SkillOption:
+    from app.config import settings
+    from app.skills.package_reader import SkillPackageError, open_builtin_skill_package
+
     capabilities = _BUILTIN_VIDEO_CAPABILITIES.get(skill_id)
+    if capabilities and not settings.component_bake_enabled:
+        capabilities = tuple(item for item in capabilities if item != "remotion_project")
     pack = SKILL_REGISTRY.get(skill_id)
+    active_version = settings.managed_skill_versions.get(skill_id)
+    if capabilities and active_version:
+        version = version or active_version
+        try:
+            manifest = open_builtin_skill_package(skill_id, version).root_manifest
+            pack = _parse_skill_md(manifest, require_directory_name=False)
+        except (SkillPackageError, SkillValidationError) as exc:
+            raise SkillResolutionError(f"Installed Skill {skill_id} is unavailable: {exc}") from exc
     if not capabilities or pack is None:
         raise SkillResolutionError("Skill is unavailable")
-    version = str(pack.metadata.get("version") or "")
-    template = load_template(skill_id)
-    if not version or template.template_id != skill_id:
+    version = version if active_version else str(pack.metadata.get("version") or "")
+    if not version:
         raise SkillResolutionError("Skill has no declared design capability")
+    if skill_id == "launch-film":
+        template = load_template(skill_id)
+        if template.template_id != skill_id:
+            raise SkillResolutionError("Skill has no declared design capability")
     return SkillOption(
         reference=BuiltInSkillReference(kind="builtin", skill_id=skill_id, version=version),
         skill_id=skill_id,
@@ -61,20 +97,21 @@ def get_builtin_skill_option(skill_id: str) -> SkillOption:
     )
 
 
-def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption | None:
+def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption:
+    from app.config import settings
+
     capabilities = [
         str(item)
         for item in ((version.capability_report or {}).get("supported") or [])
         if isinstance(item, str) and item
+        and (settings.component_bake_enabled or item not in {"remotion_project", "runtime:remotion-source"})
     ]
-    if not capabilities:
-        return None
     return SkillOption(
         reference=ExternalSkillReference(kind="external", skill_version_id=version.id),
         skill_id=str(skill.id),
         name=skill.name,
         description=skill.description,
-        capabilities=capabilities,
+        capabilities=capabilities or ["progressive_skill_package"],
         version_number=version.version,
     )
 
@@ -83,7 +120,13 @@ async def list_available_skills(
     db: AsyncSession, *, owner_id: UUID
 ) -> list[SkillOption]:
     """Public picker projection; instructions/references never leave the DB."""
-    options = [get_builtin_skill_option(skill_id) for skill_id in sorted(_BUILTIN_VIDEO_CAPABILITIES)]
+    from app.config import settings
+
+    options = [
+        get_builtin_skill_option(skill_id)
+        for skill_id in sorted(_BUILTIN_VIDEO_CAPABILITIES)
+        if skill_id in SKILL_REGISTRY or skill_id in settings.managed_skill_versions
+    ]
     rows = (
         await db.execute(
             select(UserSkill, SkillVersion)
@@ -92,11 +135,7 @@ async def list_available_skills(
             .order_by(UserSkill.name.asc(), SkillVersion.version.desc())
         )
     ).all()
-    options.extend(
-        option
-        for skill, version in rows
-        if (option := _external_option(skill, version)) is not None
-    )
+    options.extend(_external_option(skill, version) for skill, version in rows)
     return options
 
 
@@ -136,19 +175,23 @@ def resolve_named_skill(
     normalized_message = _normalized_name(message)
     matches: dict[str, SkillOption] = {}
     for option in options:
-        name = _normalized_name(option.name)
-        if not name:
-            continue
-        # ASCII word edges prevent substring guesses ("craft" inside
-        # "minecraft"); CJK may directly adjoin a Latin or Chinese Skill name.
-        if not re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", normalized_message):
-            continue
-        identity = (
-            f"builtin:{option.skill_id}:{option.reference.version}"
-            if isinstance(option.reference, BuiltInSkillReference)
-            else f"external:{option.reference.skill_version_id}"
-        )
-        matches.setdefault(identity, option)
+        aliases = [option.name]
+        if isinstance(option.reference, BuiltInSkillReference):
+            aliases.extend((option.skill_id, *_BUILTIN_SKILL_ALIASES.get(option.skill_id, ())))
+        for alias in dict.fromkeys(aliases):
+            name = _normalized_name(alias)
+            if not name:
+                continue
+            # ASCII word edges prevent substring guesses ("craft" inside
+            # "minecraft"); CJK may directly adjoin a Latin or Chinese Skill name.
+            if not re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", normalized_message):
+                continue
+            identity = (
+                f"builtin:{option.skill_id}:{option.reference.version}"
+                if isinstance(option.reference, BuiltInSkillReference)
+                else f"external:{option.reference.skill_version_id}"
+            )
+            matches.setdefault(identity, option)
 
     versioned = [
         option for option in matches.values()
@@ -196,18 +239,13 @@ async def resolve_chat_skill(
         )
         return resolve_named_skill(message, options, prior_options=prior)
     if isinstance(reference, BuiltInSkillReference):
-        option = get_builtin_skill_option(reference.skill_id)
+        option = get_builtin_skill_option(reference.skill_id, version=reference.version)
         if option.reference != reference:
             raise SkillResolutionError("built-in Skill version is unavailable")
         return SkillResolution(reference=option.reference)
     version = await get_skill_version(
         db, owner_id=owner_id, skill_version_id=reference.skill_version_id
     )
-    skill = await db.get(UserSkill, version.skill_id)
-    if (
-        skill is None
-        or skill.owner_id != owner_id
-        or _external_option(skill, version) is None
-    ):
-        raise SkillResolutionError("Skill has no declared design capability")
-    return SkillResolution(reference=reference)
+    return SkillResolution(
+        reference=ExternalSkillReference(kind="external", skill_version_id=version.id)
+    )

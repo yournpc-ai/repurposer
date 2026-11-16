@@ -2,15 +2,29 @@
 
 This is orchestration, not another content writer or confirmation machine.
 """
+from math import gcd
 from uuid import UUID
 
 from sqlalchemy import select
 
+from app.config import settings
 from app.editing.service import video_version_read
 from app.editing.store import content_of, get_video_version
 from app.models.schemas import PendingPlan, WorkflowStatus
 from app.models.tables import Composition, Conversation, Message, WorkflowRun
-from app.tools.video.params import ProduceVideoParams
+from app.tools.video.params import PrepareNarrationParams, ProduceVideoParams
+
+
+def assert_saved_producers_available(clips: list[dict]) -> None:
+
+    if not settings.component_bake_enabled and any(
+        clip.get("object_kind") == "generator" and clip.get("producer") == "remotion-project"
+        for clip in clips
+    ):
+        raise ValueError(
+            "This saved video requires remotion-project, which is unavailable in this deployment; "
+            "revise it to use native or fixed-media scenes before production"
+        )
 
 
 async def reviewed_output_ref(db, project, output_id):
@@ -29,7 +43,7 @@ async def reviewed_output_ref(db, project, output_id):
 
 def _render_capture_units(payload: dict) -> dict[str, float]:
     """The mirror bills render time only; ProduceVideo captures actual TTS."""
-    return {"film_seconds": float((payload or {}).get("duration_seconds") or 0)}
+    return {"video_seconds": float((payload or {}).get("duration_seconds") or 0)}
 
 
 async def capture_video_render(db, output_id):
@@ -68,11 +82,28 @@ async def video_quote_facts(db, project, tasks):
     seconds = {}
     images = {}
     tts_characters = {}
+    narration_tts_characters = {}
     from app.editing.schemas import GeneratorObject
     from app.tools.video.generated_images import has_fixed_generated_image
-    from app.tools.video.narration import narration_quote_characters
+    from app.tools.video.narration import (
+        narration_original_quote_characters,
+        narration_original_request_key,
+        narration_quote_characters,
+    )
 
     for task in tasks or []:
+        if task.tool == "prepare_narration":
+            params = PrepareNarrationParams.model_validate(task.params)
+            key = narration_original_request_key(
+                text=params.text, voice_id=params.voice_id, language=params.language
+            )
+            narration_tts_characters[key] = await narration_original_quote_characters(
+                text=params.text,
+                voice_id=params.voice_id,
+                language=params.language,
+                user_id=project.user_id,
+            )
+            continue
         if task.tool != "produce_video":
             continue
         production = ProduceVideoParams.model_validate(task.params)
@@ -89,7 +120,7 @@ async def video_quote_facts(db, project, tasks):
         missing = 0
         for track in content.timeline.tracks:
             for clip in track.clips:
-                if not isinstance(clip.object, GeneratorObject) or clip.object.runtime != "image-v1":
+                if not isinstance(clip.object, GeneratorObject) or clip.object.producer != "image-generation":
                     continue
                 if production.regenerate_media or not await has_fixed_generated_image(
                     clip, composition_id=str(composition.id)
@@ -105,7 +136,14 @@ async def video_quote_facts(db, project, tasks):
         "video_seconds": seconds,
         "video_images": images,
         "video_tts_characters": tts_characters,
+        "narration_tts_characters": narration_tts_characters,
     }
+
+
+def is_short_video_affirmation(text: str) -> bool:
+    import re
+
+    return bool(re.fullmatch(r"(?:ok(?:ay)?|yes)[.!。！]?", text.strip(), re.I))
 
 
 async def latest_video_approval(db, project):
@@ -117,13 +155,35 @@ async def latest_video_approval(db, project):
     )
 
 
+async def pin_narration_preparation(project, tasks):
+    """Pin the one original-only request after the ordinary plan/Start gate."""
+    narration_tasks = [t for t in tasks or [] if t.tool == "prepare_narration"]
+    if not narration_tasks:
+        return {}
+    from app.tools.video.narration import narration_original_quote_characters
+    from app.tools.video.params import narration_original_policy
+
+    if len(narration_tasks) != 1 or len(tasks or []) != 1:
+        raise ValueError("Prepare narration runs as one narration-only task")
+    params = PrepareNarrationParams.model_validate(narration_tasks[0].params)
+    characters = await narration_original_quote_characters(
+        text=params.text,
+        voice_id=params.voice_id,
+        language=params.language,
+        user_id=project.user_id,
+    )
+    return {
+        "narration_preparation": {
+            "request": params.model_dump(mode="json"),
+            "narration_policy": narration_original_policy(characters).model_dump(mode="json"),
+        }
+    }
+
+
 async def pin_video_production(db, project, tasks, approved_by):
     video_tasks = [t for t in tasks or [] if t.tool == "produce_video"]
     if not video_tasks:
         return {}
-    from app.config import settings
-    if not settings.video_project_enabled:
-        raise ValueError("Video production is disabled")
     if len(video_tasks) != 1:
         raise ValueError("Produce one saved video per run")
     production = ProduceVideoParams.model_validate(video_tasks[0].params)
@@ -144,8 +204,9 @@ async def pin_video_production(db, project, tasks, approved_by):
         for scene in storyboard["scenes"]
         for clip in scene["clips"]
     ] + list(storyboard["unassigned_clips"])
+    assert_saved_producers_available(clips)
     if production.regenerate_media and not any(
-        clip.get("object_kind") == "generator" and clip.get("runtime") == "image-v1"
+        clip.get("object_kind") == "generator" and clip.get("producer") == "image-generation"
         for clip in clips
     ):
         raise ValueError("This saved video has no model-generated image to regenerate")
@@ -178,6 +239,21 @@ async def pin_video_production(db, project, tasks, approved_by):
     conversation = await db.get(Conversation, approval.conversation_id)
     if conversation is None or conversation.project_id != project.id:
         raise ValueError("The approval belongs to another Chat")
+    if is_short_video_affirmation(approval.content or ""):
+        confirmation = (approval.intent or {}).get("video_confirmation") or {}
+        if (not receipt.get("production_invited")
+                or confirmation.get("action") not in {"produce", "start"}
+                or confirmation.get("base_ref") != read["base_ref"]
+                or confirmation.get("presented_message_id") != str(presented.id)
+                or composition.current_version_id != ref.composition_version_id):
+            raise ValueError("This confirmation needs a current storyboard with a production invitation")
+        used = await db.scalar(select(WorkflowRun.id).where(
+            WorkflowRun.project_id == project.id,
+            WorkflowRun.context["video_presentation"]["presented_message_id"].as_string()
+            == str(presented.id),
+        ).limit(1))
+        if used is not None:
+            raise ValueError("Production was already requested for this storyboard")
     block = next((b for b in presented.blocks or []
                   if b.get("kind") == "video_storyboard"
                   and b.get("composition_version_id") == read["composition_version_id"]), None)
@@ -201,8 +277,14 @@ async def pin_video_production(db, project, tasks, approved_by):
             content_of(pinned_version), user_id=project.user_id
         )
     )
+    version_settings = content_of(pinned_version).settings
+    divisor = gcd(version_settings.width, version_settings.height)
+    aspect = (
+        f"{version_settings.width // divisor}:{version_settings.height // divisor}"
+    )
     return {"version_ref": ref.model_dump(mode="json"),
             "regenerate_media": production.regenerate_media,
             "narration_policy": policy.model_dump(mode="json"),
+            "aspect": aspect,
             "video_authorized_by": str(approval.id),
             "video_presentation": receipt}

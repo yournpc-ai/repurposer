@@ -51,7 +51,7 @@ async def page_reading_for_url(
         PageReading.project_id == project_id,
         PageReading.url == normalize_page_url(url),
     )
-    return (await db.execute(stmt)).scalar_one_or_none()
+    return (await db.execute(stmt.execution_options(populate_existing=True))).scalar_one_or_none()
 
 
 async def upsert_page_reading(

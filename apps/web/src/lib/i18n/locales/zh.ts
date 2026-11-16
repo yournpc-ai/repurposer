@@ -14,6 +14,9 @@ const zh: Resources = {
     back: "返回",
     cancel: "取消",
     close: "关闭",
+    done: "完成",
+    previous: "上一页",
+    next: "下一页",
     remove: "移除",
     loading: "加载中...",
     untitled: "未命名",
@@ -82,6 +85,9 @@ const zh: Resources = {
     /** pill hero meta 行的预占内联提及（"积分 · 12 预占中"）。 */
     heldInline: "{{count}} 预占中",
     recent: "最近记录",
+    topups: "充值记录",
+    spending: "消费记录",
+    page: "{{page}} / {{pages}}",
     /** SettingsDialog「积分」section（BILLING §7 展示主轴）——余额与台账
      * 的全貌座位，与 pill 同两个端点。 */
     title: "积分",
@@ -94,13 +100,12 @@ const zh: Resources = {
     pay: "支付",
     buying: "正在打开…",
     conversion: "{{unit}} = {{credits}} 积分",
-    amountRange: "单次充值 {{min}}–{{max}}。",
     rateInfo: "积分换算与金额限制",
-    oneTime: "一次性付款，不自动续费。",
-    topupSubtitle: "输入金额，或选择充值档位。",
+    amountRange: "单次充值 {{min}}–{{max}}。",
     packagesLoadFailed: "充值选项加载失败。",
     retry: "重试",
-    topupSuccess: "已充值 {{count}} 积分。",
+    paymentSuccess: "支付成功",
+    topupSuccess: "{{count}} 积分已到账，点击完成查看充值记录。",
     checkAgain: "重新查询",
     return: {
       confirming: "正在确认付款…",
@@ -111,6 +116,23 @@ const zh: Resources = {
     viewAll: "查看全部记录",
     tx: {
       empty: "暂无变动",
+      type: "类型",
+      orderId: "订单号",
+      paidAt: "充值时间",
+      provider: "支付渠道",
+      reference: "消费编号",
+      creation: "制作",
+      outputs: "产物类型",
+      spentAt: "消费时间",
+      project: "项目",
+      amount: "消耗积分",
+      paymentAmount: "支付金额",
+      receivedCredits: "到账积分",
+      status: "状态",
+      success: "成功",
+      credited: "已入账",
+      topupEmpty: "暂无充值记录",
+      spendEmpty: "暂无消费记录",
       /** 语义账本塌缩（ADR-057 K4）：用户面只显三族——花费 / 赠送 / 充值；
        * 账本的 hold / capture / release 机器词服务端折叠，永不上 UI。 */
       /** 花费行标题的最后兜底——仅在 run 既无 LLM 命名也无产物类型时
@@ -141,406 +163,269 @@ const zh: Resources = {
     personaCreateFailed: "创建人设失败",
   },
   landing: {
+
+  "heroEyebrow": "你的 AI 视频 Agent",
+  "showcase": {
+    "label": "视频制作演示",
+    "types": "视频类型",
+    "attach": "添加素材",
+    "send": "开始对话",
+    "preview": "视频预览",
+    "start": "你想做什么视频？",
+    "play": "播放演示",
+    "pause": "暂停演示",
+    "replies": {
+      "product-promo": "视频做好了，先展示产品怎么用，再补充核心特点。\n想缩短开头、改字幕或换画面，直接说出位置就行。",
+      "talking-head": "保留了原声，字幕和重点标题也已加入。\n字幕不准、想删停顿或换标题样式，指出时间和内容就行。",
+      "text-animation": "文案没有改，已按语义安排文字节拍和重点动效。\n指定某一句，就能继续换动画、调速度或改配色。",
+      "knowledge-explainer": "旁白和画面已经配合好了，可以完整看一遍。\n哪里还不清楚，可以换例子、改旁白或放慢节奏。"
+    },
+    "disclosure": "交互示意 · 公开样片",
+    "disclosureShort": "交互示意",
+    "requests": {
+      "product-promo": "给我的产品做个短视频，重点展示它怎么用。",
+      "talking-head": "给这段口播加上字幕和重点标题，保留我的原声。",
+      "text-animation": "把这段话做成文字动画，文案不要改。",
+      "knowledge-explainer": "我想用视频讲清楚这个概念，配上旁白和画面。"
+    },
+    "steps": {
+      "product-promo": {
+        "understand": {
+          "active": "正在梳理产品卖点…",
+          "done": "已梳理产品卖点。"
+        },
+        "storyboard": {
+          "active": "正在安排产品分镜…",
+          "done": "已安排产品分镜。"
+        },
+        "produce": {
+          "active": "正在制作画面与字幕…",
+          "done": "已制作画面与字幕。"
+        }
+      },
+      "talking-head": {
+        "understand": {
+          "active": "正在识别口播内容…",
+          "done": "已识别口播内容。"
+        },
+        "storyboard": {
+          "active": "正在标记重点与停顿…",
+          "done": "已标记重点与停顿。"
+        },
+        "produce": {
+          "active": "正在生成字幕与标题…",
+          "done": "已生成字幕与标题。"
+        }
+      },
+      "text-animation": {
+        "understand": {
+          "active": "正在拆分文案节拍…",
+          "done": "已拆分文案节拍。"
+        },
+        "storyboard": {
+          "active": "正在设计文字动效…",
+          "done": "已设计文字动效。"
+        },
+        "produce": {
+          "active": "正在合成文字视频…",
+          "done": "已合成文字视频。"
+        }
+      },
+      "knowledge-explainer": {
+        "understand": {
+          "active": "正在梳理讲解结构…",
+          "done": "已梳理讲解结构。"
+        },
+        "storyboard": {
+          "active": "正在设计旁白与图示…",
+          "done": "已设计旁白与图示。"
+        },
+        "produce": {
+          "active": "正在合成讲解视频…",
+          "done": "已合成讲解视频。"
+        }
+      }
+    }
+  },
+  "story": {
+    "suggestion": "那就把产品演示放到开头，原来的介绍缩短一些，后面的内容先保留。这样改可以吗？",
+    "confirmation": "可以，就这样改。",
+    "opening": "可以。我先把产品最值得看懂的一点提炼出来，再按「问题 → 使用演示 → 总结」安排分镜。",
+    "storyboardSummary": "分镜已经整理好：先用问题抓住注意，再展示核心操作，最后收束到产品价值。接下来按这个顺序制作。",
+    "workSteps": {
+      "understand": {
+        "active": "正在梳理视频目标…",
+        "done": "已梳理视频目标。"
+      },
+      "storyboard": {
+        "active": "正在设计视频分镜…",
+        "done": "已设计视频分镜。"
+      },
+      "produce": {
+        "active": "正在制作画面与字幕…",
+        "done": "已制作画面与字幕。"
+      }
+    },
+    "revisionOpening": "好，只调整开头和原来的介绍，后面的镜头先保留。",
+    "revisionLocation": "开头和介绍段已经定位好了，只替换这两部分，后面的镜头不动。",
+    "revisionSummary": "开头已经换成产品演示，介绍也压缩好了。现在检查新旧镜头的衔接。",
+    "revisionSteps": {
+      "locate": {
+        "active": "正在定位开头与介绍段…",
+        "done": "已定位开头与介绍段。"
+      },
+      "revise": {
+        "active": "正在重排开头镜头…",
+        "done": "已重排开头镜头。"
+      },
+      "check": {
+        "active": "正在合成并检查新版本…",
+        "done": "已合成并检查新版本。"
+      }
+    },
+    "redelivery": "这一版做好了，你再看看。",
+    "redeliveryTitle": "新的一版，继续看",
+    "demoLabel": "对话制作视频演示",
+    "refineTitle": "想改哪里，直接说",
+    "deliveryTitle": "视频做好了，接着聊",
+    "delivery": "视频做好了，你看看。",
+    "followup": "接着说说你的想法…",
+    "eyebrow": "想表达什么，就从这里聊起。",
+    "idea": {
+      "title": "说说你想做的视频",
+      "description": "不用写专业需求，也不用研究提示词。告诉我们你想做什么。"
+    },
+    "watch": {
+      "title": "看看你的想法，做成视频是什么样。",
+      "description": "聊清楚方向，看看分镜，再看制作出来的视频。"
+    },
+    "revise": {
+      "title": "哪里不合适，接着说。",
+      "description": "还是在同一个对话里提出修改，不用另外学一套剪辑软件。"
+    },
+    "request": "我想做个视频，让大家看懂我的产品有什么用。你能帮我想想怎么做吗？",
+    "attachments": {
+      "label": "示例附件",
+      "image": "product-image.png",
+      "document": "product-brief.pdf"
+    },
+    "feedback": "开头有点长，先展示产品怎么用。",
+    "posterAlt": "公开产品宣传样片画面",
+    "sampleNote": "公开样片 · 分镜与制作过程为交互示意。",
+    "revisionNote": "修改要求示意；此处尚未展示经过验证的修改前后结果。",
+    "scroll": "继续滚动",
+    "skip": "直接看视频案例"
+  },
+  "faqSection": {
+    "title": "你可能还想知道",
+    "experience": {
+      "question": "不会剪辑，也能用吗？",
+      "answer": "可以。在对话里说想做什么、哪里需要调整即可，不用安装软件或插件。"
+    },
+    "material": {
+      "question": "还没有准备素材，可以开始吗？",
+      "answer": "可以先聊想法。如果制作需要网站、文稿、图片或录像，助手会告诉你还需要补充什么。"
+    },
+    "revision": {
+      "question": "视频做出来以后，还能改吗？",
+      "answer": "可以继续在对话里提出修改。具体可调整的内容取决于视频；涉及重新生成或制作的修改会消耗相应积分。"
+    },
+    "pricing": {
+      "question": "怎么收费？",
+      "answer": "新账号赠送 1,000 积分，注册无需绑卡。对话本身不收费，视频生成与制作消耗积分，制作前显示预估消耗。内测期间无需订阅，需要时再充值；项目与已购积分在内测结束后保留。"
+    },
+    "download": {
+      "question": "可以预览和下载吗？",
+      "answer": "制作完成后，可以预览并下载交付的视频。目前产品仍在内测，制作稳定性仍在完善。"
+    }
+  },
+  "footerItems": {
+    "pricing": "定价",
+    "changelog": "更新日志",
+    "terms": "使用条款",
+    "privacy": "隐私政策"
+  }
+,
     nav: {
-      features: "功能",
+      features: "使用方式",
       pricing: "定价",
       faq: "常见问题",
-      roadmap: "开发计划",
-      menus: {
-        features: {
-          items: {
-            conversation: {
-              title: "对话创作",
-              description: "说明目标，由助手完成分镜、制作与交付。",
-            },
-            animation: {
-              title: "动态图形与文字动画",
-              description: "把文字、图形、动画和声音组合成视频。",
-            },
-            mixedMedia: {
-              title: "混合素材",
-              description: "把网页画面、实拍视频和图片组合进同一部作品。",
-            },
-            revision: {
-              title: "持续修订",
-              description: "通过对话修改内容，并保留可继续编辑的版本。",
-            },
-          },
-          aside: {
-            label: "创作方式",
-            title: "从目标到成片",
-            description: "你提出要求和反馈，助手处理创作与制作。",
-            note: "不需要理解轨道、节点或专业剪辑软件。",
-          },
-        },
-        pricing: {
-          items: {
-            topup: {
-              title: "一次性充值",
-              description: "按需购买积分，不绑定订阅。",
-            },
-            balance: {
-              title: "余额清楚",
-              description: "在同一处查看可用与预占积分。",
-            },
-            history: {
-              title: "消耗记录",
-              description: "在设置中查看充值、消耗和返还记录。",
-            },
-            packages: {
-              title: "当前积分包",
-              description: "在「设置 → 积分」查看可售积分包与价格。",
-            },
-          },
-          aside: {
-            label: "计费方式",
-            title: "按创作实际用量付费",
-            description: "视频生成与制作消耗积分，对话本身不收费。",
-            note: "当前积分包与价格以应用内展示为准。",
-          },
-        },
-        faq: {
-          items: {
-            inputs: {
-              title: "可以从什么开始？",
-              description: "文字、图片、网页或现有视频都可以作为创作起点。",
-            },
-            revision: {
-              title: "生成后还能修改吗？",
-              description: "可以继续通过对话调整分镜、文字、画面与声音。",
-            },
-            videoTypes: {
-              title: "能制作哪些视频？",
-              description: "网页宣传片、文字动画、动态图形和混合素材视频。",
-            },
-            download: {
-              title: "可以预览和下载吗？",
-              description: "制作完成后可以预览交付结果并下载视频。",
-            },
-          },
-          aside: {
-            label: "使用方式",
-            title: "说清你想做什么",
-            description: "从一条具体要求开始，例如“给我的网站做一支宣传视频”。",
-            note: "不需要先学会剪辑，先看结果，再决定改什么。",
-          },
-        },
-        roadmap: {
-          items: {
-            a: {
-              title: "作品与版本",
-              description: "建立可持续修改的影片、镜头、素材和版本基础。",
-            },
-            b: {
-              title: "对话创作闭环",
-              description: "从分镜到制作与交付，组合网页、文字、实拍、图形与声音。",
-            },
-            c: {
-              title: "个人创作方法",
-              description: "保存并复用你的创作流程、结构和偏好。",
-            },
-            d: {
-              title: "完善与扩展",
-              description: "打磨使用体验，扩展短片编辑与精确修订能力。",
-            },
-          },
-          aside: {
-            label: "当前重点",
-            title: "B. 对话创作闭环",
-            description: "完善从分镜、修改到制作与交付的完整体验。",
-            note: "阶段展示建设方向，具体上线时间尚未确定。",
-          },
-        },
-      },
+      earlyAccess: "内测",
     },
     signIn: "登录",
-    openStudio: "前往应用",
+    openStudio: "开始制作视频",
+    headerCta: "开始体验",
+    heroCta: "立即制作",
     entry: {
       navigation: "主导航",
       community: "加入社群",
-      preview: "预览",
-      communityTitle: "一起打造 Repurposer",
-      communityDescription: "交流创作想法、分享作品，参与产品的打磨。",
-      communityNote: "社群预览，邀请链接待接入。",
     },
-    heroTitle1: "你的内容",
-    heroTitle2: "创作 Agent",
+    heroTitle1: "新手也能做出好视频",
+    heroTitle2: "",
     heroSubtitle:
-      "通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
-    ctaTryBeta: "试用测试版",
-    ctaSeeHow: "看看它是怎么工作的",
-    comparison: {
-      ariaLabel: "前后对比：原始素材与生成结果",
-      caption: "拖动分割线——看一段素材能变成什么",
-      scrollDown: "继续滚动",
-      beforeLabel: "原始素材",
-      afterLabel: "生成结果",
-      beforeTags: ["横屏", "双人", "声音不清晰", "无字幕"],
-      afterTags: ["本人竖屏镜头", "有字幕", "有标题", "声音更清晰"],
-      unmute: "播放声音",
-      mute: "静音",
-    },
-    manifesto: {
-      statement:
-        "你花了数月做研究，数周做幻灯片，而演讲本身只有四十分钟。然后散场了：幻灯片进了文件夹，录像躺在会议官网上，没人点开第二次——而最需要听到的人，那天根本不在现场。Repurposer 为之后的一切而生。",
-    },
-    showcase: {
-      title: "它是怎么工作的",
-      description:
-        "告诉它你要什么——它从头到尾跑完整个流水线。",
-      steps: {
-        s1: {
-          title: "有什么，放什么",
-          body: "主题演讲视频、播客音频、幻灯片，或只是一份文字稿。要什么内容、哪些语言，直接在输入框里告诉它。",
-        },
-        s2: {
-          title: "要什么，拿什么",
-          body: "长文、短片、文章、newsletter——用你的风格、按你的要求写好；不多做，不漏做。",
-        },
-        s3: {
-          title: "在对话里打磨",
-          body: "直接对结果提要求：帖子再短一点、短片换个标题、角度再犀利些。它改到你点头为止。",
-        },
-        s4: {
-          title: "一键发出去",
-          body: "做好的内容按渠道、按语言发出去。LinkedIn、newsletter、机构官网——一次搞定。",
-        },
-      },
-      screens: {
-        compose: {
-          chrome: "新项目",
-          prompt: "把我的 ECC 主题演讲弄成 LinkedIn 内容，柏林办公室那边也要德语版…",
-          chip1: "视频",
-          chip2: "幻灯片",
-          chip3: "文字稿",
-          cta: "生成",
-        },
-        results: {
-          chrome: "结果",
-          score: "92 推荐度",
-          cardTitle: "为什么储能决定能源转型的成败",
-          cardMeta: "LinkedIn · EN · 1,240 字",
-          row2: "Newsletter — EN",
-          row3: "竖屏短片 — 9:16 · 德语配音",
-        },
-        chat: {
-          chrome: "对话",
-          user: "LinkedIn 那篇再短一点，三个数字保留。",
-          agent: "改好了——收紧到 680 字，三个数字都在。",
-        },
-        publish: {
-          chrome: "发布",
-          note: "按渠道定时发出",
-          row1: "LinkedIn — 已发布",
-          row2: "Newsletter — 排队中",
-          row3: "机构官网 — 草稿已发送",
-        },
-      },
-      asides: {
-        a1: {
-          label: "素材",
-          title: "ecc26-keynote.mp4",
-          body: "38 分钟 · 附幻灯片",
-          chip: "什么格式都行",
-        },
-        a2: {
-          label: "草稿",
-          title: "3 份草稿 · EN + DE",
-          body: "你的风格，你的术语",
-          chip: "母语级写作",
-        },
-        a3: {
-          label: "打磨",
-          title: "和结果对话",
-          body: "每次修改就是一句话",
-          chip: "不会悄悄发布",
-        },
-        a4: {
-          label: "分发",
-          title: "3 个渠道",
-          body: "按语言定时发布",
-          chip: "GDPR 就绪",
-        },
-      },
+      "通过对话，轻松制作融合动态图形、\n丰富动画与精细剪辑的视频。",
+    earlyAccess: {
+      title: "做视频，并不用等准备好一切。",
+      description: "不用折腾工具，也不用研究 Skill。描述你的需求，就能许愿式创作；看到视频后，哪一秒、哪个画面不满意，直接说。",
+      credits: "新账号赠送 1,000 积分，注册无需绑卡。",
+      estimate: "制作前显示预估积分消耗。",
+      note: "内测期间，我们仍在完善制作稳定性与细节检查。",
     },
     gallery: {
-      title: "全部来自同一份素材",
-      description: "",
-      cards: {
-        c1: { type: "LinkedIn 长文", text: "能源转型的瓶颈不是发电，而是储能。我 ECC keynote 里的三个数字…" },
-        c2: { type: "金句卡", text: "“2040 年的电网，今年就在会议室里被决定。”" },
-        c3: { type: "竖屏短片", text: "0:42 ——让全场笑出来的电池比喻。9:16，带字幕。" },
-        c4: { type: "Newsletter", text: "本月：电网级储能的真实成本，以及曲线为什么刚刚拐弯…" },
-        c5: { type: "Artikel (DE)", text: "Warum Speicher — nicht Erzeugung — über die Energiewende entscheidet…" },
-        c6: { type: "Résumé (FR)", text: "Trois chiffres à retenir de la keynote ECC sur le stockage réseau…" },
-        c7: { type: "深度文章", text: "长篇阅读：我在每场政策圆桌都听到的四个储能迷思…" },
-        c8: { type: "金句卡", text: "“我们缺的不是能源，是时机。”" },
-        c9: { type: "Thread", text: "1/ 你听到的关于电网电池的一切，都过时两年了…" },
-        c10: { type: "竖屏短片", text: "0:58 ——散场后被追问最多的那段观众问答。" },
-      },
-    },
-    channels: {
-      title: "抵达你受众真正在的地方",
-      description:
-        "所有内容直接进入你发布的渠道——并且用你受众的语言。",
-      platforms: {
-        linkedin: { name: "LinkedIn", blurb: "原生发布" },
-        newsletter: { name: "Newsletter", blurb: "邮件就绪" },
-        website: { name: "机构官网", blurb: "官网文章" },
-        youtube: { name: "YouTube", blurb: "竖屏视频" },
-        x: { name: "X", blurb: "Thread" },
-        podcast: { name: "播客", blurb: "Show notes" },
-      },
-      languages: {
-        en: { name: "English", blurb: "母语级" },
-        fr: { name: "Français", blurb: "母语级" },
-        de: { name: "Deutsch", blurb: "母语级" },
-        es: { name: "Español", blurb: "母语级" },
-        it: { name: "Italiano", blurb: "母语级" },
-        nl: { name: "Nederlands", blurb: "母语级" },
-      },
-    },
-    testimonials: {
-      title: "听听他们怎么说",
-      description:
-        "研究者、讲师和传播团队，在那些必须经得起印刷检验的场合使用 Repurposer。",
+      heading: "还没想好做什么？看看这些。",
+      intro: "看看不同的视频方向，从接近你想法的那个开始。",
+      create: "用它开始创作",
       items: {
-        t1: {
-          quote: "我的 keynote 以前开完会就躺在会议官网上。今年它变成了十二篇 LinkedIn 帖子、两篇文章和一封 newsletter。系主任问我新请的撰稿人是谁。",
-          name: "Marije Albers 教授",
-          role: "能源系统教授，代尔夫特理工大学",
+        "product-promo": {
+          title: "产品宣传",
+          description: "把网站、实拍、图片和文字组合成一支产品视频。",
+          prompt: "给我的产品做个短视频，重点展示它怎么用。",
         },
-        t2: {
-          quote: "德语版读起来就像我自己写的。柏林办公室反复确认了两遍，才敢相信不是我写的。",
-          name: "Claire Dubois",
-          role: "研究传播负责人，巴黎",
+        "talking-head": {
+          title: "口播动效",
+          description: "保留真人原片和原声，加入标题、字幕与动态效果。",
+          prompt: "给这段口播加上字幕和重点标题，保留我的原声。",
         },
-        t3: {
-          quote: "以前我们要挑哪些演讲值得报道。今年峰会上每个场次都有了自己的帖子、短片和回顾。",
-          name: "Jonas Weber",
-          role: "峰会议程总监，慕尼黑",
+        "text-animation": {
+          title: "文字动画",
+          description: "把你的文稿变成文字、图形与声音共同推进的动画。",
+          prompt: "把这段话做成有表现力的文字动画。",
         },
-        t4: {
-          quote: "先审后发对我来说就是产品的全部。署我名字的东西，我必须逐字读过才能发出去。",
-          name: "Sofia Ricci 博士",
-          role: "政策研究员，米兰",
-        },
-        t5: {
-          quote: "我用英语录一次。我的西班牙学生拿到的版本读起来不像翻译稿——他们分得出来。",
-          name: "Diego Fernández",
-          role: "经济学讲师，马德里",
-        },
-        t6: {
-          quote: "GDPR 是我们法务问的第一个问题。对方的合规方案是现成的——我们已经在试点了。",
-          name: "Anke Janssen",
-          role: "大学市场负责人，阿姆斯特丹",
+        "knowledge-explainer": {
+          title: "知识讲解",
+          description: "把你掌握的知识变成带旁白的可视化讲解。",
+          prompt: "用动画讲清楚这个概念，让没有基础的人也能看懂。",
         },
       },
-    },
-    pricing: {
-      title: "简单的定价",
-      description: "免费开始。当你的内容开始比你更努力地工作时，再升级。",
-      monthly: "按月付",
-      yearly: "按年付",
-      perMonth: "/月",
-      billedYearly: "按年计费",
-      billedMonthly: "按月计费",
-      freeForever: "永久免费",
-      mostPopular: "最受欢迎",
-      footnote: "价格为欧元，不含增值税。随时可取消——套餐有效期到当期末。",
-      tiers: {
-        free: {
-          name: "免费版",
-          blurb: "在你的下一个项目上试试这条流水线。",
-          features: {
-            f1: "每月 2 个项目",
-            f2: "每场 1 条内容",
-            f3: "英语 + 1 种语言",
-            f4: "社区支持",
-          },
-          cta: "免费开始",
-        },
-        pro: {
-          name: "Pro",
-          blurb: "为日程排满的人准备。",
-          features: {
-            f1: "每月 10 个项目",
-            f2: "不限内容数量",
-            f3: "6 种欧洲语言",
-            f4: "声纹匹配配音",
-            f5: "优先生成",
-          },
-          cta: "选择 Pro",
-        },
-        institution: {
-          name: "机构版",
-          blurb: "为高校和峰会团队准备。",
-          features: {
-            f1: "包含 Pro 全部功能",
-            f2: "不限席位",
-            // 「共享品牌模板」卖的是已退役模块（ADR-038）；「欧盟数据驻留」
-            // 是硬性承诺——合规文案在落地前只保持就绪角度。
-            f3: "GDPR 就绪",
-            f4: "SSO 与对公开票",
-          },
-          cta: "联系我们",
-        },
-      },
-    },
-    faq: {
-      title: "常见问题",
-      description: "专家和机构在第一次上传之前最常问的事。",
-      items: {
-        q1: {
-          q: "我的数据存在哪里？",
-          a: "Repurposer 按 GDPR 就绪设计：你的上传和内容不会用于训练第三方模型，随时可以全部删除；欧盟数据驻留随机构版提供。",
-        },
-        q2: {
-          q: "支持哪些语言？",
-          a: "目前支持英、法、德、西、意、荷六种语言，更多欧洲语言在路线图上。所有内容都是按母语方式直接写成的，不是逐词翻译。",
-        },
-        q3: {
-          q: "我可以上传什么？",
-          a: "主题演讲视频、播客音频、幻灯片、照片，或只是一份文字稿。上下文给得越多，产出越贴近你的风格。",
-        },
-        q4: {
-          q: "会有内容被自动发布吗？",
-          a: "不会。所有产出先进入审定队列。没有你明确批准，任何内容都不会署你的名字发出。",
-        },
-        q5: {
-          q: "生成的内容归谁所有？",
-          a: "完全归你。产出源自你的素材和你的人设，我们不主张任何权利。",
-        },
-        q6: {
-          q: "可以随时取消吗？",
-          a: "可以。按月或按年付费，没有锁定期；取消后你的项目仍可导出。",
-        },
-      },
-    },
-    finalCta: {
-      headline: "散场之后，内容才刚开始",
-      subtitle:
-        "测试期间免费。传一场演讲、一次会议，或只是一份文字稿——告诉它你要什么，剩下的交给它。",
-      ctaPrimary: "免费试用测试版",
-      ctaSecondary: "看看定价",
     },
     footer: {
-      tagline: "把你现有的素材变成能沉淀的内容——帖子、短片和 newsletter，用你受众的语言。",
-      cta: "免费试用测试版",
+      autoTheme: "自动",
       columns: {
-        features: {
-          title: "功能",
-          l1: "概览",
-          l2: "工作流程",
-          l3: "案例",
-          l4: "定价",
-          l5: "常见问题",
-        },
-        // company/legal/social 三列文案随列一起退役（死锚，见 Footer.tsx）——页面上线时恢复。
+        company: "公司",
+        social: "社交媒体",
+        product: "产品",
+        legal: "法律条款",
       },
-      copyright: "© {{year}} Repurposer。保留所有权利。",
-      note: "为专家打造，GDPR 就绪。",
-      wordmark: "Repurposer",
+      resources: {
+        examples: "视频案例",
+        app: "前往应用",
+        support: "联系支持",
+      },
+      channels: {
+        wechat: "微信群",
+      },
+      wechat: {
+        title: "加入微信群",
+        description: "使用微信扫码，加入产品交流与内测反馈群。",
+        qrAlt: "Rookie Cut 微信群二维码",
+      },
+      legal: {
+        terms: "服务条款",
+        privacy: "隐私政策",
+        refund: "退款政策",
+      },
+      copyright: "© {{year}} Rookie Cut。保留所有权利。",
+      backToTop: "回到顶部",
     },
   },
   composer: {
@@ -587,42 +472,26 @@ const zh: Resources = {
   // reserved 卡在此留座但不可点击发射。
   recipes: {
     soon: "即将推出",
-    // 两级 tab 货架：一级 family pill 轨 × 下划线
-    // 子 tab × 横滑货架，按用户任务组织（2026-10 投资人演示拍板——
-    // 永不按产物介质分）。键与 components/home/recipeFamilies.ts 的
-    // RECIPE_FAMILIES 一一对应。无真 demo 的族不上架——MG demo 预填文案随
-    // 资产（MG 批 D3）落在 `recipes.shelf.demos.<demoId>.prompt`。
+    // 主 Tab 名称复用 skills.builtin；子 Tab 与 Home 注册表一致。无样片的
+    // 视频应用保留可见空态；样片 prompt 落在 recipes.shelf.demos.<demoId>.prompt。
     shelf: {
-      families: {
-        ads: "广告与 UGC",
-        talks: "演讲与访谈",
-        posts: "社媒",
-        templates: "更多",
-      },
       subs: {
-        all: "全部",
-        "text-short": "文字短片",
-        "product-demo": "产品宣传",
-        brand: "品牌与业务",
-        ugc: "UGC",
-        product: "产品",
-      },
-      titles: {
-        featured: "推荐配方",
-        "text-short": "文字短片",
-        "product-demo": "产品宣传",
-        brand: "品牌与业务",
-        ugc: "UGC",
-        product: "产品",
-        talks: "演讲与访谈",
-        posts: "社媒",
+        "website-product": "网站/产品宣传",
+        "course-service": "课程/服务宣传",
+        "opinion-talking-head": "观点口播",
+        "course-lecture-teaser": "课程/讲座预告",
+        "opinion-text": "观点文字片",
+        "quote-announcement": "金句/公告短片",
+        "concept-explainer": "概念讲解",
+        "research-report": "研究/报告解读",
       },
       nextPage: "下一页",
       previousPage: "上一页",
       upgrading: "内容升级中",
-      usePrompt: "使用提示词",
+      usePrompt: "开始创作",
       playSound: "播放声音",
       mute: "静音",
+      emptyDemo: "该应用暂无样片。",
       // MG 货架预填空位：可见占位符，插入后即选中，粘贴一次完成替换；
       // 永不变成隐藏字段或第二个输入面。
       urlPlaceholder: "［网站链接］",
@@ -633,28 +502,48 @@ const zh: Resources = {
       demos: {
         "text-short-gentle-close": {
           prompt:
-            "我想把一段文案做成文字短片，用简洁排版、轻微镜头运动和逐字入场表达内容。请先帮我梳理文案和节奏，再给出分镜。",
+            "用这个 Skill 帮我把下面这句话做成文字动画：\n\n慢一点，也能走得更远。",
         },
         "text-short-genesis": {
           prompt:
-            "我想把一段英文文案逐字做成文字短片，保留原文，用简洁排版、轻微镜头运动和逐字入场呈现。请按原文帮我整理分镜。",
+            "用这个 Skill 帮我把下面这句英文做成文字动画：\n\nEvery great idea starts with a small step.",
         },
         "product-demo-zymix": {
           prompt:
-            "使用这个 Skill 帮我把这个网站做成一支产品演示，展示主要功能并配上简洁的屏上说明：{{placeholder}}",
+            "用这个 Skill 帮我做一支产品演示视频，让观众看懂这个产品怎么用：{{placeholder}}",
         },
         // 网站来源的 demo 使用 capture 链；视频素材入口保留上传素材提示词。
         "product-demo-walkthrough": {
           prompt:
-            "我想用上传的视频或录屏做一支操作演示，选取关键步骤并配上简短说明。请先看素材，和我确定演示重点，再给出方案。",
+            "用这个 Skill 帮我把录屏做成操作演示，让观众看懂关键步骤。",
         },
         "product-demo-highlights": {
           prompt:
-            "使用这个 Skill 帮我把这个网站做成一支产品演示，展示主要功能，配上简洁的说明字幕，不要旁白；用适度的镜头运动和文字动画引导视线：{{placeholder}}",
+            "用这个 Skill 帮我做一支短视频，突出这个产品最值得关注的功能：{{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
-            "我想在视频片段上加入文字说明，并控制文字出现的时间和位置。请先根据我的素材和需求给出方案。",
+            "用这个 Skill 帮我给视频加上文字说明，让内容更容易理解。",
+        },
+        "product-promo-agentveil-the-next-move": {
+          prompt:
+            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+        },
+        "product-promo-oxvalue-product-evidence": {
+          prompt:
+            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+        },
+        "product-promo-oxvalue-energy-arc": {
+          prompt:
+            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+        },
+        "text-short-clear-rhythm": {
+          prompt:
+            "用这个 Skill 帮我把下面这段文案做成文字动画：\n\n我们常常以为，讲得越多，别人就懂得越多。\n于是不断补充背景、堆叠细节，生怕漏掉任何一个重点。\n可信息越密，真正想说的话，反而越容易被淹没。\n\n好的表达，从一个清楚的问题开始。\n先说你想解决什么，再用一个具体的例子，让人看见它为什么重要。\n给每个想法一点空间，也给观众一点理解的时间。\n\n把复杂的想法讲清楚，不是把内容变少，\n而是找到那条让人愿意听下去、也能够跟得上的线索。\n让好的内容，从被看见，走向被理解。",
+        },
+        "knowledge-explainer-clear-expression": {
+          prompt:
+            "用这个 Skill 帮我做一支动画，讲清楚为什么一次只讲一个重点更容易让人理解，面向没有基础的观众。",
         },
       },
     },
@@ -734,13 +623,55 @@ const zh: Resources = {
     external: "外部 Skill",
     builtin: {
       "launch-film": {
-        description: "把已采集的网站内容制作成有叙事引导的产品片。",
+        name: "网站发布视频",
+        shortName: "发布视频",
+        description: "把已采集的网站内容制作成固定叙事结构的发布视频。",
+      },
+      "promo-video": {
+        name: "宣传视频制作",
+        shortName: "宣传视频",
+        description: "用你的文案、网站、图片、真实视频、品牌和声音制作有依据的宣传片。",
+      },
+      "talking-head-video": {
+        name: "口播动效视频制作",
+        shortName: "口播动效",
+        description: "把真实录像制作成带时间字幕的竖屏口播视频。",
+      },
+      "text-animation": {
+        name: "文字动画视频制作",
+        shortName: "文字动画",
+        description: "把你的原文制作成可继续编辑的原生文字动画。",
+      },
+      "knowledge-explainer": {
+        name: "知识讲解视频制作",
+        shortName: "知识讲解",
+        description: "把知识文字稿做成带对齐旁白、词锚字幕和解释性绘图的讲解视频。",
       },
     },
+  },
+  videoPresets: {
+    "caption-phrases": { name: "字幕分句" },
+    "text-reveal": { name: "文字显现" },
+    "text-impact": { name: "词语强调" },
+    typewriter: { name: "打字机" },
+    "keyword-fill": { name: "关键词高亮" },
+    "word-cycle": { name: "词语轮换" },
+    "claim-layout": { name: "观点排版" },
+    "highlight-sweep": { name: "高亮扫入" },
+    "path-underline": { name: "路径下划线" },
+    callout: { name: "标注指引" },
+    "flow-steps": { name: "流程步骤" },
+    "comparison-columns": { name: "双栏对比" },
+    "card-stack": { name: "卡片堆叠" },
+    "list-reveal": { name: "列表展开" },
+    "notification-stack": { name: "通知堆叠" },
+    "title-lockup": { name: "标题组合" },
   },
   mentions: {
     pickerEmpty: "没有匹配项",
     remove: "移除提及",
+    regionChip: "{{time}} · {{width}}×{{height}}px",
+    regionText: "[框选区域：x={{x}}，y={{y}}，宽={{width}}px，高={{height}}px；源画面={{sourceWidth}}×{{sourceHeight}}px；媒体时间={{time}}]",
     types: {
       asset: "素材",
       output: "产物",
@@ -1097,7 +1028,7 @@ const zh: Resources = {
       floatPanel: "浮动面板",
       // dock 常驻免责行（ADR-051）——指向真实风险点：即将发布的内容，而非
       // 事实问答。基础形态钉在输入区上方，提问形态随输入行隐藏。
-      honesty: "Repurposer 可能出错，发布前请检查。",
+      honesty: "Rookie Cut 可能出错，发布前请检查。",
     },
     // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
     // 播，hover 放大开大屏；2026-08-16 走查拍板。）
@@ -1265,7 +1196,7 @@ const zh: Resources = {
     },
   },
   chat: {
-    assistantLabel: "Repurposer",
+    assistantLabel: "Rookie Cut",
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
@@ -1366,6 +1297,7 @@ const zh: Resources = {
     candidates: {
       more: "另外还有 {{count}} 个",
       less: "收起",
+      selected: "已选择",
     },
     sfx: {
       play: "播放音效",
@@ -1401,10 +1333,42 @@ const zh: Resources = {
        * 说各的话。 */
       videoDesign: "正在设计视频分镜…",
       videoDesignDone: "已设计视频分镜",
+      skillRead: "正在读取 Skill 方法…",
+      skillReadDone: "已读取 Skill 方法",
+      skillPreview: "正在查看 Skill 预览…",
+      skillPreviewDone: "已查看 Skill 预览",
+      videoMaterials: "正在准备视频素材…",
+      videoMaterialsDone: "已准备视频素材",
+      videoCapturePlan: "正在采集计划的网页状态…",
+      videoCapturePlanDone: "已采集计划的网页状态",
       videoRevise: "正在调整视频分镜…",
       videoReviseDone: "已调整视频分镜",
       videoReview: "正在检查成片…",
       videoReviewDone: "已检查成片",
+      videoDraftScene: "正在检查第 {{count}} 幕…",
+      videoDraftSceneDone: "已检查第 {{count}} 幕",
+      videoDraftJoin: "正在检查第 {{count}} 幕与上一幕的衔接…",
+      videoDraftJoinDone: "已检查第 {{count}} 幕与上一幕的衔接",
+      videoDraftRecheck: "正在复查第 1–{{count}} 幕…",
+      videoDraftRecheckDone: "已复查第 1–{{count}} 幕",
+      videoSave: "正在保存可编辑版本…",
+      videoSaveDone: "已保存可编辑版本",
+      sfxSearch: "正在查找音效…",
+      sfxSearchDone: "已找到音效",
+      sfxImport: "正在导入选中的音效…",
+      sfxImportDone: "已导入选中的音效",
+      musicSearch: "正在查找配乐…",
+      musicSearchDone: "已找到配乐",
+      musicSelection: "正在选择配乐…",
+      musicSelectionDone: "已选择配乐",
+      upload: "正在上传视频…",
+      uploadDone: "已上传视频",
+      narrationPrepare: "正在准备旁白对齐…",
+      narrationPrepareDone: "已提交旁白对齐准备",
+      narrationRead: "正在读取旁白对齐…",
+      narrationReadDone: "已读取旁白对齐",
+      narrationAnnotate: "正在标注旁白语义…",
+      narrationAnnotateDone: "已标注旁白语义",
     },
     activityReceipt: {
       sampledFrames: "采样帧",
@@ -1431,6 +1395,53 @@ const zh: Resources = {
         motion_and_transitions_checked: "检查运动与转场",
         audio_and_av_sync_checked: "检查音频与音画同步",
       },
+      revision: {
+        version: "已保存第 {{version}} 版",
+        settings: "画布设置 · {{fields}}",
+        addedScene: "新增场景 · {{scene}}",
+        removedScene: "移除场景 · {{scene}}",
+        movedScene: "移动 {{scene}} · {{from}} 秒 → {{to}} 秒",
+        addedClip: "新增{{kind}}片段 · {{clip}}",
+        removedClip: "移除片段 · {{clip}}",
+        updatedClip: "更新 {{clip}} · {{fields}}",
+        transitions: "已更新转场",
+        kinds: {
+          text: "文字",
+          image: "图片",
+          web: "网页",
+          video: "视频",
+          audio: "音频",
+          shape: "图形",
+          speech: "旁白",
+          generator: "Generator",
+        },
+        fields: {
+          range: "时间窗",
+          object: "内容",
+          animations: "动画",
+          scene_id: "场景",
+          source: "来源",
+          linked_group_id: "联动组",
+        },
+      },
+      component: {
+        title: "组件预览 · {{clip}}",
+        posterAlt: "{{clip}} 的代表预览帧",
+        previewFrame: "代表帧 · {{frame}}",
+        dynamicSamples: "已在这些帧验证运动 · {{frames}}",
+        fixedMedia: "固定媒体 · {{digest}}",
+      },
+      sfx: {
+        searchTopic: "音效搜索 · {{topic}}",
+        candidate: "{{ordinal}} · {{title}} · {{duration}} 秒",
+        imported: "已导入 {{title}} · {{duration}} 秒",
+        snapshot: "已导入音频 · {{id}}",
+      },
+      music: {
+        searchTopic: "配乐候选 · {{topic}}",
+        candidate: "{{ordinal}} · {{title}} · {{duration}} 秒",
+        selected: "已选择 {{title}} · {{duration}} 秒",
+      },
     },
     /** 活动行的有界展开明细（迭代三 S7，E7 诚实边界）：只有 wire 白名单
      * 字段——原始计数带标签成行（耗时内联同行，formatElapsed 是唯一措辞）。 */
@@ -1452,8 +1463,20 @@ const zh: Resources = {
       video: "短片",
       programPreview: "程序画面预览",
       programPreviewError: "当前程序预览未能加载，尚未确认完整呈现。",
+      pendingMedia: "这个局部预览所需的媒体尚未就绪，当前尚未开始制作。",
+      previewError: "这个局部预览未能加载。",
       title: "分镜",
       unavailable: "这个分镜版本已不可用。",
+      scrub: {
+        trigger: "调整字号",
+        target: "文字",
+        fontSize: "字号",
+        apply: "应用",
+        applyError: "字号未能保存，已撤销本次编辑。",
+        conflict: "影片已在其他位置更新，请重新打开当前版本后再应用。",
+        openCurrent: "打开当前版本",
+        isolatedObject: "独立文字预览，不代表完整场景中的布局、遮挡与衔接。",
+      },
     },
     /** inspecting 族的完成态镜像——读活动 completed 帧的文案（键随服务端
      * 注册表，本族按前缀交换镜像）。 */
@@ -1531,14 +1554,14 @@ const zh: Resources = {
       uploaded: "已上传",
     },
     productionStages: {
-      validate: "保存版与执行输入校验",
-      fonts: "字体资源准备",
-      generator_media: "生成媒体准备",
-      speech_media: "旁白媒体准备",
-      compile_spec: "视频规格编译",
-      output_preparation: "产物准备",
+      validate: "校验已确认版本",
+      fonts: "准备字体",
+      generator_media: "生成画面",
+      speech_media: "生成旁白",
+      compile_spec: "编译视频规格",
+      output_preparation: "创建待交付产物",
       output_resume: "复用已准备产物",
-      render_queue: "渲染排队请求",
+      render_queue: "提交渲染队列",
       render: "渲染",
       upload: "上传",
       delivery: "交付检查",
@@ -1611,7 +1634,13 @@ const zh: Resources = {
       previousSlide: "上一页",
       nextSlide: "下一页",
       slidePosition: "第 {{current}} / {{total}} 页",
-      mention: "@引用",
+      selectRegion: "局部选择",
+      referenceAsset: "引用此素材",
+      regionHint: "拖动框选当前画面",
+      regionLoading: "正在读取画面尺寸…",
+      regionSummary: "{{time}} · 源画面 {{sourceWidth}}×{{sourceHeight}} · x{{x}} y{{y}} · {{width}}×{{height}}px",
+      reselectRegion: "重新框选",
+      referenceRegion: "引用选区",
       details: "产物详情",
       allOutputs: "全部已交付产物",
       zoomIn: "放大",
@@ -1696,7 +1725,7 @@ const zh: Resources = {
     shareCopied: "链接已复制",
   },
   login: {
-    title: "登录 Repurposer",
+    title: "登录 Rookie Cut",
     subtitle: "输入邮箱接收登录验证码，无需密码；首次登录会自动创建账号。",
     emailLabel: "邮箱地址",
     emailPlaceholder: "you@company.com",
@@ -1729,7 +1758,7 @@ const zh: Resources = {
       promptTitle: "说明要做什么",
       promptDesc: "写下想要的结果。用 @ 点名已上传的素材，然后发送。",
       recipesTitle: "从卡片开始",
-      recipesDesc: "点卡片上的「使用提示词」，把提示词填入输入框，再按你的素材调整。",
+      recipesDesc: "点卡片上的「开始创作」，填入示例需求，再按你的想法和素材调整。",
     },
   },
   notifications: {

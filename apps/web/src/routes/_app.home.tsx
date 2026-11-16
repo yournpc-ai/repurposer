@@ -5,7 +5,8 @@ import { useTranslation } from "react-i18next"
 import { apiFetch } from "@/lib/api"
 import { fetchRecipeCards, type RecipePublic } from "@/lib/recipes"
 import type { ChatMention } from "@/lib/mentions"
-import { fetchChatSkills, type SkillOption } from "@/lib/skills"
+import { fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
+import { consumeLandingCreate } from "@/lib/landingCreate"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
 import { RecipeTabs } from "@/components/home/RecipeTabs"
@@ -241,6 +242,18 @@ function Home() {
     [t, prompt, mentions, selectedSkill, docked, scrollComposerIntoView],
   )
 
+  // A landing product card survives the login detour and resolves against the
+  // live catalog here. Consumption is one-shot; it never sends the draft.
+  useEffect(() => {
+    if (skillOptions.length === 0) return
+    const handoff = consumeLandingCreate()
+    if (!handoff) return
+    handlePrefill(
+      handoff.promptKey,
+      skillOptionForReference(handoff.skill, skillOptions),
+    )
+  }, [handlePrefill, skillOptions])
+
   // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal
   // shelves, resolved data-driven — a family without real content never
   // renders (上架纪律: 无真 demo 不上架). The selection is the route's; the
@@ -456,7 +469,7 @@ function Home() {
                       {sub.shelves.map((shelf, shelfIndex) => (
                         <RecipeShelf
                           key={shelf.id}
-                          title={t(`recipes.shelf.titles.${shelf.id}`)}
+                          title={t(`recipes.shelf.subs.${sub.id}`)}
                           items={shelf.items}
                           onPrefill={handlePrefill}
                           soundOwner={demoSoundOwner}
@@ -469,7 +482,7 @@ function Home() {
                           // viewport between the pinned tabs and the bottom
                           // dock; a missing demo asset → the step auto-skips.
                           tourAnchorIndex={
-                            activeFamily.id === "ads" &&
+                            activeFamily.id === "product-promo" &&
                             subIndex === 0 &&
                             shelfIndex === 0
                               ? 0

@@ -1,5 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import { CreationShowcase } from "@/components/landing/CreationShowcase"
+import { CreationStory } from "@/components/landing/CreationStory"
+import { LandingFaq } from "@/components/landing/LandingFaq"
+import { EarlyAccess } from "@/components/landing/EarlyAccess"
+import { Footer } from "@/components/landing/Footer"
 import { LandingHeader } from "@/components/landing/LandingHeader"
 import { LandingHero } from "@/components/landing/LandingHero"
 import { ReducedMotionProvider } from "@/components/landing/motion"
@@ -24,6 +29,7 @@ export const Route = createFileRoute("/")({
         { title: copy.title },
         { name: "description", content: copy.description },
         { property: "og:type", content: "website" },
+        { property: "og:site_name", content: "Rookie Cut" },
         { property: "og:url", content: SITE_URL },
         { property: "og:title", content: copy.title },
         { property: "og:description", content: copy.ogDescription },
@@ -40,9 +46,9 @@ export const Route = createFileRoute("/")({
         { rel: "canonical", href: SITE_URL },
         // The locale rides a cookie, not the URL — alternates point at the
         // same page so crawlers know both languages live here.
-        { rel: "alternate", hreflang: "en", href: SITE_URL },
-        { rel: "alternate", hreflang: "zh", href: SITE_URL },
-        { rel: "alternate", hreflang: "x-default", href: SITE_URL },
+        { rel: "alternate", hrefLang: "en", href: SITE_URL },
+        { rel: "alternate", hrefLang: "zh", href: SITE_URL },
+        { rel: "alternate", hrefLang: "x-default", href: SITE_URL },
       ],
     }
   },
@@ -53,14 +59,14 @@ const SITE_URL = "https://repurposer.ai"
 
 const LANDING_META = {
   en: {
-    title: "Repurposer — Your content creation agent",
+    title: "Rookie Cut — Your AI video agent",
     description: "Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
-    ogDescription: "Your content creation agent. Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
+    ogDescription: "Your AI video agent. Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
   },
   zh: {
-    title: "Repurposer — 你的内容创作 Agent",
+    title: "Rookie Cut — 你的 AI 视频 Agent",
     description: "通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
-    ogDescription: "你的内容创作 Agent。通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
+    ogDescription: "你的 AI 视频 Agent。通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
   },
 }
 
@@ -69,15 +75,18 @@ function LandingPage() {
     <ReducedMotionProvider>
       <div
         id="top"
-        className="flex h-svh flex-col overflow-hidden bg-background [--accent:oklch(0.95_0_0)] [--background:oklch(1_0_0)] dark:[--accent:oklch(1_0_0/8%)] dark:[--background:oklch(0.12_0_0)]"
+        className="landing-surface min-h-svh bg-background"
       >
         <SkipToContent />
         <LandingHeader />
-        <main id="main-content" className="min-h-0 flex-1 overflow-hidden">
+        <main id="main-content">
           <LandingHero />
-          {/* Long-form sections are intentionally unmounted. Their components
-              remain in components/landing for a future evidence-led page. */}
+          <CreationShowcase />
+          <CreationStory />
+          <LandingFaq />
+          <EarlyAccess />
         </main>
+        <Footer />
       </div>
     </ReducedMotionProvider>
   )

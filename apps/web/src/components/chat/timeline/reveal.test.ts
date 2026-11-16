@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   deliveryOutputReveal,
+  hasMessageOutputs,
   presentationAckReady,
   revealOpen,
   shouldAcknowledgePresentation,
@@ -172,5 +173,21 @@ describe("storyboard presentation ACK recovery", () => {
         ...mismatch,
       })).toBe(false)
     }
+  })
+})
+
+
+describe("message-owned upload results", () => {
+  it("reveals an assistant upload without a Run and keeps the prose gate", () => {
+    expect(hasMessageOutputs({ role: "assistant", outputRefs: ["uploaded"] })).toBe(true)
+    expect(deliveryOutputReveal({})).toEqual({ priorDrained: false, history: false })
+    expect(deliveryOutputReveal({ proseDrainedAtMs: 100 }).priorDrained).toBe(true)
+    expect(deliveryOutputReveal({ hydrated: true }).history).toBe(true)
+  })
+
+  it("never renders a user echo or a failed upload with no refs", () => {
+    expect(hasMessageOutputs({ role: "user", outputRefs: ["uploaded"] })).toBe(false)
+    expect(hasMessageOutputs({ role: "assistant", outputRefs: [] })).toBe(false)
+    expect(hasMessageOutputs({ role: "assistant" })).toBe(false)
   })
 })

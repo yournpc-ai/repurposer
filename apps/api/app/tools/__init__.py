@@ -57,9 +57,8 @@ from app.tools.reframe.params import ReframeClipParams
 from app.tools.align_stills.node import AlignStills  # noqa: F401
 from app.tools.research.node import ResearchNode  # noqa: F401
 from app.tools.research.params import ResearchParams
-from app.tools.film.storyboard import LaunchFilm, LaunchFilmParams  # noqa: F401
 from app.tools.video.production.node import ProduceVideo  # noqa: F401
-from app.tools.video.params import ProduceVideoParams
+from app.tools.video.params import PrepareNarrationParams, ProduceVideoParams
 
 from app.pipeline.graph import NODE_KINDS
 
@@ -114,12 +113,11 @@ class ToolEntry(BaseModel):
     summary_templates: dict[str, str] = {}
     seat: bool = False  # registered-but-not-implemented (no node yet)
     # Needs an uploaded media FILE (video/audio/image) — never satisfiable by
-    # pasted text (ADR-071 挂账 alarm 的注册表侧事实源, 2026-09-12):
-    # display/proposal metadata only (zero behavior change); the prompt's
-    # no-material enumeration is drift-checked against this by
-    # tests/test_prompt_registry_consistency_pure.py. align_stills is the
-    # designed counter-example — requires=(TRANSCRIPT,) yet serves the
-    # NO-recording case, so TRANSCRIPT membership is NOT this axis.
+    # pasted text. Display/proposal metadata only (zero behavior change); the
+    # prompt's no-material enumeration must be reviewed against this registry
+    # when either side changes. align_stills is the designed counter-example —
+    # requires=(TRANSCRIPT,) yet serves the NO-recording case, so TRANSCRIPT
+    # membership is NOT this axis.
     needs_media_file: bool = False
     # Compiler-only citizenship (N-56, iter-2 ①): False = the tool is
     # registry-legal (adjudication / dispatch / display all work) but NEVER
@@ -142,6 +140,20 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             params_model=ProduceVideoParams,
             summary_templates={"en": "Prepared video · {total_seconds:g}s",
                                "zh": "已准备短片 · {total_seconds:g} 秒"},
+        ),
+        ToolEntry(
+            name="prepare_narration",
+            description=(
+                "Prepare one exact final script as a speed-1.0 narration original, "
+                "freeze its real AUDIO snapshot and request NarrationAlignment. "
+                "Runs as the only task in its Run; it creates no video or Composition."
+            ),
+            behavior="deterministic",
+            params_model=PrepareNarrationParams,
+            summary_templates={
+                "en": "Prepared narration · {duration_seconds:g}s",
+                "zh": "已准备旁白原音 · {duration_seconds:g} 秒",
+            },
         ),
         ToolEntry(
             name="select_clips",
@@ -297,29 +309,6 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             },
         ),
         ToolEntry(
-            name="launch_film",
-            description="Direct a polished intro film of a website from a "
-            "captured web page — a fixed keynote arc built from the page's "
-            "own words over its real screenshots: motion text, a brand hero "
-            "card, camera walks over the captured sections, chapter cards, "
-            "a numbers-evidence plate, a reveal and a closing card, with a "
-            "music bed, spoken narration and burned-in captions. Never "
-            "live-action footage, staged scenes or free camera work. ONLY "
-            "when the user pasted a link and wants a film of it; needs no "
-            "uploaded media",
-            behavior="probabilistic",
-            params_model=LaunchFilmParams,
-            summary_templates={
-                # Source-neutral on purpose (文字片/网页片同链): the step
-                # ASSEMBLES the confirmed storyboard's spec and pends the
-                # render — the render step's own row reports the delivery,
-                # so this line never claims the finished video. Seconds ride
-                # the one 0.1-rounding rule the read/presentation seats use.
-                "en": "Assembled the film · {total_seconds:g}s",
-                "zh": "已组装短片 · {total_seconds:g} 秒",
-            },
-        ),
-        ToolEntry(
             name="synthesize_talk_video",
             description="Synthesize a talking-head video from transcript + persona photo + voiceprint",
             behavior="probabilistic",
@@ -345,12 +334,10 @@ MAX_TASKS_PER_RUN = 10
 def dispatchable_tools() -> list[ToolEntry]:
     """Tools the intent agent may propose: a live node exists in
     ``NODE_KINDS``. Seats (synthesize) are excluded automatically."""
-    from app.config import settings
-    excluded = {"launch_film"} if settings.video_project_enabled else {"produce_video"}
     return [
         entry
         for entry in TOOL_REGISTRY.values()
-        if not entry.seat and entry.name in NODE_KINDS and entry.name not in excluded
+        if not entry.seat and entry.name in NODE_KINDS
     ]
 
 
@@ -395,11 +382,13 @@ def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
 # venue-free too (a venue word in it once surfaced in user speech as 通讯稿,
 # 批5 v2); venues are the user's to name.
 _MENU_PHRASES: list[tuple[str, str]] = [
-    ("produce_video", "website walkthroughs, text/shape motion graphics and mixed videos "
-     "from saved storyboards, with music and optional narration/captions; "
-     "revise individual elements, split/trim clips without moving later clips, "
-     "crossfade adjacent full-frame fixed media with enough source footage, "
-     "and align existing cuts to known music beats within a chosen tolerance"),
+    ("produce_video", "product promo videos from captured websites, vertical talking-head "
+     "motion videos from real footage, native text animations, evidence-led knowledge "
+     "explainers from ready narration alignments or bounded drawings, and mixed videos "
+     "from saved storyboards; compare real native motion presets, revise individual "
+     "elements, split/trim clips without moving later clips, crossfade adjacent full-frame "
+     "fixed media with enough source footage, and align existing cuts to known music beats "
+     "within a chosen tolerance"),
     ("select_clips", "highlight clips cut from the source media"),
     ("write_post", "social posts"),
     ("write_article", "long-form articles"),
@@ -413,8 +402,6 @@ _MENU_PHRASES: list[tuple[str, str]] = [
     "the camera sits on whoever is talking or follows a moving speaker, "
     "matched automatically to the footage"),
     ("align_stills", "photo-slideshow videos from stills + audio"),
-    ("launch_film", "a narrated intro film of a website from its link — its "
-    "real pages walked on camera, motion text, music and captions"),
 ]
 
 
@@ -475,7 +462,7 @@ def validate_task_list(tasks: list[Any]) -> list[ToolEntry]:
             message = (
                 f"Tool '{task.tool}' is registered but not yet implemented"
                 if known
-                else f"Unknown tool '{task.tool}'"
+                else f"'{task.tool}' is not a runnable plan task"
             )
             raise ToolRejected(
                 message,

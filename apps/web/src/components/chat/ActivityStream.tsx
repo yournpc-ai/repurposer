@@ -32,7 +32,17 @@ import {
 } from "lucide-react"
 
 import type { ActivityFramePayload } from "@/lib/chat-stream"
-import type { ActivityRowFrame, VideoReviewReceipt } from "./timeline/types"
+import type {
+  ActivityReceipt,
+  ActivityRowFrame,
+  ComponentClipReceipt,
+  MusicSearchReceipt,
+  MusicSelectionReceipt,
+  SfxImportReceipt,
+  SfxSearchReceipt,
+  VideoReviewReceipt,
+  VideoRevisionReceipt,
+} from "./timeline/types"
 import { activityCategoryKey, activityFailureKey, foldCategories } from "./timeline/activity"
 import { formatElapsed } from "@/components/chat/workTiming"
 import { useMessageScrollerViewportAnchor } from "@/components/ui/message-scroller"
@@ -139,7 +149,13 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
           expandable && "cursor-pointer select-none",
         )}
         role={expandable ? "button" : undefined}
+        tabIndex={expandable ? 0 : undefined}
         aria-expanded={expandable ? open : undefined}
+        onKeyDown={expandable ? (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          event.currentTarget.click()
+        } : undefined}
         onClick={expandable ? () => setOpen((v) => !v) : undefined}
       >
         {status === "active" ? (
@@ -215,8 +231,8 @@ function reviewFrameTime(seconds: number): string {
   return `${Number(seconds.toFixed(3))}s`
 }
 
-/** The one result-bearing Worked detail: evidence from the exact review,
- * never the report's storage fields, metrics, summary, or raw JSON. */
+/** Review evidence from the exact delivered Output, never the report's
+ * storage fields, metrics, summary, or raw JSON. */
 function VideoReviewEvidence({ receipt }: { receipt: VideoReviewReceipt }) {
   const { t } = useTranslation()
   return (
@@ -264,6 +280,199 @@ function VideoReviewEvidence({ receipt }: { receipt: VideoReviewReceipt }) {
       </div>
     </div>
   )
+}
+
+function ComponentEvidence({
+  components,
+  nested = false,
+}: {
+  components: ComponentClipReceipt[]
+  nested?: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className={cn("flex flex-col gap-3 py-1 text-xs", !nested && "ml-5")}>
+      {components.map((component) => (
+        <div key={component.clip_id} className="flex flex-col gap-1">
+          <span className="text-meta-foreground">
+            {t("chat.activityReceipt.component.title", { clip: component.clip_id })}
+          </span>
+          <img
+            src={component.poster_url}
+            alt={t("chat.activityReceipt.component.posterAlt", { clip: component.clip_id })}
+            className="w-full max-w-sm rounded-md"
+          />
+          <span className="text-muted-foreground">
+            {t("chat.activityReceipt.component.previewFrame", { frame: component.preview_frame })}
+          </span>
+          <span className="text-muted-foreground">
+            {t("chat.activityReceipt.component.dynamicSamples", {
+              frames: component.dynamic_sample_frames.join(", "),
+            })}
+          </span>
+          <span className="break-all text-meta-foreground" title={component.media_digest}>
+            {t("chat.activityReceipt.component.fixedMedia", {
+              digest: component.media_digest.slice(0, 12),
+            })}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function VideoRevisionEvidence({ receipt }: { receipt: VideoRevisionReceipt }) {
+  const { t } = useTranslation()
+  const fields = (changes: string[]) =>
+    changes.map((change) => t(`chat.activityReceipt.revision.fields.${change}`)).join(", ")
+  return (
+    <div className="ml-5 flex flex-col gap-1 py-1 text-xs">
+      <span className="text-meta-foreground">
+        {t("chat.activityReceipt.revision.version", { version: receipt.version })}
+      </span>
+      {receipt.settings.length > 0 && (
+        <span className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.settings", { fields: receipt.settings.join(", ") })}
+        </span>
+      )}
+      {receipt.scenes.added.map((scene) => (
+        <span key={`add-scene:${scene}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.addedScene", { scene })}
+        </span>
+      ))}
+      {receipt.scenes.removed.map((scene) => (
+        <span key={`remove-scene:${scene}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.removedScene", { scene })}
+        </span>
+      ))}
+      {receipt.scenes.moved.map((move) => (
+        <span key={`move-scene:${move.scene_id}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.movedScene", {
+            scene: move.scene_id,
+            from: move.from_seconds,
+            to: move.to_seconds,
+          })}
+        </span>
+      ))}
+      {receipt.clips.added.map((clip) => (
+        <span key={`add-clip:${clip.clip_id}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.addedClip", {
+            clip: clip.clip_id,
+            kind: t(`chat.activityReceipt.revision.kinds.${clip.kind}`),
+          })}
+        </span>
+      ))}
+      {receipt.clips.removed.map((clip) => (
+        <span key={`remove-clip:${clip}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.removedClip", { clip })}
+        </span>
+      ))}
+      {receipt.clips.updated.map((clip) => (
+        <span key={`update-clip:${clip.clip_id}`} className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.updatedClip", {
+            clip: clip.clip_id,
+            fields: fields(clip.changes),
+          })}
+        </span>
+      ))}
+      {receipt.transitions_changed && (
+        <span className="text-muted-foreground">
+          {t("chat.activityReceipt.revision.transitions")}
+        </span>
+      )}
+      {receipt.components.length > 0 && <ComponentEvidence components={receipt.components} nested />}
+    </div>
+  )
+}
+
+function SfxSearchEvidence({ receipt }: { receipt: SfxSearchReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <div className="ml-5 flex flex-col gap-1 py-1 text-xs">
+      <span className="text-meta-foreground">
+        {t("chat.activityReceipt.sfx.searchTopic", { topic: receipt.topic })}
+      </span>
+      {receipt.members.map((member) => (
+        <span key={member.member_index} className="text-muted-foreground">
+          {t("chat.activityReceipt.sfx.candidate", {
+            ordinal: member.ordinal,
+            title: member.title,
+            duration: Number(member.duration_seconds.toFixed(3)),
+          })}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function SfxImportEvidence({ receipt }: { receipt: SfxImportReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <div className="ml-5 flex flex-col gap-1 py-1 text-xs">
+      <span className="text-muted-foreground">
+        {t("chat.activityReceipt.sfx.imported", {
+          title: receipt.title,
+          duration: Number(receipt.duration_seconds.toFixed(3)),
+        })}
+      </span>
+      <span className="break-all text-meta-foreground">
+        {t("chat.activityReceipt.sfx.snapshot", { id: receipt.snapshot_id })}
+      </span>
+    </div>
+  )
+}
+
+function MusicSearchEvidence({ receipt }: { receipt: MusicSearchReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <div className="ml-5 flex flex-col gap-1 py-1 text-xs">
+      <span className="text-meta-foreground">
+        {t("chat.activityReceipt.music.searchTopic", { topic: receipt.topic })}
+      </span>
+      {receipt.members.map((member) => (
+        <span key={member.member_index} className="text-muted-foreground">
+          {t("chat.activityReceipt.music.candidate", {
+            ordinal: member.ordinal,
+            title: member.title,
+            duration: Number(member.duration_seconds.toFixed(3)),
+          })}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function MusicSelectionEvidence({ receipt }: { receipt: MusicSelectionReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <div className="ml-5 flex flex-col gap-1 py-1 text-xs">
+      <span className="text-muted-foreground">
+        {t("chat.activityReceipt.music.selected", {
+          title: receipt.title,
+          duration: Number(receipt.duration_seconds.toFixed(3)),
+        })}
+      </span>
+    </div>
+  )
+}
+
+function ActivityEvidence({ receipt }: { receipt: ActivityReceipt }) {
+  switch (receipt.kind) {
+    case "video_review":
+      return <VideoReviewEvidence receipt={receipt} />
+    case "component":
+      return <ComponentEvidence components={receipt.components} />
+    case "video_revision":
+      return <VideoRevisionEvidence receipt={receipt} />
+    case "sfx_search":
+      return <SfxSearchEvidence receipt={receipt} />
+    case "sfx_import":
+      return <SfxImportEvidence receipt={receipt} />
+    case "music_search":
+      return <MusicSearchEvidence receipt={receipt} />
+    case "music_selection":
+      return <MusicSelectionEvidence receipt={receipt} />
+  }
 }
 
 /** One work segment in BOTH poses, shared by chat activities and background
@@ -339,7 +548,13 @@ export function WorkSegmentRow({
           expandable && "cursor-pointer select-none",
         )}
         role={expandable ? "button" : undefined}
+        tabIndex={expandable ? 0 : undefined}
         aria-expanded={expandable ? open : undefined}
+        onKeyDown={expandable ? (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          event.currentTarget.click()
+        } : undefined}
         onClick={
           expandable
             ? (event) => {
@@ -405,7 +620,7 @@ export function WorkSegmentRow({
                           </span>
                         )}
                       </div>
-                      {c.receipt ? <VideoReviewEvidence receipt={c.receipt} /> : null}
+                      {c.receipt ? <ActivityEvidence receipt={c.receipt} /> : null}
                     </div>
                   )
                 })}

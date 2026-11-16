@@ -6,8 +6,9 @@ line, and the mention injection. This is the Agent Interface's OWN assembly
 — moved from ``app.agents.contexts`` (the harness layer), whose home is the
 GenerationContext: each layer assembles its own context, and the harness no
 longer reads the conversation store (``Message``) or the outputs read face
-on chat's behalf. Digest doctrine unchanged (ADR-077 判词② — identity
-level only; anything a read tool reads is never pre-injected).
+on chat's behalf. Shared resource content is assembled separately by
+``tools.project_context`` for every model request; this module owns the
+conversation, workflow and pending-question framing.
 """
 
 from typing import Any
@@ -21,7 +22,6 @@ from app.agents.contexts import output_one_liner
 from app.chat.canvas_visibility import environment_line
 from app.models.schemas import ChatMention
 from app.models.tables import (
-    Asset,
     GraphEdge,
     GraphNode,
     Message,
@@ -120,6 +120,7 @@ async def build_context(
     confirmation: tuple[str, str] | None = None,
     skill=None,
     skill_ambiguity: list[str] | None = None,
+    include_pending: bool = True,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
     project summary (assets / visible outputs / latest run) + the last 3
@@ -156,28 +157,8 @@ async def build_context(
             f"{confirmation[0]}, spending={confirmation[1]}."
         )
 
-    assets = list(
-        (
-            await db.execute(
-                select(Asset)
-                .where(Asset.project_id == project.id)
-                .order_by(Asset.created_at)  # stable list order across turns
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if assets:
-        lines.append("Assets:")
-        for a in assets:
-            # The ASR-detected language rides the line — transform language
-            # decisions (translate/dub target ≠ source language) stand on it.
-            lang = (a.meta or {}).get("language")
-            lines.append(
-                f"- {a.type} id={a.id} status={a.processing_status}"
-                + (f" language={lang}" if lang else "")
-            )
-
+    # Mutable resource content/status is refreshed for every model request
+    # by tools.project_context; don't freeze a duplicate asset roster here.
     outputs = await list_visible_outputs(db, project.id)
     if outputs:
         lines.append("Current outputs:")
@@ -283,7 +264,7 @@ async def build_context(
             ]
             if not m.content and not attached:
                 continue
-            line = f"- {m.role}: {m.content[:200]}"
+            line = f"- {m.role}: {m.content or ''}"
             if attached:
                 # An attachment-only user turn (files staged in the input
                 # group, sent with no text) must still be visible to the
@@ -307,7 +288,7 @@ async def build_context(
                 line += f" (the user answered: {reply})"
             lines.append(line)
 
-    if pending is not None:
+    if pending is not None and include_pending:
         # A still-open question (e.g. pick-only, no freeform): the agent must
         # not re-ask it nor ignore it — the next message may be its answer.
         # The BARE question is the precise referent here (ask 三分解剖 ②);
@@ -334,6 +315,19 @@ async def build_context(
                 # the mention line verbatim (capped — the card selection is
                 # user truth, the context budget is not).
                 line += f' — the user pinned this exact passage: "{m.quote[:500]}"'
+            if m.region:
+                region = m.region
+                rect = region.sourceRect
+                source = region.sourceSize
+                normalized = region.normalizedRect
+                line += (
+                    " — the user pinned this exact video frame region: "
+                    f"media_time_ms={region.mediaTimeMs}; "
+                    f"source_px={source.width}x{source.height}; "
+                    f"source_rect_px=x:{rect.x},y:{rect.y},width:{rect.width},height:{rect.height}; "
+                    f"normalized_rect=x:{normalized.x:.6f},y:{normalized.y:.6f},"
+                    f"width:{normalized.width:.6f},height:{normalized.height:.6f}"
+                )
             lines.append(line)
 
     return {"text": "\n".join(lines)}

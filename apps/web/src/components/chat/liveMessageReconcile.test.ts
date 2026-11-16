@@ -15,6 +15,7 @@ import {
   runReviewerLanded,
   shouldAdmitPolledTrigger,
   stampServerMessageId,
+  stampMessagePresentation,
 } from "./liveMessageReconcile"
 
 function message(
@@ -74,7 +75,7 @@ describe("same-run recovery delivery identity", () => {
     suggestions: [],
   })
 
-  it("the first failure does not seal retry_upload's new attempt", () => {
+  it("the first failure does not seal a historical recovery attempt", () => {
     expect(runReviewerLanded([failed], "run-1", 0)).toBe(true)
     expect(runReviewerLanded([failed], "run-1", 1)).toBe(false)
     expect(isCurrentRunAttemptDelivery(failed, "run-1", 1)).toBe(false)
@@ -361,5 +362,22 @@ describe("mount history replay", () => {
       serverMessageId: "server-final",
       serverIdAliases: ["server-partial", "server-final"],
     })
+  })
+})
+
+
+describe("upload envelope ownership", () => {
+  const envelope = { id: "server-upload", intent: { type: "answer", output_refs: ["video"] } }
+  it("stamps the live speech seat without replacing its identity or display clock", () => {
+    const rows = [message("preview", 2, { birthKey: "birth", proseDrainedAtMs: 10 }), message("next", 3)]
+    const result = stampMessagePresentation(rows, "preview", envelope)
+    expect(result[0]).toMatchObject({ id: "preview", birthKey: "birth", proseDrainedAtMs: 10, outputRefs: ["video"] })
+    expect(result[1]).toBe(rows[1])
+  })
+  it("uses the exact persisted seat after hydration, never recreating a stopped row", () => {
+    const rows = [message("server-upload"), message("successor")]
+    expect(stampMessagePresentation(rows, "preview", envelope)[0].outputRefs).toEqual(["video"])
+    const stopped = [message("successor")]
+    expect(stampMessagePresentation(stopped, "preview", envelope)).toEqual(stopped)
   })
 })

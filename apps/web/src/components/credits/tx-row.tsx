@@ -3,6 +3,8 @@
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
+import { formatMoney } from "@/lib/payments"
+import { Badge } from "@/components/ui/badge"
 
 /** The wallet ledger row's wire shape + display composition — ONE seat for
  * both read surfaces (the CreditsPill popover and the SettingsDialog
@@ -30,6 +32,11 @@ export interface WalletTransaction {
   hint: string | null
   project_name: string | null
   created_at: string
+  payment_order_id?: string | null
+  payment_provider?: string | null
+  payment_amount_minor?: number | null
+  payment_currency?: string | null
+  paid_at?: string | null
 }
 
 /** Locale-aware thousands grouping (94,083) — pill trigger, hero, rows. */
@@ -53,6 +60,48 @@ export function useRelativeTime() {
   }
 }
 
+/** Public output nouns share the canvas badge vocabulary in both spend rows
+ * and the title fallback; unknown forward-compat types simply drop out. */
+function useOutputTypeNouns() {
+  const { t } = useTranslation()
+  return (types: string[]) =>
+    types
+      .map((ty) => {
+        const key = `studio.anchorCards.types.${ty}`
+        const noun = t(key)
+        return noun === key ? null : noun
+      })
+      .filter((noun): noun is string => noun != null)
+}
+
+/** Shared title composition for the compact rows and the Settings table. */
+export function useTransactionTitle() {
+  const { t } = useTranslation()
+  const outputTypeNouns = useOutputTypeNouns()
+  return (item: WalletTransaction) => {
+    if (item.label) return item.label
+    const nouns = outputTypeNouns(item.output_types ?? [])
+    // Chain: LLM name → produced-type nouns (世界自证) → instruction echo →
+    // the family word (near-unreachable).
+    return nouns.length > 0 ? nouns.join(" · ") : (item.hint ?? "") || t("credits.tx.spent")
+  }
+}
+
+function SignedCredits({ amount }: { amount: number }) {
+  const { i18n } = useTranslation()
+  return (
+    <span
+      className={cn(
+        "shrink-0 whitespace-nowrap text-sm leading-5 font-medium tabular-nums",
+        amount >= 0 ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      {amount >= 0 ? "+" : ""}
+      {formatCredits(amount, i18n.language)}
+    </span>
+  )
+}
+
 /** One ledger row: line 1 = title + signed amount, line 2 = time · project
  * (meta). Signed amounts stay neutral (no green/red semantics). */
 export function TransactionRow({
@@ -62,24 +111,9 @@ export function TransactionRow({
   item: WalletTransaction
   className?: string
 }) {
-  const { t, i18n } = useTranslation()
   const relativeTime = useRelativeTime()
-
-  let title = item.label ?? ""
-  if (!title) {
-    // Unknown/forward-compat types drop out (a missing i18n key echoes back
-    // as the key string).
-    const nouns = (item.output_types ?? [])
-      .map((ty) => {
-        const key = `studio.anchorCards.types.${ty}`
-        const noun = t(key)
-        return noun === key ? null : noun
-      })
-      .filter((noun): noun is string => noun != null)
-    // Chain: LLM name → produced-type nouns (世界自证) → instruction echo →
-    // the family word (near-unreachable).
-    title = nouns.length > 0 ? nouns.join(" · ") : (item.hint ?? "") || t("credits.tx.spent")
-  }
+  const getTitle = useTransactionTitle()
+  const title = getTitle(item)
   const meta = [relativeTime(item.created_at), item.project_name]
     .filter(Boolean)
     .join(" · ")
@@ -96,15 +130,110 @@ export function TransactionRow({
           </p>
         )}
       </div>
-      <span
-        className={cn(
-          "shrink-0 text-sm leading-5 font-medium tabular-nums",
-          item.amount >= 0 ? "text-foreground" : "text-muted-foreground",
-        )}
-      >
-        {item.amount >= 0 ? "+" : ""}
-        {formatCredits(item.amount, i18n.language)}
-      </span>
+      <SignedCredits amount={item.amount} />
     </div>
+  )
+}
+
+function formatTransactionTime(iso: string, lang: string): string {
+  return new Intl.DateTimeFormat(lang, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso))
+}
+
+/** Spend row for Settings: absolute time and separate project/amount columns
+ * make settled production charges easier to reconcile than a glance row. */
+export function SpendTableRow({ item }: { item: WalletTransaction }) {
+  const { i18n } = useTranslation()
+  const getTitle = useTransactionTitle()
+  const outputTypeNouns = useOutputTypeNouns()
+  const outputs = outputTypeNouns(item.output_types ?? [])
+  const reference = item.id.startsWith("run:") ? item.id.slice(4) : item.id
+
+  return (
+    <tr className="border-b border-subtle transition-colors last:border-0 hover:bg-accent">
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        <p title={reference}>#{reference}</p>
+      </td>
+      <td className="px-4 py-3 align-middle">
+        <p className="text-sm leading-5 whitespace-nowrap text-foreground">{getTitle(item)}</p>
+      </td>
+      <td className="px-4 py-3 align-middle">
+        {outputs.length > 0 ? (
+          <div className="flex flex-nowrap gap-1">
+            {outputs.map((output) => (
+              <Badge key={output} variant="secondary" className="rounded-md">
+                {output}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3 align-middle">
+        <p className="text-xs whitespace-nowrap text-muted-foreground">
+          {item.project_name ?? "—"}
+        </p>
+      </td>
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        {formatTransactionTime(item.created_at, i18n.language)}
+      </td>
+      <td className="px-4 py-3 text-right align-middle whitespace-nowrap">
+        <SignedCredits amount={item.amount} />
+      </td>
+    </tr>
+  )
+}
+
+/** Incoming-credit row: purchases expose their linked fiat order facts;
+ * grants and legacy rows without an order link stay explicitly unpriced. */
+export function TopupTableRow({ item }: { item: WalletTransaction }) {
+  const { t, i18n } = useTranslation()
+  const getTitle = useTransactionTitle()
+  const isPurchase = item.family === "topup"
+  const provider = item.payment_provider === "stripe"
+    ? "Stripe"
+    : (item.payment_provider ?? "—")
+
+  return (
+    <tr className="border-b border-subtle transition-colors last:border-0 hover:bg-accent">
+      <td className="px-4 py-3 align-middle">
+        <p className="text-sm leading-5 whitespace-nowrap text-foreground">{getTitle(item)}</p>
+      </td>
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        {item.payment_order_id ? (
+          <p title={item.payment_order_id}>
+            #{item.payment_order_id}
+          </p>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        {formatTransactionTime(item.paid_at ?? item.created_at, i18n.language)}
+      </td>
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground">
+        {provider}
+      </td>
+      <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+        {item.payment_amount_minor != null && item.payment_currency
+          ? formatMoney(item.payment_amount_minor, item.payment_currency, i18n.language)
+          : "—"}
+      </td>
+      <td className="px-4 py-3 text-right align-middle whitespace-nowrap">
+        <SignedCredits amount={item.amount} />
+      </td>
+      <td className="px-4 py-3 text-right align-middle whitespace-nowrap">
+        <Badge variant="secondary" className="rounded-md">
+          {t(isPurchase ? "credits.tx.success" : "credits.tx.credited")}
+        </Badge>
+      </td>
+    </tr>
   )
 }

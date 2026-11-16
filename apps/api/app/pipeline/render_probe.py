@@ -13,8 +13,6 @@ detail}`` 盖在 render 镜像节点上（与 storyboard 的 schema/grounding �
 无保留价值）。
 
 家族分派（``probe_expectation_for`` 只读 spec 自身字段）：
-- film：h264 + 1920×1080 + 实际时长 = Σ场景帧（流帧计数 ±1 帧）+ 首帧可解码；
-  spec 承诺声音（music 或逐幕 audio）时容器必须带音频流（PROBE_AUDIO_MISSING）。
 - video（ADR-145）：h264 + spec 自带 width/height + 流帧计数 = duration_frames
   （±1 帧）+ spec 自带 fps（有理数）+ 任一 audio clip 存在时容器必须带音频流。
 - clip（family 缺省）：存在 + 非零 + 容器可读 + 有视频流 + 首帧可解码——
@@ -28,13 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Film render constants mirrored from apps/render/src/film/Root.tsx
-# (FILM_DIMENSIONS/FILM_FPS — one law, mirrored where consumed;
-# app/tools/film/storyboard.py carries the allocator's FILM_FPS mirror).
-# The canvas dimensions key on the spec's ``aspect`` (ADR-130).
-FILM_DIMENSIONS = {"16:9": (1920, 1080), "1:1": (1080, 1080), "9:16": (1080, 1920)}
-FILM_FPS = 30
-FILM_CODEC = "h264"
+DEFAULT_FPS = 30
+H264_CODEC = "h264"
 
 # Probe failure codes (spec.failure.codes — the stage ledger reads these).
 PROBE_OUTPUT_MISSING = "PROBE_OUTPUT_MISSING"  # object absent / zero bytes
@@ -66,7 +59,7 @@ class ProbeExpectation:
     width: int | None = None
     height: int | None = None
     frames: int | None = None
-    fps: float = FILM_FPS
+    fps: float = DEFAULT_FPS
     # True = the container MUST carry an audio stream (the spec promised a
     # music bed and/or narration); None = audio is not asserted either way
     # (a silent cut is a legal film).
@@ -74,57 +67,10 @@ class ProbeExpectation:
 
 
 def probe_expectation_for(spec: dict[str, Any]) -> ProbeExpectation:
-    """Dispatch reads only ``spec.family`` (never node type/name). The film
-    expectation's frame count IS Σ scene frames off the spec — the renderer
-    only sums, so that sum is the contract duration."""
+    """Dispatch reads only ``spec.family``, never node type or name."""
     if spec.get("family") == "video":
         return _video_expectation(spec)
-    if spec.get("family") != "film":
-        return ProbeExpectation()
-    frames = 0
-    for scene in spec.get("scenes") or []:
-        try:
-            frames += int(scene.get("frames") or 0)
-        except (TypeError, ValueError):
-            # A malformed spec was the render service's 400 seat; the probe
-            # gate's job is the artifact — degrade the duration check rather
-            # than invent a second schema court here.
-            frames = 0
-            break
-    width, height = FILM_DIMENSIONS.get(spec.get("aspect") or "16:9", FILM_DIMENSIONS["16:9"])
-    fps_raw = spec.get("fps")
-    fps = (
-        float(fps_raw)
-        if isinstance(fps_raw, (int, float)) and not isinstance(fps_raw, bool)
-        else FILM_FPS
-    )
-    # Audio expectation (Batch 2): the spec's own promises decide — a music
-    # bed (``music``), any per-scene narration (``audio``), or any composite
-    # element keeping its original sound (``keep_audio``, ADR-140) means the
-    # rendered container must carry an audio stream. A silent cut (none of
-    # these) asserts nothing about audio.
-    scenes = spec.get("scenes") or []
-    expects_audio = (
-        bool(spec.get("music"))
-        or any(isinstance(s, dict) and s.get("audio") for s in scenes)
-        or any(
-            isinstance(s, dict)
-            and s.get("type") == "composite"
-            and any(
-                isinstance(e, dict) and e.get("kind") == "video" and e.get("keep_audio")
-                for e in s.get("elements") or []
-            )
-            for s in scenes
-        )
-    )
-    return ProbeExpectation(
-        codec=FILM_CODEC,
-        width=width,
-        height=height,
-        frames=frames or None,
-        fps=fps,
-        audio=True if expects_audio else None,
-    )
+    return ProbeExpectation()
 
 
 def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
@@ -135,7 +81,7 @@ def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
     try:
         fps = float(fps_raw["num"]) / float(fps_raw["den"])
     except (TypeError, KeyError, ZeroDivisionError):
-        fps = FILM_FPS
+        fps = DEFAULT_FPS
     try:
         frames = int(spec["duration_frames"])
     except (TypeError, KeyError, ValueError):
@@ -160,7 +106,7 @@ def _video_expectation(spec: dict[str, Any]) -> ProbeExpectation:
         for t in spec.get("tracks") or []
     )
     return ProbeExpectation(
-        codec=FILM_CODEC,
+        codec=H264_CODEC,
         width=width or None,
         height=height or None,
         frames=frames or None,

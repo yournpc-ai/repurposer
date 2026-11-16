@@ -2,10 +2,10 @@
  * projection: no React, transport, or layout ownership. */
 
 import type {
+  ActivityReceipt,
   ActivityRowFrame,
   ConversationUnit,
   OverlayMessage,
-  VideoReviewReceipt,
 } from "./types"
 import { parseActivityReceipt } from "./history"
 
@@ -32,6 +32,14 @@ const STORYBOARD_SPAN_KEYS = new Set([
   "chat.activity.videoReviseDone",
   "chat.activity.videoReview",
   "chat.activity.videoReviewDone",
+  "chat.activity.videoDraftScene",
+  "chat.activity.videoDraftSceneDone",
+  "chat.activity.videoDraftJoin",
+  "chat.activity.videoDraftJoinDone",
+  "chat.activity.videoDraftRecheck",
+  "chat.activity.videoDraftRecheckDone",
+  "chat.activity.videoSave",
+  "chat.activity.videoSaveDone",
 ])
 
 export function isDraftSpanRow(a: ActivityRowFrame): boolean {
@@ -103,7 +111,8 @@ export function foldActivityUnits(
     run = []
   }
   for (const unit of units) {
-    if (unit.kind === "activity" && unit.activity.status === "failed" && run.length > 0) {
+    if (unit.kind === "activity" && unit.activity.status === "failed" && run.length > 0 &&
+      activityOwner(run[0]) === activityOwner(unit)) {
       // One continuous segment settles into ONE failed receipt. The failure
       // remains available in its expanded details, never as a sibling status.
       flush(unit.activity)
@@ -246,7 +255,7 @@ function foldElapsedMs(
 /** The fold's expanded category rows (ADR-110 修订 — 归档归类目):
  * rows sharing one copy key AND asset type merge across the WHOLE segment
  * into ONE ×N category line (the Flora anatomy — 已读网页 ×3), order =
- * first appearance. Typed review receipts are the exception: each retains
+ * first appearance. Typed work receipts are the exception: each retains
  * its own evidence row and order. Instance names are the live phase's speech;
  * the archive speaks categories. A milestone row whose count IS its content
  * (the explore family's artifact counts — count without total) never
@@ -263,8 +272,8 @@ export interface FoldCategory {
   repeat: number
   /** A milestone row's own artifact count (merged categories: undefined). */
   count?: number
-  /** Typed review evidence keeps its own row and is never folded into ×N. */
-  receipt?: VideoReviewReceipt
+  /** Typed work evidence keeps its own row and is never folded into ×N. */
+  receipt?: ActivityReceipt
 }
 
 /** The aggregate row's expanded categories (ADR-110 修订). */

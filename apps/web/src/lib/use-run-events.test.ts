@@ -2,11 +2,18 @@ import { describe, expect, it } from "vitest"
 
 import {
   createRunEventGeneration,
+  nextRunAttachment,
   runEventsForAttachment,
   type RunEventsState,
 } from "@/lib/use-run-events"
 
 describe("run attachment generations", () => {
+  it("the Chat landing uses the attachment ordinal even if the server counter arrived first", () => {
+    expect(nextRunAttachment(0, true)).toEqual({ attempt: 1, uploadRetryCount: 1 })
+    expect(nextRunAttachment(1, true)).toEqual({ attempt: 2, uploadRetryCount: 2 })
+    expect(nextRunAttachment(2, false)).toEqual({ attempt: 0, uploadRetryCount: 0 })
+  })
+
   it("a same-run retry creates a new owner and rejects every old callback", () => {
     const generations = createRunEventGeneration()
     const failedAttempt = generations.begin()

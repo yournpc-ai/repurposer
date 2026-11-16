@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import (
     AssetType,
-    FilmStoryboard,
     MediaInput,
 )
 from app.models.tables import Asset, Output, Persona, Project
@@ -168,15 +167,14 @@ def _resized_data_url(path: Path, max_px: int) -> str | None:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-async def _media_input_for_video(asset: Asset):
-    """Build a MediaInput for a short video, or None if it exceeds safe limits."""
-    if asset.type != AssetType.VIDEO or not asset.file_url:
-        return None
-    duration = asset.duration_seconds or 0
-    if duration > _MAX_DIRECT_VIDEO_SECONDS:
+async def media_input_for_video_source(
+    file_url: str, *, duration_seconds: float, caption: str | None = None,
+):
+    """Build a bounded video observation for an Asset or frozen SourceSnapshot."""
+    if duration_seconds > _MAX_DIRECT_VIDEO_SECONDS:
         return None
 
-    path = await download_to_temp(asset.file_url)
+    path = await download_to_temp(file_url)
     if path is None:
         return None
     try:
@@ -194,10 +192,21 @@ async def _media_input_for_video(asset: Asset):
             type=MediaInputType.VIDEO,
             mime=mime,
             data_url=data_url,
-            caption="A short video clip from the talk. Use it together with the transcript.",
+            caption=caption,
         )
     finally:
         path.unlink(missing_ok=True)
+
+
+async def _media_input_for_video(asset: Asset):
+    """Build a MediaInput for a short video, or None if it exceeds safe limits."""
+    if asset.type != AssetType.VIDEO or not asset.file_url:
+        return None
+    return await media_input_for_video_source(
+        str(asset.file_url),
+        duration_seconds=asset.duration_seconds or 0,
+        caption="A short video clip from the talk. Use it together with the transcript.",
+    )
 
 
 async def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
@@ -293,35 +302,4 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
         "voice_clone_needed": not voice_id,
         "clips": clips,
         "output_seconds": output_seconds,
-        **film_quote_facts_from_pending(project.pending_brief),
-    }
-
-
-def film_quote_facts_from_pending(pending_brief: object) -> dict:
-    """The film quote fork's facts (R2-B edit 报价分叉 — launch_film's
-    estimate reads these): when the pending plan carries a VERSIONED
-    storyboard (a confirmed compose or an edit patch — the run will consume
-    THAT board), ``film_board_seconds`` = the board's real total and
-    ``film_board_tts_chars`` = its real narration characters (the interim
-    narration policy is full re-synthesis — zero reuse discount until the
-    reuse store exists; a voiceover-off version quotes 0). An absent or
-    unparsable board contributes NO keys — the typical-film constants
-    stand."""
-    pending = pending_brief if isinstance(pending_brief, dict) else None
-    raw = pending.get("film_storyboard") if pending is not None else None
-    if pending is None or not isinstance(raw, dict):
-        return {}
-    try:
-        board = FilmStoryboard.model_validate(raw)
-    except (ValueError, TypeError):
-        return {}
-    params = pending.get("film_storyboard_params")
-    narrated = not (isinstance(params, dict) and params.get("voiceover") is False)
-    return {
-        "film_board_seconds": float(sum(s.seconds for s in board.scenes)),
-        "film_board_tts_chars": (
-            float(sum(len(s.narration) for s in board.scenes if s.narration))
-            if narrated
-            else 0.0
-        ),
     }

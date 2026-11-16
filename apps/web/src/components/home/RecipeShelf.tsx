@@ -81,6 +81,11 @@ export function RecipeShelf({
           ref={trackRef}
           className="flex w-full min-w-0 max-w-full gap-3 overflow-x-auto no-scrollbar"
         >
+          {items.length === 0 && (
+            <p className="flex min-h-24 w-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+              {t("recipes.shelf.emptyDemo")}
+            </p>
+          )}
           {items.map((item, index) =>
             item.kind === "recipe" ? (
               <div
@@ -298,7 +303,7 @@ function DemoCard({
         onClick={handleSelect}
         aria-label={t("recipes.shelf.usePrompt")}
         data-tour={tourAnchor ? "home-recipes" : undefined}
-        className="block h-full w-full cursor-pointer text-left outline-none focus-visible:outline-2 focus-visible:outline-ring/40"
+        className="block h-full w-full cursor-pointer text-left outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-foreground/60"
       >
         <video
           ref={videoRef}

@@ -25,11 +25,11 @@ async def send_verification_email(email: str, code: str) -> None:
     payload = {
         "from": settings.from_email,
         "to": [email],
-        "subject": "Your Repurposer verification code",
+        "subject": "Your Rookie Cut verification code",
         "html": f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
           <h2>Verification code</h2>
-          <p>Enter this code to sign in to Repurposer:</p>
+          <p>Enter this code to sign in to Rookie Cut:</p>
           <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 24px 0;">
             {code}
           </p>
@@ -40,7 +40,7 @@ async def send_verification_email(email: str, code: str) -> None:
         </div>
         """,
         "text": (
-            f"Your Repurposer verification code is: {code}\n\n"
+            f"Your Rookie Cut verification code is: {code}\n\n"
             "It expires in 10 minutes. If you didn't request it, ignore this email."
         ),
     }

@@ -14,15 +14,19 @@
 import { messageAssetsFromAttachments, type MessageAttachment } from "@/lib/chatAttachments"
 import type { SkillReference } from "@/lib/skills"
 import type {
+  ActivityReceipt,
   ActivityRowFrame,
+  AudioCandidateReceipt,
   CandidateMemberPayload,
   CandidateSurface,
+  ComponentClipReceipt,
   OverlayMessage,
   QuestionAnswer,
   QuestionMessage,
   SuggestionPill,
   VideoReviewIssueCode,
   VideoReviewReceipt,
+  VideoRevisionReceipt,
 } from "./types"
 
 /** Resolve an answer payload to its display line. Bail variants are
@@ -100,7 +104,7 @@ export function triggerDeliveryRef(intent: unknown): string | undefined {
 
 export function triggerOutputRefs(intent: unknown): string[] {
   const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "trigger_review" || !Array.isArray(data.output_refs)) {
+  if (!Array.isArray(data.output_refs)) {
     return []
   }
   return data.output_refs.filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
@@ -129,11 +133,62 @@ function receiptRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
-/** Shared live/history receipt reader. Malformed evidence degrades to the
- * ordinary Activity category; unknown audio codes alone are ignored. */
-export function parseActivityReceipt(value: unknown): VideoReviewReceipt | undefined {
-  const root = receiptRecord(value)
-  if (!root || root.kind !== "video_review") return undefined
+function receiptString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function receiptNumber(value: unknown, positive = false): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) &&
+    (positive ? value > 0 : value >= 0)
+    ? value
+    : undefined
+}
+
+function receiptStrings(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value as string[]
+    : undefined
+}
+
+function receiptFrames(value: unknown): number[] | undefined {
+  return Array.isArray(value) && value.length >= 2 &&
+    value.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0)
+    ? value as number[]
+    : undefined
+}
+
+function parseComponentClips(value: unknown): ComponentClipReceipt[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const components: ComponentClipReceipt[] = []
+  for (const raw of value) {
+    const item = receiptRecord(raw)
+    if (!item) return undefined
+    const clipId = receiptString(item.clip_id)
+    const programDigest = receiptString(item.program_digest)
+    const mediaDigest = receiptString(item.media_digest)
+    const posterUrl = receiptString(item.poster_url)
+    const previewFrame = receiptNumber(item.preview_frame)
+    const dynamicFrames = receiptFrames(item.dynamic_sample_frames)
+    const durationFrames = receiptNumber(item.duration_frames, true)
+    const fps = receiptNumber(item.fps, true)
+    if (!clipId || !programDigest || !mediaDigest || !posterUrl ||
+        previewFrame === undefined || !dynamicFrames || durationFrames === undefined ||
+        fps === undefined) return undefined
+    components.push({
+      clip_id: clipId,
+      program_digest: programDigest,
+      media_digest: mediaDigest,
+      poster_url: posterUrl,
+      preview_frame: previewFrame,
+      dynamic_sample_frames: dynamicFrames,
+      duration_frames: durationFrames,
+      fps,
+    })
+  }
+  return components
+}
+
+function parseVideoReviewReceipt(root: Record<string, unknown>): VideoReviewReceipt | undefined {
   if (!Array.isArray(root.frames) || !Array.isArray(root.findings) ||
       !Array.isArray(root.output_issue_codes)) return undefined
 
@@ -178,6 +233,143 @@ export function parseActivityReceipt(value: unknown): VideoReviewReceipt | undef
     ),
     scope,
   }
+}
+
+function parseVideoRevisionReceipt(root: Record<string, unknown>): VideoRevisionReceipt | undefined {
+  const version = receiptNumber(root.version, true)
+  const settings = receiptStrings(root.settings)
+  const scenes = receiptRecord(root.scenes)
+  const clips = receiptRecord(root.clips)
+  const components = parseComponentClips(root.components)
+  if (version === undefined || !Number.isInteger(version) || !settings || !scenes || !clips ||
+      !components || typeof root.transitions_changed !== "boolean") return undefined
+  const addedScenes = receiptStrings(scenes.added)
+  const removedScenes = receiptStrings(scenes.removed)
+  if (!addedScenes || !removedScenes || !Array.isArray(scenes.moved)) return undefined
+  const moved: VideoRevisionReceipt["scenes"]["moved"] = []
+  for (const raw of scenes.moved) {
+    const move = receiptRecord(raw)
+    const sceneId = receiptString(move?.scene_id)
+    const from = receiptNumber(move?.from_seconds)
+    const to = receiptNumber(move?.to_seconds)
+    if (!sceneId || from === undefined || to === undefined) return undefined
+    moved.push({ scene_id: sceneId, from_seconds: from, to_seconds: to })
+  }
+  const removedClips = receiptStrings(clips.removed)
+  if (!removedClips || !Array.isArray(clips.added) || !Array.isArray(clips.updated)) return undefined
+  const added: VideoRevisionReceipt["clips"]["added"] = []
+  for (const raw of clips.added) {
+    const clip = receiptRecord(raw)
+    const clipId = receiptString(clip?.clip_id)
+    const kind = receiptString(clip?.kind)
+    if (!clipId || !kind) return undefined
+    added.push({ clip_id: clipId, kind })
+  }
+  const allowedChanges = new Set(["range", "object", "animations", "scene_id", "source", "linked_group_id"])
+  const updated: VideoRevisionReceipt["clips"]["updated"] = []
+  for (const raw of clips.updated) {
+    const clip = receiptRecord(raw)
+    const clipId = receiptString(clip?.clip_id)
+    const changes = receiptStrings(clip?.changes)
+    if (!clipId || !changes || changes.length === 0 ||
+        !changes.every((change) => allowedChanges.has(change))) return undefined
+    updated.push({ clip_id: clipId, changes: changes as VideoRevisionReceipt["clips"]["updated"][number]["changes"] })
+  }
+  return {
+    kind: "video_revision",
+    version,
+    settings,
+    scenes: { added: addedScenes, removed: removedScenes, moved },
+    clips: { added, removed: removedClips, updated },
+    transitions_changed: root.transitions_changed,
+    components,
+  }
+}
+
+function parseAudioCandidates(value: unknown): AudioCandidateReceipt[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  const members: AudioCandidateReceipt[] = []
+  for (const raw of value) {
+    const member = receiptRecord(raw)
+    const index = receiptNumber(member?.member_index)
+    const ordinal = receiptNumber(member?.ordinal, true)
+    const title = receiptString(member?.title)
+    const duration = receiptNumber(member?.duration_seconds, true)
+    if (index === undefined || !Number.isInteger(index) || ordinal === undefined ||
+        !Number.isInteger(ordinal) || !title || duration === undefined) return undefined
+    members.push({ member_index: index, ordinal, title, duration_seconds: duration })
+  }
+  return members
+}
+
+/** Shared live/history receipt reader. Malformed evidence degrades to the
+ * ordinary Activity category; unknown audio codes alone are ignored. */
+export function parseActivityReceipt(value: unknown): ActivityReceipt | undefined {
+  const root = receiptRecord(value)
+  if (!root) return undefined
+  if (root.kind === "video_review") return parseVideoReviewReceipt(root)
+  if (root.kind === "component") {
+    const components = parseComponentClips(root.components)
+    return components?.length ? { kind: "component", components } : undefined
+  }
+  if (root.kind === "video_revision") return parseVideoRevisionReceipt(root)
+  if (root.kind === "sfx_search") {
+    const candidateSetId = receiptString(root.candidate_set_id)
+    const topic = receiptString(root.topic)
+    const members = parseAudioCandidates(root.members)
+    return candidateSetId && topic && members
+      ? { kind: "sfx_search", candidate_set_id: candidateSetId, topic, members }
+      : undefined
+  }
+  if (root.kind === "sfx_import") {
+    const candidateSetId = receiptString(root.candidate_set_id)
+    const memberIndex = receiptNumber(root.member_index)
+    const assetId = receiptString(root.asset_id)
+    const snapshotId = receiptString(root.snapshot_id)
+    const snapshotDigest = receiptString(root.snapshot_digest)
+    const title = receiptString(root.title)
+    const duration = receiptNumber(root.duration_seconds, true)
+    return candidateSetId && memberIndex !== undefined && Number.isInteger(memberIndex) &&
+      assetId && snapshotId && snapshotDigest && title && duration !== undefined
+      ? {
+          kind: "sfx_import",
+          candidate_set_id: candidateSetId,
+          member_index: memberIndex,
+          asset_id: assetId,
+          snapshot_id: snapshotId,
+          snapshot_digest: snapshotDigest,
+          title,
+          duration_seconds: duration,
+        }
+      : undefined
+  }
+  if (root.kind === "music_search") {
+    const candidateSetId = receiptString(root.candidate_set_id)
+    const topic = receiptString(root.topic)
+    const members = parseAudioCandidates(root.members)
+    return candidateSetId && topic && members
+      ? { kind: "music_search", candidate_set_id: candidateSetId, topic, members }
+      : undefined
+  }
+  if (root.kind === "music_selection") {
+    const candidateSetId = receiptString(root.candidate_set_id)
+    const memberIndex = receiptNumber(root.member_index)
+    const musicId = receiptString(root.music_id)
+    const title = receiptString(root.title)
+    const duration = receiptNumber(root.duration_seconds, true)
+    return candidateSetId && memberIndex !== undefined && Number.isInteger(memberIndex) &&
+      musicId && title && duration !== undefined
+      ? {
+          kind: "music_selection",
+          candidate_set_id: candidateSetId,
+          member_index: memberIndex,
+          music_id: musicId,
+          title,
+          duration_seconds: duration,
+        }
+      : undefined
+  }
+  return undefined
 }
 
 /** A persisted activity array row (ADR-108 §2 — 每帧一行): intent =
@@ -344,7 +536,88 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
     const d = (e ?? {}) as Record<string, unknown>
     const setId = typeof d.candidate_set_id === "string" ? d.candidate_set_id : null
     if (setId === null) continue
-    if (d.kind === "set") {
+    if (d.kind === "video_preset_set") {
+      const rawMembers = Array.isArray(d.members) ? d.members : []
+      const members: CandidateMemberPayload[] = []
+      for (const value of rawMembers) {
+        const md = (value ?? {}) as Record<string, unknown>
+        if (
+          typeof md.preset_id !== "string" ||
+          typeof md.preview_url !== "string" ||
+          typeof md.preview_digest !== "string" ||
+          typeof md.duration_seconds !== "number" ||
+          !Number.isFinite(md.duration_seconds) || md.duration_seconds <= 0 ||
+          typeof md.aspect !== "string" ||
+          typeof md.width !== "number" || md.width <= 0 ||
+          typeof md.height !== "number" || md.height <= 0
+        ) {
+          members.length = 0
+          break
+        }
+        members.push({
+          start: 0,
+          end: md.duration_seconds,
+          excerpt: md.preset_id,
+          speaker: null,
+          provider: "native",
+          preset_id: md.preset_id,
+          title: typeof md.title === "string" ? md.title : md.preset_id,
+          preview_url: md.preview_url,
+          preview_digest: md.preview_digest,
+          duration_seconds: md.duration_seconds,
+          aspect: md.aspect,
+          width: md.width,
+          height: md.height,
+        })
+      }
+      if (members.length < 2 || members.length > 4 || members.length !== rawMembers.length) continue
+      events.push({
+        kind: "set",
+        surface: {
+          kind: "video_preset_set",
+          candidateSetId: setId,
+          topic: typeof d.topic === "string" ? d.topic : "",
+          assetId: null,
+          members,
+          selected: [],
+        },
+      })
+    } else if (d.kind === "music_set") {
+      const members: CandidateMemberPayload[] = []
+      for (const m of Array.isArray(d.members) ? d.members : []) {
+        const md = (m ?? {}) as Record<string, unknown>
+        if (typeof md.start !== "number" || typeof md.end !== "number") continue
+        members.push({
+          start: md.start,
+          end: md.end,
+          excerpt: typeof md.excerpt === "string" ? md.excerpt : "",
+          speaker: typeof md.speaker === "string" ? md.speaker : null,
+          provider: typeof md.provider === "string" ? md.provider : null,
+          provider_id: typeof md.provider_id === "string" ? md.provider_id : null,
+          music_id: typeof md.music_id === "string" ? md.music_id : null,
+          title: typeof md.title === "string" ? md.title : null,
+          author: typeof md.author === "string" ? md.author : null,
+          duration_seconds:
+            typeof md.duration_seconds === "number" ? md.duration_seconds : null,
+          source_url: typeof md.source_url === "string" ? md.source_url : null,
+          preview_url: typeof md.preview_url === "string" ? md.preview_url : null,
+          license: typeof md.license === "string" ? md.license : null,
+          attribution: typeof md.attribution === "string" ? md.attribution : null,
+          query: typeof md.query === "string" ? md.query : null,
+        })
+      }
+      events.push({
+        kind: "set",
+        surface: {
+          kind: "music_set",
+          candidateSetId: setId,
+          topic: typeof d.topic === "string" ? d.topic : "",
+          assetId: typeof d.asset_id === "string" ? d.asset_id : null,
+          members,
+          selected: [],
+        },
+      })
+    } else if (d.kind === "set" || d.kind === "sfx_set") {
       const members: CandidateMemberPayload[] = []
       for (const m of Array.isArray(d.members) ? d.members : []) {
         const md = (m ?? {}) as Record<string, unknown>
@@ -524,11 +797,11 @@ export function mapHistoryRows(
           // block quotes the BARE question — a refresh reads like the
           // live flow did.
           const echo = questionEcho(m)
-          if (echo) {
+          if (echo || triggerOutputRefs(m.intent).length > 0) {
             pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
-              content: echo,
+              content: echo ?? "",
               runId: m.workflow_run_id,
               runDelivery: triggerSuggestions(m.intent) !== undefined,
               runDeliveryRef: triggerDeliveryRef(m.intent),
@@ -565,22 +838,8 @@ export function mapHistoryRows(
             role: "assistant",
             content: m.content ?? "",
             runId: m.workflow_run_id,
+            outputRefs: triggerOutputRefs(m.intent),
             at: m.created_at,
-          })
-        }
-      } else if (m.question.kind === "task_book" && m.question.storyboard_echo) {
-        // 分镜 echo 回放 (dock echo 形态): a PENDING film dock's echo —
-        // prose + the code-rendered storyboard markdown + the estimate
-        // tail — replays as a normal flow message while the dock itself
-        // revives through the pending-question fetch. No run stamp: the
-        // run only exists once the dock is answered.
-        if ((m.content ?? "").trim()) {
-          pushRow({
-            id: `${m.id}-echo`,
-            role: "assistant",
-            content: m.content ?? "",
-            at: m.created_at,
-            blocks: m.blocks?.length ? m.blocks : undefined,
           })
         }
       } else if (m.question.kind === "question" && !hasOptions) {
@@ -592,6 +851,7 @@ export function mapHistoryRows(
           role: "assistant",
           content: m.content ?? "",
           runId: m.workflow_run_id,
+          outputRefs: triggerOutputRefs(m.intent),
           at: m.created_at,
         })
       } else if (m.question.kind === "task_book" && (m.blocks?.length ?? 0) > 0) {
@@ -612,11 +872,11 @@ export function mapHistoryRows(
         // pending_question fetch) — its framing prose replays as a
         // flow message so the refresh reads like the live flow did.
         const echo = questionEcho(m)
-        if (echo) {
+        if (echo || triggerOutputRefs(m.intent).length > 0) {
           pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
-            content: echo,
+            content: echo ?? "",
             runId: m.workflow_run_id,
             runDelivery: triggerSuggestions(m.intent) !== undefined,
             runDeliveryRef: triggerDeliveryRef(m.intent),

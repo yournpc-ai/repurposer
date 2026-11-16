@@ -57,22 +57,16 @@ async def lifespan(app: FastAPI):
     settings.ensure_dirs()
     assert_runners_registered()
     await init_db()
+    from app.providers.llm import get_llm_client
+
+    llm = get_llm_client()
+    request_logger.info("llm_provider_ready", provider=llm.provider, model=llm.model)
     async with AsyncSessionLocal() as db:
         await seed_default_music(db)
         await reconcile_configs(db)
-    # 孤儿起草 marker 收束 (重启律): a reload/restart mid-draft strands the
-    # committed in-flight marker; design beats live only in THIS process's
-    # chat turns, so at boot every marker is orphan — sweep or the project
-    # stays wedged (redesign refused, Start blocked) for the staleness
-    # budget. Never blocks/fails startup (logged inside).
-    from app.tools.film.storyboard import sweep_orphan_film_draft_markers
-
-    swept = await sweep_orphan_film_draft_markers()
-    if swept:
-        logger.info("film_draft_markers_swept_at_boot: %s", swept)
     # Prefix-cache warmup (批3): fire-and-forget — seeds one backend pod per
     # chat agent, never blocks or fails startup (failures logged inside).
-    if settings.minimax_warmup_enabled:
+    if settings.llm_provider == "minimax" and settings.minimax_warmup_enabled:
         from app.chat.warmup import warm_chat_prefixes
 
         global _warmup_task
@@ -81,7 +75,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Repurposer API",
+    title="Rookie Cut API",
     description="AI-powered speech content repurposing platform",
     version="0.1.0",
     lifespan=lifespan,

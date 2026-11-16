@@ -72,6 +72,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 from app.agents.tool_loop import (
     LoopEvent,
@@ -81,7 +82,18 @@ from app.agents.tool_loop import (
     TerminalAccepted,
     ToolRejected,
 )
-from app.chat.activity_receipts import VideoReviewReceipt
+from app.chat.activity_receipts import (
+    ActivityReceipt,
+    ComponentReceipt,
+    MusicSearchReceipt,
+    MusicSelectionReceipt,
+    SfxImportReceipt,
+    SfxSearchReceipt,
+    SkillReadReceipt,
+    VideoDraftReviewReceipt,
+    VideoReviewReceipt,
+    VideoRevisionReceipt,
+)
 from app.chat.exploration_tools import EXPLORATION_TOOLS
 from app.chat.perception import PERCEPTION_TOOLS
 
@@ -96,49 +108,18 @@ STATUS_ACTIVE = "active"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
-
-# The terminal-tool buckets. ask_user / answer are the Assistant
-# Conversation layer (their user face is the docked pill / the prose
-# itself) — they never open an activity (1→0, 对账规则 4), but their
-# rejections still count as repair work. Unknown (hallucinated) names open
-# nothing either — the loop already rejects them.
-# revise_output (iter-3 S3, N-58): its user face is the SAME revision-work
-# row as edit_graph's (the wiring dispatch seat is shared) — draft bucket.
-# edit_output (S3, N-59): the precise edit's user face is the draft-work row
-# too (op write + re-pend + re-render).
-# (Final Hardening B1, 2026-09-24: apply_edit_ops retired — removed here.)
-# design_storyboard (2026-10-17 用户拍板 — 分镜不是开工): the film review
-# beat is a plain tool call whose drafting happens INSIDE execute (the
-# film_director call + validation are real server work) — a draft-kind span
-# that OPENS at execute entry (``_on_executing``; its name_known slot stays
-# silent so the framing interim_prose lands first) and whose settle DOES persist
-# with its honest duration (the carve-outs below), breaking the draft
-# family's 落定即退役 default: no docked plan card absorbs this beat — the
-# markdown message IS the deliverable, and the settled "Worked for Xs" row is
-# its evidence.
-# The span speaks TWO variants (结构化编辑拍文案修正): compose keeps the
-# design pair; a call carrying ``edits`` (the patch path) speaks the ADJUST
-# pair — the persisted receipt never claims a fresh design when the work
-# was a targeted edit. The variant is read off the VALIDATED params at
-# execute entry (ReadExecuting.params): knowable there, never guessed at
-# name_known (the arguments are still streaming at that beat).
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_storyboard", "design_video", "revise_video", "review_video"})
-_RUN_TOOLS = frozenset({"start_run", "retry_upload"})
-_CONVERSATION_TOOLS = frozenset({
-    "ask_user",
-    "answer",
-    # SFX candidates/assets already have their own typed surfaces. They use
-    # the existing 1→0 projection until dedicated activity copy is integrated;
-    # no second activity protocol or raw tool-result row is introduced.
-    "search_sfx",
-    "import_sfx",
-})
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_video", "revise_video", "review_video", "review_working_draft"})
+_RUN_TOOLS = frozenset({"start_run"})
+_CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
 # face is the milestone frame (``explore_milestone`` below) + the canvas
 # card + the decision package dock — never a per-call activity (the
 # conversation tools' 1→0 同律). Referenced from the registry (U6 — never
 # re-typed), and their rejections still count as repair work.
 _EXPLORATION_VERBS: frozenset[str] = frozenset(EXPLORATION_TOOLS)
+# Native-Preset candidates have the same user face as exploration choices:
+# the persisted candidate card and its selection, never a second activity row.
+_VIDEO_CANDIDATE_TOOLS = frozenset({"show_video_presets", "select_video_preset"})
 
 # Copy keys for the terminal kinds (U7: active/completed status-forms; a
 # FAILED frame reuses the ACTIVE key — the ✗ says the work did not land,
@@ -160,18 +141,9 @@ _ACTIVITY_KEYS = {
 # propose_tasks / present_plan keep the kind default above).
 _EDIT_TOOLS = frozenset({"edit_graph", "revise_output", "edit_output"})
 _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
-# design_storyboard's own key pair (分镜不是开工): the film review beat reads
-# as its own span — 「正在设计分镜」/「正在调整分镜」 ride the phase channel
-# (on_phase) inside it; the span's settle is the ONE draft-family frame that
-# persists (its markdown message is the deliverable, no dock card absorbs it).
-_STORYBOARD_TOOLS = frozenset({"design_storyboard", "design_video", "revise_video", "review_video"})
-_STORYBOARD_KEYS = ("chat.activity.storyboard", "chat.activity.storyboardDone")
+_STORYBOARD_TOOLS = frozenset({"design_video", "revise_video", "review_video", "review_working_draft"})
 # The patch variant's pair (same span anatomy, its own vocabulary): a call
 # carrying edits reads as 调整, never as a fresh 设计.
-_STORYBOARD_EDIT_KEYS = (
-    "chat.activity.storyboardEdit",
-    "chat.activity.storyboardEditDone",
-)
 # The video family's own pairs (ADR-145 phase B): same span anatomy —
 # silent name_known, open at execute entry, settle persists. Compose and
 # targeted revision speak their own vocabularies from the tool itself (the
@@ -179,15 +151,66 @@ _STORYBOARD_EDIT_KEYS = (
 _VIDEO_DESIGN_KEYS = ("chat.activity.videoDesign", "chat.activity.videoDesignDone")
 _VIDEO_REVISE_KEYS = ("chat.activity.videoRevise", "chat.activity.videoReviseDone")
 _VIDEO_REVIEW_KEYS = ("chat.activity.videoReview", "chat.activity.videoReviewDone")
+_VIDEO_DRAFT_SCENE_KEYS = ("chat.activity.videoDraftScene", "chat.activity.videoDraftSceneDone")
+_VIDEO_DRAFT_JOIN_KEYS = ("chat.activity.videoDraftJoin", "chat.activity.videoDraftJoinDone")
+_VIDEO_DRAFT_RECHECK_KEYS = ("chat.activity.videoDraftRecheck", "chat.activity.videoDraftRecheckDone")
+_VIDEO_SAVE_KEYS = ("chat.activity.videoSave", "chat.activity.videoSaveDone")
+_VIDEO_DRAFT_REVIEW_KEY_PAIRS = (
+    _VIDEO_DRAFT_SCENE_KEYS,
+    _VIDEO_DRAFT_JOIN_KEYS,
+    _VIDEO_DRAFT_RECHECK_KEYS,
+)
+# SFX, Music and narration use the ordinary read-span lifecycle. Candidate surfaces
+# and version cards remain separate from these work facts.
+_READ_ACTION_KEYS = {
+    "retry_upload": ("chat.activity.upload", "chat.activity.uploadDone"),
+    "search_sfx": ("chat.activity.sfxSearch", "chat.activity.sfxSearchDone"),
+    "import_sfx": ("chat.activity.sfxImport", "chat.activity.sfxImportDone"),
+    "show_music_candidates": ("chat.activity.musicSearch", "chat.activity.musicSearchDone"),
+    "select_music": ("chat.activity.musicSelection", "chat.activity.musicSelectionDone"),
+    "prepare_narration": ("chat.activity.narrationPrepare", "chat.activity.narrationPrepareDone"),
+    "get_narration_alignment": ("chat.activity.narrationRead", "chat.activity.narrationReadDone"),
+    "annotate_narration": ("chat.activity.narrationAnnotate", "chat.activity.narrationAnnotateDone"),
+    "list_skill_shots": ("chat.activity.skillRead", "chat.activity.skillReadDone"),
+    "read_skill_reference": ("chat.activity.skillRead", "chat.activity.skillReadDone"),
+    "read_skill_demo": ("chat.activity.skillRead", "chat.activity.skillReadDone"),
+    "get_skill_preview": ("chat.activity.skillPreview", "chat.activity.skillPreviewDone"),
+    "prepare_video_materials": ("chat.activity.videoMaterials", "chat.activity.videoMaterialsDone"),
+    "capture_web": ("chat.activity.videoCapturePlan", "chat.activity.videoCapturePlanDone"),
+}
+_READ_ACTION_ACTIVE_KEYS = frozenset(pair[0] for pair in _READ_ACTION_KEYS.values())
+_RECEIPT_TYPES = {
+    "review_video": VideoReviewReceipt,
+    "review_working_draft": VideoDraftReviewReceipt,
+    "design_video": ComponentReceipt,
+    "revise_video": VideoRevisionReceipt,
+    "search_sfx": SfxSearchReceipt,
+    "import_sfx": SfxImportReceipt,
+    "show_music_candidates": MusicSearchReceipt,
+    "select_music": MusicSelectionReceipt,
+    "list_skill_shots": SkillReadReceipt,
+    "read_skill_reference": SkillReadReceipt,
+    "read_skill_demo": SkillReadReceipt,
+    "get_skill_preview": SkillReadReceipt,
+}
+
+
+def _tool_receipt(tool_name: str, receipt: object) -> ActivityReceipt | None:
+    expected = _RECEIPT_TYPES.get(tool_name)
+    if expected is None or not isinstance(receipt, expected):
+        return None
+    return cast(ActivityReceipt, receipt)
 
 
 def _is_storyboard_key(key: str | None) -> bool:
     return key in (
-        _STORYBOARD_KEYS
-        + _STORYBOARD_EDIT_KEYS
-        + _VIDEO_DESIGN_KEYS
+        _VIDEO_DESIGN_KEYS
         + _VIDEO_REVISE_KEYS
         + _VIDEO_REVIEW_KEYS
+        + _VIDEO_SAVE_KEYS
+        + _VIDEO_DRAFT_SCENE_KEYS
+        + _VIDEO_DRAFT_JOIN_KEYS
+        + _VIDEO_DRAFT_RECHECK_KEYS
     )
 
 
@@ -195,8 +218,12 @@ def _active_key_for(kind: str, tool_name: str) -> str | None:
     """The open-time key: the draft kind's two user faces split by tool."""
     if kind == KIND_DRAFT and tool_name in _EDIT_TOOLS:
         return _EDIT_KEYS[0]
-    if kind == KIND_DRAFT and tool_name in _STORYBOARD_TOOLS:
-        return _STORYBOARD_KEYS[0]
+    if kind == KIND_DRAFT and tool_name == "design_video":
+        return _VIDEO_DESIGN_KEYS[0]
+    if kind == KIND_DRAFT and tool_name == "revise_video":
+        return _VIDEO_REVISE_KEYS[0]
+    if kind == KIND_DRAFT and tool_name == "review_video":
+        return _VIDEO_REVIEW_KEYS[0]
     pair = _ACTIVITY_KEYS.get(kind)
     return pair[0] if pair else None
 
@@ -229,7 +256,7 @@ def kind_for_tool(tool_name: str) -> str | None:
     """The name→kind mapping's ONE seat. None = the call opens no activity
     (conversation-layer terminal tools / the exploration verbs / unknown
     names)."""
-    if tool_name in PERCEPTION_TOOLS:
+    if tool_name in PERCEPTION_TOOLS or tool_name in _READ_ACTION_KEYS:
         return KIND_READ
     if tool_name in _DRAFT_TOOLS:
         return KIND_DRAFT
@@ -276,7 +303,9 @@ def all_known_tool_names() -> frozenset[str]:
         | _DRAFT_TOOLS
         | _RUN_TOOLS
         | _CONVERSATION_TOOLS
+        | _READ_ACTION_KEYS.keys()
         | _EXPLORATION_VERBS
+        | _VIDEO_CANDIDATE_TOOLS
     )
 
 
@@ -292,8 +321,8 @@ class ActivityFrame:
     messages by real moments) and ``duration_ms`` — the real elapsed of a
     span that was genuinely ACTIVE, present only on its settling frame (a
     born-completed milestone is an instant fact — it carries no fake zero).
-    An accepted, settled video review may additionally carry its typed
-    evidence receipt; all other tools and statuses remain result-free."""
+    An accepted, settled tool may additionally carry its typed evidence
+    receipt; active, rejected, cancelled and failed frames remain result-free."""
 
     activity_id: str
     seq: int
@@ -303,10 +332,9 @@ class ActivityFrame:
     count: int | None = None
     at: str = ""
     duration_ms: int | None = None
-    # Typed evidence is an accepted review settle's only result-bearing
-    # exception to the no-params/no-results whitelist. It never carries the
-    # raw report, model prose, storage fields, or media metrics.
-    receipt: VideoReviewReceipt | None = None
+    # Typed evidence is an accepted settle's only result-bearing exception to
+    # the no-params/no-results whitelist. Each tool admits only its own model.
+    receipt: ActivityReceipt | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -381,7 +409,7 @@ class ActivityProjector:
         *,
         count: int | None = None,
         duration_ms: int | None = None,
-        receipt: VideoReviewReceipt | None = None,
+        receipt: ActivityReceipt | None = None,
     ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
@@ -390,11 +418,11 @@ class ActivityProjector:
             receipt=receipt,
         )
 
-    def _start(self, kind: str, key: str | None) -> tuple[str, ActivityFrame]:
+    def _start(self, kind: str, key: str | None, *, count: int | None = None) -> tuple[str, ActivityFrame]:
         self._count += 1
         activity_id = f"a{self._count}"
         self._active[activity_id] = (kind, key, time.monotonic())
-        return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key)
+        return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key, count=count)
 
     def _settle(
         self,
@@ -402,38 +430,19 @@ class ActivityProjector:
         status: str,
         key: str | None,
         *,
-        receipt: VideoReviewReceipt | None = None,
+        receipt: ActivityReceipt | None = None,
     ) -> ActivityFrame:
         kind, active_key, started = self._active.pop(activity_id)
-        # 诚实耗时 (2026-09-25): the whisper shows only a GENUINE span.
-        # Read / repair spans cover real server work (the query, the rework
-        # loop) — honest. A read span's start is RE-ANCHORED at execute
-        # entry by ReadExecuting (``_on_executing``): name_known is a
-        # mid-generation liveness beat, and the array row born at that beat
-        # would carry an ``at`` stamp that precedes the real work and a
-        # duration inflated by LLM generation time — re-anchoring makes the
-        # persisted row's ``at``/``duration_ms`` measure the work itself.
-        # Terminal-kind spans (draft / run) open at name_known, AFTER the
-        # LLM already did the drafting — the measured ~1s is validation
-        # noise that reads as a lie ("计划已起草 ·1s" after a 30s draft),
-        # so those settles carry none. The storyboard span is the ONE
-        # exception (2026-10-17 用户拍板): design_storyboard's drafting
-        # happens INSIDE execute (the film_director call + validation are
-        # real server work between ReadExecuting and settle), and the span
-        # OPENS at execute entry (``_on_executing`` — never at name_known),
-        # so its duration is the span's honest length.
         duration_ms = (
             max(0, int((time.monotonic() - started) * 1000))
             if kind in (KIND_READ, KIND_REPAIR) or _is_storyboard_key(active_key)
             else None
         )
-        receipt = (
-            receipt
-            if status == STATUS_COMPLETED and key == _VIDEO_REVIEW_KEYS[1]
-            else None
-        )
+        receipt = receipt if status == STATUS_COMPLETED else None
         frame = self._frame(
-            activity_id, kind, status, key, duration_ms=duration_ms, receipt=receipt
+            activity_id, kind, status, key,
+            count=len(receipt.scene_ids) if isinstance(receipt, VideoDraftReviewReceipt) else None,
+            duration_ms=duration_ms, receipt=receipt,
         )
         # 落定即退役 (2026-09-28 用户拍板; 2026-09-29 扩到 run 跨度): a
         # draft/run span's settle rides the live wire (the row leaves the
@@ -453,6 +462,9 @@ class ActivityProjector:
 
     @staticmethod
     def _done_key(kind: str, active_key: str | None) -> str | None:
+        for pair in _READ_ACTION_KEYS.values():
+            if active_key == pair[0]:
+                return pair[1]
         if kind == KIND_READ and active_key is not None:
             if active_key.startswith(_INSPECTING_PREFIX):
                 return _INSPECTING_DONE_PREFIX + active_key[len(_INSPECTING_PREFIX):]
@@ -462,16 +474,17 @@ class ActivityProjector:
             return active_key + "Done"
         if active_key == _EDIT_KEYS[0]:
             return _EDIT_KEYS[1]
-        if active_key == _STORYBOARD_EDIT_KEYS[0]:
-            return _STORYBOARD_EDIT_KEYS[1]
         if active_key == _VIDEO_DESIGN_KEYS[0]:
             return _VIDEO_DESIGN_KEYS[1]
         if active_key == _VIDEO_REVISE_KEYS[0]:
             return _VIDEO_REVISE_KEYS[1]
         if active_key == _VIDEO_REVIEW_KEYS[0]:
             return _VIDEO_REVIEW_KEYS[1]
-        if _is_storyboard_key(active_key):
-            return _STORYBOARD_KEYS[1]
+        if active_key == _VIDEO_SAVE_KEYS[0]:
+            return _VIDEO_SAVE_KEYS[1]
+        for active, done in _VIDEO_DRAFT_REVIEW_KEY_PAIRS:
+            if active_key == active:
+                return done
         pair = _ACTIVITY_KEYS.get(kind)
         return pair[1] if pair else None
 
@@ -512,7 +525,9 @@ class ActivityProjector:
             return []
         key = (
             PERCEPTION_TOOLS[tool_name].activity_key
-            if kind == KIND_READ
+            if tool_name in PERCEPTION_TOOLS
+            else _READ_ACTION_KEYS[tool_name][0]
+            if tool_name in _READ_ACTION_KEYS
             else _active_key_for(kind, tool_name)
         )
         activity_id, frame = self._start(kind, key)
@@ -613,10 +628,19 @@ class ActivityProjector:
                 kind, key, _started = self._active[activity_id]
                 if (
                     isinstance(event, ReadAccepted)
-                    and event.tool_name == "review_video"
+                    and event.tool_name == "design_video"
+                    and not event.ok
+                ):
+                    frames.append(self._settle(activity_id, STATUS_FAILED, key))
+                elif (
+                    isinstance(event, ReadAccepted)
+                    and event.tool_name in {"review_video", "review_working_draft"}
                     and (
                         not event.ok
-                        or not isinstance(event.receipt, VideoReviewReceipt)
+                        or not isinstance(
+                            event.receipt,
+                            VideoReviewReceipt if event.tool_name == "review_video" else VideoDraftReviewReceipt,
+                        )
                     )
                 ):
                     # A review without its validated report receipt is not a
@@ -639,12 +663,18 @@ class ActivityProjector:
                             _INSPECTING_FAILED_PREFIX + key[len(_INSPECTING_PREFIX):],
                         )
                     )
+                elif (
+                    isinstance(event, ReadAccepted)
+                    and not event.ok
+                    and kind == KIND_READ
+                    and key in _READ_ACTION_ACTIVE_KEYS
+                ):
+                    # Provider/search failure never takes the successful done key.
+                    frames.append(self._settle(activity_id, STATUS_FAILED, key))
                 else:
                     receipt = (
-                        event.receipt
+                        _tool_receipt(event.tool_name, event.receipt)
                         if isinstance(event, ReadAccepted)
-                        and event.tool_name == "review_video"
-                        and isinstance(event.receipt, VideoReviewReceipt)
                         else None
                     )
                     frames.append(
@@ -657,6 +687,22 @@ class ActivityProjector:
                     )
             self._open_call = None
         return frames
+
+    @staticmethod
+    def _working_draft_review_activity(params) -> tuple[tuple[str, str], int]:
+        from app.agents.working_drafts import working_draft_review_facts
+
+        facts = working_draft_review_facts(params._working_draft or {})
+        target = params._review_target
+        ordinal = next((
+            scene["ordinal"] for scene in facts["scenes"]
+            if scene["scene_id"] == target.scene_id
+        ), 1)
+        if facts["invalidated_ranges_seconds"]:
+            return _VIDEO_DRAFT_RECHECK_KEYS, ordinal
+        if target.include_previous_scene:
+            return _VIDEO_DRAFT_JOIN_KEYS, ordinal
+        return _VIDEO_DRAFT_SCENE_KEYS, ordinal
 
     def _on_executing(self, event: ReadExecuting) -> list[ActivityFrame]:
         """开工戳 (execute entry — ADR-108 数组位置律): the ONE seat where a
@@ -681,20 +727,20 @@ class ActivityProjector:
         if activity_id is None:
             if name not in _STORYBOARD_TOOLS:
                 return []
+            if name == "review_working_draft" and (
+                event.params.judgment is not None or event.params._review_target is None
+            ):
+                return []
+            count = None
             if name == "design_video":
-                keys = _VIDEO_DESIGN_KEYS
+                keys = _VIDEO_SAVE_KEYS if getattr(event.params, "save", False) else _VIDEO_DESIGN_KEYS
             elif name == "revise_video":
                 keys = _VIDEO_REVISE_KEYS
             elif name == "review_video":
                 keys = _VIDEO_REVIEW_KEYS
             else:
-                edits = (
-                    getattr(event.params, "edits", None)
-                    if event.params is not None
-                    else None
-                )
-                keys = _STORYBOARD_EDIT_KEYS if edits else _STORYBOARD_KEYS
-            activity_id, frame = self._start(KIND_DRAFT, keys[0])
+                keys, count = self._working_draft_review_activity(event.params)
+            activity_id, frame = self._start(KIND_DRAFT, keys[0], count=count)
             self._open_call = (name, activity_id)
             return [frame]
         if activity_id not in self._active:

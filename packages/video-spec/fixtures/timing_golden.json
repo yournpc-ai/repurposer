@@ -1,5 +1,5 @@
 {
-  "comment": "Golden law for ticks<->seconds<->frames. Pinned by BOTH implementations: apps/api/tests/test_editing_timing_pure.py (Python) and packages/video-spec/src/timing.test.ts (TS). Computed by exact rational math (round-half-up), not by either implementation.",
+  "comment": "Golden law for ticks<->seconds<->frames, computed by exact rational math (round-half-up), not by either implementation. TypeScript conformance uses packages/video-spec/src/timing.test.ts; Python quantization is covered by apps/api/test/core/test_video_spec.py.",
   "seconds_to_ticks": [
     { "seconds": 0.0, "rate": 90000, "ticks": 0 },
     { "seconds": 0.3, "rate": 90000, "ticks": 27000 },

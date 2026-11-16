@@ -86,11 +86,40 @@ export function RunTaskList({
       ? formatElapsed(now - runningMs)
       : null
 
-  const stepDetails = steps.length > 0 ? (
+  // Preparation and render are internal execution owners. Present their real
+  // child stages as one flat list, retaining task rows for other/legacy work.
+  const hasVideoStages = steps.some((step) =>
+    (step.kind === "produce_video" || step.kind === "render") &&
+    visibleProductionStages(step).length > 0,
+  )
+  const detailRows = steps.flatMap((step) => {
+    const stages = visibleProductionStages(step)
+    if (stages.length > 0) {
+      const rows = stages.map((stage) => (
+        <ProductionStageRow
+          key={stage.event_id}
+          stage={stage}
+          error={stage.status === "failed" ? step.error : null}
+          t={t}
+        />
+      ))
+      // Failure can occur between recorded stages; do not lose that fact when
+      // omitting the parent task. Waiting/skipped states also need their row.
+      if ((step.status === "failed" && !stages.some((stage) => stage.status === "failed")) ||
+          step.status === "waiting" || step.status === "skipped") {
+        rows.push(<TaskRow key={step.id} step={step} t={t} />)
+      }
+      return rows
+    }
+    if (hasVideoStages && (step.kind === "produce_video" || step.kind === "render") &&
+        step.status !== "failed" && step.status !== "waiting" && step.status !== "skipped") {
+      return []
+    }
+    return [<TaskRow key={step.id} step={step} t={t} />]
+  })
+  const stepDetails = detailRows.length > 0 ? (
     <div className="mt-2 ml-[5.5px] flex flex-col gap-1.5 border-l border-foreground/15 pl-3.5">
-      {steps.map((step) => (
-        <TaskRow key={step.id} step={step} t={t} />
-      ))}
+      {detailRows}
     </div>
   ) : undefined
 
@@ -124,7 +153,6 @@ function TaskRow({ step, t }: { step: WorkflowStep; t: TFunction }) {
   const label = step.kind === "render" && step.summary === "Uploaded"
     ? t("chat.legacyStepSummaries.uploaded")
     : step.summary ?? step.kind
-  const stages = visibleProductionStages(step)
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 text-xs">
@@ -149,18 +177,16 @@ function TaskRow({ step, t }: { step: WorkflowStep; t: TFunction }) {
             : label}
         </span>
       </div>
-      {stages.length > 0 ? (
-        <div className="ml-5.5 flex flex-col gap-1">
-          {stages.map((stage) => (
-            <ProductionStageRow key={stage.event_id} stage={stage} t={t} />
-          ))}
-        </div>
-      ) : null}
+
     </div>
   )
 }
 
-function ProductionStageRow({ stage, t }: { stage: ProductionStage; t: TFunction }) {
+function ProductionStageRow({ stage, error, t }: {
+  stage: ProductionStage
+  error?: string | null
+  t: TFunction
+}) {
   const label = t(`chat.productionStages.${stage.kind}`, { defaultValue: stage.kind })
   const reused =
     stage.reused_count != null && stage.reused_count > 0 && stage.item_count != null
@@ -187,7 +213,7 @@ function ProductionStageRow({ stage, t }: { stage: ProductionStage; t: TFunction
           stage.status === "running" && "shimmer text-muted-foreground",
         )}
       >
-        {label}{reused ? ` · ${reused}` : ""}
+        {label}{reused ? ` · ${reused}` : ""}{error ? ` — ${error}` : ""}
       </span>
     </div>
   )

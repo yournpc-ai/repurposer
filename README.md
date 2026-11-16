@@ -224,15 +224,13 @@ location /api/ {
 
 ## Tests
 
-Deployment requires the applicable ritual in `CLAUDE.md` to be green, in order:
+Run the applicable checks in `CLAUDE.md`; everything run must be green before deployment:
 
-1. **Backend pure tests**: `cd apps/api && uv run --extra dev python -m pytest tests/ -q`.
-2. **Static architecture gates**: `cd apps/api && uv run python scripts/check_gates.py`.
-3. **Prompt gate when the prompt/registry surface changes**: `cd apps/api && uv run python scripts/prompt_gate.py`.
-4. **Live journey matrix**: `cd apps/api && uv run python scripts/chat_scenarios.py` against a live API + dev worker with the required provider quota. LLM/paid verification needs separate authorization.
-5. **Web pure suites**: `cd apps/web && pnpm test`.
+1. **Core API/DB tests**: `cd apps/api && uv run --extra dev python -m pytest test/core -q`. These use no real model or paid production; transactional tests use disposable PostgreSQL databases.
+2. **Real user journeys**: `cd apps/api && uv run python test/journeys/chat.py`, or `--only <name>[,<name>]` for a subset of the current `JOURNEYS` registry. They require a live API, current migrations, a fresh dev worker and provider quota. Journeys that produce media need separate authorization.
+3. **Web suites**: `cd apps/web && pnpm test`, plus the applicable TypeScript checks.
 
-Scenario assertions lock server-observable shapes, not LLM wording or client-only typewriter/DOM behavior. Browser, real-model, disconnect, audio/visual and manual acceptance remain separate evidence layers; an old green run is not current-HEAD evidence.
+Journey assertions lock user-visible results and server/database facts, not LLM wording or client-only DOM behavior. Browser interaction, final audiovisual quality, production rollout and publishing remain separate acceptance layers; an old green run is not current-HEAD evidence.
 
 ## Documentation
 

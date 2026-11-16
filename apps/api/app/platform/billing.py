@@ -26,15 +26,17 @@ transaction with an IntegrityError.
 from decimal import ROUND_HALF_UP, Decimal
 from datetime import datetime
 from uuid import UUID
+from typing import Literal
 import math
 
 import structlog
-from sqlalchemy import exists, func, select, tuple_, update
+from sqlalchemy import String, case, exists, func, literal, select, tuple_, union_all, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import CreditTransaction, Wallet, WorkflowStep
 from app.platform.configs import get_config
+from app.providers.llm import price_text_tokens
 from app.providers.llm.minimax import price_tokens, price_units
 
 logger = structlog.get_logger()
@@ -70,8 +72,8 @@ def estimate_usd_range(fold: dict) -> tuple[float, float]:
     prompt_low, prompt_high = (int(v) for v in fold["prompt_tokens"])
     completion_low, completion_high = (int(v) for v in fold["completion_tokens"])
     return (
-        price_tokens(prompt_low, completion_low) + units_usd,
-        price_tokens(prompt_high, completion_high) + units_usd,
+        price_text_tokens(prompt_low, completion_low) + units_usd,
+        price_text_tokens(prompt_high, completion_high) + units_usd,
     )
 
 
@@ -101,10 +103,22 @@ def cost_usd(cost: dict | None) -> float:
     units again would double-count."""
     if not cost:
         return 0.0
-    return price_tokens(
-        int(cost.get("prompt_tokens") or 0),
-        int(cost.get("completion_tokens") or 0),
-    ) + float(cost.get("fixed_cost") or 0.0)
+    if cost.get("token_cost_usd") is not None:
+        token_cost = float(cost["token_cost_usd"])
+    elif cost.get("provider") == "deepseek" or str(cost.get("model") or "").startswith("deepseek-"):
+        token_cost = price_text_tokens(
+            int(cost.get("prompt_tokens") or 0),
+            int(cost.get("completion_tokens") or 0),
+            provider=cost.get("provider"),
+            model=cost.get("model"),
+        )
+    else:
+        # Rows without provider identity are legacy MiniMax ledgers.
+        token_cost = price_tokens(
+            int(cost.get("prompt_tokens") or 0),
+            int(cost.get("completion_tokens") or 0),
+        )
+    return token_cost + float(cost.get("fixed_cost") or 0.0)
 
 
 async def credits_for_cost(db: AsyncSession, usd: float) -> int:
@@ -172,21 +186,129 @@ async def balance(db: AsyncSession, user_id: UUID) -> int:
     return int(wallet.balance)
 
 
+async def _list_outgoing_events(
+    db: AsyncSession,
+    user_id: UUID,
+    *,
+    limit: int,
+    cursor: tuple[datetime, UUID] | None,
+) -> tuple[list[CreditTransaction], tuple[datetime, UUID] | None, int]:
+    """Paginate SEMANTIC spend events, not their raw hold/capture/release rows.
+
+    A run with at least one capture is one event, ordered by its latest ledger
+    row; a negative non-run entry is one event. The page selects ten event keys
+    first, then fetches every raw row for those runs so each fold is complete.
+    """
+    run_id = CreditTransaction.ref["run_id"].astext
+    run_scoped = (
+        CreditTransaction.kind.in_(["hold", "capture", "release"])
+        & run_id.is_not(None)
+        & (run_id != "")
+    )
+    capture_total = func.sum(
+        case((CreditTransaction.kind == "capture", CreditTransaction.amount), else_=0)
+    )
+    run_events = (
+        select(
+            run_id.label("event_key"),
+            func.max(CreditTransaction.created_at).label("created_at"),
+            # UUID is only a deterministic tie-breaker, not a chronological
+            # value; text gives the union one portable cursor column type.
+            func.max(CreditTransaction.id.cast(String)).label("cursor_id"),
+            literal(True).label("run_scoped"),
+        )
+        .where(CreditTransaction.user_id == user_id, run_scoped)
+        .group_by(run_id)
+        .having(capture_total != 0)
+    )
+    single_events = select(
+        CreditTransaction.id.cast(String).label("event_key"),
+        CreditTransaction.created_at.label("created_at"),
+        CreditTransaction.id.cast(String).label("cursor_id"),
+        literal(False).label("run_scoped"),
+    ).where(
+        CreditTransaction.user_id == user_id,
+        ~run_scoped,
+        CreditTransaction.amount < 0,
+        CreditTransaction.kind.notin_(["purchase", "grant", "refund"]),
+    )
+    events = union_all(run_events, single_events).subquery()
+    total = int(
+        await db.scalar(select(func.count()).select_from(events)) or 0
+    )
+
+    stmt = select(events)
+    if cursor is not None:
+        stmt = stmt.where(
+            tuple_(events.c.created_at, events.c.cursor_id)
+            < (cursor[0], str(cursor[1]))
+        )
+    stmt = stmt.order_by(events.c.created_at.desc(), events.c.cursor_id.desc()).limit(
+        limit + 1
+    )
+    event_rows = list((await db.execute(stmt)).all())
+    has_more = len(event_rows) > limit
+    page = event_rows[:limit]
+    if not page:
+        return [], None, total
+
+    run_ids = [row.event_key for row in page if row.run_scoped]
+    single_ids = [UUID(row.event_key) for row in page if not row.run_scoped]
+    raw_stmt = (
+        select(CreditTransaction)
+        .where(
+            CreditTransaction.user_id == user_id,
+            (run_scoped & run_id.in_(run_ids)) | CreditTransaction.id.in_(single_ids),
+        )
+        .order_by(CreditTransaction.created_at.desc(), CreditTransaction.id.desc())
+    )
+    rows = list((await db.execute(raw_stmt)).scalars().all())
+    last = page[-1]
+    nxt = (last.created_at, UUID(last.cursor_id)) if has_more else None
+    return rows, nxt, total
+
+
 async def list_transactions(
     db: AsyncSession,
     user_id: UUID,
     *,
     limit: int,
     cursor: tuple[datetime, UUID] | None = None,
-) -> tuple[list[CreditTransaction], tuple[datetime, UUID] | None]:
+    direction: Literal["in", "out"] | None = None,
+) -> tuple[list[CreditTransaction], tuple[datetime, UUID] | None, int | None]:
     """Read the caller's ledger, newest first — the ``/wallet/transactions``
     projection (BILLING §7, the billing center's read-only predecessor).
 
-    Keyset pagination on (created_at, id) DESC: the ledger is append-only,
-    so a keyset cursor is stable under concurrent appends where OFFSET would
-    drift. Returns (rows, next_cursor) — next_cursor None on the last page.
+    ``direction=out`` delegates to semantic-event pagination, returning complete
+    run folds and an exact event total. ``direction=in`` filters raw incoming
+    entries before keyset pagination; each is one semantic event. Unfiltered
+    reads keep the original raw-ledger keyset and do not calculate a total.
     """
+    if direction == "out":
+        return await _list_outgoing_events(
+            db, user_id, limit=limit, cursor=cursor
+        )
+
     stmt = select(CreditTransaction).where(CreditTransaction.user_id == user_id)
+    if direction == "in":
+        run_id = CreditTransaction.ref["run_id"].astext
+        run_scoped = (
+            CreditTransaction.kind.in_(["hold", "capture", "release"])
+            & run_id.is_not(None)
+            & (run_id != "")
+        )
+        stmt = stmt.where(
+            ~run_scoped
+            & (
+                CreditTransaction.kind.in_(["purchase", "grant", "refund"])
+                | (CreditTransaction.amount >= 0)
+            )
+        )
+    total = (
+        int(await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+        if direction == "in"
+        else None
+    )
     if cursor is not None:
         stmt = stmt.where(
             tuple_(CreditTransaction.created_at, CreditTransaction.id) < cursor
@@ -196,10 +318,10 @@ async def list_transactions(
     ).limit(limit + 1)
     rows = list((await db.execute(stmt)).scalars().all())
     if len(rows) <= limit:
-        return rows, None
+        return rows, None, total
     page = rows[:limit]
     last = page[-1]
-    return page, (last.created_at, last.id)
+    return page, (last.created_at, last.id), total
 
 
 async def held(db: AsyncSession, user_id: UUID) -> int:

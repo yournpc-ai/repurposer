@@ -1,4 +1,4 @@
-// drawing-v1's only program entry point: JSON in, per-frame JSON commands out.
+// draw-2d's only program entry point: JSON in, per-frame JSON commands out.
 // Untrusted source runs without host capabilities in a permission-restricted process.
 import vm from "node:vm";
 

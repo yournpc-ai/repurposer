@@ -1,10 +1,10 @@
 # Chat TurnBlock 四阶段施工与验收
 
-> Status: 阶段一至四及 Chat 修复上下半批均已落码。当前完整 API 1447 pytest、Web 352 tests、Web tsc、check_gates 均已通过；真实浏览器与付费旅程未运行。当前代码在正常路径只从各 delivery 自己的 `intent.output_refs` 解析交付；同 Run `retry_upload` 以客户端 attachment epoch 重订阅，并以 Run frame 的 `upload_retry_count` 与 trigger ref 区分恢复 delivery。零 delivery 时仅在 review 有界落定或历史水合后展示当前 Run 的真实 delivered 视频，任何 delivery 出现即回到消息自有 refs。pending/answered QA echo 保留 refs，初始慢历史按真实 server id alias 去重。连续工作段的 failed 在原段收成失败收据并进入展开明细，不再追加同级状态行；用户气泡到 assistant 开场为 24px，assistant 内部槽位保持 12px。Chat Stop 的 visible frontier、retract/cancelled 与写口 fence 边界不变。
+> Status: 回复容器结构收口已落码。`TurnBlock` 明确分离用户边界与 `AssistantResponse` 内部槽位；纯投影输出完整回复容器及带 opening/deliveries 的 Run 槽位，不再把孤立 runAnchor 交给渲染层。明确关联且连续的 Run 开场、工作面、交付正文和各消息自己的成片在同一容器内演进；中间用户/QA/独立事实与后续跨回合交付保持真实位置。`ChatConversation` 不再判断前后工作块来补间距。`RunCard` 统一 attached/detached 数据入口，attached 不建立重复订阅，交接连接期保留最后真实读数，RunBlock 和工作组件不因数据入口切换而重挂载。
 >
-> 当前明确未做：全量 Run cancel/resume 并发重构；真实浏览器中的同 Run 恢复、第二次 delivery、零 delivery 迟到归属、QA 水合、慢历史与刷新旅程；完整数据库旅程和付费视频制作。长期行为法 = [CHAT_ARCHITECTURE §8.10](../CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示)；目标目录唯一合同 = [VIDEO_PROJECT §12](../VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。本文只登记当前实施范围、代码接缝与剩余验收，不复制全局排期。
+> 当前定向 Chat/stream 22 files / 269 tests 与 diff 检查通过；Web tsc 初次通过，最新全量检查被范围外 MentionChip.tsx 的 formatMediaTimeMs / t 两项未使用声明阻断，包含普通多段回复、Run 开场/交付、terminal SSE 迟到、跨回合交付、独立上传、历史同源与组件挂载身份回归。API/上传工具、Stop visible frontier、计费/授权与首稿 ACK 未修改；既有上传 API/数据库 86 项证据不代表本轮重跑。全量 Web 425 passed / 2 failed；两项失败为范围外的首页旧英文文案断言与媒体选区浮点精度断言，未改动对应实现或断言。本轮不运行真实浏览器或付费旅程，真实呈现由用户验收。
 >
-> 新增开放批——Worked 工作证据与闭环正文：与 D5 两路能力切片并行，首批仅以现有 `review_video` 打通 typed receipt → Worked 展开 → 结果型正文 → 历史回放；Worked 外层和 Stop/授权边界不变。SFX、component、revision 与 Run 的后续接入归 D5 公共集成。当前未实施、未验证；三路文件所有权唯一合同 = [Video Project 施工合同 §4.5.1](video-project-implementation.md#451-并行切片与文件所有权)。
+> 剩余用户验收：多段普通回复的内部布局与卡片揭示；Run live → Worked 与明细开合的视口稳定；中途 QA、跨回合及多次交付；独立上传成功/失败/Stop；慢历史、水合、刷新及 full/panel/mobile、双主题、键盘与 reduced-motion。全量 Run cancel/resume 并发重构不在本批。历史缺 `turn_id` 继续只读容忍，不伪造回复关系。长期行为法 = [CHAT_ARCHITECTURE §8.10](../CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示)，目录合同 = [VIDEO_PROJECT §12](../VIDEO_PROJECT.md#12-目标目录与新旧代码处置)。
 
 ## 0. 目标与总边界
 
@@ -24,7 +24,7 @@
 ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
   → ChatConversation（scroller / blocks）
   → timeline 纯投影（types / project / activity / history / speech / reveal）
-  → TurnBlock / RunBlock
+  → TurnBlock → AssistantResponse / RunBlock
   → ComponentSlot / RevealSlot / rows / run / video
 ```
 
@@ -50,7 +50,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 
 ## 3. 阶段二——TurnBlock、渐进揭示与块级动作
 
-> 当前实施状态：A/B/C 与四项收口修复已落码，验收中。Web 298 tests、API 1400 pytest、check_gates 与最新 tsc 均通过；migration 已由用户确认应用并核验，真实浏览器/可访问性验收未完成。四项修复为：question-shaped trigger 的 answered/pending options echo 恢复 run delivery 身份；persisted early failure 按乐观行 id 原位 reconcile 服务端 turn id；Stop 与 send 共用 composer 座位并在停止后聚焦输入；用户真实项目冒烟已证明 Stop→立即重发的新回复正常、旧流不污染新 Turn 且硬刷新一致；每条 chat/answer stream 以局部 owner 阻止旧回调、envelope、failure 与 finally 改写 successor。attached Output 已接入 `RevealSlot`，detached `RunCard` 保留原渲染面，未冒充全部 Output 路径已统一。下方出口在真实浏览器/可访问性验收完成前保持未勾选。
+> 当前实施状态：A/B/C 与四项收口修复已落码，验收中。Web 298 tests、API 1400 pytest 与最新 tsc 均通过；migration 已由用户确认应用并核验，真实浏览器/可访问性验收未完成。四项修复为：question-shaped trigger 的 answered/pending options echo 恢复 run delivery 身份；persisted early failure 按乐观行 id 原位 reconcile 服务端 turn id；Stop 与 send 共用 composer 座位并在停止后聚焦输入；用户真实项目冒烟已证明 Stop→立即重发的新回复正常、旧流不污染新 Turn 且硬刷新一致；每条 chat/answer stream 以局部 owner 阻止旧回调、envelope、failure 与 finally 改写 successor。attached Output 已接入 `RevealSlot`，detached `RunCard` 保留原渲染面，未冒充全部 Output 路径已统一。下方出口在真实浏览器/可访问性验收完成前保持未勾选。
 >
 > 当前必须走查的已识别风险：`RevealSlot` 以隐藏挂载加载真实 DTO/媒体，hidden video 的 `canPlay` 是否发生决定 Output 能否揭示；正常 delayed-start recovery 仍需真实浏览器验证；`/results` 瞬时失败只保留真实恢复观察，不预防性新增 retry/backoff，取得真实失败证据后再做最小修复。detached RunCard 的 Reveal 消费路径归后续 3B 统一，阶段四 §5.7 只核对无残留双路径。
 >
@@ -83,7 +83,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 
 > 当前实施状态：**3A 薄垂直切片已落码，未封板**。`produce_video` 保持单节点、`retries=0`；真实发射点已接保存版/执行输入校验、字体、实际存在的 Generator/Speech 媒体准备、video-spec 编译、Output 新建或复用，以及 render 排队请求。未启用旁白不写 Speech 阶段；缓存与 resume 只记录实际复用计数/事实。阶段持久于 `workflow_steps.spec.production_stages`，携带稳定 `event_id/kind`、run/step/attempt、持久 `seq`、状态和真实起止；写入使用短事务行锁与当前 attempt/claim_token 围栏，live snapshot、`step.updated` 与历史序列化共用同一 DTO，旧 Run 缺字段仍读原 Prepare/Render。
 >
-> attached `RunBlock` 只重组 ChatDock 既有 steps/run props 与唯一 `useRunEvents` 数据面，`RunTaskList` 负责步骤与当前 attempt 内部阶段投影；Output 仍由匹配 delivery 的真实首显/drain 或历史水合控制揭示，detached `RunCard` 未另开订阅或重写。真实 render start/finish（`claim_pending_render` / `render_output`）与 delivery admission **未接入阶段记录，明确留给 3B**；本批只有 render queued，不冒充 rendering/delivered。多次 delivery 的逐 Output Reveal、detached 统一及完整失败/重试矩阵仍归 3B。3A 已补受限纯测试；Web 301 tests 与 `npx tsc --noEmit`、API 1400 pytest、`check_gates` 均通过。
+> attached `RunBlock` 只重组 ChatDock 既有 steps/run props 与唯一 `useRunEvents` 数据面，`RunTaskList` 负责步骤与当前 attempt 内部阶段投影；Output 仍由匹配 delivery 的真实首显/drain 或历史水合控制揭示，detached `RunCard` 未另开订阅或重写。真实 render start/finish（`claim_pending_render` / `render_output`）与 delivery admission **未接入阶段记录，明确留给 3B**；本批只有 render queued，不冒充 rendering/delivered。多次 delivery 的逐 Output Reveal、detached 统一及完整失败/重试矩阵仍归 3B。3A 已补受限纯测试；Web 301 tests 与 `npx tsc --noEmit`、API 1400 pytest 均通过。
 >
 > 3A 已有真实验证：项目 `2f875e94-8163-4bb6-9be3-d10203ab0319` 的 Run `6215b2ce-7b4a-4232-9041-1195d9ea1c7f` 交付同一 v13 成片，5 个内部阶段在初次打开与硬刷新后一致，单 Run/Output 无重复；共享查看器视频 `readyState=4`、`duration=8.064`、无播放错误，最终结算 16 credits。首次上传受本地代理/DNS 影响失败，复用已渲染字节重传成功，未重新渲染。该证据证明 3A 垂直链，不替代 3B 的真实 render/delivery 阶段与完整旅程。
 
@@ -101,7 +101,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 >
 > render mirror step 在 `claim_pending_render` 成功提交后同步 Output 的 `render_claim_token` 并递增 attempt，随后复用 `ProductionStages` 短事务行锁、当前 attempt/token fencing 与同一 DTO 写 start；queued 和无稳定围栏的 mirror 不写 running。`render_output` 在无 spec、renderer/probe异常与 fenced Output 成功提交等真实结果边界 settle：upload-only 恢复只记 upload；renderer 明确返回普通任务 `stage=upload` 时记 render completed + upload failed，不冒充 delivery。成功渲染与探针通过后，只有重新读取 Output 且既有 `output_is_delivered`（render completed + video file 及版本准入）成立才追加 delivery admission；不从 Run terminal 或 Output 存在猜测交付。旧 Run 无阶段字段、Speech 规则、delivery 首显收段与 Output Reveal 均未改；多次 delivery、detached RunCard 和跨 attempt Worked 耗时仍归 3B-3。
 >
-> 本批自动证据：Web 24 files / 306 tests、`npx tsc --noEmit`、API 1403 pytest、`check_gates` 与 `git diff --check` 全绿；既有 upload-failure/recovery DB 旅程使用 mock renderer，证明 claim start、render/upload 成败、delivery admission、attempt 递增及 typed option 的持久关联，不代表真实渲染或付费旅程通过。
+> 本批自动证据：Web 24 files / 306 tests、`npx tsc --noEmit`、API 1403 pytest 与 `git diff --check` 全绿；既有 upload-failure/recovery DB 旅程使用 mock renderer，证明 claim start、render/upload 成败、delivery admission、attempt 递增及 typed option 的持久关联，不代表真实渲染或付费旅程通过。
 >
 > **3B-3 当前状态（2026-10-31）：实现已落码，完整矩阵未闭环。** 两个 QA 边界已修：option + assets/focus 保留完整真实用户气泡与 Turn，纯 option 仍只显示 Q/A；expired/superseded 机器作答不再命中 legacy 回退，空 `answer.text` 仅保留旧行读容忍。detached 与 attached 共用真实 ready/Reveal 门槛，单 Run 制作过程仍只有一个面；detached 不复用第一条 delivery 的显示边沿，保留 exact Output 查看入口。真实 detached Output 已在共享查看器播放，旧 Output 初次加载与硬刷新均只出现一次。
 >
@@ -111,7 +111,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 >
 > version 21 的真实付费主链已通过。首次 Run `a0191d5f-62e3-499b-bc26-e5aef2dfe140` 在 render 前失败：常驻 worker 尚未加载当前 `TextStyle.letter_spacing` schema；validate/fonts 已完成，无 Output/render/capture。重启 worker 后，同一正常 Chat 制作请求创建 Run `a1d74bf8-ddbe-4400-a748-d95bc3417228`，其 `version_ref` 精确钉住 `2716649a-2031-44fb-b32f-75ae01f34c13` 与既有 content/presentation digest，auto 授权报价 16 credits。validate → fonts（3/3 复用）→ compile_spec → output_preparation → render_queue → render → delivery admission 全部完成，Output `c90c53aa-03aa-496d-9833-1f017afdae1d` 为 `render_status=completed`，交付 trigger 行持久化。共享查看器真实播放 `readyState=4`、`duration=8.064`、播放进度从 4.184s 前进到 5.989s、无错误；硬刷新后 Output 卡仍仅一张，history 不再发送 presentation ACK。钱包从 93,308 变为 93,292 credits、held=0，唯一本次 capture 为该 Run 的 16 credits；失败的前次 Run 无 capture。证据为 `artifacts/chat-turn-block-stage3/ack-fixed-production-retry.json`、`ack-fixed-playback.json` 及对应截图。
 >
-> 本次完整自动门：Web 25 files / 333 tests、`npx tsc --noEmit`、API 1440 pytest、`check_gates` 全绿；未改 Prompt，未运行 prompt_gate。连续真实 Run `77ea2f4a-6177-4df0-aad4-45715270d394` / `f90f6d0e-4956-42c5-91b8-27775a518755` 分别交付 Output `ee519430-403c-4448-a9db-2c468e7a23ca` / `ff1bce2a-ec1d-44b2-bceb-c085e9815c33`，数据库消息 `3463a3ab…` / `100dfcdf…` 各只保存自己的一个 ref；旧卡位置不变，新卡只在新消息，共享查看器从第 8 项翻到第 7 项。两次硬刷新均每卡一张、零入场重播、零尾部 spacer，浏览器无错误；每 Run capture 16 credits。证据为 `artifacts/chat-turn-block-stage3/per-delivery-live*`、`per-delivery-history-*`。另一次 Run `c4c581e5-b714-4af1-ad15-9011e3576cdb` 的向上阅读锚点在 Output 揭示时保持稳定，但脚本把旧 delivery 文字误判为新交付，停止时新 Run 仍在 Gathering results，故不计 live → Worked 几何证据。阶段三实现已完成；delivery 后 live → Worked 几何、完整失败/恢复与全形态矩阵仍欠，阶段四未开工。
+> 本次完整自动门：Web 25 files / 333 tests、`npx tsc --noEmit`、API 1440 pytest 全绿。连续真实 Run `77ea2f4a-6177-4df0-aad4-45715270d394` / `f90f6d0e-4956-42c5-91b8-27775a518755` 分别交付 Output `ee519430-403c-4448-a9db-2c468e7a23ca` / `ff1bce2a-ec1d-44b2-bceb-c085e9815c33`，数据库消息 `3463a3ab…` / `100dfcdf…` 各只保存自己的一个 ref；旧卡位置不变，新卡只在新消息，共享查看器从第 8 项翻到第 7 项。两次硬刷新均每卡一张、零入场重播、零尾部 spacer，浏览器无错误；每 Run capture 16 credits。证据为 `artifacts/chat-turn-block-stage3/per-delivery-live*`、`per-delivery-history-*`。另一次 Run `c4c581e5-b714-4af1-ad15-9011e3576cdb` 的向上阅读锚点在 Output 揭示时保持稳定，但脚本把旧 delivery 文字误判为新交付，停止时新 Run 仍在 Gathering results，故不计 live → Worked 几何证据。阶段三实现已完成；delivery 后 live → Worked 几何、完整失败/恢复与全形态矩阵仍欠，阶段四未开工。
 
 ### 开工门槛
 
@@ -138,7 +138,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 
 ### 3C 阶段四前阻断修复（A–E）
 
-> Status: 当前修复上半批已落码；API 1447 pytest、Web 337 tests、Web tsc、check_gates、prompt_gate 均已通过。A/D/E 的既有实现边界不变；B/C 已改为下述 `interim_prose`、逐 delta partial 与客户端实际可见 Stop 协议。无可见回复不再保留 retracted tombstone，而是同事务删除整个 Turn。真实首条上传、Stop 两态、Stop/final-commit 竞态、活跃 Run 取消、刷新与 successor Turn 主链仍待真实浏览器验收；本批未发起付费 Run/render，未执行 DB reset。
+> Status: 当前修复上半批已落码；API 1447 pytest、Web 337 tests、Web tsc 已通过。A/D/E 的既有实现边界不变；B/C 已改为下述 `interim_prose`、逐 delta partial 与客户端实际可见 Stop 协议。无可见回复不再保留 retracted tombstone，而是同事务删除整个 Turn。真实首条上传、Stop 两态、Stop/final-commit 竞态、活跃 Run 取消、刷新与 successor Turn 主链仍待真实浏览器验收；本批未发起付费 Run/render，未执行 DB reset。
 
 #### A. 首页素材与首条用户消息
 
@@ -159,8 +159,8 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 1. 主动 Stop 与意外断线分开。`prepare_chat_turn` 提交用户行后由 `_turn_stream` 发 `turn.started`，ChatDock 收编真实 `turn_id` 并保存本次 text/mentions/attachments 快照；OPTIONS answer 流继续原 answer abort/settlement，不进入普通 Turn Stop。
 2. `POST /api/v1/chat/turns/{turn_id}/stop` 接收 `prose[{message_id,visible_chars}]`、`activity_ids`、`structure_ids`。`visible_chars` 只表示打字机已经释放的 Unicode code point 前缀；DB committed、SSE emitted 或浏览器 received 但仍在缓冲区都不算看见。structure id 只由真实开放渲染路径在 DOM commit 后注册到同步 ref：RevealSlot 必须满足 `ready && priorDrained`，Candidate 由自身可见卡片注册；hidden/loading/未 drain/历史水合与仅凭 `blocks`/`candidates` 字段存在都不得登记。服务端只接受本 Turn 已有行 id 并按自己的 content clamp，客户端不能上传正文。
 3. 控制口在开局用户行锁内原子记录决定与 frontier：零可见正文/Activity/结构时删除整个 Turn 并返回 `retracted`；有部分可见内容时裁掉未显示行与尾部、取消可见 active Activity、写 `turn_state='cancelled'` 并返回该状态。disconnect 只做幂等清理，不能再把 cancelled 改写成 retracted 或反向恢复。
-4. 客户端只在收到 `cancelled` / `retracted` 后 abort。Stop 路径 `halt/discard` 未显示缓冲，绝不 drain；SSE quiet close 若先于控制响应到达，先等待本次 Stop Promise，再选择 Stop halt 或普通 drain/failure，两个先后序都只投影一次。`stopPending` 由当前 Turn context 持有，旧 stream finally 与迟到控制响应只在 owner 匹配时清理，不得卡死或误清 successor。retracted 删除本地整 Turn、恢复 draft/mentions/既有 staged chips 并清除首条 router handoff，刷新不得自动重发，cancelled 只保留同一 frontier。既有 owner guard 阻止旧 SSE 修改 successor Turn。
-5. final commit 与 Stop 共用同一行锁，所有该处锁读必须 `populate_existing`，防止等待锁之前的 identity-map 旧值覆盖竞态事实。nested Start 在锁 pending question 前先取 opening-row fence，锁序与 Stop 的 opening → transcript 一致；answer/Run/hold 只 flush，由 outer final fence 唯一 commit，worker 在该 commit 前不可见。主 Turn 已持有该 fence 时，同一 async Turn 的独立 transcript Session 共享其锁所有权、不得跨 Session 再等待同一把锁；Stop 等其他请求上下文仍正常加锁，outer execute 在提交、回滚或异常退出时清除共享标记。直接 answer 与 presentation-ACK auto-Start 保持自己的 commit。Stop 先赢则 assistant/Run/hold 所在最终事务回滚，不留新 Run、hold、capture；final commit 先赢则 Stop 返回真实终态且不 abort。既有授权、计费守卫、exact version/digest 不变。nested Start 的 Activity 独立写入已有真实 Postgres 定向覆盖，本次修复后的测试与真实浏览器复验未运行。
+4. 客户端只在收到 `cancelled` / `retracted` 后 abort。Stop 路径 `halt/discard` 未显示缓冲，绝不 drain；SSE quiet close 若先于控制响应到达，先等待本次 Stop Promise，再选择 Stop halt 或普通 drain/failure，两个先后序都只投影一次。`fetch-event-source` 的外部 abort-resolve 由 `streamTurn` 转成 `AbortError` rejection，外层 `streamChat` 必须 settle，仍由本条既有 catch/finally 收口；该转换与真实浏览器 Stop 复验未运行。`stopPending` 由当前 Turn context 持有，旧 stream finally 与迟到控制响应只在 owner 匹配时清理，不得卡死或误清 successor。retracted 删除本地整 Turn、恢复 draft/mentions/既有 staged chips 并清除首条 router handoff，刷新不得自动重发，cancelled 只保留同一 frontier。既有 owner guard 阻止旧 SSE 修改 successor Turn。
+5. final commit 与 Stop 共用同一行锁，所有该处锁读必须 `populate_existing`，防止等待锁之前的 identity-map 旧值覆盖竞态事实。nested Start 在锁 pending question 前先取 opening-row fence，锁序与 Stop 的 opening → transcript 一致；answer/Run/hold 只 flush，由 outer final fence 唯一 commit，worker 在该 commit 前不可见。主 Turn 已持有该 fence 时，同一 async Turn 的独立 transcript Session 共享其锁所有权、不得跨 Session 再等待同一把锁；Stop 等其他请求上下文仍正常加锁；开局行统一使用 `FOR NO KEY UPDATE`，既保持写口互斥，又允许 `messages.turn_id` 自外键的 `FOR KEY SHARE` 检查，避免独立 transcript INSERT 等待自己的外层 Start，outer execute 在提交、回滚或异常退出时清除共享标记。直接 answer 与 presentation-ACK auto-Start 保持自己的 commit。Stop 先赢则 assistant/Run/hold 所在最终事务回滚，不留新 Run、hold、capture；final commit 先赢则 Stop 返回真实终态且不 abort。既有授权、计费守卫、exact version/digest 不变。nested Start 的 Activity 独立写入已有真实 Postgres 定向覆盖，本次修复后的测试与真实浏览器复验未运行。
 
 #### D. Run 活跃时 Send=Stop 与真实取消
 
@@ -184,7 +184,7 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 
 ## 5. 阶段四——同源回放与旧路径退役
 
-> Status: 当前代码只有一个 RunBlock 工作面，Output 正常只挂在所属 delivery 消息上。同 Run 恢复重读当前 attempt，旧 delivery 不 seal 新 attempt；第二次 delivery 留在自己的消息位置。零 delivery 的当前 Run 在 live 有界 review 落定或历史水合后可展示自己的真实 delivered 视频，迟到 delivery 接管后不留双卡；已有 delivery 缺 refs 仍为空。pending/answered QA echo 保留自己的 refs，历史不由 live-only suggestions 推导 reviewing。初始慢历史按真实 server id alias 合并，保留本地 birth key 与 typing。`LegacyRunOutputs`、通用 Run 级 Output Reveal、`showOutputs` / `anchorOutputs` 和旧无 `output_refs` 消息归属回退不恢复。上述上下半批改动已通过当前完整 API 1447 pytest、Web 352 tests、Web tsc 与 check_gates；真实记录回放与浏览器旅程仍需用户验收。
+> Status: 当前代码只有一个 RunBlock 工作面，Output 正常只挂在所属 delivery 消息上。已有历史 Run 恢复事件仍按当前 attempt 读取，旧 delivery 不 seal 新 attempt；独立 retry_upload 不重开 Run，成片跟随当前回复；第二次 delivery 留在自己的消息位置。零 delivery 的当前 Run 在 live 有界 review 落定或历史水合后可展示自己的真实 delivered 视频，迟到 delivery 接管后不留双卡；已有 delivery 缺 refs 仍为空。pending/answered QA echo 保留自己的 refs，历史不由 live-only suggestions 推导 reviewing。初始慢历史按真实 server id alias 合并，保留本地 birth key 与 typing。`LegacyRunOutputs`、通用 Run 级 Output Reveal、`showOutputs` / `anchorOutputs` 和旧无 `output_refs` 消息归属回退不恢复。上述上下半批改动已通过当前完整 API 1447 pytest、Web 352 tests、Web tsc；真实记录回放与浏览器旅程仍需用户验收。
 
 ### 范围
 
@@ -216,10 +216,10 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 | 工作段开合与收段 | 被点击行及最终回答的视口位置稳定；向上阅读不被吸底，活动 Turn 收缩不弹跳，历史无空白 |
 | 分镜首稿与后续修订 | 完整呈现与 ACK 先于授权制作； pending/accepted/rejected 刷新一致；普通修订不伪造 Output |
 | 后台制作 | 内部阶段真实、跨回合身份稳定、一个 Run 一个面、交付首显才收段 |
-| Run 中停止与多次交付 | 块归属和锚点正确，每次 delivery 只展示自己的视频 refs；同 Run retry_upload 重订阅并恢复 Send=Stop，旧 attempt 事件不污染新 attempt，旧 delivery 不 seal 新 attempt；查看器 exact output 不串项，非视频不进 Chat 卡片/查看器/`@output` |
+| Run 中停止与多次交付 | 块归属和锚点正确，每次 delivery 只展示自己的视频 refs；独立 retry_upload 在当前 Chat 工作段显示上传活动，不重开原 Run；历史恢复事件的旧 attempt 不污染当前读取；查看器 exact output 不串项，非视频不进 Chat 卡片/查看器/`@output` |
 | Chat Stop 可见边界 | 仅 Thinking、已入库但未显示 interim/partial 均 retracted 且刷新无复活；部分已释放正文只保留 Unicode 前缀与可见事实，未显示尾部不补播；draft/mentions/既有附件 chips 正确恢复 |
 | Stop 竞态与 successor | Stop 后迟到 interim/partial/Activity/final commit 被拒；Stop 赢 final commit 时无新 Run/hold/capture；旧 SSE 不污染 successor，OPTIONS answer 不缩成普通 prompt |
-| 失败/停止/重试/恢复 | 无虚假完成与未接受组件；同 Run 第一次失败 delivery 后 retry_upload 恢复 active，第二次成功 delivery 正常入流，旧 attempt 不覆盖新尝试；费用与授权语义不变 |
+| 失败/停止/重试/恢复 | 无虚假完成与未接受组件；制作失败后 retry_upload 只重传成片，原失败收据不改写，成功 refs 跟随当前回复；停止上传清理自身 claim，不覆盖 successor claim；费用与授权语义不变 |
 | 零 delivery 视频 | live terminal 不提前出卡，有界 review 落定后只展示真实 delivered 视频；cancelled/partial/trigger 永久静默分支可读，历史不重新 reviewing，迟到 delivery 接管且无双卡或空卡 |
 | 历史与旧数据 | seq 不乱、旧行读容忍、无动画重播、无相邻位置猜关系；pending/answered QA refs 保留，初始慢历史与普通发送只留一条 user/assistant 且 birth key 不变 |
 | OPTIONS QA 作答 | 确定性选项作答只显示上方 Q/A 卡，不显示重复用户气泡；真实用户行仍承担 Turn，直接 answer、freeform、普通消息与刷新行为均正确 |
@@ -227,8 +227,8 @@ ChatDock（外壳 / 当前回合与恢复状态编排 / composer 承重结构）
 
 ## 7. 验证纪律与不做清单
 
-- 每阶段先跑改动面的纯测试与 tsc；涉及 API 时跑对应 pytest 与 `check_gates`。最终按改动面执行部署前仪式链；上半批已触及 `app/prompts/chat/_read_tools.j2` 的称谓，部署前仍按既有要求核验 `prompt_gate`。**下半批未触及 prompt 面，不需要新增 prompt_gate 探针或阈值调整。**
-- 真实浏览器验收使用正常 Chat 与持久数据，不用组件故事、静态截图或客户端计时器冒充执行事实。测试归属遵循 ADR-114：保留主流程旅程与承重防漂移守卫，不新立文件形状锁。
+- 每阶段先跑改动面的 Web 测试与 tsc；涉及 API 时运行 `test/core`，涉及真实对话行为时运行当前 `JOURNEYS` 的相关旅程。prompt 改动也由相关真实旅程验收，不另立探针或阈值。
+- 真实浏览器验收使用正常 Chat 与持久数据，不用组件故事、静态截图或客户端计时器冒充执行事实。测试归属遵循 ADR-114：保留真实主流程旅程与核心 API/DB 合同，不新立文件形状锁。
 - 禁直接安装/替换整套参考 Chat 或滚动库；禁复制参考项目的 reasoning 展示、模型货架、通用版本树、Sources rail 或与当前需求无关的 chrome。
 - 禁为视口稳定新增固定延时、自动展开动画、第二 scrollport 或通用 UI 事件总线；禁为消除状态重复而隐藏真实 review、失败或交付事实。
 - 禁把“渐进揭示”做成虚假数据生成；禁让所有组件共用一个巨型状态枚举吞并 QA、授权、Run 和打字机的正交状态。

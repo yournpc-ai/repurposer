@@ -37,8 +37,9 @@ mention = 用户与 AI 交流时对**实体**的点名机制。它服务两类�
 - **输入组件唯一**：一切文本输入面挂同一个 `MentionEditor`（Home composer / ChatDock 两形态）；跨形态不得 remount 丢草稿。候选源差异走 `MentionContext`，禁每面各起 textarea / 自养 picker。产物指认 = @output；旧 `focus_output` 只读历史，不恢复写入。
 - **chip 三律**：可见（内联 chip，无 ×）/ 发送即消费 / 文本删除即纯化（Backspace / Delete / 选区删除，无状态跨发送残留）。
 - **服务端解析唯一发生地**：mention 的机械效果（上下文富化、指认注入）只在服务端发生；前端永不构建 prior。
-- **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。`@output` 候选行以右侧 `vN` 标示真实内容版本，插入 chip 使用「名称 vN」；当前项目与跨项目候选一致。名称只用于显示与筛选，修订目标始终由 pinned `output_id` 解算。
+- **大白话显示名**：picker 与 chip 显示用户语言（"配音"），永不出现节点 kind / 模型名 / 技术黑话。`@output` 候选行以右侧 `vN` 标示真实内容版本，插入 chip 使用「名称 vN」；项目内 picker 只展示当前项目的素材与产物，账号级 references 数据链保留给后续跨项目入口，未开放前不得混入当前列表。名称只用于显示与筛选，修订目标始终由 pinned `output_id` 解算。
 - **段落级指认（ADR-069——`quote` 是 output mention 的字段，不是新类型）**：文本产物卡（post/article）上划选段落 → 「引用这段」pill → dock 落**带引文的 @output chip**（序列化 = `@label "quote"`，chip 内联渲染截断引文；出生截断 200 字，上下文注入截断 500 字）。语义 = **引文即修订范围**（prompt 规则钉死：agent 修订那一段，永不盲目重写全文）。§3 闸门关系：quote 不是新 mention 类型——它是 output 指认的粒度细化，类型表不动。transcript 文档卡不开此口（其选区 = 未来剪辑 primitive）。
+- **画面局部选择（`region` 是 output mention 的字段，不是新类型）**：Output 查看器的「局部选择」暂停当前帧，框选时以 mask 暗化选区外画面、显示选区框/角点与实时源像素尺寸；选择事实同时保存源视频像素尺寸与整数区域、0～1 归一化区域、框选时 CSS 像素区域和毫秒级 `mediaTimeMs`，坐标空间明示为 `source_pixels`。「引用选区」在 dock 形成带时间与宽高的 @output chip；本次消息正文包含用户框选的 x/y/宽/高/源尺寸/媒体时间，结构化 `region` 随 `mentions` 持久化并由服务端上下文确定性注入。region 只寄存在对应 chip，文本删除 chip 即同步删除正文摘要与全部结构化选区记录；替换为同 Output 的整片引用也移除旧 region。「引用此素材」始终钉整个 Output，不暗用局部选区。region 是用户指认事实，不是像素编辑能力证明；工具不支持局部修改时必须诚实说明，手势永不直接改产物。
 
 ## 5. @tool 方针（PLANNED，未实施）
 

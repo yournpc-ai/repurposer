@@ -68,49 +68,15 @@ class PerceptionTool:
     # nature, e.g. web search). A NEW fetch-capable tool without a seat
     # declaration is the repeat-fetch bug class reborn — declare one.
     seat: str | None = None
-    # The deployment-gate hook (same law as ChatTool.wire_view): rewrites
-    # the (description, parameters) pair at spec time so a gated capability
-    # slice (e.g. the film read's images, keyed to film_edits_enabled)
-    # never reaches the wire while the gate is off.
     wire_view: Any = None  # Callable[[str, dict], tuple[str, dict]] | None
     # ADR-109: interim_prose 资格已通用化——任何非终态调用前的散文都走
     # interim_prose 座位（app/agents/tool_loop.py），注册表不再携带资格字段。
 
 
-def _output_spec_wire_view(description: str, parameters: dict) -> tuple[str, dict]:
-    """The film read's image slice rides the edit capability gate
-    (settings.film_edits_enabled): gate OFF = the base description and a
-    schema without ``views`` — the model is never told about an image
-    channel the observation would not attach. The read's execute side
-    simply never attaches images while gated (declaration and observation
-    gate together)."""
-    from app.config import settings  # deferred: config leaf
-
-    if settings.film_edits_enabled:
-        return description, parameters
-    from app.agents.tool_loop import prune_wire_parameters
-
-    return _OUTPUT_SPEC_DESCRIPTION, prune_wire_parameters(parameters, {"views"})
-
-
 _OUTPUT_SPEC_DESCRIPTION = (
-    "Read one output's current state (caption style, music, "
-    "aspect, the text body; a film output reads back its "
-    "storyboard version and per-scene ids) — "
-    "ALWAYS before a relative edit "
-    "('smaller', 'quieter', 'like before'): compose the change "
-    "from the current settings, never invent them. Omit the output "
-    "id to read the film's CURRENT storyboard version (the live "
-    "draft when one stands, else the latest delivered film) — the "
-    "re-read seat before continuing a targeted edit in a later turn."
-)
-_OUTPUT_SPEC_IMAGES_SENTENCE = (
-    " A film read also attaches the site's captured view screenshots "
-    "(the MATERIAL's views, never frames of the rendered film) and lists "
-    "the candidate views an update_scene edit may name — the response "
-    "carries up to 12 thumbnails with their camera-target inventories "
-    "(the element ids a focus may name), or name views (page/shot pairs) "
-    "for a specific set; one named view reads back in high resolution."
+    "Read one output's current state (caption style, music, aspect, the text "
+    "body) — ALWAYS before a relative edit ('smaller', 'quieter', 'like "
+    "before'): compose the change from the current settings, never invent them."
 )
 
 
@@ -119,11 +85,10 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
     for entry in [
         PerceptionTool(
             name="get_output_spec",
-            description=_OUTPUT_SPEC_DESCRIPTION + _OUTPUT_SPEC_IMAGES_SENTENCE,
+            description=_OUTPUT_SPEC_DESCRIPTION,
             params_model=GetOutputSpecParams,
             execute=executes.get_output_spec,
             activity_key="chat.inspecting.outputSpec",
-            wire_view=_output_spec_wire_view,
         ),
         PerceptionTool(
             name="get_node",
@@ -165,8 +130,11 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_music",
             description=(
-                "Search the music library by mood/keyword (empty = the full "
-                "catalog) — before recommending or proposing a music bed."
+                "Look up Music library ids by mood/keyword (empty = the full "
+                "catalog) for direct application of a named track/mood or a "
+                "restrained default music bed. This metadata read has no "
+                "playback cards or listening evidence; hear/compare requests "
+                "use show_music_candidates."
             ),
             params_model=SearchMusicParams,
             execute=executes.search_music,
@@ -319,7 +287,10 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
                 "camera/animation ids) — ALWAYS re-read through this before "
                 "a revise_video patch, and never guess a work: name the "
                 "composition_id (its CURRENT version) or an exact "
-                "version_id from a storyboard card or a previous read."
+                "version_id from a storyboard card or a previous read. "
+                "present=true re-shows the canonical card; with an explicit "
+                "bounded scrub target it shows only that local Scene/Clip "
+                "window or isolated Object, never the complete video."
             ),
             params_model=GetVideoVersionParams,
             execute=executes.get_video_version,
@@ -354,6 +325,7 @@ def perception_chat_tools(*names: str) -> list[ChatTool]:
                 description=entry.description,
                 params_model=entry.params_model,
                 terminal=False,
+                batchable=True,
                 wire_view=entry.wire_view,
             )
         )
@@ -381,11 +353,23 @@ async def run_perception_tool(
         text, ok = await executes.understanding_observation(db, project)
         return ToolObservation(text, ok=ok)
     if name == "get_output_spec":
-        # The film read's attached view screenshots ride the observation
-        # (R3 读取座) — the loop's wire seat projects them as content parts.
         text, images = await executes.output_spec_observation(db, project, params)
         return ToolObservation(text, images=tuple(images))
-    return ToolObservation(text=await entry.execute(db, project, params))
+    text = await entry.execute(db, project, params)
+    if isinstance(text, ToolObservation):
+        return text
+    if name == "get_web_page" and isinstance(params, GetWebPageParams):
+        from app.tools.world import page_reading_for_url
+        from app.tools.project_context import page_context_key
+        # A best-effort store write may have failed. In that case the result
+        # remains turn-local and must not be folded into an absent resource.
+        page = await page_reading_for_url(db, project.id, params.url)
+        body = text.partition("\n\n")[2]
+        if page is not None and page.text and page.text == body:
+            return ToolObservation(text=text, context_lifetime="project", context_keys=(
+                page_context_key(project.id, page.url, page.text),
+            ))
+    return ToolObservation(text=text)
 
 
 __all__ = [

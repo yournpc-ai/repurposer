@@ -17,6 +17,7 @@ import {
   type MentionContext,
 } from "@/lib/mentions"
 import i18n from "@/lib/i18n"
+import { formatMediaTimeMs, type MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { cn } from "@/lib/utils"
 import { MentionPicker } from "@/components/mentions/MentionPicker"
 import {
@@ -24,7 +25,11 @@ import {
   skillChipLabel,
 } from "@/components/composer/SkillChip"
 import { SkillPicker } from "@/components/composer/SkillPicker"
-import { skillTriggerQuery, type SkillOption } from "@/lib/skills"
+import {
+  skillDisplayName,
+  skillTriggerQuery,
+  type SkillOption,
+} from "@/lib/skills"
 
 /**
  * 提及编辑器 (MentionEditor) — the full-form mention input (docs/tasks/
@@ -102,6 +107,15 @@ function normalizeEmpty(el: HTMLElement) {
   }
 }
 
+function readMentionRegion(raw: string | undefined): MediaRegionSelection | undefined {
+  if (!raw) return undefined
+  try {
+    return JSON.parse(raw) as MediaRegionSelection
+  } catch {
+    return undefined
+  }
+}
+
 /** Serialize the editable DOM into prompt text: text nodes verbatim, chips
  * as `@label` (a quoted chip — 选区引用 — carries its pinned passage inline
  * as `@label "passage"`, so the sentence and the history both keep what the
@@ -113,7 +127,17 @@ function serializeNode(node: Node): string {
   if (node.dataset.mentionType) {
     const base = `@${node.dataset.mentionLabel ?? ""}`
     const quote = node.dataset.mentionQuote
-    return quote ? `${base} "${quote}"` : base
+    const region = readMentionRegion(node.dataset.mentionRegion)
+    const regionText = region ? ` ${i18n.t("mentions.regionText", {
+      x: region.sourceRect.x,
+      y: region.sourceRect.y,
+      width: region.sourceRect.width,
+      height: region.sourceRect.height,
+      sourceWidth: region.sourceSize.width,
+      sourceHeight: region.sourceSize.height,
+      time: formatMediaTimeMs(region.mediaTimeMs),
+    })}` : ""
+    return `${base}${quote ? ` "${quote}"` : ""}${regionText}`
   }
   if (node.tagName === "BR") return "\n"
   const inner = Array.from(node.childNodes).map(serializeNode).join("")
@@ -160,14 +184,18 @@ export function MentionEditor({
       .replace(/^\n/, "") // leading block boundary is not a real newline
     const mentions: ChatMention[] = Array.from(
       el.querySelectorAll<HTMLElement>(`[${MENTION_ATTR}]`),
-    ).map((node) => ({
-      type: node.dataset.mentionType as ChatMention["type"],
-      id: node.dataset.mentionId ?? "",
-      label: node.dataset.mentionLabel ?? "",
-      // The pinned passage round-trips through the DOM (选区引用 — a rollback
-      // re-insert keeps it; absent = the whole entity is the referent).
-      ...(node.dataset.mentionQuote ? { quote: node.dataset.mentionQuote } : {}),
-    }))
+    ).map((node) => {
+      const region = readMentionRegion(node.dataset.mentionRegion)
+      return {
+        type: node.dataset.mentionType as ChatMention["type"],
+        id: node.dataset.mentionId ?? "",
+        label: node.dataset.mentionLabel ?? "",
+        // Quote and region live only on their chip: deleting the chip removes
+        // the serialized text and every structured field in the same sync.
+        ...(node.dataset.mentionQuote ? { quote: node.dataset.mentionQuote } : {}),
+        ...(region ? { region } : {}),
+      }
+    })
     onChange(text, mentions)
     if (selectedSkill && !el.querySelector(`[${SKILL_ATTR}]`)) {
       onSkillChange?.(null)
@@ -185,6 +213,7 @@ export function MentionEditor({
       chip.dataset.mentionId = mention.id
       chip.dataset.mentionLabel = mention.label
       if (mention.quote) chip.dataset.mentionQuote = mention.quote
+      if (mention.region) chip.dataset.mentionRegion = JSON.stringify(mention.region)
       chip.className =
         "mx-0.5 inline-flex items-baseline gap-0.5 rounded-md bg-muted px-1 text-foreground"
 
@@ -201,6 +230,16 @@ export function MentionEditor({
         quote.textContent = `“${snippet.length > 24 ? `${snippet.slice(0, 24)}…` : snippet}”`
         quote.className = "text-muted-foreground"
         chip.appendChild(quote)
+      }
+      if (mention.region) {
+        const region = document.createElement("span")
+        region.textContent = i18n.t("mentions.regionChip", {
+          time: formatMediaTimeMs(mention.region.mediaTimeMs),
+          width: mention.region.sourceRect.width,
+          height: mention.region.sourceRect.height,
+        })
+        region.className = "text-muted-foreground"
+        chip.appendChild(region)
       }
 
       return chip
@@ -253,7 +292,11 @@ export function MentionEditor({
       chip.className = SKILL_CHIP_CLASS_NAME
 
       const label = document.createElement("span")
-      label.textContent = skillChipLabel(option, i18n.t("skills.external"))
+      label.textContent = skillChipLabel(
+        option,
+        i18n.t("skills.external"),
+        skillDisplayName(option, i18n.t),
+      )
       label.className = "max-w-56 truncate"
       chip.appendChild(label)
       return chip

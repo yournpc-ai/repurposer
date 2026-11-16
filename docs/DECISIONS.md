@@ -8,7 +8,7 @@
 - 只有架构边界、产品语义或关键取舍发生真实变化时才新增独立编号；稳定编号不随意重排。
 - 被取代的规则不作为现行法并列保留；失效叙述直接删除，不保存归档或专题历史副本。仍被引用的编号在下表保留替代去向。
 - 实施状态与未验证项归 `PROGRESS.md` / 局部 progress；ADR 的 Decided 不等于已实现或已验收。
-- 视频施工以 ADR-145 与 VIDEO_PROJECT 为准；旧 FilmStoryboard/pending 信封/固定骨架/legacy 指纹的具体实现条款不再构成兼容义务，仍有效的创作/授权/视听语义归 VIDEO_PROJECT §15，共享守卫与剩余验收归 VERIFICATION。旧编号不用于恢复已退役任务或实现锁。
+- 视频施工以 ADR-145/146 与 VIDEO_PROJECT 为准；旧 FilmStoryboard/pending 信封/固定骨架/legacy 指纹的具体实现条款不再构成兼容义务，仍有效的创作/授权/视听语义归 VIDEO_PROJECT §15，共享守卫与剩余验收归 VERIFICATION。旧编号不用于恢复已退役任务或实现锁。
 
 ## 主题索引
 
@@ -20,7 +20,7 @@
 | UI、画布、工作区与卡面 | 035–038、041–042、046、048、051、056–058、061–063、067–076、082、098、111–115、118、122、143 | `UI_GUIDELINES.md` / `CHAT_ARCHITECTURE.md` |
 | 身份、定位与国际化 | 013、037–038、042 | `POSITIONING.md` / `PRD.md` |
 | 渲染、clip-spec、媒体与音乐 | 016、018、020、023–024、044–045、096、113、115、130、136、140、145 | `RENDERING.md` / `MUSIC_ARCHITECTURE.md`；视频目标归 `VIDEO_PROJECT.md` |
-| Film/MG | 119、121、123、127、129–132、134–145 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
+| Film/MG | 119、121、123、127、129–132、134–148 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
 | 测试与验证治理 | 114 | `VERIFICATION.md` / `PROGRESS.md` |
 
 ## 退役编号与别名解析
@@ -631,7 +631,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 7. **actor 概念不采用**：工具包与节点声明已经回答“谁执行”，不新增第三套执行者身份。
 
 **Consequences**:
-- 架构改动必须保持 compile_graph、chat 判决/dock、run 与渲染的现行契约；回归使用当前 `SCENARIOS` 注册表与 harness 公共断言，数量不在本 ADR 冻结。
+- 架构改动必须保持 compile_graph、chat 判决/dock、run 与渲染的现行契约；回归使用当前 `JOURNEYS` 注册表与其公共用户可见断言，数量不在本 ADR 冻结。
 - **DX 目标**：加工具 = 加一个工具包并登记；加 agent = 加一条声明；加产物 = 同时注册工具与产物事实。节点友好名由 `NodeBase.label` 派生，不另起平行表。
 - **词汇**：NAMING N-29~N-35 与 N-42；排期以 PROGRESS 为准。
 - **Agent 语义边界**：声明式结构化调用不等于开放式 autonomy。pipeline 是 orchestrator-workers；chat 边缘是 routing + 有界工具 loop；生产层有界 loop 节点是另一座受控形态。产品对用户仍是一个 assistant。
@@ -1188,16 +1188,16 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Decision**:
 
-1. **结构律**：chat 两个 system prompt 住 `app/prompts/chat/*_system.j2`（与全站 agent prompt 同一 jinja_env 基建；`*_system` 后缀区分 `app/prompts/` 根下同名的 user-turn 模板），真·双消费共享段 = `_*.j2` partial 单一定义两处 `{% include %}`——**五件**：speech_language / translate_target / naming / asking_strategy（提问三律，router 嵌套列表形为正典）/ writers_no_material（router 全块为正典 + `{% if chat_loop %}` 相位分支承载 chat loop 的 existing-project 尾巴）；动态目录行（tool / op / wiring lines）作 render 变量注入；`prompts.py` 降级为薄装配包装（函数签名不变，零调用点改动）。机械迁移必须 byte-identical——`scratch/prompt_split_diff.py` 渲染对比脚本卡死（before = 拆分前快照）；后续每次编辑性改动同律——router 侧渲染 byte-diff 卡死，chat_intent 侧 unified diff 审 delta。mention 规则与 key order 不抽：前者从来不是双胞胎（旧 router prompt 无 mention 块，查快照实证），后者两相位字段名不同（answer vs summary/text），是合理分叉。
+1. **结构律**：chat 两个 system prompt 住 `app/prompts/chat/*_system.j2`（与全站 agent prompt 同一 jinja_env 基建；`*_system` 后缀区分 `app/prompts/` 根下同名的 user-turn 模板），真·双消费共享段 = `_*.j2` partial 单一定义两处 `{% include %}`——**五件**：speech_language / translate_target / naming / asking_strategy（提问三律，router 嵌套列表形为正典）/ writers_no_material（router 全块为正典 + `{% if chat_loop %}` 相位分支承载 chat loop 的 existing-project 尾巴）；动态目录行（tool / op / wiring lines）作 render 变量注入；`prompts.py` 降级为薄装配包装（函数签名不变，零调用点改动）。机械迁移必须 byte-identical——`apps/api/scripts/prompt_split_diff.py` 渲染对比脚本卡死（before = 同目录拆分前快照）；后续每次编辑性改动同律——router 侧渲染 byte-diff 卡死，chat_intent 侧 unified diff 审 delta。mention 规则与 key order 不抽：前者从来不是双胞胎（旧 router prompt 无 mention 块，查快照实证），后者两相位字段名不同（answer vs summary/text），是合理分叉。
 2. **零硬编码默认链**：链的形状永不写死在 prompt——"Default chain when the request is vague" 规则**整条删除**（先改为「从上下文判断」的灵活版，探针实测后对 vague 引导做减法到底：模型有工具目录的 when-to-use 描述与上下文，vague 请求的判断不需要专条）；`tasks_explicit` 语义不变（false = 默认提案的来源簿记）。
 3. **考古不出 token 律**：日期 / ADR 编号 / 历史注永不进模型可见文本——出处住模板头 `{# #}` 注释与本文档；模型只见规则的当前态。**例外判例**：看似考古的行可能有**语义承重**——「lift applies ONLY to the ask-back refusal」限定弹是承重限定不是考古：剥考古括注、留限定本体（模板保留此弹 + "The two rules cooperate: lift the gating, keep the grounding."）。
 4. **规则减负**（探针 A/B 双闸后执行）：死字段 `confidence` 不进 prompt（零消费方；schema 字段留作读容忍）；风格脚手架三禁令 + never-reuse 并入 FREE PHRASING 一条（保留 banned literal 作例）；目标语言 worked examples 两条（同源护栏本体保留）；参数骑行四规则并一；NO-MATERIAL CASE 两行；answer/draft 例表每类 ≤3，start 例表 6 条全量保留（中文例防语言锚定）；EXCEPTION 1/2 并入 Disclosure 段；无 vague 默认链（判词②）。**承重保留**：碎键不起跑 / never invent platform（ADR-060）/ subtitles vs dubbing / whole-source vs highlights（ADR-043）/ presented chain 保全 / 提问三律 / 出书门槛 / key order（打字机律牙）/ pending-question 段 / **no-material 块的块结构（标题 + 子弹组）与 lift 限定弹**（判词③例外）/ echo 块近逐字旧构（ADR-070 换面中性 Start 句、Disclosure 命名）。
 5. **双 wire 共享一套语义契约**：native `tool_calls` 为主，工具参数 schema 与描述随原生调用面提供给模型；action-JSON 回退由 prompt 散文描述信封与参数形状。两条路径都在服务端经 Pydantic、注册表和工具白名单校验，prompt/schema/枚举必须对账；不得宣称「schema 从不发送给模型」或把 `response_format=json_object` 当成唯一当前路径。provider 是否遵守 `json_schema`、native tools 或其他方言由实际能力声明与探针证明，方言消化归 client。散文字段的 null / 缺省读容忍与 settled-prose 打字机释放在两条路径都成立。chat_intent shape C 骨架带 `default_path`——两相位共用的 skip 路径牙（dock × 与插话提醒消费），只有 `slot` 是 chat loop 留 null。
-6. **prompt 减肥必须过探针闸，且探针必须轮转（双重流程律）**：① **任何 prompt delta 靠探针实测，不靠文本推理**——探针闸 = `scripts/prompt_gate.py`（对 native-tool providers 的有界工具 loop 线，绝对阈值，`--provider` 参数化）：**上下文必须复刻剧本真人设状态**（`persona_exists: False`——带人设的探针会给出假绿）。② **探针调用必须 round-robin 交错，禁按变体顺序连跑**——provider 状态以分钟尺度漂移，顺序批把「变体」与「时间」混杂。③ **冗余与限定不是脂肪，小型 open 模型的指令遵循靠它们承重**——承重件 = no-material 块结构 + lift 限定弹 + start 例表 + echo 块结构，减肥不得动它们。
+6. **prompt 减肥必须经真实用户旅程实测，对照采样必须轮转**：① 任何 prompt delta 靠当前 `JOURNEYS` 的真实行为验收，不靠文本推理，上下文必须复刻对应旅程的用户与人设状态。② 需要比较 prompt/provider 变体时采用 round-robin 交错，禁按变体顺序连跑，避免把 provider 时间漂移误判为改动效果。③ **冗余与限定不是脂肪，小型 open 模型的指令遵循靠它们承重**——承重件 = no-material 块结构 + lift 限定弹 + start 例表 + echo 块结构，减肥不得动它们。
 7. **混合形状代码侧顺形**：`draft + tasks=[] + ask 对象在场` 归一为 ask 判决；`draft + tasks=[] + 无 ask + answer 在场` 归一为 answer 判决，播出的散文即最终内容。空链永不可 dock，valid ask 不得因空链校验被降级成拒答。任何 ask 判决在仍有待决计划行（`kind=task_book`）或普通问题时采用插话形态：ask 散文落普通回答，待决行保持敞开；不得 supersede 计划行而让 `project.pending_brief` 与确认生命周期失去对应。**`_constraint_key` 数字归 `#`**：同键重申恒胜——"under 200 words" 与 "under 100 words" 数字归一后同键、逐项 precedence 原位替换，不攒自相矛盾的双条目。
 8. **被跳过槽位的推断值不算根**：计划呈现门槛 `has_root`——topic 槽已在 asked 簿（用户 × 跳过 = 已选默认路径）时，只有 user-stated 的 topic 才算根；模型推断的 topic 不再把书重新有根化、绕过 draft_from_persona 的代码宣言（reason + code echo 双缺席 = 失败形态）。素材在场仍经 material_state 成根（infer-from-material 路径不受影响）；用户后补原话永远算根。
 
-**Consequences**: prompt 面改动的验收三阶段——byte-identical（机械拆分）→ 渲染级 unified diff（减负 delta 可审）→ 轮转探针实测 + 剧本矩阵。部署前仪式链：纯函数 pytest → check_gates → prompt gate（`scripts/prompt_gate.py`，10 探针绝对阈值；判负先复跑一次再二分归因，永不调阈值迁就回归）→ 当前 `SCENARIOS` 剧本矩阵。工具名枚举的漂移报警 = `ToolEntry.needs_media_file` 旗标（零行为元数据，人工标定）+ `tests/test_prompt_registry_consistency_pure.py`（media-needing / writers 两枚举与注册表对账 + 全模板枚举名注册校验）——MEDIA∪TRANSCRIPT 派生轴会误纳 align_stills（requires=(TRANSCRIPT,) 却为无录音场景而生），故旗标人工标定、测试对账而非自动派生。slot 握手与 start 判决的残留 flake = 模型侧既有方差，非 prompt 杠杆可解；模型把 brief 写成无槽名来源化条目数组的形状天然有损（无槽名无法映射 topic/audience），代码侧顺形无路，挂账为模型侧课题。
+**Consequences**: prompt 面改动的验收 = byte-identical（机械拆分）→ 渲染级 unified diff（减负 delta 可审）→ 当前 `JOURNEYS` 真实用户旅程。部署按改动运行 `test/core`、相关真实旅程和 Web 检查；失败先复跑与归因，永不调断言迁就回归。工具名枚举的漂移风险由 `ToolEntry.needs_media_file` 旗标（零行为元数据，人工标定）、注册表审查和真实旅程工具调用共同核对——MEDIA∪TRANSCRIPT 派生轴会误纳 align_stills（requires=(TRANSCRIPT,) 却为无录音场景而生），故旗标人工标定而非自动派生。slot 握手与 start 判决的残留 flake = 模型侧既有方差，非 prompt 杠杆可解；模型把 brief 写成无槽名来源化条目数组的形状天然有损，代码侧顺形无路，挂账为模型侧课题。
 
 **Related**: ADR-052（提问三律 / 出书门槛——内容不变）、ADR-054（密度律）、ADR-058 / ADR-060（命名与防编造——保留）、ADR-064（顺形律——brief 形状指导保留）、ADR-070
 
@@ -1339,7 +1339,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **边界**：本 ADR 只规定执行身份与 fenced 零副作用，不定义 ExecutionAttempt / attempt 语义迁移、poison-pill 上限、hold GC、select_clips 语义收窄、worker registry、pause-cancel、chat 墙钟、统一 Policy 层或 AgentBudget；这些能力各有当前合同，不能以本 ADR 为根据扩 scope。fencing 不限制健康并发（双活 worker 各 claim 不同节点 = 合法；startup-reap 竞态造成的重复执行被 fencing 正确丢弃——浪费的是资源，不是正确性）。
 
-**Consequences**: 双扣路径封死（fenced 永不 capture）= 收费的诚实前提；render morph 窗口腐蚀封死（zombie 先完成 0 命中，产物永不回退旧 spec）；run 复活链封死。Known residue（登记挂账）：fenced 执行途中已直传对象存储的媒体对象成孤儿（DB 世界干净、存储世界留垃圾，归后续存储 GC 小批，与 render superseded 删 key 先例对齐）；fenced zombie Suspend 的孤儿问题消息（永不过期，窗口极小，后续小批清理）。锁序影响：fencing 写把 step 行锁提前到尾段写时刻（原来在 commit flush），但锁窗口内只剩 capture/sync 的短 DB 操作（无 LLM 等待），D9 族形态不复发。验收 = 纯函数套件（token 捕获决策 + rowcount=0 零副作用，`tests/test_execution_fencing_pure.py`）+ 手工竞态演练（A claim→停滞→reap→B claim→B 完成→A 醒：A 终态写 0 命中、无第二条 capture、run 行保持 B 判决；render 同型；zombie Suspend 不复活 run）+ 单 worker happy path / retry / QualityBounce 回归。
+**Consequences**: 双扣路径封死（fenced 永不 capture）= 收费的诚实前提；render morph 窗口腐蚀封死（zombie 先完成 0 命中，产物永不回退旧 spec）；run 复活链封死。Known residue（登记挂账）：fenced 执行途中已直传对象存储的媒体对象成孤儿（DB 世界干净、存储世界留垃圾，归后续存储 GC 小批，与 render superseded 删 key 先例对齐）；fenced zombie Suspend 的孤儿问题消息（永不过期，窗口极小，后续小批清理）。锁序影响：fencing 写把 step 行锁提前到尾段写时刻（原来在 commit flush），但锁窗口内只剩 capture/sync 的短 DB 操作（无 LLM 等待），D9 族形态不复发。验收 = 纯函数套件（token 捕获决策 + rowcount=0 零副作用，`test/core/test_execution_fencing.py`）+ 手工竞态演练（A claim→停滞→reap→B claim→B 完成→A 醒：A 终态写 0 命中、无第二条 capture、run 行保持 B 判决；render 同型；zombie Suspend 不复活 run）+ 单 worker happy path / retry / QualityBounce 回归。
 
 **Related**: ADR-017（reap 语义 fencing-aware）/ ADR-030（render 认领谓词加身份维度——规则 2 的认领先例扩一列）/ ADR-050（guarded-write 纪律 = 身份守卫——会话纪律不变）/ ADR-055（billing——`_mutate` 双层 dedupe 永不破坏，fenced 永不进 capture_step 是 execution kernel owns billing boundary 的具体含义）/ North Star §8（Execution Kernel）
 
@@ -1450,7 +1450,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 **Consequences**: 布局算法的输入从「出生时刻的拓扑快照」改为「当前 Product DAG 的 rank」——帧错位五源（L1-L5）的视觉症状结构性消除；执行序与呈现解耦后，「帧错 → 执行错」的污染链断掉；Product Canvas 的边界从约定升级为带准入闸的 invariant。空帧处置细则：出生地保证每行必带合法帧；前端静默原点兜底删除——dev 显式失败 / prod graceful fallback（fallback = rank 投影，不是原点）。
 
-**落地座位**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，RunOp 接入）；canonical fixture = `apps/api/tests/test_product_graph_pure.py`。legacy `materialize` 行的读面可见性与谓词不一致 = 已知残留；生产 DB 清零证据与删除条件归 `docs/VERIFICATION.md` §4 和 `docs/VERIFICATION.md` §0，未满足前保留兼容。
+**落地座位**：契约模块 = `app/pipeline/product_graph.py`（pure）——判词 1 的准入闸落地为 type 层 membership 谓词（媒介五值可见 / `HIDDEN_ROLES` / `LEVER_TOOLS` 两显式枚举 / 未知 type default-deny，等效机制）；判词 2 的 rank = `product_ranks`（longest-path，rank 边集 = `{video, audio, text}`，ctx 引用流排除）；判词 3 的消费点 = `topological_order`（与 rank 同一事实源，RunOp 接入）。legacy `materialize` 行的读面可见性与谓词不一致 = 已知残留；生产 DB 清零证据与删除条件归 `docs/VERIFICATION.md` §4 和 `docs/VERIFICATION.md` §0，未满足前保留兼容。
 
 **Related**: ADR-036（布局自算 + append-only）/ ADR-057（图即产品对象——判词① 的母体；K5 维持）/ ADR-062（边对账律——对账不再依赖帧一致性）/ ADR-067（出锚语义律——「呈现忠于语义」同族）/ ADR-082（呈现/语义隔离铁律 + 呈现层修法先例）
 
@@ -1622,7 +1622,7 @@ Lifecycle Projection       Execution Runtime
 - **Activity Projection 座位**：`agents/tool_loop.py` typed `LoopEvent`（内核只说发生了什么）+ `chat/activity.py` 纯投影器（kind 用户语义四值，MODULE_ARCH §7.1）+ `assistant.activity` SSE 帧 + dock `ActivityStream` 组件；相位帧保留（并行渲染），打字机律不破。
 - **Presentation Contract 归位**：Confirm/Start 唯 dock pill（无 Canvas Confirmation Seat）；`lib/lifecycleStamp.ts` 三态谓词（stamp missing = unknown ≠ ready，无 fallback-to-true）；confirm/running 两腿由戳派生（`confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached`，无 phase 状态机）；System Status 相位面 = 基座 Thinking… + 分镜跨度三相位 + 显式清除帧（ADR-133：通用 LLM 黑盒窗不设别名），永不建相位帧 → lifecycle readiness 正向锁；**「lifecycle 键恒在」不变量**（graph 响应零节点也补戳）；**run 活性/存在是 transport 事实，非 lifecycle 推导**（合法读者在册：ChatDock `runAttached` / `projects.$id.index` `hasRuns` / `runActive`——禁补戳读者）；`render_superseded` 入 `USER_ERROR_LINES`；ChatDock normalize* 族住 `chatProtocol.ts`；无 `_DOCUMENT_CONFIRM_PX` 几何债。
 - **Confirmation Doctrine 统一实现座位**：deterministic scope classifier（零 op 词汇纯核 + 装配器）按 resulting paid scope 裁决 continuation / expansion / unproven，绝不按 operation 名称猜测；unproven 失败闭，`/generate` 在余额检查前返回机器可读 `scope.unproven`。呈现与授权按 ADR-117/139 分流：auto 只在制作意图、呈现与全部守卫成立时免批准拍，ask 与守卫线走确认；Start 服务端 `evaluate_start_gate` 是唯一强制点，dock pill 与口头/typed answer 共用同一机器。
-- **依赖方向座位（四族合法缝，§6 唯一通道）**：① trigger fires（run_completed / run_failed / craft_decompiled）→ `pipeline/trigger_events.py` 白名单事件缝（白名单冻结，扩名单 = ADR 评审；fire-and-forget 未注册 = 静默降级永不 pipeline 失败；`app.main` / `app.worker` 两组合根双注册）；② 同步会话写四命令（dock_interrupt_question / finalize_bailed_runs / seed_project_prompt / discard_unanswered_plan）→ `pipeline/conversation_bridge.py` 显式 protocol（未注册 fail-loudly）；③ 会话读四助手 → `platform/conversation_context.py` 只读协议座；④ 完整 chat 回合（POST /outputs/{id}/regenerate）→ 端点住 `chat/routes.py`（URL/method/OpenAPI 不变）。`build_context` 住 `chat/context.py`（各层自装上下文）。pipeline→chat import 清零、跨模块私有 import 清零、零新增 deferred import——常驻守卫 = `tests/test_import_direction_pure.py`（AST 双门 + 冷导入探针 + 组合根接线保险 + 自引用改名碰撞扫描）。
+- **依赖方向座位（四族合法缝，§6 唯一通道）**：① trigger fires（run_completed / run_failed / craft_decompiled）→ `pipeline/trigger_events.py` 白名单事件缝（白名单冻结，扩名单 = ADR 评审；fire-and-forget 未注册 = 静默降级永不 pipeline 失败；`app.main` / `app.worker` 两组合根双注册）；② 同步会话写四命令（dock_interrupt_question / finalize_bailed_runs / seed_project_prompt / discard_unanswered_plan）→ `pipeline/conversation_bridge.py` 显式 protocol（未注册 fail-loudly）；③ 会话读四助手 → `platform/conversation_context.py` 只读协议座；④ 完整 chat 回合（POST /outputs/{id}/regenerate）→ 端点住 `chat/routes.py`（URL/method/OpenAPI 不变）。`build_context` 住 `chat/context.py`（各层自装上下文）。pipeline→chat import 清零、跨模块私有 import 清零、零新增 deferred import 仍是依赖方向合同；由组合根启动、代码审查和相关真实旅程验收，不设独立静态源码门禁。
 - **Hygiene 挂账**：service.py / schemas.py / graph_fill.py 拆分、Message.intent typed union、edit_output operations 路径 commit 律对齐——永不进关键路径，排期见 PROGRESS。
 - **新能力机械回答表（验收基准）**：Agent action → Tool Interface；改 Domain → Application Command → Write Gate；用户要看到在做 → Activity Projection；改变产品阶段 → Lifecycle Projection；UI 响应 → Presentation consumes projection。若新增一种能力仍需「新 phase + 新 envelope + 新 ChatDock if + 新 polling + 新 prompt 条件」，说明本合同被破坏——STOP 上报。
 
@@ -1681,7 +1681,7 @@ run 完成触发回合的 reviewer = **确定性执行验证 + 已批准 plan �
 
 ### 9. 发现型路由（R6）
 
-探索链只服务**实现空间未定的发现型目标**（「找最好 / 挑 / 哪些」类语义）；范围清晰的干脆请求（「加中文字幕」）走既有短路径——**「更智能 = 所有事情都探索」永禁**。判定归 intent router（prompt 面改动走 prompt_gate）；干脆请求在新世界 = Content Plan 的零探索退化形态（ADR-089 §8 统一词表）。
+探索链只服务**实现空间未定的发现型目标**（「找最好 / 挑 / 哪些」类语义）；范围清晰的干脆请求（「加中文字幕」）走既有短路径——**「更智能 = 所有事情都探索」永禁**。判定归 intent router（prompt 面改动由相关真实用户旅程验收）；干脆请求在新世界 = Content Plan 的零探索退化形态（ADR-089 §8 统一词表）。
 
 ### 10. 项目记忆（R23~R26）
 
@@ -1741,12 +1741,12 @@ quote 输入 = Content Plan 具体字段（精确区间 → 时长 → 渲染单
 
 新探索流与既有 chat 路（`propose_tasks` / `edit_graph`）**并行 → 证明 → 退役**——一刀切永禁；退役扳机 = 旅程四主链 e2e 全绿 + 迁移期无 regression 在册。干脆请求（ADR-088 §9）在新世界 = Content Plan 的零探索退化形态，词表统一。
 
-**迁移边界（CURRENT）**：当前主链仍使用 `propose_tasks` / `edit_graph` / `revise_output` 等已注册产品语义工具，探索链与确定性 Content Plan 编译尚未完成整体替换。不得提前从 prompt、registry 或执行层删除现役工具。任何退役必须以当前 `SCENARIOS` 主旅程全绿、真实数据兼容与 PROGRESS 明确销号为前提；当前剩余工作归 `tasks/agent-working-loop-iter-3.md`。
+**迁移边界（CURRENT）**：当前主链仍使用 `propose_tasks` / `edit_graph` / `revise_output` 等已注册产品语义工具，探索链与确定性 Content Plan 编译尚未完成整体替换。不得提前从 prompt、registry 或执行层删除现役工具。任何退役必须以当前 `JOURNEYS` 主旅程全绿、真实数据兼容与 PROGRESS 明确销号为前提；当前剩余工作归 `tasks/agent-working-loop-iter-3.md`。
 
 **`select_clips` 存留裁决**：
 ① **执行世界永不做发现**——发现工作的唯一座位 = chat 边缘 agent 探索链（R6 路由 + 证据 reads + 探索写门）；plan 来源的工作经编译器走 `cut_segments`（Select 证据指针编译期解引用 → 数值区间确定性裁剪），编译器永不编译 `select_clips`（N-56）。② select_clips **当前仍是主链执行工具**，同时服务零探索退化形态；只有 Content Plan 新链完整接管并通过相同旅程后，才可评估其退役。不得把目标架构写成当前已禁用。③ 候选存留面复核：长素材二次裁切 = chat 侧 reads + `revise_selects`（N-58）覆盖；语义连续处理 / execution-time transformation 无在册需求——均不构成保留 LLM 可见性的理由。④ 调用面清单（退役时的机械削除对照表）：注册表 `app/tools/__init__.py` / 节点 `app/tools/clips/node.py` / prompt 面三处（`intent_router_system.j2` / `_specific_instruction.j2` / `_writers_no_material.j2`）/ recipes 预设链与执行侧声明（tracks / morph / orchestrator / lifecycle / derivative_dispatch / decompile / outputs / verify / graph_fill / schemas）/ web 展示键（ChatDock / chatProtocol / i18n / 项目页）。
 
-**Consequences**: 每批过既有门禁（纯 pytest / prompt_gate / 剧本 + PROGRESS §0.4 执行规则 7 认知验收）。**零改动重申**：执行写门（`apply_wiring_ops` / `create_run`）/ scope classifier / Start 四合取 / 计费三词两层与 hold→capture→release / fencing（ADR-079）——本条不改任何执行世界机制，只改「谁有资格向执行世界递东西」。
+**Consequences**: 每批按改动运行核心测试与真实旅程，并过 PROGRESS §0.4 执行规则 7 认知验收。**零改动重申**：执行写门（`apply_wiring_ops` / `create_run`）/ scope classifier / Start 四合取 / 计费三词两层与 hold→capture→release / fencing（ADR-079）——本条不改任何执行世界机制，只改「谁有资格向执行世界递东西」。
 
 **Related**: ADR-088（双生——探索产物与工作循环）/ ADR-087 §4（确认教义——停顿定律是其付费边的泛化；Consequences Phase 4 = scope classifier D4）/ ADR-028（拓扑铁律——编译器是其新兑现形态）/ ADR-055（计费——决策包的费用语义面）/ ADR-058（通道分家——craft 修订的卡面直改先例）/ ADR-079（fencing——执行写不变）/ ADR-057（draft 图 K5——编译产物的画布形态）
 
@@ -1845,7 +1845,7 @@ verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付*
 
 `qa`/`streaming` 等客户端派生态不落库（既有律重申）；反向同律——**言语永不只活在客户端**：想被记住的 agent 言语必须在出生刻落库。新增消息流文案的准入门：它是不是 agent 说过的话？是 → 入库；不是 → 不得出现在消息流（去 status 行 / 卡片 / 原生控件）。（**寄存器细化（ADR-095）**：消息流允许「日志格」的世界事件行——动宾短语 + 事实后缀、无人称无语气、视觉分行，Claude Code tool 行同款；本准入门禁令只针对「言语格写法 + 非 LLM 作者」的组合。）
 
-**Consequences**: live-only 重复类 bug 结构性不可能（对账一处不缺）；起始句成为普通言语行——刷新一致由消息机制天然兑现，零持久化新机；零 LLM 开工道的沉默是诚实形态而非缺失。零 schema 变更；W2~W5 均触 prompt 面，过 prompt_gate。验收 = 复现剧本 live 无重复 + LLM 开工道（口头 yes / Start pill 同进 start_run 回合）开工句流式出现且刷新后仍在 + echo dedup 回归（计划回声不双显）+ 打字机律回归（开工句不瞬移）。
+**Consequences**: live-only 重复类 bug 结构性不可能（对账一处不缺）；起始句成为普通言语行——刷新一致由消息机制天然兑现，零持久化新机；零 LLM 开工道的沉默是诚实形态而非缺失。零 schema 变更；W2~W5 均触 prompt 面，须由相关真实旅程复核。验收 = 复现剧本 live 无重复 + LLM 开工道（口头 yes / Start pill 同进 start_run 回合）开工句流式出现且刷新后仍在 + echo dedup 回归（计划回声不双显）+ 打字机律回归（开工句不瞬移）。
 
 **Related**: ADR-058（展示文案二源律——言语来源纪律的母法）/ ADR-073（收据层级与时序律）/ ADR-080（界面语言唯一 owner）/ ADR-095（三寄存器律——§3 准入门的寄存器细化）/ CHAT_ARCH §8.6（信封权威与打字机律）/ §8.7（run 段时序律）
 
@@ -1871,13 +1871,13 @@ verify 回退的 best-not-last restore 与 run 内重试 = **产物从未交付*
 
 ### 3. prompt 面修正（prompt authoring law：现在时法律，零引号例句）
 
-trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表述；router plan 面补 §2 的分镜组合律。模型面文本永不含日期 / ADR 编号 / 事故叙事。两处改动同属 prompt 面，过 prompt_gate。
+trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表述；router plan 面补 §2 的分镜组合律。模型面文本永不含日期 / ADR 编号 / 事故叙事。两处改动同属 prompt 面，须由相关真实旅程复核。
 
 ### 4. 能力菜单措辞升格
 
 `_MENU_PHRASES` 的 reframe_clip 行从画幅机械语言升格为语义语言（智能分镜 / 镜头跟人），注册表文案 en/zh 同改；能力问答面由此能说出分镜能力。
 
-**Consequences**: 访谈素材静默中央裁剪的结构通路关闭；agent 方向评判获得诚实性约束；想法回合说得出分镜、用户选定后链必含分镜；能力问答能说出分镜。零 schema / 零工具改动——reframe_clip 工具不动，动的全是选择律与措辞面。验证 = prompt_gate + 剧本矩阵 S8（分镜必含座）与相关座回归 + 访谈素材 live e2e（验收 = 想法回合说得出分镜方向、选定后同素材产出分镜成片）。
+**Consequences**: 访谈素材静默中央裁剪的结构通路关闭；agent 方向评判获得诚实性约束；想法回合说得出分镜、用户选定后链必含分镜；能力问答能说出分镜。零 schema / 零工具改动——reframe_clip 工具不动，动的全是选择律与措辞面。验证 = `interview_to_framing` 等相关真实旅程回归 + 访谈素材 live e2e（验收 = 想法回合说得出分镜方向、选定后同素材产出分镜成片）。
 
 **Related**: ADR-058（展示文案二源律）/ ADR-089（能力编译与执行边界——能力清单是编译事实，选择律在本条）/ prompt authoring law（CLAUDE.md Testing 节）/ RECIPES §4.8（配方准入——分镜能力的用户面承诺）
 
@@ -2126,7 +2126,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 3. **仲裁并行化**：`_arbitrate` 的 cap-5 歧义段裁决改 `asyncio.gather` 并发（段间零依赖，串行纯属保守）；仲裁并发必须保持有界，且不改变每段裁决语义。
 4. **剪辑复用座**：① interview 的左右槽位锚点（cx/cy/w/n）随 speaker_map 持久化，reframe 的 interview_switch 直接读取、砍掉每 clip 的全片重扫（旧 map 无锚点回退 bootstrap）；② gate 扫描落 `meta.face_scan` digest（counts[] + majority/share + 派生 `face_free_spans` 空镜段 / `extra_people_spans` 观众段），chat 感知层据此加一条 footage-scan 事实行（cutaway/B-roll 候选数）——一次扫描同时喂形态判定与下游分镜原料。
 
-**Consequences**: 访谈误判 multi 的一类 flake 结构性消失（本地计数确定性 + 聚合抗干扰）；纯 PPT/无脸片零脸升级后仍 unknown，诚实不冤枉。明确不做（过度设计防线）：shot boundary 检测是独立工序后补；8fps 帧级轨迹不落库（体积大、消费方不明）；reframe 切点逐帧精检保留自有 pass（2s 粗轨给锚点够用、给切点精度不够）。确定性回归 = `tests/test_speaker_map_pure.py`（多数决/span 推导 13 例）。
+**Consequences**: 访谈误判 multi 的一类 flake 结构性消失（本地计数确定性 + 聚合抗干扰）；纯 PPT/无脸片零脸升级后仍 unknown，诚实不冤枉。明确不做（过度设计防线）：shot boundary 检测是独立工序后补；8fps 帧级轨迹不落库（体积大、消费方不明）；reframe 切点逐帧精检保留自有 pass（2s 粗轨给锚点够用、给切点精度不够）。说话人多数决与 span 推导须在素材理解真实旅程中复核；不保留独立内部样例套件。
 
 **Related**: ADR-045（D3/D4 的判定层被本条定型，仲裁 cap 与能量归属机制不动）/ ADR-102（理解读链——face_scan 事实行经 `speaker_form_lines` 注入同一座位）
 
@@ -2244,20 +2244,20 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 **Related**: ADR-086（判词①枚举修订——transcript 移出「可编辑中间工作产品」枚举，改判「素材卡的内容层」）/ ADR-097（transcript 的 companion 身份退役——不再是 artifact，是 asset 的面）/ ADR-112（cue 结构化 + hover 显时 + 服务端预格式化 label 由本条继承并改写座位：spec 落库 → 读面派生）/ ADR-057（零投影——图不再存显示副本，本条是修法正身）/ ADR-067（出锚语义律不动；入锚精确化）/ ADR-016（对应 spec family 不变——轨道栈只是读面投影）/ Workspace 合同 v4.2 C4（双层不变量搬家，永不反算时间码）/ `docs/VIDEO_EDITOR.md` L3（编排永禁）
 
-## ADR-114: 测试体系——用户旅程矩阵与承重防漂移守卫
+## ADR-114: 测试体系——真实用户旅程与核心 API/DB 合同
 
-**Status**: Decided；运行规范与合同映射 = `VERIFICATION.md`。
+**Status**: Decided；运行规范与覆盖映射 = `VERIFICATION.md`。
 
 **Decision**:
-1. 只长期保留两类测试资产：**用户主流程全旅程矩阵**与**承重架构防漂移守卫**。事故回归锁、批次产物、死机制与镜像实现形态的锁不作为永久资产。
-2. 活 LLM 闸 = `scripts/chat_scenarios.py` 的当前 `SCENARIOS` 注册表；数量与编号以注册表为准，不在 ADR 冻结。SSE 工具 loop 线格式、Activity 帧、dock 形态与估价断言由 harness 公共断言携带。
-3. 纯 pytest 只测无需 DB/LLM/HTTP 的纯函数与承重分支；需要真实事务或 LLM 的行为归旅程矩阵。web vitest 保持纯 node 组件旁置套件。
-4. `check_gates.py` 是静态架构门；`prompt_gate.py` 只在 prompt 面改动时运行，探针/阈值以当前注册表为准。失败先复跑与归因，**永不为放行回归调阈**。
-5. 退役 = 自然死亡：重构使测试锁定的机制消失时逐案删除，不留注释尸体；新覆盖必须能指出属于哪本旅程哪一步或哪条全站铁律。
-6. fixture 使用 `scenario/` 前缀，防共享 key 被删除；常驻 worker 抢跑、进程组清理、配额与 round-robin 纪律是运行合同的一部分。
-7. 客户端法律（打字机、remount、形态机）不进服务端剧本断言；服务端真值才进。真实浏览器、动态视听与付费/生产路径仍需对应人工或专门验收。
-8. 当前已知未覆盖/观察面必须保留：S1/S6f/S10 方差归因、失败不扣费、孤儿 hold、run 执行权、turn durability、SSE reconnect、repair 泄漏。没有自动看护不等于已验收。
-9. VERIFICATION.md 是当前验证母文档；harness 代码归位仍为 PLANNED，范围与收集/import验收见该文档 §6。当前脚本路径继续有效，不把文档升格当成代码已搬迁。
+1. 只长期保留两类测试资产：**用户主流程全旅程矩阵**与**核心 API/DB 确定性测试**。后者覆盖支付、上传、工具协议、权限、计费、作品数据、执行与交付等用户直接依赖的合同；内部 helper、提示词文案、实现形态、重复 ToolLoop 机制和事故编号不另立永久测试。
+2. 活模型旅程入口 = `test/journeys/chat.py` 的当前 `JOURNEYS` 注册表；名称与数量以注册表为准，不在 ADR 冻结。断言只锁用户可见结果和服务端/数据库真值，不锁 LLM 文案。
+3. 核心测试入口 = `test/core`。它不调用真实模型、不执行付费制作；需要真实事务的测试使用独立临时 PostgreSQL 数据库。Web vitest 保持组件旁置的确定性套件。
+4. 部署前按改动面运行核心测试、真实旅程和 Web 检查。真实旅程需要活 API、当前 migration、fresh worker 与模型配额；付费制作仍须单独明确授权。
+5. 重构使测试锁定的合同消失时逐案删除，不留注释尸体；禁止为放行削弱断言，也禁止把同一用户行为复制成多份内部实现锁。
+6. fixture 使用 `scenario/` 前缀，防共享 key 被删除；常驻 worker 抢跑、进程组清理与配额纪律是运行合同的一部分。
+7. 客户端法律（打字机、remount、形态机）不进服务端旅程断言；真实浏览器、动态视听、付费/生产路径和公开发布仍需对应人工或专门验收。
+8. 未自动覆盖不等于已验收：失败不扣费、孤儿 hold、run 执行权、turn durability、SSE reconnect、repair 泄漏等开放面必须继续登记，直到取得当前证据。
+9. `VERIFICATION.md` 是当前验证母文档；核心测试、旅程、fixture 与诊断工具的唯一位置和命令以该文为准，不保留第二注册表或归档副本。
 
 **Related**: ADR-039/071/079/089/099/102/108/117/119/141/144；`docs/VERIFICATION.md`。
 
@@ -2356,7 +2356,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 6. **产物文件 probe 校验闸**（放行闸③，禁止事项 10 的座位）：`render_output` 成功路径落 COMPLETED 前必过 `app/pipeline/render_probe.py`——一座闸门、家族分派检查项（film：h264 + 1920×1080 + 视频流帧计数 = Σ场景帧 ±1 帧；clip：存在/非零/容器可读/首帧可解码 + caption sidecar 存在即法、非零当且仅当 `caption_track` 非空——渲染服务对空轨写零字节 srt，空 sidecar 是无字幕 clip 的合法产物）。时长判据走**流帧计数**而非容器时长——mp4 容器 duration 带 muxer 衬垫（取证：465 帧流精确 15.5s vs 容器 15.552s），永不作契约面。未过 = 渲染 FAILED + `spec.failure={stage:"probe",codes,detail}` 盖 render 镜像节点（与 storyboard 的 schema/grounding 同字段形状）；被拒产物本体留对象存储作取证，probe 临时副本即清。
 7. **worker 渲染执行形态**：渲染认领后跑 asyncio task（与节点同构），并发上限 `render_concurrency`（默认 2——争用资源是渲染服务的 headless Chrome）+ 单渲染栅栏 `render_timeout_seconds`（默认 900 = 历史栅栏可配化；film 基线 ≈46s/26s 片，clip 长源渲染长尾共享同一栅栏故不收紧）；两键住 env Settings（工程参数，configs 边界律 §3）。验收只要求并发帽、超时、临时目录清理与真实渲染隔离在当前环境重新成立，不保存历史墙钟数字。
 8. **失败分类台账 = 仪表层**（`scripts/film_stage_ledger.py`）：五段通过率（schema/grounding/constraint/render/probe）+ codes Top N，读数供归因，永不阻塞部署；数据源 = `spec.failure` 单字段 + 节点/产物终态。
-9. **MG 旅程座 = 当前 `SCENARIOS` 注册项**（`chat_scenarios.py`）：URL → web_page 真采集 → 分镜方案 dock（echo 内嵌分镜 markdown）→ 口头 yes 开工 → 真渲染 + probe 闸 → film 产物 + 画布血缘 + 台账 hold=capture+release；只锁形态不锁文案。
+9. **创作旅程座 = 当前 `JOURNEYS` 注册项**（`test/journeys/chat.py`）：只锁当前产品的用户可见结果、持久化事实、渲染与计费边界，不锁 LLM 文案，也不为已退役 Film 主链保留专属旅程。
 
 **Related**: ADR-016（spec 契约律）/ ADR-028（禁第二条编排链）/ ADR-058（name 二源律，null 读容忍）/ ADR-096 §1（渲染 pend 唯一座）/ ADR-052（absorb 信封座）/ ADR-114（旅程注册表纪律）
 
@@ -2372,7 +2372,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 4. **子页发现 = 首页 manifest 同 host 链接**（`BAD_LINK` 过滤正则移植），cap 3，逐条复用同一 capture 入口产独立 web_page 资产；资产模型一对多零改动。禁爬外站、禁递归深挖。
 5. **排除**：可编辑 HTML 双交付（产品交付面 = canvas 节点 + MP4）、FAL 生成媒体、运行时音频测速库。
 
-**Consequences**: 新依赖唯一 = playwright（pip）；采集时长因滚动预载上升，`web_capture_timeout_seconds` 与 processor 超时预算同批重估；旧 web_page 行（无 shots/elements）走 fold-only 降级路径继续可成片；`FilmSceneUi.shot`（默认 0）让 storyboarder 在一页多图里选取景。验收锚 = 重采 linear.app 出真内容 section 图 + `scratch/demo-films/` 三片重跑端到端。
+**Consequences**: 新依赖唯一 = playwright（pip）；采集时长因滚动预载上升，`web_capture_timeout_seconds` 与 processor 超时预算同批重估；旧 web_page 行（无 shots/elements）走 fold-only 降级路径继续可成片；`FilmSceneUi.shot`（默认 0）让 storyboarder 在一页多图里选取景。验收锚 = 重采 linear.app 出真内容 section 图 + 三片端到端媒体检查；一次性 demo-films 工具只作本机诊断，复验步骤与未运行项必须在当前验收文档自足登记。
 
 **Related**: ADR-119（film 家族基座）/ ADR-129（分镜核对与参数行）/ ADR-028（禁第二编排链/采集链）/ ADR-039（工具包一座）
 
@@ -2661,7 +2661,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 4. **抄录漂移注记 + 原文继承守卫**：逐字重稿重述 `text` 且与 base 版本钉住文案有出入时，观察文本附 `text_source_drift_note` 的子句级诚实注记（同 manifest 切分口径点名 L 行旧/新文）——呈现永不得称「原文一字未改」；永不硬拒（用户有意改文案合法）。**注记只知情、不放行，且保护追踪「最后可证接受的文字基准」而非相邻版本差**（复审②——A→B→继承 B 洞）：漂移状态持久化在**版本封套** `film_text_drift={baseline_sha256}`（白空不敏感 digest），每次 compose/patch 落版经 `film_text_drift_next` 重算——省略 text 继承漂移文案、重述同一漂移文案、无关 patch、普通重稿**全部只延续不解除**；解除恰好三条可证路径：① 恢复原文（新钉住文案 == 基准）；② 用户本回合亲手贴出该文案（`text_drift_user_proven`）；③ copy_drift dock 的明示确认（开工消费 pending，状态随之消亡）。dock 座读**在场版本的持久状态**（`film_text_drift_held`——世界真值，回合对象重建永不丢保护）作为 `copy_drift` 押住 auto 直启（优先级：`unmet_condition` 之下、`awaiting_production` 之上；估价尾行同名诚实子句「确认即按这版开始，或说一句恢复原文」）。结构化 copy patch 不自动豁免：系统 `change_set` 的精确前后文字只证明实际差异，不证明用户授权，也不能给旧 drift 销账；完整当前保存版本是用户的审查对象。
 5. **交付收敛与分支专属**：`run_completed` 骑**零读的 `delivery_agent`**（tools=[wrap_up]，max_iterations=3）与独立 `delivery_system.j2`；通用 `trigger_system.j2` 只负责 `run_failed` / `craft_decompiled`。event line 只组合对话上下文与最新工具/run 结果的 DELIVERY FACTS；`run_review` 先以代码裁决唯一 `delivery=failed|partial|delivered`，模型只叙述该分支，不再同时承担成功宣告、全量审计、卡片引导、评价与下一步。空事实块只给收据能证明的普通完成。render-contracted 的 film/clip 必须 render completed 且视频文件存在才算 delivered；失败/未就绪行不进 `landed` 提示词行或 Chat 产物卡，只有已交付 film 做确认版一致性对账。UI `page`/`shot` 选择器烘焙为 `url`/`image` 的形状差不报 drift，身份由 storyboard digest 核对。`run_failed` / `craft_decompiled` 仍骑带读 agent（失败原因与骨架缺口没有预装事实，读是诚实底座）。交付仍是有界 tool loop：拒收/修复迭代合法存在，永不宣称任何情况下绝对一次模型调用。
 
-**Consequences**: `DesignStoryboardArgs` 仍无 `production_intent`（ADR-139：design_storyboard 不在六 dock 工具之列）——改为工具描述明说 + schema 拒收不变；prompt 面触 `film_director_text.j2`（顺序律机械化）/ `delivery_system.j2` / `trigger_system.j2`（交付与失败/骨架职责拆分）/ `turn_tools.py` 工具描述（纠正道 + 无 production_intent 一行）——prompt_gate 欠账合并；`ConfirmationNeed.reason` 词表增两员（`unmet_condition` / `copy_drift`——client pill 谓词只读 `requires_confirmation`，零前端改动）；compose 发布守卫补齐 `film_draft_inflight_live` 活性半边（与 patch 一致——双路一致性由真实隔离 PG 测试锁定：首稿→纠正→提交 / 失败 / 过期 / 接管四分支，核心事务与锁零 stub，LLM 座可 stub）；打字机律两牙不受影响（无新散文通道——drift note 骑既有观察文本座位，交付言语仍一条终态行）。
+**Consequences**: `DesignStoryboardArgs` 仍无 `production_intent`（ADR-139：design_storyboard 不在六 dock 工具之列）——改为工具描述明说 + schema 拒收不变；prompt 面触 `film_director_text.j2`（顺序律机械化）/ `delivery_system.j2` / `trigger_system.j2`（交付与失败/骨架职责拆分）/ `turn_tools.py` 工具描述（纠正道 + 无 production_intent 一行）；`ConfirmationNeed.reason` 词表增两员（`unmet_condition` / `copy_drift`——client pill 谓词只读 `requires_confirmation`，零前端改动）；compose 发布守卫补齐 `film_draft_inflight_live` 活性半边（与 patch 一致——双路一致性由真实隔离 PG 测试锁定：首稿→纠正→提交 / 失败 / 过期 / 接管四分支，核心事务与锁零 stub，LLM 座可 stub）；打字机律两牙不受影响（无新散文通道——drift note 骑既有观察文本座位，交付言语仍一条终态行）。
 
 **Related**: ADR-139（§3 授权收窄——本条 §3 把「条件未满足」补进同一法律）/ ADR-129（版本绑定不变）/ ADR-117（§4 确认 conjunct 增员）/ ADR-088 §8 / ADR-135（trigger 两分：交付只写、失败仍读）/ ADR-058（世界自证——DELIVERY FACTS 即唯一合法事实源）/ ADR-060（echo 防编造——drift note 同教义）/ ADR-137（patch 链纠正道同律）
 
@@ -2697,20 +2697,69 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-145: 视频编辑本体——Composition / CompositionVersion / Track·Clip·Object / Skill / video-spec
 
-**Status**: Decided（2026-11-02 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；四阶段施工 = `docs/tasks/video-project-implementation.md`；A/B/C 按当前合同验收，D5 未实施）
+**Status**: Decided（2026-11-04 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；全部剩余施工与验收 = `docs/tasks/skill-package-promo-video.md` 的六个实际批次与并行依赖；A–C 实现证据 = `docs/tasks/video-project-implementation.md`，完整 B/C 与发布门未关闭）
 
 **Decision**:
 
 1. **Project 是 Chat/执行上下文，Composition 是持续编辑的影片身份，CompositionVersion 是不可变内容版本**。同一 Chat 可创建多部影片，通过 @asset/@output 分别修订；全局素材库支持跨 Chat 引用，服务端按 owner/权限解算，引用成片当素材与继续修改同一作品分开。Timeline 只在版本内部；不新增 Work / WorkDocument、Sequence 或独立 Timeline 根。新视频 Output.work_id 映射 Composition.id，承接既有发布/归档锚，旧 Clip/非视频语义不随之更改。
 2. **Track 上是 Clip，Clip 内是 Object**。Clip 拥有输出时间窗与可选 SourceSnapshot/source_range；Object 拥有内容、布局、样式和 transform。Animation 以关键帧 + 分段 easing 作用于 Object 属性；Transition 单独表达 Clip 间关系。TextPart 是可寻址的派生对象，只有独立编辑需要时才提升为 TextClip，不默认逐字持久化。
 3. **Storyboard 是 CompositionVersion 的服务端 canonical 投影**。Scene 持有可空 `visual_description`，由 LLM 描述真实画面元素与运动；精确时间、文字和旁白仍读结构。视觉修改必须更新或清空该描述，禁止旧摘要冒充新画面。呈现回执钉 `presented_message_id + presentation_digest + composition_version_id`，首稿强制审阅不变。Scene 引用 SpeechObject.text 这一份旁白原文，字幕记录派生关系，用户手改后不被旁白重生成覆盖。
-4. **Skill 是版本化创作包，不是执行工具**。VideoTemplate 表达结构，Preset 表达局部参数，PromptTemplate 只做 composer 可见预填。launch-film 在新链只是内置 Skill；通用 `design_video / revise_video / produce_video` 共用 CompositionVersion、CRUD、制作和渲染。`/skill + prompt` 仍走唯一 `POST /chat`，个人保存与外部导入不执行任意脚本、不授予权限。“保存创作方法”才是 Skill；既有素材/产物通过全局 @ 引用，不建设“复制确切作品”功能。Template/Preset 在保存版本前展开，渲染编译不重新查询可变注册表。
-5. **作品版本与执行图分家**。`apply_composition_edits` 是作品内容唯一写口；`apply_wiring_ops` 仍是执行图唯一写口。WorkflowRun/WorkflowStep、create_run、队列、fencing、计费、Output/render ownership 全部复用；produce 只消费钉住的 version_ref，缺版或漂移不得重新设计。内容、Start 执行输入、准备后的 execution_digest 与请求幂等按目标合同分开；默认固定切点，只允许有界语速适配，超界回到 Chat 修订，不借帧或静默截断。Graph 可先保留为隐藏血缘/修订拓扑，Canvas 可独立退役，Scene/Clip 不成为 graph nodes。
+4. **Skill 是版本化创作包，不是执行工具**。VideoTemplate 表达结构，Preset 表达局部参数，PromptTemplate 只做 composer 可见预填。launch-film 在新链只是内置 Skill；通用 `design_video / revise_video / produce_video` 共用 CompositionVersion、CRUD、制作和渲染。`/任务名 + prompt` 仍走唯一 `POST /chat`，个人保存与外部导入不执行任意脚本、不授予权限。“保存创作方法”才是 Skill；既有素材/产物通过全局 @ 引用，不建设“复制确切作品”功能。Template/Preset 在保存版本前展开，渲染编译不重新查询可变注册表。
+5. **作品版本与执行图分家**。`apply_composition_edits` 是作品内容唯一写口；`apply_wiring_ops` 仍是执行图唯一写口。WorkflowRun/WorkflowStep、create_run、队列、fencing、计费、Output/render ownership 全部复用；produce 只消费钉住的 version_ref，缺版或漂移不得重新设计。内容、Start 执行输入、准备后的 execution_digest 与请求幂等按目标合同分开；普通 MG 默认固定切点，只允许有界语速适配，超界回到 Chat 修订，不借帧或静默截断。**知识讲解增加源对齐旁白模式**：最终音频与 NarrationAlignment 先于最终分镜冻结，Scene/Animation 由真实词锚解算；其准备使用独立 `narration_alignments` 行与 worker 认领源，TTS 仍复用 VideoNarration 的报价、授权和未知结果保护，完成后同样进入唯一作品与 Run 链。Graph 可先保留为隐藏血缘/修订拓扑，Canvas 可独立退役，Scene/Clip 不成为 graph nodes。
 6. **video-spec 是 Film 的继任渲染契约**。它只描述量化时间、Tracks/Clips/Objects、Animations/Transitions、样式、音频和解析后素材，不含 React/Remotion/DOM/任意 CSS。RenderAdapter 与 PreviewAdapter 都必须可替换并声明能力；Remotion 商业许可或替代实现须在生产前收口。
-7. **素材绑定不可变快照**。CompositionVersion 引用 SourceSnapshot 与 content digest；多轮修订不依赖聊天历史恢复素材，不因同一快照重复读取/采集，显式 refresh 才更换绑定。
+7. **素材绑定不可变快照**。CompositionVersion 引用 SourceSnapshot 与 content digest；多轮修订不依赖聊天历史恢复素材，不因同一快照重复读取/采集，显式 refresh 才更换绑定。源对齐旁白另引用 READY NarrationAlignment 的 id + digest，文本/音频/算法任一变化都必须准备新对齐。网页采用初始侦察 + CapturePlan 最终采集：最终采集通过现有 WEB_PAGE Asset 队列生成新 Asset/SourceSnapshot，已保存版本绝不随后台补采漂移。
 8. **独立分支内破坏性替换，不迁移既有业务数据**。生产无实际用户，允许停机与本应用旧数据 reset，执行仍核对目标和 dry-run；生产就绪后合并 main。新链先做网页宣传片/MG，验收后删除旧 Film 专用实现，不建设 FilmStoryboard/film-spec 数据适配器。Clip 迁移与删除后置，完整 Scrub/Inspector 最后实施；B 先提供纯 Chat 最小预览，属性组件经统一编辑写口提交。A 内先打通最小渲染闭环，再补官网片/MG 对照；默认切换以 A+B 和生产许可门为前提，不等待个人 Skill 或完整素材库页面。B 在开发期直接替换旧 Film 专用合同，不建设兼容双链；共享可靠性机制与授权/计费/交付不变量保留。D 必须完成旧链残留、依赖、测试与文档的一轮显式删除清理和清理后旅程验收。现有 Chat 外观可保持，必要前端协议接线纳入 B，UI 改版可并行。
-9. **创作能力只扩展现有本体，不新增平行架构**。固定 Skill、外部 Skill、自由设计和 Generator 共用「grounding → 能力选择 → CompositionVersion → 真实呈现 → 授权制作 → 视听检查 → 结构化修订」循环；出生后都是同一多轨作品。Generator 可新增受控 runtime：`component-v1` 允许 Agent 按用户讲稿/素材编写 TSX，HTML/SVG 作为组件内标记，经有界上游 runner 烘焙为固定媒体。CompositionVersion 保存该不可变 Generator 来源是唯一 renderer-source 例外，最终 video-spec 仍无 React/Remotion；原始外部 Skill 脚本不因此获得执行权。SFX 复用 AudioObject/effect Track/SourceSnapshot 与通用修订，候选试听和 D4 Inspector 共享真实播放器但保持 search/import/revise 各自语义。
+9. **创作能力只扩展现有本体，不新增平行架构**。固定 Skill、外部 Skill、自由设计和 Generator 共用「grounding → 能力选择 → CompositionVersion → 真实呈现 → 授权制作 → 视听检查 → 结构化修订」循环；出生后都是同一多轨作品。Generator 的目标 `remotion-project` 允许 Agent 按用户讲稿/素材编写完整、多文件、多组件的不可变 Remotion 工程，经有界上游 runner 烘焙为固定媒体；限制系统权限、依赖与资源，不限制工程内部创作结构。CompositionVersion 保存该不可变 Generator 来源是唯一 renderer-source 例外，最终 video-spec 仍无 React/Remotion；原始外部 Skill 脚本与 TSX 不因此获得执行权。SFX 复用 AudioObject/effect Track/SourceSnapshot 与通用修订，候选试听和精确 Inspector 共享真实播放器但保持 search/import/revise 各自语义。高频画面丰富性由分类内置 Preset 展开原生 Objects/Animations 承担；Preset 不是新 Object 类型、React 组件或第二运行时，运镜/转场、真实网页状态、媒体时间变换与复杂自由画面仍各归既有座位。用户用本地化任务名显式绑定 Skill，未绑定时 LLM 只推断通用创作方向；Preset 比较复用现有 Candidate Surface 与候选消息日志，普通语言选择后再经唯一内容写口应用，不新增外部 Gallery 流程、第二意图面或交付后工作台。
 
 **Consequences**: ADR-016/119 的 clip/film 两家族仍是当前代码事实，但不再是长期视频本体上限；迁移期的 video-spec 是 Film 继任而非永久第三套架构。ADR-127 的“模型只填创意槽、代码保证结构”继续成立，但固定结构改由内置 VideoTemplate + 确定性实例化承载；component-v1 服务无法预设的讲稿/内容画面，不改变固定 Skill 与自由创作共用作品和修订链的事实。ADR-140 的 composite 不作为长期特殊 Scene 类型，能力由通用 Track/Clip/Object 承接。旧 Film 任务与旧结构锁退出；现行实现查代码与 RENDERING，有效需求归 VIDEO_PROJECT §15，新施工以 ADR-145 两份合同为准，测试退役不代表新链完成。
 
 **Related**: ADR-016（renderer-neutral spec 与黑盒）/ ADR-119（Film storyboard 与 skill 接入）/ ADR-127（固定骨架与创意槽）/ ADR-129（版本身份与执行钉版）/ ADR-137（结构化编辑与 base_ref）/ ADR-139（制作意图）/ ADR-140（组合元素）/ ADR-144（首稿审阅）
+
+## ADR-146: 视频创作工作草稿与条件工具——生成增量、保存原子
+
+**Status**: Decided（2026-11-10 用户拍板；目标法 = `docs/VIDEO_PROJECT.md` §2.2/§8.1.2，实施与验收 = `docs/tasks/composition-authoring-context-convergence.md`；当前代码尚未完成该改造）
+
+**Decision**:
+
+1. **Composition 本体与不可变版本不变，整片生成不再等于一次保存调用**。首稿与开放重稿通过多次 `design_video` 写入同一个服务端工作草稿；每次只携带设置、来源或完整 Scene/Track/Clip/Transition，最终 `save=true` 对组装结果完整校验，并仍只经 `apply_composition_edits` 原子保存一个 CompositionVersion。工作草稿复用 ConversationContext，不新增 Draft/AuthoringSession 表或作品根。
+2. **局部错误不再触发整片重交**。首稿 schema 错误、语义错误与保存版局部修订都保留有效工作并只修目标范围；`fresh_design` 与只读 `rejected_candidate_ref` 退出。完整实体写入不是构造 Op 程序；字段 patch、执行顺序、error-id 修正矩阵和模型编写构造程序继续禁止。服务端确定性模板实例化与受控 Generator 编程不属于被禁止的模型 Op 协议。
+3. **工具按真实状态逐轮投影**。ToolLoop 在现有每轮上下文刷新和草稿恢复后，只向模型提供当前必要的读取、草稿写入、版本修订、预览或制作工具；执行端独立校验权限与状态。不新增持久化阶段机、多 Director 链或第二意图面。
+4. **局部预览边界由 ADR-147 修订**。预览不是 Output，不自动启动 Run；用户明确制作后才由 produce_video 固定版本、生成/烘焙、渲染、检查与交付。
+5. **校验分层而非取消**。每次写入校验本实体与可独立判断的权限/来源/局部约束，最终保存校验完整 Composition 与跨实体/渲染约束；权限、不可变来源、并发/幂等、计费、授权、隔离和固定执行不延后。语义等价的空值/序列化方言由代码规范化，不要求模型为此重写整片。
+6. **一法一座，不把恢复协议复制到四个座位**。参数约束只由实际 args/EntityWrites wire schema 表达；草稿合并结果只返回 ref/digest/errors 等世界事实；ToolLoop 只投影和执行工具；prompt 只讲逐步创作、保持未改范围、真实预览与明确制作。禁止在工具描述、观察文本、loop 尾部和 prompt 中分别复述同一修复法律。
+
+**Consequences**: ADR-145 的 Composition / CompositionVersion / 唯一写口 / 钉版制作继续成立，其“普通 Chat 一次提交完整 Composition”不再是首稿唯一接口；ADR-127 的固定 Skill“模型填创作槽、代码保证结构”继续成立，自由创作则使用同一工作草稿与完整实体。此次不恢复强制多 Director、Direction 中间作品层或模型构造 Op，也不改变首稿审阅、制作意图和守卫线。新链真实首稿、局部修复、预览、刷新/Stop 与制作旅程通过前，不得将本决策描述为已落地或生产就绪。
+
+**Related**: ADR-145（作品本体与保存边界）/ ADR-127（固定 Skill 创作槽）/ ADR-129（版本化呈现）/ ADR-137（base_ref 与结构化修订）/ ADR-139（制作意图）/ ADR-144（首稿审阅）/ ADR-147（局部 Scrub 预览边界）
+
+## ADR-147: 制作前只做局部 Scrub——完整成片永不预览
+
+**Status**: Decided（2026-11-11 用户拍板；目标法 = `docs/VIDEO_PROJECT.md` §0.1/§8.1.2/§10/§11.3，实施与验收 = `docs/tasks/composition-authoring-context-convergence.md`）
+
+**Decision**:
+
+1. **制作前没有完整成片动态预览，无用户请求例外**。默认呈现完整 Storyboard、修改摘要和必要静态代表帧；完整 `video_spec` 不进入制作前浏览器。正式制作后的 Output 播放与交付不变。
+2. **动态检查统一为明确目标的局部 Scrub**。目标只能是带 Scene/Clip id 和明确时间窗的片段，或独立 Object；预览钉 composition_version_id、content_digest 与 target，只向客户端发送归一化局部 spec，不创建 Run、Output 或新版本。Apply 才经既有内容写口保存新版本。
+3. **预览由创作意图触发，不由内容特征自动触发**。只有动态需求需要比较/澄清、用户修改后需要核对本次局部结果，或用户明确要求看特定效果时才可选提供。用户询问字幕等通用效果时可走 Preset/candidate 分支；纯文案等静态修改可不提供。独立 Object 预览不声称场景布局、遮挡或衔接已通过。
+4. **复用同一编译与编辑链**。局部投影复用 video-spec compiler、`slice_clip`、PreviewAdapter、固定 Generator digest 与既有权限/计费边界；默认首稿不预烘焙 Generator，不新增第二播放器、第二生产链或付费媒体侧门。
+
+**Consequences**: ADR-146 的按内容自动附完整预览条款由本决策替代；工作草稿、不可变版本、首稿审阅、制作授权和费用守卫不变。核心测试、真实旅程与真实浏览器/视听验收分别证明各自边界，落码不等于验收完成。
+
+**Related**: ADR-145 / ADR-146 / ADR-139 / ADR-144
+
+
+## ADR-148: 通用网页采集与部分成功——模型描述需求，服务端拥有执行血缘
+
+**Status**: Decided；现行字段与行为契约 = `docs/VIDEO_PROJECT.md` §9.2，实施与验收状态 = `docs/PROGRESS.md` §0 和 promo-video 当前合同。
+
+**Decision**:
+
+1. **`CaptureRequest` 是 `capture_web` 的唯一公开输入**。模型只声明网页状态、单元素或有界元素集合，以及 page/elements/blank_plate 输出；不再编写 CapturePlan、required、内部 role 或配对 id。服务端绑定冻结来源并机械生成 baseline、scale、几何和血缘，不引入材料解析或逐镜头配方架构。
+2. **采集按 output/member 部分成功**。任何可用真实视图都可冻结为 SourceSnapshot 并立即派生可消费图片；失败不撤回其他成果。全部有界 issues 与成功图片同次返回，零可用视图才整体失败。SSRF、无凭证上下文、同源、动作与资源安全边界不变。
+3. **集合成员拥有显式身份**。稳定阅读序、member id/digest、文本和几何共同标识资源；共同 blank plate 同时移除全部目标。普通不透明纹理与透明 RGBA 全画布纹理都是正式固定资源形态。
+4. **复用已完成的部分结果**。同 digest 的 completed 部分结果不因缺 peer 自动 reset；补救通过修改请求形成新身份。既有 Composition、不可变版本、web_shots、正式生产链与 Renderer 不因采集部分失败改变语义。
+5. **集合扩大数量预算，不放宽字节与权限预算**。单个 Generator 可引用至多 64 个固定图片，既有单资源和总字节上限继续执行；任意 `page_script` 不在本决策开放。
+
+**Consequences**: Agent 可以直接使用一次调用中的成功素材并针对失败范围发出新请求，不再重复提交完整执行计划。内部 CapturePlan 仍用于 worker 与 asset provenance；模型公开协议、即时 observation 与完整 Snapshot context 分层。核心确定性测试与真实 Chat 验收分别证明各自边界，落码不等于真实旅程通过。
+
+**Related**: ADR-145（不可变作品与来源快照）/ ADR-146（增量创作、完整校验）/ ADR-121（网页采集安全与两阶段边界）

@@ -21,7 +21,7 @@ from typing import Literal
 from uuid import UUID
 
 import structlog
-from sqlalchemy import CursorResult, func, select, text, update
+from sqlalchemy import CursorResult, String, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -390,6 +390,26 @@ async def reap_stale(db: AsyncSession) -> None:
     The reap never resets the counter: that count IS the loop being bounded
     (only intent-driven re-pends and the manual reset seats zero it).
     """
+    # Foreground upload tools never become background rendering after a crash.
+    # Their production mirror deliberately remains failed throughout transfer.
+    interrupted_uploads = list((await db.execute(select(Output).where(
+        Output.render_status == RenderStatus.RENDERING,
+        select(WorkflowStep.id).where(
+            WorkflowStep.kind == "render",
+            WorkflowStep.status == "failed",
+            WorkflowStep.spec["output_id"].astext == func.cast(Output.id, String),
+            WorkflowStep.spec["failure"]["stage"].astext == "upload",
+        ).exists(),
+    ))).scalars())
+    for output in interrupted_uploads:
+        project = await db.get(Project, output.project_id)
+        output.render_status = RenderStatus.FAILED
+        output.render_claim_token = None
+        output.render_error = user_line(
+            "render_upload_failed", display_language(None, project.language if project else None),
+        )
+    await db.flush()
+
     capped_assets = (
         (
             await db.execute(

@@ -7,7 +7,7 @@ export interface ComponentFrameSample {
   png: Buffer;
 }
 
-/** Bounded counterpart of drawing-v1's real-pixel motion diagnostic. Source
+/** Bounded counterpart of draw-2d's real-pixel motion diagnostic. Source
  * API usage proves nothing: compare a few actual rendered frames instead of
  * scanning for useCurrentFrame or inspecting the whole film pixel by pixel. */
 export function assertDynamicComponentFrames(
@@ -15,7 +15,7 @@ export function assertDynamicComponentFrames(
 ): void {
   if (samples.length < 2) {
     throw new ComponentPolicyError(
-      "component-v1 needs at least two sampled frames to verify real motion",
+      "remotion-project needs at least two sampled frames to verify real motion",
     );
   }
   const uniquePixels = new Set(
@@ -23,7 +23,7 @@ export function assertDynamicComponentFrames(
   );
   if (uniquePixels.size < 2) {
     throw new ComponentPolicyError(
-      "component-v1 produced identical pixels at every sampled frame; add real motion",
+      "remotion-project produced identical pixels at every sampled frame; add real motion",
     );
   }
 }

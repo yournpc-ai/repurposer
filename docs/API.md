@@ -499,7 +499,7 @@ Clip outputs only. Request:
 POST /api/v1/outputs/{output_id}/render
 ```
 
-Accepts `clip` and `film` outputs. Returns 202 with the updated output; repeated clicks while `PENDING`/`RENDERING` do not revoke the in-flight claim. A queued render is claimed using the render eligibility and claim-token fencing rules, rendered through the matching `spec.family`, then writes back the produced files. A missing `render_spec` or another output type returns 400. This render action does not imply that clip-only revise/cover/translate/dub actions also accept film.
+Accepts `clip` and `video` outputs. Returns 202 with the updated output; repeated clicks while `PENDING`/`RENDERING` do not revoke the in-flight claim. A queued render is claimed using the render eligibility and claim-token fencing rules, rendered through the matching `spec.family`, then writes back the produced files. A missing `render_spec` or another output type returns 400. This render action does not imply that clip-only revise/cover/translate/dub actions accept video.
 
 ### Generate Cover
 
@@ -682,6 +682,16 @@ POST /api/v1/chat/messages/{id}/answer
 
 Answers a docked question (the question machine) — writing the answer is what unblocks the pending decision: a task-book start begins the run, an options answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the review panel's edited book), `option` / `freeform` (answers to options questions), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
 
+### Video Version Presentation and Scrub Apply
+
+```http
+GET /api/v1/chat/video/versions/{version_id}/storyboard
+PUT /api/v1/chat/video/versions/{version_id}/clips/{clip_id}
+POST /api/v1/chat/messages/{message_id}/video-presentation
+```
+
+The storyboard read is owner-scoped and pins the exact immutable version; when the content needs motion, its `video_preview` carries the same version/digest. Scrub Apply sends `base_ref`, `track_id`, the complete text `clip`, and `request_id`; it creates a new version through the shared revision service, never an LLM call, Run, or Output. A stale base returns 409. Presentation ACK accepts only the version and presentation digest actually shown, with any required preview ready or honestly pending.
+
 ## 13. Notifications
 
 ### List Notifications
@@ -718,7 +728,7 @@ GET /api/v1/wallet/transactions?limit=30&cursor=<opaque>
 
 Returns **semantic per-event rows**, not raw ledger rows. Hold/capture/release entries for a run fold into one spend row; holds and releases do not appear independently. Grants/refunds/positive adjustments map to `grant`, purchases to `topup`, and negative adjustments to `spend`. Raw `kind`, `ref`, `balance_after` and `idempotency_key` remain internal ledger facts and do not cross this wire.
 
-Pagination is keyset over the raw append-only ledger, newest-first; the semantic fold is applied per page. A run split by a page boundary therefore shows its page-local net. `limit` defaults to 30, max 100; malformed cursors return 422.
+Unfiltered pagination is keyset over the raw append-only ledger, newest-first, with the semantic fold applied per page. `direction=in` filters incoming entries before keyset pagination; each raw entry is one event. `direction=out` instead paginates semantic spend events first (one captured Run or one negative non-run entry), then fetches complete raw rows for those events, so every page contains up to `limit` real spend rows. Direction-filtered responses include the exact semantic `total`; the UI derives current/total pages from it. Unfiltered responses leave `total` null and a run split by their page boundary shows its page-local net. `limit` defaults to 30, max 100; malformed cursors return 422.
 
 ```json
 {
@@ -738,7 +748,7 @@ Pagination is keyset over the raw append-only ledger, newest-first; the semantic
 }
 ```
 
-`label` and `hint` are nullable; `output_types` contains public produced types only. `project_name` is nullable. `created_at` uses the semantic group's latest underlying row. `GET /runs/{id}` remains the place for per-step estimate/cost detail.
+`label` and `hint` are nullable; `output_types` contains public produced types only. `project_name` is nullable. `created_at` uses the semantic group's latest underlying row. Purchase rows additionally carry nullable `payment_order_id`, `payment_provider`, `payment_amount_minor`, `payment_currency` and `paid_at`, batch-joined from the linked `payment_orders` row; grants and legacy purchases without an order link keep them null, so clients never infer fiat from credits. `GET /runs/{id}` remains the place for per-step estimate/cost detail.
 
 Insufficient credits at run birth is a structured 422 (user-level vocabulary, never conflated with a provider 402):
 
@@ -794,7 +804,7 @@ Core models:
 - `Conversation` (project-scoped chat container; output targeting rides mentions)
 - `Message` (chat messages, referenced by `conversation_id`)
 
-Rendering contracts: `ClipSpec` and `FilmSpec` are separate families dispatched by `spec.family`; renderer names do not enter either contract. Clip-related models include `ClipSource` / `CaptionCue` / `ClipTitle` / `ClipMusic` / `ClipDub` / `ClipBrand` / `IntroOutroCard` / `Point`. Request/derivative models include `GenerateRequest` / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`; field-level truth remains the Pydantic schema.
+Rendering contracts: `ClipSpec` and video-spec are separate families dispatched by `spec.family`; renderer names do not enter either contract. Clip-related models include `ClipSource` / `CaptionCue` / `ClipTitle` / `ClipMusic` / `ClipDub` / `ClipBrand` / `IntroOutroCard` / `Point`. Request/derivative models include `GenerateRequest` / `DubRequest` / `TranslateCaptionsRequest` / `CarouselResponse` / `CarouselSlide`; field-level truth remains the Pydantic schema.
 
 ## 17. Distribution (Channels & Publications)
 

@@ -364,7 +364,7 @@ class WalletTransactionItem(BaseModel):
     family: str
     amount: int
     # The row's display name per ADR-058 二源律: grant/topup carry their
-    # server-composed family label (+ note); a spend carries its run's
+    # localized semantic family label; a spend carries its run's
     # LLM-chosen plan name or None — the client then composes the honest
     # fallback from ``output_types`` (世界自证, 产物徽标). The user's prompt
     # text is NEVER the label: it names what the user asked, not what ran.
@@ -378,11 +378,20 @@ class WalletTransactionItem(BaseModel):
     hint: str | None = None
     project_name: str | None = None
     created_at: datetime
+    # Fiat facts for a purchase, joined from its linked payment order in one
+    # batch. Grants and legacy purchases without an order link keep these NULL;
+    # the client must never infer a fiat amount from the credited amount.
+    payment_order_id: str | None = None
+    payment_provider: str | None = None
+    payment_amount_minor: int | None = None
+    payment_currency: str | None = None
+    paid_at: datetime | None = None
 
 
 class WalletTransactionsResponse(BaseModel):
     items: list[WalletTransactionItem]
     next_cursor: str | None
+    total: int | None = None
 
 
 def _encode_cursor(at: datetime, row_id: UUID) -> str:
@@ -411,9 +420,12 @@ async def get_wallet_transactions(
     user: User = Depends(get_current_user_required),
     limit: int = Query(default=30, ge=1, le=100),
     cursor: str | None = Query(default=None),
+    direction: Literal["in", "out"] | None = Query(default=None),
 ) -> WalletTransactionsResponse:
     """List the caller's SEMANTIC ledger rows, newest first (keyset
     pagination on the raw ledger — drift-free; the fold rides above it).
+    ``direction=in|out`` applies the incoming/spend boundary before keyset
+    pagination so the two Settings tables paginate independently.
 
     The fold (ADR-057 K4): hold/capture/release collapse per run into ONE
     花费 row (the run's settled net — hold+release cancel; a run with no
@@ -423,7 +435,9 @@ async def get_wallet_transactions(
     from sqlalchemy import select as _select
 
     from app.models.tables import (
+        CreditTransaction as _CreditTransaction,
         Output as _Output,
+        PaymentOrder as _PaymentOrder,
         Project as _Project,
         WorkflowRun as _Run,
         WorkflowStep as _Step,
@@ -432,12 +446,14 @@ async def get_wallet_transactions(
     from app.ui_locale import current_ui_language
 
     keyset = _decode_cursor(cursor) if cursor else None
-    rows, nxt = await list_transactions(db, user.id, limit=limit, cursor=keyset)
+    rows, nxt, total = await list_transactions(
+        db, user.id, limit=limit, cursor=keyset, direction=direction
+    )
 
     # ── Group the run-scoped rows (hold / capture / release) by run ──────
     # Order is preserved newest-first: a group's slot is its LATEST row's.
     groups: dict[str, dict] = {}
-    ordered: list[tuple[str, object]] = []  # (group key | "", row) newest-first
+    ordered: list[tuple[str, _CreditTransaction]] = []  # (group key | "", row) newest-first
     for row in rows:
         ref = row.ref or {}
         run_id = ref.get("run_id") if row.kind in ("hold", "capture", "release") else None
@@ -448,6 +464,29 @@ async def get_wallet_transactions(
             ordered.append((str(run_id), row))
         else:
             ordered.append(("", row))
+
+    purchase_ids = [
+        row.id for key, row in ordered if not key and row.kind == "purchase"
+    ]
+    payment_orders = (
+        list(
+            (
+                await db.execute(
+                    _select(_PaymentOrder).where(
+                        _PaymentOrder.user_id == user.id,
+                        _PaymentOrder.credit_transaction_id.in_(purchase_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if purchase_ids
+        else []
+    )
+    payment_by_transaction = {
+        str(order.credit_transaction_id): order for order in payment_orders
+    }
 
     # Spend-row facts in three batches (ADR-058 二源律): the run's context
     # carries the LLM-chosen plan name (source ①); the produced PUBLIC output
@@ -554,19 +593,31 @@ async def get_wallet_transactions(
             "grant": "赠送" if zh else "Grant",
             "spend": "花费" if zh else "Spent",
         }[family]
+        payment = payment_by_transaction.get(str(row.id))
         items.append(
             WalletTransactionItem(
                 id=str(row.id),
                 family=family,
                 amount=amount,
-                label=row.note or fallback,
+                # Internal notes are operational metadata, not localized UI
+                # copy. Incoming rows use their semantic family label; only
+                # spend rows may carry a human-readable adjustment note.
+                label=(row.note or fallback) if family == "spend" else fallback,
                 created_at=row.created_at,
+                payment_order_id=str(payment.id) if payment else None,
+                payment_provider=payment.provider if payment else None,
+                payment_amount_minor=(
+                    int(payment.amount_minor) if payment else None
+                ),
+                payment_currency=payment.currency if payment else None,
+                paid_at=payment.paid_at if payment else None,
             )
         )
 
     return WalletTransactionsResponse(
         items=items,
         next_cursor=_encode_cursor(*nxt) if nxt is not None else None,
+        total=total,
     )
 
 

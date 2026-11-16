@@ -29,6 +29,10 @@ import {
   AudioCandidateSurface,
   isAudioCandidateSurface,
 } from "./video/AudioCandidateSurface"
+import {
+  VideoPresetCandidateSurface,
+  isVideoPresetCandidateSurface,
+} from "./video/VideoPresetCandidateSurface"
 import type { CandidateSurface } from "./timeline/types"
 import { shouldAnimateEntrance } from "./timeline/reveal"
 import {
@@ -55,6 +59,9 @@ export function CandidateSurfaceCard(props: {
   turnId?: string
   onStructureVisible?: RegisterStructureVisibility
 }) {
+  if (isVideoPresetCandidateSurface(props.surface)) {
+    return <VideoPresetCandidateSurface {...props} />
+  }
   if (isAudioCandidateSurface(props.surface)) {
     return <AudioCandidateSurface {...props} />
   }

@@ -12,7 +12,7 @@ import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { RunCard } from "@/components/chat/RunCard"
 import { ComponentSlot } from "./blocks/ComponentSlot"
 import type { RegisterStructureVisibility } from "./structureVisibility"
-import { RunBlock } from "./blocks/RunBlock"
+import { AssistantResponse } from "./blocks/AssistantResponse"
 import { TurnBlock } from "./blocks/TurnBlock"
 import { Button } from "@/components/ui/button"
 import { Message, MessageContent } from "@/components/ui/message"
@@ -35,12 +35,14 @@ import { FocusRow, TurnErrorRow } from "./rows/MetaRow"
 import { UserBubble } from "./rows/UserMessage"
 import type {
   ConversationUnit,
+  AssistantResponseSlot,
+  RunResponseSlot,
   OverlayMessage,
   ProjectAsset,
   SuggestionPill,
 } from "./timeline/types"
 import { buildConversationBlocks } from "./timeline/project"
-import { deliveryOutputReveal, type VideoPresentationRecoveryFact } from "./timeline/reveal"
+import { deliveryOutputReveal, hasMessageOutputs, type VideoPresentationRecoveryFact } from "./timeline/reveal"
 
 
 /** Send-time follow re-arm (2026-09-24, user-reported auto-scroll failures).
@@ -150,7 +152,7 @@ export function ChatConversation({
     )
   }
   const renderConversationMessage = (m: OverlayMessage) => {
-    const deliveryOutputSlot = m.runDelivery ? (
+    const deliveryOutputSlot = hasMessageOutputs(m) ? (
       <div data-message-scroller-reading-edge>
         <ComponentSlot
           slot={{
@@ -166,6 +168,20 @@ export function ChatConversation({
         />
       </div>
     ) : null
+    // Empty speech rows remain in the timeline projection for identity and
+    // work-segment boundaries, but a zero-height DOM item still consumes the
+    // parent AssistantResponse's flex gap. Mount a slot only when one of the
+    // branches below has a visible payload.
+    if (
+      m.role === "assistant" &&
+      !m.qa &&
+      m.meta == null &&
+      !m.content &&
+      deliveryOutputSlot == null &&
+      (m.suggestions?.length ?? 0) === 0 &&
+      !m.candidates &&
+      (m.blocks?.length ?? 0) === 0
+    ) return null
     return (
     // Keyed by birthKey (OverlayMessage law): a interim_prose-promoted row's
     // id changes (streamId → #ipN) but its key must not — an id-keyed list
@@ -204,9 +220,7 @@ export function ChatConversation({
             )}
           </div>
         ) : m.role === "user" ? (
-          <div className="flex w-full flex-col gap-2 pb-3">
-            {/* TurnBlock's 12px slot gap + this 12px pad gives the user echo a
-                24px boundary before assistant speech; inner slots stay compact. */}
+          <div className="flex w-full flex-col gap-2">
             {/* The turn's persisted focus rides as a gray prefix row (D8
                 修订 — 焦点入流): system fact first, the bubble below it. */}
             {m.focus ? <FocusRow label={m.focus.label} /> : null}
@@ -346,6 +360,48 @@ export function ChatConversation({
     if (block.turnId === activeTurnId) bottomSeatBlockKey = block.key
   }
 
+  const renderUnit = (unit: ConversationUnit) => unit.kind === "message"
+    ? renderConversationMessage(unit.message) : renderActivityUnit(unit)
+
+  const renderRun = (slot: RunResponseSlot) => {
+    const opening = slot.opening.map(renderUnit)
+    const deliveries = slot.deliveries.map(renderUnit)
+    const sharedProps = {
+      opening,
+      renderAttemptCount: deliveryAttemptCounts.get(slot.runId) ?? 1,
+    }
+    return (
+      <RunCard
+        key={slot.key}
+        {...sharedProps}
+        runId={slot.runId}
+        availableOutputs={chatOutputs}
+        hasDelivery={(deliveryAttemptCounts.get(slot.runId) ?? 0) > 0}
+        onOpen={openOutputViewer}
+        attached={slot.runId === runId ? {
+          steps,
+          title: runTitle,
+          runStartedAt: runCreatedAt,
+          terminal,
+          cancelled: status === "cancelled",
+          failed: status === "failed",
+          reviewPending,
+          workEndedAtMs: runWorkEndedAtMs,
+          hasUploads,
+          outputs: runFallbackOutputs,
+          onOpen: openOutputViewer,
+          renderAttemptCount: sharedProps.renderAttemptCount,
+          narrativeFallback: assets.some((asset) =>
+            asset.processing_status === "pending" || asset.processing_status === "processing",
+          ) ? t("results.stepper.transcribing") : t("results.stepper.queued"),
+        } : undefined}
+      >
+        {deliveries}
+      </RunCard>
+    )
+  }
+  const renderSlot = (slot: AssistantResponseSlot) => slot.kind === "run" ? renderRun(slot) : renderUnit(slot)
+
   return (
     <MessageScrollerProvider
       // autoScroll: the assistant's streaming reply's live edge
@@ -379,61 +435,14 @@ export function ChatConversation({
                 the run adapter pins bottom while live and anchors at the
                 run end once terminal. */}
             {conversationBlocks.map((block) => {
-              if (block.kind === "runAnchor") {
-                const blockRunId = block.runId
-                const sharedProps = {
-                  renderAttemptCount: deliveryAttemptCounts.get(blockRunId) ?? 1,
-                }
-                return (
-                  <MessageScrollerItem key={block.key}>
-                    {blockRunId === runId ? (
-                      <RunBlock
-                        {...sharedProps}
-                        steps={steps}
-                        title={runTitle}
-                        runStartedAt={runCreatedAt}
-                        terminal={terminal}
-                        cancelled={status === "cancelled"}
-                        failed={status === "failed"}
-                        reviewPending={reviewPending}
-                        workEndedAtMs={runWorkEndedAtMs}
-                        hasUploads={hasUploads}
-                        outputs={runFallbackOutputs}
-                        onOpen={openOutputViewer}
-                        narrativeFallback={
-                          assets.some(
-                            (a) =>
-                              a.processing_status === "pending" ||
-                              a.processing_status === "processing",
-                          )
-                            ? t("results.stepper.transcribing")
-                            : t("results.stepper.queued")
-                        }
-                      />
-                    ) : (
-                      <RunCard
-                        runId={blockRunId}
-                        {...sharedProps}
-                        availableOutputs={chatOutputs}
-                        hasDelivery={(deliveryAttemptCounts.get(blockRunId) ?? 0) > 0}
-                        onOpen={openOutputViewer}
-                      />
-                    )}
-                  </MessageScrollerItem>
-                )
-              }
-              const units = block.units.map((unit) => {
-                if (unit.kind === "message") {
-                  return renderConversationMessage(unit.message)
-                }
-                return renderActivityUnit(unit)
-              })
+              if (block.kind === "run") return renderRun(block)
+              const slots = block.slots.map(renderSlot)
               if (block.kind === "standalone") {
-                return <Fragment key={block.key}>{units}</Fragment>
+                return <AssistantResponse key={block.key}>{slots}</AssistantResponse>
               }
               return (
-                <TurnBlock key={block.key}>
-                  {units}
+                <TurnBlock key={block.key} user={block.user ? renderConversationMessage(block.user) : null}>
+                  {slots}
                   {block.key === bottomSeatBlockKey && bottomNowRow ? (
                     <MessageScrollerItem key={`now:${block.key}`}>
                       <WorkSegmentRow rows={[]} activity={bottomNowRow} />
@@ -448,9 +457,11 @@ export function ChatConversation({
                 timeline (and for pure, non-expandable Thinking). The
                 SAME WorkSegmentRow covers both seats and both poses. */}
             {bottomNowRow && bottomSeatBlockKey == null ? (
-              <MessageScrollerItem>
-                <WorkSegmentRow rows={[]} activity={bottomNowRow} />
-              </MessageScrollerItem>
+              <AssistantResponse>
+                <MessageScrollerItem>
+                  <WorkSegmentRow rows={[]} activity={bottomNowRow} />
+                </MessageScrollerItem>
+              </AssistantResponse>
             ) : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>

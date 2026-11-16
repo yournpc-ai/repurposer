@@ -1,114 +1,79 @@
 /**
- * Home 两级 tab 货架 (D5, flora-parity-ui 批) — the data-driven registry
- * behind `RecipeTabs` + `RecipeShelf`: 一级 pill 轨 (families) × 下划线子
- * tab (subs) × 横滑货架 (shelves).
+ * Home's two-level creation shelf: four video products × two typical
+ * applications × real sample cards. Product names come from the built-in
+ * Skill registry's localized display names; application and prompt copy live
+ * in i18n. Every sample resolves to the exact built-in Skill reference +
+ * editable prompt payload used for its new creation journey.
  *
- * 组织轴 = 用户任务 (2026-10 investor-demo ruling), never 产物介质: the
- * tabs answer "what can I get done", not "what file type comes out".
- * Three task families + a catch-all:
+ * Video application seats stay visible when their sample list is empty. The
+ * shared shelf renders an honest empty state; it never substitutes another
+ * sample or hides the product. Non-video Recipe mappings and prompt payloads
+ * remain registered below, but the retired task groups are not Home tabs.
  *
- *   ads (Ads & UGC — first seat = the home default)   文字短片 / 产品演示
- *   talks (Talks & interviews)   一段讲话 → 字幕 / 配音 / 竖屏剪辑 / 重构
- *   posts (Social media)         LinkedIn 核心: 贴文 / 轮播幻灯 (金句卡演示期隐藏)
- *   templates (More)             catch-all 座 — 未归类服务端新卡的兜底行,
- *                                正常为空不渲染
- *
- * 上架纪律: `resolveFamilies` drops empty shelves → empty subs → empty
- * families, so a family without demos never renders, not even a placeholder
- * seat (连摆位都不摆). A demo video SHOULD be a real render of the shelf's
- * capability; one reused product-demo entry temporarily rides REUSED
- * existing renders as pure layout placeholders (each entry's comment names
- * its source) — a placeholder proves the shelf's layout, never the
- * capability, and swapping in a real sample is a data-only edit.
- * Placeholders are recorded in data comments and the batch brief, never
- * bannered in the UI.
- *
- * 卡片点击唯一归宿 = composer 预填 (D5 禁则 8 — 永不是模板编辑器): every
- * resolved shelf item carries its `prefillKey` — a recipe card resolves to
- * `recipes.<id>.promptTemplate` (配方 = 提示词, ADR-040), a demo card to
- * `recipes.shelf.demos.<id>.prompt`.
+ * Clicking a card only prefills the composer. It never sends a message,
+ * uploads material, creates a project/Run, or grants production intent.
  */
 
 import type { LucideIcon } from "lucide-react"
-import { LayoutGrid } from "lucide-react"
 
 import type { RecipePublic } from "@/lib/recipes"
-import type { SkillOption } from "@/lib/skills"
+import {
+  skillOptionForReference,
+  type SkillOption,
+} from "@/lib/skills"
 
-/** One demo video card on a MG family shelf (autoplay muted loop + hover
- * sound veil; the render itself is the evidence). */
+/** One real sample video on a product application shelf. */
 export interface ShelfDemo {
-  /** Demo id — prefill copy lives at `recipes.shelf.demos.<id>.prompt`. The
-   * id is the card's stable business key (React key + sound-owner id): it
-   * never derives from the url, so a video swap touches nothing else. */
+  /** Stable business key; prompt copy lives at
+   * `recipes.shelf.demos.<id>.prompt`. */
   id: string
-  /** Demo video URL. The standard is a real render of the shelf's
-   * capability; placeholder entries (a reused existing render, its source
-   * named in the entry's comment) exist only to ship a shelf's layout
-   * before its own samples land — replacing one is a data-only edit. */
+  /** Public, content-addressed bytes under the reserved demo/ prefix. */
   url: string
-  /** Card frame: "wide" = 16:9, "vertical" = 3/4 (prototype .vcard / .v).
-   * Always the file's real aspect — never stretch a placeholder. */
+  /** The file's real aspect ratio; media is never stretched to fit a card. */
   orientation: "wide" | "vertical"
-  /** Optional built-in Skill identity; resolved against live picker options. */
-  skillId?: string
+  /** Exact immutable built-in Skill binding used by the source journey. */
+  skillId: string
+  skillVersion?: string
 }
 
 export interface RecipeShelfDef {
-  /** Shelf id — the title key is `recipes.shelf.titles.<id>`. */
+  /** Application id — its label key is `recipes.shelf.subs.<id>`. */
   id: string
-  /** "recipes" = the family's recipe cards (RecipeCard); "demos" = MG demo
-   * video cards. */
   kind: "recipes" | "demos"
   demos?: ShelfDemo[]
 }
 
 export interface RecipeSubTabDef {
-  /** Sub-tab id — the label key is `recipes.shelf.subs.<id>`. */
   id: string
   shelves: RecipeShelfDef[]
 }
 
 export interface RecipeFamilyDef {
-  /** Family id — the label key is `recipes.shelf.families.<id>`. */
   id: string
-  /** Optional leading glyph on the level-1 pill (prototype: the templates
-   * tab carries the grid icon). */
+  /** Product label reuses `skills.builtin.<skillId>.name` via
+   * `skillDisplayName`; Home does not maintain another product-name table. */
+  skillId?: string
   icon?: LucideIcon
-  /** Keep the tab visible as a registry seat while disabling selection. */
   disabled?: boolean
+  /** Keep empty demo applications visible with the shared empty state. */
+  preserveEmptyDemoShelves?: boolean
   subs: RecipeSubTabDef[]
 }
 
-/** The recipe card's shelf family — D5's "recipe 注册表加 family 字段",
- * web-side projection: the server registry (apps/api) stays family-
- * agnostic, so the assignment lives here. A card registered server-side
- * WITHOUT an entry here files under "templates" (the catch-all row — MG
- * 批 D3「进现有配方行」). Hidden cards keep their honest mapping — the
- * seat reappears the moment the hide lifts. */
+/** Existing non-video Recipe ownership. These mappings do not create video
+ * product tabs or alter the cards' existing prompt/capability registration. */
 export const RECIPE_CARD_FAMILY: Record<string, string> = {
-  // Talks & interviews — one talk recording in, named cuts out.
   "multilingual-subs": "talks",
   "voice-dub": "talks",
   "highlight-clips": "talks",
   reframe: "talks",
-  // Social media — the LinkedIn-core written/visual outputs.
   "social-post": "posts",
   carousel: "posts",
-  "quote-cards": "posts", // demo-hidden (DEMO_HIDDEN_CARDS)
-  "image-video": "templates", // demo-hidden (DEMO_HIDDEN_CARDS)
+  "quote-cards": "posts",
+  "image-video": "templates",
 }
 
-/** 演示期下架清单 (2026-10 investor-demo ruling) — HIDE, never delete: the
- * cards stay in the server registry, the capabilities stay live (the agent
- * still answers a spoken request), the i18n copy stays. The shelf simply
- * doesn't list them. Remove an id here and the card reappears in its
- * mapped family.
- *
- *   quote-cards — 内容偏薄 (single composite image), overlaps the posts
- *                 story the carousel already tells better
- *   image-video — 照片成片, consumer-flavored, off the knowledge-expert
- *                 positioning, collides with the MG flagship story */
+/** Shelf-only visibility; hidden cards remain registered capabilities. */
 export const DEMO_HIDDEN_CARDS: ReadonlySet<string> = new Set([
   "quote-cards",
   "image-video",
@@ -118,57 +83,42 @@ export function recipeCardFamily(card: RecipePublic): string {
   return RECIPE_CARD_FAMILY[card.id] ?? "templates"
 }
 
-/** The shelf registry — task families in display order (the first family
- * is the home's default tab). Ads' RESERVED seats (brand / ugc / product)
- * declare EMPTY demo lists until their renders land — invisible until then,
- * zero component changes to turn them on. The product-demo / text-short subs
- * are LIVE shelves. Any remaining placeholder entries are marked
- * individually below; the text-short entries and the product-demo shelf's
- * first three entries are real video-chain renders. */
+/** The current Home video shelf. Exactly eight application seats are visible;
+ * five entries backed by real source journeys have media. The other five
+ * shelves intentionally remain empty. */
 export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
   {
-    // Ads — Film-led text shorts and product demos. First seat = the home
-    // default tab.
-    id: "ads",
+    id: "product-promo",
+    skillId: "promo-video",
+    preserveEmptyDemoShelves: true,
     subs: [
       {
-        // 产品宣传 — the first three entries are real video-chain renders.
-        // The remaining reused entry stays explicitly marked as a placeholder.
-        id: "product-demo",
+        id: "website-product",
         shelves: [
           {
-            id: "product-demo",
+            id: "website-product",
             kind: "demos",
             demos: [
               {
-                // ZYMIX 产品演示 + 独立屏上说明字幕 — real render from the
-                // current film chain (project 8577f1ff, output 8beb17c9).
-                id: "product-demo-zymix",
+                // Project b8b20d17… / Output cf91834d…, revision 2.
+                id: "product-promo-agentveil-the-next-move",
                 skillId: "launch-film",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-zymix-one-way-in-41a917c7.mp4",
+                skillVersion: "1.4.0",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-promo-agentveil-the-next-move-a2a4b391.mp4",
                 orientation: "wide",
               },
               {
-                // AgentVeil 产品演示 + 独立屏上说明字幕 — real render from
-                // the current film chain (project b7530c00, output 8cac9bf1),
-                // 81.0s / 16:9.
-                id: "product-demo-highlights",
-                skillId: "launch-film",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-28f35353.mp4",
+                // Project 7386da2b… / Output 73258a3a…, V1 product-evidence.
+                id: "product-promo-oxvalue-product-evidence",
+                skillId: "promo-video",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-promo-oxvalue-product-evidence-e1e78348.mp4",
                 orientation: "wide",
               },
               {
-                // AgentVeil in Motion — latest delivered video from project
-                // bd2b2f2e, output 558c6547; 88.1s / 16:9.
-                id: "product-demo-captioned",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-in-motion-420b7ffe.mp4",
-                orientation: "wide",
-              },
-              {
-                // 操作流程演示 — placeholder: reuses the zymix.ai wide
-                // launch film.
-                id: "product-demo-walkthrough",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/mg-launch-film-zymix-9890ad58.mp4",
+                // Project 9f7440f8… / Output a98d24e9…, V1 energy arc.
+                id: "product-promo-oxvalue-energy-arc",
+                skillId: "promo-video",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-promo-oxvalue-energy-arc-6f210db6.mp4",
                 orientation: "wide",
               },
             ],
@@ -176,56 +126,88 @@ export const RECIPE_FAMILIES: RecipeFamilyDef[] = [
         ],
       },
       {
-        // 文字短片 — real text-source Film render (project 9345ddc2,
-        // output a9701fe0), content-addressed into the demo/ tree.
-        id: "text-short",
-        shelves: [
-          {
-            id: "text-short",
-            kind: "demos",
-            demos: [
-              {
-                id: "text-short-gentle-close",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-gentle-close-6c42705a.mp4",
-                orientation: "wide",
-              },
-              {
-                // Genesis 逐字英文文字短片 — real text-source Film render
-                // (project f52c489c, output 50a6b40d), 68.1s / 16:9.
-                id: "text-short-genesis",
-                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-genesis-25aa61fa.mp4",
-                orientation: "wide",
-              },
-            ],
-          },
-        ],
+        id: "course-service",
+        shelves: [{ id: "course-service", kind: "demos", demos: [] }],
       },
-      { id: "brand", shelves: [{ id: "brand", kind: "demos", demos: [] }] },
-      { id: "ugc", shelves: [{ id: "ugc", kind: "demos", demos: [] }] },
-      { id: "product", shelves: [{ id: "product", kind: "demos", demos: [] }] },
     ],
   },
   {
-    id: "talks",
-    disabled: true,
-    subs: [{ id: "all", shelves: [{ id: "talks", kind: "recipes" }] }],
+    id: "talking-head",
+    skillId: "talking-head-video",
+    preserveEmptyDemoShelves: true,
+    subs: [
+      {
+        id: "opinion-talking-head",
+        shelves: [{ id: "opinion-talking-head", kind: "demos", demos: [] }],
+      },
+      {
+        id: "course-lecture-teaser",
+        shelves: [{ id: "course-lecture-teaser", kind: "demos", demos: [] }],
+      },
+    ],
   },
   {
-    id: "posts",
-    disabled: true,
-    subs: [{ id: "all", shelves: [{ id: "posts", kind: "recipes" }] }],
+    id: "text-animation",
+    skillId: "text-animation",
+    preserveEmptyDemoShelves: true,
+    subs: [
+      {
+        id: "opinion-text",
+        shelves: [
+          {
+            id: "opinion-text",
+            kind: "demos",
+            demos: [
+              {
+                // Project e92babc3… / Output c71525b6…, revision 2.
+                id: "text-short-clear-rhythm",
+                skillId: "text-animation",
+                skillVersion: "1.0.0",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-clear-rhythm-2d594025.mp4",
+                orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "quote-announcement",
+        shelves: [{ id: "quote-announcement", kind: "demos", demos: [] }],
+      },
+    ],
   },
   {
-    // Catch-all seat: a server-side card without a family mapping files
-    // here. Empty in the current assignment → never renders.
-    id: "templates",
-    icon: LayoutGrid,
-    subs: [{ id: "all", shelves: [{ id: "featured", kind: "recipes" }] }],
+    id: "knowledge-explainer",
+    skillId: "knowledge-explainer",
+    preserveEmptyDemoShelves: true,
+    subs: [
+      {
+        id: "concept-explainer",
+        shelves: [
+          {
+            id: "concept-explainer",
+            kind: "demos",
+            demos: [
+              {
+                // Project 0d6104fd… / Output 2b791e37…, revision 2.
+                id: "knowledge-explainer-clear-expression",
+                skillId: "knowledge-explainer",
+                skillVersion: "1.0.0",
+                url: "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/knowledge-explainer-clear-expression-73f4a743.mp4",
+                orientation: "wide",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "research-report",
+        shelves: [{ id: "research-report", kind: "demos", demos: [] }],
+      },
+    ],
   },
 ]
 
-/** One card on a resolved shelf — the discriminated union the shelf
- * renders; `prefillKey` is the click's entire payload (composer 预填). */
 export type ShelfItem =
   | { kind: "recipe"; card: RecipePublic; prefillKey: string; skill?: SkillOption }
   | { kind: "demo"; demo: ShelfDemo; prefillKey: string; skill?: SkillOption }
@@ -242,16 +224,15 @@ export interface ResolvedSub {
 
 export interface ResolvedFamily {
   id: string
+  skillId?: string
   icon?: LucideIcon
   disabled?: boolean
   subs: ResolvedSub[]
 }
 
-/** Project the registry + the fetched recipe cards into renderable
- * families — the 上架纪律 lives here: empty shelf → dropped, empty sub →
- * dropped, empty family → dropped. Card order = the server registry's
- * insertion order (preserved by the encounter-order grouping). Reserved
- * cards keep their seat (RECIPES §10 — RecipeCard renders the Soon pill). */
+/** Project registry definitions and fetched cards into renderable shelves.
+ * Generic empty Recipe groups still collapse; opted-in video demo shelves
+ * preserve their application seat so the empty state is visible. */
 export function resolveFamilies(
   families: RecipeFamilyDef[],
   cards: RecipePublic[],
@@ -259,8 +240,6 @@ export function resolveFamilies(
 ): ResolvedFamily[] {
   const cardsByFamily = new Map<string, RecipePublic[]>()
   for (const card of cards) {
-    // 演示期下架 (DEMO_HIDDEN_CARDS): hide ≠ delete — the card's capability
-    // and copy stay live, the shelf just doesn't list it.
     if (DEMO_HIDDEN_CARDS.has(card.id)) continue
     const familyId = recipeCardFamily(card)
     const list = cardsByFamily.get(familyId)
@@ -270,6 +249,7 @@ export function resolveFamilies(
   return families
     .map((family) => ({
       id: family.id,
+      skillId: family.skillId,
       icon: family.icon,
       disabled: family.disabled,
       subs: family.subs
@@ -285,23 +265,26 @@ export function resolveFamilies(
                       card,
                       prefillKey: `recipes.${card.id}.promptTemplate`,
                     }))
-                  : (shelf.demos ?? []).map((demo) => {
-                      const skill = demo.skillId
-                        ? skills.find(
-                            (option) =>
-                              option.reference.kind === "builtin" &&
-                              option.reference.skill_id === demo.skillId,
+                  : (shelf.demos ?? []).map((demo) => ({
+                      kind: "demo" as const,
+                      demo,
+                      prefillKey: `recipes.shelf.demos.${demo.id}.prompt`,
+                      skill: demo.skillVersion
+                        ? skillOptionForReference(
+                            { kind: "builtin", skill_id: demo.skillId, version: demo.skillVersion },
+                            skills,
                           )
-                        : undefined
-                      return {
-                        kind: "demo" as const,
-                        demo,
-                        prefillKey: `recipes.shelf.demos.${demo.id}.prompt`,
-                        skill,
-                      }
-                    }),
+                        : skills.find((option) => option.reference.kind === "builtin"
+                          && option.skill_id === demo.skillId),
+                    })),
             }))
-            .filter((shelf) => shelf.items.length > 0),
+            .filter(
+              (shelf) =>
+                shelf.items.length > 0 ||
+                (family.preserveEmptyDemoShelves === true &&
+                  sub.shelves.find((candidate) => candidate.id === shelf.id)?.kind ===
+                    "demos"),
+            ),
         }))
         .filter((sub) => sub.shelves.length > 0),
     }))

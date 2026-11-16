@@ -171,19 +171,26 @@ def inspect_output_audio(
                     observed="The executed spec expects sound, but the Output has no audio stream.",
                 ))
             return audio, issues
-        resampler = av.AudioResampler(format="flt", layout="mono", rate=_AUDIO_RATE)
+        # Measure the delivered channels directly. A stereo→mono resample uses
+        # FFmpeg's 1/sqrt(2) per-channel matrix, which adds up to +3 dB for
+        # correlated channels and can invent clipping that the Output lacks.
+        resampler = av.AudioResampler(
+            format="fltp", layout=stream.codec_context.layout, rate=_AUDIO_RATE
+        )
         sample_count = 0
+        value_count = 0
         square_sum = 0.0
         peak = 0.0
         clipped = 0
         try:
             def consume(frame: av.AudioFrame) -> None:
-                nonlocal sample_count, square_sum, peak, clipped
-                values = frame.to_ndarray().reshape(-1)
+                nonlocal sample_count, value_count, square_sum, peak, clipped
+                values = frame.to_ndarray()
                 if values.size == 0:
                     return
-                sample_count += int(values.size)
-                square_sum += float(np.dot(values, values))
+                sample_count += int(values.shape[-1])
+                value_count += int(values.size)
+                square_sum += float(np.sum(values.astype(np.float64) ** 2))
                 peak = max(peak, float(np.max(np.abs(values))))
                 clipped += int(np.count_nonzero(np.abs(values) >= _CLIPPED_THRESHOLD))
 
@@ -211,10 +218,10 @@ def inspect_output_audio(
         ))
         return _unavailable_audio(expected=expected, present=True), issues
 
-    rms = math.sqrt(square_sum / sample_count)
+    rms = math.sqrt(square_sum / value_count)
     rms_dbfs = _dbfs(rms)
     peak_dbfs = _dbfs(peak)
-    clipped_ratio = clipped / sample_count
+    clipped_ratio = clipped / value_count
     audio = AudioInspection(
         expected=expected,
         present=True,

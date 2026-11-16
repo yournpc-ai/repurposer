@@ -22,7 +22,7 @@ import numpy as np
 from av.audio.resampler import AudioResampler
 from PIL import Image, ImageDraw
 
-FIXTURE_MEDIA = Path(__file__).resolve().parents[1] / "tests/fixtures/video_project/media"
+FIXTURE_MEDIA = Path(__file__).resolve().parents[1] / "test/fixtures/video_project/media"
 WEBSITE_FRAMES = sorted(
     {
         0,

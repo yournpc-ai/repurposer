@@ -46,6 +46,16 @@ from app.pipeline.orchestrator import (
 from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.rendering import render_output
 from app.pipeline.staging import reap_stale_staging_uploads
+from app.platform.payment_webhooks import (
+    claim_payment_alert,
+    flag_stale_webhook_events,
+    process_payment_alert,
+)
+from app.tools.video.alignment_store import (
+    claim_pending_alignment,
+    process_narration_alignment,
+    reap_stale_alignments,
+)
 
 # Composition-root seam wiring (ADR-087 §6): the trigger fires and the
 # interrupt machine's docks happen in this process, so the Agent Interface
@@ -59,12 +69,34 @@ logger = structlog.get_logger()
 _NODE_CONCURRENCY = 4
 
 # Staging GC (Batch A, I-PFA-08): S3 listing is not free, so the reaper runs
-# on a slow cadence inside the tick loop rather than every tick.
+# on a slow cadence. It is a background task, never inline in the claim loop:
+# storage cleanup must not delay user-requested asset/run/render work.
 _STAGING_REAP_INTERVAL_SECONDS = 3600
 _last_staging_reap = 0.0
+_staging_reap_task: asyncio.Task[None] | None = None
 
 _running_node_tasks: set[asyncio.Task] = set()
 _running_render_tasks: set[asyncio.Task] = set()
+
+
+async def _run_staging_reap() -> None:
+    """Retrieve every background failure instead of leaking task exceptions."""
+    try:
+        await reap_stale_staging_uploads()
+    except Exception as e:  # noqa: BLE001 — cleanup retries on the next cadence
+        logger.warning("staging_reap_failed", error=str(e))
+
+
+def _schedule_staging_reap(now: float) -> bool:
+    """Start at most one cleanup task without making the claim loop await it."""
+    global _last_staging_reap, _staging_reap_task  # noqa: PLW0603
+    if now - _last_staging_reap < _STAGING_REAP_INTERVAL_SECONDS:
+        return False
+    if _staging_reap_task is not None and not _staging_reap_task.done():
+        return False
+    _last_staging_reap = now
+    _staging_reap_task = asyncio.create_task(_run_staging_reap())
+    return True
 
 
 async def _run_render(output_id: UUID) -> None:
@@ -91,11 +123,31 @@ async def _tick() -> bool:
         did_work = True
         await process_publication(pub_id)
 
+    # Payment alerts are an outbox claim source: the API persists failures,
+    # while this worker owns the external email call and its bounded retries.
+    async with AsyncSessionLocal() as db:
+        if await flag_stale_webhook_events(db):
+            did_work = True
+        payment_alert = await claim_payment_alert(db)
+    if payment_alert is not None:
+        did_work = True
+        await process_payment_alert(payment_alert)
+
     async with AsyncSessionLocal() as db:
         asset_id = await claim_pending_asset(db)
     if asset_id is not None:
         did_work = True
         await process_asset(asset_id)
+
+    # Deterministic final-audio/script alignment is the fifth claim source.
+    # ALIGNED waits for Agent semantics and READY is immutable; neither is
+    # claimed again. Expired PROCESSING leases recover to PENDING only.
+    async with AsyncSessionLocal() as db:
+        await reap_stale_alignments(db)
+        alignment_claim = await claim_pending_alignment(db)
+    if alignment_claim is not None:
+        did_work = True
+        await process_narration_alignment(*alignment_claim)
 
     # Fill up to the concurrency cap with ready nodes; each runs as its own
     # asyncio task (contextvars metering stays per-node).
@@ -133,13 +185,9 @@ async def _tick() -> bool:
         _running_render_tasks.add(task)
         task.add_done_callback(_running_render_tasks.discard)
 
-    # Staging GC (Batch A): expired, unreferenced pre-project uploads.
-    # Hourly cadence; failures stay inside the reaper (log + next pass).
-    global _last_staging_reap  # noqa: PLW0603
-    now = asyncio.get_running_loop().time()
-    if now - _last_staging_reap >= _STAGING_REAP_INTERVAL_SECONDS:
-        _last_staging_reap = now
-        await reap_stale_staging_uploads()
+    # Staging GC is scheduled only after every claim source has had its turn.
+    # A slow storage sweep remains isolated from all subsequent ticks.
+    _schedule_staging_reap(asyncio.get_running_loop().time())
 
     return did_work
 
@@ -147,7 +195,17 @@ async def _tick() -> bool:
 async def run_worker() -> None:
     """Worker entrypoint: recover orphaned jobs, then poll forever."""
     assert_runners_registered()
-    logger.info("worker_starting", poll_interval=settings.worker_poll_interval)
+    from app.providers.llm import get_llm_client
+
+    llm = get_llm_client()
+    logger.info(
+        "worker_starting",
+        poll_interval=settings.worker_poll_interval,
+        llm_provider=llm.provider,
+        llm_model=llm.model,
+    )
+    if not settings.payment_alert_recipient_list:
+        logger.warning("payment_alerts_not_configured")
     async with AsyncSessionLocal() as db:
         # Warm the configs cache before any claim: the pricing seams
         # (price_units → peek_config) read it synchronously, and this
@@ -157,6 +215,7 @@ async def run_worker() -> None:
         await warm_config_cache(db)
         await reap_stale(db)
         await reap_stale_publications(db)
+        await reap_stale_alignments(db)
     await finalize_stuck_runs()
 
     while True:

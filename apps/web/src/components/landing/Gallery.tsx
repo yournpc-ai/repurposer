@@ -1,130 +1,139 @@
-import {
-  motion,
-  useAnimationFrame,
-  useMotionValue,
-  useScroll,
-  useSpring,
-  useTransform,
-  useVelocity,
-} from "motion/react"
-import { useRef, type ReactNode } from "react"
+import { useNavigate } from "@tanstack/react-router"
+import { useCallback, useEffect, useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+  LANDING_GALLERY,
+  type LandingGalleryItem,
+} from "@/components/landing/content"
+import { LANDING_CONTAINER } from "@/components/landing/layout"
 import { useReducedMotion } from "@/components/landing/motion"
-import { SectionHeading } from "@/components/landing/SectionHeading"
+import { useAuth } from "@/lib/auth-context"
+import { stageLandingCreate } from "@/lib/landingCreate"
+import { cn } from "@/lib/utils"
 
-/**
- * Velocity-reactive marquee of knowledge-asset cards (the template's photo
- * marquee, re-contented: our outputs are text, so the cards are mini
- * LinkedIn posts / quote cards / clip notes). Two rows, opposite directions,
- * scroll velocity boosts and can reverse the drift.
- */
-
-const ROW_A_KEYS = ["c1", "c2", "c3", "c4", "c5"] as const
-const ROW_B_KEYS = ["c6", "c7", "c8", "c9", "c10"] as const
-
-const COPIES = 5
-const SET_FRACTION = 100 / COPIES
-const BASE_SPEED = 0.55
-const MAX_VELOCITY_BOOST = 4
-
-function wrap(min: number, max: number, value: number): number {
-  const range = max - min
-  return ((((value - min) % range) + range) % range) + min
+const CARD_POSITION: Record<LandingGalleryItem["id"], string> = {
+  "product-promo": "lg:col-start-1 lg:col-end-3 lg:row-start-1",
+  "talking-head": "lg:col-start-3 lg:row-start-1 lg:row-end-3",
+  "text-animation": "lg:col-start-1 lg:row-start-2",
+  "knowledge-explainer": "lg:col-start-2 lg:row-start-2",
 }
 
-function AssetCard({ cardKey }: { cardKey: string }): ReactNode {
+function GalleryCard({
+  item,
+  onCreate,
+  autoPlay,
+  className,
+}: {
+  item: LandingGalleryItem
+  onCreate: (item: LandingGalleryItem) => void
+  autoPlay: boolean
+  className?: string
+}): ReactNode {
   const { t } = useTranslation()
+  const rootRef = useRef<HTMLElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const root = rootRef.current
+    const video = videoRef.current
+    if (!root || !video) return
+    if (!autoPlay) {
+      video.pause()
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          void video.play().catch(() => undefined)
+        } else {
+          video.pause()
+        }
+      },
+      { threshold: 0.12 },
+    )
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [autoPlay])
+
   return (
-    <figure className="mr-5 w-[260px] shrink-0 sm:w-[300px]">
-      <div className="rounded-2xl border border-border bg-background p-5">
-        <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
-          {t(`landing.gallery.cards.${cardKey}.type`)}
-        </span>
-        <p className="mt-2.5 text-[13px] leading-relaxed text-foreground">
-          {t(`landing.gallery.cards.${cardKey}.text`)}
+    <article
+      ref={rootRef}
+      className={cn(
+        "group relative min-h-0 overflow-hidden rounded-2xl bg-muted",
+        item.id === "talking-head"
+          ? "aspect-[3/4] lg:aspect-auto"
+          : "aspect-video lg:aspect-auto",
+        className,
+      )}
+    >
+      <video
+        ref={videoRef}
+        src={item.videoUrl}
+        poster={item.posterUrl}
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className="absolute inset-0 h-full w-full object-cover"
+        aria-label={t(`landing.gallery.items.${item.id}.title`)}
+      />
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[75%] landing-gallery-scrim"
+      />
+
+      <button type="button" onClick={() => onCreate(item)} aria-label={`${t("landing.gallery.create")}: ${t(`landing.gallery.items.${item.id}.title`)}`} className="absolute inset-0 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-media-foreground" />
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-5 font-sans text-media-foreground sm:p-6">
+        <h3 className="font-sans text-xl leading-tight font-medium sm:text-2xl tracking-[-0.02em]">
+          {t(`landing.gallery.items.${item.id}.title`)}
+        </h3>
+        <p className="mt-2 max-w-md text-sm leading-6 font-normal text-media-foreground/80">
+          {t(`landing.gallery.items.${item.id}.description`)}
         </p>
       </div>
-    </figure>
-  )
-}
-
-function MarqueeRow({
-  cardKeys,
-  direction,
-}: {
-  cardKeys: readonly string[]
-  direction: 1 | -1
-}): ReactNode {
-  const prefersReducedMotion = useReducedMotion()
-  const baseX = useMotionValue(direction === 1 ? -SET_FRACTION / 2 : 0)
-  const directionFactor = useRef<number>(direction)
-
-  const { scrollY } = useScroll()
-  const scrollVelocity = useVelocity(scrollY)
-  const smoothVelocity = useSpring(scrollVelocity, {
-    damping: 50,
-    stiffness: 400,
-  })
-  const velocityFactor = useTransform(
-    smoothVelocity,
-    [0, 1200],
-    [0, MAX_VELOCITY_BOOST],
-    { clamp: false }
-  )
-
-  const x = useTransform(baseX, (value) => `${wrap(-SET_FRACTION, 0, value)}%`)
-
-  useAnimationFrame((_, delta) => {
-    if (prefersReducedMotion) return
-    const step = BASE_SPEED * (delta / 1000)
-    const boost = velocityFactor.get()
-    if (boost < 0) directionFactor.current = -direction
-    else if (boost > 0) directionFactor.current = direction
-    const moveBy = directionFactor.current * step * (1 + Math.abs(boost)) * -1
-    baseX.set(baseX.get() + moveBy)
-  })
-
-  if (prefersReducedMotion) {
-    return (
-      <div className="overflow-x-auto px-5 sm:px-8 lg:px-10">
-        <div className="flex w-max">
-          {cardKeys.map((key) => (
-            <AssetCard key={key} cardKey={key} />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="overflow-hidden">
-      <motion.div style={{ x }} className="flex w-max">
-        {Array.from({ length: COPIES }, (_, copy) =>
-          cardKeys.map((key) => <AssetCard key={`${copy}-${key}`} cardKey={key} />)
-        )}
-      </motion.div>
-    </div>
+    </article>
   )
 }
 
 export function Gallery(): ReactNode {
   const { t } = useTranslation()
-  return (
-    <section
-      id="gallery"
-      className="scroll-mt-24 overflow-hidden pb-24 sm:pb-32"
-    >
-      <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
-        <SectionHeading
-          title={t("landing.gallery.title")}
-          description={t("landing.gallery.description")}
-        />
-      </div>
+  const navigate = useNavigate()
+  const { isAuthenticated, setLoginOpen } = useAuth()
+  const reduce = useReducedMotion()
+  const onCreate = useCallback(
+    (item: LandingGalleryItem) => {
+      stageLandingCreate({
+        skill: item.skill,
+        promptKey: `landing.gallery.items.${item.id}.prompt`,
+      })
+      if (isAuthenticated) void navigate({ to: "/home" })
+      else setLoginOpen(true)
+    },
+    [isAuthenticated, navigate, setLoginOpen],
+  )
 
-      <div className="mt-14 flex flex-col gap-5">
-        <MarqueeRow cardKeys={ROW_A_KEYS} direction={1} />
-        <MarqueeRow cardKeys={ROW_B_KEYS} direction={-1} />
+  const galleryGrid = (
+    <div className={cn("grid gap-5 lg:grid-cols-[1fr_1fr_0.96fr] lg:grid-rows-2", reduce ? "lg:h-[min(66svh,680px)]" : "lg:min-h-0 lg:flex-1 lg:max-h-[680px]")}>
+      {LANDING_GALLERY.map((item) => (
+        <GalleryCard
+          key={item.id}
+          item={item}
+          onCreate={onCreate}
+          autoPlay={!reduce}
+          className={CARD_POSITION[item.id]}
+        />
+      ))}
+    </div>
+  )
+
+  return (
+    <section id="gallery" className={cn("scroll-mt-24 py-20 sm:py-24", !reduce && "lg:h-[170svh] lg:py-0")}>
+      <div className={cn(LANDING_CONTAINER, !reduce && "lg:sticky lg:top-20 lg:flex lg:h-[calc(100svh-5rem)] lg:flex-col lg:justify-center lg:py-6")}>
+        <h2 className="mb-10 lg:mb-6 text-center font-display text-3xl leading-[1.15] font-normal tracking-tight text-balance sm:text-4xl">{t("landing.gallery.heading")}</h2>
+        {galleryGrid}
       </div>
     </section>
   )

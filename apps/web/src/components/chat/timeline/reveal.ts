@@ -53,6 +53,14 @@ export function presentationAckReady({
   return allowed && dtoReady && prosePresented && previewsReady
 }
 
+/** Message-owned uploads have no Run delivery marker. Never attach their
+ * products to the historical failed Run or to a user echo. */
+export function hasMessageOutputs(
+  message: Pick<OverlayMessage, "role" | "outputRefs">,
+): boolean {
+  return message.role === "assistant" && (message.outputRefs?.length ?? 0) > 0
+}
+
 /** A delivery's own Output slot reads only that message's display facts.
  * Another delivery, Run terminal state and Worked seals are not inputs. */
 export function deliveryOutputReveal(

@@ -12,10 +12,7 @@ header. Plain callers get the one-shot JSON ``ChatResponse`` (unchanged);
 the action JSON retired into terminal tool calls, so the prose channel IS
 the reply — ``assistant.delta`` frames carry it verbatim (dialect-stripped at
 the client seam, typewriter law native); ``assistant.thinking`` carries
-liveness keepalives, the film design span's System Status labels
-(``capturing`` / ``storyboarding`` / ``storyboard_revision`` — emitted at
-real transitions inside ``design_storyboard`` and cleared at its exit),
-and the explicit clear frame; ``question.preview`` docks the
+liveness keepalives and the explicit phase-clear frame; ``question.preview`` docks the
 pill the moment an ask_user call's arguments validate. The terminal envelope
 (``turn.completed`` / ``turn.failed``) stays authoritative.
 """
@@ -29,7 +26,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 from sqlalchemy import select
 
 from app.agents.contexts import output_one_liner
@@ -94,6 +91,7 @@ chat_router = APIRouter()
 @chat_router.get("/conversation", response_model=ConversationResponse)
 async def get_conversation(
     project_id: UUID,
+    include_context: bool = False,
     db: DBDep = None,
     current_user: User = Depends(get_current_user_required),
 ) -> ConversationResponse | None:
@@ -116,6 +114,9 @@ async def get_conversation(
             detail="Conversation not found",
         )
     response = ConversationResponse.model_validate(conversation)
+    # Large model-facing history is opt-in; it is never accepted as input.
+    if not include_context:
+        response.context = None
     pending = await latest_pending_question(db, UUID(str(conversation.id)))
     if pending is not None:
         response.pending_question = ChatMessageResponse.model_validate(pending)
@@ -328,6 +329,8 @@ def _make_activity_persister(
         }
         if frame.duration_ms is not None:
             merged["duration_ms"] = frame.duration_ms
+        if frame.receipt is not None and frame.receipt.kind != "skill_read":
+            merged["receipt"] = frame.receipt.model_dump(mode="json")
         try:
             from app.models.database import AsyncSessionLocal
 
@@ -1114,28 +1117,93 @@ async def read_video_storyboard(
     version_id: UUID,
     db: DBDep,
     current_user: User = Depends(get_current_user_required),
+    scrub: str | None = None,
 ) -> dict:
     """The canonical storyboard DTO behind a presenting message block.
     Tools use the complete facts; the visible reply is the LLM's grounded
     Markdown overview. Owner-scoped; an unknown/foreign version reads 404,
     never a leak."""
     from app.editing.service import video_version_read  # deferred: editing seam
-    from app.editing.store import (  # deferred: write door
-        CompositionNotFound,
-        PermissionDenied,
-    )
+    from app.editing.store import CompositionNotFound, PermissionDenied
+    from app.models.schemas import VideoScrubTarget
+    from app.tools.video.preview import ScrubTargetError, enrich_video_scrub
 
     try:
         read = await video_version_read(
             db, owner_id=UUID(str(current_user.id)), version_id=version_id
         )
-        from app.tools.video.programs import enrich_generator_previews
-        return await enrich_generator_previews(read)
+        if scrub is None:
+            return read
+        try:
+            target = TypeAdapter(VideoScrubTarget).validate_python(json.loads(scrub))
+        except (ValueError, TypeError, json.JSONDecodeError):
+            raise HTTPException(422, "Invalid Scrub target") from None
+        return await enrich_video_scrub(
+            db, read, owner_id=UUID(str(current_user.id)), target=target
+        )
+    except ScrubTargetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except (CompositionNotFound, PermissionDenied):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video version not found",
         ) from None
+
+
+class VideoClipRevision(BaseModel):
+    base_ref: dict
+    track_id: str = Field(min_length=1, max_length=64)
+    clip: dict
+    request_id: str = Field(min_length=1, max_length=120)
+
+
+@chat_router.put("/video/versions/{version_id}/clips/{clip_id}")
+async def revise_video_clip(
+    version_id: UUID,
+    clip_id: str,
+    data: VideoClipRevision,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Apply one complete Clip from the deterministic Scrub Input gesture."""
+    from app.editing.edits import ClipEntityWrite
+    from app.editing.schemas import Clip
+    from app.editing.service import revise_video
+    from app.editing.store import (
+        CompositionNotFound,
+        ContentDigestMismatch,
+        PermissionDenied,
+        StaleBase,
+    )
+    from app.models.schemas import ReviseVideoArgs, VideoVersionRef
+
+    base_ref = VideoVersionRef.model_validate(data.base_ref)
+    clip = Clip.model_validate(data.clip)
+    if (
+        base_ref.composition_version_id != version_id
+        or clip.clip_id != clip_id
+        or clip.object.kind != "text"
+    ):
+        raise HTTPException(422, "The Scrub target does not match this saved version")
+    args = ReviseVideoArgs(
+        base_ref=base_ref,
+        clips=[ClipEntityWrite(track_id=data.track_id, clip=clip)],
+    )
+    try:
+        return await revise_video(
+            db,
+            owner_id=UUID(str(current_user.id)),
+            args=args,
+            request_id=f"scrub:{data.request_id}",
+        )
+    except (StaleBase, ContentDigestMismatch):
+        raise HTTPException(
+            409, "This video changed elsewhere. Reopen the current version before applying."
+        ) from None
+    except (CompositionNotFound, PermissionDenied):
+        raise HTTPException(404, "Video version not found") from None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
 
 
 class VideoPresentationComplete(BaseModel):

@@ -18,25 +18,49 @@ import { WaveformPlayer } from "./WaveformPlayer"
 
 const VISIBLE_COUNT = 3
 
-export function isAudioCandidateMember(member: CandidateMemberPayload): boolean {
+function hasCompleteAudioFacts(member: CandidateMemberPayload): boolean {
   return (
-    member.provider === "freesound" &&
     typeof member.provider_id === "string" &&
     typeof member.title === "string" &&
     typeof member.author === "string" &&
     typeof member.duration_seconds === "number" &&
     Number.isFinite(member.duration_seconds) &&
     member.duration_seconds > 0 &&
-    typeof member.source_url === "string" &&
     typeof member.preview_url === "string" &&
-    member.license === "CC0" &&
+    typeof member.license === "string" &&
     typeof member.attribution === "string" &&
     typeof member.query === "string"
   )
 }
 
+export function isAudioCandidateMember(member: CandidateMemberPayload): boolean {
+  if (!hasCompleteAudioFacts(member)) return false
+  if (member.provider === "freesound") {
+    return (
+      member.music_id == null &&
+      typeof member.source_url === "string" &&
+      member.license === "CC0"
+    )
+  }
+  return (
+    member.provider === "music_library" &&
+    !!member.provider_id &&
+    member.music_id === member.provider_id &&
+    (member.source_url == null || typeof member.source_url === "string") &&
+    member.start === 0 &&
+    member.end === member.duration_seconds
+  )
+}
+
 export function isAudioCandidateSurface(surface: CandidateSurface): boolean {
-  return surface.members.length > 0 && surface.members.every(isAudioCandidateMember)
+  if (surface.members.length === 0 || !surface.members.every(isAudioCandidateMember)) {
+    return false
+  }
+  const provider = surface.members[0].provider
+  return (
+    surface.members.every((member) => member.provider === provider) &&
+    (surface.kind !== "music_set" || provider === "music_library")
+  )
 }
 
 /** Display the provider's name, not its filename extension. Provenance stays
@@ -45,7 +69,7 @@ export function soundDisplayTitle(title: string): string {
   return title.replace(/\.[a-z][a-z0-9]{0,15}$/i, "")
 }
 
-/** SFX candidates add playback to the existing ordinal/selection contract;
+/** Audio candidates add playback to the existing ordinal/selection contract;
  * importing still happens only through the user's next natural-language turn. */
 export function AudioCandidateSurface({
   surface,

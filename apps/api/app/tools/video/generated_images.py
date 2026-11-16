@@ -1,4 +1,4 @@
-"""MiniMax image-01 production for image-v1 GeneratorObjects.
+"""MiniMax image-01 production for image-generation GeneratorObjects.
 
 The CompositionVersion owns only the reviewable request. An authorized Run
 writes a submitted marker before one non-idempotent provider POST, then meters
@@ -41,8 +41,8 @@ class GeneratedImageOutcomeUnknown(GeneratedImageError):
 
 def _image_object(clip: Clip) -> GeneratorObject:
     obj = clip.object
-    if not isinstance(obj, GeneratorObject) or obj.runtime != "image-v1":
-        raise GeneratedImageError(f"clip {clip.clip_id} is not an image-v1 GeneratorObject")
+    if not isinstance(obj, GeneratorObject) or obj.producer != "image-generation":
+        raise GeneratedImageError(f"clip {clip.clip_id} is not an image-generation GeneratorObject")
     if not isinstance(obj.output, GeneratedImageOutput):
         raise GeneratedImageError(f"clip {clip.clip_id} lacks generated-image output constraints")
     return obj
@@ -183,7 +183,7 @@ async def ensure_generated_image_clip(
     await _save_manifest(key, {
         "schema_version": 1,
         "state": "submitted",
-        "runtime": obj.runtime,
+        "producer": obj.producer,
         "program_digest": obj.program_digest(),
         "request": _request(obj),
         "execution_id": execution_id,
@@ -203,7 +203,7 @@ async def ensure_generated_image_clip(
     media_key, media_digest = await store_source_bytes(data, suffix, mime_type)
     manifest = {
         "schema_version": 1,
-        "runtime": obj.runtime,
+        "producer": obj.producer,
         "program_digest": obj.program_digest(),
         "request": _request(obj),
         "provider_request": {

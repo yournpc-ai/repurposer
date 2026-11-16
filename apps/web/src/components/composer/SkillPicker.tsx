@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next"
 import {
   fetchChatSkills,
   filterSkillOptions,
+  skillDisplayName,
   type SkillOption,
 } from "@/lib/skills"
 import { cn } from "@/lib/utils"
@@ -47,7 +48,9 @@ export function SkillPicker({
     return () => controller.abort()
   }, [])
 
-  const filtered = filterSkillOptions(options, query)
+  const filtered = filterSkillOptions(options, query, (option) =>
+    skillDisplayName(option, t),
+  )
 
   useEffect(() => {
     setActiveIndex(0)
@@ -79,10 +82,13 @@ export function SkillPicker({
     return () => window.removeEventListener("keydown", handler, true)
   }, [filtered, activeIndex, onSelect, onClose])
 
+  const spaceBelow = window.innerHeight - position.bottom
+  const openAbove = spaceBelow < 264 && position.top > spaceBelow
+
   return createPortal(
     <div
       style={
-        position.top > 220
+        openAbove
           ? {
               left: position.left,
               top: position.top,
@@ -125,7 +131,7 @@ export function SkillPicker({
               <BookOpen className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">
-                  /{option.name}
+                  {skillDisplayName(option, t)}
                   {option.version_number != null ? ` v${option.version_number}` : ""}
                 </span>
                 {option.description ? (

@@ -79,6 +79,14 @@ export function runEventsForAttachment(
     : initialState(runId, attempt)
 }
 
+/** Attachment ordinals retain compatibility with historical Run recovery
+ * events. Foreground retry_upload never returns a Run id and never calls
+ * this helper; its products belong to the current answer. */
+export function nextRunAttachment(currentAttempt: number, sameRun: boolean) {
+  const attempt = sameRun ? currentAttempt + 1 : 0
+  return { attempt, uploadRetryCount: attempt }
+}
+
 export function useRunEvents(
   runId: string | null,
   onTerminal?: () => void,

@@ -13,6 +13,7 @@
  * live-only double-paragraph bug class). */
 
 import type { OverlayMessage, QuestionMessage } from "./timeline/types"
+import { triggerOutputRefs } from "./timeline/history"
 import { releaseSettledCandidateRows } from "@/lib/chatStreamFrames"
 
 /** 信封散文真值: the follow-up row's prose truth, RAW (the DB's verbatim
@@ -112,7 +113,7 @@ export function spliceAnswerEnvelope(
           runId: followUp?.workflow_run_id ?? m.runId,
           turnId: followUp?.turn_id ?? m.turnId,
           ...(followUp
-            ? { blocks: followUp.blocks?.length ? followUp.blocks : undefined }
+            ? { blocks: followUp.blocks?.length ? followUp.blocks : undefined, outputRefs: triggerOutputRefs(followUp.intent) }
             : {}),
           ...(followUp?.seq != null ? { seq: followUp.seq } : {}),
           // Re-anchor on the server row's created_at — the preview's client

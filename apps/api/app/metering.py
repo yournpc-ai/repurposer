@@ -1,6 +1,6 @@
 """Per-node LLM usage metering (ADR-025, RunPlan Phase 1).
 
-The single LLM choke point (``providers/llm/minimax.py``) reports API ``usage`` here;
+The single LLM choke point (``providers/llm`` clients) reports API ``usage`` here;
 ``record_usage`` accumulates it onto the workflow step currently bound via
 ``bind_workflow_step``. Binding is a contextvar, so concurrent node executions
 (asyncio tasks) each meter their own node, and retries/fallbacks inside one
@@ -35,6 +35,7 @@ drifts with the vendor price list).
 """
 
 import contextvars
+from contextlib import contextmanager
 from typing import Any
 from uuid import UUID
 
@@ -49,7 +50,15 @@ _current_cost_ledger: contextvars.ContextVar[dict | None] = contextvars.ContextV
 
 
 def _new_ledger() -> dict:
-    return {"prompt_tokens": 0, "completion_tokens": 0, "fixed_cost": 0.0, "units": {}}
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "fixed_cost": 0.0,
+        "token_cost_usd": None,
+        "provider": None,
+        "model": None,
+        "units": {},
+    }
 
 
 class bind_workflow_step:
@@ -86,6 +95,7 @@ def merge_accrued_cost(node_cost: dict | None, accrued: dict | None) -> dict | N
         accrued.get("prompt_tokens")
         or accrued.get("completion_tokens")
         or accrued.get("fixed_cost")
+        or accrued.get("token_cost_usd") is not None
         or accrued.get("units")
     ):
         return node_cost
@@ -100,6 +110,16 @@ def merge_accrued_cost(node_cost: dict | None, accrued: dict | None) -> dict | N
         float(cost.get("fixed_cost") or 0.0) + float(accrued.get("fixed_cost") or 0.0),
         6,
     )
+    if accrued.get("token_cost_usd") is not None:
+        cost["token_cost_usd"] = round(
+            float(cost.get("token_cost_usd") or 0.0)
+            + float(accrued["token_cost_usd"]),
+            6,
+        )
+    if accrued.get("provider") is not None:
+        cost["provider"] = accrued["provider"]
+    if accrued.get("model") is not None:
+        cost["model"] = accrued["model"]
     units = dict(cost.get("units") or {})
     for key, value in (accrued.get("units") or {}).items():
         units[key] = round(float(units.get(key) or 0.0) + float(value), 4)
@@ -108,16 +128,18 @@ def merge_accrued_cost(node_cost: dict | None, accrued: dict | None) -> dict | N
     return cost
 
 
-async def record_usage(usage: dict | None) -> None:
-    """Accumulate one LLM call's token usage onto the bound workflow step.
+async def record_usage(
+    usage: dict | None,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    cost_usd: float | None = None,
+) -> None:
+    """Accumulate one LLM call's token usage and optional actual token cost.
 
-    Silently no-ops when no node is bound (e.g. request-path calls such as
-    infer-intent) or when the provider omitted usage. Pure ledger mutation —
-    metering must never break generation.
-
-    A bound conversation-turn ledger (ADR-117 D3) accumulates the same call
-    in parallel — the two bindings never coexist structurally, so each call
-    lands on exactly one ledger in practice.
+    Providers with cache- or time-dependent prices pass their per-call cost;
+    legacy callers retain the aggregate MiniMax pricing path. Pure ledger
+    mutation — metering must never break generation.
     """
     if not usage:
         return
@@ -129,10 +151,29 @@ async def record_usage(usage: dict | None) -> None:
     if accrued is not None:
         accrued["prompt_tokens"] += prompt
         accrued["completion_tokens"] += completion
+        if provider is not None:
+            accrued["provider"] = provider
+        if model is not None:
+            accrued["model"] = model
+        if cost_usd is not None:
+            accrued["token_cost_usd"] = float(accrued["token_cost_usd"] or 0.0) + cost_usd
     conversation = _current_conversation_ledger.get()
     if conversation is not None:
         conversation["prompt_tokens"] += prompt
         conversation["completion_tokens"] += completion
+        if provider is not None:
+            conversation["provider"] = provider
+        if model is not None:
+            previous_model = conversation.get("model")
+            if previous_model not in (None, model):
+                logger.warning(
+                    "conversation_usage_mixed_models",
+                    previous_model=previous_model,
+                    model=model,
+                )
+            conversation["model"] = model
+        if cost_usd is not None:
+            conversation["cost_usd"] = float(conversation["cost_usd"] or 0.0) + cost_usd
         cached = _cached_tokens_of(usage)
         if cached is not None:
             conversation["cached_tokens"] = (
@@ -150,6 +191,25 @@ _current_conversation_trace: contextvars.ContextVar[dict[str, str] | None] = (
 )
 
 
+_current_model_prompt: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "model_prompt_diagnostics", default=None,
+)
+
+
+def current_model_prompt() -> dict[str, Any] | None:
+    return _current_model_prompt.get()
+
+
+@contextmanager
+def bind_model_prompt(assembly: dict[str, Any]):
+    """Diagnostic sideband only; reset on success, failure and cancellation."""
+    token = _current_model_prompt.set(assembly)
+    try:
+        yield
+    finally:
+        _current_model_prompt.reset(token)
+
+
 def current_conversation_trace() -> dict[str, str] | None:
     """Optional local diagnostic correlation; never part of model input."""
     return _current_conversation_trace.get()
@@ -158,7 +218,14 @@ def current_conversation_trace() -> dict[str, str] | None:
 def _new_conversation_ledger() -> dict:
     # cached_tokens stays None until the provider actually reports cache
     # hits (conversation_usage.cached_tokens is nullable — 返回即记).
-    return {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": None}
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cached_tokens": None,
+        "provider": None,
+        "model": None,
+        "cost_usd": None,
+    }
 
 
 def _cached_tokens_of(usage: dict) -> int | None:
@@ -189,7 +256,8 @@ class bind_conversation_turn:
     which is silently dropped — never miscounted onto another turn."""
 
     def __init__(
-        self, *, conversation_id: UUID | None = None, turn_id: UUID | str | None = None
+        self, *, conversation_id: UUID | None = None, turn_id: UUID | str | None = None,
+        project_id: UUID | str | None = None
     ) -> None:
         self._token: contextvars.Token[dict | None] | None = None
         self._trace_token: contextvars.Token[dict[str, str] | None] | None = None
@@ -197,6 +265,8 @@ class bind_conversation_turn:
             {"conversation_id": str(conversation_id), "turn_id": str(turn_id)}
             if conversation_id is not None and turn_id is not None else None
         )
+        if self._trace is not None and project_id is not None:
+            self._trace["project_id"] = str(project_id)
         self.accrued: dict = _new_conversation_ledger()
 
     def __enter__(self) -> "bind_conversation_turn":
@@ -232,18 +302,33 @@ async def fold_conversation_usage(
         accrued.get("prompt_tokens") or accrued.get("completion_tokens")
     ):
         return
-    from app.config import settings  # deferred: keep metering import-light
+    from app.config import settings
     from app.models.tables import ConversationUsage  # deferred: model edge
+    from app.providers.llm import get_llm_client, price_text_tokens
 
     prompt = int(accrued.get("prompt_tokens") or 0)
     completion = int(accrued.get("completion_tokens") or 0)
-    try:
-        from app.providers.llm.minimax import price_tokens  # deferred: cycle
-
-        cost = price_tokens(prompt, completion)
-    except Exception as e:  # noqa: BLE001 — metering must never break the turn
-        logger.warning("conversation_usage_price_failed", error=str(e))
-        cost = 0.0
+    provider = accrued.get("provider")
+    model = accrued.get("model")
+    if provider is None and model is None:
+        # Bare legacy records belong to MiniMax even after the deployment's
+        # default text provider changes.
+        provider = "minimax"
+        model = settings.minimax_model
+    model = model or get_llm_client().model
+    if accrued.get("cost_usd") is not None:
+        cost = float(accrued["cost_usd"])
+    else:
+        try:
+            cost = price_text_tokens(
+                prompt,
+                completion,
+                provider=provider,
+                model=model,
+            )
+        except Exception as e:  # noqa: BLE001 — metering must never break the turn
+            logger.warning("conversation_usage_price_failed", error=str(e))
+            cost = 0.0
     db.add(
         ConversationUsage(
             user_id=user_id,
@@ -256,10 +341,7 @@ async def fold_conversation_usage(
                 else None
             ),
             cost_usd=round(cost, 6),
-            # The conversation layer speaks to ONE provider/model today;
-            # price_tokens prices the same default. A second provider joining
-            # the chat layer must split the ledger per model first.
-            model=settings.minimax_model,
+            model=model,
         )
     )
 

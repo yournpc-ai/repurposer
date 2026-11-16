@@ -80,7 +80,7 @@
 | 路由器 | intent router（`intent_router`） | chat 边缘的意图路由（N-44 / ADR-052）：一个 router 两个相位 prompt（pre-run / post-run，相位 = 上下文参数）；ask 形状两相位共享。业界坐标 = Anthropic routing 模式 / OpenAI SDK triage。**落地现状**：pre-run 相位实例 = `intent_router`；post-run 相位实例 = `chat_intent_agent`——**物理形态 = 双实例保持**（DIALOG_WORKFLOW §8） | 不是 autonomy 义的 agent（永禁）；不是第二意图入口 |
 | brief | brief（`projects.pending_brief` 的 brief 块） | 对话引擎的结构化状态（N-45 / ADR-052；类名 `Brief`）：槽位 topic / audience / tone / constraints[] / material_state + 任务链与 derived；**每槽带来源 user-stated > inferred > default，代码侧合并**（LLM proposes, code decides）；上下文工程主压缩件（累积 prompt 叙事降存档位） | 不是会话记忆（记忆层座位不变）；不是计划（计划 = brief 的渲染）；不是 session state（评审被拒，N-52） |
 | 有界 loop 节点 | bounded loop node | pipeline 侧 agent 性的合法座位（N-47 / ADR-052，已落地——试点 = research 节点）：`NodeBase` 子类，内部 mini tool-loop（工具 = `app/tools/` 注册表）——三护栏：迭代上限（节点声明）/ 报价 = fold（上限 × 单次）/ 对外 = DAG 单节点（拓扑 / 占位 roster / SSE 无感）。业界同构 = LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component | 不是开放式 autonomy（永拒不变）；chat 侧的有界工具 loop = `ToolLoopAgent`（另一座，ADR-077） |
-| 剧本矩阵 | `chat_scenarios.py` | scripts/ 下的用户旅程矩阵：预设多轮剧本对活 API 跑形态级断言（真实 LLM 不锁文案）；与纯 pytest、check_gates、prompt_gate 分属部署仪式的不同检查 | 不叫 harness（harness 单义 = 调用面，N-48）；未运行不得写成通过 |
+| 用户旅程矩阵 | `test/journeys/chat.py` / `JOURNEYS` | 预设多轮用户旅程对活 API 验证用户可见结果与服务端/数据库真值（真实模型不锁文案）；与 `test/core` 的核心 API/DB 确定性测试分属两类测试资产 | 不叫 harness（harness 单义 = 调用面，N-48）；未运行不得写成通过 |
 | 能力层 | capability layer | 编辑能力的唯一事实层（ADR-033）：`OP_REGISTRY`（参数级微操作）∪ `TOOL_REGISTRY`（任务级宏操作），双注册表双海拔 | 不适配器私设能力 |
 | 适配层 | adapter | 能力层之上的薄转换：chat / editor /（预留）mcp——只做"输入形式 → 注册表调用"的翻译 | 不含编辑逻辑；不是新能力来源 |
 | 瞬时节点错误 | `TransientNodeError` | step 级重试的判定类型（`app/pipeline/errors.py`，agent-loop-upgrade W3）：provider/网络/存储瞬时故障；`execute_step` 按节点类声明的 `retries` 预算（`NodeBase.retries`）复位 pending | 不是确定性失败的通行证——缺失输入/空批次必须普通异常快速失败 |
@@ -179,21 +179,33 @@
 | 画面描述 | `Scene.visual_description` | LLM 对当前真实视觉元素与运动的用户可读摘要；视觉修改必须更新或清空 | 不是 renderer 输入、结构真相或可失实保留的旧文案 |
 | 片段 | `Clip` | Track 上有输出时间窗的编辑项，内含 Object，可引用 SourceSnapshot/source_range | 不再专指旧 clip-spec；不是 `is_clip` 布尔变体 |
 | 对象 | `Object` | Clip 内可渲染、可变换、可动画的内容 | 不自行决定 Track 和输出时间 |
-| 生成对象 | `GeneratorObject`（`kind="generator"`） | 创作层保留程序或模型请求及参数，受控生产固定媒体后参与合成；当前已接 drawing-v1 与 image-v1，component-v1 归 D5 | 不是执行节点 `prototype="generator"`、Run 或每供应商子类，不向 video-spec 注入可执行代码或模型请求 |
-| 组件程序 | `component-v1` | GeneratorObject 的受控 runtime；Agent 按真实内容编写不可变 TSX，HTML/SVG 为组件内标记，上游烘焙为固定媒体 | 不是 HTML runtime、外部 Skill 脚本权限、任意 npm/React 注入或最终 spec 对象 |
+| 生成对象 | `GeneratorObject`（`kind="generator"`） | 创作层保留程序或模型请求及参数，受控生产固定媒体后参与合成；目标以 `producer = draw-2d / remotion-project / image-generation` 区分生产方式 | 不是执行节点 `prototype="generator"`、Run 或每供应商子类，不向 video-spec 注入可执行代码或模型请求 |
+| 2D 程序绘制 | `draw-2d` | Agent 编写受控 2D 绘制程序并生产固定媒体；替代旧名 `drawing-v1` | 不是自由 DOM、业务执行图或原生矢量对象的逐项可编辑承诺 |
+| Remotion 工程 | `remotion-project` | Agent 编写完整、不可变的多文件 Remotion 工程，经隔离 runner 烘焙为固定媒体；替代旧名 `component-v1`，不再以单组件为创作上限 | 不是外部 Skill 脚本权限、动态 npm/网络/DB 权限或最终 spec 对象 |
+| 图像生成 | `image-generation` | 保存模型图像生成请求，授权制作后固定实际图片；替代旧名 `image-v1` | 不是固定 ImageObject、任意供应商参数或免授权生成 |
+| 镜头卡 | shot card | Skill 包内的镜头意图、参数、能量、已知坑与参考实现位置 | 不是新作品层、运行期镜头注册表或 renderer 组件身份 |
+| 镜头静态索引 | `library.json` | 卡名、变体、分类与预览的发现/消歧索引 | 不是动态 import、执行注册表或第二作品模型 |
+
+`GeneratorObject` 的字段为 `producer`；旧 `runtime` 与旧值只在既有 CompositionVersion 读兼容、迁移合同和历史证据中保留，不作为活跃写口。
 | 音效 | `SFX` | 由 AudioObject + audio/effect Track + SourceSnapshot 承载的声音素材与 cue；候选工具为 `search_sfx` / `import_sfx`，作品修订仍走 `revise_video` | 不是 SfxObject、第二音频 spec、ASR 任务或语音 `voice` |
 | 波形播放器 | `WaveformPlayer` | SFX 候选与音频 Inspector 共用的真实播放/seek/进度组件；bars 是绑定稳定音频身份的确定性视觉表达 | 不是 VoiceRecorder、随机波形、真实音频分析、候选写口或第二作品编辑器 |
 | 动画 | `Animation` | 所属 Clip 内针对 Object/TextPart 属性的关键帧序列与分段 easing | 不是 Clip 间 Transition，不是 Text 专属能力 |
 | 文字部件 | `TextPart` | 由 TextObject 派生的 line/word/grapheme/span 可寻址对象 | 默认不是独立 Clip，不按数组下标静默重指 |
 | 素材快照 | `SourceSnapshot` | 素材某次内容的不可变 digest、manifest/transcript/views 与存储引用 | 不是 refresh 会覆盖的“最新 Asset”或 page_readings 缓存别名 |
+| 旁白对齐 | `NarrationAlignment` | 最终音频与讲稿的句/词源时间、文本范围、锚定/插值来源及 Agent 语义标注的不可变事实；准备完成后供 CompositionVersion 引用 | 不是 ASR 原文副本、可独立编辑的 timestamps 文件、置信度分数或第二作品根 |
+| 旁白锚点 | `NarrationAnchor` | Animation 从特定 NarrationAlignment 的 sentence/word/text_range 解算输出帧时保留的来源引用 | 不是浮点秒、渲染器输入或跨文本版本静默重指 |
+| 分镜采集计划 | `CapturePlan` | 由选定网页镜头产生的有界路由、状态、元素、动作与制品要求，经现有 WEB_PAGE Asset 队列生成新快照 | 不是任意浏览器脚本、登录/表单提交权限、全站爬虫或第二意图入口 |
 | 视频模板 | `VideoTemplate` | 可确定性展开为 CompositionVersion 的结构、槽位、有界 repeat/variant | 不是 PromptTemplate、assistant 文案或执行脚本 |
 | 预设 | `Preset` | Animation/Caption/TextStyle/Audio 等局部参数组合，实例化后展开 | 不是整部 VideoTemplate，不是 Renderer 运行时查询依赖 |
+| 视频预设候选面 | `VideoPresetCandidateSurface` | Chat 内展示 2–4 个注册 Preset 的真实动态预览，经 `video_preset_set` 持久化并由普通语言选择 | 不是外部 Gallery、直接改作品按钮、mention、第二意图面或模板编辑器 |
 | 提示词模板 | `PromptTemplate` | composer 可见预填；当前 Recipe 的目标语义 | 不携带隐藏执行参数，不叫 VideoTemplate，不要求 UI 出现“配方” |
 | 视频渲染契约 | `video-spec` | CompositionVersion 编译出的 renderer-neutral 自足渲染输入 | 不含 React/Remotion/DOM/任意 CSS，不是 CompositionVersion 本身 |
 
 **命名裁决**：Project 是 Chat/执行上下文，Composition 是影片身份，CompositionVersion 是内容版本，Timeline 是内部时间结构。选 Composition 表达 MG/网页/文字/媒体的时空组合，不同时引入 Sequence、Work / WorkDocument。用户面沿用影片名称、画面、字幕、版本；工具仍叫 design_video/revise_video/produce_video。
 
-**目标目录与持久化词族**：`app/editing` 拥有 Composition/CompositionVersion/SourceSnapshot 内容服务；`app/tools/video` 拥有 produce_video 与 VideoNarration 制作能力。目标表 = `compositions` / `composition_versions` / `source_snapshots` / `video_narrations`，C 再增 `user_skills` / `skill_versions`。`video-spec` 是纯契约包；旧 Film schema 当前在 apps/render/src/film/schema.ts，不存在独立 packages/film-spec。目录去向与逐项删除条件只维护在 VIDEO_PROJECT §12，表 owner 归 MODULE_ARCHITECTURE §4.2（TARGET）。
+当前内置 Skill id：产品宣传沿用 `launch-film`，口播动效 = `talking-head-video`，文字动画 = `text-animation`，知识讲解 = `knowledge-explainer`。新增核心宣传 Skill = `promo-video`，用户面 zh = `/宣传视频制作`、en = `/Promo video`；其实现与 Home 新入口绑定归 `tasks/skill-package-promo-video.md` P4，旧 launch-film 的既有绑定和 provenance 不改名。这些是内部引用与包名；picker/chip 的 zh 用户面名称依次为 `/产品宣传视频制作`、`/口播动效视频制作`、`/文字动画视频制作`、`/知识讲解视频制作`，en 依次为 `/Product promo video`、`/Talking-head motion video`、`/Text animation video`、`/Knowledge explainer video`，永不把内部 id 当作用户面 Slash 名称。十六个原生 Preset id 固定为 `caption-phrases` / `text-reveal` / `text-impact` / `typewriter` / `keyword-fill` / `word-cycle` / `claim-layout` / `highlight-sweep` / `path-underline` / `callout` / `flow-steps` / `comparison-columns` / `card-stack` / `list-reveal` / `notification-stack` / `title-lockup`；它们是展开注册表条目，不是 Object kind、renderer component 或 mention。
+
+**目标目录与持久化词族**：`app/editing` 拥有 Composition/CompositionVersion/SourceSnapshot 内容服务；`app/tools/video` 拥有 produce_video、VideoNarration 与 NarrationAlignment 制作能力。目标表 = `compositions` / `composition_versions` / `source_snapshots` / `video_narrations`，外部 Skill 增加 `user_skills` / `skill_versions`，旁白对齐增加 `narration_alignments`。`video-spec` 是纯契约包；旧 Film schema 当前在 apps/render/src/film/schema.ts，不存在独立 packages/film-spec。目录去向与逐项删除条件只维护在 VIDEO_PROJECT §12，表 owner 归 MODULE_ARCHITECTURE §4.2（TARGET）。
 
 **版本词汇作用域**：N-59 的原地 edit/undo/restore 描述现行 Output 编辑器；新视频的内容修订经 apply_composition_edits 生成 CompositionVersion，制作成功才交付新 Output。新视频 Output.work_id = Composition.id，发布/归档继续锚该作品；跨 Chat @output 钉具体 Output/版本，不自动追随 head。Skill 保存创作方法，全局库负责素材/产物可引用性，不设“复制确切作品”能力。
 
@@ -241,7 +253,7 @@
 | N-45 | `pending_intent` → `pending_brief`（brief） | 对话引擎的结构化状态正名（ADR-052 判词 4）：intent 是单轮推断产物，brief 是跨轮累积状态——槽位 topic / audience / tone / constraints[] / material_state，每槽带来源 user-stated > inferred > default，代码侧合并。**`pending_brief` 列名是存储出身**：列名 / results 响应字段随列冻结，概念词 = brief | §1 |
 | N-46 | 角色名 = 节点 display 属性，工艺叙事默认 | 工作流内部永远函数名（动词族零人格）；用户可见进行态叙事 = 节点声明上的可选展示属性（`task_name` 机制升级位）——默认**写工艺不写人**（「正在剪辑成片…」✓ /「剪辑师正在…」✗）；N-24 禁令对象 = assistant 的班子包装，步骤级工艺叙事是另一层；人形叙事 = 对 N-24 的显式例外，需单独裁决（ADR-052 判词 7） | §1 |
 | N-47 | 生产侧有界 loop 节点 = agent 性的合法座位 | 编译期排不出拓扑的活（搜索 / 阅读）由 `NodeBase` 子类承接：内部 mini tool-loop（工具 = `app/tools/` 注册表）+ 三护栏（迭代上限 / 报价 = fold / 对外 = DAG 单节点）；业界同构 LangGraph subgraph / Mastra agent-in-step / Anthropic agentic component；开放式 autonomy（无界循环 / 自主改拓扑 / 自我 steering）永拒不变——常备否决清单只收编有界形态（ADR-052 判词 8） | §1 |
-| N-48 | harness 单义 = 调用面 Agent 漏斗；「剧本 harness」→「剧本矩阵」 | harness 只指调用面漏斗（`agents/base.py` + contexts 装配 + prompts）；测试脚本叫**剧本矩阵**（`scripts/chat_scenarios.py`）；harness 只保留调用面含义，不为测试脚本另立产品概念。pytest/vitest 的 test suite 仍是正常工程词，不在此禁令内 | §1 |
+| N-48 | harness 单义 = 调用面 Agent 漏斗；测试入口 = 核心测试 / 用户旅程矩阵 | harness 只指调用面漏斗（`agents/base.py` + contexts 装配 + prompts）；真实用户测试叫**用户旅程矩阵**（`test/journeys/chat.py` / `JOURNEYS`），确定性合同测试叫**核心测试**（`test/core`）。harness 只保留调用面含义，不为测试脚本另立产品概念。pytest/vitest 的 test suite 仍是正常工程词，不在此禁令内 | §1 |
 | N-49 | 提问机器词汇批：词根 question/answer，ask 只剩 action 动词一个座位 | 当前词汇与形态见 `CHAT_ARCHITECTURE.md` §8：`AskPayload`→`QuestionPayload` / `AskProposal`→`QuestionProposal`（kind 字段删除——LLM 只产普通问题，task_book 恒由系统举起）/ `AskOption`→`Option` / kind 枚举收敛 `{task_book, question}`（语义分支只有"是不是计划"一处，其余结算全走载荷握手字段：`workflow_run_id`→续跑 / `slot`→回填 / `caption_mode_` 前缀→恢复模式；旧行 "choice"/"confirm" 读容忍升级，只读不写）/ `QaPair`→`AnsweredQuestion`、`qaAnswerText`→`answeredQuestionText` / OpsCard 死码删除。提问机器方言词 **clarify / receipt / eval / primitive** 禁作同义别名；`archive` 只保留产物归档（`archived_at`）本义，不作提问或收据别名 | §1 |
 | N-50 | 形态律两词 = 文字问 / 选项问；插话 / 提醒尾；「形态切换」「morph」不用于提问形态分类 | 提问机器形态律（ADR-053）：问题按 `options` 是否为空分两形——**文字问**（options 空 = 普通对话消息）/ **选项问**（options 非空 = dock 阻塞形态，输入行让位但 MentionEditor 不卸载），渲染分流与 kind 无关；计划确认 pill 不按选项问阻塞。**插话**（interjection）= 待决中与问题无关的用户消息（判定是 LLM 的——slot 握手 / `pending_disposition` 三态；结算是代码的）；**提醒尾** = 插话回合回复末尾代码拼装的双语固定句（原问题 + default_path，永不借 LLM 之声）。「形态切换」「morph」只用于 dock 布局与 stadium 半径过渡 | §1 |
 | N-51 | 积分词汇批：credit / wallet / credit_transactions / hold→capture→release / grant / purchase / payment；settle / claim / pay / ledger 表名 / entry 永禁 | 积分系统命名（ADR-055，行业坐标 = Stripe authorize→capture→release / Modern Treasury ledger transactions）：**credit**（积分 = 用户面唯一计价单位）；**wallet**（余额 + 判定）；**credit_transactions**（台账行——ledger 保留为子系统概念名不上表名，行 = transaction，entry 是双 entry 会计第三层用不到）；扣费时序 **hold → capture → release**（预扣 → 实扣 → 释放剩余——settle 是银行间清算语境、claim 是用户发起的收款动作方向相反，均禁）；**grant**（授予：开户 / 订阅周期 / 补偿）/ **purchase**（购买，支付订单入账）/ **payment**（名词位；pay 是动词只留函数名）；比例参数 `credits.per_cost_usd`（消耗比例 ≠ 购买比例） | §1 |

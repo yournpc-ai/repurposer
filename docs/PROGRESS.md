@@ -10,33 +10,36 @@
 ### 0.1 里程碑状态
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Video Project 新架构**：按 ADR-145 与四阶段合同建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A 最小基座已落地；B 按基础闭环、官网片、混合合成、程序画面、生成媒体、旁白余项分批实施，批次合同见施工文档 §2.5；C 为外部 Skill 持久化、加载与领域策略，D 为发布清理与独立扩展门，D5 在现有本体上扩展 SFX、component-v1 与真实 Gallery。旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
+- **当前主线 — Video Project 新架构**：按 ADR-145/146 建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A–C 已形成各自限定实现与真实证据，完整 B/C 未封板。当前优先打通工作草稿、条件工具与局部 Scrub 反馈；全部剩余施工、发布门与验收统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进，旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
 - **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项
+
+P2 已按 [当前接线顺序与代码验收](tasks/sequential-video-authoring.md#64-当前接线顺序与代码验收) 统一两个 Chat runner 的目标、提示、工具、证据与条件发言。工作草稿、默认分镜、按需局部预览及显式顺序审片继续保留；Shotcraft 多文件与固定图像、Talkcraft 无图像数据动画卡在当前共用链均通过绑定、分镜保存及按需局部预览，零 Run/Output。当前 `sequential_oxvalue_draft_review` 已在项目 `fc7c1a05-37f8-48af-a406-79448af5b499` 通过：顺序首稿 14 次 Chat 调用、186,586 输入 tokens，标题编辑 2 次、4,645 tokens，两轮零 Run/Output。完整 core 当前为 397 passed / 1 个既有 SFX 文案失败。
+
+内置 Promo 与旧 provenance 已完成同一通用创作与编辑切换：四秒真实视频、普通修订、overlay 询问→回答→保存→删除、第三轮 SSE／非流式续接均独立通过，最终 provider 请求和数据库事实均不经过旧协议。`editing/promo.py`、两个旧 Jinja、专用参数/展开器、包名分派和 `video_shotcraft.py` 已删除，历史版本与 provenance 保留。装配失败零版本写入且原草稿可恢复。逐轮真实 ID、工具声明和 tokens 见 [动态 Skill 切换与删除](tasks/sequential-video-authoring.md#631-动态-skill-切换与删除)。
+
+`promo_short_confirmation_delivery` 的当前项目 `bf405d24-ca25-416e-9929-c9c4fe3a815a` 已从空项目和原始 URL 话术完成唯一版本、OK 同版本制作、原 Chat 自动交付、浏览器后重复 Yes 幂等、1185 帧完整解码及非静音音乐验证；新旧 Output 均完成刷新前后连续播放到 `ended`。成功首稿 Chat 累计 413,954、已知合计 415,671、峰值 51,959 tokens，相对历史成功基线分别下降 56.57%、56.46%、31.12%。旧 Turn `faebb418-0e83-40e3-9468-c9a6f67f13ab` 已通过现有失败入口收口，MiniMax M3 最小真实探活恢复。P1 历史独立放行保持关闭；技术放行不代替最终用户主观视听，完整 P6+P7 不关闭。
+
+本地 `/promo-video` 已切到内部安装的 Shotcraft `bdd94be16d60fa8f`。通用宿主读取上游方法、124 张镜头卡、150 个变体和 54 张本地预览，五首 BGM 与平台共享库现有文件逐字节相符。切换后 `promo_short_confirmation_delivery` 完整通过，分镜、同版本 Run、自动交付和重复确认幂等均已验证。首稿 695,534 Chat 输入 tokens，高于旧 Promo 包的 413,954。当前成片为无声，分镜无音乐 Clip。浏览器硬刷新前后均连续播至 32.32 秒结束；独立 Cat Walk 分镜保留一条共用曲库音乐 Clip，零制作。
 
 “当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Video Project 新架构** | **B 各限定能力及 B-UI 已贯通，完整 B 未封板。**当前收口覆盖 Chat/工具活动/呈现及全部 Use prompt 入口：已盘点14项（6可点击、6禁用族、2隐藏）；本次已有两条文字短片与一条网站片交付，字幕定位与另一网站片已授权制作但最终交付待数据库恢复核验，上传操作演示仍欠完整旅程。修复工具说明/字段差异、MG背景与微推近、文字布局参数及交付语言来源；历史展示 hash 未精确复现，不写成完全归因。原¥10窗口已记录约¥6.87及未知项保留；本次另授权¥20，已返回供应商用量约¥4.73，含失败与worker。当前 Docker/数据库连接异常、浏览器上传受阻，已请求恢复；完整调用与回答合并在 artifacts/video-project-b/b-vi-temporal/chat-journey-review.md。完整视听、接缝、剧本矩阵及其他多轮方差保留；C可基于稳定已声明能力推进，D发布门未完成 | [目标架构](VIDEO_PROJECT.md) / [施工与事实](tasks/video-project-implementation.md) §2.0、§2.4、§2.5 |
-| **当前** | **B-VII 通用时间线编辑内核** | 通用 `EditTarget` × move/trim/delete/time_map × ripple/source policy 已落码；首轮真实 Chat 暴露的端点 1 tick 越界、能力拒绝反复重试和成功后额外补版已分别修为输出网格同量化、首次能力拒绝结构终态、命名范围满足后停止，复验均未运行。`revise_video` 原子落一版并保留 provenance；纯函数、过期 base_ref DB、S13 两回合与 S14 Speech 拒绝旅程已写待跑，pytest/check_gates/prompt_gate/真实 Chat 复验不得写成通过 | [领域合同](VIDEO_PROJECT.md#66-编辑目标时间变换与联动) / [施工与验收](tasks/video-project-implementation.md#254-b-vii通用时间线编辑内核修复已落码真实-chat-复验未运行) |
-| **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；统一金额链改动后的真实联调、€20/€50、重放/并发/取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
-| **当前** | Home 创作入口真实样片 | Ads 族只展示 Product Promo 与 Text Animation 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张占位卡仍待用户选定对应链真片。网页 Film 相机、默认字幕落点与强调标记渲染修复待 prompt/live/render 复验，既有 AgentVeil demo 未重渲染。视频 Skill 卡与 `/skill` 统一 Skill chip + prompt 的目标归 C2，非 Skill Recipe 继续预填；货架可点不等于制作能力通过 | [任务状态](tasks/home-creation-entry-refresh.md) |
-| **当前** | **Chat TurnBlock 与可见 Stop 收口** | 当前修复上下半批已落码；当前完整 API 1447 pytest、Web 352 tests、Web tsc、check_gates 均已通过。正常交付只读各消息自己的 `output_refs`；同 Run retry_upload 以 attachment epoch 重订阅并用 `upload_retry_count` / trigger ref 隔离旧 delivery，恢复后重进 active 与 Send=Stop，第二次 delivery 正常进入 live；零 delivery 仅在有界 review 落定或历史水合后展示真实 delivered 视频，迟到 delivery 不留双卡；QA echo refs、历史 settled 与初始慢历史 server id alias 已接线。连续工作段的 failed 在原段收口，用户气泡到 assistant 开场为 24px。Stop visible frontier、retract/cancelled 与写口 fence 不变。待走真实浏览器中的同 Run 恢复、第二次 delivery、零 delivery 迟到归属、QA 水合、慢历史、Stop/刷新旅程；完整 DB 与付费制作验收未做，全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
-| 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
+| **当前** | **Video Project / 创作主链收敛（优先于后续验收扩张）** | 工作草稿、条件工具、真实 Chat 首稿/局部修订与消息修复保留。首稿统一 `scene_plan / scene`，保存版统一五个高层 revision action，模型不提交 raw Op 或手抄 base_ref；旧 Promo 参数、模板、展开、包名/provenance 分派已删除且不可回落。当前真实 URL 项目已完成同版本 Run/Output/digest、唯一交付、重复确认幂等、完整解码、实际音轨和新旧 Output 刷新前后连续播放，成功首稿减量已由真实 provider 请求证实。注册旅程的 Pydantic 序列化错误已最小修复并在同一项目续验，未另造 Run；真实主链已在同一项目续验。参数修复观察不再额外指挥用户话术，重复确认已携带真实 Run/Output/交付事实并经原项目复验；完整 core 为 397 passed / 1 failed，唯一失败仍为既有 SFX 文案断言。内置 Skill 随应用部署、内部注册和使用，不开放用户自助安装；外部 SkillVersion 仅作内部登记、测试与历史 provenance。默认 Storyboard、按需局部 Scrub、OK/Yes 同版本制作授权保留。浏览器 Scrub Apply/取消/409、最终用户视听、普通项目与旧 Clip 回归、完整 P6+P7、runner 环境、Remotion 许可、部署与公开发布仍开放。逐轮 ID、用量与脚本边界见 [动态 Skill 切换与删除](tasks/sequential-video-authoring.md#631-动态-skill-切换与删除)。 |
+| **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |
+| **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
+| **当前** | **Landing 对话式视频叙事与内测商业面** | 暖白底三层 Hero（Rookie Cut 品牌与新主标题）、四类 Tab 自动演示/独立背景、340svh 固定滚动叙事、静态 Gallery（当前不挂载）、正文 FAQ、简洁 CTA 与参考三列 Footer 已落码。演示使用公开候选样片与交互投影，未验证为真实 Chat 回放或修改后成片；真实类别样片与多轮交付仍按 P6+P7 验收。既有 TypeScript 与 landingCreate 定向检查通过；最新 Header/Hero 视觉调整尚未复跑静态检查或浏览器验收，桌面首屏/Tab/FAQ/Footer、其余尺寸、双主题、reduced-motion、媒体播放与登录预填完整旅程均待复验。Footer 未配置项目仅保留文字座位，发布前需真实链接或移除；公开 1,000 开户赠额前核对数据库配置；支付与公开授权门未关闭 | [当前合同](LANDING.md) |
+| **当前** | **Chat TurnBlock 与可见 Stop 收口** | 回复容器结构已落码：TurnBlock 分离用户与 AssistantResponse，回复内部持有正文/Worked/组件槽位；RunBlock 组合明确关联且连续的开场、工作面与逐消息交付，独立 QA/跨回合消息不重排。ChatConversation 已移除相邻工作块间距补偿；RunCard 统一 attached/detached 入口，交接不重挂载工作组件、不重复订阅。Chat/stream 22 files / 269 tests 通过；Web tsc 最新被范围外 MentionChip 两项 unused 阻断，全量 Web 425 passed / 2 failed（首页旧文案、媒体选区浮点断言）；媒体选区已继续接入选区外 mask、实时尺寸、「引用选区」chip、消息正文/结构化 region、普通 Chat 与 Video Project 上下文及 prompt 语义；region 只寄存在 chip，删除 chip 同步清除正文摘要和全部结构化选区草稿。上述 Web 读数早于本轮接入，需重跑；真实呈现由用户验收。独立上传 tool、消息自有 output_refs、Stop frontier、授权与费用边界不变。剩余多段回复、Run 收段视口、中途 QA/多次交付、上传/Stop、慢历史/刷新及全形态用户验收；全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
+| 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证；staging GC 已移出 worker 认领等待并改为 8 路有界用户前缀 listing，定向纯测试已补但未运行。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
 | 开放 | Agent Working Loop 持续闭环 | 代码层已落，六段 live 验收、Candidate Surface live/replay、CJK 长素材检索与探索存储真实 DB 迁移仍待完成；验收后才可按覆盖映射、当前矩阵、无回归证据与生产引用清点执行 `edit_graph` 退役小提交 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
-| 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟、chat `retry_upload`、确定性重传建议与缓存 miss 失败闭已落码，新增/更新测试尚未运行；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
+| 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟；chat `retry_upload` 已改为当前回合的独立上传工具与状态行，走 /upload 并保留原 Run/失败步骤；缓存 miss 不重渲染。定向 API 121 项、历史回放 44 项及 Web/render tsc 通过，新上传 UI 真实浏览器旅程尚未复验；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
 | 开放 | Agent 交互与画布确认迁移 | DeferredFrames 现行规则已归 CHAT；仍需真实 rejected-turn 浏览器证据：零客户端散文/预览、零服务端 commit/dock 残片，并保留有序原始事件。ADR-111 仍欠等待态节点面原型与 live 走查；相机 fit 缩放夹、capture 前估价面和刷新重建面须在同一份新合同中定清；跨轮防复读需可复现证据后再升级 | CHAT §8；现行决策 ADR-099/111 |
 | 开放 | 消息回放与素材检视 | seq/首回合事务、interim_prose 五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
-| 开放 | 素材理解与对话面验收 | prompt_gate、全量剧本和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
+| 开放 | 素材理解与对话面验收 | 素材/咨询真实旅程和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
 | 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置) |
-| 开放 | 新视频视听与现有 UI 验收 | 网页/MG双源、逐字保真、默认字幕/章节/reveal、严格slide与音轨要求归新视频B；纯Chat/锚卡/声音互斥/移动端/双主题仍需真实走查。旧实现测试与事故工单退出不代表新能力已通过 | [视频要求](VIDEO_PROJECT.md#15-新链必须承接的产品语义与验收缺口) / [UI验收](VERIFICATION.md#57-现有-ui-自足与锚卡) |
-| 开放 | B 支撑：按需采集与内容审片 | 增强网页采集首个静态镜头与首个真实静帧审片 → 局部修订 → 制作 → 同点复核均已通过，只代表两个最小切片；截断状态已冻结并单独送入 Director。`output-checks-v1` 已接入 `review_video`，定向纯测试、`check_gates` 及首条 B + 四条 C4 真实 Output 的付费审片/复用通过；音频 RMS/峰值与采样帧候选已覆盖，无声音要求的合法静音不误报，连续运动、主观听感、integrated LUFS、音画同步及其他完整检查仍开放。长页补读、空底板、交互状态按后续镜头与作品需要保留；D4 时间点编辑按独立消费者实施，不先建共享帧平台 | [施工与验收](tasks/video-project-implementation.md#253-b-支撑增量按需采集与内容质检两个首个最小闭环已通过完整能力待扩) / VIDEO_PROJECT §8.5、§9.2 |
-| **当前** | C：外部 Skill 持久化、held-out 创作与正常用户旅程 | C1/C3/C4 领域出口已通过：原始 video-shotcraft 固定包导入并保存不可变 SkillVersion，owner/幂等/不可变与 Strict/Adaptive 底座已验证；未适配的 `marker-underline-title` 经通用加载由真实 Agent 创作 drawing-v1，完成 Generator 参数及原生标题修订，最终 run-less Output `a7186f7d-5c0b-4ff6-ae65-58653681c242` 的版本/digest 与实际帧通过。完整 API 1453 tests、聚焦 lint、`check_gates` 和 diff check 通过；prompt_gate 十探针均通过（A/G 11/12，其余 12/12；G 首轮因 provider 连接错误无效后复跑），未调阈。仅声明该 held-out 镜头，未支持全镜头库/外部脚本。C2/C5 基础接线已落码：内置/外部统一版本引用、picker/chip、Home 同载荷、消息持久化及 SSE/刷新回放均复用唯一 Chat/设计/生产链，Skill 不进入修订或 worker；本批未运行 pytest/Web/tsc/真实 Chat/Run，正常授权计费旅程、恶意 Skill 综合验收与最终自我介绍长片仍未完成，外部 Chat 绑定暂为 instructions-only。通用时间编辑归 B-VII，不在 C 复制 | [C 合同与证据](tasks/video-project-implementation.md#3-阶段-c外部-skill-持久化加载与领域策略) / 同文 §5.1 |
-
-| **当前** | **D5：SFX、component、Chat 工作证据与真实 Gallery** | 三个限定切片按施工合同 §4.5 并行：SFX 负责 CC0 检索/真实试听/固定资产/原生音频修订，component-v1 负责 Agent 按真实内容编写受控 TSX 并上游烘焙，Chat 工作证据先以现有 `review_video` 打通 typed receipt → Worked 展开 → 结果型正文 → 历史回放；随后统一 revision、SFX/component 与 Chat/Run 集成，再固化 launch-film SFX、文字视频和旁白视频三种内置 Skill。所有创作共用 CompositionVersion 与唯一写口，不新增作品根、SfxObject、HTML runtime、第二生产链或第二活动协议。Gallery 必须具有对应真实样片、完整音轨及制作/修订/动态视听验收；SFX 两回合候选身份已接入现有 `candidates_log` → `video_context_lines` → 服务端解算链，prompt 只在用户明确请求音效时搜索、下一回合选择后导入；Activity 复用现有投影。真实事故修复已落码但未运行验证：接受 `mp3`/`mp3float` 且保留真实帧解码；导入失败走 TerminalRefusal，重搜/改选等用户下一回合；候选在所属最终回复 drain 后揭示，selection 只重绘原卡；卡面隐藏 provider chrome 且保留持久 provenance；搜索观察与 prompt 不再诱导来源/未试听评价；播放器改为稳定 candidate-seeded bars + 真实 audio + 现有 motion；MiniMax content 中的工具方言残片在 provider 边界过滤。相关 API/Web 纯测试已写，pytest/Web/tsc/check_gates/prompt_gate/真实 Chat 复验均未运行；真实候选/导入/落轨/制作、浏览器试听和真实 Chat review 仍未验收。`FREESOUND_API_KEY` 缺失已得到真实 provider 错误；Gallery 真实证据仍不足 | [目标架构](VIDEO_PROJECT.md#0-核心决策) / [D5 施工合同](tasks/video-project-implementation.md#45-d5创作能力扩展与商业化-gallery) |
 
 ### 0.3 R1.1 — Commercial / Distribution（支付首批 ACTIVE，其余排期挂起）
 
@@ -115,7 +118,7 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 |---|---|---|---|
 | 首发推荐分：维度明细 | P1 | 首发推荐分已持久化；与 `tasks/output-quality-verify.md` 的覆盖范围对账 | 结果网格展示评分维度与理由；规格来源 = DECISION_MATRIX §B、STRATEGY §2.1 |
 | persona 校准打分 | P1 | 内部源 = 用户选用行为 + operations 编辑痕迹；外部发布回流不在当前周期 | 定位根落地后校准对象为定位的人设分区；规格来源 = DECISION_MATRIX §G、STRATEGY §2.1/§2.2 |
-| LLM 滚动摘要（超长会话历史） | P2 | 先用 `scratch/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
+| LLM 滚动摘要（超长会话历史） | P2 | 先用 `apps/api/scripts/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
 | 结构化节拍图 + clip-spec motion 枚举 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
 | 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §E |
 | LLM provider 抽象 | P1 | ADR-025 边界；第二 provider 的触发可为代码/视觉能力、成本或 EU 驻留，按实际消费者接入 | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
@@ -131,7 +134,6 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | persona AI 印象摘要字段 | P2 | 现有 persona 提炼链；摘要进入 `PersonaContext` 与表列 | 概览卡顶部增加一句 AI 生成画像；现有字段拼装视图不因此回退 |
 | insert_broll 技能 | P1 | ADR-044 layers 契约；排在 reframe spike 结论之后 | 面向用户自己的幻灯片/截图；LLM 只做语义定位，机械工序选页与取窗后生成 layer 条目；不扩成 stock B-roll 库 |
 | run 收官散文兑现核对 | P2 | 先核对 `run_completed` 触发回合是否已兑现 | 目标行为 = 按 ADR-135/141 的当前分支只陈述确定性 delivered/partial/failed、真实产物与费用事实；不强制默认建议 pills 或唯一下一步，不伪造主观质量判断，不新增第二进度面。已兑现则关闭本行，未兑现则保留缺口 |
-| landing 叙事骨架重构（六幕 + 商务尾） | P2 | 足够真实产物密度；当前仍缓做 | 结构、背书插槽与文案纪律归 `LANDING.md` §4；证据归 `research/flora.md` §2 |
 | reframe per-clip 检测缓存 | P2 | `speaker_map` 素材级事实作缓存源 | 同素材多 clip 复用检测，避免每 clip 重复探测与计费 |
 | speaker_map 本人含量门禁 v2 | P2 | 多人话轮归属可靠性经过真实素材验证 | 只从用户本人话轮学风格；未实装，来源 = ADR-045 |
 | morph 罕见拓扑双渲染 | P2 | 无 | non-fork → fork → non-fork 且无 producer 的链形中，抑制与 rescue 可能重复支付一次渲染；需消除重复执行 |
@@ -155,7 +157,6 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | MG 与代码画面创作 | P2 | 已归 Video Project B-I～IV | 原生对象动画与 Generator 程序画面沿 design_video/revise_video/produce_video 共链；范围与出口见施工合同，不另建 generate_motion_graphics 产品链 |
 | 刀 A overlay 词汇扩展 | P2 | 现有 ASR / speaker_map / beat_map 与 overlay 契约；逐项验收后上架 | 按“一行扩展配方类型”增加词汇，不把 film-spec 的全幅生成链复制成第二套 overlay 系统 |
 | Film 帧级精细估价 | P2 | 当前秒级简式估价与确定性帧分配 | 报价使用实际帧/复用范围，保留 NULL 不可报价与守卫线；不得为精确总价伪报未出生的渲染 fanout |
-| Film 独立 prompt_gate 探针族 | P1 | 现有 prompt_gate 与 Film 工具注册表 | 增加 Film 专属的呈现、版本、拒绝、grounding 与授权形态探针；先校准读数，绝对阈值不得为放行回归下调 |
 | 个人创作 Skill | P2 | Video Project 阶段 C，依赖已声明内容能力 | 保存/调用/导入创作方法，可包含已支持的 Generator 来源和参数；外部脚本不自动执行，受控视觉程序按 VIDEO_PROJECT §8.1.1 生产，业务引擎与权限仍由系统掌握 |
 | 对话剪辑工具族（cut / stitch / reorder） | P2 | 两站机制；复核 L3 边界 | 以 video×editor + chat 修订提供对话剪辑；只扩 agent 工具，不建设多轨 NLE，专业需求仍导出剪映/Premiere |
 | 能力画廊 generate/edit 分组徽标 | P2 | 节点 prototype 属性 | 从注册表与媒体入边派生 generator/editor 展示分组；不把该轴变成节点 type |
@@ -176,7 +177,7 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | operations 用户级 undo/restore UI | P1 | 现有 REST undo/journal/restore 与归档 409 | 不新增 `undo_edit` chat 动词，不做完整 version UI；只在卡面 factsbar 或产物档案提供最小回滚入口 |
 | `set_caption_visibility`（edit_output 第五件） | P1 | 前四种编辑形态经过野外观察 | 与 `caption_enabled` 计划默认对账后再定参数形状（ADR-090 §1） |
 | 失败渲染触发 reaper 重跑的副作用 | P2 | 图生命周期与重试语义 | 核对“节点滞留 running → reaper 重跑 select_clips → 整链 wipe 再生”是否仍可复现；目标 = 渲染失败落 failed 并可重试，而非全链重跑；重试不得绕过授权与计费守卫 |
-| 未复现异常留观 | P2 | 下次 live 验收窗口 | 曾登记“run TIMEOUT 但渲染 completed”与“多义问题待决时带 pin 编辑 /chat 500”；后者用 `scratch/repro_chat_500.py` 未复现。只有重现后才升级为已确认缺陷并取证 |
+| 未复现异常留观 | P2 | 下次 live 验收窗口 | 曾登记“run TIMEOUT 但渲染 completed”与“多义问题待决时带 pin 编辑 /chat 500”；后者本机一次性探针未复现。只有在新证据中重现后才升级为已确认缺陷并取证 |
 | 归档 version 存储成本观察 | P2 | 归档写门持续产生真实版本后观察增量 | 归档文件是回滚物理基础，当前仅随项目删除 GC；有存储曲线证据后再评压缩/清理，不预设删除版本 |
 | R1 残留（remix e2e + fixture 地基） | P2 | 真实 Gallery 的 remix 通道 | 补 remix 全链 e2e（矩阵 S10 座位）并复位剧本 fixture 地基；不重复登记已由其他合同覆盖的触发/出生机制 |
 | 工作请求的非空 bare answer 代码 floor | P1 | 当前 ToolLoop/propose_turn；空 bare-answer 已有修复 | 非空无工具回复仍会作为 answer 持久化。需裁决何时工作请求必须有代码侧“未执行”兜底，同时保留合法信息回答与 Film 方向讨论；这是待取证/裁决项，不作为已证实 release blocker |
@@ -189,7 +190,7 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | 多活跃 run 产品终局 | P2 | 删除范围与跨 run 修订语义先明确 | 当前仍为 project `{PENDING,RUNNING}` 至多一个 owner；是否放宽是独立产品决策，不得由技术重构静默改变 |
 | understanding 复用身份 | P2 | C1 skeleton cache identity 的评审结论 | 评估 `_find_reusable_understanding` 是否需要同类 hash/version/并发治理；不与 C1 搭车隐式扩 scope |
 | 纯 pytest 基线复核 | P1 | 纯函数套件全绿承诺 | 上次未销号范围 = decompile / graph_wiring / import_direction / wire_tiers；旧数量与归因不作当前事实，需在当前 HEAD 重新运行并按真实结果归位 |
-| trigger beat ③ 引号例句（prompt 卫生） | P2 | `trigger_system.j2` beat ③ | 引号例句可能被照抄，需改成风格/原则约束；不新增禁词补丁 |
+| trigger beat ③ 引号例句（prompt 卫生） | P2 | `event_mode.j2` beat ③ | 引号例句可能被照抄，需改成风格/原则约束；不新增禁词补丁 |
 | 能力菜单欠卖（dub_clip / remove_filler） | P2 | `_MENU_PHRASES` | dub_clip 应说明声纹克隆，remove_filler 应覆盖 repeated takes；措辞先从完整 procedure 核对真实能力 |
 | 建议发射率与 substrate 排查 | P1 | 随 ADR-100 改靶；gate 仪表与 stub execute | probe I 不为放行降阈；路由劫持零容忍，探索问缺少下一步才计失败。固定模型/参数/场景重复采样并保留原始输出 → 工具调用 → 应用处理，区分模型未提、未调用与被丢弃；补 `answer-args-invalid`，语义失败先人工标注 |
 | 发射层 / provider 方差受控复测（S5 族） | P2 | 与建议发射率共用取证面 | 固定模型/provider/温度/工具/输入/初始状态重复采样，按失败签名记频率；区分采样波动、prompt 不足、应用处理不稳与评测器过敏，不用单次绿红直接归因 |

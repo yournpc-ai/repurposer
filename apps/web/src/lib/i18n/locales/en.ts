@@ -12,6 +12,9 @@ const en = {
     back: "Back",
     cancel: "Cancel",
     close: "Close",
+    done: "Done",
+    previous: "Previous",
+    next: "Next",
     remove: "Remove",
     loading: "Loading...",
     untitled: "Untitled",
@@ -93,6 +96,9 @@ const en = {
     /** The pill hero's inline held mention (meta row: "Credits · 12 held"). */
     heldInline: "{{count}} held",
     recent: "Recent",
+    topups: "Top-ups",
+    spending: "Spending",
+    page: "{{page}} / {{pages}}",
     /** The SettingsDialog「积分」section (BILLING §7 展示主轴) — the
      * balance + ledger full-view seat, same two endpoints as the pill. */
     title: "Credits",
@@ -105,13 +111,12 @@ const en = {
     pay: "Pay",
     buying: "Opening…",
     conversion: "{{unit}} = {{credits}} credits",
-    amountRange: "Enter {{min}}–{{max}} per top-up.",
     rateInfo: "Credit conversion and amount limits",
-    oneTime: "One-time payment. No subscription.",
-    topupSubtitle: "Enter an amount or choose a preset.",
+    amountRange: "Enter {{min}}–{{max}} per top-up.",
     packagesLoadFailed: "Couldn't load top-up options.",
     retry: "Try again",
-    topupSuccess: "{{count}} credits added.",
+    paymentSuccess: "Payment successful",
+    topupSuccess: "{{count}} credits added. Select Done to view your top-ups.",
     checkAgain: "Check again",
     return: {
       confirming: "Confirming your payment…",
@@ -122,6 +127,23 @@ const en = {
     viewAll: "View all",
     tx: {
       empty: "No transactions yet",
+      type: "Type",
+      orderId: "Order",
+      paidAt: "Paid at",
+      provider: "Provider",
+      reference: "Reference",
+      creation: "Creation",
+      outputs: "Outputs",
+      spentAt: "Spent at",
+      project: "Project",
+      amount: "Credits spent",
+      paymentAmount: "Payment",
+      receivedCredits: "Credits received",
+      status: "Status",
+      success: "Paid",
+      credited: "Credited",
+      topupEmpty: "No top-ups yet",
+      spendEmpty: "No spending yet",
       /** The semantic fold (ADR-057 K4): the user面 only ever sees three
        * families — spend / grant / top-up; the ledger's hold / capture /
        * release machinery folds server-side and never crosses the wire. */
@@ -154,410 +176,269 @@ const en = {
     personaCreateFailed: "Failed to create persona",
   },
   landing: {
+
+  "heroEyebrow": "Your AI video agent",
+  "showcase": {
+    "label": "Video creation demonstration",
+    "types": "Video types",
+    "attach": "Add material",
+    "send": "Start a conversation",
+    "preview": "Video preview",
+    "start": "What would you like to make?",
+    "play": "Play demonstration",
+    "pause": "Pause demonstration",
+    "replies": {
+      "product-promo": "The video opens with the product in use, then covers its key features.\nAsk for a shorter opening, different captions, or a change to any scene.",
+      "talking-head": "Your original voice is kept, with captions and key titles added.\nPoint out the time and wording to fix captions, remove a pause, or restyle a title.",
+      "text-animation": "Your wording is unchanged, with text beats and emphasis timed to the copy.\nPick any line to change its animation, pacing, or colors.",
+      "knowledge-explainer": "The narration and visuals are ready to watch together.\nIf something is unclear, ask for another example, different narration, or a slower pace."
+    },
+    "disclosure": "Interaction illustration · Public sample videos",
+    "disclosureShort": "Interaction illustration",
+    "requests": {
+      "product-promo": "Make a short video introducing my product. Show how it works.",
+      "talking-head": "Add captions and a few clear titles to my recording. Keep my voice.",
+      "text-animation": "Turn this text into an animated video. Keep the wording.",
+      "knowledge-explainer": "Help me explain this idea in a video, with narration and visuals."
+    },
+    "steps": {
+      "product-promo": {
+        "understand": {
+          "active": "Clarifying the product story…",
+          "done": "Clarified the product story."
+        },
+        "storyboard": {
+          "active": "Planning the product scenes…",
+          "done": "Planned the product scenes."
+        },
+        "produce": {
+          "active": "Creating visuals and captions…",
+          "done": "Created the visuals and captions."
+        }
+      },
+      "talking-head": {
+        "understand": {
+          "active": "Reading the recording…",
+          "done": "Transcribed the recording."
+        },
+        "storyboard": {
+          "active": "Marking key moments and pauses…",
+          "done": "Marked key moments and pauses."
+        },
+        "produce": {
+          "active": "Creating captions and titles…",
+          "done": "Created captions and titles."
+        }
+      },
+      "text-animation": {
+        "understand": {
+          "active": "Breaking the copy into beats…",
+          "done": "Broke the copy into beats."
+        },
+        "storyboard": {
+          "active": "Designing text motion…",
+          "done": "Designed the text motion."
+        },
+        "produce": {
+          "active": "Assembling the text video…",
+          "done": "Assembled the text video."
+        }
+      },
+      "knowledge-explainer": {
+        "understand": {
+          "active": "Structuring the explanation…",
+          "done": "Structured the explanation."
+        },
+        "storyboard": {
+          "active": "Designing narration and visuals…",
+          "done": "Designed the narration and visuals."
+        },
+        "produce": {
+          "active": "Assembling the explainer video…",
+          "done": "Assembled the explainer video."
+        }
+      }
+    }
+  },
+  "story": {
+    "suggestion": "Let’s open with the product in use, shorten the introduction, and keep the rest. Does that work for you?",
+    "confirmation": "Yes, go ahead.",
+    "opening": "Yes. I’ll identify the most useful thing to show, then shape the story around a problem, a product demonstration, and a clear takeaway.",
+    "storyboardSummary": "The storyboard is ready: open with the problem, show the core workflow, then connect it back to the product’s value. I’ll build the scenes in that order.",
+    "workSteps": {
+      "understand": {
+        "active": "Clarifying the video’s goal…",
+        "done": "Clarified the video’s goal."
+      },
+      "storyboard": {
+        "active": "Designing the storyboard…",
+        "done": "Designed the storyboard."
+      },
+      "produce": {
+        "active": "Creating visuals and captions…",
+        "done": "Created the visuals and captions."
+      }
+    },
+    "revisionOpening": "Got it. I’ll change only the opening and the original introduction, keeping the later scenes intact.",
+    "revisionLocation": "The opening and introduction are located. Only those two parts change; the later scenes stay as they are.",
+    "revisionSummary": "The opening now shows the product in use, and the introduction is shorter. I’m checking the transition into the existing scenes.",
+    "revisionSteps": {
+      "locate": {
+        "active": "Locating the opening and introduction…",
+        "done": "Located the opening and introduction."
+      },
+      "revise": {
+        "active": "Reordering the opening scenes…",
+        "done": "Reordered the opening scenes."
+      },
+      "check": {
+        "active": "Assembling and checking the new version…",
+        "done": "Assembled and checked the new version."
+      }
+    },
+    "redelivery": "Here is another version. Take a look.",
+    "redeliveryTitle": "Another version. Keep the conversation going.",
+    "demoLabel": "Conversation demonstration",
+    "refineTitle": "Tell us what to change.",
+    "deliveryTitle": "Your video. In the conversation.",
+    "delivery": "Here is the video. Take a look.",
+    "followup": "What would you like to change?",
+    "eyebrow": "You know what you want to say. Start there.",
+    "idea": {
+      "title": "Tell us about your video.",
+      "description": "You do not need a production brief or a special prompt. Tell us what you have in mind."
+    },
+    "watch": {
+      "title": "See how it comes together.",
+      "description": "Discuss the direction, review the storyboard, then watch the video."
+    },
+    "revise": {
+      "title": "Something not quite right? Say so.",
+      "description": "Ask for changes in the same conversation. No editing software to learn."
+    },
+    "request": "I want a video that shows people what my product does. Can you help me work out the idea?",
+    "attachments": {
+      "label": "Example attachments",
+      "image": "product-image.png",
+      "document": "product-brief.pdf"
+    },
+    "feedback": "The opening is too long. Start by showing the product in use.",
+    "posterAlt": "Frame from the public product video sample",
+    "sampleNote": "Public sample · Storyboard and production interactions are illustrated.",
+    "revisionNote": "Example revision request. This preview does not show a verified before-and-after result.",
+    "scroll": "Keep scrolling",
+    "skip": "See video examples"
+  },
+  "faqSection": {
+    "title": "A few things you might be wondering.",
+    "experience": {
+      "question": "Do I need to know how to edit?",
+      "answer": "No. Use the conversation to explain what you want to make and request changes. There is no software or plugin to install."
+    },
+    "material": {
+      "question": "What if I do not have material ready?",
+      "answer": "You can start by discussing an idea. If the video needs a website, text, images or footage, the assistant will ask for what is needed."
+    },
+    "revision": {
+      "question": "Can I change the video afterwards?",
+      "answer": "Yes. Explain what you want to adjust in chat. Available changes depend on the video; requests that require new production can use credits."
+    },
+    "pricing": {
+      "question": "How much does it cost?",
+      "answer": "New accounts get 1,000 credits, with no card needed to sign up. Conversation itself is free. Video generation and production use credits, with estimates shown before production. During beta, add credits when needed without a subscription. Projects and purchased credits stay after beta."
+    },
+    "download": {
+      "question": "Can I preview and download the video?",
+      "answer": "You can preview and download the delivered video when production is complete. The product is in beta, and production reliability is still being improved."
+    }
+  },
+  "footerItems": {
+    "pricing": "Pricing",
+    "changelog": "Changelog",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy"
+  }
+,
     nav: {
-      features: "Features",
+      features: "How it works",
       pricing: "Pricing",
       faq: "FAQ",
-      roadmap: "Roadmap",
-      menus: {
-        features: {
-          items: {
-            conversation: {
-              title: "Conversational creation",
-              description: "Describe your goal; the assistant handles the storyboard, production, and delivery.",
-            },
-            animation: {
-              title: "Motion graphics & text animation",
-              description: "Combine text, graphics, animation, and sound into a video.",
-            },
-            mixedMedia: {
-              title: "Mixed media",
-              description: "Bring web captures, footage, and images into the same video.",
-            },
-            revision: {
-              title: "Ongoing revisions",
-              description: "Refine through conversation while keeping editable versions.",
-            },
-          },
-          aside: {
-            label: "How you create",
-            title: "From goal to finished video",
-            description: "You provide the brief and feedback; the assistant handles creation and production.",
-            note: "No tracks, nodes, or professional editing software to learn.",
-          },
-        },
-        pricing: {
-          items: {
-            topup: {
-              title: "One-time top-ups",
-              description: "Add credits when you need them, without a subscription.",
-            },
-            balance: {
-              title: "A clear balance",
-              description: "See available and held credits in one place.",
-            },
-            history: {
-              title: "Activity history",
-              description: "Review purchases, usage, and releases in Settings.",
-            },
-            packages: {
-              title: "Current packages",
-              description: "See available packs and prices in Settings → Credits.",
-            },
-          },
-          aside: {
-            label: "Pricing",
-            title: "Pay for what you make",
-            description: "Video generation and production use credits. Conversation itself is not charged.",
-            note: "Current packages and prices are shown in the app.",
-          },
-        },
-        faq: {
-          items: {
-            inputs: {
-              title: "What can I start with?",
-              description: "Start with text, images, a website, or an existing video.",
-            },
-            revision: {
-              title: "Can I revise a video?",
-              description: "Keep using conversation to adjust the storyboard, text, visuals, and sound.",
-            },
-            videoTypes: {
-              title: "What can I make?",
-              description: "Website promos, text animation, motion graphics, and mixed-media videos.",
-            },
-            download: {
-              title: "Can I preview and download?",
-              description: "Preview the delivered result and download the video when production is complete.",
-            },
-          },
-          aside: {
-            label: "How it works",
-            title: "Say what you want to make",
-            description: "Start with a specific request, such as “Make a promo video for my website.”",
-            note: "You don’t need to learn editing first. Review the result, then decide what to change.",
-          },
-        },
-        roadmap: {
-          items: {
-            a: {
-              title: "Videos & versions",
-              description: "A foundation for editable videos, scenes, assets, and versions.",
-            },
-            b: {
-              title: "Creation, end to end",
-              description: "From storyboard to delivery, combining web, text, footage, graphics, and sound.",
-            },
-            c: {
-              title: "Reusable methods",
-              description: "Save and reuse your creative process, structure, and preferences.",
-            },
-            d: {
-              title: "Refine & extend",
-              description: "Polish the experience and expand short-form editing and precise review.",
-            },
-          },
-          aside: {
-            label: "Current focus",
-            title: "B. Creation, end to end",
-            description: "Refining the path from storyboard and revisions to production and delivery.",
-            note: "Stages show our development direction, not committed release dates.",
-          },
-        },
-      },
+      earlyAccess: "Early access",
     },
     signIn: "Sign in",
-    openStudio: "Go to app",
+    openStudio: "Create a video",
+    headerCta: "Get started",
+    heroCta: "Create now",
     entry: {
       navigation: "Main navigation",
       community: "Join the community",
-      preview: "Preview",
-      communityTitle: "Build with us.",
-      communityDescription: "Share what you’re creating, exchange ideas, and help shape Repurposer.",
-      communityNote: "Community preview — an invite link will be added here.",
     },
-    heroTitle1: "Your content",
-    heroTitle2: "creation agent",
+    heroTitle1: "Rookies can make great videos too.",
+    heroTitle2: "",
     heroSubtitle:
-      "Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
-    ctaTryBeta: "Try the beta",
-    ctaSeeHow: "See how it works",
-    comparison: {
-      ariaLabel: "Before and after: raw material and the generated result",
-      caption: "Drag the divider — see what raw material becomes",
-      scrollDown: "Scroll down",
-      beforeLabel: "Raw",
-      afterLabel: "Generated result",
-      beforeTags: ["Landscape", "Two people", "Muffled audio", "No captions"],
-      afterTags: ["Vertical solo shot", "Captions", "Title", "Clearer audio"],
-      unmute: "Play sound",
-      mute: "Mute",
-    },
-    manifesto: {
-      statement:
-        "You spent months on the research and weeks on the slides. The talk itself is over in forty minutes. Then the room empties. The slides go into a folder. The recording sits on a conference page nobody opens twice — and the people who most needed to hear it weren't in the room. Repurposer exists for everything after.",
-    },
-    showcase: {
-      title: "How it works",
-      description:
-        "Tell it what you need — it runs the whole pipeline, start to finish.",
-      steps: {
-        s1: {
-          title: "Bring whatever you have",
-          body: "Keynote video, podcast audio, slides, or just the transcript. Tell it what you need right in the input box — what to make, and in which languages.",
-        },
-        s2: {
-          title: "You name it, you get it",
-          body: "Posts, clips, articles, newsletters — written in your style, exactly to your brief. Nothing extra, nothing missing.",
-        },
-        s3: {
-          title: "Refine in chat",
-          body: "Talk to the results: shorten a post, retitle a clip, push a different angle. It rewrites until you approve.",
-        },
-        s4: {
-          title: "One click and it's out",
-          body: "Finished pieces go out per channel and language. LinkedIn, newsletter, your website — done.",
-        },
-      },
-      screens: {
-        compose: {
-          chrome: "New project",
-          prompt: "Do something with my ECC keynote — LinkedIn first. Our Berlin office needs German too…",
-          chip1: "Video",
-          chip2: "Slides",
-          chip3: "Transcript",
-          cta: "Generate",
-        },
-        results: {
-          chrome: "Results",
-          score: "92 Pick score",
-          cardTitle: "Why grid storage decides the energy transition",
-          cardMeta: "LinkedIn · EN · 1,240 chars",
-          row2: "Newsletter — EN",
-          row3: "Short clip — DE dub · 9:16",
-        },
-        chat: {
-          chrome: "Chat",
-          user: "Make the LinkedIn post shorter — keep the three numbers.",
-          agent: "Done — tightened to 680 chars, all three numbers kept.",
-        },
-        publish: {
-          chrome: "Publish",
-          note: "Scheduled per channel",
-          row1: "LinkedIn — published",
-          row2: "Newsletter — queued",
-          row3: "Website — draft sent",
-        },
-      },
-      asides: {
-        a1: {
-          label: "Source",
-          title: "ecc26-keynote.mp4",
-          body: "38 min · slides attached",
-          chip: "Any format works",
-        },
-        a2: {
-          label: "Drafts",
-          title: "3 drafts · EN + DE",
-          body: "Your style, your terms",
-          chip: "Written natively",
-        },
-        a3: {
-          label: "Refine",
-          title: "Chat with the results",
-          body: "Every edit is one message",
-          chip: "Nothing ships silently",
-        },
-        a4: {
-          label: "Distribution",
-          title: "3 channels",
-          body: "Per-language scheduling",
-          chip: "GDPR-ready",
-        },
-      },
+      "No complex timelines or keyframes.\nCreate animated promos and explainer videos—just by chatting.",
+    earlyAccess: {
+      title: "Make videos without waiting until everything is ready.",
+      description: "No tools to wrangle, no Skills to study. Describe what you want and create by asking. If a moment or frame isn't right, just say so.",
+      credits: "New accounts get 1,000 free credits. No card needed to sign up.",
+      estimate: "See the estimated credit cost before production.",
+      note: "During beta, we're continuing to improve production reliability and detailed review.",
     },
     gallery: {
-      title: "Made from one source",
-      description: "",
-      cards: {
-        c1: { type: "LinkedIn post", text: "Storage, not generation, is the bottleneck of the energy transition. Three numbers from my ECC keynote…" },
-        c2: { type: "Quote card", text: "“The grid of 2040 is being decided in committee rooms this year.”" },
-        c3: { type: "Short clip", text: "0:42 — the battery analogy that got the room laughing. 9:16, captioned." },
-        c4: { type: "Newsletter", text: "This month: what grid-scale storage actually costs, and why the curve just bent…" },
-        c5: { type: "Artikel (DE)", text: "Warum Speicher — nicht Erzeugung — über die Energiewende entscheidet…" },
-        c6: { type: "Résumé (FR)", text: "Trois chiffres à retenir de la keynote ECC sur le stockage réseau…" },
-        c7: { type: "Article", text: "A longer read: the four storage myths I hear in every policy panel…" },
-        c8: { type: "Quote card", text: "“We don't have an energy problem. We have a timing problem.”" },
-        c9: { type: "Thread", text: "1/ Everything you heard about grid batteries is two years out of date…" },
-        c10: { type: "Short clip", text: "0:58 — the audience Q&A moment everyone asked about afterwards." },
-      },
-    },
-    channels: {
-      title: "Lands where your audience is",
-      description:
-        "Everything routes straight into the channels you publish on — and in the languages your audience speaks.",
-      platforms: {
-        linkedin: { name: "LinkedIn", blurb: "Native posts" },
-        newsletter: { name: "Newsletter", blurb: "Email-ready" },
-        website: { name: "Website", blurb: "Articles for your site" },
-        youtube: { name: "YouTube", blurb: "Vertical clips" },
-        x: { name: "X", blurb: "Threads" },
-        podcast: { name: "Podcast", blurb: "Show notes" },
-      },
-      languages: {
-        en: { name: "English", blurb: "Native" },
-        fr: { name: "Français", blurb: "Native" },
-        de: { name: "Deutsch", blurb: "Native" },
-        es: { name: "Español", blurb: "Native" },
-        it: { name: "Italiano", blurb: "Native" },
-        nl: { name: "Nederlands", blurb: "Native" },
-      },
-    },
-    testimonials: {
-      title: "In their own words",
-      description:
-        "Researchers, lecturers and comms teams use Repurposer where the work has to hold up in print.",
+      heading: "Need an idea? Start here.",
+      intro: "A few directions to explore. Start with the one closest to your idea.",
+      create: "Make one like this",
       items: {
-        t1: {
-          quote: "My keynote used to die on the conference website. This year it became twelve LinkedIn posts, two essays and a newsletter. My dean asked who my new ghostwriter was.",
-          name: "Prof. Marije Albers",
-          role: "Professor of Energy Systems, TU Delft",
+        "product-promo": {
+          title: "Product Promo",
+          description: "Combine your website, footage, images, and text in one product video.",
+          prompt: "Make a short video introducing my product. Show how it works.",
         },
-        t2: {
-          quote: "The German versions read like I wrote them myself. Our Berlin office checked twice to be sure I hadn't.",
-          name: "Claire Dubois",
-          role: "Head of research communications, Paris",
+        "talking-head": {
+          title: "Talking-head Motion",
+          description: "Keep your footage and voice; add titles, captions, and motion.",
+          prompt: "Add captions and a few clear titles to my recording. Keep my voice.",
         },
-        t3: {
-          quote: "We used to choose which keynotes deserved coverage. This year every session at the summit got its own posts, clips and recaps.",
-          name: "Jonas Weber",
-          role: "Summit programme director, Munich",
+        "text-animation": {
+          title: "Text Animation",
+          description: "Turn your script into animated type, graphics, and sound.",
+          prompt: "Turn this text into an expressive animated video.",
         },
-        t4: {
-          quote: "Review-before-publish is the whole product for me. Nothing with my name on it goes out until I've read every word.",
-          name: "Dr. Sofia Ricci",
-          role: "Policy researcher, Milan",
-        },
-        t5: {
-          quote: "I record once in English. My Spanish students get a version that doesn't read like a translation — they can tell the difference.",
-          name: "Diego Fernández",
-          role: "Economics lecturer, Madrid",
-        },
-        t6: {
-          quote: "GDPR was the first question our lawyers asked. The answers were ready — we're in pilot now.",
-          name: "Anke Janssen",
-          role: "University marketing lead, Amsterdam",
+        "knowledge-explainer": {
+          title: "Knowledge Explainer",
+          description: "Turn what you know into a narrated visual explanation.",
+          prompt: "Explain this idea with animation for someone new to the topic.",
         },
       },
-    },
-    pricing: {
-      title: "Simple pricing",
-      description: "Start free. Upgrade when your content starts working harder than you do.",
-      monthly: "Monthly",
-      yearly: "Yearly",
-      perMonth: "/mo",
-      billedYearly: "billed yearly",
-      billedMonthly: "billed monthly",
-      freeForever: "free forever",
-      mostPopular: "Most popular",
-      footnote:
-        "Prices in EUR, VAT excluded. Cancel anytime — your plan runs to the end of the period.",
-      tiers: {
-        free: {
-          name: "Free",
-          blurb: "Try the pipeline on your next project.",
-          features: {
-            f1: "2 projects per month",
-            f2: "1 piece of content per talk",
-            f3: "English + 1 language",
-            f4: "Community support",
-          },
-          cta: "Start free",
-        },
-        pro: {
-          name: "Pro",
-          blurb: "For a packed calendar.",
-          features: {
-            f1: "10 projects per month",
-            f2: "Unlimited content",
-            f3: "6 European languages",
-            f4: "Voice-matched dubbing",
-            f5: "Priority generation",
-          },
-          cta: "Start with Pro",
-        },
-        institution: {
-          name: "Institution",
-          blurb: "For universities and summit teams.",
-          features: {
-            f1: "Everything in Pro",
-            f2: "Unlimited seats",
-            // "Shared brand templates" sold a retired module (ADR-038);
-            // "EU data residency" was a hard claim — compliance copy stays
-            // in the ready angle until it ships.
-            f3: "GDPR-ready",
-            f4: "SSO & invoicing",
-          },
-          cta: "Contact us",
-        },
-      },
-    },
-    faq: {
-      title: "Questions, answered",
-      description: "The things experts and institutions ask before the first upload.",
-      items: {
-        q1: {
-          q: "Where is my data stored?",
-          a: "Repurposer is GDPR-ready by design: your uploads and outputs never train third-party models, and you can delete everything at any time. EU data residency ships with Institution plans.",
-        },
-        q2: {
-          q: "Which languages are supported?",
-          a: "English, French, German, Spanish, Italian and Dutch today, with more European languages on the roadmap. Everything is written natively, never translated word-for-word.",
-        },
-        q3: {
-          q: "What can I upload?",
-          a: "Keynote videos, podcast audio, slide decks, photos, or just a transcript. The more context you give, the closer the output sits to your style.",
-        },
-        q4: {
-          q: "Does anything get published automatically?",
-          a: "No. Every output lands in a review queue first. Nothing carries your name until you explicitly approve it.",
-        },
-        q5: {
-          q: "Who owns the generated content?",
-          a: "You do, outright. Outputs are derived from your material and your persona; we claim no rights over them.",
-        },
-        q6: {
-          q: "Can I cancel anytime?",
-          a: "Yes. Plans are monthly or yearly with no lock-in, and your projects stay exportable after cancellation.",
-        },
-      },
-    },
-    finalCta: {
-      headline: "The room empties. The content is just getting started.",
-      subtitle:
-        "Free during beta. Drop in a talk, a meeting, or just a transcript — tell it what you want, and it does the rest.",
-      ctaPrimary: "Try the free beta",
-      ctaSecondary: "See pricing",
     },
     footer: {
-      tagline:
-        "Turning what you already have into lasting content — posts, clips and newsletters in the languages your audience speaks.",
-      cta: "Try the free beta",
+      autoTheme: "Auto",
       columns: {
-        features: {
-          title: "Features",
-          l1: "Overview",
-          l2: "How it works",
-          l3: "Gallery",
-          l4: "Pricing",
-          l5: "FAQ",
-        },
-        // company/legal/social column copy retired with the columns (dead
-        // anchors, Footer.tsx) — restore with the pages.
+        company: "Company",
+        social: "Social media",
+        product: "Product",
+        legal: "Legal",
       },
-      copyright: "© {{year}} Repurposer. All rights reserved.",
-      note: "Made for experts, GDPR-ready.",
-      wordmark: "Repurposer",
+      resources: {
+        examples: "Video examples",
+        app: "Go to app",
+        support: "Contact support",
+      },
+      channels: {
+        wechat: "WeChat",
+      },
+      wechat: {
+        title: "Join the WeChat group",
+        description: "Scan the QR code with WeChat to join the conversation.",
+        qrAlt: "Rookie Cut WeChat group QR code",
+      },
+      legal: {
+        terms: "Terms of Service",
+        privacy: "Privacy Policy",
+        refund: "Refund Policy",
+      },
+      copyright: "© {{year}} Rookie Cut. All rights reserved.",
+      backToTop: "Back to top",
     },
   },
   composer: {
@@ -606,43 +487,27 @@ const en = {
   // reserved cards render disabled with the Soon pill, never launchable.
   recipes: {
     soon: "Soon",
-    // Two-level tab shelf: family pill track × underline sub-tabs ×
-    // horizontal shelves, organized by USER TASK (2026-10 investor-demo
-    // ruling — never by output media type). Keys mirror
-    // components/home/recipeFamilies.ts RECIPE_FAMILIES. A family without real
-    // demos never renders (无真 demo 不上架) — MG demo prefill copy lands
-    // with its assets (MG 批 D3) at `recipes.shelf.demos.<demoId>.prompt`.
+    // Product names reuse skills.builtin; application labels mirror the Home
+    // registry. Empty video applications stay visible with an honest empty
+    // state. Sample prompts live at recipes.shelf.demos.<demoId>.prompt.
     shelf: {
-      families: {
-        ads: "Ads & UGC",
-        talks: "Talks & Interviews",
-        posts: "Social Media",
-        templates: "More",
-      },
       subs: {
-        all: "All",
-        "text-short": "Text Animation",
-        "product-demo": "Product Promo",
-        brand: "Brand & Business",
-        ugc: "UGC",
-        product: "Products",
-      },
-      titles: {
-        featured: "Featured Recipes",
-        "text-short": "Text Animation",
-        "product-demo": "Product Promo",
-        brand: "Brand & Business",
-        ugc: "UGC",
-        product: "Products",
-        talks: "Talks & Interviews",
-        posts: "Social Media",
+        "website-product": "Websites & products",
+        "course-service": "Courses & services",
+        "opinion-talking-head": "Opinion talking head",
+        "course-lecture-teaser": "Course & lecture teasers",
+        "opinion-text": "Opinion text videos",
+        "quote-announcement": "Quotes & announcements",
+        "concept-explainer": "Concept explainers",
+        "research-report": "Research & reports",
       },
       nextPage: "More",
       previousPage: "Previous",
       upgrading: "Content is being upgraded",
-      usePrompt: "Use prompt",
+      usePrompt: "Start creating",
       playSound: "Play sound",
       mute: "Mute",
+      emptyDemo: "No sample for this application yet.",
       // MG shelf prefill blank: a VISIBLE placeholder, inserted selected so
       // paste replaces it in one gesture; it never becomes a hidden field or
       // a second input surface.
@@ -655,29 +520,49 @@ const en = {
       demos: {
         "text-short-gentle-close": {
           prompt:
-            "I want to turn my copy into a text short with clean typography, subtle camera motion, and word-by-word entrances. Please first help me refine the copy and pacing, then propose a storyboard.",
+            "Use this Skill to help me animate this line:\n\nSlow down. Go further.",
         },
         "text-short-genesis": {
           prompt:
-            "I want to turn an English script into a text short, preserving every word with clean typography, subtle camera motion, and word-by-word entrances. Please organize the original text into a storyboard.",
+            "Use this Skill to help me animate this line:\n\nEvery great idea starts with a small step.",
         },
         "product-demo-zymix": {
           prompt:
-            "Use this skill to help me turn this website into a product demo that presents its key features with concise on-screen explanations: {{placeholder}}",
+            "Use this Skill to help me make a demo showing how this product works: {{placeholder}}",
         },
         // Website-source demos use the capture flow; video-source entries keep
         // upload-based prompts.
         "product-demo-walkthrough": {
           prompt:
-            "I want to turn my uploaded video or screen recording into an operation walkthrough — pick the key steps and add short explanations. Please look at my material first, align with me on the demo's focus, then propose a plan.",
+            "Use this Skill to help me turn my screen recording into a walkthrough that makes the key steps easy to follow.",
         },
         "product-demo-highlights": {
           prompt:
-            "Use this skill to help me turn this website into a product demo that presents its key features, with concise explanatory subtitles, no voiceover, and subtle camera moves and text animations that guide attention: {{placeholder}}",
+            "Use this Skill to help me make a short video highlighting this product’s most useful features: {{placeholder}}",
         },
         "product-demo-captioned": {
           prompt:
-            "I want to add text captions onto my video clips, controlling when and where the text appears. Please first propose a plan based on my material and requirements.",
+            "Use this Skill to help me add text explanations that make my video easier to understand.",
+        },
+        "product-promo-agentveil-the-next-move": {
+          prompt:
+            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+        },
+        "product-promo-oxvalue-product-evidence": {
+          prompt:
+            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+        },
+        "product-promo-oxvalue-energy-arc": {
+          prompt:
+            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+        },
+        "text-short-clear-rhythm": {
+          prompt:
+            "Use this Skill to help me animate this copy:\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\nMaking complex ideas clear takes more than cutting words.\nIt takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
+        },
+        "knowledge-explainer-clear-expression": {
+          prompt:
+            "Use this Skill to help me make an animation explaining why focusing on one point at a time makes an idea easier to understand, for someone new to the topic.",
         },
       },
     },
@@ -763,13 +648,55 @@ const en = {
     external: "External Skill",
     builtin: {
       "launch-film": {
-        description: "Turn a captured website into a guided product film.",
+        name: "Website launch film",
+        shortName: "Launch film",
+        description: "Turn a captured website into a guided launch film with a fixed narrative.",
+      },
+      "promo-video": {
+        name: "Promotional video",
+        shortName: "Promotional video",
+        description: "Create a grounded promotional video from your copy, website, images, footage, brand, and sound.",
+      },
+      "talking-head-video": {
+        name: "Talking-head motion video",
+        shortName: "Talking-head motion",
+        description: "Shape real footage into a vertical video with timed captions.",
+      },
+      "text-animation": {
+        name: "Text animation video",
+        shortName: "Text animation",
+        description: "Turn your exact copy into editable native text motion.",
+      },
+      "knowledge-explainer": {
+        name: "Knowledge explainer video",
+        shortName: "Knowledge explainer",
+        description: "Turn knowledge copy into an explainer with aligned narration, word-timed captions, and explanatory drawings.",
       },
     },
+  },
+  videoPresets: {
+    "caption-phrases": { name: "Caption phrases" },
+    "text-reveal": { name: "Text reveal" },
+    "text-impact": { name: "Word impact" },
+    typewriter: { name: "Typewriter" },
+    "keyword-fill": { name: "Keyword highlight" },
+    "word-cycle": { name: "Word cycle" },
+    "claim-layout": { name: "Claim layout" },
+    "highlight-sweep": { name: "Highlight sweep" },
+    "path-underline": { name: "Path underline" },
+    callout: { name: "Callout" },
+    "flow-steps": { name: "Flow steps" },
+    "comparison-columns": { name: "Comparison columns" },
+    "card-stack": { name: "Card stack" },
+    "list-reveal": { name: "List reveal" },
+    "notification-stack": { name: "Notification stack" },
+    "title-lockup": { name: "Title lockup" },
   },
   mentions: {
     pickerEmpty: "No matches",
     remove: "Remove mention",
+    regionChip: "{{time}} · {{width}}×{{height}}px",
+    regionText: "[selected region: x={{x}}, y={{y}}, width={{width}}px, height={{height}}px; source={{sourceWidth}}×{{sourceHeight}}px; media_time={{time}}]",
     types: {
       asset: "Asset",
       output: "Output",
@@ -1133,7 +1060,7 @@ const en = {
       // point: content about to go out, not factual Q&A. ABOVE the input
       // container since the 2026-09-06 FAUNA-parity ruling, hidden with
       // the input on the question morph.
-      honesty: "Repurposer can make mistakes — review before you publish.",
+      honesty: "Rookie Cut can make mistakes — review before you publish.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens
@@ -1317,7 +1244,7 @@ const en = {
     },
   },
   chat: {
-    assistantLabel: "Repurposer",
+    assistantLabel: "Rookie Cut",
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
@@ -1432,6 +1359,7 @@ const en = {
     candidates: {
       more: "{{count}} more",
       less: "Show less",
+      selected: "Selected",
     },
     sfx: {
       play: "Play sound",
@@ -1480,10 +1408,42 @@ const en = {
        * vocabularies. */
       videoDesign: "Designing the video storyboard…",
       videoDesignDone: "Designed the video storyboard",
+      skillRead: "Reading the Skill method…",
+      skillReadDone: "Read the Skill method",
+      skillPreview: "Checking the Skill preview…",
+      skillPreviewDone: "Checked the Skill preview",
+      videoMaterials: "Preparing video materials…",
+      videoMaterialsDone: "Prepared video materials",
+      videoCapturePlan: "Capturing the planned webpage state…",
+      videoCapturePlanDone: "Captured the planned webpage state",
       videoRevise: "Adjusting the video storyboard…",
       videoReviseDone: "Adjusted the video storyboard",
       videoReview: "Reviewing the delivered video…",
       videoReviewDone: "Reviewed the delivered video",
+      videoDraftScene: "Checking Scene {{count}}…",
+      videoDraftSceneDone: "Checked Scene {{count}}",
+      videoDraftJoin: "Checking Scene {{count}} and its join from the previous Scene…",
+      videoDraftJoinDone: "Checked Scene {{count}} and its join from the previous Scene",
+      videoDraftRecheck: "Rechecking Scenes 1–{{count}}…",
+      videoDraftRecheckDone: "Rechecked Scenes 1–{{count}}",
+      videoSave: "Saving the editable version…",
+      videoSaveDone: "Saved the editable version",
+      sfxSearch: "Finding sound effects…",
+      sfxSearchDone: "Found sound effects",
+      sfxImport: "Importing the selected sound…",
+      sfxImportDone: "Imported the selected sound",
+      musicSearch: "Finding background music…",
+      musicSearchDone: "Found background music",
+      musicSelection: "Selecting the chosen music…",
+      musicSelectionDone: "Selected the music",
+      upload: "Uploading video…",
+      uploadDone: "Uploaded video",
+      narrationPrepare: "Preparing narration alignment…",
+      narrationPrepareDone: "Prepared the narration request",
+      narrationRead: "Reading narration alignment…",
+      narrationReadDone: "Read the narration alignment",
+      narrationAnnotate: "Annotating narration…",
+      narrationAnnotateDone: "Annotated the narration",
     },
     activityReceipt: {
       sampledFrames: "Sampled frames",
@@ -1510,6 +1470,53 @@ const en = {
         motion_and_transitions_checked: "Motion and transitions checked",
         audio_and_av_sync_checked: "Audio and audio-visual sync checked",
       },
+      revision: {
+        version: "Saved version {{version}}",
+        settings: "Canvas settings · {{fields}}",
+        addedScene: "Added scene · {{scene}}",
+        removedScene: "Removed scene · {{scene}}",
+        movedScene: "Moved {{scene}} · {{from}}s → {{to}}s",
+        addedClip: "Added {{kind}} clip · {{clip}}",
+        removedClip: "Removed clip · {{clip}}",
+        updatedClip: "Updated {{clip}} · {{fields}}",
+        transitions: "Updated transitions",
+        kinds: {
+          text: "text",
+          image: "image",
+          web: "web",
+          video: "video",
+          audio: "audio",
+          shape: "shape",
+          speech: "narration",
+          generator: "Generator",
+        },
+        fields: {
+          range: "time window",
+          object: "content",
+          animations: "animations",
+          scene_id: "scene",
+          source: "source",
+          linked_group_id: "linked group",
+        },
+      },
+      component: {
+        title: "Component preview · {{clip}}",
+        posterAlt: "Representative preview frame for {{clip}}",
+        previewFrame: "Representative frame · {{frame}}",
+        dynamicSamples: "Motion verified at frames · {{frames}}",
+        fixedMedia: "Fixed media · {{digest}}",
+      },
+      sfx: {
+        searchTopic: "Sound search · {{topic}}",
+        candidate: "{{ordinal}} · {{title}} · {{duration}}s",
+        imported: "Imported {{title}} · {{duration}}s",
+        snapshot: "Imported audio · {{id}}",
+      },
+      music: {
+        searchTopic: "Music library · {{topic}}",
+        candidate: "{{ordinal}} · {{title}} · {{duration}}s",
+        selected: "Selected {{title}} · {{duration}}s",
+      },
     },
     /** The activity row's bounded expand detail (iter-3 S7, E7 诚实边界):
      * only the wire whitelist's fields — the raw count rides as a labeled
@@ -1534,8 +1541,20 @@ const en = {
       video: "Video",
       programPreview: "Program preview",
       programPreviewError: "The exact program preview could not be loaded; production has not been acknowledged.",
+      pendingMedia: "Media required by this local preview is not ready; no production has started.",
+      previewError: "This local preview could not be loaded.",
       title: "Storyboard",
       unavailable: "This storyboard version is no longer available.",
+      scrub: {
+        trigger: "Adjust text size",
+        target: "Text",
+        fontSize: "Font size",
+        apply: "Apply",
+        applyError: "The text size could not be saved. Your edit was rolled back.",
+        conflict: "This video changed elsewhere. Reopen the current version before applying.",
+        openCurrent: "Open current version",
+        isolatedObject: "Isolated text preview; scene layout, occlusion and joins are not checked here.",
+      },
     },
     /** Past-tense mirrors of the inspecting family — a read activity's
      * completed frames (chat.inspecting.* stays the active form; the keys
@@ -1624,14 +1643,14 @@ const en = {
       uploaded: "Uploaded",
     },
     productionStages: {
-      validate: "Saved version and input validation",
-      fonts: "Font resource preparation",
-      generator_media: "Generator media preparation",
-      speech_media: "Narration media preparation",
-      compile_spec: "Video specification compilation",
-      output_preparation: "Output preparation",
+      validate: "Validate approved version",
+      fonts: "Prepare fonts",
+      generator_media: "Generate visuals",
+      speech_media: "Generate narration",
+      compile_spec: "Compile video specification",
+      output_preparation: "Create output",
       output_resume: "Prepared output reuse",
-      render_queue: "Render queue request",
+      render_queue: "Submit to render queue",
       render: "Render",
       upload: "Upload",
       delivery: "Delivery check",
@@ -1705,7 +1724,13 @@ const en = {
       previousSlide: "Previous slide",
       nextSlide: "Next slide",
       slidePosition: "Slide {{current}} / {{total}}",
-      mention: "Reference",
+      selectRegion: "Select region",
+      referenceAsset: "Reference this asset",
+      regionHint: "Drag to select a region of this frame",
+      regionLoading: "Reading frame dimensions…",
+      regionSummary: "{{time}} · source {{sourceWidth}}×{{sourceHeight}} · x{{x}} y{{y}} · {{width}}×{{height}}px",
+      reselectRegion: "Reselect",
+      referenceRegion: "Reference region",
       details: "Output details",
       allOutputs: "All delivered outputs",
       zoomIn: "Zoom in",
@@ -1792,7 +1817,7 @@ const en = {
     shareCopied: "Link copied",
   },
   login: {
-    title: "Sign in to Repurposer",
+    title: "Sign in to Rookie Cut",
     subtitle:
       "Enter your email and we'll send you a sign-in code — no password, and new accounts are created automatically.",
     emailLabel: "Email address",
@@ -1829,7 +1854,7 @@ const en = {
         "Write the result you want. Use @ to point to an uploaded asset, then send it.",
       recipesTitle: "Start from a card",
       recipesDesc:
-        "Choose Use prompt on a card to fill the composer, then adjust the prompt for your material.",
+        "Choose Start creating on a card to fill the composer, then adjust the prompt for your material.",
     },
   },
   notifications: {

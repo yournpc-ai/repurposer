@@ -334,3 +334,13 @@ describe("spliceAnswerEnvelope", () => {
     expect(out.map((m) => m.id)).toEqual(["u1"])
   })
 })
+
+
+it("an upload in an answer continuation keeps its refs on the existing speech seat", () => {
+  const rows: OverlayMessage[] = [{ id: "preview", role: "assistant", content: "Uploaded", birthKey: "birth" }]
+  const result = spliceAnswerEnvelope(rows, {
+    optimisticId: "qa", previewId: "preview", answeredRow: null,
+    followUp: followUp({ content: "Uploaded", intent: { type: "answer", output_refs: ["video"] } }),
+  })
+  expect(result[0]).toMatchObject({ id: "preview", birthKey: "birth", outputRefs: ["video"], streaming: false })
+})

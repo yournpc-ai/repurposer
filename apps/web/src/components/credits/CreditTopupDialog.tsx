@@ -30,17 +30,17 @@ export function CreditTopupDialog({
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogContent className="gap-0 p-6 sm:max-w-lg">
         <DialogHeader className="gap-2 pr-8">
-          <DialogTitle className="text-lg font-semibold">
+          <DialogTitle className="text-xl font-semibold">
             {t("credits.buyTitle")}
           </DialogTitle>
-          <DialogDescription>
-            {shortfall
-              ? t("credits.insufficient", {
-                  balance: formatCredits(shortfall.balance, i18n.language),
-                  required: formatCredits(shortfall.required, i18n.language),
-                })
-              : t("credits.topupSubtitle")}
-          </DialogDescription>
+          {shortfall && (
+            <DialogDescription>
+              {t("credits.insufficient", {
+                balance: formatCredits(shortfall.balance, i18n.language),
+                required: formatCredits(shortfall.required, i18n.language),
+              })}
+            </DialogDescription>
+          )}
         </DialogHeader>
         {open && (
           <div className="mt-6">

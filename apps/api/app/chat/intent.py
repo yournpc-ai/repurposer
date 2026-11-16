@@ -300,21 +300,13 @@ def _assemble_plan_turn(
 # The registries are static once imported (the tools door opens them), so
 # the system prompts are built once at declaration time.
 #
-# max_iterations=12 (报价 = fold): the discovery chain (iter-2 ⑤, R2 免费
-# 探索区连续工作) rides ONE turn — get_understanding (the anchored
-# transcript rides it, ADR-107) → propose_candidates → propose_selects →
-# propose_plans = up to 5 calls on the designed flow. Live evidence
-# (2026-09-23 S-explore-2 runs): the realistic chain is 8-10 — the model
-# reads every range it means to judge as evidence before proposing,
-# and ProposePlansArgs is the router's most complex params shape (plans ×
-# outputs nested lists), so its malformed-call recovery needs real budget:
-# at 8 one rejection starved the plans call; at 10 a plans params
-# rejection at iteration 9 left no recovery room. 12 = realistic 9-10 + 2
-# recovery headroom; the bound stays what makes an unquoted chat turn
-# safe (bounded, never open-ended).
+# max_iterations=20 (报价 = fold): discovery and direct video authoring ride
+# ONE turn, with bounded read/preparation/correction headroom. The separate
+# no-progress policy still stops repeated failed writes before this ceiling;
+# the bound keeps an unquoted chat turn finite, never open-ended.
 intent_router = ToolLoopAgent(
     name="intent_router",
-    prompt="intent_router.j2",
+    prompt="chat/user.j2",
     system=intent_router_system(),
     temperature=0.2,
     assemble=_assemble_plan_turn,
@@ -322,7 +314,7 @@ intent_router = ToolLoopAgent(
     # candidates/selects NON-terminal (the turn chains the discovery), only
     # propose_plans is terminal (the dock = the paid-boundary stop, R15).
     tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
-    max_iterations=12,
+    max_iterations=20,
 )
 
 
@@ -343,7 +335,7 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
 
 chat_intent_agent = ToolLoopAgent(
     name="chat_intent",
-    prompt="chat_intent.j2",
+    prompt="chat/user.j2",
     system=chat_intent_system(),
     temperature=0.2,
     assemble=_assemble_chat_turn,
@@ -352,11 +344,7 @@ chat_intent_agent = ToolLoopAgent(
     # discovery chain), propose_plans / revise_plan terminal (the dock = the
     # paid-boundary stop, R15).
     tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS, *exploration_chat_tools()],
-    # max_iterations 6→12 (iter-3 E8): the discovery chain rides ONE turn —
-    # search → reads → candidates → selects → plans is 8-10 realistic calls
-    # on the plan path's live evidence (2026-09-23, S-explore-2), and the
-    # ProposePlansArgs params shape needs real rejection-recovery headroom;
-    # 12 = realistic 9-10 + 2 recovery. The bound stays what makes an
-    # unquoted chat turn safe (bounded, never open-ended).
-    max_iterations=12,
+    # max_iterations 12→20: discovery and direct video revision get bounded
+    # read/correction headroom; the independent no-progress stop still applies.
+    max_iterations=20,
 )

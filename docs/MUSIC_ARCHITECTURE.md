@@ -1,6 +1,6 @@
 # Repurposer Music Architecture
 
-> Status: 当前规范（2026-10-25）。音乐库、默认选曲、persona 面板自定义生成与 clip 换曲是当前能力；上传、配额/缓存、Chat 自定义生成和高级音频编辑仍未完成。
+> Status: 当前规范（2026-11-09）。音乐库、默认选曲、persona 面板自定义生成与 clip 换曲是当前能力；Video Project 的本地库五首候选、下一轮序号选曲与原生 music 修订已有一次真实 Chat 证据，完整 S15、制作和主观混音验收仍未完成。上传、配额/缓存、Chat 自定义生成和高级音频编辑仍未完成。
 > Related: ADR-023；字段级事实源为当前 models、routes 与 `app/tools/music/`。
 
 ## 1. 范围与命名
@@ -17,13 +17,14 @@
 2. persona 皮肤的音乐默认与启用开关；
 3. clip 生成时从现有库选曲，不在每次 clip 生成中自动创作新音乐；
 4. persona 皮肤 Music 面板试听、选默认和从 prompt 生成新曲；
-5. `set_music` 换曲/开关/增益并重渲染；Chat `add_music` 确定性选择现有库曲目；
-6. `POST /api/v1/music/generate` 直接生成一条新 Music。
+5. `set_music` 换曲/开关/增益并重渲染；旧 Clip Chat `add_music` 确定性选择现有库曲目；
+6. Video Project 普通 Chat 通过 `show_music_candidates` 展示本地真实可播放候选，后续消息用 `select_music` 解算序号选择，再经 `prepare_video_materials` 冻结字节并由 `revise_video.add_audio(role="music")` 保存新版本；
+7. `POST /api/v1/music/generate` 直接生成一条新 Music。
 
 当前不做：
 
 - 用户上传音乐；
-- 多轨音频时间线、自由增益自动化、起止裁剪或淡入淡出编辑器；
+- 通用自由多轨音频编辑器；Video Project 只通过受控 Clip/source window、增益与既有动画能力修订音轨；
 - 在 Chat 或 result editor 中“Generate new”自定义音乐；
 - prompt 去重缓存、生成配额或该路由的 credits 收费；
 - 未经明确授权把私有用户音乐公开。
@@ -48,16 +49,19 @@ outputs.render_spec.music（url / enabled / gain_db / music_id）
 renderer 只消费 spec；换曲通过 set_music → render PENDING → worker
 ```
 
-`add_music` 是库选择技能，不是音乐生成技能。 Film 的音乐与旁白有其自身 spec/版本合同，不得借本模块把 Film 变成自由多轨音频编辑器。
+`add_music` 是旧 Clip 链的库选择技能，不是音乐生成技能。 Film 的音乐与旁白有其自身 spec/版本合同，不得借本模块把 Film 变成自由多轨音频编辑器。
+
+Video Project 不复用旧 `render_spec.music` 块：Music 先冻结为内容寻址的音频 `SourceSnapshot`，再形成 `AudioObject + ClipSource + Clip`；BGM 位于 `role="music"` 轨，SFX 位于独立 `role="effect"` 轨。`show_music_candidates` 只发候选，持久化到 `candidates_log` 后才可在后续普通消息中由 `select_music` 解算；工具调用方不能自行提供 URL、媒体身份或 digest 替代持久化候选。选曲本身不写版本、不启动 Run，落轨后的新版本仍需完整呈现与普通制作授权。
 
 ## 4. 数据归属
 
 | 数据 | 事实源 | 规则 |
 |---|---|---|
 | 音频字节 | 对象存储 `music/{music_id}.{ext}` | DB 只存 key；reset 保留 `music/` 前缀 |
-| Music 元数据 | `music` 表 | mood、prompt、license、duration、attribution、visibility 等按当前 schema |
+| Music 元数据 | `music` 表 | mood、prompt、license、duration、attribution、visibility 等按当前 schema；策展曲的 `meta` 另存 `content_sha256`、作者、风格、参考 BPM 与实际 BeatGrid 分析结果 |
 | 默认音乐 | `persona.brand` + 系统默认皮肤 | `musicId` 为显式选择，`musicMood` 为回退；`musicEnabled` 是总开关 |
-| 单个 clip 选择 | `outputs.render_spec.music` | 渲染运行时事实；renderer 不读 Music 表 |
+| 单个 clip 选择 | `outputs.render_spec.music` | 旧 Clip 渲染运行时事实；renderer 不读 Music 表 |
+| Video Project 选曲 | `SourceSnapshot.meta.music` + 版本内 music Clip | 冻结时校验已有 `content_sha256` 与实际字节；`SourceSnapshot.digest` 是版本权威内容身份 |
 
 三种数据形态：
 
@@ -69,11 +73,13 @@ renderer 只消费 spec；换曲通过 set_music → render PENDING → worker
 
 ## 5. 默认库与启动对账
 
-默认 catalog 当前按 `calm` / `uplifting` / `corporate` 三种 mood 组织，具体行、标题与对象 key 以 seed 注册表和数据库为准。
+默认 catalog 由 `CURATED_MUSIC_CATALOG` 的五首 Shotcraft BGM 组成：Tech House、Cat Walk、G Eazy NBA type、House Vibez、Tonight。平台不再自动补入 Calm Academic、Inspiring Vision、Corporate Drive；启动时会删除未被历史 Output 引用的旧平台行及其对象，仍被引用的行转为私有以保留历史而不进入候选库。用户自己生成的音乐不受影响。
 
 - `app/pipeline/music.py:seed_default_music` 在应用启动时 reconcile：按 mood 查缺，对象存在而记录缺失时补记录。
 - 启动 reconcile **不调用 MiniMax、不生成音频、不花配额**；对象不存在时保持缺失并诚实跳过。
-- 一次性生成/上传由 `apps/api/scripts/seed_default_music.py` 承担，需独立授权与配额。
+- 五首都来自 Shotcraft 的 `assets/audio/bgm`。前四首有逐曲作者和 URL；`bgm-tech-house.mp3` 的原曲名、作者与逐曲 URL 无法反查，库中明确标记“商用前复核”。代码与音乐的许可分别记录，不把 Shotcraft 的 Apache-2.0 当成音乐许可。
+- 策展字节由 `apps/api/scripts/import_library_music.py <Shotcraft/assets/audio/bgm>` 显式导入。脚本只读五首白名单本地 MP3，解码探测真实时长、计算 SHA-256 并上传缺失对象；已有对象仅字节完全相同才复用，绝不覆盖。它不写 DB、不调用模型。
+- 启动 reconcile 保存来源、许可、作者、风格、参考 BPM 和实际时长/digest，并尽力补齐 BeatGrid；参考 BPM 不冒充新分析结果，BeatGrid 缺失时保持为空。
 - reset_db 保留 `music/` 对象前缀，清库后重启只重建可对应记录。
 
 ## 6. 选曲与 spec
@@ -82,6 +88,8 @@ renderer 只消费 spec；换曲通过 set_music → render PENDING → worker
 2. clip 计划可依据品牌默认与内容 mood 选择现有 Music；Chat `add_music` 确定性选择已有曲目，不隐式调用生成端点。
 3. `app/memory/brand.py` 与当前烘焙链把 Music 解析为 `ClipMusic`，写入 `render_spec.music`。
 4. renderer 只消费 `url / enabled / gain_db / music_id` 等 spec 字段，不知道 Music、mood 或 persona 的存在。
+
+Video Project 的新链选曲分四种情况：用户直接点名库内曲目/mood 时，`search_music` 只提供元数据 id；用户要求试听或比较时，`show_music_candidates` 发至多五首真实对象仍存在、时长有效的本地候选；后续序号选择由 `select_music` 重查当前权限、标题、时长与 digest；用户同时要求应用时才继续 prepare + revise。无 BGM 只删除或省略 music Clip，不恢复默认 bed；没有真实 BeatGrid/BPM 时不伪造卡点。
 
 ```ts
 interface ClipMusic {
@@ -111,6 +119,7 @@ trim/start/end、自动增益与多曲混音不在当前契约中；新增前必
 - `set_music` 负责换曲、开关和增益；journal/undo 与重渲染按 Operation Model 和 render fencing 执行。
 - Chat `add_music` 只选择现有库；用户要求创作新曲时，应导向当前 persona Music 面板或明确回答能力边界，不能假装 Chat 已生成。
 - persona Music 面板提供公开 + 自己曲目的列表、试听、默认选择与 prompt 生成。
+- Video Project 候选卡复用 `AudioCandidateSurface` 与真实 `WaveformPlayer`，实时 SSE 与 `candidates_log` 刷新回放都保留 `music_set` 身份、选择高亮和工作回执；选曲卡不提供执行按钮，应用仍走普通 Chat 修订。
 - result editor 的当前换曲能力不等于有“Generate new”按钮；独立 `/library/music` 全库管理页仍属后续。
 
 ## 9. 用户上传（PLANNED）
@@ -142,6 +151,7 @@ trim/start/end、自动增益与多曲混音不在当前契约中；新增前必
 ## 11. 质量与验收
 
 - 默认库 reconcile 必须离线可启动，缺失对象不触发隐式生成。
+- 当前 Music 候选/序号选择、music/effect 分轨、digest 防错与 S15 配乐扩展的测试和真实播放、版本落轨、钉版制作、混音验收状态以当前任务合同为准；代码与静态覆盖不等于这些旅程已经通过。
 - 选曲、换曲、开关与增益在 preview/export 一致；离屏播放与全局声音互斥遵守 UI 合同。
 - 自定义生成分别验证 provider 成功、上传、DB 行、权限、公开默认、失败与重复点击；当前没有缓存/配额时不得写对应通过结论。
 - 音乐特定的感知质量、响度、循环自然度和与旁白/人声的动态混音仍需真实试听；通用 verify 或文件存在不等于音乐质量通过。

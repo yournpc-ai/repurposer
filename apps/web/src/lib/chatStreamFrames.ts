@@ -42,15 +42,16 @@ export interface QuestionPreviewPayload {
   default_path?: string | null
 }
 
-/** One ``assistant.candidates`` event. ``set`` = a candidate set's birth
- * (or idempotent re-emit — the client replaces by candidate_set_id);
+/** One ``assistant.candidates`` event. ``set`` = a transcript candidate
+ * set's birth, ``sfx_set``/``music_set`` = the same envelope carrying audio
+ * candidates (or idempotent re-emit — the client replaces by candidate_set_id);
  * ``selection`` = the set's FULL current selection (the client replaces,
  * never unions — a revise re-point drops the old pick by construction).
  * Chat decisions never become graph nodes; this channel is their only
  * surface. */
 export type CandidateEventPayload =
   | {
-      kind: "set"
+      kind: "set" | "sfx_set" | "music_set" | "video_preset_set"
       candidate_set_id: string
       topic: string
       asset_id?: string | null
@@ -135,6 +136,10 @@ export function reduceCandidateFrame(
     )
   }
   const surface: CandidateSurface = {
+    kind:
+      event.kind === "video_preset_set" || event.kind === "music_set"
+        ? event.kind
+        : undefined,
     candidateSetId: event.candidate_set_id,
     topic: event.topic,
     assetId: event.asset_id ?? null,

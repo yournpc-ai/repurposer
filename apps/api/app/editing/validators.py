@@ -32,12 +32,118 @@ from app.editing.timing import source_ticks_to_output_ticks, ticks_to_frames
 SnapshotFacts = dict[UUID, dict]
 
 
+class ValidationProblems(list[str]):
+    """Messages stay backward-compatible; indexed metadata feeds correction."""
+
+    def __init__(self):
+        super().__init__()
+        self.issues: dict[int, dict] = {}
+
+
 class ContentValidationError(ValueError):
     """The candidate version breaks content law; the batch never lands."""
 
+    def __init__(self, problems: list[str]):
+        self.problems = list(problems)
+        metadata = getattr(problems, "issues", {})
+        self.issues = []
+        for index, problem in enumerate(self.problems):
+            issue = dict(metadata.get(index, {}))
+            issue.setdefault("loc", [])
+            issue.setdefault("type", "content_validation")
+            issue.setdefault("msg", problem)
+            self.issues.append(issue)
+        super().__init__("; ".join(self.problems))
 
-def _fail(problems: list[str], msg: str) -> None:
+
+def _fail(
+    problems: list[str],
+    msg: str,
+    *,
+    entity: dict | None = None,
+    relation: str | None = None,
+    field_path: list[str | int] | None = None,
+    operation_path: list[str | int] | None = None,
+) -> None:
+    index = len(problems)
     problems.append(msg)
+    if isinstance(problems, ValidationProblems) and (
+        entity or relation or field_path or operation_path
+    ):
+        problems.issues[index] = {
+            "loc": [], "type": relation or "content_validation", "msg": msg,
+            **({"relation": relation} if relation else {}),
+            **({"entity": entity} if entity else {}),
+            **({"field_path": field_path} if field_path else {}),
+            **({"operation_path": operation_path} if operation_path else {}),
+        }
+
+
+def _validate_capture_snapshot(snapshot_id: UUID, facts: dict, problems: list[str]) -> None:
+    """Validate every captured view without requiring failed peers to exist."""
+    del snapshot_id
+    meta = facts.get("meta") or {}
+    plan = meta.get("capture_plan") or {}
+    views = meta.get("views") or []
+    by_id = {str(view.get("view_id")): view for view in views}
+    states = {str(state.get("state_id")): state for state in plan.get("states") or []}
+    artifacts = list(plan.get("artifacts") or [])
+    for view in views:
+        view_id = str(view.get("view_id"))
+        matches = [
+            artifact for artifact in artifacts
+            if (
+                str(artifact.get("artifact_id") or "") == view_id
+                or (
+                    artifact.get("output_id") is not None
+                    and artifact.get("output_id") == view.get("output_id")
+                )
+            )
+            and artifact.get("state_id") == view.get("state_id")
+            and artifact.get("role") == view.get("artifact_role")
+        ]
+        if len(matches) != 1:
+            _fail(problems, f"web view {view_id}: captured output has no unique plan lineage")
+            continue
+        artifact = matches[0]
+        if view.get("paired_view_id") != artifact.get("paired_view_id"):
+            _fail(problems, f"web view {view_id}: paired view differs from its plan")
+        if not view.get("storage_key") or not re.fullmatch(r"[0-9a-f]{64}", str(view.get("digest") or "")):
+            _fail(problems, f"web view {view_id}: captured output lacks immutable bytes/digest")
+        state = states.get(str(view.get("state_id") or ""))
+        if state is None or view.get("actions") != state.get("actions"):
+            _fail(problems, f"web view {view_id}: route/action provenance does not match its state")
+        if not view.get("route") or not isinstance(view.get("page_height"), int):
+            _fail(problems, f"web view {view_id}: route or post-state page height is absent")
+        target_id = view.get("target_element_id")
+        if target_id:
+            target = next((e for e in view.get("elements") or [] if str(e.get("id")) == str(target_id)), None)
+            if target is None:
+                _fail(problems, f"web view {view_id}: selected element {target_id} is absent")
+            elif not target.get("css_box") or not target.get("pixel_box"):
+                _fail(problems, f"web view {view_id}: selected element lacks post-state CSS/pixel boxes")
+            if not isinstance(view.get("region_text"), str) or not isinstance(view.get("region_text_truncated"), bool):
+                _fail(problems, f"web view {view_id}: selected region text/truncation fact is absent")
+        pair_id = view.get("paired_view_id")
+        if not pair_id:
+            continue
+        pair = by_id.get(str(pair_id))
+        if pair is None:
+            continue
+        if view.get("route") != pair.get("route") or view.get("source_y") != pair.get("source_y"):
+            _fail(problems, f"web view {view_id}: paired views differ in route or measured scroll")
+        if (view.get("css_width"), view.get("css_height")) != (pair.get("css_width"), pair.get("css_height")):
+            _fail(problems, f"web view {view_id}: paired views differ in CSS viewport")
+        if view.get("artifact_role") in {"blank_plate", "cutout"}:
+            if view.get("state_id") != pair.get("state_id"):
+                _fail(problems, f"web view {view_id}: plate/cutout pair crosses states")
+            if view.get("device_scale_factor") != pair.get("device_scale_factor"):
+                _fail(problems, f"web view {view_id}: plate/cutout pair crosses capture scales")
+            if target_id:
+                own = next((e for e in view.get("elements") or [] if str(e.get("id")) == str(target_id)), None)
+                other = next((e for e in pair.get("elements") or [] if str(e.get("id")) == str(target_id)), None)
+                if own and other and (own.get("css_box") != other.get("css_box") or own.get("full_css_box") != other.get("full_css_box")):
+                    _fail(problems, f"web view {view_id}: plate/cutout coordinates differ from the populated view")
 
 
 def _validate_component_source(obj: GeneratorObject, clip_id: str, problems: list[str]) -> None:
@@ -45,9 +151,14 @@ def _validate_component_source(obj: GeneratorObject, clip_id: str, problems: lis
     # structure only. TSX syntax/capability diagnostics belong to the single
     # controlled runner; matching words across JSX text or comments here is
     # neither correct validation nor a security boundary.
+    if obj.project is not None:
+        # The complete schema, file digests, imports and resource identities are
+        # pinned before this whole-candidate check; TS capability diagnostics
+        # remain owned by the controlled runner.
+        return
     code = obj.code or ""
     if not re.search(r"\bexport\s+default\b", code):
-        _fail(problems, f"clip {clip_id}: component-v1 needs a default component export")
+        _fail(problems, f"clip {clip_id}: remotion-project needs a default component export")
     for key, value in obj.parameters.items():
         if isinstance(value, str) and re.search(r"https?://|\bdata:", value, re.IGNORECASE):
             _fail(problems, f"clip {clip_id}: component parameter {key!r} is not a fixed resource")
@@ -61,7 +172,7 @@ def _validate_clip_source(
     if isinstance(obj, GeneratorObject):
         if src is not None:
             _fail(problems, f"clip {clip.clip_id}: generator sources are prepared, not bound media")
-        if obj.runtime in {"drawing-v1", "component-v1"}:
+        if obj.producer in {"draw-2d", "remotion-project"}:
             expected_ticks = obj.output.duration_frames * content.settings.timebase // obj.output.fps
             if (
                 expected_ticks * obj.output.fps != obj.output.duration_frames * content.settings.timebase
@@ -71,8 +182,25 @@ def _validate_clip_source(
                     problems,
                     f"clip {clip.clip_id}: program output frames/fps must exactly match its output window",
                 )
-            if obj.runtime == "component-v1":
+            if obj.producer == "remotion-project":
                 _validate_component_source(obj, clip.clip_id, problems)
+                if obj.project is not None:
+                    for resource in obj.project.resources:
+                        binding = next(
+                            (b for b in content.sources if b.snapshot_id == resource.snapshot_id), None
+                        )
+                        facts = snapshots.get(resource.snapshot_id)
+                        if (
+                            binding is None
+                            or binding.snapshot_digest != resource.snapshot_digest
+                            or facts is None
+                            or facts.get("digest") != resource.snapshot_digest
+                            or facts.get("kind") != "image"
+                        ):
+                            _fail(
+                                problems,
+                                f"clip {clip.clip_id}: resource {resource.path!r} lacks its exact bound image snapshot",
+                            )
         return
     if isinstance(obj, (TextObject, ShapeObject)):
         if src is not None:
@@ -89,9 +217,18 @@ def _validate_clip_source(
             _fail(problems, f"clip {clip.clip_id}: {exc}")
         return
     if isinstance(obj, SpeechObject):
-        if src is not None:
-            _fail(problems, f"clip {clip.clip_id}: pending speech has no bound media source")
-        return
+        if obj.alignment is None:
+            if src is not None:
+                _fail(problems, f"clip {clip.clip_id}: pending speech has no bound media source")
+            return
+        if src is None:
+            _fail(problems, f"clip {clip.clip_id}: source-aligned speech requires its audio snapshot")
+            return
+        if (
+            src.snapshot_id != obj.alignment.audio_snapshot_id
+            or src.snapshot_digest != obj.alignment.audio_digest
+        ):
+            _fail(problems, f"clip {clip.clip_id}: speech alignment and audio snapshot differ")
     if src is None:
         _fail(problems, f"clip {clip.clip_id}: {obj.kind} objects require a source")
         return
@@ -137,15 +274,18 @@ def _validate_clip_source(
                 )
         return
 
-    if isinstance(obj, (AudioObject, VideoObject)):
-        expected_kind = "audio" if isinstance(obj, AudioObject) else "video"
+    if isinstance(obj, (AudioObject, VideoObject)) or (
+        isinstance(obj, SpeechObject) and obj.alignment is not None
+    ):
+        expected_kind = "video" if isinstance(obj, VideoObject) else "audio"
         if facts["kind"] != expected_kind:
             _fail(
                 problems,
                 f"clip {clip.clip_id}: {expected_kind} object bound to a {facts['kind']} snapshot",
             )
         if src.source_range is None:
-            _fail(problems, f"clip {clip.clip_id}: {expected_kind} sources require a source_range")
+            _fail(problems, f"clip {clip.clip_id}: {expected_kind} sources require a source_range",
+                  entity={"clip_id": clip.clip_id}, field_path=["source", "source_range"])
             return
         duration = facts.get("duration_ticks")
         if duration is None:
@@ -158,14 +298,24 @@ def _validate_clip_source(
                 f"({src.source_range.end} > {duration} source ticks) — a 1× clip may not "
                 "invent source media",
             )
-        source_len = source_ticks_to_output_ticks(
-            src.source_range.duration, content.settings.timebase
-        )
+        if isinstance(obj, SpeechObject):
+            # Aligned clips and their word anchors quantize absolute source
+            # positions before subtracting; use that same Clip-local window.
+            source_len = source_ticks_to_output_ticks(
+                src.source_range.end, content.settings.timebase
+            ) - source_ticks_to_output_ticks(
+                src.source_range.start, content.settings.timebase
+            )
+        else:
+            source_len = source_ticks_to_output_ticks(
+                src.source_range.duration, content.settings.timebase
+            )
         if source_len != clip.range.duration:
             _fail(
                 problems,
                 f"clip {clip.clip_id}: source window ({source_len} ticks) and output window "
-                f"({clip.range.duration} ticks) differ — only 1× mapping is supported",
+                f"({clip.range.duration} ticks) differ — only 1× mapping is supported; source uses SOURCE_TIMEBASE=90000 ticks/s",
+                entity={"clip_id": clip.clip_id}, field_path=["source", "source_range"],
             )
 
 
@@ -181,7 +331,12 @@ def _quantized_keys_have_collisions(
 
 
 def _validate_animation(
-    clip: Clip, anim: Animation, content: CompositionContent, problems: list[str]
+    clip: Clip,
+    anim: Animation,
+    content: CompositionContent,
+    problems: list[str],
+    *,
+    animation_index: int,
 ) -> None:
     obj = clip.object
     clip_ticks = clip.range.duration
@@ -193,13 +348,49 @@ def _validate_animation(
         )
     if anim.property == "audio.gain" and not isinstance(obj, (AudioObject, SpeechObject, VideoObject)):
         _fail(problems, f"animation {anim.animation_id}: audio.gain on a non-audio object")
-    if anim.property in {"filter.blur", "text.letter_spacing"} and not isinstance(obj, TextObject):
+    if anim.property == "path.reveal":
+        if not isinstance(obj, ShapeObject) or obj.shape != "path" or not obj.path:
+            _fail(
+                problems,
+                f"animation {anim.animation_id}: path.reveal requires a path shape with non-empty path data",
+            )
+        if anim.text_part is not None or anim.narration_anchor is not None:
+            _fail(
+                problems,
+                f"animation {anim.animation_id}: path.reveal accepts only whole-object targets",
+            )
+    if anim.property in {
+        "filter.blur", "text.letter_spacing", "text.color", "text.stroke_color",
+        "text.weight", "text.stroke_width",
+    } and not isinstance(obj, TextObject):
         _fail(problems, f"animation {anim.animation_id}: {anim.property} on a non-text object")
     if anim.property != "audio.gain" and isinstance(obj, (AudioObject, SpeechObject)):
         _fail(problems, f"animation {anim.animation_id}: visual property on an audio object")
+    if anim.narration_anchor is not None:
+        anchor = anim.narration_anchor
+        caption = obj.caption if isinstance(obj, TextObject) else None
+        if (
+            caption is None
+            or caption.state != "derived"
+            or caption.narration_alignment_id != anchor.alignment_id
+            or caption.narration_content_digest != anchor.content_digest
+            or caption.speech_object_id != anchor.speech_object_id
+        ):
+            _fail(
+                problems,
+                f"animation {anim.animation_id}: narration anchor provenance does not match its derived caption",
+            )
+        if anim.text_part is None or anim.property not in {
+            "transform.scale", "transform.position", "opacity", "filter.blur",
+            "text.color", "text.stroke_color", "text.weight", "text.stroke_width",
+        }:
+            _fail(
+                problems,
+                f"animation {anim.animation_id}: narration anchors require a supported TextPart animation",
+            )
 
     seen_at: set[int] = set()
-    for kf in anim.keyframes:
+    for keyframe_index, kf in enumerate(anim.keyframes):
         if kf.at in seen_at:
             _fail(problems, f"animation {anim.animation_id}: duplicate keyframe at {kf.at}")
         seen_at.add(kf.at)
@@ -208,15 +399,24 @@ def _validate_animation(
                 problems,
                 f"animation {anim.animation_id}: keyframe at {kf.at} is past the clip's "
                 f"local duration ({clip_ticks})",
+                entity={"clip_id": clip.clip_id, "animation_id": anim.animation_id},
+                field_path=[
+                    "animations", animation_index, "keyframes", keyframe_index, "at",
+                ],
             )
         if anim.property == "transform.position":
             if not isinstance(kf.value, tuple):
                 _fail(problems, f"animation {anim.animation_id}: transform.position needs [x, y]")
+        elif anim.property in {"text.color", "text.stroke_color"}:
+            if not isinstance(kf.value, str) or re.fullmatch(r"#[0-9a-fA-F]{6}", kf.value) is None:
+                _fail(problems, f"animation {anim.animation_id}: {anim.property} needs #RRGGBB")
         else:
             if not isinstance(kf.value, (int, float)) or isinstance(kf.value, bool):
                 _fail(problems, f"animation {anim.animation_id}: {anim.property} needs a scalar")
             elif anim.property == "opacity" and not 0 <= kf.value <= 1:
                 _fail(problems, f"animation {anim.animation_id}: opacity out of [0, 1]")
+            elif anim.property == "path.reveal" and not 0 <= kf.value <= 1:
+                _fail(problems, f"animation {anim.animation_id}: path.reveal out of [0, 1]")
             elif anim.property == "transform.scale" and not 0 < kf.value <= 10:
                 _fail(problems, f"animation {anim.animation_id}: scale out of (0, 10]")
             elif anim.property == "audio.gain" and not 0 <= kf.value <= 4:
@@ -228,6 +428,18 @@ def _validate_animation(
                     problems,
                     f"animation {anim.animation_id}: letter spacing out of [-0.2, 0.5] em",
                 )
+            elif anim.property == "text.weight" and (
+                int(kf.value) != kf.value or int(kf.value) not in {400, 500, 600, 700, 800, 900}
+            ):
+                _fail(problems, f"animation {anim.animation_id}: unsupported text weight")
+            elif anim.property == "text.stroke_width" and not 0 <= kf.value <= 64:
+                _fail(problems, f"animation {anim.animation_id}: text stroke width out of [0, 64]")
+        if (
+            anim.property in {"text.color", "text.stroke_color", "text.weight", "text.stroke_width"}
+            and kf is not anim.keyframes[-1]
+            and kf.easing.kind != "hold"
+        ):
+            _fail(problems, f"animation {anim.animation_id}: {anim.property} supports hold segments only")
 
     shifts = [0]
     if anim.text_part is not None:
@@ -268,7 +480,12 @@ def _validate_animation(
 def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> None:
     """Validate the COMPLETE candidate; raise ContentValidationError listing
     every violation found (one honest report, not the first failure)."""
-    problems: list[str] = []
+    problems: list[str] = ValidationProblems()
+
+    for binding in content.sources:
+        facts = snapshots.get(binding.snapshot_id)
+        if facts and facts.get("kind") == "web" and (facts.get("meta") or {}).get("capture_plan"):
+            _validate_capture_snapshot(binding.snapshot_id, facts, problems)
 
     for label, ids in (
         ("snapshot", [str(b.snapshot_id) for b in content.sources]),
@@ -311,6 +528,13 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                     problems,
                     f"track {track.track_id}: clips {previous.clip_id} and {following.clip_id} "
                     "overlap on one track",
+                    entity={
+                        "track_id": track.track_id,
+                        "clip_ids": [previous.clip_id, following.clip_id],
+                        "clip_id": following.clip_id,
+                    },
+                    relation="same_track_overlap",
+                    operation_path=["track_id"],
                 )
         for clip in track.clips:
             clips_by_id[clip.clip_id] = clip
@@ -336,7 +560,7 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                     f"clip {clip.clip_id}: mixed word + grapheme TextPart hierarchy is unsupported",
                 )
             seen_targets: set[tuple[str, str | None]] = set()
-            for anim in clip.animations:
+            for animation_index, anim in enumerate(clip.animations):
                 part_ids = anim.text_part.part_ids if anim.text_part is not None else [None]
                 for part_id in part_ids:
                     key = (anim.property, part_id)
@@ -347,7 +571,9 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
                             f"{anim.target_object_id}.{anim.property} for TextPart {part_id}",
                         )
                     seen_targets.add(key)
-                _validate_animation(clip, anim, content, problems)
+                _validate_animation(
+                    clip, anim, content, problems, animation_index=animation_index
+                )
 
     speech_clips = {
         clip.object.object_id: clip
@@ -364,15 +590,36 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
             continue
         if clip.scene_id != speech_clip.scene_id:
             _fail(problems, f"clip {clip.clip_id}: caption and speech must belong to the same scene")
-        if derivation.state == "derived" and clip.range != speech_clip.range:
-            _fail(problems, f"clip {clip.clip_id}: derived caption must share its speech window")
+        if derivation.state == "derived" and derivation.text_start is None and clip.range != speech_clip.range:
+            _fail(problems, f"clip {clip.clip_id}: derived sentence caption must share its speech window")
         speech = speech_clip.object
         assert isinstance(speech, SpeechObject)
-        if derivation.state == "derived" and (
-            clip.object.text != speech.text
-            or derivation.source_text_digest != speech_text_digest(speech.text)
-        ):
-            _fail(problems, f"clip {clip.clip_id}: derived caption does not match its speech text")
+        if derivation.alignment == "faster-whisper-script-v1":
+            if (
+                speech.alignment is None
+                or derivation.narration_alignment_id != speech.alignment.alignment_id
+                or derivation.narration_content_digest != speech.alignment.content_digest
+            ):
+                _fail(problems, f"clip {clip.clip_id}: caption and speech alignment provenance differ")
+        elif speech.alignment is not None:
+            _fail(problems, f"clip {clip.clip_id}: source-aligned speech has a TTS caption derivation")
+        if derivation.state == "derived":
+            if derivation.source_text_digest != speech_text_digest(speech.text):
+                _fail(problems, f"clip {clip.clip_id}: derived caption has stale speech text identity")
+            if derivation.text_start is None:
+                if clip.object.text != speech.text:
+                    _fail(problems, f"clip {clip.clip_id}: derived caption does not match its speech text")
+            else:
+                text_end = derivation.text_end
+                if (
+                    derivation.alignment != "faster-whisper-script-v1"
+                    or text_end is None
+                    or text_end > len(speech.text)
+                    or clip.object.text != speech.text[derivation.text_start:text_end]
+                ):
+                    _fail(problems, f"clip {clip.clip_id}: caption phrase does not match its exact speech span")
+                if clip.range.start < speech_clip.range.start or clip.range.end > speech_clip.range.end:
+                    _fail(problems, f"clip {clip.clip_id}: caption phrase escapes its speech window")
 
     for scene in content.scenes:
         if total_ticks and scene.range.end > total_ticks:
@@ -403,4 +650,4 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
     if total_ticks == 0:
         _fail(problems, "a version needs at least one clip")
     if problems:
-        raise ContentValidationError("; ".join(problems))
+        raise ContentValidationError(problems)

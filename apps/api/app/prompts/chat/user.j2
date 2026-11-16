@@ -1,0 +1,71 @@
+{% if mode == "plan" %}{%- if recent -%}
+Recent conversation:
+{{ recent|join('\n') }}
+
+{% endif -%}
+User message: {{ message }}
+{%- if speech_language %}
+{{ speech_language }}
+{%- endif %}
+{%- if surface_line %}
+{{ surface_line }}
+{%- endif %}
+{%- if confirmation_line %}
+{{ confirmation_line }}
+{%- endif %}
+{%- if brief_lines %}
+The brief so far (code-merged state — a user-stated slot is the user's own words, a fixed fact; the asked line names slots already asked once — never ask those again):
+{{ brief_lines|join('\n') }}
+{%- endif %}
+{%- if persona_lines %}
+The user's persona (identity memory — asking strategy ②'s pantry: source concrete one-word option values from here first, e.g. audience / domain terms; when nothing here fits the slot, asking with few or no options is legal):
+{{ persona_lines|join('\n') }}
+{%- endif %}
+{%- if pending_lines %}
+A question of yours is still awaiting the user's answer — judge THIS message against it first (if it supplies the pending slot's value, propose that slot with source 'user-stated' in your brief update; if it is an unrelated interjection, judge the message on its own merits and leave that slot alone — the question stays pending and the user gets a reminder):
+{{ pending_lines|join('\n') }}
+{%- endif %}
+{%- if asset_lines %}
+Uploaded files (in upload order):
+{{ asset_lines|join('\n') }}
+{%- endif %}
+{%- if material_pending_line %}
+{{ material_pending_line }}
+{%- endif %}
+{%- if understanding_lines %}
+The system's read of the material (the materialized understanding of the current asset set — top-tier semantic evidence: judge what the content IS and what it argues from THIS, quote-level grounded):
+{{ understanding_lines|join('\n') }}
+{%- endif %}
+{%- if speaker_form_lines %}
+The footage's speaker form (deterministic, off each video's speaker analysis — the framing direction's evidence: an interview's turn-taking or a single speaker means the camera CAN sit on whoever talks):
+{{ speaker_form_lines|join('\n') }}
+{%- endif %}
+{%- if filename %}
+Uploaded file: {{ filename }}{% if file_language %} (detected language: {{ file_language }}){% endif %}
+{%- if material_excerpt %}
+Material excerpt (the opening of the source content — judge what the material IS from this, never from the filename alone):
+{{ material_excerpt }}
+{%- endif %}
+{%- else %}
+{%- if not asset_lines %}
+No file uploaded (text-only input).
+{%- endif %}
+{%- endif %}
+{%- if presented_plan %}
+A plan has already been presented to the user and is awaiting confirmation (a JSON task chain): {{ presented_plan }}
+This chain is the CURRENT plan — it may include edits the user made directly in the plan panel, which never appear in the conversation. Emit the FULL revised chain: keep every task and param the user's message does not revise (tools, counts, languages, angles shown in the chain), and when the message revises one — 'clips only needs 2', 'make the post German', 'drop the quotes' — emit exactly that revision. The latest user message always wins.
+{%- endif %}
+{%- if plans_lines %}
+A decision package you structured is on the table awaiting confirmation — its Content Plans (the plan_id is the revision target's ONLY legitimate source — never invent one):
+{{ plans_lines|join('\n') }}
+{%- endif %}{% elif mode == "conversation" %}Context:
+{{ context_text }}
+
+User message: {{ message }}{% elif mode == "event" or mode == "delivery" %}Context:
+{{ context_text }}
+
+[System event — no user message this turn]: {{ event_line }}
+{%- if speech_language %}
+
+{{ speech_language }}
+{%- endif %}{% endif %}

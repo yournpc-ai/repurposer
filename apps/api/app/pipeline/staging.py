@@ -12,6 +12,7 @@ never reach ``attached`` within ``STAGING_TTL_SECONDS`` are expired and
 reaped (including the "PUT succeeded, attach never called" window).
 """
 
+import asyncio
 import time
 
 import structlog
@@ -30,28 +31,43 @@ logger = structlog.get_logger()
 # 24h: generous against any realistic compose→Generate gap; in-flight PUTs
 # finish in minutes, so nothing young is ever at risk.
 STAGING_TTL_SECONDS = 24 * 3600
+# Listing is remote IO. Keep the owner-prefix isolation, but do not turn the
+# user count into a serial storage-delay multiplier.
+_STAGING_LIST_CONCURRENCY = 8
 
 
 async def reap_stale_staging_uploads(ttl_seconds: int = STAGING_TTL_SECONDS) -> int:
     """Delete expired, unreferenced staging objects. Returns the delete count.
 
     Enumeration is per-user (bounded prefixes) — never a bucket-wide listing.
-    Failures are logged and skipped: a reaper must never take the worker loop
-    down, and a missed object is simply reaped on the next pass.
+    Prefix reads use bounded concurrency; reference checks keep their own short
+    DB sessions, so no transaction stays open across remote storage calls.
+    Failures are logged and skipped: a missed object is retried next pass.
     """
     cutoff = time.time() - ttl_seconds
-    reaped = 0
     async with AsyncSessionLocal() as db:
         user_ids = list((await db.execute(select(User.id))).scalars().all())
-        for user_id in user_ids:
+
+    semaphore = asyncio.Semaphore(_STAGING_LIST_CONCURRENCY)
+
+    async def list_for_user(user_id):
+        async with semaphore:
             try:
                 objects = await list_objects_with_age(get_staging_upload_prefix(user_id))
+                return user_id, objects
             except Exception as e:  # noqa: BLE001 — storage hiccup ≠ worker failure
                 logger.warning("staging_reap_list_failed", user_id=str(user_id), error=str(e))
-                continue
-            expired = [key for key, modified in objects if modified < cutoff]
-            if not expired:
-                continue
+                return user_id, None
+
+    listings = await asyncio.gather(*(list_for_user(user_id) for user_id in user_ids))
+    reaped = 0
+    for _user_id, objects in listings:
+        if objects is None:
+            continue
+        expired = [key for key, modified in objects if modified < cutoff]
+        if not expired:
+            continue
+        async with AsyncSessionLocal() as db:
             referenced = set(
                 (
                     await db.execute(select(Asset.file_url).where(Asset.file_url.in_(expired)))
@@ -59,14 +75,14 @@ async def reap_stale_staging_uploads(ttl_seconds: int = STAGING_TTL_SECONDS) -> 
                 .scalars()
                 .all()
             )
-            for key in expired:
-                if key in referenced:
-                    continue
-                try:
-                    await delete_file(key)
-                    reaped += 1
-                except Exception as e:  # noqa: BLE001 — skip, retry next pass
-                    logger.warning("staging_reap_delete_failed", key=key, error=str(e))
+        for key in expired:
+            if key in referenced:
+                continue
+            try:
+                await delete_file(key)
+                reaped += 1
+            except Exception as e:  # noqa: BLE001 — skip, retry next pass
+                logger.warning("staging_reap_delete_failed", key=key, error=str(e))
     if reaped:
         logger.info("staging_reap_completed", reaped=reaped)
     return reaped

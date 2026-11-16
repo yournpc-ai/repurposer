@@ -21,6 +21,25 @@ def narration_policy(max_tts_characters: int) -> NarrationPolicy:
     return NarrationPolicy(max_tts_characters=max_tts_characters)
 
 
+def narration_original_policy(max_tts_characters: int) -> NarrationPolicy:
+    """One speed-1.0 original only; narration preparation never adapts it."""
+    return NarrationPolicy(
+        max_speed=1.0,
+        max_attempts=1,
+        max_tts_characters=max_tts_characters,
+    )
+
+
+class PrepareNarrationParams(BaseModel):
+    """The exact final script and resolved voice for one original-only Run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=9000)
+    voice_id: str = Field(min_length=1, max_length=255)
+    language: str = Field(min_length=2, max_length=16)
+
+
 class ProduceVideoParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version_ref: VideoVersionRef = Field(

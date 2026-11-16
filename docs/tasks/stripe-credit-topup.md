@@ -1,6 +1,6 @@
 # Stripe 一次性积分充值——施工合同
 
-> Status: ACTIVE（2026-11-02）。金额预设、自由金额、Checkout、webhook、purchase 与前端购买面已落码；既有 €10 订单已验证本地真实 Checkout → webhook → paid/purchase → UI 主旅程且只有一条入账台账。当前预设与自由金额统一由前端提交 `amount_minor`、服务端以 `price_data` 创建 Checkout；该改动后的真实联调、重放、并发、测试套件和公网部署未运行。长期架构与字段/API 合同归 `docs/PAYMENTS.md`，积分语义归 `BILLING.md`；本文件只载首批施工范围、依赖与验收。
+> Status: ACTIVE（2026-11-06）。金额预设、自由金额、Checkout、webhook、purchase 与前端购买面已落码；既有 €10 订单已验证本地真实 Checkout → webhook → paid/purchase → UI 主旅程且只有一条入账台账。当前预设与自由金额统一由前端提交 `amount_minor`、服务端以 `price_data` 创建 Checkout；该改动后的真实联调、重放、并发、测试套件和公网部署未运行。webhook 持久审计与 worker 邮件告警已落码，尚未执行其 migration 或真实故障/投递验收。长期架构与字段/API 合同归 `docs/PAYMENTS.md`，积分语义归 `BILLING.md`；本文件只载首批施工范围、依赖与验收。
 
 ## 0. 目标与当前事实
 
@@ -28,7 +28,7 @@
 本批交付：
 
 1. 金额预设与自由金额竖切：实际 Checkout → CLI webhook → 钱包入账。
-2. 一张 `payment_orders` 表与 migration；不新建独立 webhook event 表。
+2. `payment_orders` 与 `payment_webhook_events` 两张表及 migration；后者只做投递审计与异步告警 outbox，不参与财务幂等裁决。
 3. packages / checkout-sessions / order read / stripe webhook 四个接口。
 4. SettingsDialog 积分购买面、CreditsPill 入口与支付返回确认。
 5. 公网 test 部署交接材料与完整安全/幂等验收。
@@ -63,6 +63,8 @@
 3. `completed + payment_status=paid` 在同一 DB 事务内完成 purchase、订单 paid、credit_transaction_id 与 paid/credited 时间；提交后才 2xx。
 4. `expired` 只关闭 pending 订单；重复事件、已 paid 订单、永久校验失败都不能重复加积分。
 5. 日志只记 ID、状态与校验码，不记密钥、完整事件体或银行卡资料。
+6. 每个验签事件在 `payment_webhook_events` 持久化处理结果、原因码、HTTP 状态与投递次数；验签/配置拒绝按小时聚合，缺签名请求不写库。审计与告警不得改变订单锁和台账幂等语义。
+7. 处理失败与可行动的校验不符写告警 outbox；worker 经 Resend 异步发送给 `PAYMENT_ALERT_RECIPIENTS`，有租约、claim token、指数退避与 5 次上限，API 请求内零邮件调用。
 
 完成证据：实际 Checkout 测试付款后余额与语义台账正确；同事件重放和不同事件并发都不能双入账，成功 URL 本身零入账。
 
@@ -70,7 +72,7 @@
 
 1. 新建 `apps/web/src/lib/payments.ts`，统一 API 类型与调用；不在组件里复制价格或积分包常量。
 2. 新建 `components/credits/CreditPackagePicker.tsx` 作为唯一金额选择与 Checkout 启动组件；改造 `components/settings/CreditsSection.tsx` 的余额、购买入口与台账层级，不在 Settings 内嵌金额选择或支付表单。
-3. 新增轻量 `CreditTopupDialog` 独占金额 input、预设按钮、换算 tooltip、取消与 Checkout 跳转；手动输入取消预设选中，点击预设回填 input 并显示选中态，两种输入都提交 `amount_minor`。改造 `components/credits/CreditsPill.tsx` 区分购买入口与完整台账入口，Settings 余额区购买按钮与 Chat 余额不足灰行均打开该弹窗，支付成功不自动重试 run。
+3. 新增轻量 `CreditTopupDialog` 独占金额 input、到账积分、预设按钮、取消与 Checkout 跳转；手动输入取消预设选中，点击预设回填 input 并显示选中态，两种输入都提交 `amount_minor`。改造 `components/credits/CreditsPill.tsx` 区分购买入口与完整台账入口，Settings 余额区购买按钮与 Chat 余额不足灰行均打开该弹窗，支付成功不自动重试 run。
 4. 扩展 `routes/_app.settings.tsx` 接收 Checkout return：打开积分 section、轮询订单、按真实 paid 状态刷新 wallet/transactions；success 返回先显示确认中，cancelled 不产生成功反馈。
 5. 新文案同步 `en.ts` / `zh.ts`；复用现有 Card/Button/i18n/token，不新增 Stripe.js 或银行卡表单。
 
@@ -79,7 +81,7 @@
 ### P4 — 文档、部署交接与 live 前置
 
 1. 更新 `API.md`、`BILLING.md`、`MODULE_ARCHITECTURE.md` 与本任务剩余欠账；长期规则只留 PAYMENTS/BILLING，排期更新 `PROGRESS.md`，不新增会话报告或重复 ADR。
-2. 给部署/账号管理者交付：公网 webhook URL、两个 event 类型、两个支付环境变量名、live/test 配置分工、migration 与 API/Web 重建说明。
+2. 给部署/账号管理者交付：公网 webhook URL、两个 event 类型、Stripe API/webhook secret、worker 的 `PAYMENT_ALERT_RECIPIENTS` 与 Resend 依赖、live/test 配置分工、migration 与 API/worker 重建说明。
 3. 公网 test 由 Dashboard 创建独立 webhook secret，服务器不安装/运行 CLI；确认反代落到本项目 API 容器。
 4. live 另需 live key/webhook、税务与退款政策、监控责任人和真实小额验收，未满足不得标为真实收款 ready；一次性充值不需要 live Price。
 
@@ -99,6 +101,9 @@
 - paid 后收到 expired 不改变订单或余额；pending 收到 unpaid completed 不入账。
 - webhook 提交前模拟 DB 故障时返回 500，Stripe 重试后可恢复且仍只入一次。
 - 伪造签名、test/live 环境不符、金额/币种不符、Session/订单/用户不匹配均零入账。
+- 成功、忽略、失败与重放分别留下正确审计行；同事件并发重放不双生，payload 哈希变化不进入入账。伪造签名与缺 secret 按小时聚合，缺签名请求零审计写入。
+- 审计最终化前模拟 DB 故障返回 500，Stripe 重试后仍只入一次且审计恢复为真实终态；进程崩溃留下的 processing 行在 10 分钟后转为 processing_timeout；告警邮件故障不影响 webhook 响应或入账。
+- worker 只认领到期告警，崩溃租约可回收，发送终态受 claim token fencing；未配置收件人时审计正常且无伪成功，配置恢复后待告警可补发。
 - 重复点击/请求产生的未支付订单不造成收款；同一内部订单不能创建两个 Checkout Session。
 
 ### 3.3 权限、前端与部署
@@ -112,6 +117,6 @@
 
 - 纯函数覆盖只放在金额解析、事件映射与状态机纯层；真实事务、并发、权限和 Stripe 签名链必须走真实 DB/API/Checkout 验收，不能用 mock 绿代替。
 - 本批不改 prompt，不新增 LLM 断言或付费模型探针。部署前检查按仓库现行仪式链执行，web 纯测试/类型检查按改动面补齐。
-- 当前支付代码、migration、纯校验测试和文档已落地；migration 已由 dev 执行。既有 €10 订单已完成本地真实 Checkout 测试付款，webhook 验签后将订单置为 `paid`，写入恰好一条 10,000 积分 purchase 台账并刷新 UI；统一 inline-price 改动后的真实 Checkout/webhook、€20/€50、自由金额、重放、并发、取消/过期、伪造签名、权限、pytest、web 类型检查/测试、公网部署与 live 验收均**未运行**。
+- 当前支付代码、migration、纯校验测试和文档已落地；migration 已由 dev 执行。既有 €10 订单已完成本地真实 Checkout 测试付款，webhook 验签后将订单置为 `paid`，写入恰好一条 10,000 积分 purchase 台账并刷新 UI；统一 inline-price 改动后的真实 Checkout/webhook、€20/€50、自由金额、重放、并发、取消/过期、伪造签名、权限、pytest、web 类型检查/测试、公网部署与 live 验收均**未运行**。`payment_webhook_events` 持久审计与 worker 邮件告警已落码，新 migration、真实 DB 重放/并发/故障恢复、Resend 投递和告警认领均**未运行**，不沿用旧订单链验证作为新审计链证据。
 - 本机 Stripe CLI 与本地 webhook secret 已配置，listener 已进入 Ready。剩余外部待办为公网 API origin/反代与 Dashboard 公网 endpoint；一次性充值不再需要创建或配置 Stripe Product / Price。
 - 完成后长期约束回 PAYMENTS/BILLING，未完成验收保留在本任务；不把过程日志、密钥或历史报告写入 docs。

@@ -13,16 +13,51 @@ Schemas and slot resolution live in app/editing/director.py (pure, gate
 from __future__ import annotations
 
 from app.agents.base import Agent, AssembleResult
+from app.agents.tool_loop import ChatTool
 from app.editing.director import (
-    ComponentDirection,
+    AlignedNarrationDirection,
+    ComponentVideoDirection,
     GeneratedImageDirection,
     LaunchFilmDirection,
     MgDirection,
     MixedDirection,
     ProgramDirection,
 )
+from app.skills.package_session import (
+    GetSkillPreviewArgs,
+    ListSkillShotsArgs,
+    ReadSkillDemoArgs,
+    ReadSkillReferenceArgs,
+)
 from app.tools.video.review import ContentReviewAnswer
 
+
+SKILL_READ_TOOLS = [
+    ChatTool(
+        name="list_skill_shots",
+        description="List the bound package's compact shot index, sequence and template identities. Read only; filter or page large indexes.",
+        params_model=ListSkillShotsArgs,
+        terminal=False,
+    ),
+    ChatTool(
+        name="read_skill_reference",
+        description="Read one bounded slice of SKILL.md, a shot card, sequence, or template inside the bound package.",
+        params_model=ReadSkillReferenceArgs,
+        terminal=False,
+    ),
+    ChatTool(
+        name="read_skill_demo",
+        description="Read one bounded slice of a selected demo source or declared demos/lib dependency. Source is reference only, never executable input.",
+        params_model=ReadSkillDemoArgs,
+        terminal=False,
+    ),
+    ChatTool(
+        name="get_skill_preview",
+        description="Read a selected shot's real preview, preferring its declared timeline image over MP4 by default; return an honest available=false when none exists.",
+        params_model=GetSkillPreviewArgs,
+        terminal=False,
+    ),
+]
 
 def _assemble_launch(
     *,
@@ -51,7 +86,7 @@ def _assemble_launch(
 
 video_director: Agent[LaunchFilmDirection] = Agent(
     name="video_director",
-    prompt="video_director.j2",
+    prompt="video/website_director.j2",
     schema=LaunchFilmDirection,
     system=(
         "You are a film director for evidence-led website launch films. You "
@@ -65,8 +100,6 @@ video_director: Agent[LaunchFilmDirection] = Agent(
     stream=True,
     timeout_s=300,
 )
-
-
 def _assemble_mg(
     *,
     text: str,
@@ -97,15 +130,56 @@ def _assemble_mg(
 
 mg_director: Agent[MgDirection] = Agent(
     name="mg_director",
-    prompt="mg_director.j2",
+    prompt="video/mg_director.j2",
     schema=MgDirection,
     system=(
-        "You are a motion-graphics designer. You pace short text scenes over "
-        "a solid field — every line on screen is exact copy, never invented "
+        "You are a motion-graphics designer. You choreograph independently timed text blocks, visual hierarchy and "
+        "native graphics — every line on screen is exact copy, never invented "
         "facts. Output valid JSON, no commentary."
     ),
     temperature=0.5,
     assemble=_assemble_mg,
+    stream=True,
+    timeout_s=300,
+    read_tools=SKILL_READ_TOOLS,
+)
+def _assemble_aligned_narration(
+    *,
+    alignment_json: str,
+    focus: str | None,
+    instruction: str | None,
+    language: str | None,
+    scene_count: int | None,
+    background: str | None,
+    component_bake_enabled: bool = False,
+    repair_feedback: str | None = None,
+) -> AssembleResult:
+    return (
+        {
+            "alignment_json": alignment_json,
+            "focus": focus,
+            "instruction": instruction,
+            "language": language,
+            "scene_count": scene_count,
+            "background": background,
+            "component_bake_enabled": component_bake_enabled,
+            "repair_feedback": repair_feedback,
+        },
+        [],
+    )
+
+
+aligned_narration_director: Agent[AlignedNarrationDirection] = Agent(
+    name="aligned_narration_director",
+    prompt="video/aligned_narration_director.j2",
+    schema=AlignedNarrationDirection,
+    system=(
+        "You are a motion-graphics director working from a READY narration "
+        "alignment. Select real sentences and exact source fragments; the "
+        "system owns every audio and word time. Output valid JSON, no commentary."
+    ),
+    temperature=0.5,
+    assemble=_assemble_aligned_narration,
     stream=True,
     timeout_s=300,
 )
@@ -137,7 +211,7 @@ def _assemble_mixed(
 
 mixed_director: Agent[MixedDirection] = Agent(
     name="mixed_director",
-    prompt="mixed_director.j2",
+    prompt="video/mixed_director.j2",
     schema=MixedDirection,
     system=(
         "You are a video compositor working only from frozen real recordings. "
@@ -149,6 +223,7 @@ mixed_director: Agent[MixedDirection] = Agent(
     assemble=_assemble_mixed,
     stream=True,
     timeout_s=300,
+    read_tools=SKILL_READ_TOOLS,
 )
 
 
@@ -160,6 +235,10 @@ def _assemble_visual_request(
     language: str | None,
     target_seconds: float | None,
     narration: str | None = None,
+    aspect: str | None = None,
+    current: str | None = None,
+    available_resources: list[dict] | None = None,
+    repair_feedback: str | None = None,
 ) -> AssembleResult:
     return (
         {
@@ -169,6 +248,10 @@ def _assemble_visual_request(
             "language": language,
             "target_seconds": target_seconds,
             "narration": narration,
+            "aspect": aspect,
+            "current": current,
+            "available_resources": available_resources or [],
+            "repair_feedback": repair_feedback,
         },
         [],
     )
@@ -176,40 +259,43 @@ def _assemble_visual_request(
 
 program_director: Agent[ProgramDirection] = Agent(
     name="program_director",
-    prompt="program_director.j2",
+    prompt="video/draw_2d_director.j2",
     schema=ProgramDirection,
     system=(
         "You are a creative graphics programmer. Author an original deterministic "
-        "drawing-v1 visual program for the user's requested moving picture; never "
+        "draw-2d visual program for the user's requested moving picture; never "
         "substitute a preset name or pseudocode. Output valid JSON, no commentary."
     ),
     temperature=0.6,
     assemble=_assemble_visual_request,
     stream=True,
     timeout_s=300,
+    read_tools=SKILL_READ_TOOLS,
 )
 
 
-component_director: Agent[ComponentDirection] = Agent(
+component_director: Agent[ComponentVideoDirection] = Agent(
     name="component_director",
-    prompt="component_director.j2",
-    schema=ComponentDirection,
+    prompt="video/remotion_project_director.j2",
+    schema=ComponentVideoDirection,
     system=(
-        "You are a creative visual-component author. Write an original deterministic "
-        "controlled TSX component for the user's requested moving picture; never "
-        "substitute a preset, imports, arbitrary dependencies or pseudocode. "
+        "You are a creative visual-program author. Write original deterministic "
+        "multi-file Remotion scenes for the user's requested moving picture; organize "
+        "a complete work into coherent shots when that fits the content. Never "
+        "substitute a preset, undeclared imports, arbitrary dependencies or pseudocode. "
         "Output valid JSON, no commentary."
     ),
     temperature=0.6,
     assemble=_assemble_visual_request,
     stream=True,
     timeout_s=300,
+    read_tools=SKILL_READ_TOOLS,
 )
 
 
 image_director: Agent[GeneratedImageDirection] = Agent(
     name="image_director",
-    prompt="image_director.j2",
+    prompt="video/generated_image_director.j2",
     schema=GeneratedImageDirection,
     system=(
         "You are an image art director. Author one precise text-to-image request "
@@ -220,6 +306,7 @@ image_director: Agent[GeneratedImageDirection] = Agent(
     assemble=_assemble_visual_request,
     stream=True,
     timeout_s=300,
+    read_tools=SKILL_READ_TOOLS,
 )
 
 
@@ -230,6 +317,7 @@ def _assemble_review(
     storyboard: str,
     frame_facts: str,
     deterministic_checks: str,
+    motion_review: str,
     previous_review_facts: str,
     frames: list | None = None,
 ) -> AssembleResult:
@@ -240,6 +328,7 @@ def _assemble_review(
             "storyboard": storyboard,
             "frame_facts": frame_facts,
             "deterministic_checks": deterministic_checks,
+            "motion_review": motion_review,
             "previous_review_facts": previous_review_facts,
         },
         list(frames or []),
@@ -248,7 +337,7 @@ def _assemble_review(
 
 video_reviewer: Agent[ContentReviewAnswer] = Agent(
     name="video_reviewer",
-    prompt="video_reviewer.j2",
+    prompt="video/reviewer.j2",
     schema=ContentReviewAnswer,
     system=(
         "You are a video content reviewer. Base new visual findings only on "
@@ -267,6 +356,7 @@ video_reviewer: Agent[ContentReviewAnswer] = Agent(
 
 
 __all__ = [
+    "aligned_narration_director",
     "component_director",
     "image_director",
     "mg_director",

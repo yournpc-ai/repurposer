@@ -231,6 +231,124 @@ def resolve_focus(
     }
 
 
+_GEOMETRY_EPSILON = 1e-9
+
+
+def box_inside_unit_canvas(box: dict[str, float], *, epsilon: float = _GEOMETRY_EPSILON) -> bool:
+    """Whether a normalized layer box is fully inside the canvas."""
+    try:
+        x, y, width, height = (float(box[key]) for key in ("x", "y", "width", "height"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) for value in (x, y, width, height)):
+        return False
+    return (
+        x >= -epsilon
+        and y >= -epsilon
+        and x + width <= 1.0 + epsilon
+        and y + height <= 1.0 + epsilon
+    )
+
+
+def boxes_have_area_overlap(
+    first: dict[str, float],
+    second: dict[str, float],
+    *,
+    epsilon: float = _GEOMETRY_EPSILON,
+) -> bool:
+    """Positive-area intersection; touching edges and float noise do not count."""
+    overlap_width = min(
+        float(first["x"]) + float(first["width"]),
+        float(second["x"]) + float(second["width"]),
+    ) - max(float(first["x"]), float(second["x"]))
+    overlap_height = min(
+        float(first["y"]) + float(first["height"]),
+        float(second["y"]) + float(second["height"]),
+    ) - max(float(first["y"]), float(second["y"]))
+    return overlap_width > epsilon and overlap_height > epsilon
+
+
+def visible_web_element_boxes(
+    view: dict[str, Any],
+    *,
+    layout: dict[str, float],
+    fit: str,
+    canvas: tuple[int, int],
+) -> list[dict[str, Any]]:
+    """Map reliable frozen element boxes into normalized canvas coordinates.
+
+    Element x/y are centers in view-normalized coordinates. The source view is
+    fitted and centered inside the scene's actual destination box, then clipped
+    to that box and the canvas. Covered elements, invalid boxes and cropped-away
+    pixels are not obstacles. A blank plate formally removes only its target.
+    """
+    if fit not in {"cover", "contain"}:
+        raise ValueError(f"unsupported web fit {fit!r}")
+    try:
+        view_width = float(view["width"])
+        view_height = float(view["height"])
+        canvas_width, canvas_height = (float(value) for value in canvas)
+        destination = {key: float(layout[key]) for key in ("x", "y", "width", "height")}
+    except (KeyError, TypeError, ValueError):
+        return []
+    dimensions = (view_width, view_height, canvas_width, canvas_height, destination["width"], destination["height"])
+    if not all(math.isfinite(value) and value > 0 for value in dimensions):
+        return []
+    if not all(math.isfinite(value) for value in destination.values()):
+        return []
+
+    scale = (
+        max(destination["width"] * canvas_width / view_width, destination["height"] * canvas_height / view_height)
+        if fit == "cover"
+        else min(destination["width"] * canvas_width / view_width, destination["height"] * canvas_height / view_height)
+    )
+    offset_x = destination["x"] + (destination["width"] - view_width * scale / canvas_width) / 2
+    offset_y = destination["y"] + (destination["height"] - view_height * scale / canvas_height) / 2
+    removed_id = (
+        str(view.get("target_element_id"))
+        if view.get("artifact_role") == "blank_plate" and view.get("target_element_id") is not None
+        else None
+    )
+    mapped: list[dict[str, Any]] = []
+    for element in view.get("elements") or []:
+        if element.get("covered") or (
+            removed_id is not None and str(element.get("id")) == removed_id
+        ):
+            continue
+        try:
+            cx, cy, width, height = (float(element[key]) for key in ("x", "y", "w", "h"))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not all(math.isfinite(value) for value in (cx, cy, width, height)) or width <= 0 or height <= 0:
+            continue
+        # Only pixels present in the frozen source view can become obstacles.
+        source_left = max(0.0, cx - width / 2)
+        source_top = max(0.0, cy - height / 2)
+        source_right = min(1.0, cx + width / 2)
+        source_bottom = min(1.0, cy + height / 2)
+        if source_right <= source_left or source_bottom <= source_top:
+            continue
+        left = offset_x + source_left * view_width * scale / canvas_width
+        top = offset_y + source_top * view_height * scale / canvas_height
+        right = offset_x + source_right * view_width * scale / canvas_width
+        bottom = offset_y + source_bottom * view_height * scale / canvas_height
+        left = max(left, destination["x"], 0.0)
+        top = max(top, destination["y"], 0.0)
+        right = min(right, destination["x"] + destination["width"], 1.0)
+        bottom = min(bottom, destination["y"] + destination["height"], 1.0)
+        if right - left <= _GEOMETRY_EPSILON or bottom - top <= _GEOMETRY_EPSILON:
+            continue
+        mapped.append({
+            "id": element.get("id"),
+            "kind": element.get("kind"),
+            "x": left,
+            "y": top,
+            "width": right - left,
+            "height": bottom - top,
+        })
+    return mapped
+
+
 def camera_keyframes(
     focus: dict[str, float] | None,
     *,
@@ -272,8 +390,12 @@ def camera_keyframes(
     def covered(x: float, y: float, scale: float) -> tuple[float, float]:
         slack_x = math.floor(max((scale - 1) * canvas_width / 2, 0.0) * 10) / 10
         slack_y = math.floor(max((scale - 1) * canvas_height / 2, 0.0) * 10) / 10
-        return (min(max(round(x, 1), -slack_x), slack_x),
-                min(max(round(y, 1), -slack_y), slack_y))
+        covered_x = min(max(round(x, 1), -slack_x), slack_x)
+        covered_y = min(max(round(y, 1), -slack_y), slack_y)
+        return (
+            0.0 if covered_x == 0 else covered_x,
+            0.0 if covered_y == 0 else covered_y,
+        )
 
     tx, ty = covered(tx, ty, zoom)
     arrival = int(clip_ticks * arrival_frac)

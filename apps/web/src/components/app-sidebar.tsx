@@ -100,7 +100,7 @@ export function AppSidebar() {
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
             <LogoMark />
-            <span className="font-semibold tracking-tight">Repurposer</span>
+            <span className="font-semibold tracking-tight">Rookie Cut</span>
           </div>
           {/* Collapse toggle (ChatGPT anatomy, 2026-09-27): a single quiet
               PanelLeft glyph — the same icon family as the rail's hover

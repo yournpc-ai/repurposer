@@ -3,13 +3,23 @@
 # Deliberately avoids `set -e` so one service failing doesn't kill the rest,
 # and never blocks on an unresponsive Docker daemon.
 
-echo "Starting Repurposer development environment..."
+echo "Starting Rookie Cut development environment..."
 
 # Always run relative to the repo root, regardless of where this is invoked from.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || { echo "Cannot cd to repo root ($ROOT)"; exit 1; }
 
 export DEMO_SEED_ASYNC=true
+
+# The Node render process does not load the repository .env itself. Forward
+# only the component-runner opt-in; an explicit process environment wins.
+if [ -z "${COMPONENT_BAKE_ENABLED+x}" ] && [ -r "$ROOT/.env" ]; then
+  while IFS= read -r line; do
+    case "$line" in
+      COMPONENT_BAKE_ENABLED=*) export COMPONENT_BAKE_ENABLED="${line#*=}" ;;
+    esac
+  done < "$ROOT/.env"
+fi
 
 # --- helpers ---------------------------------------------------------------
 kill_port() {
@@ -53,6 +63,43 @@ wait_for_url() {
   return 1
 }
 
+# Each long-running service has one supervisor. PID files let the next dev.sh
+# stop old supervisors BEFORE their children; killing only the children would
+# otherwise make an old supervisor restart them into the new stack.
+SUPERVISOR_DIR="${TMPDIR:-/tmp}/repurposer-dev-supervisors"
+mkdir -p "$SUPERVISOR_DIR"
+stop_stale_supervisors() {
+  local unit pidfile pid command
+  for unit in api worker render web; do
+    pidfile="$SUPERVISOR_DIR/$unit.pid"
+    [ -r "$pidfile" ] || continue
+    pid=$(<"$pidfile")
+    command=$(ps -p "$pid" -o command= 2>/dev/null || true)
+    if [ -n "$pid" ] && [[ "$command" == *"scripts/dev.sh"* ]]; then
+      echo "Stopping previous $unit supervisor (pid $pid)..."
+      kill -TERM "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pidfile"
+  done
+}
+
+# A supervisor restarts only when its own service exits. TERM is an explicit
+# shutdown, not a crash: the pipeline's service family is cleaned by dev.sh.
+supervise() {
+  local unit=$1 logfile=$2; shift 2
+  (
+    trap 'exit 0' TERM INT
+    sh -c 'echo $PPID' > "$SUPERVISOR_DIR/$unit.pid"
+    while true; do
+      echo "$(date '+%Y-%m-%d %H:%M:%S') [$unit] starting" | tee -a "$logfile"
+      "$@"
+      status=$?
+      echo "$(date '+%Y-%m-%d %H:%M:%S') [$unit] exited (status $status); restarting in 2s" | tee -a "$logfile"
+      sleep 2
+    done
+  ) &
+}
+
 # --- kill previous service instances -----------------------------------------
 # 2026-09-11 用户拍板：dev.sh 启动 = 干净 slate——全机每个服务只剩本次启动
 # 的一个实例（一对：包装器 + 本体）。端口杀（kill_port）只拿到监听者本人：
@@ -82,6 +129,7 @@ kill_service_families() {
   done
 }
 
+stop_stale_supervisors
 kill_service_families -TERM
 sleep 2
 # TERM 幸存者 + tsx watch 复活竞态，一律 KILL 收尾。
@@ -125,23 +173,33 @@ fi
 # --- per-service log files --------------------------------------------------
 # 2026-10-16 取证教训: 终端 scrollback 不是台账——一次 37 分钟的链上失败
 # (film 分镜起草穷举) 的 violation codes 随窗口关闭灭失。每个服务 tee 一份
-# 到 /tmp,启动时截断 (每 session 新鲜,不无限增长);终端输出不变。
+# 到 /tmp,启动时截断一次；自动重启追加，不覆盖上一段崩溃证据。
 LOG_API=/tmp/rep-api.log
 LOG_WORKER=/tmp/rep-worker.log
 LOG_RENDER=/tmp/rep-render.log
 LOG_WEB=/tmp/rep-web.log
 : > "$LOG_API"; : > "$LOG_WORKER"; : > "$LOG_RENDER"; : > "$LOG_WEB"
 
+api_command() {
+  ( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee -a "$LOG_API" )
+}
+worker_command() {
+  ( cd "$ROOT/apps/api" && uv run python -m app.worker 2>&1 | tee -a "$LOG_WORKER" )
+}
+web_command() {
+  ( cd "$ROOT/apps/web" && pnpm dev 2>&1 | tee -a "$LOG_WEB" )
+}
+
 # --- backend ---------------------------------------------------------------
-echo "Starting API on http://localhost:8000 ..."
-( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee "$LOG_API" ) &
+echo "Starting API on http://localhost:8000 (auto-restart enabled) ..."
+supervise api "$LOG_API" api_command
 API_PID=$!
 
 # --- worker ----------------------------------------------------------------
-# Processes the Postgres-backed job queue (asset processing + generation) in a
-# separate process so heavy jobs don't compete with the API's online requests.
-echo "Starting background worker ..."
-( cd "$ROOT/apps/api" && uv run python -m app.worker 2>&1 | tee "$LOG_WORKER" ) &
+# Processes the Postgres-backed job queue in a separate process so heavy jobs
+# never compete with the API's online requests.
+echo "Starting background worker (auto-restart enabled) ..."
+supervise worker "$LOG_WORKER" worker_command
 WORKER_PID=$!
 
 # Wait for the API to finish startup before launching the frontend, otherwise
@@ -155,7 +213,7 @@ wait_for_url "http://localhost:8000/health" "API" 60
 # Only render receives the proxy; API/worker keep their existing networking.
 # Explicit opt-out wins over inherited variables. A transient probe failure
 # must not silently switch a configured proxy to the throttled direct path.
-echo "Starting render service on http://localhost:3001 ..."
+echo "Starting render service on http://localhost:3001 (auto-restart enabled) ..."
 RENDER_PROXY_ENV=()
 if [ "${RENDER_PROXY:-}" = "off" ]; then
   RENDER_PROXY_ENV=(-u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy)
@@ -179,12 +237,15 @@ else
     echo "  render proxy: enabled but TOS probe failed; keeping proxy. Check Surge or explicitly use RENDER_PROXY=off." | tee -a "$LOG_RENDER"
   fi
 fi
-( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev 2>&1 | tee -a "$LOG_RENDER" ) &
+render_command() {
+  ( cd "$ROOT/apps/render" && env "${RENDER_PROXY_ENV[@]}" pnpm dev 2>&1 | tee -a "$LOG_RENDER" )
+}
+supervise render "$LOG_RENDER" render_command
 RENDER_PID=$!
 
 # --- frontend --------------------------------------------------------------
-echo "Starting web app on http://localhost:3000 ..."
-( cd "$ROOT/apps/web" && pnpm dev 2>&1 | tee "$LOG_WEB" ) &
+echo "Starting web app on http://localhost:3000 (auto-restart enabled) ..."
+supervise web "$LOG_WEB" web_command
 WEB_PID=$!
 
 # --- startup liveness gate ---------------------------------------------------
@@ -193,13 +254,15 @@ WEB_PID=$!
 # the other services' logs and a user's run queued forever. The API has
 # wait_for_url; the other three had NOTHING. Give every service a few
 # seconds to prove it's alive, then SAY the verdict per service.
+# Supervisors add a second check: a living supervisor with zero children is
+# a crash loop, not a healthy service.
 check_alive() {
   local pid=$1 name=$2 hint=$3
   if kill -0 "$pid" 2>/dev/null; then
-    echo "  ✔ $name (pid $pid)"
+    echo "  ✔ $name (supervisor pid $pid)"
     return 0
   fi
-  echo "  ✘ $name DIED AT STARTUP — its traceback is above."
+  echo "  ✘ $name SUPERVISOR DIED AT STARTUP — its traceback is above."
   echo "    rerun: $hint"
   return 1
 }
@@ -210,19 +273,15 @@ DEAD=0
 check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 )" || DEAD=1
 check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
 check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && HTTPS_PROXY=http://127.0.0.1:6152 pnpm dev )"                   || DEAD=1
-check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                      || DEAD=1
-# Unique-instance guard (2026-09-08 worker 孤儿教训，2026-09-11 推广到全家):
-# 启动前已两趟模式杀，此刻每个服务家族的匹配进程都该只属于本次启动——
-# 超出预期计数 = 孤儿/复活，大声说出来并列 offender。
-# 预期计数：API 2（uv run 包装器 + uvicorn 主进程；reload 的 spawn 子进程
-# 不带特征串，不计）、worker 2、render 2（tsx watch 父 + node 子）、web 1
-# （vite 本体；pnpm 包装器 argv 无特征）。
+check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                         || DEAD=1
+# Unique-instance guard：启动时每个服务家族必须恰好有预期进程数；少了是
+# 崩溃/重启中，多了是孤儿/复活。API 2、worker 2、render 2、web 1。
 family_count() { pgrep -f "$1" 2>/dev/null | wc -l | tr -d ' '; }
 check_family() {
-  local pattern=$1 name=$2 max=$3 count
+  local pattern=$1 name=$2 expected=$3 count
   count=$(family_count "$pattern")
-  if [ "$count" -gt "$max" ]; then
-    echo "  ⚠ $name: $count processes match '$pattern' (expected ≤ $max) — orphans will run STALE code:"
+  if [ "$count" -ne "$expected" ]; then
+    echo "  ⚠ $name: $count processes match '$pattern' (expected $expected) — service is down, restarting, or orphaned:"
     pgrep -fl "$pattern"
     DEAD=1
   fi
@@ -236,8 +295,8 @@ if [ "$DEAD" -ne 0 ]; then
 fi
 
 # --- cleanup ---------------------------------------------------------------
-# Ctrl+C 也要干净：先杀本次启动的四个 PID，再按家族模式清场——包装器死了
-# 不保证 spawn 子进程 / watcher 跟着死，不留任何能给下次启动添乱的东西。
-trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$RENDER_PID" "$WEB_PID" 2>/dev/null; sleep 1; kill_service_families -9; exit' INT TERM
+# Ctrl+C 也要干净：先杀本次启动的四个 supervisor，再按家族模式清场——包装器死了
+# 不保证 spawn 子进程 / watcher 跟着死，也不能让 supervisor 在清场时复活服务。
+trap 'echo; echo "Shutting down..."; kill "$API_PID" "$WORKER_PID" "$RENDER_PID" "$WEB_PID" 2>/dev/null; sleep 1; kill_service_families -9; rm -f "$SUPERVISOR_DIR"/*.pid; exit' INT TERM
 
 wait

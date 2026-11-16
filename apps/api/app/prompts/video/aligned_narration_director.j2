@@ -1,0 +1,32 @@
+{# aligned_narration_director.j2 — READY sentence/semantics input; the director selects sentence ids and exact visible fragments, never times. Field bounds mirror editing/director.py's AlignedNarrationDirection. #}
+Design native motion graphics for the READY narration alignment below. Its sentences, words, source ticks and Agent semantics are world facts. Do not output timestamps, durations, synthesized narration, new word ids or approximate animation times. The server derives all clip ranges and word-anchor keyframes.
+
+ALIGNMENT:
+{{ alignment_json }}
+
+{% if repair_feedback %}SOURCE / VALIDATION REPAIR FEEDBACK (world facts, not a new creative request):
+{{ repair_feedback }}
+Correct only the implicated scene/source and preserve every other valid scene exactly.
+{% endif %}
+{% if language %}The video's language: {{ language }}.{% endif %}
+{% if focus %}The agreed direction: {{ focus }}{% endif %}
+{% if scene_count %}The user requires exactly {{ scene_count }} scenes.{% endif %}
+{% if instruction %}DESIGN REQUIREMENTS:
+{{ instruction }}{% endif %}
+
+Return `name`, `language`, optional `background`, and 1–6 `scenes`. Each scene selects one or more `sentence_ids`; across the scenes, cover every sentence exactly once in script order. Use semantics to decide grouping and emphasis: main definitions/processes deserve visual hierarchy, subordinate evidence/examples may group together, and transition sentences should stay concise.
+
+For each scene provide `lines` (1–3 exact fragments copied from its selected sentences, each at most 40 characters), `intent` (at most 120 characters), one factual `visual_description` (at most 240 characters), `size` (medium | large | hero), `align`, optional text `color`, `enter` (fade | rise | lines | words | graphemes), and `drift` (none | push_in | pull_out). These entrance choices affect the native title only; emphasized narration words already have server-resolved caption impact animation. Do not add `emphasis_word_ids` or any timing fields to a scene.
+
+A scene may also include one explanatory `generator`. The server supplies its exact scene window and full Composition raster at 30fps; do not output duration, dimensions, fps, timestamps, external assets, database, scheduler or dependency access. Reserve clear space for the native title and bottom caption. Important titles, captions and narration remain native. Short labels intrinsic to a drawn relationship may be baked only when the chosen producer can express them and the explanation needs them; they are not independent native objects.
+
+For `draw-2d`, set `producer="draw-2d"`, provide `code` and declared scalar `parameters`, set `project=null`, and do not add `output` or any other Generator field. Use this path for a coherent visual relationship or transformation that its primitives can express well. When the design requirements request a Generator, exactly one scene must include it.
+{% include "video/_draw_2d_contract.j2" %}
+{% if component_bake_enabled %}
+For a diagram, multi-stage transformation, precise layout or motion that draw-2d cannot carry, set `producer="remotion-project"`, provide the complete `project`, set `code=null`, `parameters={}`, and `resources=[]`. Its registered Composition must use the scene's server-supplied duration and full raster at 30fps. Do not use this richer producer for a simple picture that native shapes or draw-2d already express well.
+{% include "video/_component_project_contract.j2" %}
+{% else %}remotion-project is unavailable in this deployment; use only draw-2d.{% endif %}
+
+When useful, add up to four independent native `shapes` using rect/ellipse geometry, exact hex fills and the supported fade/rise/scale/rotate motion. Do not invent interfaces, datasets, quotations, user media, or factual sources. Diagram relationships must explain the selected sentences and semantics. Keep the palette readable against the solid background{% if background %}; the user fixed background={{ background }}{% endif %}.
+
+Answer with the JSON object only.

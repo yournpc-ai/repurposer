@@ -6,7 +6,7 @@ from app.models.tables import Output
 from app.pipeline.graph import NodeBase, Requirement
 from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_spec_field, set_stage, ui_lang_of
-from app.tools.video.params import NarrationPolicy, ProduceVideoParams
+from app.tools.video.params import NarrationPolicy, PrepareNarrationParams, ProduceVideoParams
 from app.tools.video.produce import queue_composition_render
 from app.tools.video.production.stages import ProductionStages
 
@@ -39,7 +39,7 @@ class ProduceVideo(NodeBase):
         seconds = (ctx.get("video_seconds") or {}).get(str(ref.get("composition_version_id")))
         if seconds is None:
             return None
-        units = {"film_seconds": seconds}
+        units = {"video_seconds": seconds}
         tts_characters = (ctx.get("video_tts_characters") or {}).get(
             str(ref.get("composition_version_id")), 0
         )
@@ -125,3 +125,145 @@ class ProduceVideo(NodeBase):
         await fill_summary(node.id, self.kind, ui_language=ui_lang_of(run, project),
                            total_seconds=output.payload["duration_seconds"])
         return [output.id]
+
+
+class PrepareNarration(NodeBase):
+    """One authorized speed-1.0 original, with no Composition or video Output."""
+
+    kind = "prepare_narration"
+    node_type = "audio"
+    prototype = "generator"
+    task_name = "Prepare narration"
+    task_name_zh = "准备旁白原音"
+    produces_outputs = False
+    retries = 0
+
+    def estimate(self, ctx):
+        from app.tools.video.narration import narration_original_request_key
+
+        spec = ctx.get("spec") or {}
+        params = PrepareNarrationParams.model_validate({
+            key: spec.get(key) for key in ("text", "voice_id", "language")
+        })
+        key = narration_original_request_key(
+            text=params.text, voice_id=params.voice_id, language=params.language
+        )
+        characters = (ctx.get("narration_tts_characters") or {}).get(key)
+        if characters is None:
+            return None
+        units = {"tts_chars": float(characters)} if characters else {}
+        return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": units}
+
+    async def run(self, db, run, node, project):
+        from app.editing.schemas import (
+            Clip,
+            CompositionContent,
+            SpeechObject,
+            TimeRange,
+            Timeline,
+            Track,
+            VersionSettings,
+        )
+        from app.editing.timing import SOURCE_TIMEBASE
+        from app.models.database import AsyncSessionLocal
+        from app.tools.video.alignment_store import request_alignment
+        from app.tools.video.narration import prepare_speech_media
+        from app.tools.video.preparation import snapshot_narration_original
+
+        preparation = (run.context or {}).get("narration_preparation") or {}
+        params = PrepareNarrationParams.model_validate(preparation.get("request"))
+        policy = NarrationPolicy.model_validate(preparation.get("narration_policy"))
+        expected = params.model_dump(mode="json")
+        if any(node.spec.get(key) != value for key, value in expected.items()):
+            raise ValueError("The narration step does not match its authorized request")
+        if node.spec.get("narration_policy") != policy.model_dump(mode="json"):
+            raise ValueError("The narration step does not match its authorized TTS policy")
+
+        stages = ProductionStages(
+            run_id=run.id,
+            step_id=node.id,
+            attempt=node.attempt,
+            claim_token=node.claim_token,
+        )
+        async with stages.stage("validate"):
+            await set_stage(node.id, "preparing_narration")
+
+        speech = SpeechObject(
+            kind="speech",
+            object_id="obj_prepare_narration",
+            text=params.text,
+            voice_id=params.voice_id,
+            language=params.language,
+        )
+        timebase = 90000
+        # Computation-only adapter for the existing fixed-window core. The
+        # generous window keeps the original at 1.0×; max_attempts=1 means an
+        # impossible window still fails without a second paid submission.
+        content = CompositionContent(
+            settings=VersionSettings(width=1, height=1, timebase=timebase),
+            timeline=Timeline(tracks=[Track(
+                track_id="trk_prepare_narration",
+                kind="audio",
+                role="dialogue",
+                order=0,
+                clips=[Clip(
+                    clip_id="clp_prepare_narration",
+                    range=TimeRange(start=0, end=86400 * timebase),
+                    object=speech,
+                )],
+            )]),
+        )
+        reuse: list[bool] = []
+        async with stages.stage("speech_media") as facts:
+            prepared = await prepare_speech_media(
+                content,
+                user_id=project.user_id,
+                execution_id=str(run.id),
+                policy=policy,
+                on_reuse=reuse.append,
+            )
+            facts["item_count"] = len(reuse)
+            facts["reused_count"] = sum(reuse)
+        manifest = prepared[speech.object_id]
+        original = manifest["original"]
+
+        async with stages.stage("audio_snapshot"):
+            async with AsyncSessionLocal() as freeze_db:
+                asset, snapshot = await snapshot_narration_original(
+                    freeze_db, project, text=params.text, original=original
+                )
+                await freeze_db.commit()
+                asset_id = asset.id
+                snapshot_id = snapshot.id
+                snapshot_digest = snapshot.digest
+                duration_ticks = snapshot.duration_ticks
+        if duration_ticks is None:
+            raise ValueError("The fixed narration snapshot has no real duration")
+
+        async with stages.stage("alignment_request"):
+            alignment = await request_alignment(
+                owner_id=project.user_id,
+                audio_snapshot_id=snapshot_id,
+                text=params.text,
+            )
+        result = {
+            "asset_id": str(asset_id),
+            "audio_snapshot_id": str(snapshot_id),
+            "audio_digest": snapshot_digest,
+            "alignment_id": alignment["alignment_id"],
+            "alignment_status": alignment["status"],
+            "usage_characters": int((manifest.get("usage") or {}).get("tts_chars") or 0),
+            "cache_hit": bool(original.get("cache_hit")),
+        }
+        run.context = {
+            **(run.context or {}),
+            "narration_preparation": {**preparation, "result": result},
+        }
+        await set_spec_field(node.id, "narration_preparation", result)
+        await fill_summary(
+            node.id,
+            self.kind,
+            ui_language=ui_lang_of(run, project),
+            duration_seconds=duration_ticks / SOURCE_TIMEBASE,
+        )
+        return []

@@ -2,8 +2,9 @@
 
 import os
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -18,6 +19,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Text/code LLM provider. Media generation stays with its own providers.
+    llm_provider: Literal["minimax", "deepseek"] = "minimax"
+
     # Minimax
     minimax_api_key: str = ""
     minimax_model: str = "minimax-m3"
@@ -26,8 +30,32 @@ class Settings(BaseSettings):
     # API boot seeds the passive prefix cache on one backend pod (forensics
     # 2026-09-27). Fire-and-forget, never blocks startup.
     minimax_warmup_enabled: bool = True
-    # Local, opt-in request/response capture for journey review. Empty = off.
-    minimax_journey_trace: str = ""
+    # Local, opt-in full request/response capture for every text/code provider.
+    # Empty = off. The old MINIMAX_JOURNEY_TRACE environment name remains an alias.
+    llm_trace_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("LLM_TRACE_PATH", "MINIMAX_JOURNEY_TRACE"),
+    )
+
+    # Operator-managed Skill releases. Each path points to the installed
+    # package directory. Keep release directories immutable after activation.
+    managed_skill_root: Path | None = None
+    managed_skill_versions: dict[str, str] = Field(default_factory=dict)
+
+    # DeepSeek text/code generation. Tool loops are non-thinking until the
+    # harness can replay DeepSeek's required historical reasoning_content.
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-flash"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_reasoning_effort: Literal["low", "high", "max"] = "high"
+    # Explicit cap: DeepSeek otherwise defaults non-thinking responses to 8K,
+    # which truncates large Composition tool arguments before JSON parsing.
+    deepseek_max_output_tokens: int = Field(default=32768, ge=1, le=393216)
+    # Comma-separated YYYY-MM-DD public holidays treated as off-peak.
+    deepseek_offpeak_dates: str = ""
+    # Accounting conversion for DeepSeek's CNY price list; override with the
+    # deployment's contract/accounting rate when it differs.
+    deepseek_cny_per_usd: float = Field(default=7.2, gt=0)
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/repurposer"
@@ -79,9 +107,6 @@ class Settings(BaseSettings):
     # schedule is invented here.
     asset_max_attempts: int = 3
     render_max_attempts: int = 3
-    # Semantic storyboard repairs after the initial candidate, shared by
-    # text/web design, production and cost estimation.
-    film_storyboard_max_retries: int = Field(default=10, ge=0)
     # Render execution knobs (MG D4 — engineering parameters, deployment-shaped,
     # so env Settings, NOT the configs table; boundary rule = platform/configs.py
     # header §3). render_concurrency caps simultaneous renders per worker process
@@ -93,22 +118,6 @@ class Settings(BaseSettings):
     # minutes. 1800s includes the shared 12-minute upload retry budget.
     render_concurrency: int = 2
     render_timeout_seconds: int = 1800
-
-    # Film storyboard EDIT path (the patch beat) — internal-test gate,
-    # deployment-shaped like the knobs above. Default OFF: the model never
-    # sees the edits capability (wire schema / tool description / prompt law
-    # / read-back hints all prune it) AND the execution branch refuses a
-    # direct edits call; ON is for local/test verification only. The compose
-    # path (design + open feedback redraft) is unaffected either way.
-    film_edits_enabled: bool = False
-
-    # Video Project Chat path (ADR-145 phase B) — internal-test gate,
-    # deployment-shaped like the film edit gate above. Default OFF: the
-    # design_video / revise_video / get_video_version tools never reach the
-    # wire and the old launch_film conversation law stays. ON: the new-chain
-    # tools join both chat paths and the launch-film film's design beat rides
-    # the CompositionVersion chain instead of design_storyboard.
-    video_project_enabled: bool = False
 
     # Upstream component bake stays fail-closed until the deployment provides
     # real process/filesystem/egress/resource isolation. Source scanning is
@@ -152,10 +161,21 @@ class Settings(BaseSettings):
     # Payments — hosted Stripe Checkout; amounts and credits stay server-side.
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    # Comma-separated operations recipients. Only the worker needs this value;
+    # webhook requests persist the alert outbox without calling Resend inline.
+    payment_alert_recipients: str = ""
+
+    @property
+    def payment_alert_recipient_list(self) -> list[str]:
+        return [
+            recipient.strip()
+            for recipient in self.payment_alert_recipients.split(",")
+            if recipient.strip()
+        ]
 
     # Auth / email
     resend_api_key: str = ""
-    from_email: str = "Repurposer <no-reply@repurposer.local>"
+    from_email: str = "Rookie Cut <no-reply@repurposer.local>"
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_expire_days: int = 1
 

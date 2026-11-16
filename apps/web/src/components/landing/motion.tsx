@@ -44,25 +44,6 @@ export function ReducedMotionProvider({
   )
 }
 
-function subscribeToMinWidth(query: string) {
-  return (callback: () => void): (() => void) => {
-    const mediaQuery = window.matchMedia(query)
-    mediaQuery.addEventListener("change", callback)
-    return () => mediaQuery.removeEventListener("change", callback)
-  }
-}
-
-export function useIsDesktop(): boolean {
-  // lg breakpoint: the pinned AppShowcase needs room for its browser frame,
-  // which is far wider than the template's phone mock.
-  const query = "(min-width: 1024px)"
-  return useSyncExternalStore(
-    subscribeToMinWidth(query),
-    () => window.matchMedia(query).matches,
-    () => true
-  )
-}
-
 export const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },

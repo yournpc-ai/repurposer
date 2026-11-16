@@ -1,8 +1,12 @@
-import type { ReactNode } from "react"
+import { Children, type ReactNode } from "react"
+import { AssistantResponse } from "./AssistantResponse"
 
-/** Compact vertical rhythm shared by one turn's prose, work segments and
- * structured slots. Top-level turn spacing stays on the conversation
- * scrollport; this component adds no card, colour or second message truth. */
-export function TurnBlock({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-3">{children}</div>
+/** The user boundary and assistant interior have separate layout owners. */
+export function TurnBlock({ user, children }: { user?: ReactNode; children?: ReactNode }) {
+  return (
+    <div data-slot="turn-block" className="flex min-w-0 flex-col gap-6">
+      {user}
+      {Children.toArray(children).length > 0 ? <AssistantResponse>{children}</AssistantResponse> : null}
+    </div>
+  )
 }

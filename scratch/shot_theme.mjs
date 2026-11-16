@@ -20,6 +20,7 @@ const chrome = spawn(CHROME, [
   "--window-size=1600,1000",
   "--force-device-scale-factor=2",
   "--no-first-run",
+  "--no-proxy-server",
   "--mute-audio",
   "about:blank",
 ], { stdio: "ignore" })

@@ -1,31 +1,20 @@
-/** Storyboard presentation companion (Video Project phase B).
- *
- * The visible storyboard is the assistant's own Markdown overview, rendered
- * by Streamdown in the ordinary message row. This companion resolves the
- * SAVED version behind the block, preserves any real Generator previews, and
- * acknowledges presentation only after that prose has finished typing and
- * those previews are playable. The canonical DTO stays available to tools;
- * it is not re-rendered as a technical table for the user. */
-
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Button } from "@/components/ui/button"
 import { apiFetch } from "@/lib/api"
-import type { VideoStoryboardBlock } from "../timeline/types"
+import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"
+import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
+import { TextSizeScrubInput, type ScrubVersionRead } from "./TextSizeScrubInput"
 
-interface GeneratorPreview {
-  clip_id: string
-  video_url: string
-  poster_url: string
-}
-
-interface VideoVersionRead {
+interface VideoVersionRead extends ScrubVersionRead {
   composition_id: string
   composition_version_id: string
   content_digest: string
   presentation_digest: string
-  generator_previews?: GeneratorPreview[]
+  video_preview?: VideoPreviewRead
+  scrub?: VideoScrubTarget
 }
 
 export function StoryboardCard({
@@ -46,24 +35,36 @@ export function StoryboardCard({
    * delayed-start recovery. Ordinary history passes false. */
   allowPresentationAck: boolean
   onRunStarted?: (id: string) => void
-  /** Real read/preview settlement for the outer reveal gate. Preview failure
-   * opens the honest error surface but never satisfies the ACK gate below. */
   onReady?: (ready: boolean) => void
 }) {
   const { t } = useTranslation()
+  const [activeVersionId, setActiveVersionId] = useState(block.composition_version_id)
   const [read, setRead] = useState<VideoVersionRead | null>(null)
   const [failed, setFailed] = useState(false)
-  const [readyPreviews, setReadyPreviews] = useState<string[]>([])
-  const [failedPreviews, setFailedPreviews] = useState<string[]>([])
+  const [previewReady, setPreviewReady] = useState(!block.scrub)
+  const [textSizeDraft, setTextSizeDraft] = useState<{
+    clipId: string
+    fontSize: number
+  } | null>(null)
+  const handleDraftChange = useCallback((draft: { clipId: string; fontSize: number } | null) => {
+    setTextSizeDraft(draft)
+  }, [])
+  const handleApplied = useCallback((versionId: string) => {
+    setTextSizeDraft(null)
+    setRead(null)
+    setPreviewReady(true)
+    setActiveVersionId(versionId)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
+    const scrub = activeVersionId === block.composition_version_id ? block.scrub : undefined
     setRead(null)
     setFailed(false)
-    setReadyPreviews([])
-    setFailedPreviews([])
+    setPreviewReady(!scrub)
+    const query = scrub ? `?scrub=${encodeURIComponent(JSON.stringify(scrub))}` : ""
     apiFetch(
-      `/api/v1/chat/video/versions/${block.composition_version_id}/storyboard`,
+      `/api/v1/chat/video/versions/${activeVersionId}/storyboard${query}`,
       { toast: false },
     )
       .then(async (res) => {
@@ -71,12 +72,20 @@ export function StoryboardCard({
         const data = (await res.json()) as VideoVersionRead
         if (
           data.composition_id !== block.composition_id ||
-          data.composition_version_id !== block.composition_version_id ||
-          (block.content_digest != null && data.content_digest !== block.content_digest)
+          data.composition_version_id !== activeVersionId ||
+          (
+            activeVersionId === block.composition_version_id &&
+            block.content_digest != null &&
+            data.content_digest !== block.content_digest
+          ) ||
+          JSON.stringify(data.scrub ?? null) !== JSON.stringify(scrub ?? null)
         ) {
           throw new Error("Storyboard identity mismatch")
         }
-        if (!cancelled) setRead(data)
+        if (!cancelled) {
+          setRead(data)
+          setPreviewReady(data.video_preview === undefined)
+        }
       })
       .catch(() => {
         if (!cancelled) setFailed(true)
@@ -84,26 +93,29 @@ export function StoryboardCard({
     return () => {
       cancelled = true
     }
-  }, [block.composition_id, block.composition_version_id, block.content_digest])
-
-  const previews = read?.generator_previews ?? []
-  const previewsReady = previews.every((preview) => readyPreviews.includes(preview.clip_id))
-  const previewsSettled = previews.every(
-    (preview) =>
-      readyPreviews.includes(preview.clip_id) || failedPreviews.includes(preview.clip_id),
-  )
-
-  useEffect(() => {
-    onReady?.(failed || (read !== null && previewsSettled))
-  }, [failed, onReady, previewsSettled, read])
+  }, [
+    activeVersionId,
+    block.composition_id,
+    block.composition_version_id,
+    block.content_digest,
+    block.scrub,
+  ])
 
   useEffect(() => {
-    if (!read || !presentationAckReady({
-      allowed: allowPresentationAck,
-      dtoReady: read !== null,
-      prosePresented,
-      previewsReady,
-    })) return
+    onReady?.(failed || read !== null)
+  }, [failed, onReady, read])
+
+  useEffect(() => {
+    if (
+      activeVersionId !== block.composition_version_id ||
+      !read ||
+      !presentationAckReady({
+        allowed: allowPresentationAck,
+        dtoReady: read !== null,
+        prosePresented,
+        previewsReady: previewReady,
+      })
+    ) return
     let cancelled = false
     void new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -129,9 +141,10 @@ export function StoryboardCard({
       cancelled = true
     }
   }, [
+    activeVersionId,
     read,
+    previewReady,
     prosePresented,
-    previewsReady,
     allowPresentationAck,
     messageId,
     block.presented_message_id,
@@ -146,40 +159,39 @@ export function StoryboardCard({
       </p>
     )
   }
-  if (!read || previews.length === 0) return null
-
+  if (!read) return null
   return (
-    <div className="mt-1 max-w-lg">
-      {previews.map((preview) => (
-        <div key={preview.clip_id} className="mt-2">
-          <p className="mb-1 text-xs text-meta">
-            {t("chat.videoStoryboard.programPreview")}
-          </p>
-          <video
-            className="w-full rounded-md bg-muted"
-            controls
-            playsInline
-            preload="metadata"
-            src={preview.video_url}
-            poster={preview.poster_url}
-            onCanPlay={() =>
-              setReadyPreviews((current) =>
-                current.includes(preview.clip_id) ? current : [...current, preview.clip_id],
-              )
-            }
-            onError={() =>
-              setFailedPreviews((current) =>
-                current.includes(preview.clip_id) ? current : [...current, preview.clip_id],
-              )
-            }
-          />
-          {failedPreviews.includes(preview.clip_id) ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("chat.videoStoryboard.programPreviewError")}
-            </p>
-          ) : null}
-        </div>
-      ))}
-    </div>
+    <>
+      {read.video_preview && (
+        <CompositionPreview
+          preview={read.video_preview}
+          identity={{
+            composition_id: read.composition_id,
+            composition_version_id: read.composition_version_id,
+            content_digest: read.content_digest,
+          }}
+          textSizeDraft={textSizeDraft}
+          onReady={() => setPreviewReady(true)}
+          onError={() => setPreviewReady(false)}
+        />
+      )}
+      {read.is_current === false &&
+        read.current_version_id &&
+        read.current_version_id !== read.composition_version_id && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            onClick={() => handleApplied(read.current_version_id!)}
+          >
+            {t("chat.videoStoryboard.scrub.openCurrent")}
+          </Button>
+        )}
+      <TextSizeScrubInput
+        read={read}
+        onDraftChange={handleDraftChange}
+        onApplied={handleApplied}
+      />
+    </>
   )
 }

@@ -8,6 +8,7 @@ assets (the capture half of the "URL → asset" recipe).
 
 import hashlib
 import re
+from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -238,6 +239,58 @@ async def create_web_page_assets_committed_from_urls(
     return created
 
 
+async def create_capture_plan_asset_committed(
+    project_id: UUID,
+    user_id: UUID,
+    plan: Any,
+) -> UUID:
+    """Birth one queue-owned final capture in its own transaction.
+
+    The typed plan has already been bound to a reconnaissance snapshot. A
+    matching in-flight/completed plan is reused; no browser work runs in the
+    Chat request process.
+    """
+    from app.models.database import AsyncSessionLocal
+    from app.tools.research.capture import capture_plan_digest
+
+    digest = capture_plan_digest(plan)
+    async with AsyncSessionLocal() as session:
+        rows = list((await session.scalars(select(Asset).where(
+            Asset.project_id == project_id,
+            Asset.type == AssetType.WEB_PAGE,
+        ))).all())
+        siblings = [row for row in rows if (row.meta or {}).get("capture_plan_digest") == digest]
+        for row in siblings:
+            if row.processing_status in {AssetStatus.PENDING, AssetStatus.PROCESSING} or (
+                row.processing_status == AssetStatus.COMPLETED
+                and (row.meta or {}).get("shots")
+            ):
+                return UUID(str(row.id))
+        if siblings:
+            from app.pipeline.jobs import reset_asset_processing
+
+            asset = siblings[0]
+            reset_asset_processing(asset)
+        else:
+            asset = await create_web_page_asset_from_url(
+                session, project_id, user_id, plan.capture_url
+            )
+        asset.meta = {
+            "capture_url": plan.capture_url,
+            "capture_plan": plan.model_dump(mode="json"),
+            "capture_plan_digest": digest,
+            "origin": {
+                "kind": "capture_plan",
+                "source_url": plan.source_url,
+                "source_snapshot_id": str(plan.source_snapshot_id),
+                "source_snapshot_digest": plan.source_snapshot_digest,
+            },
+        }
+        asset_id = UUID(str(asset.id))
+        await session.commit()
+        return asset_id
+
+
 # Direction-turn capture priming (2026-10-17 用户拍板): the website-film
 # direction beat lawfully ends in a bare reply — NO tool seat runs, so the
 # model's material_urls declaration may never happen and the capture would
@@ -249,7 +302,7 @@ async def create_web_page_assets_committed_from_urls(
 # is mechanical; the read tool's 「discussion link is not material」 law is
 # untouched (it governs what get_web_page's READ implies, not what the plan
 # path primes).
-_URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"'】」)\]]+")
+_URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"'】」)\]，。；：！？、]+")
 # Sentence punctuation that trails a pasted link is never part of it.
 _URL_TRAILING_STRIP = "\"'<>)]}.,;:!?…。，、；：！？"
 

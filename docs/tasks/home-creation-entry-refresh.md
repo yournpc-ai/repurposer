@@ -1,57 +1,60 @@
 # Home 创作入口与真实样片——当前状态
 
-> Status: 前端货架、composer 预填与可见性暂停已有代码层结果。**Home 的 Ads 族只展示 Text Animation（文字短片）与 Product Promo 两个子 tab；Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film，Product Promo 前三张为 ZYMIX / AgentVeil 真片，第三张使用项目 `bd2b2f2e` 最新交付 `558c6547`，第四张仍复用既有片作布局占位。** 下一步由用户选定 Product Promo 第四张真实样片后做数据替换，并分别完成对应制作能力验收。
+> Status: 当前开发/手测入口为四产品 × 八应用；三个应用共接入五张来自内部真实旅程的新链样片，另外五个应用显示统一空态。此处不构成正式公开 Gallery 验收；用户连续看片、实际试听与逐类公开发布门统一归 `skill-package-promo-video.md` P6。
 
-## 1. 数据来源与职责
+## 1. 当前信息架构
 
-- MG demo 货架来自前端 `components/home/recipeFamilies.ts:RECIPE_FAMILIES`，视频 URL 为内容寻址的 `demo/` 对象，不走 recipes API。
-- 服务端 `GET /api/v1/recipes` 只提供 RecipeCard 配方卡；前端 `RECIPE_CARD_FAMILY` 决定其货架归属。新增/隐藏卡片不能只改一边后宣称全站一致。
-- 空 shelf/sub/family 不渲染；保留座不是可见占位卡。`DEMO_HIDDEN_CARDS` 只控制货架曝光，不删除服务端能力或 prompt 注册。
-- 货架以用户任务组织，不以输出介质堆砌；首屏 hero 与 composer 仍是主入口，货架位于其下。
+旧「广告与 UGC / 演讲与访谈 / 社媒」不再作为 Home 视频分组，旧 Film 样片和复用占位片不进入当前货架。非视频 Recipe 的服务端注册、能力与 prompt 未改。
 
-## 2. 当前样片真值
+| 产品主 Tab | 典型应用子 Tab | 当前内容 |
+|---|---|---|
+| 产品宣传 | 网站/产品宣传、课程/服务宣传 | 前者三张真实样片；后者空态 |
+| 口播动效 | 观点口播、课程/讲座预告 | 两者均空态 |
+| 文字动画 | 观点文字片、金句/公告短片 | 前者一张真实样片；后者空态 |
+| 知识讲解 | 概念讲解、研究/报告解读 | 前者一张真实样片；后者空态 |
 
-| 货架 | 当前内容 | 可以证明什么 | 不能证明什么 |
+主 Tab 短名来自 `skills.builtin.<id>.shortName`，由 `skillDisplayName(..., "short")` 读取；picker、chip 与 `/任务名` 继续使用完整 `name`。Home 不维护第二份产品命名表。子 Tab 与空态均走 en/zh i18n，空态只陈述「该应用暂无样片 / No sample for this application yet.」。
+
+卡片「开始创作 / Start creating」以「用这个 Skill 帮我…… / Use this Skill to help me…」示范使用方式，预填简短需求，并单独绑定既有 Skill。预填不默认指定分幕、时长、画幅、动效、音乐、音效或制作阶段，也不把这些限制隐藏到后台。文字动画提供可直接编辑的示例文案，知识讲解提供可替换的具体概念；产品宣传由用户提供自己的来源。样片是参考，不承诺复刻；制作授权继续由既有流程处理。中英文入口文案已同步，当前改动未做浏览器或制作验证。
+
+## 2. 五张当前样片与来源
+
+| 应用 / demo id | demo key | 来源与精确 Skill | prompt 来源 |
 |---|---|---|---|
-| Text Animation：`text-short-gentle-close` / `text-short-genesis` | 当前文字源 Film 链真实产物：`9345ddc2` / Output `a9701fe0`（20.6 秒）与 `f52c489c` / Output `50a6b40d`（68.1 秒），均 16:9 | 两条文字短片样例的内容、画幅、货架布局、预填与播放交互 | 新预填文案的完整 Chat→制作旅程；其他文字短片需求都必然成功 |
-| Product Promo：`product-demo-zymix` / `product-demo-highlights` / `product-demo-captioned` / `product-demo-walkthrough` | `product-demo-zymix`（项目 `8577f1ff`、Output `8beb17c9`）与 `product-demo-highlights`（项目 `b7530c00`、Output `8cac9bf1`，81.0 秒）均为当前 Film 链真实产物，16:9，含独立屏上说明字幕；第三张 `product-demo-captioned` 使用项目 `bd2b2f2e` 最新交付 Output `558c6547`（AgentVeil in Motion，88.1 秒、1920×1080 / 30fps），第四张复用既有片 | ZYMIX / AgentVeil 真片来源与画幅；当前代码中的排序与预填映射 | 第四张对应能力；任何卡片的完整 Chat→制作旅程；新第二卡的浏览器货架与播放表现 |
+| 网站/产品宣传 · `product-promo-agentveil-the-next-move` | `demo/outputs/product-promo-agentveil-the-next-move-a2a4b391.mp4` | Project `b8b20d17-28eb-4c60-8656-d937f2593f56`；修订版 `91c7d379-df3b-4076-9881-8978e8ec5000`；Output `cf91834d-8bc3-40e8-821d-92c5e5e961e3`；`launch-film@1.4.0` | 当前预填只描述根据网站或素材表达产品价值；不继承样片的声音和镜头设置 |
+| 网站/产品宣传 · `product-promo-oxvalue-product-evidence` | `demo/outputs/product-promo-oxvalue-product-evidence-e1e78348.mp4` | Project `7386da2b-596e-496b-bb71-01768070ee9e`；V1 `d05092fa-37bd-4f41-bedc-296371600a81`；Output `73258a3a-0b16-416b-8a61-d256664f0a0f`；`promo-video@1.0.0` | 与下一张卡共用原始默认预填，不固定 arc；Agent 根据用户材料选择表达路线 |
+| 网站/产品宣传 · `product-promo-oxvalue-energy-arc` | `demo/outputs/product-promo-oxvalue-energy-arc-6f210db6.mp4` | Project `9f7440f8-d552-4732-9763-ada09e8c5476`；V1 `aa5a8f5a-0b52-475e-aee1-0399df0dc818`；Output `a98d24e9-c100-4646-94f9-4424c30ccd57`；`promo-video@1.0.0` | 同上；卡片不携带来源旅程额外指定的 energy arc、字幕、配乐或画幅要求 |
+| 观点文字片 · `text-short-clear-rhythm` | `demo/outputs/text-short-clear-rhythm-2d594025.mp4` | Project `e92babc3-2dab-4876-a31b-ce0e31667d67`；修订版 `c2df1934-2ace-4b5f-89fb-95e7f9a67f09`；Output `c71525b6-1ab3-4ac3-b694-ce84076efe84`；`text-animation@1.0.0` | 当前预填为有表现力的文字动画与一段可编辑的完整示例文案；不继承样片时长、画幅或逐词入场 |
+| 概念讲解 · `knowledge-explainer-clear-expression` | `demo/outputs/knowledge-explainer-clear-expression-73f4a743.mp4` | Project `0d6104fd-05d0-4029-a1e8-9c193450495e`；修订版 `866b194d-ea31-4c01-af2f-5f17163e5af6`；Output `2b791e37-3290-499e-a88f-c83323354911`；`knowledge-explainer@1.0.0` | 当前预填为解释“一次只讲一个重点”的概念需求；不要求用户预先提供最终录音，不携带样片内部资产 |
 
-占位事实留在注册表条目注释和本文，不在 UI 加“占位”横幅；因此任何评审、营销或验收都不得仅凭卡面把占位称为真实能力。
+五份本地文件均已核对真实 Output、实际帧数、fps、画幅与音轨；新增两片还核对了 CompositionVersion content digest 与完整本地 SHA-256：
 
-第三张样片已按用户指定复制到内容寻址 `demo/outputs/product-demo-agentveil-in-motion-420b7ffe.mp4`，与源 Output 字节哈希一致；公开 URL 返回 200。此项仅替换样片和横屏展示，不改变卡片预填需求，不宣称新的制作能力验收。浏览器货架与播放未验证。
+- AgentVeil 产品片：1920×1080 / 30fps，3482 帧，116.2 秒，含音轨；SHA-256 `4c25ec1c…c84`。
+- OxValue product-evidence：1920×1080 / 30fps，1350 帧，45 秒，Tech House 音轨全程可解码；18,929,727 字节；SHA-256 `41356290a9eb80bfb3e78a6c0c6939b9e8dc61998d0de2b63ad919bd9008df2e`。原生文字无底条；前两幕均显示完整首页、视觉重复的问题仍保留。
+- OxValue energy-arc：1920×1080 / 30fps，1275 帧，42.5 秒，Tech House 音轨全程可解码；7,391,479 字节；SHA-256 `f9392d8712a8d3e83255a9ff5a1603418fe8dca3341086d20b23f4766487ec65`。当前上架的 V1 原生字幕仍有深色背景，不代表后续无底字幕规则已落实到这张旧片。
+- 文字片：1920×1080 / 30fps，360 帧，12.1 秒，含音轨；SHA-256 `50ecc3a8…f15`。
+- 知识片：1920×1080 / 30fps，114 帧，3.861 秒，含音轨；SHA-256 `7f26d8aa…146`。
+
+五个内容寻址对象均位于公开 demo 前缀，URL 返回 200，Content-Length 与 ETag/MD5 匹配，且带 immutable 缓存。文字片、知识片与两张新增 OxValue 片均完成公网 SHA-256 全量回读；AgentVeil 产品片只有本地 SHA、公开长度与 ETag 核对，未记为公网 SHA 回读通过。未覆盖任何既有 demo key。
 
 ## 3. 交互合同
 
-- 非 Skill Recipe/demo 卡片点击唯一归宿是 composer 预填 `promptTemplate`/demo prompt；视频 Skill 卡点击形成与 `/skill` 相同的可见 Skill chip + 可编辑 prompt，并复用同一 `POST /chat` 载荷。两类卡片都不自动发送、不建项目/run、不打开模板编辑器；未注册或未声明能力的 Skill 不伪装成可点击卡。
-- 草稿为空或仍等于上次预填原文时，点另一张同类卡可替换预填；已有用户文字或 @-mention 时保留原文并换行追加，不静默清空。一次创作至多一个 Skill chip，另选 Skill 只替换绑定，Backspace / Delete / 选区删除移除绑定，二者都不清空用户文字。
-- prompt 是完整用户口吻需求，不暴露工具/spec/版本，不锁死用户未要求的画幅、幕数、时长或配音；卡片明确写出的制作要求仍可编辑，后续 chat 修改优先，缺素材由正常 Chat 补问。
-- `product-demo-zymix` 与 `product-demo-highlights` 的 prompt 使用网站入口，按 Film 的网站 capture 合同执行与验收；AgentVeil 第二卡预填明确“说明字幕 + 无旁白 + 适度运镜和文字动画”，对应该样片的制作请求。其余 Product Promo 的 prompt 只承诺使用用户上传的视频/录屏，不承诺自动打开网站录屏。
-- Demo 视频静音循环；IntersectionObserver 离屏暂停、回视口恢复，声音遵循全局单例互斥。每个货架独立滚动，画幅按真实文件，不拉伸。
-- en/zh 同步；窄屏无页面级横向溢出。组件复用现有 RecipeTabs/RecipeShelf，不为每条货架复制实现。
+- 卡片点击唯一行为是进入 composer，形成精确版本的可见 Skill chip + 可编辑 prompt；与手动 Slash/Skill 选择使用同一 reference + prompt 载荷，最终仍只走 `POST /chat`。
+- 不自动发送、不自动 Start、不自动上传素材、不建项目或 Run、不产生制作意图；没有 `recipe_id` 旁路、第二意图面或第二执行链。
+- 空态没有样片卡或发射动作。五个无样片应用保持可见，不能拿其他应用成片填充。
+- 草稿替换/追加、Skill chip 删除与切换、声音互斥、离屏暂停、真实画幅与两级锚点滚动沿用既有实现。DemoCard 的键盘焦点使用可见 `outline-solid`，不是不可见的 `outline-none` 残留。
+- 正式公开 Gallery 仍逐类要求完整制作/修订旅程、真实完整音轨、连续动态观看与实际试听；当前开发/手测上架不替代这些门。
 
-## 4. 真实样片替换
+## 4. 当前验证
 
-1. 用户先选定目标样片，并确认它确实由对应当前制作链生成；不要用另一配方成片顶替。
-2. 在 `recipeFamilies.ts` 对应 demo entry 替换 `url`，按真实文件更新 `orientation`；保留稳定 id，非必要不改 prefill。
-3. 若真片语义要求调整 prompt，只改 `recipes.shelf.demos.<id>.prompt` 的 en/zh 镜像；不得借换片引入“保证同样效果”承诺。
-4. 新片继续使用 `demo/` 保留前缀与内容寻址，不覆盖共享 key；上传/发布是独立授权操作。
-5. 替换后分别验收：货架交互、样片内容真实性、对应 Chat→方案→授权→制作→交付全旅程。三者不可互相代替。
+- 原三张卡阶段的定向 Web 纯测试为 **27/27 通过**，真实 Chrome 为 **8/8 代表组合通过**，覆盖 desktop/mobile、en/zh、light/dark、普通/reduced-motion、长 prompt 换行、无页面级横向溢出、键盘可见焦点与 `ignoreCache:true` 硬刷新。原三张卡共点击 24 次，均形成对应 chip + 可编辑 prompt；监听到的修改请求为 **0**，没有 `POST /chat`、上传或创建项目/Run。证据在 `scratch/d5-home-four-products/`，汇总为 `browser-matrix.json`。
+- 当前新增的两张 OxValue 卡已登记真实 URL、精确 `promo-video@1.0.0`、wide 画幅与 en/zh 同一默认 prompt，并更新 registry/count 断言。两张公开对象的 200 响应、Content-Length、ETag/MD5 与全量 SHA-256 回读均已实测；**新增后的 Web 测试、TypeScript 与浏览器点击/播放尚未运行**。
+- 当前 `test/core`、相关真实旅程与完整 Web 检查本次未运行；新增上架未调用付费模型或制作新版本，未部署。
 
-## 5. 当前验证边界
+## 5. 留给用户的逐卡手测
 
-当前Use prompt专门收口已盘点6个可点击demo与8个服务端配方（6禁用族、2隐藏）。两条文字demo与基础网站demo已从真实首页预填、正常Chat审阅与制作取得新交付；部分经历真实失败和纠错，不是现成货架样片的替代证明。字幕定位与另一网站demo已制作但交付待数据库恢复核验；上传操作演示尚欠完整旅程。未替换货架媒体、未开启隐藏配方、未改为自动发送。完整原文与实测记录归 `artifacts/video-project-b/b-vi-temporal/chat-journey-review.md`；后续恢复后按每个入口更新，不能据三条成功把六条全勾。
-
-Text Animation 两片均已核对项目 Output、1920×1080 / 30fps、实际时长与多个时间点画面，并分别复制为新的内容寻址 `demo/` 对象，两个公开 URL 均已返回 200；ZYMIX 首卡此前已核对真实文件与画面。Product Promo 第二卡现为项目 `b7530c00` 的 Output `8cac9bf1`：用户提供本地下载文件（MD5 `28f35353`），与链上 Output 的存储对象 MD5 逐字节一致，上传为新的内容寻址 `demo/` 对象（`product-demo-agentveil-28f35353.mp4`），公开 URL 已返回 200 且回读 MD5 一致。逐帧画面核对覆盖的是同项目上一版（Output `d0247a98`，破折号已修、home 静态定场卡、reveal 引子与卡片正常）；`8cac9bf1` 本身只做了哈希同源核对与 81 秒时长核对，**未做逐帧画面复核**，浏览器货架/播放回归也未做。
-
-当前两 tab 阵容、第二卡替换、重命名、预填和 composer 光标修复只有代码层结果，**尚未做浏览器货架/播放与光标回归、tsc/vitest 或新预填对应的真实 Chat 全旅程复验**。这些证据不覆盖 Product Promo 第四张占位卡的制作能力，也不代替任何新卡对应制作链的完整验收。
-
-网页 Film 相机取景已改为 director 从实际 UI shot 的元素清单选择 `camera_focuses`，代码负责 section 截图输入、元素盒解析、主推 1.6× 上限与防露边 camera walk；默认字幕改为只在 Chapter 的 `ch*_ui`、`prove` 与 `plate` 缺槽时自动补轨，`open` / `hero` / `home` / `divider` / `reveal` / `end` 默认无轨但允许显式覆盖，文字源默认不变；Hero、reveal 副文案和 closing card 的引用 accent 星号改由 renderer 消费为强调样式。项目 `0400185c` 样片评审后又落一批确定性修复：home 概览幕改为静态定场卡（3s 固定窗口、修订带 2–6s、无运镜，`camera_focuses` 拒收 home）；`_pick_focus` 默认选择器改为 heading → video/image → text → button（修复"heading 死 kind 导致 Copy 徽章赢过卡片主题"），capture 端开始给 h1–h6/role=heading 发 `heading` kind（存量 capture 库存无此 kind，靠 text 层兜底改善）；字幕 cue 文本在装配与 spec 构建两处剥除 `*...*` 强调标记（字幕无强调通道，存量 storyboard 重渲染自愈）；reveal 引子 `lead_seconds` 封顶 3s（修复 14s 幕 8.4s 单行静止）。项目 `b7530c00` 样片（已吃到第一批修复：home 静态 2.9s、reveal 引子 4.5s、字幕无星号）评审后再落引用文案两条确定性守则：所有上屏槽位（引用与创作 alike）剥离首尾悬挂连接符（"AgentVeil —" 的页标题 head-fit 残段曾在 hero 大字旁烧出一根孤"—"；前导 "-" 永不剥——可能是负号）；`fit:"head"` 截断优先取窗口内最后一个完整句子（修复 reveal 副文案 "…Team and Enterprise add" 断句残段）。交付可见性一批（项目 `b7530c00` v2 换 BGM 后用户仍看到 v1 的取证结论）：画布媒体节点挂载默认从"首版（出生序）"改为"最新版"（null = 最后一行，与 DocumentCard 同约定；灯箱与 dossier 的未上报回退同步改为最新行），消息列表 RunCard 交付收据的 `OutputChatCard` 补 `film` case（复用 ClipCard，film payload 无 `hook`，标题回退链补 `payload.name`）——此前 film 交付在消息列表渲染为 null，桌面端锚卡又被 canvasVisible 门禁压住，唯一可见播放器只有画布节点且默认 v1。同批再收口两处同族缺口：锚卡 `anchorCardOf` 名字回退链补 `payload.name`、时长规格覆盖 film（此前 chip 只剩裸类型词 + 黑首帧空方块；en/zh 补 `chat.anchorCards.types.film`）；历史 detached run 收据 `RunCard` 从展开逐步骤行改为复用 `RunTaskList`/`WorkSegmentRow`（终态收成一条可展开的「Worked for Xm」工作记录，回放无 delivery seal 时诚实回退到 run 可观察步骤跨度），rich 产物卡不变——attached 活 run 的收据形态仍是锚卡 chip（ADR-118 单一渲染面律），detached 历史行的档案形态仍是 rich 卡。以上仅有代码与现行合同结果，**尚未运行 pytest/check_gates、prompt_gate、tsc、真实分镜/revision 或新渲染对照**。既有 AgentVeil Output 与第二位 demo 仍是旧版画面，不因代码修复自动更新；`0400185c` 这部影片需在 chat 走一次 revision（不要 keep_cut，否则冻结时间轴保留旧 home 时长）再重渲染才能吃到修复。
-
-真实样片到位前，Film progress 与 PROGRESS 必须继续保留此欠账；不要因“首页已能点”关闭。
-
-## Prohibited Behaviors
-
-- 禁把占位片写成真实能力证据或用于制作链验收。
-- 禁为换片新增后端接口、组件副本、模板编辑器或第二预填入口。
-- 禁静默覆盖用户草稿、自动发送、自动建 run、无真片上架空壳。
-- 禁覆盖共享 demo key、拉伸画幅、绕开声音互斥或让离屏视频继续无界解码。
+1. **产品宣传 → 网站/产品宣传**：逐一点击三张卡片，确认前两张来源分别绑定 `launch-film@1.4.0` 与 `promo-video@1.0.0`，新增两张 OxValue 卡只形成相同默认 prompt、不暗藏 arc；实际播放公开 MP4。自行提供网站与产品图片/视频后手动发送，先完整审阅首版，再另行明确制作。product-evidence 的前两幕网页重复、energy-arc V1 的深色字幕底仍是已知视觉欠账；连续看片与实际试听尚未完成。
+2. **文字动画 → 观点文字片**：确认预填包含简短需求与一段可编辑的完整示例文案；可编辑后手动发送，首版呈现不应同回合开工。连续看片并试听；另做一次局部文字修订，确认只改目标内容。
+3. **知识讲解 → 概念讲解**：使用预填概念或换成自己的主题；不会沿用样片内部资产。连续看片并试听，核对词锚字幕和解释性 Generator；v2 标题/Generator 拥挤只减轻、未完全消除，必须实际判断，不能视为视觉验收已通过。
+4. **五个空态**：课程/服务宣传、观点口播、课程/讲座预告、金句/公告短片、研究/报告解读只应显示暂无样片，不出现可点视频卡。
+5. **口播阻塞**：指定真人 VIDEO 与 SourceSnapshot 仍为 `NoSuchKey`；本批没有制作替代片，也不以空态宣称口播能力已验收。

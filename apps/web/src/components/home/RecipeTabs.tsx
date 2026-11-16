@@ -5,8 +5,11 @@ import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { localBuiltinSkillOptions, skillDisplayName } from "@/lib/skills"
 
 import type { ResolvedFamily } from "./recipeFamilies"
+
+const BUILTIN_SKILLS = localBuiltinSkillOptions()
 
 /**
  * 两级 tab (D5, prototype 屏①): 一级 = family pill 轨 (stadium pills on a
@@ -115,6 +118,9 @@ export function RecipeTabs({
         >
           {families.map((family) => {
             const Icon = family.icon
+            const skill = family.skillId
+              ? BUILTIN_SKILLS.find((option) => option.skill_id === family.skillId)
+              : undefined
             const on = family.id === activeFamilyId
             const disabled = family.disabled === true
             const button = (
@@ -132,7 +138,9 @@ export function RecipeTabs({
                 }`}
               >
                 {Icon && <Icon className="h-4 w-4" />}
-                {t(`recipes.shelf.families.${family.id}`)}
+                {skill
+                  ? skillDisplayName(skill, t, "short")
+                  : t(`recipes.shelf.families.${family.id}`)}
               </button>
             )
             if (!disabled) return button

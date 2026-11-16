@@ -63,7 +63,7 @@ async def search_sfx_candidates(query: str) -> dict[str, Any]:
     if not sounds:
         raise SfxError(f"no verified CC0 MP3 candidates found for {query!r}")
     return {
-        "kind": "set",
+        "kind": "sfx_set",
         "candidate_set_id": str(uuid4()),
         "topic": query,
         "asset_id": None,
@@ -80,7 +80,7 @@ def resolve_candidate_member(
     """Resolve only a persisted audio member; no caller-supplied media facts."""
     for event in events:
         if (
-            event.get("kind") != "set"
+            event.get("kind") not in {"sfx_set", "set"}  # ``set`` = pre-discriminator read tolerance
             or event.get("candidate_set_id") != str(candidate_set_id)
         ):
             continue
@@ -160,7 +160,7 @@ def _import_facts(asset: Asset, snapshot: SourceSnapshot) -> dict[str, Any]:
     }
 
 
-async def _persisted_candidate_events(
+async def persisted_candidate_events(
     db: AsyncSession,
     *,
     project: Project,
@@ -292,7 +292,7 @@ async def import_sfx_candidate(
     rolls back only that unit, then is read back and fully verified; unrelated
     database failures are never retried or hidden by the idempotent path.
     """
-    events = await _persisted_candidate_events(
+    events = await persisted_candidate_events(
         db,
         project=project,
         candidate_set_id=args.candidate_set_id,

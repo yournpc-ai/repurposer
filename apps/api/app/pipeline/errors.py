@@ -88,10 +88,6 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
     # A film narration line does not fit its scene even after the bounded
     # speed ladder — a design problem (the line is too long), never an
     # outage. The fix is a shorter line via the design beat.
-    "film_narration_fit": {
-        "en": "One narration line ran longer than its scene even after pacing adjustments — ask me to redesign the storyboard with a shorter line.",
-        "zh": "有一句旁白调速后仍然放不下它的场景——让我重新设计分镜，把这句改短一点。",
-    },
     "storage_unavailable": {
         "en": "Saving the file failed — please try again",
         "zh": "文件保存失败，请重试",
@@ -141,66 +137,30 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
     # The film storyboard's bounded rewrite exhausted (3 candidates, each
     # rejected by the grounding validator) — the honest line names what the
     # film is made of, never the machinery.
-    "film_storyboard_timeout": {
-        "en": "The storyboard took too long. No production has started; ask me to retry the storyboard.",
-        "zh": "分镜设计等待过久，尚未开工。可以让我重新设计分镜。",
-    },
     # The design beat's capture wait outlasted its ceiling — the draft
     # refused a half-captured world; nothing was designed, nothing started.
-    "film_capture_timeout": {
-        "en": "I didn't finish reading the pages in time, so no storyboard was designed — ask me to design it again.",
-        "zh": "网页没能及时读完，分镜尚未设计。可以让我重新设计。",
-    },
-    "film_storyboard_ungrounded": {
-        "en": "I couldn't draft a faithful film of that page — try a page with clearer copy, or tell me what to lead with.",
-        "zh": "没能为那个页面写出忠实的短片文案——换一页文案更清楚的，或告诉我先突出什么。",
-    },
-    "film_timing_invalid": {
-        "en": "The storyboard's timing failed validation. Adjust the scene or animation timing before retrying production.",
-        "zh": "分镜的时间设置未通过校验，需要调整幕长或动画时间后再制作。",
-    },
     # The TEXT source's ladder terminal (素材源抽象): every candidate failed
     # the checks. The copy itself already passed the feasibility preflight,
     # so this line never blames the user's words or their named numbers —
     # it owns the miss and names what the system can do next.
-    "film_text_ungrounded": {
-        "en": "I couldn't arrange that text into a readable storyboard — the copy itself is fine; my layout didn't pass the checks. Ask me to try again, or tell me how to adjust it (distill the key points, change the pacing).",
-        "zh": "这段文字没能排成可读的分镜——文字本身没问题，是我的编排没通过校验。可以让我重试一次，或告诉我怎么调整（比如提炼重点、换个节奏）。",
-    },
     # The text source's material preflight: at the DEFAULT (natural reading)
     # pace the full copy runs past the single-film frame cap — named BEFORE
     # any design attempt, with the actions the system can actually take
     # (including the user's explicit faster-pace choice — the reading
     # estimate recommends, it never bounds). Never dressed up as the user's
     # parameter mistake.
-    "film_text_beyond_reach": {
-        "en": "At a natural reading pace that text runs past one film's length limit. I can distill it, you can trim it, we can split it into several films — or name a duration and I'll pace it faster (the text will move quickly).",
-        "zh": "这段文字按自然语速读完会超过一支片子的时长上限。我可以提炼改编，你可以删短一些，或者我们拆成几支——也可以点名一个时长，我按更快的节奏排（文字会过得比较快）。",
-    },
     # The text source's named-target preflight: the named duration is over
     # the render frame cap, or the named scene count sits outside the copy's
     # real satisfiable span (screen overflow / scenes with nothing to cite)
     # — the honest conflict plus the workable options (never a silent
     # squeeze; a named FASTER pace is legal and never lands here).
-    "film_text_target_overflow": {
-        "en": "That doesn't fit as named — the duration is over the film's length limit, or that scene count can't hold this copy. Adjust the number, trim the words, or let me distill it.",
-        "zh": "按你点名的排不下——时长超过了片子上限，或这个幕数装不下这段文字（有真实可行区间）。可以改一下数字、删短文字，或让我提炼改编。",
-    },
     # The text source's zero-copy preflight (the text film's birth gate):
     # no words arrived at all — the remedy is the copy itself or a brief.
-    "film_text_empty": {
-        "en": "There's no text to work from yet — paste the copy itself, or tell me what the film should say.",
-        "zh": "还没有可用的文字——把文案贴进来，或告诉我片子要说什么。",
-    },
     # The direction preflight found a view-poor world: the page's VISUALS
     # never captured (a blocked / timed-out browser half), rejected before
     # any LLM call. The honest remedy is a re-capture (re-sending the link
     # re-arms the hollow asset — the dedup seat's law) or user-supplied
     # shots — never clearer copy.
-    "film_views_missing": {
-        "en": "I couldn't capture that page's visuals — re-send the link so I can retry, or paste a few screenshots of the page and I'll design from those.",
-        "zh": "那个页面的画面没能抓下来——重发一次链接让我重抓，或直接贴几张页面截图，我照着设计。",
-    },
 }
 
 

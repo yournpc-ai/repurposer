@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import { reduceCandidateFrame } from "@/lib/chatStreamFrames"
-import { isAudioCandidateSurface } from "../video/AudioCandidateSurface"
+import {
+  isAudioCandidateMember,
+  isAudioCandidateSurface,
+} from "../video/AudioCandidateSurface"
 import {
   buildConversationBlocks,
+  conversationBlockUnits,
   buildConversationUnits,
 } from "./project"
 import { candidatesLog, mapHistoryRows, type HistoryRow } from "./history"
@@ -26,15 +30,42 @@ const audioMember = {
 }
 
 const setEvent = {
-  kind: "set" as const,
+  kind: "sfx_set" as const,
   candidate_set_id: "sfx-set-1",
   topic: "door click",
   asset_id: null,
   members: [audioMember],
 }
 
+const musicId = "6f27e054-cd2b-4c0f-b77b-99b72292d7b5"
+const musicMember = {
+  start: 0,
+  end: 96.4,
+  excerpt: "Focused Lines",
+  speaker: null,
+  provider: "music_library",
+  provider_id: musicId,
+  music_id: musicId,
+  title: "Focused Lines",
+  author: "Library Artist",
+  duration_seconds: 96.4,
+  source_url: null,
+  preview_url: `/api/v1/music/${musicId}/stream`,
+  license: "Library license",
+  attribution: "Focused Lines by Library Artist",
+  query: "focused electronic",
+}
+
+const musicSetEvent = {
+  kind: "music_set" as const,
+  candidate_set_id: "music-set-1",
+  topic: "focused electronic",
+  asset_id: null,
+  members: [musicMember],
+}
+
 describe("SFX candidate live/history parity", () => {
-  it("keeps the complete audio member facts in the existing kind:set envelope", () => {
+  it("keeps complete audio facts in the sfx_set envelope on live and history", () => {
     const live = reduceCandidateFrame([], setEvent, "2026-11-02T00:00:00Z")[0]
       .candidates
     const replayed = candidatesLog({ type: "candidates_log", events: [setEvent] })
@@ -126,8 +157,58 @@ describe("SFX candidate live/history parity", () => {
     const blocks = buildConversationBlocks(buildConversationUnits(history))
     expect(blocks).toHaveLength(1)
     expect(blocks[0].kind).toBe("turn")
-    expect(blocks[0].kind === "turn" && blocks[0].units.map((unit) =>
+    expect(blocks[0].kind === "turn" && conversationBlockUnits(blocks[0]).map((unit) =>
       unit.kind === "message" ? unit.message.id : unit.rowKey,
     )).toEqual(history.map((message) => message.id))
+  })
+})
+
+describe("Music library candidate history", () => {
+  it("replays every local member fact and retains the music_set surface kind", () => {
+    const live = reduceCandidateFrame([], musicSetEvent, "2026-11-02T00:00:00Z")[0]
+      .candidates
+    const replayed = candidatesLog({
+      type: "candidates_log",
+      events: [musicSetEvent],
+    })
+    expect(replayed).toHaveLength(1)
+    expect(replayed?.[0]).toMatchObject({
+      kind: "set",
+      surface: {
+        kind: "music_set",
+        candidateSetId: "music-set-1",
+        assetId: null,
+      },
+    })
+    expect(replayed?.[0].kind === "set" && replayed[0].surface.members)
+      .toEqual([musicMember])
+    expect(live?.kind).toBe("music_set")
+    expect(live?.members).toEqual([musicMember])
+    expect(replayed?.[0].kind === "set" && isAudioCandidateSurface(replayed[0].surface))
+      .toBe(true)
+  })
+
+  it("accepts an absent source URL but rejects mismatched or provider-mixed members", () => {
+    expect(isAudioCandidateMember({ ...musicMember, source_url: "" })).toBe(true)
+    expect(isAudioCandidateMember({
+      ...musicMember,
+      music_id: "c1f3ee14-b143-4c62-9722-0d9f37266776",
+    })).toBe(false)
+    expect(isAudioCandidateMember({
+      ...musicMember,
+      provider: "freesound",
+      source_url: "https://freesound.org/people/library/sounds/12345/",
+      license: "CC0",
+    })).toBe(false)
+
+    const replayed = candidatesLog({
+      type: "candidates_log",
+      events: [musicSetEvent],
+    })
+    const surface = replayed?.[0].kind === "set" ? replayed[0].surface : undefined
+    expect(surface && isAudioCandidateSurface({
+      ...surface,
+      members: [musicMember, audioMember],
+    })).toBe(false)
   })
 })

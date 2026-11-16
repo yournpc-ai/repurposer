@@ -7,10 +7,9 @@ Preserved object-storage prefixes (never touched, by design):
   URLs are baked into the web bundle (``apps/web/src/lib/recipes.assets.ts``),
   generated ONCE via ``scripts/upload_recipe_assets.py``. They must survive
   every deploy and every reset: production never regenerates them.
-- ``music/`` — platform seed tracks. ``seed_default_music.py`` reconciles
-  Music rows against existing objects WITHOUT spending MiniMax quota (it
-  skips any object that already exists); deleting the objects would force
-  paid regeneration after every reset.
+- ``music/`` — curated platform tracks. Startup reconciles Music rows against
+  existing objects WITHOUT spending MiniMax quota; deleting the objects would
+  require re-importing the curated source bytes after every reset.
 
 Everything else in the bucket (``{user_id}/uploads|outputs|personas|
 brand-media/...`` and any stray top-level prefix) is deleted, and every row
@@ -33,8 +32,8 @@ Usage (from apps/api/):
     uv run python scripts/reset_db.py --yes --db-only       # DB only
     uv run python scripts/reset_db.py --yes --storage-only  # storage only
 
-After the wipe the script itself restores the platform seed it just removed
-(default Music rows reconciled against the preserved ``music/`` objects —
+After the wipe the script itself restores the curated platform records it just
+removed (Music rows reconciled against the preserved ``music/`` objects —
 idempotent, no MiniMax quota spent), so no restart or manual seeding is
 required afterwards. There is no brand seed: a persona whose skin block is
 NULL falls back to the system default skin at bake time. Migrations are
@@ -97,7 +96,6 @@ CASCADE_COVERED = {
     "journeys",
     "exploration_rows",
     "graph_islands",
-    "film_narrations",
     # Per-conversation sequence counters cascade with conversations.
     "message_seq_counters",
 }

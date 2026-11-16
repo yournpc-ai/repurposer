@@ -253,6 +253,10 @@ Thumbs.db
 .playwright-mcp/
 .remotion/
 
-# Local rendered sample films
+# Local rendered sample films and model diagnostics
 /artifacts/video-project-a2/
 /artifacts/video-project-b/
+/artifacts/model-traces/
+
+# Local-only probes, evidence, and generated media
+/scratch/

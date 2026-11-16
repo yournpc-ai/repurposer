@@ -57,7 +57,7 @@ class SkillPack:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _parse_skill_md(path: Path) -> SkillPack:
+def _parse_skill_md(path: Path, *, require_directory_name: bool = True) -> SkillPack:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
         raise SkillValidationError(f"{path.name}: missing YAML frontmatter block")
@@ -85,7 +85,7 @@ def _parse_skill_md(path: Path) -> SkillPack:
             f"{path.name}: name {name!r} must be lowercase letters/digits with "
             "single hyphens, ≤64 chars, no leading/trailing hyphen"
         )
-    if name != path.parent.name:
+    if require_directory_name and name != path.parent.name:
         raise SkillValidationError(
             f"{path.name}: name {name!r} must equal its directory {path.parent.name!r}"
         )

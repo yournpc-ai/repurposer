@@ -401,6 +401,15 @@ def _compile_task_list(
             # Hoisted above (ADR-052 B4) — the LLM naming its position in
             # the chain changes nothing about the execution topology.
             continue
+        if entry.name == "prepare_narration":
+            # One original-only root: no Composition, plan prelude, clips
+            # modifier, verify, render or Output is involved in this scope.
+            if len(entries) != 1:
+                raise ValueError("Prepare narration runs as one narration-only task")
+            params_dict = params.model_dump(mode="json", exclude_none=True) if params else {}
+            nodes.append(_NodeSpec(entry.name, seq, inputs=[], spec=params_dict))
+            seq += 1
+            continue
         if not node_cls.needs_plan_prelude and not node_cls.produces_outputs:
             modifiers.append((item, entry))
             continue
@@ -425,13 +434,6 @@ def _compile_task_list(
                     # iter-2 ②: source_span rides the slot like count/focus —
                     # compiler-emitted, the writer narrows its material to it.
                     if k in ("count", "focus", "language", "tone_override", "source_span")
-                    # Film-family slot fields (ADR-130) ride ONLY the
-                    # launch_film slot — clips already seat aspect at spec
-                    # top-level; a generic whitelist would fork one fact
-                    # into two seats (the pure cut-chain test guards this).
-                    # The text source (ADR-138 §7.6) rides the same seat:
-                    # exclude_none drops the keys for web films byte-clean.
-                    or (node_cls.kind == "launch_film" and k in ("voiceover", "subtitles", "music_mood", "aspect", "text", "verbatim", "target_seconds", "scene_count", "group_chars"))
                 },
             }
             spec = {
@@ -785,25 +787,13 @@ async def _check_birthplace_requires(
             owners = needs.setdefault(req.key, (req, []))[1]
             owners.append(entry.name.replace("_", " "))
     has_clips_slot = any(t.tool == "select_clips" for t in (task.tasks or []))
-    # Text-source film (ADR-138 §7.6): a launch_film task carrying the copy
-    # itself needs no captured page — the words are the material.
-    film_has_text = any(
-        t.tool == "launch_film"
-        and isinstance(t.params, dict)
-        and bool(t.params.get("text"))
-        for t in (task.tasks or [])
-    )
     for key in sorted(needs):
         req, owners = needs[key]
-        if key == WEB_PAGE.key and film_has_text:
-            continue
         if await req.missing(db, project):
             # The clips-media 422 keeps its own copy: it names the way out
             # ("deselect clips") in plan terms, not tool terms.
             if key == MEDIA.key and has_clips_slot:
                 raise ValueError(CLIPS_NEED_MEDIA)
-            if key == WEB_PAGE.key:
-                raise ValueError(FILM_NEEDS_PAGE)
             raise ValueError(
                 f"Missing required input: {key} (needed by: {', '.join(owners)})"
             )
@@ -824,13 +814,6 @@ CLIPS_NEED_MEDIA = (
     "Clips need a video, audio, or image source. Upload one or deselect clips."
 )
 
-# Birthplace rejection copy for the film gate (WEB_PAGE requirement — the
-# film family's honest substitute for source media): no captured page, or the
-# capture failed. The way out names the paste-a-link motion.
-FILM_NEEDS_PAGE = (
-    "A launch film needs a captured page. Paste the link in chat first "
-    "(or again — the earlier capture didn't succeed)."
-)
 
 # Birthplace rejection copy for the active-run guard (create_run).
 RUN_ALREADY_ACTIVE = (
@@ -1057,10 +1040,11 @@ async def create_run(
             if (task.ui_language or "").startswith("zh")
             else RUN_ALREADY_ACTIVE
         )
-    from app.tools.video.production import pin_video_production
+    from app.tools.video.production import pin_narration_preparation, pin_video_production
     video_context = await pin_video_production(
         db, project, task.tasks, task.video_authorized_by
     )
+    narration_context = await pin_narration_preparation(project, task.tasks)
     target_type: str | None = None
     if task.scope in _TARGETED_DERIVATIVE_SCOPES and task.target_id is not None:
         target = await db.get(Output, task.target_id)
@@ -1097,7 +1081,7 @@ async def create_run(
     run = WorkflowRun(
         project_id=project.id,
         status=WorkflowStatus.PENDING,
-        context={**task.model_dump(mode="json"), **video_context},
+        context={**task.model_dump(mode="json"), **video_context, **narration_context},
         progress=0,
     )
     db.add(run)
@@ -1125,9 +1109,15 @@ async def create_run(
     for ns in node_specs:
         spec = dict(ns.spec or {})
         if ns.kind == "produce_video":
-            # The paid-fit ceiling is authorized with the Run, then pinned
-            # into its executable step; neither side may drift on resume.
+            # The paid-fit ceiling and canvas aspect are authorized with the
+            # Run, then pinned into its executable step; neither side may
+            # drift on resume.
             spec["narration_policy"] = video_context.get("narration_policy")
+            spec["aspect"] = video_context["aspect"]
+        if ns.kind == "prepare_narration":
+            spec["narration_policy"] = narration_context["narration_preparation"][
+                "narration_policy"
+            ]
         if "summary" not in spec:
             # Builder-written task name (the task list's pending-row text —
             # label() carries the static name, or the slot-tagged sibling
@@ -2022,10 +2012,27 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         missing_delivery = len(delivered) < len(output_ids)
         project = await db.get(Project, run.project_id)
 
-        if failed_verdict or missing_delivery:
+        # A narration-only Run succeeds on fixed audio + alignment + settled
+        # usage, never on a fabricated Output. Other zero-Output Runs keep
+        # the ordinary verdict unchanged.
+        narration_error = None
+        if not failed_verdict:
+            from app.tools.video.production.narration import (
+                has_narration_preparation_scope,
+                narration_preparation_fact,
+            )
+
+            if has_narration_preparation_scope(run):
+                try:
+                    await narration_preparation_fact(db, run, nodes)
+                except ValueError as exc:
+                    narration_error = str(exc)
+
+        if failed_verdict or missing_delivery or narration_error:
             run.status = WorkflowStatus.FAILED
             run.error = (
                 (failed_verdict[0].error if failed_verdict else None)
+                or narration_error
                 or next((o.render_error for o in outputs if o.render_error), None)
                 or user_line("delivery_missing", (project.language if project else None) or "en")
             )

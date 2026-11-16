@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { AtSign, FileWarning, Loader2 } from "lucide-react"
+import { AtSign, FileWarning, Loader2, Scan } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { MediaLightbox, type MediaLightboxData } from "@/components/results/MediaLightbox"
+import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { anchorCardOf, anchorLabel, isChatVideoOutput } from "@/lib/anchorCards"
 import { useOutputPoster } from "@/lib/outputPoster"
@@ -27,13 +28,20 @@ export function ChatOutputViewer({
   entries: ChatOutputEntry[] | null
   onNavigate: (outputId: string) => void
   onOpenChange: (open: boolean) => void
-  onMention: (output: Output) => void
+  onMention: (output: Output, region?: MediaRegionSelection) => void
 }) {
   const { t } = useTranslation()
   const selectedEntry = outputId ? entries?.find((entry) => entry.output_id === outputId) : undefined
   const hasPersistedEntry = selectedEntry !== undefined
   const [fallback, setFallback] = useState<Output | null>(null)
   const [failed, setFailed] = useState(false)
+  const [regionSelecting, setRegionSelecting] = useState(false)
+  const [regionSelection, setRegionSelection] = useState<MediaRegionSelection | null>(null)
+
+  useEffect(() => {
+    setRegionSelecting(false)
+    setRegionSelection(null)
+  }, [outputId])
 
   useEffect(() => {
     let active = true
@@ -130,10 +138,45 @@ export function ChatOutputViewer({
       gallery={gallery}
       getSlot={getOutputSlot}
       actions={selectedOutput ? (
-        <Button variant="outline" size="sm" className="h-9" onClick={() => onMention(selectedOutput)}>
-          <AtSign className="size-4" />{t("chat.outputViewer.mention")}
-        </Button>
+        <>
+          <Button
+            variant={regionSelecting ? "secondary" : "outline"}
+            size="sm"
+            className="h-9 max-sm:w-9 max-sm:px-0"
+            aria-label={t("chat.outputViewer.selectRegion")}
+            title={t("chat.outputViewer.selectRegion")}
+            aria-pressed={regionSelecting}
+            disabled={!selectedOutput.files.video}
+            onClick={() => setRegionSelecting((current) => !current)}
+          >
+            <Scan className="size-4" /><span className="max-sm:hidden">{t("chat.outputViewer.selectRegion")}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 max-sm:w-9 max-sm:px-0"
+            aria-label={t("chat.outputViewer.referenceAsset")}
+            title={t("chat.outputViewer.referenceAsset")}
+            onClick={() => onMention(selectedOutput)}
+          >
+            <AtSign className="size-4" /><span className="max-sm:hidden">{t("chat.outputViewer.referenceAsset")}</span>
+          </Button>
+        </>
       ) : null}
+      regionSelection={selectedOutput?.files.video ? {
+        enabled: regionSelecting,
+        value: regionSelection,
+        onChange: setRegionSelection,
+        onReselect: () => setRegionSelection(null),
+        onCancel: () => {
+          setRegionSelection(null)
+          setRegionSelecting(false)
+        },
+        onDone: () => {
+          if (regionSelection) onMention(selectedOutput, regionSelection)
+          setRegionSelecting(false)
+        },
+      } : undefined}
     />
   )
 }

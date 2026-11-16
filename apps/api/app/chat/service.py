@@ -72,7 +72,7 @@ from app.chat.suggestions import (
     compose_suggestion_note,
     suggestion_stale_reasons,
 )
-from app.chat.turn_tools import film_wiring_guard, strip_tool_echoes
+from app.chat.turn_tools import strip_tool_echoes
 from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import (
     AnswerPayload,
@@ -87,7 +87,6 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     ChatTurnStopRequest,
-    FilmStoryboard,
     InferredIntent,
     Option,
     PendingPlan,
@@ -134,12 +133,6 @@ logger = structlog.get_logger()
 MAX_MESSAGE_CHARS = 20_000
 MAX_ATTACHMENTS_PER_TURN = 5
 MAX_MENTIONS_PER_TURN = 10
-
-_ASK_BACK_TEXT = (
-    "I want to make sure I do the right thing — could you be more specific? "
-    "For example: re-cut highlights, remove filler words, add music, "
-    "or rewrite a post."
-)
 
 
 def _material_gate_text(text: str) -> str:
@@ -657,9 +650,6 @@ async def _create_run_from_tasks(
     """
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
 
-    film_guard = film_wiring_guard(tasks=tasks)
-    if film_guard is not None:
-        raise ValueError(film_guard)
     if not (name or "").strip():
         # 二源律的可观测座 (ADR-058): the fallback chain label is legal but
         # silent — count every run an LLM proposal SHOULD have named and
@@ -758,60 +748,6 @@ async def resolve_confirmation_need(
         production_intent=production_intent,
         unmet_condition=unmet_condition,
         copy_drift=copy_drift,
-    )
-
-
-def _film_gate_facts(
-    tasks: list,
-    pending: PendingPlan | None,
-    question: dict | None,
-) -> "FilmGateFacts | None":
-    """The Start gate's film conjuncts (ADR-129), computed once per start
-    attempt from the confirmed chain + the stored pending plan + the docked
-    question's stamp. None = the chain carries no film (the gate's film
-    conjuncts stay dark).
-
-    Draft-match law: the dock's stamped token/version must agree with the
-    ACTIVE draft, and token equality never short-circuits the rest — the
-    effective chain's canonical launch_film params, the version number, the
-    board's content digest and the execution snapshot digest all compare.
-    A panel edit therefore fails closed for an explicit re-dock instead of
-    executing old storyboard content under new levers. Pre-version rows keep
-    the fingerprint fallback (读容忍)."""
-    from app.pipeline.lifecycle import FilmGateFacts  # deferred: chat → pipeline
-    from app.tools.film.storyboard import (  # deferred
-        film_draft_inflight_live,
-        film_first_draft_unpresented,
-        film_start_draft_match,
-    )
-
-    if not any(getattr(t, "tool", None) == "launch_film" for t in tasks):
-        return None
-    has_draft = pending is not None and isinstance(pending.film_storyboard, dict)
-    hold = bool(pending.film_review_hold) if pending is not None else False
-    inflight = (
-        film_draft_inflight_live(pending.film_draft_inflight)
-        if pending is not None
-        else False
-    )
-    match = (
-        film_start_draft_match(
-            pending,
-            tasks,
-            (pending.prompt if pending is not None else None) or None,
-            (question or {}).get("film_draft_token"),
-            (question or {}).get("film_storyboard_version"),
-        )
-        if pending is not None
-        else False
-    )
-    return FilmGateFacts(
-        film_chain=True,
-        has_active_draft=has_draft,
-        draft_match=match,
-        review_hold=hold,
-        first_draft_unpresented=film_first_draft_unpresented(pending),
-        draft_inflight=inflight,
     )
 
 
@@ -1231,6 +1167,34 @@ async def _active_run_line(
     return None
 
 
+def _loop_incomplete_text(text: str, result) -> str:
+    """An execution limit is not evidence that a requested capability is absent."""
+    observations = getattr(result, "observations", [])
+    rejections = getattr(result, "rejections", [])
+    video_tools = {"design_video", "revise_video"}
+    saved = bool(getattr(result, "version_saved", False))
+    prepared = any(name in {"prepare_video_materials", "capture_web"} and ok for name, ok in observations)
+    rejected = any(r.tool_name in video_tools for r in rejections) or any(name in video_tools and not ok for name, ok in observations)
+    material_failed = any(name in {"prepare_video_materials", "capture_web"} and not ok for name, ok in observations)
+    if _prefers_zh(text):
+        if saved:
+            return "作品版本已保存，但本轮后续处理未完成。当前保存内容仍保留。"
+        prefix = "已成功准备的素材仍保留。" if prepared else ""
+        if rejected:
+            return prefix + "本轮作品提交未通过校验，已达到本轮处理上限，尚未保存本轮修改。"
+        if material_failed:
+            return prefix + "仍有素材准备失败，本轮未能完成作品。已成功的资源仍保留。"
+        return prefix + "本轮已达到处理次数上限，尚未完成你的请求。"
+    if saved:
+        return "The work version was saved, but this turn's follow-up did not finish. The saved content remains available."
+    prefix = "Successfully prepared materials remain available. " if prepared else ""
+    if rejected:
+        return prefix + "The work submission did not pass validation before this turn's limit. This turn's changes were not saved."
+    if material_failed:
+        return prefix + "Some material preparation failed, so the work is incomplete. Successfully prepared resources remain available."
+    return prefix + "This turn reached its processing limit before completing your request."
+
+
 def _cannot_do_text(text: str) -> str:
     """The refusal line (both intent surfaces). Human capability words only —
     registry tool names are internal vocabulary, never user-facing
@@ -1390,6 +1354,69 @@ def _video_review_failure_text(text: str, facts: dict[str, Any]) -> str:
     )
 
 
+def _video_review_report_text(text: str, report: dict[str, Any]) -> str:
+    """Close from a completed report when the later prose continuation fails.
+
+    The focused reviewer has already persisted its findings. Losing the outer
+    model call must not erase that work or misread it as an ambiguous request.
+    """
+    zh = _prefers_zh(text)
+    scope = report.get("scope") if isinstance(report.get("scope"), dict) else {}
+    frames = report.get("frames") if isinstance(report.get("frames"), list) else []
+    findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+    summary = str(report.get("summary") or "").strip()
+    if summary and _prefers_zh(summary) != zh:
+        summary = ""
+    observations = [
+        value
+        for finding in findings
+        if isinstance(finding, dict)
+        and (value := str(finding.get("observed") or "").strip())
+        and _prefers_zh(value) == zh
+    ]
+    if summary:
+        content = summary
+        if not content.endswith(("。", "！", "？", ".", "!", "?")):
+            content += "。" if zh else "."
+        if observations:
+            content += (
+                "具体发现：" + "；".join(observations) + "。"
+                if zh else "Specific findings: " + "; ".join(observations) + ". "
+            )
+    elif observations:
+        content = (
+            "本次检查发现：" + "；".join(observations) + "。"
+            if zh else "This review found: " + "; ".join(observations) + ". "
+        )
+    elif zh:
+        content = (
+            f"本次检查已完成，实际解码并检查了 {len(frames)} 个采样帧；"
+            + (f"记录了 {len(findings)} 条内容发现。" if findings else "这些采样帧中没有内容发现。")
+        )
+    else:
+        content = (
+            f"This review completed and checked {len(frames)} actual decoded sample frames; "
+            + (
+                f"it recorded {len(findings)} content findings. "
+                if findings else "those sampled frames contained no content findings. "
+            )
+        )
+    unchecked: list[str] = []
+    if not scope.get("motion_and_transitions_checked"):
+        unchecked.append("连续运动与转场" if zh else "continuous motion and transitions")
+    if scope.get("audio_signal_checked"):
+        unchecked.append("主观听感" if zh else "perceived listening quality")
+    if not scope.get("audio_and_av_sync_checked"):
+        unchecked.append("音画同步" if zh else "audio-visual synchronization")
+    if unchecked:
+        content += (
+            "本次未检查" + "、".join(unchecked) + "；结论只覆盖上述采样与信号范围。"
+            if zh else "This review did not check " + ", ".join(unchecked)
+            + "; its conclusions cover only the samples and signals above. "
+        )
+    return content + ("本次没有修改成片。" if zh else "The video was not changed. ")
+
+
 def _sfx_import_failure_text(text: str) -> str:
     """Close a failed selection honestly; the next search or pick is the user's."""
     if _prefers_zh(text):
@@ -1436,13 +1463,66 @@ def _design_blocked_text(text: str, refusal: str | None) -> str:
     )
 
 
-def _design_no_progress_text(text: str, *, version_saved: bool) -> str:
+def _markdown_cell(value: object) -> str:
+    text = str(value or "—")
+    return text.replace("|", "\\|").replace("\r\n", "\n").replace("\n", "<br>")
+
+
+def _video_no_progress_text(text: str, read: dict) -> str:
+    """Present the saved video facts when a later correction exhausts its loop."""
+    from app.editing.service import storyboard_presentation_rows
+
+    zh = _prefers_zh(text)
+    rows = storyboard_presentation_rows(read)
+    if zh:
+        intro = "下面的分镜已经保存。最后一次后续调整未完成，未写入这版；本次没有开始制作。"
+        header = "| 镜头 | 时间 | 屏幕文字 | 画面与目的 |"
+        divider = "| --- | --- | --- | --- |"
+        footer = "请先查看这个已保存版本；未完成的调整仍需另行处理。"
+    else:
+        intro = (
+            "The storyboard below is saved. The last follow-up adjustment did not "
+            "complete and is not included; no production started."
+        )
+        header = "| Shot | Time | On-screen text | Picture and purpose |"
+        divider = "| --- | --- | --- | --- |"
+        footer = "Review this saved version first; the unfinished adjustment still needs separate handling."
+    table = [header, divider]
+    for row in rows:
+        direction = row.get("scene_visual_description") or row.get("scene_intent")
+        table.append(
+            "| "
+            + " | ".join((
+                _markdown_cell(row.get("shot")),
+                f"{float(row['start_seconds']):.2f}–{float(row['end_seconds']):.2f}s",
+                _markdown_cell(row.get("text")),
+                _markdown_cell(direction),
+            ))
+            + " |"
+        )
+    payload = read["storyboard"]
+    settings = payload["settings"]
+    facts = (
+        f"时长 {float(payload['duration_seconds']):.1f} 秒；"
+        f"画布 {settings['width']}×{settings['height']}；{float(settings['fps']):g}fps。"
+        if zh else
+        f"Duration {float(payload['duration_seconds']):.1f}s; "
+        f"canvas {settings['width']}×{settings['height']}; {float(settings['fps']):g}fps."
+    )
+    return "\n\n".join((intro, "\n".join(table), facts, footer))
+
+
+def _design_no_progress_text(
+    text: str, *, version_saved: bool, video_read: dict | None = None
+) -> str:
     """Honest close after the loop's Film rejection policy stops a retry.
 
     The two states are deliberately different: a failed correction must not
     erase the fact that an earlier version was saved this turn, while a
     failed first design must not claim that any new storyboard exists.
     """
+    if video_read is not None:
+        return _video_no_progress_text(text, video_read)
     if _prefers_zh(text):
         if version_saved:
             return (
@@ -1452,8 +1532,7 @@ def _design_no_progress_text(text: str, *, version_saved: bool) -> str:
             )
         return (
             "这次调整没有完成，我没有保存新的分镜，也没有开始制作。我已停止"
-            "重复尝试；此前保存的内容不会被这次失败覆盖。请再发一次，我会"
-            "重新尝试。"
+            "重复尝试。请再发一次，我会重新尝试。"
         )
     if version_saved:
         return (
@@ -1464,8 +1543,8 @@ def _design_no_progress_text(text: str, *, version_saved: bool) -> str:
         )
     return (
         "This change did not complete. I did not save a new storyboard or "
-        "start production, and I stopped the repeated attempts. Previously "
-        "saved work is unchanged. Send the request again and I'll retry."
+        "start production, and I stopped the repeated attempts. Send the "
+        "request again and I'll retry."
     )
 
 
@@ -1630,9 +1709,6 @@ async def sync_plan_question(
     estimate: PlanEstimate | None = None,
     plans: list[dict] | None = None,
     need: "ConfirmationNeed | None" = None,
-    storyboard_echo: bool = False,
-    film_draft_token: str | None = None,
-    film_storyboard_version: int | None = None,
 ) -> list[UUID]:
     """Keep exactly one pending task_book question per project conversation.
 
@@ -1654,16 +1730,8 @@ async def sync_plan_question(
     (live journey pushes it into the flow before docking; the restore replay
     renders it as the flow line above the answered archive). An empty echo
     stores empty content (the docked card / plan prose are the question's
-    face, never a machine digest line). ``storyboard_echo`` marks a film
-    dock whose echo content carries the code-rendered storyboard markdown —
-    on refresh the pending row's content replays as a flow message while
-    the dock revives separately. ``film_draft_token`` (ADR-129) stamps the
-    presented storyboard draft's per-version token into the payload — the
-    Start gate compares it against the active draft's token and refuses a
-    dock that presents an older design. ``film_storyboard_version`` stamps
-    the explicit revision number alongside it. Returns the run ids whose
-    parked interrupt was cascade-bailed by the supersede (finalized by the
-    caller after its commit). Flush-only.
+    face, never a machine digest line). Returns the run ids whose parked
+    interrupts were cascade-bailed by the supersede. Flush-only.
     """
     conversation = await _get_or_create_project_conversation(
         db, user_id, UUID(str(project.id))
@@ -1716,9 +1784,6 @@ async def sync_plan_question(
             derived=derived or [],            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
             # chain; empty on the router-drafted docks (读容忍).
             plans=plans or [],
-            storyboard_echo=storyboard_echo,
-            film_draft_token=film_draft_token,
-            film_storyboard_version=film_storyboard_version,
         ),
         intent=intent.model_dump(mode="json"),
     )
@@ -1852,19 +1917,6 @@ async def _auto_start_docked_plan(
         # ADR-129: the film conjuncts hold on the auto 道 too — a review
         # hold or a redesign between dock and this beat keeps the plan
         # docked (the auto start never leaps over them).
-        film=_film_gate_facts(
-            list(intent.tasks) if intent is not None else [],
-            (
-                PendingPlan.model_validate(project.pending_brief)
-                if isinstance(project.pending_brief, dict)
-                else None
-            ),
-            (
-                pending_question.question
-                if isinstance(pending_question.question, dict)
-                else None
-            ),
-        ),
     )
     if gate is not None:
         logger.info(
@@ -2436,7 +2488,6 @@ async def answer_question(
                 stamp=stamp,
                 # ADR-129: the film conjuncts — active draft, presented-draft
                 # match (token / fingerprint), review hold.
-                film=_film_gate_facts(tasks, pending, message.question),
             )
             if gate is not None:
                 detail: dict[str, Any] = {"code": gate.code}
@@ -2569,110 +2620,6 @@ async def answer_question(
                     },
                 ),
             }
-            # prepared_storyboard + the versioned film state (ADR-129): a
-            # film chain born from a dock runs the storyboard the user SAW —
-            # the stored PendingPlan's dump is the shown truth (世界自证:
-            # what they saw is what runs). Validated here before stamping;
-            # the worker consumes it STRICTLY — a stale prepared board
-            # fails the run with a redesign request, never a silent
-            # re-orchestration. The version / content digest / execution
-            # snapshot / draft token stamp alongside: 呈现稿 digest = run
-            # context digest = render spec digest, one truth. Absent (a
-            # draft that never stood at dock time) → the birth orchestrates
-            # fresh, by design.
-            if any(t.tool == "launch_film" for t in tasks):
-                prepared_storyboard = (
-                    pending.film_storyboard if pending is not None else None
-                )
-                if isinstance(prepared_storyboard, dict):
-                    try:
-                        FilmStoryboard.model_validate(prepared_storyboard)
-                    except (ValueError, TypeError):
-                        prepared_storyboard = None
-                    if prepared_storyboard is not None:
-                        from app.tools.film.edits import (  # deferred: tool seam
-                            film_music_retime_of,
-                        )
-
-                        run.context = {
-                            **(run.context or {}),
-                            "prepared_storyboard": prepared_storyboard,
-                            "film_storyboard_version": (
-                                pending.film_storyboard_version
-                                if pending is not None
-                                else None
-                            ),
-                            "film_storyboard_content_digest": (
-                                pending.film_storyboard_content_digest
-                                if pending is not None
-                                else None
-                            ),
-                            "film_storyboard_params": (
-                                pending.film_storyboard_params
-                                if pending is not None
-                                else None
-                            ),
-                            "film_storyboard_fingerprint": (
-                                pending.film_storyboard_fingerprint
-                                if pending is not None
-                                else None
-                            ),
-                            "film_execution": (
-                                pending.film_storyboard_execution
-                                if pending is not None
-                                else None
-                            ),
-                            "film_draft_token": (
-                                pending.film_draft_token
-                                if pending is not None
-                                else None
-                            ),
-                            # The version envelope (compose|patch|variant +
-                            # the base version) — provenance recovery reads
-                            # it back through the same keys.
-                            "film_created_via": (
-                                pending.film_created_via
-                                if pending is not None
-                                else None
-                            ),
-                            "film_base_version": (
-                                pending.film_base_version
-                                if pending is not None
-                                else None
-                            ),
-                            # The surviving set_music retime instruction
-                            # (keep_cut|recut — ADR-137): projected as the
-                            # instruction's PROVENANCE (and the
-                            # half-written-envelope tripwire: keep_cut
-                            # without frames fails closed).
-                            # ``film_kept_frames`` = the version's frozen
-                            # cut (版本状态 — frozen at patch time by a
-                            # keep_cut swap, or inherited by a
-                            # timeline-preserving edit): the run's frame
-                            # seat consumes it fail-closed whenever
-                            # present; None = allocate + snap to the bed's
-                            # grid as usual.
-                            "film_music_retime": film_music_retime_of(pending),
-                            "film_kept_frames": (
-                                pending.film_kept_frames
-                                if pending is not None
-                                else None
-                            ),
-                            # The frozen cut's other half (冻结场内切点):
-                            # the reveal words' landing beats — the run
-                            # consumes them fail-closed whenever the kept
-                            # cut covers a reveal scene.
-                            "film_kept_reveal_onsets": (
-                                pending.film_kept_reveal_onsets
-                                if pending is not None
-                                else None
-                            ),
-                        }
-            # E3 双态写者 (first half, iter-3 S1): the confirmed package's
-            # plan rows settle ready/revised → compiled IN THE SAME
-            # TRANSACTION as the snapshot stamp — the artifact state machine
-            # and the paid execution never diverge. Router-drafted docks
-            # carry no plans → the call is a no-op.
             from app.pipeline.exploration_store import (  # deferred: pipeline edge
                 mark_compiled,
             )
@@ -2717,7 +2664,10 @@ async def answer_question(
             # suggestion) or the interrupt already expired — the pick is the
             # user's say, carried by the generic continuation (same seat as
             # the no-run-id branch below).
-            with bind_conversation_turn() as _usage_bind:
+            with bind_conversation_turn(
+                conversation_id=conversation.id, turn_id=turn_id or message.id,
+                project_id=conversation.project_id,
+            ) as _usage_bind:
                 follow_up, _run_id, bailed_run_ids, _settled = (
                     await _continue_chat_answer(
                         db, user_id, conversation, question, data, option_label,
@@ -2744,7 +2694,10 @@ async def answer_question(
     elif question.kind == "question" and data.kind in ("option", "freeform"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
-        with bind_conversation_turn() as _usage_bind:
+        with bind_conversation_turn(
+            conversation_id=conversation.id, turn_id=turn_id or message.id,
+            project_id=conversation.project_id,
+        ) as _usage_bind:
             follow_up, _run_id, bailed_run_ids, _extra = (
                 await _continue_chat_answer(
                     db,
@@ -2797,7 +2750,10 @@ async def answer_question(
             # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
             # fixed-count slice.
             recent = await recent_history_within_budget(db, history)
-            with bind_conversation_turn() as _usage_bind:
+            with bind_conversation_turn(
+                conversation_id=conversation.id, turn_id=turn_id or message.id,
+                project_id=conversation.project_id,
+            ) as _usage_bind:
                 follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
                     db,
                     user_id,
@@ -3087,27 +3043,68 @@ async def prepare_chat_turn(
     from app.skills.store import SkillNotFoundError
 
     prior_skill_references: list[SkillReference] | None = None
+    inherited_skill: SkillReference | None = None
+    inherited_binding = False
     if request.skill is None:
-        previous_user = await db.scalar(
+        previous_users = list((await db.scalars(
             select(Message)
-            .where(Message.conversation_id == conversation_id, Message.role == "user")
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.role == "user",
+                Message.turn_state == "settled",
+            )
             .order_by(Message.seq.desc().nullslast(), Message.created_at.desc())
-            .limit(1)
+            .limit(32)
+        )).all())
+        from pydantic import TypeAdapter
+
+        previous_with_ambiguity = next(
+            (row for row in previous_users if (row.intent or {}).get("skill_ambiguity")),
+            None,
         )
         raw_prior = (
-            (previous_user.intent or {}).get("skill_ambiguity")
-            if previous_user is not None
-            else None
+            (previous_with_ambiguity.intent or {}).get("skill_ambiguity")
+            if previous_with_ambiguity is not None else None
         )
         if isinstance(raw_prior, list):
-            from pydantic import TypeAdapter
-
             try:
                 prior_skill_references = TypeAdapter(
                     list[SkillReference]
                 ).validate_python(raw_prior)
             except ValueError:
                 prior_skill_references = None
+        from app.models.tables import Composition, CompositionVersion
+
+        saved_version = await db.scalar(
+            select(CompositionVersion.id)
+            .join(Composition, CompositionVersion.composition_id == Composition.id)
+            .where(
+                Composition.origin_project_id == conversation.project_id,
+                Composition.owner_id == user_id,
+            )
+            .limit(1)
+        )
+        if saved_version is None:
+            from app.chat.conversation_context import context_items
+
+            active_draft = any(
+                (item.get("candidate") or {}).get("active", True)
+                and item.get("target_tool") == "design_video"
+                and '"draft_id"' in str(item.get("text") or "")
+                for item in context_items(conversation.context)
+            )
+            for index, previous_user in enumerate(previous_users):
+                if index and not active_draft:
+                    break
+                intent = previous_user.intent or {}
+                raw_skill = intent.get("skill")
+                if raw_skill is None or intent.get("skill_binding") == "inherited":
+                    continue
+                try:
+                    inherited_skill = TypeAdapter(SkillReference).validate_python(raw_skill)
+                except ValueError:
+                    inherited_skill = None
+                break
 
     try:
         skill_resolution = await resolve_chat_skill(
@@ -3117,6 +3114,19 @@ async def prepare_chat_turn(
             message=request.message,
             prior_references=prior_skill_references,
         )
+        if (
+            request.skill is None
+            and inherited_skill is not None
+            and skill_resolution.reference is None
+            and not skill_resolution.ambiguous
+        ):
+            inherited_binding = True
+            skill_resolution = await resolve_chat_skill(
+                db,
+                owner_id=user_id,
+                reference=inherited_skill,
+                message=request.message,
+            )
     except (SkillResolutionError, SkillNotFoundError) as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -3131,7 +3141,10 @@ async def prepare_chat_turn(
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
         intent=(
-            {"skill": skill_resolution.reference.model_dump(mode="json")}
+            {
+                "skill": skill_resolution.reference.model_dump(mode="json"),
+                **({"skill_binding": "inherited"} if inherited_binding else {}),
+            }
             if skill_resolution.reference is not None
             else {
                 "skill_ambiguity": [
@@ -3216,6 +3229,15 @@ async def prepare_chat_turn(
                     (pending.answer or {}).get("text") or request.message,
                 )
             await db.flush()
+
+    from app.chat.video_turn_seats import short_video_confirmation
+
+    if not (request.attachments or request.mentions or request.skill):
+        confirmation = await short_video_confirmation(
+            db, project, conversation_id, request.message, pending,
+        )
+        if confirmation is not None:
+            user_message.intent = {**(user_message.intent or {}), "video_confirmation": confirmation}
 
     interrupt_reply: Message | None = None
     plan_path = False
@@ -3376,7 +3398,11 @@ async def _lock_turn_for_transcript_write(
         .execution_options(populate_existing=True)
     )
     if turn_id not in _TURN_ROW_LOCKS_HELD.get():
-        query = query.with_for_update()
+        # FOR NO KEY UPDATE still serializes Stop, final commit and transcript
+        # writers, but permits the FOR KEY SHARE check made by INSERTs whose
+        # messages.turn_id references this opening row. Full FOR UPDATE makes
+        # an independent transcript Session wait on its own outer Start.
+        query = query.with_for_update(key_share=True)
     row = (await db.execute(query)).scalar_one_or_none()
     if (
         row is None
@@ -3545,6 +3571,9 @@ async def stop_turn_at_visible_frontier(
         for message_id, count in visible_prefix.items()
         if (by_id[message_id].content or "")[:count].strip()
     }
+
+    from app.chat.conversation_context import discard_turn_context
+    await discard_turn_context(db, row.conversation_id, user_message_id)
 
     if not visible_prose and not visible_activity and not visible_structure:
         await db.execute(
@@ -3722,6 +3751,7 @@ async def execute_chat_turn(
         with bind_conversation_turn(
             conversation_id=UUID(str(prepared.conversation.id)),
             turn_id=prepared.user_message.id,
+            project_id=prepared.conversation.project_id,
         ) as _usage_bind:
             if prepared.plan_path:
                 # The intent router's context excludes this turn's own message

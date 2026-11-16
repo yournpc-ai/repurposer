@@ -1,4 +1,4 @@
-"""Drive the Remotion render service for a renderable output (clip or film).
+"""Drive the Remotion render service for a renderable clip or video Output.
 
 The worker claims an output (``render_status=PENDING`` -> RENDERING) and calls
 this. It absolutizes the spec's storage-relative URLs (the spec stores relative
@@ -6,12 +6,10 @@ keys via the storage seam; the render service needs absolute URLs it can
 fetch), POSTs the spec to the render service (black box: spec -> MP4[+SRT]),
 and writes the resulting output keys back into ``output.files``.
 
-Two spec families (dispatch reads only ``spec.family``, ADR-016/ADR-119):
+Two spec families dispatch only on ``spec.family``:
 - clip (absent family): source/track URLs resolve through the track registry;
   the render yields video + srt.
-- film: ``ui.image`` / ``end.logo_url`` resolve here (the film-spec has no
-  track registry); the render yields video alone.
-- video (ADR-145): every clip's ``source.url`` resolves here (the video-spec
+- video: every clip's ``source.url`` resolves here (the video-spec
   carries storage keys, never absolute URLs, off the compiler); the render
   yields video alone.
 
@@ -73,29 +71,7 @@ def _resolve_url(value: str) -> str:
     return public_url(value) or value
 
 
-def _absolutize_film(spec: dict[str, Any]) -> dict[str, Any]:
-    """The film family's URL absolutization (no track registry — the
-    film-spec's URL-bearing slots: ui.image / end.logo_url / per-scene
-    narration ``audio`` / the ``music`` bed / composite elements' ``src``
-    (ADR-140))."""
-    for scene in spec.get("scenes") or []:
-        if scene.get("type") == "ui" and isinstance(scene.get("image"), str):
-            scene["image"] = _resolve_url(scene["image"])
-        if scene.get("type") == "end" and isinstance(scene.get("logo_url"), str):
-            scene["logo_url"] = _resolve_url(scene["logo_url"])
-        if isinstance(scene.get("audio"), str):
-            scene["audio"] = _resolve_url(scene["audio"])
-        if scene.get("type") == "composite":
-            for element in scene.get("elements") or []:
-                if isinstance(element.get("src"), str):
-                    element["src"] = _resolve_url(element["src"])
-    music = spec.get("music")
-    if isinstance(music, dict) and isinstance(music.get("url"), str):
-        music["url"] = _resolve_url(music["url"])
-    return spec
-
-
-def _absolutize_video(spec: dict[str, Any]) -> dict[str, Any]:
+def absolutize_video(spec: dict[str, Any]) -> dict[str, Any]:
     """Absolutize every video source/font key; digests stay unchanged."""
     for font in spec.get("fonts") or []:
         if isinstance(font.get("url"), str):
@@ -119,13 +95,11 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
       public base URL; those endpoints redirect to object storage.
 
     Any URL that is already absolute is left untouched. Dispatch reads only
-    ``spec.family`` (never node type/name): film/video → their own walks;
-    everything else → the clip track registry.
+    ``spec.family`` (never node type/name): video has its own walk;
+    everything else uses the clip track registry.
     """
-    if spec.get("family") == "film":
-        return _absolutize_film(spec)
     if spec.get("family") == "video":
-        return _absolutize_video(spec)
+        return absolutize_video(spec)
     # Registry fold (ADR-044): the slots to resolve are each track's declared
     # url_fields — a newly registered track's URLs absolutize with zero changes
     # here.
@@ -417,7 +391,7 @@ async def resolve_upload_retry(
             output is None
             or output.project_id != project.id
             or output.archived_at is not None
-            or output.type not in ("clip", "film", "video")
+            or output.type not in ("clip", "video")
             or output.render_spec is None
             or output.render_status != RenderStatus.FAILED
             or run.status != WorkflowStatus.FAILED
@@ -429,94 +403,6 @@ async def resolve_upload_retry(
     if len(candidates) > 1:
         return UPLOAD_RETRY_AMBIGUOUS
     return candidates[0]
-
-
-async def queue_upload_retry(
-    db: AsyncSession,
-    project: Project,
-    target: UploadRetryTarget,
-) -> UUID | str:
-    """Reopen the failed run for a free, upload-only recovery attempt.
-
-    The existing Output queue remains the claim source. The one-shot
-    ``upload_only`` intent rides the render step envelope, never film-spec or
-    clip-spec. No new run or paid production step is born.
-    """
-    output, step, run = target
-    # Serialize explicit recovery against another recovery on this project;
-    # the lock is acquired only after the model's tool call, never across LLM.
-    await db.get(Project, project.id, with_for_update=True)
-    active_id = await db.scalar(
-        select(WorkflowRun.id)
-        .where(
-            WorkflowRun.project_id == project.id,
-            WorkflowRun.id != run.id,
-            WorkflowRun.status.in_(
-                [
-                    WorkflowStatus.PENDING,
-                    WorkflowStatus.RUNNING,
-                    WorkflowStatus.WAITING_HUMAN,
-                ]
-            ),
-        )
-        .limit(1)
-    )
-    if active_id is not None:
-        return f"Another run is active in this project ({active_id}); upload recovery has not been queued."
-
-    run = await db.get(WorkflowRun, run.id, with_for_update=True)
-    step = await db.get(WorkflowStep, step.id, with_for_update=True)
-    output = await db.get(Output, output.id, with_for_update=True)
-    if (
-        run is None
-        or step is None
-        or output is None
-        or run.status != WorkflowStatus.FAILED
-        or step.status != "failed"
-        or not _upload_failure(step)
-        or output.render_status != RenderStatus.FAILED
-        or output.archived_at is not None
-    ):
-        return "The upload failure changed before recovery could be queued; read the current run and output state."
-
-    from app.pipeline.jobs import reset_output_render  # deferred: jobs ↔ rendering
-
-    reset_output_render(output)
-    lang = display_language(
-        run.context if isinstance(run.context, dict) else None,
-        project.language,
-    )
-    step_spec = {k: v for k, v in (step.spec or {}).items() if k != "failure"}
-    step_spec.update({
-        "upload_only": True,
-        "summary": user_line("render_upload", lang),
-    })
-    step.spec = step_spec
-    step.status = "pending"
-    step.error = None
-    # Keep the attempt monotonic: the render claim increments it, and replayable
-    # stage event ids must not collide with the failed render attempt.
-    step.claim_token = None
-    step.started_at = None
-    step.finished_at = None
-    run.status = WorkflowStatus.RUNNING
-    run.error = None
-    run.context = {
-        **(run.context or {}),
-        "upload_retry_count": int((run.context or {}).get("upload_retry_count") or 0) + 1,
-    }
-    project.status = ProjectStatus.PROCESSING
-    await db.flush()
-    statuses = list(
-        (await db.execute(select(WorkflowStep.status).where(WorkflowStep.run_id == run.id)))
-        .scalars()
-        .all()
-    )
-    settled = sum(s in ("done", "failed", "skipped") for s in statuses)
-    run.progress = int(settled / len(statuses) * 100) if statuses else 0
-    await db.flush()
-    logger.info("output_upload_retry_queued", output_id=str(output.id), run_id=str(run.id))
-    return UUID(str(run.id))
 
 
 async def _settle_claimed_render_stages(
@@ -589,7 +475,7 @@ async def _record_delivery_admission(output_id: UUID, claim_token: UUID) -> None
         )
 
 
-async def render_output(output_id: UUID) -> None:
+async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) -> None:
     """Render a claimed output via the render service; persist terminal state.
 
     Assumes the output is already claimed (RENDERING). On success writes
@@ -601,6 +487,12 @@ async def render_output(output_id: UUID) -> None:
     parked idle-in-transaction there invites lock pileups), and a fresh short
     session lands the guarded terminal write.
     """
+    # Tool recovery owns only the Output transfer. Its original Run and stage
+    # receipts remain historical facts, and it never starts paid work.
+    async def recovery_aware(effect, *args, **kwargs):
+        if not upload_only_recovery:
+            await effect(*args, **kwargs)
+
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Output, Project)
@@ -640,8 +532,8 @@ async def render_output(output_id: UUID) -> None:
             )
             await db.commit()
             if failed.rowcount:
-                await _settle_claimed_render_stages(output_id, mine, "failed")
-                await _mirror_render_node(
+                await recovery_aware(_settle_claimed_render_stages, output_id, mine, "failed")
+                await recovery_aware(_mirror_render_node,
                     output_id, "failed", user_line("render_failed", lang)
                 )
             else:
@@ -652,9 +544,8 @@ async def render_output(output_id: UUID) -> None:
         # Snapshot everything the render + terminal write need as plain data —
         # the ORM objects die with this session.
         spec = _absolutize(copy.deepcopy(output.render_spec))
-        # film + video both render to video alone (subtitles burn into the
-        # picture; no caption sidecar artifact).
-        no_sidecar = spec.get("family") in ("film", "video")
+        # Video subtitles burn into the picture; there is no sidecar.
+        no_sidecar = spec.get("family") == "video"
         files = dict(output.files or {})
         project_id = output.project_id
         # 素材源缓存桥 (2026-10-07): the render service stages sources into the
@@ -683,12 +574,15 @@ async def render_output(output_id: UUID) -> None:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        upload_only = bool(
+        upload_only = upload_only_recovery or bool(
             request_step is not None
             and (request_step.spec or {}).get("upload_only") is True
         )
 
-    failure = {"stage": "render", "codes": ["RENDER_FAILED"]}
+    failure = (
+        {"stage": "upload", "codes": ["UPLOAD_FAILED"]}
+        if upload_only_recovery else {"stage": "render", "codes": ["RENDER_FAILED"]}
+    )
     old_video_key = files.get("video")
     old_srt_key = files.get("srt")
     try:
@@ -696,9 +590,7 @@ async def render_output(output_id: UUID) -> None:
         video_key = await get_output_path(
             project_id, user_id, f"{output_id}-{render_ts}.mp4"
         )
-        # film + video render to video alone (no caption track → no SRT
-        # artifact; the render service's film/video branches likewise
-        # require only video).
+        # Video renders without an SRT sidecar.
         srt_key = (
             None
             if no_sidecar
@@ -743,7 +635,11 @@ async def render_output(output_id: UUID) -> None:
         async with httpx.AsyncClient(
             timeout=settings.render_timeout_seconds, trust_env=False
         ) as client:
-            resp = await client.post(settings.render_url, json=payload)
+            resp = await client.post(
+                settings.render_url.removesuffix("/render") + "/upload"
+                if upload_only_recovery else settings.render_url,
+                json=payload,
+            )
             if resp.is_error:
                 try:
                     error_data = resp.json()
@@ -792,14 +688,14 @@ async def render_output(output_id: UUID) -> None:
                 )
                 await db.commit()
             if failed.rowcount:
-                await _settle_claimed_render_stages(output_id, mine, "failed")
-                await _stamp_render_failure(
+                await recovery_aware(_settle_claimed_render_stages, output_id, mine, "failed")
+                await recovery_aware(_stamp_render_failure,
                     output_id, {"stage": "probe", "codes": codes, "detail": detail}
                 )
-                await _mirror_render_node(
+                await recovery_aware(_mirror_render_node,
                     output_id, "failed", user_line("render_failed", lang)
                 )
-                await _finalize_owning_run(output_id)
+                await recovery_aware(_finalize_owning_run, output_id)
             else:
                 # Fenced (a morph re-pended mid-render): this render's product
                 # is stale regardless of probe outcome — discard the object
@@ -848,7 +744,7 @@ async def render_output(output_id: UUID) -> None:
                     render_error=None,
                 )
             )
-            if claimed.rowcount and spec.get("family") == "video":
+            if claimed.rowcount and spec.get("family") == "video" and not upload_only_recovery:
                 from app.tools.video.production import capture_video_render
                 await capture_video_render(db, output_id)
             await db.commit()
@@ -863,15 +759,15 @@ async def render_output(output_id: UUID) -> None:
                         key=orphan_key,
                         error=str(e),
                     )
-            await _mirror_superseded_node(output_id, lang)
+            await recovery_aware(_mirror_superseded_node, output_id, lang)
             return
         # The fresh artifacts passed the probe and the fenced Output write
         # committed. Render/upload completion and delivery admission remain
         # separate facts; neither is inferred from run terminal or Output existence.
-        await _settle_claimed_render_stages(output_id, mine, "completed")
-        await _record_delivery_admission(output_id, mine)
-        await _mirror_render_node(output_id, "done")
-        await _finalize_owning_run(output_id)
+        await recovery_aware(_settle_claimed_render_stages, output_id, mine, "completed")
+        await recovery_aware(_record_delivery_admission, output_id, mine)
+        await recovery_aware(_mirror_render_node, output_id, "done")
+        await recovery_aware(_finalize_owning_run, output_id)
 
         # Best-effort cleanup of the previous render's objects. Only bare
         # keys are deletable; legacy /api/v1 paths and absolute URLs are
@@ -922,16 +818,16 @@ async def render_output(output_id: UUID) -> None:
             if failure["stage"] == "upload" and not upload_only:
                 # The renderer's explicit upload-stage error proves rendering
                 # finished; only the upload failed. No delivery is admitted.
-                await _settle_claimed_render_stages(
+                await recovery_aware(_settle_claimed_render_stages,
                     output_id, mine, "completed", kind="render"
                 )
-                await _settle_claimed_render_stages(
+                await recovery_aware(_settle_claimed_render_stages,
                     output_id, mine, "failed", kind="upload"
                 )
             else:
-                await _settle_claimed_render_stages(output_id, mine, "failed")
-            await _stamp_render_failure(output_id, failure)
-            await _mirror_render_node(
+                await recovery_aware(_settle_claimed_render_stages, output_id, mine, "failed")
+            await recovery_aware(_stamp_render_failure, output_id, failure)
+            await recovery_aware(_mirror_render_node,
                 output_id, "failed", error_line
             )
-            await _finalize_owning_run(output_id)
+            await recovery_aware(_finalize_owning_run, output_id)

@@ -1,0 +1,33 @@
+{# mg_director.j2 — the no-skill motion-graphics design contract. Input is
+   the exact on-screen copy (the user's own or the chat model's distilled
+   text); the director paces it into 1–6 text scenes. Mirror contract:
+   field bounds are editing/director.py's MgDirection; presets are
+   tools/video/design.py's MG entrance vocabulary. #}
+You are designing a short motion-graphics video: editable typography, spatial relationships and native vector graphics. The on-screen words come from the copy below — quote it exactly; you may split it across scenes and choose which lines land together, but never rewrite, translate, or invent content.
+
+THE COPY:
+{{ text }}
+
+{% if narration %}SPOKEN COPY:
+{{ narration }}
+Narration is enabled. Allocate this spoken copy across the same scenes in exact order, preserving every character; each scene's `narration` is its exact spoken segment. Do not rewrite, translate, or invent narration.{% else %}Narration is off; every scene's `narration` is null.{% endif %}
+{% if language %}The video's language: {{ language }}.{% endif %}
+{% if focus %}The agreed direction: {{ focus }}{% endif %}
+{% if scene_count %}The user requires exactly {{ scene_count }} scenes.{% endif %}
+{% if target_seconds %}The exact total duration is {{ target_seconds }} seconds. Allocate it across the scenes; short scenes are allowed.{% endif %}
+{% if instruction %}DESIGN REQUIREMENTS:
+{{ instruction }}
+{% if current %}CURRENT DESIGN:
+{{ current }}{% endif %}{% endif %}
+
+Paragraph breaks are not mandatory scene cuts. Choose scenes and reading beats from the content, with enough time for entrances and a static reading hold; do not default to three scenes.
+
+Design 1–6 scenes, honoring the exact count and total duration above when supplied. For each: `lines` (legacy simple text block, or [] when using text_beats), `duration_seconds` (positive, up to 30; the whole piece stays within 118s), `enter` (fade | rise | lines | words | graphemes — how the text enters), `size` (medium | large | hero), `align`, an optional `color` (hex), a short `intent` (what this beat is for), and `visual_description` (one plain sentence naming the real elements and their motion — never elements that do not exist). Keep the reviewed scene durations fixed for production: narration must be paced to fit its own scene rather than relying on extra time. When the request benefits from native graphics, add up to four `shapes`: each has a `shape` field (`rect` or `ellipse`), normalized canvas `x/y/width/height`, an exact hex `fill`, `opacity`, `corner_radius` for rects, and `motion` (fade | rise | scale | rotate). Shapes are independently editable visual elements; use them to express relationships, contrast or accumulation when useful, rather than adding arbitrary decoration. Omit `shapes` when the copy alone is stronger. Pace for reading within the user's duration.
+
+For expressive text animation, use `text_beats` instead of a paragraph-sized `lines` block. Each beat is an independently editable TextObject with `lines` (1–3 exact source fragments, each <=40 characters), `start_seconds`, `end_seconds` (scene-local), normalized `x`, `y`, `width`, `height` within the canvas, `font_size` (24–200 canvas pixels), `weight` (400/500/600/700/800/900), optional hex `color`, `align`, `enter`, and `drift`. Use 1–12 beats per scene, list them in source reading order with nondecreasing starts, and include every source character exactly once across the work. Set scene `lines=[]` when beats are used. Beats may coexist on separate layers or replace each other in the same space. Their windows must fit the scene and allow both entrance and a readable hold (at least max(1.2 seconds, character count / 8)). Use meaningful hierarchy: a short premise, a visual contrast, a supporting phrase, a conclusion. Do not leave three long paragraphs on screen for 30 seconds each. Derive total duration from reading and movement, not from the per-scene maximum. Choose a palette and composition for this content; dark backgrounds and centered white text are options, not defaults. Do not repeat words just to create emphasis. Fill visual_description with 2–3 concrete clauses: the main subject and its position/scale/hierarchy, the real entrance or movement sequence, and the final reading hold. Describe only effects expressed by the returned objects and their available motion fields; avoid null or generic adjectives.
+
+Return exactly the root fields `name`, `language`, `background`, and `scenes`. The solid field color is `background` (hex), not background_color; there is no root duration field. {% if background %}The user has fixed background={{ background }}; choose text and shapes against that field.{% else %}Choose background and text colors together as a readable palette. Omitting background uses the dark field #0B1020, so dark text needs an explicit light background.{% endif %}
+
+Each scene may also set `drift`: none | push_in | pull_out (default none). push_in/pull_out continuously scales the text plane by 3.5% across the scene, independently of its entrance. Use this for a requested subtle push or pull in a text short. `enter=words` is staggered word opacity, not word rise; `enter=rise` moves the whole text block. Describe only these actual selected motions, without invented camera paths or invented word timings.
+
+Answer with the JSON object only.

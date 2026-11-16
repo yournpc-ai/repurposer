@@ -21,7 +21,12 @@ read face for the future Chat surface (§2.2: an explicit version read, never
 
 from __future__ import annotations
 
+from copy import deepcopy
+import json
+from typing import Any
 from uuid import UUID, uuid4
+
+from pydantic import ValidationError
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +36,7 @@ from app.editing.edits import BindSource, EditError, Op, apply_ops
 from app.editing.schemas import CompositionContent
 from app.editing.timing import DEFAULT_TIMEBASE
 from app.editing.validators import (
+    ContentValidationError,
     SnapshotFacts,
     validate_content,
 )
@@ -62,14 +68,150 @@ class ContentDigestMismatch(EditingError):
     """The caller's expected content digest does not match the base version."""
 
 
+class CandidateContentError(EditingError):
+    """A direct final-content candidate failed before any version was saved."""
+
+    def __init__(self, reason: str, *, content: dict[str, Any], errors: list[dict]):
+        super().__init__(reason)
+        self.content = deepcopy(content)
+        self.errors = deepcopy(errors)
+        self.issues = deepcopy(errors)
+
+
+def _raw_clips(content: dict[str, Any]):
+    timeline = content.get("timeline")
+    if not isinstance(timeline, dict):
+        return
+    tracks = timeline.get("tracks")
+    if not isinstance(tracks, list):
+        return
+    for track in tracks:
+        if not isinstance(track, dict) or not isinstance(track.get("clips"), list):
+            continue
+        for clip in track["clips"]:
+            if isinstance(clip, dict):
+                yield clip
+
+
+def _snapshot_id(value: Any) -> UUID | None:
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _raw_snapshot_ids(content: dict[str, Any]) -> set[UUID]:
+    ids: set[UUID] = set()
+    sources = content.get("sources")
+    if isinstance(sources, list):
+        for binding in sources:
+            if isinstance(binding, dict) and (sid := _snapshot_id(binding.get("snapshot_id"))) is not None:
+                ids.add(sid)
+    for clip in _raw_clips(content):
+        source = clip.get("source")
+        if isinstance(source, dict) and (sid := _snapshot_id(source.get("snapshot_id"))) is not None:
+            ids.add(sid)
+        obj = clip.get("object")
+        project = obj.get("project") if isinstance(obj, dict) else None
+        resources = project.get("resources") if isinstance(project, dict) else None
+        if isinstance(resources, list):
+            for resource in resources:
+                if isinstance(resource, dict) and (sid := _snapshot_id(resource.get("snapshot_id"))) is not None:
+                    ids.add(sid)
+    return ids
+
+
+def _resolve_raw_snapshot_references(
+    content: dict[str, Any], facts: SnapshotFacts, *, owner_id: UUID
+) -> dict[str, Any]:
+    """Pin immutable snapshot digests from server facts, never model prose."""
+    resolved = deepcopy(content)
+    ids = _raw_snapshot_ids(resolved)
+    for snapshot_id in ids:
+        fact = facts.get(snapshot_id)
+        if fact is None or fact.get("owner_id") != owner_id:
+            raise EditError(f"snapshot {snapshot_id} is not accessible to this user")
+    sources = resolved.get("sources")
+    if sources is None:
+        sources = []
+        resolved["sources"] = sources
+    if not isinstance(sources, list):
+        return resolved
+    bound: set[UUID] = set()
+    for binding in sources:
+        if not isinstance(binding, dict):
+            continue
+        snapshot_id = _snapshot_id(binding.get("snapshot_id"))
+        if snapshot_id is not None and snapshot_id in facts:
+            binding["snapshot_digest"] = facts[snapshot_id]["digest"]
+            bound.add(snapshot_id)
+    for clip in _raw_clips(resolved):
+        source = clip.get("source")
+        if isinstance(source, dict):
+            snapshot_id = _snapshot_id(source.get("snapshot_id"))
+            if snapshot_id is not None and snapshot_id in facts:
+                source["snapshot_digest"] = facts[snapshot_id]["digest"]
+        obj = clip.get("object")
+        project = obj.get("project") if isinstance(obj, dict) else None
+        resources = project.get("resources") if isinstance(project, dict) else None
+        if isinstance(resources, list):
+            for resource in resources:
+                if not isinstance(resource, dict):
+                    continue
+                snapshot_id = _snapshot_id(resource.get("snapshot_id"))
+                if snapshot_id is not None and snapshot_id in facts:
+                    resource["snapshot_digest"] = facts[snapshot_id]["digest"]
+    for snapshot_id in sorted(_raw_snapshot_ids(resolved) - bound, key=str):
+        sources.append({
+            "snapshot_id": str(snapshot_id),
+            "snapshot_digest": facts[snapshot_id]["digest"],
+        })
+    return resolved
+
+
+def _candidate_errors(exc: Exception) -> list[dict]:
+    if isinstance(exc, ValidationError):
+        return json.loads(exc.json(include_input=False, include_url=False))
+    issues = getattr(exc, "issues", None)
+    if issues:
+        return deepcopy(issues)
+    return [{"loc": [], "type": "content_validation", "msg": str(exc)}]
+
+
 def content_of(version: CompositionVersion) -> CompositionContent:
-    """Reassemble the typed content from a version row's four columns."""
+    """Reassemble typed content, mapping only legacy persisted Generator names.
+
+    The compatibility copy never writes the version row or recomputes its stored
+    content_digest; every newly saved version serializes ``producer`` only.
+    """
+    timeline = deepcopy(version.timeline)
+    if isinstance(timeline, dict):
+        for track in timeline.get("tracks") or []:
+            if not isinstance(track, dict):
+                continue
+            for clip in track.get("clips") or []:
+                if not isinstance(clip, dict):
+                    continue
+                obj = clip.get("object")
+                if not isinstance(obj, dict) or obj.get("kind") != "generator":
+                    continue
+                legacy_runtime = obj.get("runtime")
+                if not isinstance(legacy_runtime, str):
+                    continue
+                producer = {
+                    "drawing-v1": "draw-2d",
+                    "component-v1": "remotion-project",
+                    "image-v1": "image-generation",
+                }.get(legacy_runtime)
+                if producer is not None and "producer" not in obj:
+                    obj.pop("runtime")
+                    obj["producer"] = producer
     return CompositionContent(
         schema_version=version.schema_version,
         settings=version.settings,
         sources=version.sources,
         scenes=version.scenes,
-        timeline=version.timeline,
+        timeline=timeline,
     )
 
 
@@ -184,7 +326,8 @@ async def apply_composition_edits(
     db: AsyncSession,
     *,
     owner_id: UUID,
-    ops: list[Op],
+    ops: list[Op] | None = None,
+    content: dict[str, Any] | CompositionContent | None = None,
     request_id: str | None = None,
     composition_id: UUID | None = None,
     base_version_id: UUID | None = None,
@@ -193,15 +336,20 @@ async def apply_composition_edits(
     name: str = "",
     skill_provenance: dict | None = None,
 ) -> tuple[Composition, CompositionVersion, bool]:
-    """The single content write door. Returns (composition, version, replayed)
-    — ``replayed=True`` means the request_id matched a committed version and
-    NOTHING new was written (the retry's honest answer).
+    """The single content write door. Returns (composition, version, replayed).
 
-    Create path: ``composition_id=None`` births a Composition whose version 1
-    is built from EMPTY content + the op batch (the batch must add settings,
-    tracks and clips — the whole-candidate validation decides sufficiency).
-    Edit path: the batch rides on the base version's content.
+    Internal deterministic callers may still supply ``ops``. Chat authoring
+    supplies the complete final ``content`` instead; both paths share the same
+    owner/base checks, immutable snapshot resolution, whole-candidate
+    validation, idempotency and immutable-version commit.
     """
+    if (ops is None) == (content is None):
+        raise EditingError("supply exactly one of ops or complete content")
+    direct_content = (
+        content.model_dump(mode="json") if isinstance(content, CompositionContent)
+        else deepcopy(content) if content is not None
+        else None
+    )
     request_digest = (
         canonical_json_hash({
             "owner_id": owner_id,
@@ -212,7 +360,8 @@ async def apply_composition_edits(
             "origin_project_id": origin_project_id,
             "name": name,
             "skill_provenance": skill_provenance,
-            "ops": [op.model_dump(mode="json") for op in ops],
+            "content": direct_content,
+            "ops": [op.model_dump(mode="json") for op in ops] if ops is not None else None,
         })
         if request_id is not None
         else None
@@ -278,24 +427,33 @@ async def apply_composition_edits(
                 )
             base_content = content_of(base_version)
 
-        # --- resolve bound snapshots (the digest source of truth) -----------
-        bind_ids = {op.snapshot_id for op in ops if isinstance(op, BindSource)}
-        referenced_ids = {
-            b.snapshot_id for b in base_content.sources
-        }
-        facts = await snapshot_facts(db, bind_ids | referenced_ids)
-        for sid in bind_ids:
-            if sid not in facts:
-                raise EditError(f"snapshot {sid} does not exist")
-            if facts[sid]["owner_id"] != owner_id:
-                raise PermissionDenied(f"snapshot {sid} belongs to another user")
-        bound_digests = {sid: f["digest"] for sid, f in facts.items()}
-
-        # --- pure batch apply + whole-candidate validation -------------------
-        candidate = apply_ops(base_content, ops, bound_digests)
-        candidate_ids = {b.snapshot_id for b in candidate.sources}
-        candidate_facts = await snapshot_facts(db, candidate_ids)
-        validate_content(candidate, candidate_facts)
+        if direct_content is not None:
+            # Direct authoring is already the complete final work. Resolve all
+            # immutable media identities before strict schema + semantic checks.
+            direct_facts = await snapshot_facts(db, _raw_snapshot_ids(direct_content))
+            direct_content = _resolve_raw_snapshot_references(
+                direct_content, direct_facts, owner_id=owner_id
+            )
+            candidate = CompositionContent.model_validate(direct_content)
+            candidate_ids = {b.snapshot_id for b in candidate.sources}
+            candidate_facts = await snapshot_facts(db, candidate_ids)
+            validate_content(candidate, candidate_facts)
+        else:
+            assert ops is not None
+            # --- internal deterministic op batch -----------------------------
+            bind_ids = {op.snapshot_id for op in ops if isinstance(op, BindSource)}
+            referenced_ids = {b.snapshot_id for b in base_content.sources}
+            facts = await snapshot_facts(db, bind_ids | referenced_ids)
+            for sid in bind_ids:
+                if sid not in facts:
+                    raise EditError(f"snapshot {sid} does not exist")
+                if facts[sid]["owner_id"] != owner_id:
+                    raise PermissionDenied(f"snapshot {sid} belongs to another user")
+            bound_digests = {sid: f["digest"] for sid, f in facts.items()}
+            candidate = apply_ops(base_content, ops, bound_digests)
+            candidate_ids = {b.snapshot_id for b in candidate.sources}
+            candidate_facts = await snapshot_facts(db, candidate_ids)
+            validate_content(candidate, candidate_facts)
 
         # --- land the version + move the head (same transaction) -------------
         version = CompositionVersion(
@@ -330,12 +488,19 @@ async def apply_composition_edits(
         composition.current_version_id = version.id
         await db.commit()
         return composition, version, False
-    except Exception:
-        # No half-versions: any failure rolls the whole transaction back —
-        # the composition row (create path), the version row and the head
-        # pointer land together or not at all. Attributes are never read
-        # after the rollback (expired ORM state is a MissingGreenlet trap).
+    except Exception as exc:
+        # No half-versions: any failure rolls the whole transaction back. Keep
+        # the direct candidate in local raw JSON before rollback so Chat can
+        # retain it as an uncommitted working draft without a DB side write.
+        raw_candidate = deepcopy(direct_content) if direct_content is not None else None
+        errors = _candidate_errors(exc) if raw_candidate is not None else []
         await db.rollback()
+        if raw_candidate is not None and isinstance(
+            exc, (ValidationError, ContentValidationError, EditError)
+        ):
+            raise CandidateContentError(
+                str(exc), content=raw_candidate, errors=errors
+            ) from exc
         raise
 
 

@@ -1,0 +1,521 @@
+// The video composition: tracks → clips → objects over the output timeline.
+// TextPart identity/timing and all frame quantization arrive compiled; this
+// adapter only evaluates values and paints the explicit inline layout.
+import React from "react";
+import {
+  AbsoluteFill,
+  Audio,
+  Img,
+  OffthreadVideo,
+  Sequence,
+  cancelRender,
+  continueRender,
+  delayRender,
+  useCurrentFrame,
+} from "remotion";
+
+import {
+  evaluateProperty,
+  type AnimValue,
+  type VideoClip,
+  type VideoSpec,
+  type VideoTextObject,
+  type VideoTextPart,
+} from "@repurposer/video-spec";
+
+function scalar(v: AnimValue | undefined, fallback: number): number {
+  return typeof v === "number" ? v : fallback;
+}
+
+function stringValue(v: AnimValue | undefined, fallback: string): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+function vec2(v: AnimValue | undefined): [number, number] | undefined {
+  return Array.isArray(v) ? [v[0], v[1]] : undefined;
+}
+
+const gainLinear = (db: number) => Math.pow(10, db / 20);
+const originCss = (origin: "center" | "top_left") =>
+  origin === "top_left" ? "0% 0%" : "50% 50%";
+
+const FontResources: React.FC<{
+  fonts: VideoSpec["fonts"];
+  onReady?: () => void;
+  onError?: () => void;
+}> = ({ fonts, onReady, onError }) => {
+  const [handle] = React.useState(() => delayRender("video: loading pinned font resources"));
+  React.useEffect(() => {
+    let active = true;
+    Promise.all(
+      fonts.map(async (resource) => {
+        const face = new FontFace(
+          resource.family,
+          `url(${JSON.stringify(resource.url)}) format("${resource.format}")`,
+          {
+            style: "normal",
+            weight: String(resource.weight),
+            ...(resource.unicode_range ? { unicodeRange: resource.unicode_range } : {}),
+          },
+        );
+        await face.load();
+        if (active) {
+          (document.fonts as FontFaceSet & { add(font: FontFace): void }).add(face);
+        }
+      }),
+    )
+      .then(() => {
+        if (active) {
+          continueRender(handle);
+          onReady?.();
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (onError) {
+          continueRender(handle);
+          onError();
+          return;
+        }
+        cancelRender(error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fonts, handle, onReady, onError]);
+  return null;
+};
+
+function wholeObjectStyle(clip: VideoClip, frame: number): React.CSSProperties {
+  const obj = clip.object;
+  if (obj.kind === "audio") throw new Error("audio object has no visual layout");
+  const { animations } = clip;
+  const position =
+    vec2(evaluateProperty(animations, obj.object_id, "transform.position", frame)) ??
+    ([0, 0] as [number, number]);
+  const scale = scalar(
+    evaluateProperty(animations, obj.object_id, "transform.scale", frame),
+    obj.transform.scale,
+  );
+  const rotation = scalar(
+    evaluateProperty(animations, obj.object_id, "transform.rotation", frame),
+    obj.transform.rotation,
+  );
+  const opacity = scalar(
+    evaluateProperty(animations, obj.object_id, "opacity", frame),
+    obj.opacity,
+  );
+  const blur = scalar(
+    evaluateProperty(animations, obj.object_id, "filter.blur", frame),
+    0,
+  ) ?? 0;
+  return {
+    position: "absolute",
+    left: obj.layout.x,
+    top: obj.layout.y,
+    width: obj.layout.width,
+    height: obj.layout.height,
+    opacity,
+    filter: blur > 0 ? `blur(${blur}px)` : undefined,
+    transformOrigin: originCss(obj.transform.origin),
+    transform: `translate(${obj.transform.x + position[0]}px, ${
+      obj.transform.y + position[1]
+    }px) scale(${scale}) rotate(${rotation}deg)`,
+  };
+}
+
+function textPaintStyle(
+  clip: VideoClip & { object: VideoTextObject },
+  frame: number,
+  textPartId: string | null = null,
+): React.CSSProperties {
+  const { animations, object } = clip;
+  const objectId = object.object_id;
+  const base = object.style;
+  const wholeColor = stringValue(
+    evaluateProperty(animations, objectId, "text.color", frame),
+    base.color,
+  );
+  const wholeWeight = scalar(
+    evaluateProperty(animations, objectId, "text.weight", frame),
+    base.weight,
+  );
+  const wholeStrokeColor = stringValue(
+    evaluateProperty(animations, objectId, "text.stroke_color", frame),
+    base.stroke?.color ?? "transparent",
+  );
+  const wholeStrokeWidth = scalar(
+    evaluateProperty(animations, objectId, "text.stroke_width", frame),
+    base.stroke?.width ?? 0,
+  );
+  const color =
+    textPartId === null
+      ? wholeColor
+      : stringValue(
+          evaluateProperty(animations, objectId, "text.color", frame, textPartId),
+          wholeColor,
+        );
+  const weight =
+    textPartId === null
+      ? wholeWeight
+      : scalar(
+          evaluateProperty(animations, objectId, "text.weight", frame, textPartId),
+          wholeWeight,
+        );
+  const strokeColor =
+    textPartId === null
+      ? wholeStrokeColor
+      : stringValue(
+          evaluateProperty(animations, objectId, "text.stroke_color", frame, textPartId),
+          wholeStrokeColor,
+        );
+  const strokeWidth =
+    textPartId === null
+      ? wholeStrokeWidth
+      : scalar(
+          evaluateProperty(animations, objectId, "text.stroke_width", frame, textPartId),
+          wholeStrokeWidth,
+        );
+  const shadow = base.shadow;
+  return {
+    color,
+    fontWeight: weight,
+    WebkitTextStrokeColor: strokeColor,
+    WebkitTextStrokeWidth: strokeWidth,
+    ...(textPartId === null && shadow
+      ? {
+          textShadow: `${shadow.offset[0]}px ${shadow.offset[1]}px ${shadow.blur}px ${shadow.color}`,
+        }
+      : {}),
+  };
+}
+
+function textPartStyle(
+  clip: VideoClip & { object: VideoTextObject },
+  part: VideoTextPart,
+  frame: number,
+  line: boolean,
+): React.CSSProperties {
+  const objectId = clip.object.object_id;
+  const position =
+    vec2(evaluateProperty(clip.animations, objectId, "transform.position", frame, part.part_id)) ??
+    ([0, 0] as [number, number]);
+  const scale = scalar(
+    evaluateProperty(clip.animations, objectId, "transform.scale", frame, part.part_id),
+    1,
+  );
+  const rotation = scalar(
+    evaluateProperty(clip.animations, objectId, "transform.rotation", frame, part.part_id),
+    0,
+  );
+  const opacity = scalar(
+    evaluateProperty(clip.animations, objectId, "opacity", frame, part.part_id),
+    1,
+  );
+  const blur = scalar(
+    evaluateProperty(clip.animations, objectId, "filter.blur", frame, part.part_id),
+    0,
+  ) ?? 0;
+  const wholeLetterSpacing = scalar(
+    evaluateProperty(clip.animations, objectId, "text.letter_spacing", frame),
+    clip.object.style.letter_spacing,
+  );
+  const letterSpacing = scalar(
+    evaluateProperty(clip.animations, objectId, "text.letter_spacing", frame, part.part_id),
+    wholeLetterSpacing,
+  );
+  return {
+    ...textPaintStyle(clip, frame, part.part_id),
+    display: line ? "block" : "inline-block",
+    whiteSpace: line ? "pre-wrap" : "pre",
+    opacity,
+    filter: blur > 0 ? `blur(${blur}px)` : undefined,
+    letterSpacing: `${letterSpacing}em`,
+    transformOrigin: "50% 50%",
+    transform: `translate(${position[0]}px, ${position[1]}px) scale(${scale}) rotate(${rotation}deg)`,
+  };
+}
+
+function targetedParts(
+  object: VideoTextObject,
+  kind: "word" | "grapheme",
+  line: VideoTextPart,
+): VideoTextPart[] {
+  return object.parts
+    .filter(
+      (part) =>
+        part.kind === kind &&
+        part.layout_range.start === line.text_range.start &&
+        part.layout_range.end === line.text_range.end,
+    )
+    .sort((a, b) => a.text_range.start - b.text_range.start);
+}
+
+const TextLine: React.FC<{
+  clip: VideoClip & { object: VideoTextObject };
+  line: VideoTextPart;
+  granular: "word" | "grapheme" | null;
+  frame: number;
+}> = ({ clip, line, granular, frame }) => {
+  const object = clip.object;
+  if (!granular) {
+    return <div style={textPartStyle(clip, line, frame, true)}>{line.text || "​"}</div>;
+  }
+  const parts = targetedParts(object, granular, line);
+  const chars = Array.from(object.text);
+  const children: React.ReactNode[] = [];
+  let cursor = line.text_range.start;
+  for (const part of parts) {
+    if (part.text_range.start < cursor) {
+      throw new Error(`overlapping TextParts in ${object.object_id}`);
+    }
+    if (part.text_range.start > cursor) {
+      children.push(chars.slice(cursor, part.text_range.start).join(""));
+    }
+    children.push(
+      <span key={part.part_id} style={textPartStyle(clip, part, frame, false)}>
+        {part.text}
+      </span>,
+    );
+    cursor = part.text_range.end;
+  }
+  if (cursor < line.text_range.end) children.push(chars.slice(cursor, line.text_range.end).join(""));
+  if (children.length === 0) children.push("​");
+  return <div style={textPartStyle(clip, line, frame, true)}>{children}</div>;
+};
+
+const TextObjectView: React.FC<{
+  clip: VideoClip & { object: VideoTextObject };
+  fonts: VideoSpec["fonts"];
+  frame: number;
+}> = ({ clip, fonts, frame }) => {
+  const object = clip.object;
+  const families = fonts.filter(
+    (resource) =>
+      resource.font_id === object.style.font.font_id &&
+      resource.font_set_digest === object.style.font.digest,
+  );
+  if (families.length === 0) throw new Error(`no pinned font for ${object.object_id}`);
+  const partKinds = new Set(
+    object.parts
+      .filter((part) =>
+        clip.animations.some((animation) => animation.target_text_part_id === part.part_id),
+      )
+      .map((part) => part.kind),
+  );
+  const granular = partKinds.has("grapheme") ? "grapheme" : partKinds.has("word") ? "word" : null;
+  const lines = object.parts.filter((part) => part.kind === "line");
+  const letterSpacing = scalar(
+    evaluateProperty(clip.animations, object.object_id, "text.letter_spacing", frame),
+    object.style.letter_spacing,
+  );
+  return (
+    <div
+      style={{
+        ...wholeObjectStyle(clip, frame),
+        ...textPaintStyle(clip, frame),
+        background: object.style.background ?? "transparent",
+        fontFamily: families.map((resource) => resource.family).join(", "),
+        fontSynthesis: "none",
+        fontSize: object.style.font_size,
+        textAlign: object.style.align,
+        letterSpacing: `${letterSpacing}em`,
+        lineHeight: object.style.line_height,
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {lines.map((line) => (
+        <TextLine
+          key={line.part_id}
+          clip={clip}
+          line={line}
+          granular={granular}
+          frame={frame}
+        />
+      ))}
+    </div>
+  );
+};
+
+const VideoObjectView: React.FC<{ clip: VideoClip; frame: number; gain: number }> = ({ clip, frame, gain }) => {
+  if (clip.object.kind !== "video" || !clip.source) return null;
+  const object = clip.object;
+  const base = gainLinear(object.gain_db) * gain;
+  const gainAnim = clip.animations.find(
+    (animation) =>
+      animation.target_object_id === object.object_id &&
+      animation.target_text_part_id === null &&
+      animation.property === "audio.gain",
+  );
+  return (
+    <div style={wholeObjectStyle(clip, frame)}>
+      <OffthreadVideo
+        src={clip.source.url}
+        startFrom={clip.source.start_frame ?? 0}
+        endAt={clip.source.end_frame}
+        muted={object.muted}
+        volume={
+          gainAnim
+            ? (localFrame) =>
+                base *
+                scalar(
+                  evaluateProperty(clip.animations, object.object_id, "audio.gain", localFrame),
+                  1,
+                )
+            : base
+        }
+        style={{ width: "100%", height: "100%", objectFit: object.fit }}
+      />
+    </div>
+  );
+};
+
+const ShapeObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, frame }) => {
+  if (clip.object.kind !== "shape") return null;
+  const object = clip.object;
+  const { width, height } = object.layout;
+  const paint = {
+    fill: object.fill ?? "none",
+    stroke: object.stroke ?? "none",
+    strokeWidth: object.stroke_width,
+  };
+  const reveal = scalar(
+    evaluateProperty(clip.animations, object.object_id, "path.reveal", frame),
+    1,
+  );
+  return (
+    <div style={wholeObjectStyle(clip, frame)}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        role="presentation"
+      >
+        {object.shape === "rect" ? (
+          <rect x={0} y={0} width={width} height={height} rx={object.corner_radius} {...paint} />
+        ) : object.shape === "ellipse" ? (
+          <ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} {...paint} />
+        ) : (
+          <path
+            d={object.path ?? ""}
+            {...paint}
+            pathLength={1}
+            strokeDasharray={1}
+            strokeDashoffset={1 - reveal}
+          />
+        )}
+      </svg>
+    </div>
+  );
+};
+
+const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"]; gain: number }> = ({
+  clip,
+  fonts,
+  gain,
+}) => {
+  const frame = useCurrentFrame();
+  const obj = clip.object;
+  if (obj.kind === "audio") return null;
+  if (obj.kind === "text") {
+    return <TextObjectView clip={clip as VideoClip & { object: VideoTextObject }} fonts={fonts} frame={frame} />;
+  }
+  if (obj.kind === "video") {
+    return <VideoObjectView clip={clip} frame={frame} gain={gain} />;
+  }
+  if (obj.kind === "shape") {
+    return <ShapeObjectView clip={clip} frame={frame} />;
+  }
+  if (!clip.source) throw new Error(`${obj.kind} clip ${clip.clip_id} carries no source`);
+  return (
+    <div style={wholeObjectStyle(clip, frame)}>
+      <Img
+        src={clip.source.url}
+        style={{ width: "100%", height: "100%", objectFit: obj.fit }}
+      />
+    </div>
+  );
+};
+
+const AudioClipView: React.FC<{ clip: VideoClip }> = ({ clip }) => {
+  if (clip.object.kind !== "audio" || !clip.source) return null;
+  const src = clip.source;
+  const base = gainLinear(clip.object.gain_db);
+  const gainAnim = clip.animations.find(
+    (animation) =>
+      animation.target_object_id === clip.object.object_id &&
+      animation.target_text_part_id === null &&
+      animation.property === "audio.gain",
+  );
+  return (
+    <Audio
+      src={src.url}
+      startFrom={src.start_frame ?? 0}
+      endAt={src.end_frame}
+      volume={
+        gainAnim
+          ? (frame) =>
+              base *
+              scalar(
+                evaluateProperty(clip.animations, clip.object.object_id, "audio.gain", frame),
+                1,
+              )
+          : base
+      }
+    />
+  );
+};
+
+export const Video: React.FC<{
+  spec: VideoSpec;
+  onFontsReady?: () => void;
+  onFontsError?: () => void;
+}> = ({ spec, onFontsReady, onFontsError }) => {
+  const frame = useCurrentFrame();
+  const dissolve = (clipId: string) => {
+    let opacity = 1, gain = 1;
+    for (const transition of spec.transitions ?? []) {
+      const progress = Math.max(0, Math.min(1, (frame-transition.start_frame) / (transition.end_frame-transition.start_frame-1)));
+      if (clipId === transition.to_clip_id) { opacity *= progress; gain *= progress; }
+      if (clipId === transition.from_clip_id) gain *= 1-progress;
+    }
+    return { opacity, gain };
+  };
+  const visualTracks = spec.tracks
+    .filter((track) => track.kind === "visual")
+    .sort((a, b) => a.order - b.order);
+  const audioTracks = spec.tracks.filter((track) => track.kind === "audio");
+  return (
+    <AbsoluteFill style={{ background: spec.background }}>
+      <FontResources
+        fonts={spec.fonts}
+        onReady={onFontsReady}
+        onError={onFontsError}
+      />
+      {visualTracks.flatMap((track) =>
+        track.clips.map((clip) => (
+          <Sequence
+            key={clip.clip_id}
+            from={clip.start_frame}
+            durationInFrames={clip.end_frame - clip.start_frame}
+          >
+            <AbsoluteFill style={{ opacity: dissolve(clip.clip_id).opacity }}>
+              <VisualObjectView clip={clip} fonts={spec.fonts} gain={dissolve(clip.clip_id).gain} />
+            </AbsoluteFill>
+          </Sequence>
+        )),
+      )}
+      {audioTracks.flatMap((track) =>
+        track.clips.map((clip) => (
+          <Sequence
+            key={clip.clip_id}
+            from={clip.start_frame}
+            durationInFrames={clip.end_frame - clip.start_frame}
+          >
+            <AudioClipView clip={clip} />
+          </Sequence>
+        )),
+      )}
+    </AbsoluteFill>
+  );
+};

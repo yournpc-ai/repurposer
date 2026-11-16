@@ -100,6 +100,7 @@ function StoryboardSlot({
           onStructureVisible={onStructureVisible}
         >
           <StoryboardCard
+            key={versionId}
             block={slot.block}
             messageId={message.id}
             prosePresented={prosePresented}

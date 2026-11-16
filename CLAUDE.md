@@ -20,7 +20,7 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；固定 Skill、外部 Skill、自由设计和 Generator 共用同一创作循环与多轨作品，能力迭代只扩展现有本体/Generator/tools，不另起作品根或生产链。新架构施工先读 `docs/VIDEO_PROJECT.md` §0，再读命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/video-project-implementation.md` 当前阶段与验收；D5 的 SFX / component-v1 / Gallery 两路并行与文件所有权见其 §4.5。现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15，不再维护旧 Film 施工三件套。
+- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；固定 Skill、外部 Skill、自由设计和 Generator 共用同一创作循环与多轨作品，能力迭代只扩展现有本体/Generator/tools，不另起作品根或生产链。新架构施工先读 `docs/VIDEO_PROJECT.md` §0，再读命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/skill-package-promo-video.md` §4 既有基线与当前批次；A–C 实现证据只在需要核对时查 `docs/tasks/video-project-implementation.md`；创作循环/上下文收敛先读 VIDEO_PROJECT §8.1.2 与 `docs/tasks/composition-authoring-context-convergence.md`，其实施细则只在该切片合同维护，不沿旧多 Director 阶段规则继续扩展。后续排期只认统一合同。现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
@@ -101,18 +101,18 @@ Correct:
 
 ## Product Positioning
 
-Repurposer serves **European knowledge experts who have content but no time to manage social media** — professors, researchers, lecturers, executives (solo or via assistant). Core positioning = **an AI agent that turns existing material into the content the user names** — guiding people who don't know editing or social media in growing their personal IP — not a self-serve media tool, not "viral short-video clips".
+Repurposer serves **people who want to make product or knowledge videos without learning to edit**. Core positioning = **a conversational video agent** that wraps creative methods, Skills, production and rendering into a browser experience. Users provide material, describe a goal, review the storyboard and result, request revisions through conversation, and download the video. No installation, development environment or Skill setup is required of the user.
 
-- **Target & input**: 知识专家带素材的模糊目标。**输入不止"演讲"** —— 会议/报告/播客/纯文字稿+照片/幻灯片都可以。
-- **Channels**: LinkedIn, 机构站, 邮件 newsletter。**Multi-output 是能力非承诺**：用户点名什么生成什么，承诺句 = "the user names it, the agent makes it"——打包式「一输入全套出」文案永禁；多语言是入场券（FR/DE/ES/IT/EN 等）。
-- **GDPR / EU 驻留** = 卖点但对外文案保持「ready 角度」，合规实装后改写。
-- **Dual track 命名**（NAMING N-25）：对内 = **agent**；对外 = **assistant / 助手**，"agent" 永不出现于英文文案（zh 用品类句「你的自媒体Agent团队」=品牌妥协，待 N-25 修订）；角色隐喻（运营官/操盘手/班子）禁（N-24）。
-- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；身份从 expertise 出发，**不称用户 influencer / creator / 网红**；承诺句 = "You focus on your craft; we handle the rest."（与 hero "We do the rest" 同源）；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = **一行问句**（`home.heroQuestion`）指向 composer——页面唯一目的地是输入框，问句与轮换 placeholder 形成一问一答；品牌名不在 hero 重复，由侧栏锁up / MobileHeader 承载（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器；视频 Skill 卡则形成与 `/skill` 相同的 Skill chip + 可编辑 prompt，不另走 Recipe 发射载荷。
+- **Target & input**: 产品或知识表达需求；网站、产品素材、文稿、图片或录像。不以欧洲知识专家、个人 IP 或特定分发渠道限定用户。
+- **Promise boundary**: 对话制作与持续修订；不承诺一输入全套内容、自动发布、爆款、变现或完整专业 NLE。未实现与未验收能力不作已完成承诺。
+- **Skills**: 内部创作能力，不是 Skill 商店或面向开发者的安装工具；公开文案先说明用户能做什么，不要求理解模型、节点、轨道或工作流。
+- **Naming**: 产品可称 video agent / 视频 Agent；当前 Landing Hero = `Your AI video agent` + `Rookies can make great videos too.`，说明保持现有功能描述。单助手叙事，不使用团队或代运营角色隐喻。
+- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；围绕用户的产品或知识表达目标，不为用户强加职业身份；承诺限于视频制作与对话修订；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = **一行问句**（`home.heroQuestion`）指向 composer——页面唯一目的地是输入框，问句与轮换 placeholder 形成一问一答；品牌名不在 hero 重复，由侧栏锁up / MobileHeader 承载（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器；视频 Skill 卡则形成与 `/任务名` 相同的 Skill chip + 可编辑 prompt，不另走 Recipe 发射载荷。
 - **用户到来即彷徨**（行为规格 → CHAT_ARCH §3.3）：每步都答「下一步是什么」——开始前配方卡接住 / 计划中确认 dock 接住 / 完成后结果画布闭环接住（ADR-041）。agent 顾问姿态四律：① **每轮一问、每问可一词答、默认路径恒带（散文零宣告）**（ADR-052 判词 5 + ADR-103；只问用户能答的——听众/目的，参数由配方与默认值吸收）② 带理由纠偏（给替代方案，禁静默拒绝）③ 成功定义随计划 ④ 始终给出当前可执行的下一步；全败 run 给确定性原因与至多两个可行选项，成功交付不强制建议 pills 或虚构唯一建议；不做职业/变现咨询（诊断是为了更快给出对方案，不是把生产工具变顾问）。
 - **闭环优先于卡片数量**：卡点亮（能力真 + 预览真）≠ 通路；「Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产」全通才算；对外叙事单位 = "完全通路"。
-- **闭环叙事与身份命名**（ADR-037 / NAMING N-27）：用户侧闭环 = **管理 IP → 产生 outputs → 发布**，en 用 "personal brand / thought leadership"，zh 用 "IP / 自媒体"；产品内身份模块 = **人设**（多实例扁平：工作号/生活号）。**身份根升格为「定位（Positioning）」已拍板**（ADR-042，目标架构 → `docs/POSITIONING.md`，生产层闭环后动工）——人设收窄为定位的表达分区，渠道/选题/素材挂定位根，品牌/IP 留营销承诺层；落地前代码层只 `persona`。
+- **闭环叙事与身份命名**（ADR-037 / NAMING N-27）：当前用户侧闭环 = **提供素材 → 描述目标 → 查看分镜和视频 → 对话修订 → 下载**；个人品牌与分发不是 Landing 的默认承诺；产品内身份模块 = **人设**（多实例扁平：工作号/生活号）。**身份根升格为「定位（Positioning）」已拍板**（ADR-042，目标架构 → `docs/POSITIONING.md`，生产层闭环后动工）——人设收窄为定位的表达分区，渠道/选题/素材挂定位根，品牌/IP 留营销承诺层；落地前代码层只 `persona`。
 
-前端文案 / 工具网格 / 示例占位围绕 **content / LinkedIn / multi-language**，避开 "TikTok / viral / trending"。
+前端文案与示例围绕 **视频任务 / 对话制作与修订 / 无需剪辑经验**，不承诺爆款、变现或未经实现的分发能力。
 
 ## Internationalization (i18n)
 
@@ -196,25 +196,20 @@ t("home.allProjects", { count: projects.length })
 
 ## Database Reset
 
-`apps/api/scripts/reset_db.py [--yes] [--db-only|--storage-only]` 清部署：dry-run 默认（印目标），`--yes` 落地。**保留前缀**：`demo/`（landing + 配方卡营销资产，内容寻址；生产永不再生）+ `music/`（平台默认曲目；`scripts/seed_default_music.py` reconcile 零配额复种）。**生产慎跑**——dry-run banner 先看。完成后重启即 auto-migrate + 默认音乐 reconcile；人设 `brand: null` 走系统默认皮，不布品牌种子；栈不布 demo 项目，`SKIP_DEMO_SEED` 是死旗，不依赖。
+`apps/api/scripts/reset_db.py [--yes] [--db-only|--storage-only]` 清部署：dry-run 默认（印目标），`--yes` 落地。**保留前缀**：`demo/`（landing + 配方卡营销资产，内容寻址；生产永不再生）+ `music/`（Shotcraft 五首平台策展曲目；`scripts/import_library_music.py` 只导入缺失对象，启动 reconcile 零配额补行）。**生产慎跑**——dry-run banner 先看。完成后重启即 auto-migrate + 音乐 reconcile；人设 `brand: null` 走系统默认皮，不布品牌种子；栈不布 demo 项目，`SKIP_DEMO_SEED` 是死旗，不依赖。
 
 ## Testing
 
-测试资产只保留两类（ADR-114）：**用户主流程旅程矩阵**（各种类型的用户通过 chat 进行的各种创作流程，全旅程）与**承重架构防漂移守卫**（唯一写口 / 依赖方向 / registry↔prompt 一致性等全站铁律看门）。事故回归锁 / 批次产物 / 镜像实现形态的锁不立；新机制的覆盖需求必须能说出「矩阵哪本旅程的哪一步」，说不出归属旅程先回炉。退役 = 自然死亡：重构使哪本红就删哪本，删除逐案过堂，不留注释尸体。
+测试资产只保留两类（ADR-114）：**用户主流程旅程矩阵**（各种用户通过 Chat 多轮完成创作、修订与交付）与**核心 API/DB 确定性测试**（支付、上传、工具协议、权限、计费、作品数据、执行与交付等用户直接依赖的合同）。内部 helper、提示词文案、实现形态、重复 ToolLoop 机制和事故编号不另立永久测试；行为能由真实旅程证明时，不复制一套内部锁。
 
-**部署前仪式链**（按序全绿才可部署）：
+**部署前检查**（按改动面运行，所跑项全绿才可部署）：
 
-1. 纯 pytest：`cd apps/api && uv run --extra dev python -m pytest tests/ -q`
-2. check_gates（静态架构门：boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）：`cd apps/api && uv run python scripts/check_gates.py`
-3. prompt_gate（仅当改动触及 prompt 面——`app/prompts/chat/`、`chat/prompts.py`、registry catalog lines）：`cd apps/api && uv run python scripts/prompt_gate.py`——10 探针（A–I 族，H 含 H4）绝对阈值，`--provider` 参数化（native-tool providers only，探的是工具 loop 线）。失败协议：复跑一次（provider 漂移在阈值内也存在），仍红则二分归因；**永不为放行回归调阈**。
-4. 剧本矩阵（唯一活 LLM 闸，需活 API + dev worker + MiniMax 配额）：`cd apps/api && uv run python scripts/chat_scenarios.py`——运行当前 `SCENARIOS` 注册表（目前 S1–S14；S11 = MG 贴链成片全旅程，S12 = 网站入口变体，S13 = 通用时间修订零 Run 旅程，S14 = Speech 时间编辑一次能力拒绝诚实收尾）对活 API 跑形态级断言，harness 公共断言每本自动携带（SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言）。永不锁 LLM 文案（代码强制文本例外）；客户端法律（打字机 / remount / 形态机）不进剧本断言——服务端真值才进。
+1. 核心 API/DB：`cd apps/api && uv run --extra dev python -m pytest test/core -q`。不调用真实模型、不执行付费制作；需要事务的测试使用独立临时 PostgreSQL 数据库。
+2. 真实用户旅程：`cd apps/api && uv run python test/journeys/chat.py`，或以 `--only <name>[,<name>]` 运行当前 `JOURNEYS` 注册表的子集。需要活 API、当前 migration、fresh dev worker 与模型配额；会制作媒体的旅程须另行明确授权。旅程只锁用户可见结果和服务端/数据库真值，不锁 LLM 文案。
+3. Web：`cd apps/web && npm test`，并按改动运行 TypeScript 检查。
 
-**仪表层**（诊断尺子，非闸——读数供人工判读，不阻塞部署）：`scripts/reply_quality_probe.py` / `accept_quote_card_family.py` / `reconcile_credits.py` / `verify_beat_map.py` / `crop_track_parity.py` / `run_anatomy_matrix.py` / `craft_anatomy.py` / `film_stage_ledger.py`（film 链五段通过率 + failure codes 分布，ADR-119 D4）。
+真实浏览器交互、最终动态视听、生产环境与公开发布仍需对应人工验收；核心测试或旅程通过不能替代这些证据。fixture 先拷 `scenario/` 前缀，常驻 worker 必须加载当前代码，失败先归因机制，禁止为放行削弱断言。运行与故障处置细则归 `docs/VERIFICATION.md`。
 
-**Deterministic pure-function suites** (`apps/api/tests/*_pure.py`): no database, no LLM, no HTTP; sessions are in-memory stubs. They cover adjudication / pure-mapping layers where branch coverage matters and drift risk is low (the wiring door `apply_wiring_ops` + `_fill_key_for_step`, stream extraction, registry ↔ prompt enumeration consistency). If a behavior needs a real transaction or an LLM to verify, it belongs to the scenario matrix, not here. Run: `cd apps/api && uv run --extra dev python -m pytest tests/<file> -q`.
-
-**Web**：vitest 组件旁置纯函数套件（纯 node 零 DOM）：`cd apps/web && npm test`。
-
-fixture 纪律 / flake 处置 / 配额纪律归 `docs/VERIFICATION.md` §1.3～§1.4（剧本素材先拷 `scenario/` 前缀；常驻 worker 抢跑律；断言只锁形态，红先归因机制，禁调断言放行）。
+诊断脚本不是部署门禁，其读数不能替代上述测试或真实验收。
 
 **Prompt authoring law**: prompt files carry ONLY current-state law. Model-facing text never names dates / ADR numbers / batch or incident labels / retired forms — every law reads as if it was always the law. `{# #}` comment headers stay one-anchor-line: what the file is + operational constraints (include placement, mirror contracts) — no incident narratives; history lives in git and `docs/DECISIONS.md`. Prose-field schema changes still carry the two typewriter teeth (null-read tolerance + settled-prose pacing).

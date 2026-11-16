@@ -100,8 +100,8 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
     return (
       <div className="space-y-4" aria-label={t("common.loading")}>
         <Skeleton className="h-12.5 w-full" />
-        <Skeleton className="h-9 w-24" />
-        <Skeleton className="ml-auto h-9 w-24" />
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="ml-auto h-11 w-48" />
       </div>
     )
   }
@@ -133,12 +133,48 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
     max: formatMoney(policy.max_amount_minor, policy.currency, i18n.language),
   })
   const inputCurrency = selected?.currency ?? policy.currency
+  const showAmountError = amountInput.length > 0 && !amountValid
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <div className="flex items-center gap-1">
-          <p className="text-sm text-muted-foreground">{t("credits.amount")}</p>
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-xl text-muted-foreground">
+            {formatCurrencySymbol(inputCurrency, i18n.language)}
+          </span>
+          <Input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={amountInput}
+            disabled={purchasing}
+            aria-label={t("credits.amount")}
+            aria-invalid={showAmountError}
+            aria-describedby="credit-topup-amount-hint"
+            onChange={(event) => {
+              setAmountInput(event.target.value)
+              setSelectedKey(null)
+            }}
+            className="h-12.5 rounded-md bg-muted pl-10 pr-4 text-2xl font-semibold tabular-nums md:text-2xl dark:bg-muted"
+            placeholder="0.00"
+          />
+        </div>
+        <div className="mt-2 flex min-h-5 items-center gap-1">
+          <p
+            id="credit-topup-amount-hint"
+            className={cn(
+              "text-sm",
+              showAmountError ? "text-destructive" : "font-medium text-muted-foreground",
+            )}
+          >
+            {credits !== null
+              ? t("credits.packageCredits", {
+                  count: formatCredits(credits, i18n.language),
+                })
+              : showAmountError
+                ? amountRange
+                : ""}
+          </p>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -159,47 +195,11 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
             </TooltipContent>
           </Tooltip>
         </div>
-        <div className="relative mt-2">
-          <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-lg text-muted-foreground">
-            {formatCurrencySymbol(inputCurrency, i18n.language)}
-          </span>
-          <Input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={amountInput}
-            disabled={purchasing}
-            aria-label={t("credits.amount")}
-            aria-invalid={amountInput.length > 0 && !amountValid}
-            aria-describedby="credit-topup-amount-hint"
-            onChange={(event) => {
-              setAmountInput(event.target.value)
-              setSelectedKey(null)
-            }}
-            className="h-12.5 rounded-md bg-muted pl-9 pr-4 text-xl font-semibold tabular-nums md:text-xl dark:bg-muted"
-            placeholder="0.00"
-          />
-        </div>
-        <p
-          id="credit-topup-amount-hint"
-          className={cn(
-            "mt-2 min-h-4 text-xs",
-            amountInput.length > 0 && !amountValid
-              ? "text-destructive"
-              : "text-muted-foreground",
-          )}
-        >
-          {credits !== null
-            ? t("credits.packageCredits", {
-                count: formatCredits(credits, i18n.language),
-              })
-            : amountRange}
-        </p>
       </div>
 
       {packages.length > 0 && (
         <div
-          className="flex flex-wrap gap-2"
+          className="grid grid-cols-3 gap-2"
           role="group"
           aria-label={t("credits.amount")}
         >
@@ -210,10 +210,10 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
                 key={item.key}
                 type="button"
                 variant={checked ? "default" : "secondary"}
-                size="sm"
+                size="lg"
                 aria-pressed={checked}
                 disabled={purchasing}
-                className="min-w-20"
+                className="min-w-0 text-base"
                 onClick={() => {
                   setSelectedKey(item.key)
                   setAmountInput(formatAmountInput(item.amount_minor))
@@ -226,14 +226,12 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">{t("credits.oneTime")}</p>
-
       <div className="flex justify-end gap-2 pt-2">
         {onCancel && (
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size="lg"
             disabled={purchasing}
             onClick={onCancel}
           >
@@ -242,7 +240,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
         )}
         <Button
           type="button"
-          size="sm"
+          size="lg"
           disabled={!amountValid || purchasing}
           onClick={() => void buy()}
         >

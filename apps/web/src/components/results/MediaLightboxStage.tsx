@@ -36,6 +36,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { downloadFile } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
+import { MediaRegionSelectionOverlay } from "./MediaRegionSelectionOverlay"
+import type { MediaRegionSelectionControl } from "./mediaRegionSelection"
 
 const DURATION = { fast: 0.12, standard: 0.2, exit: 0.18 }
 const ENTER_EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
@@ -161,6 +163,7 @@ export function MediaLightboxStage({
   start,
   actions,
   getSlot,
+  regionSelection,
   onNavigate,
   onClosed,
   requestCloseRef,
@@ -171,6 +174,7 @@ export function MediaLightboxStage({
   start: number
   actions?: ReactNode
   getSlot?: (slotId: string) => HTMLElement | null
+  regionSelection?: MediaRegionSelectionControl
   onNavigate: (outputId: string) => void
   onClosed: () => void
   requestCloseRef: RefObject<(() => void) | null>
@@ -467,6 +471,7 @@ export function MediaLightboxStage({
   }
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (regionSelection?.enabled) return
     if (event.target instanceof Element && event.target.closest("video,button,input,textarea,[data-no-viewer-gesture]")) return
     if (closingRef.current || (event.pointerType === "mouse" && event.button !== 0)) return
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -670,7 +675,12 @@ export function MediaLightboxStage({
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault()
-      close()
+      if (regionSelection?.enabled) {
+        event.stopPropagation()
+        regionSelection.onCancel()
+      } else {
+        close()
+      }
       return
     }
     if (event.target instanceof Element && event.target.closest("input,textarea,video,[contenteditable=true],[data-no-viewer-gesture]")) return
@@ -754,6 +764,7 @@ export function MediaLightboxStage({
                   mediaRef={active ? mediaRef : undefined}
                   hero={active ? { x: heroX, y: heroY, scale: heroS, opacity: heroO } : null}
                   zoom={active && item.kind === "image" ? { scale: zoomS, x: panX, y: panY, radius } : null}
+                  regionSelection={active ? regionSelection : undefined}
                 />
               </div>
             )
@@ -962,6 +973,7 @@ function MediaFrame({
   hero,
   zoom,
   mediaRef,
+  regionSelection,
 }: {
   item: MediaLightboxData
   frame: Rect
@@ -969,7 +981,10 @@ function MediaFrame({
   hero: HeroValues | null
   zoom: ZoomValues | null
   mediaRef?: Ref<HTMLDivElement>
+  regionSelection?: MediaRegionSelectionControl
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   return (
     <motion.div
       className="absolute origin-top-left"
@@ -986,6 +1001,7 @@ function MediaFrame({
             <div className="absolute inset-0"><MediaThumbnail item={item} /></div>
             {active && item.url ? (
               <video
+                ref={videoRef}
                 key={item.id ?? item.url}
                 src={item.url}
                 poster={item.poster ?? undefined}
@@ -995,6 +1011,9 @@ function MediaFrame({
                 playsInline
                 preload="metadata"
               />
+            ) : null}
+            {regionSelection && (regionSelection.enabled || regionSelection.value) ? (
+              <MediaRegionSelectionOverlay videoRef={videoRef} control={regionSelection} />
             ) : null}
           </>
         ) : item.kind === "image" && item.url ? (

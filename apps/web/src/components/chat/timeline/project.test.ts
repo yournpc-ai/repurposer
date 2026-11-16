@@ -16,6 +16,7 @@ import {
 } from "./activity"
 import {
   buildConversationBlocks,
+  conversationBlockUnits,
   buildConversationUnits,
   closeWorkSegment,
 } from "./project"
@@ -59,7 +60,7 @@ function unitId(u: ConversationUnit): string {
 }
 
 function blockUnits(block: ConversationBlock): ConversationUnit[] {
-  return block.kind === "runAnchor" ? [] : block.units
+  return conversationBlockUnits(block)
 }
 
 function foldOf(u: ConversationUnit): {
@@ -890,82 +891,81 @@ describe("buildConversationBlocks — explicit turn ownership, stable block iden
     expect(units.map(unitId)).toEqual(["fold:a1", "fold:a2"])
   })
 
-  it("an active attached Run pins bottom; terminal uses its first explicit delivery association with one stable surface", () => {
-    const units = buildConversationUnits([
-      { ...assistantMsg("run-birth"), runId: "run-1" },
-      { ...assistantMsg("run-delivery"), runId: "run-1", runDelivery: true },
-    ])
-    const live = buildConversationBlocks(units, {
-      attachedRunId: "run-1",
-      pinAttachedRun: true,
+  it("a production reply owns its opening, single work slot and exact delivery", () => {
+    const opening = { ...assistantMsg("opening"), turnId: "t1", runId: "run-1" }
+    const user = { ...msg("user"), turnId: "t1" }
+    const delivery = { ...assistantMsg("delivery"), runId: "run-1", runDelivery: true, outputRefs: ["video"] }
+    const live = buildConversationBlocks(buildConversationUnits([user, opening]), {
+      attachedRunId: "run-1", pinAttachedRun: true,
     })
-    expect(live.map((block) => block.kind)).toEqual(["standalone", "standalone", "runAnchor"])
-    expect(live[2]).toMatchObject({ key: "run:run-1", runId: "run-1" })
-
-    const terminal = buildConversationBlocks(units, {
-      attachedRunId: "run-1",
-      pinAttachedRun: false,
+    const settled = buildConversationBlocks(buildConversationUnits([user, opening, delivery]), {
+      attachedRunId: "run-1", pinAttachedRun: false,
     })
-    expect(terminal.map((block) => block.kind)).toEqual(["standalone", "runAnchor", "standalone"])
-    expect(terminal.filter((block) => block.kind === "runAnchor")).toHaveLength(1)
-    expect(blockUnits(terminal[0]).map(unitId)).toEqual(["run-birth"])
-    expect(blockUnits(terminal[2]).map(unitId)).toEqual(["run-delivery"])
+    expect(live).toHaveLength(1)
+    expect(settled).toHaveLength(1)
+    expect(live[0].key).toBe(settled[0].key)
+    expect(settled[0]).toMatchObject({ kind: "turn", user: { id: "user" }, slots: [{
+      kind: "run", key: "run:run-1", runId: "run-1",
+      opening: [{ kind: "message", message: { id: "opening" } }],
+      deliveries: [{ kind: "message", message: { id: "delivery", outputRefs: ["video"] } }],
+    }] })
+    expect(live[0]).toMatchObject({ slots: [{ kind: "run", key: "run:run-1", deliveries: [] }] })
+    expect(settled.flatMap(blockUnits).map(unitId)).toEqual(["user", "opening", "delivery"])
+    // Run SSE may lag the delivery frame; it must not move the work after its result.
+    expect(buildConversationBlocks(buildConversationUnits([user, opening, delivery]), {
+      attachedRunId: "run-1", pinAttachedRun: true,
+    })).toEqual(settled)
   })
 
-  it("failed and recovery deliveries never move a detached Run to the last delivery", () => {
+  it("intervening QA prevents the Run from swallowing earlier speech", () => {
     const rows = [
-      { ...assistantMsg("run-birth"), runId: "run-1" },
-      { ...assistantMsg("mid-run-qa"), runId: "run-1", independentKind: "qa" as const },
-      {
-        ...assistantMsg("failed-delivery"),
-        runId: "run-1",
-        runDelivery: true,
-        at: "2026-10-30T14:11:43Z",
-      },
-      {
-        ...assistantMsg("recovery-delivery"),
-        runId: "run-1",
-        runDelivery: true,
-        at: "2026-10-30T13:50:00Z",
-      },
+      { ...assistantMsg("opening"), runId: "run-1" },
+      { ...assistantMsg("qa"), runId: "run-1", independentKind: "qa" as const },
+      { ...assistantMsg("delivery"), runId: "run-1", runDelivery: true },
     ]
     const blocks = buildConversationBlocks(buildConversationUnits(rows))
-    expect(blocks.map((block) => block.kind)).toEqual([
-      "standalone",
-      "standalone",
-      "runAnchor",
-      "standalone",
-      "standalone",
-    ])
-    expect(blocks[2]).toMatchObject({ key: "run:run-1", runId: "run-1" })
-    expect(blockUnits(blocks[0]).map(unitId)).toEqual(["run-birth"])
-    expect(blockUnits(blocks[1]).map(unitId)).toEqual(["mid-run-qa"])
-    expect(blockUnits(blocks[3]).map(unitId)).toEqual(["failed-delivery"])
-    expect(blockUnits(blocks[4]).map(unitId)).toEqual(["recovery-delivery"])
+    expect(blocks.map((block) => block.kind)).toEqual(["standalone", "standalone", "run"])
+    expect(blocks[2]).toMatchObject({ key: "run:run-1", opening: [], deliveries: [{ kind: "message", message: { id: "delivery" } }] })
+    expect(blocks.flatMap(blockUnits).map(unitId)).toEqual(["opening", "qa", "delivery"])
   })
 
-  it("delivery-only history anchors before the first explicit delivery, never the last", () => {
+  it("cross-turn delivery and independent upload keep their own response and refs", () => {
+    const rows = [
+      { ...assistantMsg("first"), runId: "run-1", runDelivery: true, turnId: "delivery-1", outputRefs: ["video-1"] },
+      { ...msg("user"), turnId: "retry-turn" },
+      { ...assistantMsg("upload"), turnId: "retry-turn", outputRefs: ["video-2"] },
+      { ...assistantMsg("later"), runId: "run-1", runDelivery: true, turnId: "delivery-2", outputRefs: ["video-3"] },
+    ]
+    const blocks = buildConversationBlocks(buildConversationUnits(rows))
+    expect(blocks.map((block) => block.kind)).toEqual(["run", "turn", "turn"])
+    expect(blocks[0]).toMatchObject({ deliveries: [{ kind: "message", message: { id: "first", outputRefs: ["video-1"] } }] })
+    expect(blocks[1]).toMatchObject({ user: { id: "user" }, slots: [{ kind: "message", message: { id: "upload", outputRefs: ["video-2"] } }] })
+    expect(blocks[2]).toMatchObject({ slots: [{ kind: "message", message: { id: "later", outputRefs: ["video-3"] } }] })
+    expect(blocks.flatMap(blockUnits).map(unitId)).toEqual(["first", "user", "upload", "later"])
+  })
+
+  it("delivery-only history has one Run surface and keeps each message's products", () => {
     const blocks = buildConversationBlocks(buildConversationUnits([
-      { ...assistantMsg("old-failed"), runId: "run-1", runDelivery: true },
-      { ...assistantMsg("old-recovered"), runId: "run-1", runDelivery: true },
+      { ...assistantMsg("first"), runId: "run-1", runDelivery: true, outputRefs: ["one"] },
+      { ...assistantMsg("second"), runId: "run-1", runDelivery: true, outputRefs: ["two"] },
     ]))
-    expect(blocks.map((block) => block.kind)).toEqual(["runAnchor", "standalone", "standalone"])
-    expect(blockUnits(blocks[1]).map(unitId)).toEqual(["old-failed"])
-    expect(blockUnits(blocks[2]).map(unitId)).toEqual(["old-recovered"])
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ kind: "run", key: "run:run-1", deliveries: [
+      { kind: "message", message: { id: "first", outputRefs: ["one"] } },
+      { kind: "message", message: { id: "second", outputRefs: ["two"] } },
+    ] })
   })
 
-  it("a Run without delivery uses the first explicit Run association as its legacy fallback", () => {
+  it("a Run without delivery composes only with its explicitly associated opening", () => {
     const blocks = buildConversationBlocks(buildConversationUnits([
       { ...assistantMsg("run-1-start"), runId: "run-1" },
       { ...assistantMsg("run-1-qa"), runId: "run-1", independentKind: "qa" as const },
       { ...assistantMsg("run-2-start"), runId: "run-2" },
     ]))
-    expect(blocks.filter((block) => block.kind === "runAnchor").map((block) => block.key)).toEqual([
-      "run:run-1",
-      "run:run-2",
-    ])
-    expect(blockUnits(blocks[0]).map(unitId)).toEqual(["run-1-start"])
-    expect(blockUnits(blocks[2]).map(unitId)).toEqual(["run-1-qa"])
+    expect(blocks.map((block) => block.kind)).toEqual(["standalone", "standalone", "standalone"])
+    expect(blocks[0]).toMatchObject({ slots: [{ kind: "run", runId: "run-1", deliveries: [] }] })
+    expect(blocks[2]).toMatchObject({ slots: [{ kind: "run", runId: "run-2", deliveries: [] }] })
+    expect(blocks.flatMap(blockUnits).map(unitId)).toEqual(["run-1-start", "run-1-qa", "run-2-start"])
   })
 
   const linkedOptionRows = (extra: Partial<OverlayMessage> = {}): OverlayMessage[] => [
@@ -1049,4 +1049,16 @@ describe("buildConversationBlocks — explicit turn ownership, stable block iden
     const [block] = buildConversationBlocks(buildConversationUnits([row]))
     expect(block.key).toBe("turn:optimistic-user")
   })
+})
+
+
+it("a failed upload never settles an adjacent different turn's Worked", () => {
+  const previous = { ...activityMsg("previous"), turnId: "old-turn" }
+  const failed = { ...activityMsg("upload", {
+    status: "failed", key: "chat.activity.upload",
+  }), turnId: "upload-turn" }
+  const units = foldActivityUnits(buildConversationUnits([previous, failed]))
+  expect(units).toHaveLength(2)
+  expect(units[0]).toMatchObject({ kind: "activityFold", turnId: "old-turn", failure: null })
+  expect(units[1]).toMatchObject({ kind: "activity", turnId: "upload-turn", activity: { status: "failed" } })
 })

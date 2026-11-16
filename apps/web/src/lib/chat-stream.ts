@@ -31,6 +31,7 @@ import { normalizeStreamError } from "@/lib/streamTransport"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import type { CandidateEventPayload } from "@/lib/chatStreamFrames"
 import type { ChatAttachment } from "@/lib/types"
+import type { ChatMention } from "@/lib/mentions"
 
 // The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
 // A test seam) — re-exported here so existing import sites stay put.
@@ -51,7 +52,7 @@ import type {
 export interface ChatTurnBody {
   project_id: string
   message: string
-  mentions?: { type: string; id: string; label: string; quote?: string }[]
+  mentions?: ChatMention[]
   skill?: SkillReference
   /** Files staged in the input group and sent with this turn (the server
    * persists them on the user message row — refresh re-renders the chips). */
@@ -363,6 +364,14 @@ function streamTurn<T>(
         // typed so the caller can reconcile the archive without re-POSTing.
         throw normalized
       },
+    }).then(() => {
+      // fetch-event-source resolves (never rejects) when OUR input signal
+      // aborts. Convert that transport completion into the AbortError the
+      // turn owner awaits; otherwise sendChat's catch/finally never runs and
+      // Stop leaves the composer busy forever.
+      if (signal?.aborted) {
+        reject(new DOMException("The operation was aborted.", "AbortError"))
+      }
     }).catch((err) => {
       sseProbe("stream.reject", {
         url,

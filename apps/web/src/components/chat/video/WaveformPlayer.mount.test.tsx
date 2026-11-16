@@ -11,6 +11,8 @@ const { animateMock } = vi.hoisted(() => ({
 vi.mock("motion/react", async (importOriginal) => ({
   ...await importOriginal<typeof import("motion/react")>(),
   animate: animateMock,
+  useReducedMotion: () =>
+    window.matchMedia?.("(prefers-reduced-motion)")?.matches ?? false,
 }))
 
 vi.mock("react-i18next", () => ({

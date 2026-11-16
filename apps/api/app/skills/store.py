@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import canonical_json_hash
 from app.models.tables import SkillVersion, UserSkill
-from app.skills.external import SkillDraft
+from app.providers import storage
+from app.skills.external import (
+    ExternalSkillError,
+    SkillDraft,
+    skill_draft_payload,
+    validate_skill_media_bytes,
+)
 
 
 class SkillNotFoundError(ValueError):
@@ -44,7 +50,10 @@ async def import_external_skill(
         db.add(skill)
         await db.flush()
 
-    draft_json = draft.model_dump(mode="json")
+    draft_json = skill_draft_payload(draft)
+    # SkillVersion persists this field on UserSkill, so its immutable digest
+    # must use the description that will actually be read back with the row.
+    draft_json["description"] = skill.description
     version_digest = canonical_json_hash(draft_json)
     existing = (
         await db.execute(
@@ -86,12 +95,22 @@ async def import_external_skill(
             "declared_inputs": row.declared_inputs,
             "policy": row.policy,
         }
+        if "media" in draft_json or row.media:
+            persisted["media"] = row.media or []
         if persisted == draft_json:
             return row, True
 
     version = await db.scalar(
         select(func.max(SkillVersion.version)).where(SkillVersion.skill_id == skill.id)
     )
+    for item in draft.media:
+        if item.data is None or item.storage_key is None:
+            raise ExternalSkillError(f"Skill media bytes are missing: {item.path}")
+        validate_skill_media_bytes(item, item.data)
+        # Digest-derived keys make repeated writes idempotent. A later database
+        # rollback may leave an unreferenced object; no mutable row is rewritten.
+        await storage.save(item.storage_key, item.data, content_type=item.mime_type)
+
     row = SkillVersion(
         id=uuid4(),
         skill_id=skill.id,
@@ -99,6 +118,7 @@ async def import_external_skill(
         version=(version or 0) + 1,
         instructions=draft.instructions,
         references=[item.model_dump(mode="json") for item in draft.references],
+        media=[item.model_dump(mode="json") for item in draft.media],
         declared_inputs=[item.model_dump(mode="json") for item in draft.declared_inputs],
         capability_report=draft.capability_report.model_dump(mode="json"),
         policy=draft.policy.model_dump(mode="json"),

@@ -17,7 +17,7 @@ the wire tiers (ADR-077 判词④ 法则).
 
 Guardrails (三条军规):
 
-- ``max_iterations`` 封顶 — declared per agent (≤6 initial per the brief).
+- ``max_iterations`` 封顶 — declared per agent (the two Chat entrances use 20).
   The loop's worst case is a fold: cap × one call's cost, never open-ended
   (报价 = fold 的会话层形态 — chat turns aren't pre-quoted, the bound is
   what makes that safe).
@@ -55,16 +55,42 @@ would be a lie.
 
 import json
 import time
+from copy import deepcopy
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
+from typing import Any, Literal
 
 import structlog
 from pydantic import BaseModel, ValidationError
 
 from app.agents.base import AGENTS, jinja_env
-from app.providers.llm.base import LLMError, LLMSchemaError
-from app.providers.llm.minimax import MiniMaxClient, minimax_client
+from app.agents.candidate_correction import (
+    CORRECTION_TOOL_NAME,
+    CandidateCorrectionArgs,
+    CandidateRecord,
+    CandidateRejected,
+    CandidateScope,
+    CorrectionError,
+    RestoredCandidate,
+    apply_correction,
+    correction_tool,
+)
+from app.agents.working_drafts import (
+    WorkingDraftRejected,
+    WorkingDraftReviewed,
+    WorkingDraftUpdated,
+    candidate_progress_digest,
+    merge_working_draft,
+    tool_progress_digest,
+    verify_working_draft,
+    working_draft_diagnostic,
+    working_draft_observation,
+)
+from app.metering import bind_model_prompt
+from app.providers.llm import get_llm_client
+from app.providers.llm.base import LLMClient, LLMError, LLMSchemaError
+from app.providers.llm.trace import trace_argument_normalization
+from app.agents.arguments import normalize_numeric_arguments, numeric_string_changes
 
 logger = structlog.get_logger()
 
@@ -105,6 +131,15 @@ class ChatTool:
     params_model: type[BaseModel] | None
     terminal: bool = True
     wire_view: Callable[[str, dict], tuple[str, dict]] | None = None
+    # Explicit opt-in for sequential multi-call batches; content writes and
+    # terminal actions remain standalone even when non-terminal on the wire.
+    batchable: bool = False
+    repairable: bool = False
+    # ConversationContext-backed working drafts use the same identity and
+    # recovery records for successful incremental writes and failed saves.
+    draftable: bool = False
+    # Evidence reads authenticate and retain the same draft without merging writes.
+    draft_reader: bool = False
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -188,8 +223,10 @@ class LoopResult:
     ``no_progress_tool`` = the bare final reply (the model spoke without
     calling a tool — read as the answer call, the read-tolerant floor).
     ``exhausted=True`` = the iteration cap was hit
-    with every call rejected — the caller degrades honestly (the cannot-do
-    line or the code-composed topic question), never a fabricated success.
+    before a terminal answer; successful observations and rejection facts
+    remain available to the caller for a truthful incomplete-work response.
+    ``version_saved`` means a real CompositionVersion write succeeded;
+    successful ``save=false`` working-draft updates never set it.
     ``calls`` = the tool sequence trace (the scenario suite's T4 assertion
     target).
     """
@@ -200,6 +237,7 @@ class LoopResult:
     iterations: int
     calls: list[str] = field(default_factory=list)
     exhausted: bool = False
+    version_saved: bool = False
     # Set when the loop ended on an execute's TerminalRefusal (below): the
     # refusing tool's name. The caller maps it to its honest close — the
     # loop itself never words user-facing meaning.
@@ -212,6 +250,8 @@ class LoopResult:
     # TerminalRefusal and budget exhaustion so the chat layer can close with
     # the truthful preservation/failure semantics.
     no_progress_tool: str | None = None
+    observations: list[tuple[str, bool]] = field(default_factory=list)
+    rejections: list["ToolRejected"] = field(default_factory=list)
 
 
 @dataclass
@@ -239,8 +279,7 @@ def _loop_echo(feedback: str) -> str:
     into the loop)."""
     return (
         f"\n\nYour previous tool call was rejected: {feedback}. "
-        "Speak to the user if the situation changed for them, then call the "
-        "right tool with valid arguments."
+        "Call the right tool with valid arguments."
     )
 
 
@@ -275,6 +314,44 @@ def _unwrap_item_dialect(value: Any) -> Any:
 
 
 @dataclass(frozen=True)
+class ContextSnapshot:
+    """Fresh caller-owned facts; keys identify fully included resources."""
+
+    text: str
+    keys: frozenset[str] = frozenset()
+    images: tuple[Any, ...] = ()
+    resources: tuple[tuple[str, dict[str, Any]], ...] = ()
+    skill_method: str | None = None
+
+
+@dataclass(frozen=True)
+class RoundAssembly:
+    """One caller-owned projection of the next provider request."""
+
+    tools: list[ChatTool]
+    system: str
+    context: str | None = None
+    media: tuple[Any, ...] = ()
+    stage: str | None = None
+    include_project_context: bool = True
+    include_observation_media: bool = True
+    observation_tools: frozenset[str] | None = None
+    allow_interim_prose: bool = True
+    missing_tool_feedback: str | None = None
+    opening_text: str | None = None
+    caller_state: dict | None = None
+
+
+@dataclass(frozen=True)
+class ConversationHistory:
+    """Caller-owned historical protocol pairs and their assembly evidence."""
+
+    messages: tuple[dict, ...] = ()
+    audit: dict = field(default_factory=dict)
+    candidates: tuple[RestoredCandidate, ...] = ()
+
+
+@dataclass(frozen=True)
 class ToolObservation:
     """A NON-terminal tool's accepted result (T2b 感知族 — the read tools'
     return channel). The text is model-facing (compact lines, capped by the
@@ -288,7 +365,7 @@ class ToolObservation:
     ``images`` (film 读取座, R3): compressed material screenshots the read
     attaches for the model's creative judgment — MediaInput-shaped
     (``type``/``data_url``/``caption``; typed loosely here because the
-    kernel never imports the domain layer, check_gates 5a), each caption
+    kernel never imports the domain layer), each caption
     binding the image to its asset/scene references. They ride the SAME
     tool message as content parts (the loop's observation seat projects
     them); budget enforcement (count/size/over-budget honesty) is the
@@ -302,9 +379,39 @@ class ToolObservation:
     # Opaque internal evidence for the accepted-event consumer. The loop never
     # interprets it and never adds it to the model-facing observation wire.
     receipt: BaseModel | None = None
+    # call: one model continuation; turn: this loop; project: canonical facts
+    # may replace the observation only after the fresh snapshot includes its keys.
+    context_lifetime: str = "turn"
+    context_keys: tuple[str, ...] = ()
+    project_text: str | None = None
+    # Fold the protocol pair after its first delivered continuation without
+    # changing its durable ConversationContext lifetime.
+    fold_after_delivery: bool = False
+    # Independent of within-loop folding: may this result survive this turn?
+    persist: bool = True
+    # Accepted domain evidence may supply one user-facing finding after acceptance.
+    accepted_interim_prose: str | None = None
 
 
-def _observation_wire_content(observation: ToolObservation) -> str | list[dict]:
+@dataclass(frozen=True)
+class ToolExchange:
+    """An actual completed call/result; persistence belongs to the caller."""
+
+    call_id: str
+    tool_name: str
+    arguments: dict
+    observation: ToolObservation
+    base_keys: frozenset[str] = frozenset()
+    executed_arguments: dict | None = None
+    iteration: int = 0
+    call_index: int = 0
+    # Actual correction calls retain their own wire identity; these fields
+    # attribute validation, supersession and execution to the original tool.
+    target_tool: str | None = None
+    candidate: dict | None = None
+
+
+def observation_wire_content(observation: ToolObservation) -> str | list[dict]:
     """The role:tool message's content (ONE wire seat — both chat paths ride
     this same loop). Plain text when the read carries no images (the
     historical shape, byte-identical); with images, the standard content
@@ -358,6 +465,9 @@ class ToolRejected:
     iteration: int
     detail: str | None
     duration_ms: int
+    # Content-only fingerprint (target + arguments + base keys), excluding the
+    # random candidate id so a fresh call cannot fake progress merely by renaming itself.
+    candidate_digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -394,8 +504,7 @@ class ReadExecuting:
 
     ``params`` carries the call's VALIDATED params (None for a params-less
     tool) — the one fact the projection needs to tell a tool's VARIANTS
-    apart at execute entry (design_storyboard's compose vs patch split
-    reads ``edits`` off it). name_known can never carry this bit: the name
+    apart at execute entry. name_known can never carry this bit: the name
     surfaces mid-stream while the arguments are still arriving, so a
     variant claimed there would be a guess. The kernel still reports WHAT
     HAPPENED only — the params→user-vocabulary translation is entirely the
@@ -433,7 +542,7 @@ RejectionStop = Callable[[ToolRejected, tuple[ToolRejected, ...]], bool]
 # All side effects belong to the executor; the loop writes nothing.
 LoopExecute = Callable[
     [str, BaseModel | None, str],
-    Awaitable[str | None | ToolObservation | TerminalRefusal],
+    Awaitable[str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftReviewed | WorkingDraftUpdated],
 ]
 
 
@@ -455,7 +564,7 @@ class ToolLoopAgent:
         tools: list[ChatTool],
         temperature: float = 0.3,
         max_iterations: int = 4,
-        client: MiniMaxClient | None = None,
+        client: LLMClient | None = None,
         packs: list[str] | None = None,
     ) -> None:
         if not tools:
@@ -470,7 +579,7 @@ class ToolLoopAgent:
         self.temperature = temperature
         self.tools = tools
         self.max_iterations = max_iterations
-        self.client = client or minimax_client
+        self.client = client or get_llm_client()
         self.packs = packs or []
         if name in AGENTS:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
@@ -488,6 +597,14 @@ class ToolLoopAgent:
         on_interim_prose: _Hook | None = None,
         on_loop_event: _Hook | None = None,
         should_stop_rejection: RejectionStop | None = None,
+        bare_rejection_feedback: Callable[[], str | None] | None = None,
+        refresh_context: Callable[[], Awaitable[ContextSnapshot]] | None = None,
+        restore_context: Callable[..., Awaitable[ConversationHistory]] | None = None,
+        on_context_event: _Hook | None = None,
+        candidate_scope: CandidateScope | None = None,
+        tools: list[ChatTool] | None = None,
+        round_assembler: Callable[..., RoundAssembly] | None = None,
+        system_prompt: str | None = None,
         **ctx: Any,
     ) -> LoopResult:
         """Run the bounded loop: assemble → render → [generate_with_tools →
@@ -552,6 +669,12 @@ class ToolLoopAgent:
           the result then carries ``no_progress_tool`` (not ``exhausted`` and
           not ``ended_by``), emits no fake ``LoopExhausted``, and makes no
           further model call. The chat caller owns the user-facing close.
+        - ``tools``: an optional per-call projection of the declared tool set.
+          It changes this turn's wire and dispatch table without mutating the
+          shared agent; the default remains the full declaration.
+        - ``round_assembler``: an optional caller-owned projection rerun after
+          context/draft restore and repair selection. It returns the final tools,
+          System, dynamic facts and media policy; execution still validates the call.
         """
         capabilities = getattr(self.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
@@ -568,11 +691,31 @@ class ToolLoopAgent:
             from app.agents.contexts import pack_instructions  # deferred: contexts pulls the chat/pipeline assembly layer
 
             template_kwargs["packs"] = pack_instructions(self.packs)
+        if self.prompt == "chat/user.j2":
+            template_kwargs["mode"] = {
+                "intent_router": "plan",
+                "chat_intent": "conversation",
+                "trigger_turn": "event",
+                "trigger_delivery": "delivery",
+            }[self.name]
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
-        specs = [tool_spec(t) for t in self.tools]
-        by_name = {t.name: t for t in self.tools}
+        active_tools = self.tools if tools is None else tools
+        if not active_tools:
+            raise ValueError("a tool-loop call declares its tool set")
+        specs = [tool_spec(t) for t in active_tools]
+        correction_declaration = correction_tool()
+        declared_by_name = {t.name: t for t in [*active_tools, correction_declaration]}
+        declared_parameter_schemas = {
+            t.name: t.params_model.model_json_schema()
+            for t in [*active_tools, correction_declaration]
+            if t.params_model is not None
+        }
+        scope = candidate_scope or CandidateScope(
+            owner_id=f"agent:{self.name}", conversation_id=f"loop:{self.name}"
+        )
+        effective_system = self.system if system_prompt is None else system_prompt
         base_messages: list[dict] = [
-            {"role": "system", "content": self.system},
+            {"role": "system", "content": effective_system},
             {"role": "user", "content": user_prompt},
         ]
         calls: list[str] = []
@@ -595,8 +738,14 @@ class ToolLoopAgent:
         # hit-rate questions — reads × interim_proses conversion (ADR-109:
         # the eligible axis retired with the whitelist).
         accepted_reads: list[str] = []
+        observation_results: list[tuple[str, bool]] = []
+        version_saved = False
+        draft_finalized = False
 
         def _finish(result: LoopResult) -> LoopResult:
+            result.observations = list(observation_results)
+            result.version_saved = version_saved
+            result.rejections = list(rejections)
             logger.info(
                 "tool_loop_turn",
                 agent=self.name,
@@ -614,14 +763,68 @@ class ToolLoopAgent:
             return result
         # The wire continuation after an accepted read: the assistant tool_call
         # echo + the role:tool observation (the standard OpenAI form). The
-        # tail SURVIVES later rejections (they ride the user-message echo —
-        # one rejection form only) so a retry never pays a second read.
+        # tail survives later rejections, including the rejected call/result
+        # pairs, so corrections have the full candidate and prior evidence.
         observation_tail: list[dict] = []
+        observation_scopes: dict[str, tuple[str, tuple[str, ...]]] = {}
+        project_image_observations: dict[str, ToolObservation] = {}
+        delivered_observations: set[str] = set()
+        fold_after_delivery: set[str] = set()
         # Repair-label truthfulness (交互完整性批 ②): set by the rejection
         # paths below, cleared at each iteration's top — on_repair marks a
         # rejection's retry, never an accepted read's continuation.
         prev_rejected = False
+        pending_rejection_feedback: str | None = None
         rejections: list[ToolRejected] = []
+        rejected_candidates: list[dict] = []
+        candidates: dict[str, CandidateRecord] = {}
+        drafts: dict[str, CandidateRecord] = {}
+        restored_live_ids: set[str] = set()
+        restored_draft_ids: set[str] = set()
+        retired_candidate_ids: set[str] = set()
+        repair_candidate_id: str | None = None
+        latest_draft_id: str | None = None
+
+        async def retire_failed_candidate(record: CandidateRecord, *, iteration: int, kind: str) -> None:
+            """A terminal design failure is a durable inactive fact, not a
+            candidate that a later turn may resurrect with an old digest."""
+            nonlocal repair_candidate_id
+            payload = record.diagnostic(kind=kind, correction_error=CorrectionError(
+                "candidate_retired", "The design turn ended without saving this candidate; start from current project facts.",
+            ))
+            await _emit(on_context_event, ToolExchange(
+                call_id=record.call_id, tool_name=record.tool_name, arguments={},
+                observation=ToolObservation(json.dumps(payload, ensure_ascii=False), ok=False),
+                base_keys=record.base_keys, iteration=iteration, call_index=0,
+                target_tool=record.tool_name,
+                candidate={"candidate_id": record.candidate_id,
+                    "candidate_digest": record.candidate_digest,
+                    "target_tool": record.tool_name, "base_keys": sorted(record.base_keys),
+                    "active": False},
+            ))
+            retired_candidate_ids.add(record.candidate_id)
+            candidates.pop(record.candidate_id, None)
+            if repair_candidate_id == record.candidate_id:
+                repair_candidate_id = None
+
+        async def retire_working_draft(record: CandidateRecord, *, iteration: int, kind: str) -> None:
+            nonlocal latest_draft_id
+            payload = working_draft_diagnostic(record, kind=kind)
+            payload["draft_retired"] = True
+            await _emit(on_context_event, ToolExchange(
+                call_id=record.call_id, tool_name=record.tool_name, arguments={},
+                observation=ToolObservation(json.dumps(payload, ensure_ascii=False), ok=False),
+                base_keys=record.base_keys, iteration=iteration, call_index=0,
+                target_tool=record.tool_name,
+                candidate={"candidate_id": record.candidate_id,
+                    "candidate_digest": record.candidate_digest,
+                    "target_tool": record.tool_name, "base_keys": sorted(record.base_keys),
+                    "active": False},
+            ))
+            retired_candidate_ids.add(record.candidate_id)
+            drafts.pop(record.candidate_id, None)
+            if latest_draft_id == record.candidate_id:
+                latest_draft_id = None
 
         async def _reject(
             event: ToolRejected, *, feedback: str, iteration: int
@@ -633,7 +836,7 @@ class ToolLoopAgent:
             retracts the failed iteration, and the chat finish seat writes
             the honest terminal response.
             """
-            nonlocal prev_rejected
+            nonlocal prev_rejected, pending_rejection_feedback
             await _emit(on_loop_event, event)
             previous = tuple(rejections)
             rejections.append(event)
@@ -642,6 +845,9 @@ class ToolLoopAgent:
                 and should_stop_rejection is not None
                 and should_stop_rejection(event, previous)
             ):
+                failed_candidate = candidates.get(repair_candidate_id or "")
+                if failed_candidate is not None:
+                    await retire_failed_candidate(failed_candidate, iteration=iteration, kind="no_progress")
                 logger.info(
                     "tool_loop_no_progress",
                     agent=self.name,
@@ -659,13 +865,13 @@ class ToolLoopAgent:
                         no_progress_tool=event.tool_name,
                     )
                 )
-            base_messages[1] = {
-                "role": "user",
-                "content": user_prompt + _loop_echo(feedback),
-            }
+            # Keep the opening byte-stable for provider prefix caching. The
+            # latest rejection remains visible as a trailing user message.
+            pending_rejection_feedback = _loop_echo(feedback)
             prev_rejected = True
             return None
 
+        assembled_result_count = 0
         for iteration in range(self.max_iterations):
             if iteration and prev_rejected and on_repair is not None:
                 await _emit(on_repair)
@@ -674,25 +880,231 @@ class ToolLoopAgent:
             # its ToolRejected fact (iteration start → the rejection).
             iteration_started = time.monotonic()
             streaming = on_delta is not None and iteration == 0
-            messages = [*base_messages, *observation_tail]
-            try:
-                if streaming:
-                    result = await self.client.generate_stream_with_tools(
-                        messages=messages,
-                        tools=specs,
-                        temperature=self.temperature,
-                        on_delta=on_delta,
-                        on_reasoning=on_reasoning,
-                        on_tool_call=on_tool_call,
-                    )
+            snapshot = await refresh_context() if refresh_context is not None else None
+            if snapshot is not None and not isinstance(snapshot, ContextSnapshot):
+                raise TypeError("refresh_context must return ContextSnapshot")
+            omitted = {
+                call_id for call_id, (lifetime, keys) in observation_scopes.items()
+                # Every result must reach the model in one complete assistant/
+                # tool protocol pair before any lifetime can retire it. A fresh
+                # project snapshot may already contain the just-written resource
+                # on the very next iteration; folding at that point would hide
+                # the successful call itself and make the model repeat the work.
+                if call_id in delivered_observations
+                and (
+                    lifetime == "call" or call_id in fold_after_delivery
+                    or (lifetime == "project" and keys and snapshot is not None
+                        and set(keys).issubset(snapshot.keys))
+                )
+            }
+            replacements = {
+                call_id: observation_wire_content(
+                    replace(observation, text=observation.project_text, images=())
+                )
+                for call_id, observation in project_image_observations.items()
+                if call_id in omitted and observation.context_lifetime == "project"
+            }
+            omitted -= replacements.keys()
+            # Remove whole protocol pairs, never orphan assistant/tool messages.
+            tail = []
+            for message in observation_tail:
+                if message.get("tool_call_id") in replacements:
+                    tail.append({**message, "content": replacements[message["tool_call_id"]]})
+                    continue
+                if message.get("tool_call_id") in omitted:
+                    continue
+                if message.get("tool_calls"):
+                    retained = [c for c in message["tool_calls"] if c["id"] not in omitted]
+                    if retained:
+                        tail.append({**message, "tool_calls": retained})
                 else:
-                    result = await self.client.generate_with_tools(
-                        messages=messages,
-                        tools=specs,
-                        temperature=self.temperature,
+                    tail.append(message)
+            feedback = (
+                [{"role": "user", "content": pending_rejection_feedback}]
+                if pending_rejection_feedback is not None else []
+            )
+            # Rejection feedback is a ONE-ROUND control message. Assembling it
+            # consumes it; later rounds retain only durable observations and
+            # any newly rejected call's own feedback.
+            pending_rejection_feedback = None
+            shared = [{"role": "user", "content": observation_wire_content(ToolObservation(snapshot.text, images=snapshot.images))}] if snapshot and (snapshot.text or snapshot.images) else []
+            history = await restore_context(snapshot, [*base_messages, *tail, *feedback, *shared]) if restore_context is not None else ConversationHistory()
+            current_restored_ids: set[str] = set()
+            current_draft_ids: set[str] = set()
+            for restored in history.candidates:
+                target = declared_by_name.get(restored.tool_name)
+                is_draft = target is not None and target.draftable
+                if (
+                    restored.candidate_id in retired_candidate_ids
+                    or target is None or not (target.repairable or target.draftable)
+                    or (restored.base_keys and (snapshot is None or not restored.base_keys.issubset(snapshot.keys)))
+                ):
+                    continue
+                try:
+                    restored_record = CandidateRecord.restore(
+                        restored, schema=declared_parameter_schemas[restored.tool_name], scope=scope
                     )
-                    for tool_call in result.tool_calls:
-                        await _emit(on_tool_call, tool_call.name)
+                except CorrectionError as exc:
+                    history.audit.setdefault("candidate_rejections", []).append({
+                        "candidate_id": restored.candidate_id, "reason": str(exc),
+                    })
+                    continue
+                if is_draft:
+                    if restored_record.candidate_id not in drafts:
+                        drafts[restored_record.candidate_id] = restored_record
+                    current_draft_ids.add(restored_record.candidate_id)
+                else:
+                    candidates[restored_record.candidate_id] = restored_record
+                    current_restored_ids.add(restored_record.candidate_id)
+            for stale_id in restored_live_ids - current_restored_ids:
+                if stale_id != repair_candidate_id:
+                    candidates.pop(stale_id, None)
+            for stale_id in restored_draft_ids - current_draft_ids:
+                if stale_id != latest_draft_id:
+                    drafts.pop(stale_id, None)
+            restored_live_ids = current_restored_ids
+            restored_draft_ids = current_draft_ids
+            active_repair = candidates.get(repair_candidate_id or "")
+            restricted_tools = (
+                [correction_declaration]
+                if active_repair is not None
+                else [*active_tools, correction_declaration]
+                if candidates
+                else active_tools
+            )
+            if round_assembler is not None:
+                has_new_result = len(observation_results) > assembled_result_count
+                new_result_ok = has_new_result and observation_results[-1][1]
+                assembled = round_assembler(
+                    tools=restricted_tools,
+                    drafts=tuple(drafts.values()),
+                    snapshot=snapshot,
+                    active_repair=active_repair,
+                    iteration=iteration,
+                    interim_prose_count=interim_proses_sent,
+                    new_result=bool(new_result_ok),
+                    new_result_tool=observation_results[-1][0] if new_result_ok else None,
+                    version_saved=version_saved,
+                    draft_finalized=draft_finalized,
+                )
+                assembled_result_count = len(observation_results)
+            else:
+                assembled = RoundAssembly(tools=restricted_tools, system=effective_system)
+            round_tools = assembled.tools
+            effective_system = assembled.system
+            base_messages[0] = {"role": "system", "content": effective_system}
+            if not assembled.include_project_context:
+                shared = []
+            if assembled.context:
+                shared = [*shared, {"role": "user", "content": observation_wire_content(
+                    ToolObservation(assembled.context, images=assembled.media)
+                )}]
+            if assembled.observation_tools is not None:
+                retained_call_ids = {
+                    message.get("tool_call_id") for message in tail
+                    if message.get("role") == "tool" and (
+                        message.get("name") in assembled.observation_tools
+                        or message.get("tool_call_id") not in delivered_observations
+                    )
+                }
+                filtered_tail = []
+                for message in tail:
+                    if message.get("role") == "tool":
+                        if message.get("tool_call_id") in retained_call_ids:
+                            filtered_tail.append(message)
+                    elif message.get("tool_calls"):
+                        retained_calls = [
+                            call for call in message["tool_calls"] if call.get("id") in retained_call_ids
+                        ]
+                        if retained_calls:
+                            filtered_tail.append({**message, "tool_calls": retained_calls})
+                tail = filtered_tail
+            if not assembled.include_observation_media:
+                def without_media(message: dict) -> dict:
+                    content = message.get("content")
+                    if not isinstance(content, list):
+                        return message
+                    return {**message, "content": [
+                        part for part in content
+                        if not isinstance(part, dict) or part.get("type") == "text"
+                    ]}
+
+                history_messages = [without_media(message) for message in history.messages]
+                tail = [without_media(message) for message in tail]
+            else:
+                history_messages = list(history.messages)
+            opening = base_messages[1:]
+            if assembled.opening_text is not None:
+                history_messages = []
+                opening = [{"role": "user", "content": assembled.opening_text}]
+            by_name = {t.name: t for t in [*round_tools, correction_declaration]}
+            parameter_schemas = {
+                t.name: t.params_model.model_json_schema()
+                for t in [*round_tools, correction_declaration]
+                if t.params_model is not None
+            }
+            round_specs = specs if round_tools == active_tools else [tool_spec(t) for t in round_tools]
+            # The refreshed world snapshot is the LAST message. Rebuilding it
+            # must not invalidate the stable history/observation prefix.
+            messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
+            opening_index = 1 + len(history_messages)
+            observation_start = opening_index + 1
+            feedback_start = observation_start + len(tail)
+            project_start = feedback_start + len(feedback)
+            assembly = {
+                "agent": self.name, "iteration": iteration, "max_iterations": self.max_iterations,
+                "system_sources": getattr(effective_system, "sources", []),
+                "user_sources": getattr(user_prompt, "sources", []),
+                "template_variables": sorted(template_kwargs),
+                "declared_packs": self.packs,
+                "pack_text": template_kwargs.get("packs"),
+                "conversation_context": history.audit,
+                "rejections": [{"iteration": r.iteration, "tool_name": r.tool_name,
+                                "kind": r.kind, "detail": r.detail} for r in rejections],
+                "accepted_reads": list(accepted_reads),
+                "omitted_observation_ids": sorted(omitted),
+                "summarized_observation_ids": sorted(replacements),
+                "repair_tool": active_repair.tool_name if active_repair is not None else None,
+                "repair_candidate": ({"candidate_id": active_repair.candidate_id,
+                    "candidate_digest": active_repair.candidate_digest,
+                    "target_tool": active_repair.tool_name} if active_repair is not None else None),
+                "available_candidate_ids": sorted(candidates),
+                "available_draft_ids": sorted(drafts),
+                "retained_observation_ids": [m["tool_call_id"] for m in tail if m.get("tool_call_id")],
+                "rejected_candidates": list(rejected_candidates),
+                "candidate_retained": (
+                    all(any(c.get("id") == candidate["call_id"]
+                            for m in messages for c in m.get("tool_calls", []))
+                        for candidate in rejected_candidates)
+                    if rejected_candidates else None
+                ),
+                "message_sections": {"system": [0], "conversation_history": list(range(1, opening_index)),
+                                     "opening_and_feedback": [opening_index],
+                                     "observations": list(range(observation_start, feedback_start)),
+                                     "loop_feedback": list(range(feedback_start, project_start)),
+                                     "project_context": list(range(project_start, project_start + len(shared)))},
+            }
+            try:
+                with bind_model_prompt(assembly):
+                    if streaming:
+                        result = await self.client.generate_stream_with_tools(
+                            messages=messages,
+                            tools=round_specs,
+                            temperature=self.temperature,
+                            thinking=False,
+                            on_delta=on_delta if assembled.allow_interim_prose else None,
+                            on_reasoning=on_reasoning,
+                            on_tool_call=on_tool_call,
+                        )
+                    else:
+                        result = await self.client.generate_with_tools(
+                            messages=messages,
+                            tools=round_specs,
+                            temperature=self.temperature,
+                            thinking=False,
+                        )
+                        for tool_call in result.tool_calls:
+                            await _emit(on_tool_call, tool_call.name)
             except LLMSchemaError as e:
                 # The truncation signature (finish_reason=tool_calls but
                 # arguments hit EOF) — schema class: absorbed into the loop
@@ -723,6 +1135,7 @@ class ToolLoopAgent:
             # Misplaced speech (an args-level "prose" habit key) reads as
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
+            delivered_observations.update(observation_scopes)
             if not result.tool_calls:
                 if not prose.strip():
                     # 空裸回复护栏 (2026-10-06, live 取证 96a86172 起 — the
@@ -757,8 +1170,27 @@ class ToolLoopAgent:
                     if stopped is not None:
                         return stopped
                     continue
-                # Bare final reply — the read-tolerant answer call (any
-                # kept read-iteration speech composes in front of it).
+                required_feedback = (
+                    bare_rejection_feedback() if bare_rejection_feedback is not None else None
+                ) or assembled.missing_tool_feedback
+                if required_feedback:
+                    stopped = await _reject(
+                        ToolRejected(
+                            kind="execute_guardrail",
+                            tool_name="answer",
+                            iteration=iteration,
+                            detail=required_feedback[:200],
+                            duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                        ),
+                        feedback=required_feedback,
+                        iteration=iteration,
+                    )
+                    if stopped is not None:
+                        return stopped
+                    continue
+                # Bare final reply — the read-tolerant answer call unless the
+                # caller still requires a terminal decision (any kept
+                # read-iteration speech composes in front of it).
                 return _finish(
                     LoopResult(
                         prose=_compose_speech([*speech_parts, prose]),
@@ -768,272 +1200,715 @@ class ToolLoopAgent:
                         calls=calls,
                     )
                 )
-            call = result.tool_calls[0]
-            if len(result.tool_calls) > 1:
-                # The prompts say exactly one tool; extra calls never run
-                # (parallel gate actions would fork the turn's writes).
-                logger.warning(
-                    "tool_loop_extra_calls",
-                    agent=self.name,
-                    extra_calls=[c.name for c in result.tool_calls[1:]],
+            batched = len(result.tool_calls) > 1
+            response_prose = prose
+            prose_handled = False
+            wire_calls = [
+                {"id": call.id or f"call_{iteration}_{index}", "type": "function",
+                 "function": {"name": call.name, "arguments": json.dumps(call.arguments, ensure_ascii=False)}}
+                for index, call in enumerate(result.tool_calls)
+            ]
+            if batched:
+                observation_tail.append({"role": "assistant", "content": prose or "", "tool_calls": wire_calls})
+
+            async def remember(call, call_id, observation, executed_arguments=None, *,
+                               candidate_record: CandidateRecord | None = None,
+                               candidate_active: bool = True,
+                               target_tool: str | None = None,
+                               wire_arguments: dict[str, Any] | None = None):
+                if observation.context_lifetime not in {"call", "turn", "project"}:
+                    raise ValueError("unknown observation context lifetime")
+                fold_keys = observation.context_keys if not observation.images or observation.project_text is not None else ()
+                if observation.images and observation.project_text is not None:
+                    project_image_observations[call_id] = observation
+                if observation.fold_after_delivery:
+                    fold_after_delivery.add(call_id)
+                observation_scopes[call_id] = (observation.context_lifetime, fold_keys)
+                projected_arguments = call.arguments if wire_arguments is None else wire_arguments
+                if not batched:
+                    projected_calls = wire_calls if wire_arguments is None else [
+                        {**wire_call, "function": {**wire_call["function"], "arguments": json.dumps(wire_arguments, ensure_ascii=False)}}
+                        if wire_call["id"] == call_id else wire_call
+                        for wire_call in wire_calls
+                    ]
+                    observation_tail.append({"role": "assistant", "content": prose or "", "tool_calls": projected_calls})
+                observation_tail.append({"role": "tool", "tool_call_id": call_id, "name": call.name,
+                                         "content": observation_wire_content(observation)})
+                await _emit(on_context_event, ToolExchange(
+                    call_id=call_id, tool_name=call.name, arguments=projected_arguments,
+                    observation=observation, base_keys=snapshot.keys if snapshot else frozenset(),
+                    executed_arguments=executed_arguments, iteration=iteration, call_index=call_index,
+                    target_tool=target_tool,
+                    candidate=({"candidate_id": candidate_record.candidate_id,
+                        "candidate_digest": candidate_record.candidate_digest,
+                        "target_tool": candidate_record.tool_name,
+                        "base_keys": sorted(candidate_record.base_keys),
+                        "active": candidate_active}
+                        if candidate_record is not None else None),
+                ))
+
+            async def reject_candidate(call, call_id, record: CandidateRecord, *,
+                                       include_candidate: bool, detail: str,
+                                       kind: str = "params_validation",
+                                       event_kind: str = "params_validation",
+                                       correction_error: CorrectionError | None = None):
+                nonlocal repair_candidate_id
+                candidates[record.candidate_id] = record
+                repair_candidate_id = record.candidate_id
+                rejected_candidates.append({
+                    "iteration": iteration, "call_id": call_id,
+                    "tool_name": record.tool_name, "candidate_id": record.candidate_id,
+                    "candidate_digest": record.candidate_digest,
+                    "arguments": deepcopy(record.arguments), "errors": record.errors,
+                })
+                payload = record.diagnostic(
+                    include_candidate=include_candidate, kind=kind,
+                    correction_error=correction_error,
                 )
-            calls.append(call.name)
-            tool = by_name.get(call.name)
-            if tool is None:
-                logger.info(
-                    "tool_loop_rejection",
-                    agent=self.name,
-                    iteration=iteration,
-                    kind="unknown_tool",
-                    tool=call.name,
+                encoded = json.dumps(payload, ensure_ascii=False)
+                await remember(
+                    call, call_id, ToolObservation(encoded, ok=False),
+                    executed_arguments=record.arguments, candidate_record=record,
+                    target_tool=record.tool_name,
                 )
-                stopped = await _reject(
-                    ToolRejected(
-                        kind="unknown_tool",
-                        tool_name=call.name,
-                        iteration=iteration,
-                        detail=None,
-                        duration_ms=int((time.monotonic() - iteration_started) * 1000),
-                    ),
+                return await _reject(
+                    ToolRejected(event_kind, record.tool_name, iteration, detail[:200], 0),
                     feedback=(
-                        f"unknown tool {call.name!r} — call exactly one of: "
-                        + ", ".join(t.name for t in self.tools)
+                        f"The retained {record.tool_name} candidate was not executed. "
+                        f"Use {CORRECTION_TOOL_NAME} with candidate_id={record.candidate_id} "
+                        "and the current digest/diagnostics in its tool result; do not repeat resource preparation."
                     ),
                     iteration=iteration,
                 )
+
+            async def reject_working_draft(call, call_id, record: CandidateRecord, *,
+                                           detail: str,
+                                           kind: str = "content_validation",
+                                           event_kind: str = "execute_guardrail",
+                                           correction_error: CorrectionError | None = None):
+                nonlocal latest_draft_id
+                drafts[record.candidate_id] = record
+                latest_draft_id = record.candidate_id
+                rejected_candidates.append({
+                    "iteration": iteration, "call_id": call_id,
+                    "tool_name": record.tool_name, "candidate_id": record.candidate_id,
+                    "candidate_digest": record.candidate_digest,
+                    "arguments": deepcopy(record.arguments), "errors": record.errors,
+                })
+                payload = working_draft_diagnostic(record, kind=kind)
+                if correction_error is not None:
+                    payload["draft_error"] = {"code": correction_error.code, "message": str(correction_error)}
+                await remember(
+                    call, call_id, ToolObservation(
+                        json.dumps(payload, ensure_ascii=False), ok=False, fold_after_delivery=True,
+                    ),
+                    executed_arguments=record.arguments, candidate_record=record,
+                    candidate_active=True, target_tool=record.tool_name,
+                )
+                return await _reject(
+                    ToolRejected(
+                        event_kind, record.tool_name, iteration, detail[:200], 0,
+                        candidate_digest=candidate_progress_digest(record),
+                    ),
+                    feedback="The working draft was not saved; its latest identity and errors are in the tool result.",
+                    iteration=iteration,
+                )
+
+            unsafe = [call for call in result.tool_calls if call.name in by_name
+                      and (by_name[call.name].terminal or not by_name[call.name].batchable)]
+            if batched and unsafe:
+                # Reject BEFORE any work: no first write, silent drops or forked starts.
+                feedback = "This batch was not executed. Content writes and terminal actions must be submitted alone; batch only declared reads/resource preparation."
+                calls.extend(call.name for call in result.tool_calls)
+                for call_index, call in enumerate(result.tool_calls):
+                    await remember(call, wire_calls[call_index]["id"], ToolObservation(feedback, ok=False))
+                correction_call = next((c for c in result.tool_calls if c.name == CORRECTION_TOOL_NAME), None)
+                correction_candidate = candidates.get(str(correction_call.arguments.get("candidate_id") or "")) if correction_call is not None else None
+                rejection_owner = (
+                    active_repair.tool_name if active_repair is not None and correction_call is not None
+                    else correction_candidate.tool_name if correction_candidate is not None
+                    else unsafe[0].name
+                )
+                stopped = await _reject(ToolRejected(kind="execute_guardrail", tool_name=rejection_owner,
+                    iteration=iteration, detail=feedback, duration_ms=0), feedback=feedback, iteration=iteration)
                 if stopped is not None:
                     return stopped
                 continue
-            # 读容忍 at the loop boundary (打字机律牙①'s loop form): the
-            # retired wire habits drop silently — "type"/"kind" naming keys
-            # (the tool's name already carries both), a "prose" speech key
-            # (speech belongs to the content channel — misplaced speech
-            # still reads as speech when the channel stayed empty).
-            raw = dict(call.arguments)
-            raw.pop("type", None)
-            raw.pop("kind", None)
-            habit_prose = raw.pop("prose", None) or ""
-            if not prose.strip() and isinstance(habit_prose, str):
-                prose = habit_prose
-            raw = _unwrap_item_dialect(raw)
-            params: BaseModel | None = None
-            if tool.params_model is not None:
-                try:
-                    params = tool.params_model.model_validate(raw)
-                except ValidationError as e:
+
+            if active_repair is not None and any(call.name != CORRECTION_TOOL_NAME for call in result.tool_calls):
+                feedback = (
+                    f"This entire reply was not executed. Only {CORRECTION_TOOL_NAME} is available. "
+                    "Use the retained candidate diagnostic and target_parameters_schema; "
+                    "do not invent schema lookup tools. Choose patch or explicit replace."
+                )
+                for call_index, call in enumerate(result.tool_calls):
+                    calls.append(call.name)
+                    await remember(call, wire_calls[call_index]["id"], ToolObservation(feedback, ok=False),
+                                   candidate_record=active_repair, target_tool=active_repair.tool_name)
+                stopped = await _reject(ToolRejected("execute_guardrail", active_repair.tool_name,
+                    iteration, feedback, 0), feedback=feedback, iteration=iteration)
+                if stopped is not None:
+                    return stopped
+                continue
+
+            for call_index, call in enumerate(result.tool_calls):
+                call_id = call.id or f"call_{iteration}_{call_index}"
+                prose = response_prose if not prose_handled else ""
+                calls.append(call.name)
+                tool = by_name.get(call.name)
+                if tool is None:
+                    if not batched:
+                        await remember(call, call_id, ToolObservation(f"Unknown tool {call.name!r}; not executed.", ok=False))
                     logger.info(
                         "tool_loop_rejection",
                         agent=self.name,
                         iteration=iteration,
-                        kind="params_validation",
+                        kind="unknown_tool",
                         tool=call.name,
-                        detail=str(e)[:200],
                     )
+                    if batched:
+                        await remember(call, call_id, ToolObservation(f"Unknown tool {call.name!r}; not executed.", ok=False))
+                        continue
                     stopped = await _reject(
                         ToolRejected(
-                            kind="params_validation",
+                            kind="unknown_tool",
                             tool_name=call.name,
                             iteration=iteration,
-                            detail=str(e)[:200],
+                            detail=None,
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
-                        feedback=str(e),
+                        feedback=(
+                            f"unknown tool {call.name!r} — call exactly one of: "
+                            + ", ".join(t.name for t in active_tools)
+                        ),
                         iteration=iteration,
                     )
                     if stopped is not None:
                         return stopped
                     continue
-            # The read speech's routing is decided BEFORE execution (发射座
-            # 前移, ADR-104 发射时点修订): a read was ACCEPTED the moment its
-            # params validated — the perception dispatch always observes,
-            # never rejects — so the speech-commit protocol's retraction
-            # window is already closed, and for a WAITING read (ADR-102 —
-            # execute blocks until the material's terminal state) a
-            # post-execution emission would hold the waiter line hostage for
-            # the whole wait: delivered after the silence it exists to
-            # cover, and persisted with a created_at that sorts it AFTER the
-            # read's activity by birth moment. Emitted here, the speech lands
-            # before the wait begins and the activity sorts BETWEEN the two
-            # speeches.
-            #   The ONE routing rule (ADR-109 — 言语座位通用化): prose before
-            #   a TERMINAL call is settled speech (the ledger — the
-            #   ``not tool.terminal`` guard is what keeps the reply itself
-            #   off the interim_prose channel); prose riding ANY non-terminal
-            #   call is a INTERIM_PROSE — the seat is universal (白名单退役:
-            #   per-tool eligibility asked the registry to license speech;
-            #   the model's phase-narration instinct is the judge, the
-            #   harness provides the seat, the cap guards the rhythm).
-            #   It rides on_interim_prose, never the ledger. Without an
-            #   on_interim_prose channel (the one-shot JSON path) the ledger
-            #   keeps everything; capped prose is dropped (earned, never
-            #   scheduled — never merged back).
-            interim_prose_route = (
-                not tool.terminal
-                and bool(prose.strip())
-                and on_interim_prose is not None
-            )
-            if interim_prose_route and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN:
-                await _emit(on_interim_prose, prose.strip())
-                interim_proses_sent += 1
-                logger.info(
-                    "tool_loop_interim_prose",
-                    agent=self.name,
-                    iteration=iteration,
-                    predecessor=last_read_name,
+                # 读容忍 at the loop boundary (打字机律牙①'s loop form): the
+                # retired wire habits drop silently — "type"/"kind" naming keys
+                # (the tool's name already carries both), a "prose" speech key
+                # (speech belongs to the content channel — misplaced speech
+                # still reads as speech when the channel stayed empty).
+                raw = dict(call.arguments)
+                raw.pop("type", None)
+                raw.pop("kind", None)
+                habit_prose = raw.pop("prose", None) or ""
+                if not prose_handled and not prose.strip() and isinstance(habit_prose, str):
+                    prose = habit_prose
+                is_correction = call.name == CORRECTION_TOOL_NAME
+                is_draft_merge = False
+                is_draft_update = False
+                if not is_correction:
+                    raw = _unwrap_item_dialect(raw)
+                dispatch_name = call.name
+                dispatch_tool = tool
+                candidate_record = active_repair if is_correction else None
+                correction_merge = None
+                if tool.params_model is not None and not is_correction:
+                    raw, changes = normalize_numeric_arguments(raw, parameter_schemas[call.name])
+                    trace_argument_normalization(model_call_id=assembly.get("model_call_id"), tool_call_id=call_id, agent=self.name, iteration=iteration, changes=changes)
+                params: BaseModel | None = None
+                if is_correction:
+                    try:
+                        correction_params = CandidateCorrectionArgs.model_validate(raw)
+                        request = correction_params.root
+                        candidate_record = candidate_record or candidates.get(request.candidate_id)
+                        if candidate_record is None:
+                            raise CorrectionError("unknown_candidate", "candidate_id does not name a current retained candidate in this owner/conversation.")
+                        if candidate_record.base_keys and (
+                            snapshot is None or not candidate_record.base_keys.issubset(snapshot.keys)
+                        ):
+                            stale = CorrectionError(
+                                "stale_base", "The candidate's source/version facts are no longer current; it was retired without execution. Re-read current facts and create a new candidate.",
+                            )
+                            stopped = await reject_candidate(call, call_id, candidate_record,
+                                include_candidate=False, detail=str(stale), correction_error=stale)
+                            if stopped is None:
+                                await retire_failed_candidate(candidate_record, iteration=iteration, kind="stale_base")
+                                continue
+                            return stopped
+                        correction_merge = apply_correction(candidate_record, request)
+                        raw = correction_merge.arguments
+                        dispatch_name = candidate_record.tool_name
+                        dispatch_tool = by_name[dispatch_name]
+                    except ValidationError as e:
+                        detail = str(e)
+                        correction_error = CorrectionError("invalid_correction", detail)
+                        if candidate_record is not None:
+                            stopped = await reject_candidate(call, call_id, candidate_record,
+                                include_candidate=False, detail=detail, correction_error=correction_error)
+                        else:
+                            feedback = json.dumps({"ok": False, "execution": "not executed", "saved": False,
+                                "correction_error": {"code": correction_error.code, "message": detail}}, ensure_ascii=False)
+                            await remember(call, call_id, ToolObservation(feedback, ok=False))
+                            stopped = await _reject(ToolRejected("params_validation", active_repair.tool_name if active_repair else call.name,
+                                iteration, detail[:200], 0), feedback=detail, iteration=iteration)
+                        if stopped is not None:
+                            return stopped
+                        continue
+                    except CorrectionError as e:
+                        if candidate_record is None:
+                            feedback = json.dumps({"ok": False, "execution": "not executed", "saved": False,
+                                "correction_error": {"code": e.code, "message": str(e)}}, ensure_ascii=False)
+                            await remember(call, call_id, ToolObservation(feedback, ok=False))
+                            stopped = await _reject(ToolRejected("params_validation", call.name, iteration, str(e)[:200], 0),
+                                feedback=str(e), iteration=iteration)
+                        else:
+                            stopped = await reject_candidate(call, call_id, candidate_record,
+                                include_candidate=False, detail=str(e), correction_error=e)
+                        if stopped is not None:
+                            return stopped
+                        continue
+                    raw, changes = normalize_numeric_arguments(raw, parameter_schemas[dispatch_name])
+                    trace_argument_normalization(model_call_id=assembly.get("model_call_id"), tool_call_id=call_id,
+                        agent=self.name, iteration=iteration, changes=changes)
+                    try:
+                        params = dispatch_tool.params_model.model_validate(raw) if dispatch_tool.params_model is not None else None
+                        trace_argument_normalization(model_call_id=assembly.get("model_call_id"), tool_call_id=call_id, agent=self.name, iteration=iteration, changes=numeric_string_changes(raw, params.model_dump(mode="json") if params is not None else {}))
+                    except ValidationError as e:
+                        errors = json.loads(e.json(include_input=False, include_url=False))
+                        candidate_record = candidate_record.updated(raw, errors, call_id=call_id)
+                        stopped = await reject_candidate(call, call_id, candidate_record,
+                            include_candidate=not correction_merge.complete_arguments_in_call,
+                            detail=str(e))
+                        if stopped is not None:
+                            return stopped
+                        continue
+                elif tool.params_model is not None:
+                    try:
+                        params = tool.params_model.model_validate(raw)
+                        trace_argument_normalization(model_call_id=assembly.get("model_call_id"), tool_call_id=call_id, agent=self.name, iteration=iteration, changes=numeric_string_changes(raw, params.model_dump(mode="json")))
+                    except ValidationError as e:
+                        errors = json.loads(e.json(include_input=False, include_url=False))
+                        draft_validation_record = None
+                        if tool.draftable and isinstance(raw.get("draft_ref"), dict):
+                            try:
+                                reference = raw["draft_ref"]
+                                draft_id = reference.get("draft_id")
+                                if not isinstance(draft_id, str):
+                                    raise CorrectionError("invalid_draft", "draft_id must be a string")
+                                draft_record = drafts.get(draft_id)
+                                if draft_record is None:
+                                    raise CorrectionError("unknown_draft", "draft_id does not name a current retained Composition draft")
+                                verify_working_draft(draft_record, reference)
+                                draft_validation_record = draft_record.updated(
+                                    draft_record.arguments, errors, call_id=call_id,
+                                )
+                            except (ValidationError, CorrectionError):
+                                # An unauthenticated reference cannot borrow a
+                                # retained draft's identity for its diagnostic.
+                                pass
+                        if draft_validation_record is not None:
+                            stopped = await reject_working_draft(
+                                call, call_id, draft_validation_record,
+                                detail=str(e), kind="params_validation",
+                                event_kind="params_validation",
+                            )
+                        elif tool.repairable:
+                            candidate_record = CandidateRecord.create(
+                                tool_name=call.name, arguments=raw, errors=errors,
+                                schema=parameter_schemas[call.name], scope=scope,
+                                base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
+                            )
+                            logger.info("tool_loop_rejection", agent=self.name, iteration=iteration,
+                                kind="params_validation", tool=call.name, detail=str(e)[:200])
+                            stopped = await reject_candidate(call, call_id, candidate_record,
+                                include_candidate=False, detail=str(e))
+                        else:
+                            rejected_candidates.append({
+                                "iteration": iteration, "call_id": call_id,
+                                "tool_name": call.name, "arguments": raw, "errors": errors,
+                            })
+                            logger.info("tool_loop_rejection", agent=self.name, iteration=iteration,
+                                kind="params_validation", tool=call.name, detail=str(e)[:200])
+                            await remember(call, call_id, ToolObservation(json.dumps({
+                                "ok": False, "execution": "not executed", "saved": False,
+                                "kind": "params_validation", "errors": errors, "candidate": raw,
+                                "repair": "Return valid arguments for this tool.",
+                            }, ensure_ascii=False), ok=False, fold_after_delivery=tool.draftable))
+                            stopped = await _reject(ToolRejected("params_validation", call.name, iteration,
+                                str(e)[:200], int((time.monotonic() - iteration_started) * 1000)),
+                                feedback=str(e), iteration=iteration) if not batched else None
+                        if stopped is not None:
+                            return stopped
+                        continue
+                if not is_correction and params is not None and getattr(params, "draft_ref", None) is not None:
+                    reference = params.draft_ref
+                    candidate_record = drafts.get(reference.draft_id)
+                    try:
+                        if candidate_record is None:
+                            raise CorrectionError("unknown_draft", "draft_id does not name a current retained Composition draft in this owner/conversation")
+                        verify_working_draft(candidate_record, reference)
+                        if candidate_record.base_keys and (
+                            snapshot is None or not candidate_record.base_keys.issubset(snapshot.keys)
+                        ):
+                            raise CorrectionError("stale_base", "The draft's source/version facts are no longer current; re-read current facts and start a new design")
+                        bind_working_draft = getattr(params, "bind_working_draft", None)
+                        if bind_working_draft is None:
+                            raise CorrectionError("invalid_draft", "the target tool cannot accept working draft state")
+                        if tool.draft_reader:
+                            bind_working_draft(candidate_record.arguments)
+                        else:
+                            merged = merge_working_draft(candidate_record, params)
+                            dispatch_name = candidate_record.tool_name
+                            dispatch_tool = by_name[dispatch_name]
+                            bind_working_draft(merged)
+                            is_draft_merge = True
+                    except (CorrectionError, ValidationError) as exc:
+                        correction_error = exc if isinstance(exc, CorrectionError) else CorrectionError("invalid_revision", str(exc))
+                        if candidate_record is not None:
+                            stopped = await reject_working_draft(
+                                call, call_id, candidate_record,
+                                detail=str(exc), kind="params_validation",
+                                event_kind="params_validation", correction_error=correction_error,
+                            )
+                        else:
+                            feedback = json.dumps({"ok": False, "execution": "not executed", "saved": False,
+                                "draft_error": {"code": correction_error.code, "message": str(correction_error)}}, ensure_ascii=False)
+                            await remember(call, call_id, ToolObservation(feedback, ok=False))
+                            stopped = await _reject(ToolRejected("params_validation", call.name, iteration,
+                                str(exc)[:200], 0), feedback=str(exc), iteration=iteration)
+                        if stopped is not None:
+                            return stopped
+                        if isinstance(correction_error, CorrectionError) and correction_error.code == "stale_base" and candidate_record is not None:
+                            await retire_working_draft(candidate_record, iteration=iteration, kind="stale_base")
+                        continue
+                tool = dispatch_tool
+                if is_correction:
+                    assert candidate_record is not None and correction_merge is not None
+                # The read speech's routing is decided BEFORE execution (发射座
+                # 前移, ADR-104 发射时点修订): a read was ACCEPTED the moment its
+                # params validated — the perception dispatch always observes,
+                # never rejects — so the speech-commit protocol's retraction
+                # window is already closed, and for a WAITING read (ADR-102 —
+                # execute blocks until the material's terminal state) a
+                # post-execution emission would hold the waiter line hostage for
+                # the whole wait: delivered after the silence it exists to
+                # cover, and persisted with a created_at that sorts it AFTER the
+                # read's activity by birth moment. Emitted here, the speech lands
+                # before the wait begins and the activity sorts BETWEEN the two
+                # speeches.
+                #   The ONE routing rule (ADR-109 — 言语座位通用化): prose before
+                #   a TERMINAL call is settled speech (the ledger — the
+                #   ``not tool.terminal`` guard is what keeps the reply itself
+                #   off the interim_prose channel); prose riding ANY non-terminal
+                #   call is a INTERIM_PROSE — the seat is universal (白名单退役:
+                #   per-tool eligibility asked the registry to license speech;
+                #   the model's phase-narration instinct is the judge, the
+                #   harness provides the seat, the cap guards the rhythm).
+                #   It rides on_interim_prose, never the ledger. Without an
+                #   on_interim_prose channel (the one-shot JSON path) the ledger
+                #   keeps everything; capped prose is dropped (earned, never
+                #   scheduled — never merged back).
+                prose_handled = True
+                # Draft judgments speak only from their accepted observation.
+                if not tool.terminal and (
+                    not assembled.allow_interim_prose
+                    or (tool.draft_reader and getattr(params, "judgment", None) is not None)
+                ):
+                    prose = ""
+                interim_prose_route = (
+                    not tool.terminal
+                    and bool(prose.strip())
+                    and on_interim_prose is not None
                 )
-            elif interim_prose_route:
-                logger.info(
-                    "tool_loop_interim_prose_capped",
-                    agent=self.name,
-                    iteration=iteration,
-                )
-            elif not tool.terminal:
-                speech_parts.append(prose)
-            await _emit(on_tool_ready, call.name, params)
-            # The composed speech: a TERMINAL call gets the ledger + this
-            # iteration's prose (it never entered the ledger — the guard
-            # above); a read gets the LEDGER AS IS — its prose either just
-            # entered it (non-routed) or left the ledger for the interim_prose
-            # channel (routed: emitted = the interim_prose owns the words;
-            # capped = dropped, never merged back). Re-adding ``prose``
-            # here would double the non-routed read's speech and leak
-            # interim_prose words back into the ledger (regression caught by
-            # test_read_observation_continues_the_loop_and_keeps_speech).
-            speech = _compose_speech(
-                speech_parts if not tool.terminal else [*speech_parts, prose]
-            )
-            if not tool.terminal:
-                # The read's work-START stamp (ADR-108 数组位置律): the
-                # projector re-anchors the span's honest duration at
-                # execute entry — after the interim_prose seat above, so the
-                # waiter row is appended (and persisted) BEFORE the
-                # activity row's birth: 服务员话 → 读活动 → 读后回复 is
-                # array order, never a clock race.
-                await _emit(on_loop_event, ReadExecuting(tool_name=call.name, params=params))
-            outcome = await execute(call.name, params, speech)
-            if isinstance(outcome, ToolObservation):
-                if tool.terminal:
-                    raise RuntimeError(
-                        f"terminal tool {call.name!r} returned a ToolObservation "
-                        "— the declaration and the execute table skewed "
-                        "(a terminal call ends the turn, never observes)"
+                if interim_prose_route and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN:
+                    await _emit(on_interim_prose, prose.strip())
+                    interim_proses_sent += 1
+                    logger.info(
+                        "tool_loop_interim_prose",
+                        agent=self.name,
+                        iteration=iteration,
+                        predecessor=last_read_name,
                     )
-                # A read accepted (T2b 感知族): the iteration's speech was
-                # already routed pre-execution (the seat above); what remains
-                # is the wire continuation — this read becomes the LAST read
-                # for the hit-rate log's predecessor field.
-                last_read_name = call.name
-                accepted_reads.append(call.name)
-                call_id = call.id or f"call_{iteration}"
-                observation_tail.append(
-                    {
-                        "role": "assistant",
-                        "content": prose or "",
-                        "tool_calls": [
-                            {
-                                "id": call_id,
-                                "type": "function",
-                                "function": {
-                                    "name": call.name,
-                                    "arguments": json.dumps(
-                                        call.arguments, ensure_ascii=False
-                                    ),
-                                },
-                            }
-                        ],
-                    }
+                elif interim_prose_route:
+                    logger.info(
+                        "tool_loop_interim_prose_capped",
+                        agent=self.name,
+                        iteration=iteration,
+                    )
+                elif not tool.terminal:
+                    speech_parts.append(prose)
+                await _emit(on_tool_ready, dispatch_name, params)
+                # The composed speech: a TERMINAL call gets the ledger + this
+                # iteration's prose (it never entered the ledger — the guard
+                # above); a read gets the LEDGER AS IS — its prose either just
+                # entered it (non-routed) or left the ledger for the interim_prose
+                # channel (routed: emitted = the interim_prose owns the words;
+                # capped = dropped, never merged back). Re-adding ``prose``
+                # here would double the non-routed read's speech and leak
+                # interim_prose words back into the ledger (regression caught by
+                # test_read_observation_continues_the_loop_and_keeps_speech).
+                speech = _compose_speech(
+                    speech_parts if not tool.terminal else [*speech_parts, prose]
                 )
-                observation_tail.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "name": call.name,
-                        "content": _observation_wire_content(outcome),
-                    }
-                )
-                await _emit(
-                    on_loop_event,
-                    ReadAccepted(
-                        tool_name=call.name,
-                        ok=outcome.ok,
-                        receipt=outcome.receipt,
-                    ),
-                )
-                continue
-            if isinstance(outcome, TerminalRefusal):
-                # The deterministic turn-ending refusal: the REJECTION facts
-                # all ride the existing seat (ToolRejected — the speech
-                # retracts, the half-started activity cancels), then the
-                # loop ends instead of offering the echo's next iteration.
+                if not tool.terminal:
+                    # The read's work-START stamp (ADR-108 数组位置律): the
+                    # projector re-anchors the span's honest duration at
+                    # execute entry — after the interim_prose seat above, so the
+                    # waiter row is appended (and persisted) BEFORE the
+                    # activity row's birth: 服务员话 → 读活动 → 读后回复 is
+                    # array order, never a clock race.
+                    await _emit(on_loop_event, ReadExecuting(tool_name=dispatch_name, params=params))
+                outcome = await execute(dispatch_name, params, speech)
+                if isinstance(outcome, WorkingDraftReviewed):
+                    if not tool.draft_reader or candidate_record is None:
+                        raise RuntimeError(f"{dispatch_name} returned draft evidence without draft_reader=True")
+                    candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
+                    drafts[candidate_record.candidate_id] = candidate_record
+                    latest_draft_id = candidate_record.candidate_id
+                    observation = outcome.observation
+                    payload = json.loads(observation.text)
+                    payload["draft_ref"] = working_draft_observation(candidate_record)["draft_ref"]
+                    payload["review"] = working_draft_observation(candidate_record)["review"]
+                    outcome = replace(observation, text=json.dumps(payload, ensure_ascii=False))
+                    is_draft_update = True
+                if isinstance(outcome, WorkingDraftUpdated):
+                    if not tool.draftable:
+                        raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
+                    if candidate_record is None:
+                        candidate_record = CandidateRecord.create(
+                            tool_name=dispatch_name, arguments=outcome.arguments, errors=[],
+                            schema=parameter_schemas[dispatch_name], scope=scope,
+                            base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
+                        )
+                    else:
+                        candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
+                    drafts[candidate_record.candidate_id] = candidate_record
+                    latest_draft_id = candidate_record.candidate_id
+                    outcome = ToolObservation(
+                        json.dumps(working_draft_observation(candidate_record), ensure_ascii=False),
+                        ok=True,
+                        fold_after_delivery=True,
+                    )
+                    is_draft_update = True
+                    is_draft_merge = False
+                if isinstance(outcome, WorkingDraftRejected):
+                    if not tool.draftable:
+                        raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
+                    arguments = outcome.arguments
+                    if candidate_record is None:
+                        candidate_record = CandidateRecord.create(
+                            tool_name=dispatch_name, arguments=arguments, errors=outcome.errors,
+                            schema=parameter_schemas[dispatch_name], scope=scope,
+                            base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
+                        )
+                    else:
+                        candidate_record = candidate_record.updated(arguments, outcome.errors, call_id=call_id)
+                    stopped = await reject_working_draft(
+                        call, call_id, candidate_record,
+                        detail=outcome.reason,
+                    )
+                    if stopped is not None:
+                        return stopped
+                    continue
+                if isinstance(outcome, CandidateRejected):
+                    if not tool.repairable:
+                        raise RuntimeError(f"{dispatch_name} returned candidate validation without repairable=True")
+                    if candidate_record is None:
+                        candidate_record = CandidateRecord.create(
+                            tool_name=dispatch_name, arguments=raw, errors=outcome.errors,
+                            schema=parameter_schemas[dispatch_name], scope=scope,
+                            base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
+                        )
+                    else:
+                        candidate_record = candidate_record.updated(raw, outcome.errors, call_id=call_id)
+                    stopped = await reject_candidate(
+                        call, call_id, candidate_record,
+                        include_candidate=is_correction and not correction_merge.complete_arguments_in_call,
+                        detail=outcome.reason, kind="content_validation", event_kind="execute_guardrail",
+                    )
+                    if stopped is not None:
+                        return stopped
+                    continue
+                if isinstance(outcome, ToolObservation):
+                    if tool.terminal:
+                        raise RuntimeError(
+                            f"terminal tool {dispatch_name!r} returned a ToolObservation "
+                            "— the declaration and the execute table skewed "
+                            "(a terminal call ends the turn, never observes)"
+                        )
+                    if is_draft_merge and outcome.ok:
+                        assert candidate_record is not None
+                        retired_candidate_ids.add(candidate_record.candidate_id)
+                        drafts.pop(candidate_record.candidate_id, None)
+                        if latest_draft_id == candidate_record.candidate_id:
+                            latest_draft_id = None
+                        for stale_draft in list(drafts.values()):
+                            await retire_working_draft(
+                                stale_draft, iteration=iteration, kind="superseded"
+                            )
+                    elif outcome.ok and tool.draftable and not is_draft_update:
+                        # A successful save supersedes retained working drafts;
+                        # a save=false update remains the active draft itself.
+                        for stale_draft in list(drafts.values()):
+                            await retire_working_draft(
+                                stale_draft, iteration=iteration, kind="superseded"
+                            )
+                    if is_correction:
+                        retired_candidate_ids.add(candidate_record.candidate_id)
+                        candidates.pop(candidate_record.candidate_id, None)
+                        repair_candidate_id = None
+                    # A working-draft observation is an accepted write step,
+                    # not a saved version. Only the direct save observation
+                    # carries this fact; tool.ok alone includes save=false.
+                    if (
+                        outcome.ok
+                        and dispatch_name in {"design_video", "revise_video"}
+                        and not is_draft_update
+                    ):
+                        version_saved = True
+                        if dispatch_name == "design_video" and assembled.stage in {"draft_build", "draft_finalize"}:
+                            draft_finalized = True
+                    last_read_name = dispatch_name
+                    accepted_reads.append(dispatch_name)
+                    observation_results.append((dispatch_name, outcome.ok))
+                    await remember(
+                        call, call_id, outcome,
+                        executed_arguments=(
+                            candidate_record.arguments if (
+                                candidate_record is not None
+                                and (is_draft_update or (is_draft_merge and not outcome.ok))
+                            )
+                            else params.model_dump(mode="json") if params is not None else {}
+                        ),
+                        candidate_record=candidate_record if (is_correction or is_draft_merge or is_draft_update) else None,
+                        candidate_active=is_draft_update or (is_draft_merge and not outcome.ok),
+                        target_tool=dispatch_name if (is_correction or is_draft_merge or is_draft_update) else None,
+                    )
+                    await _emit(
+                        on_loop_event,
+                        ReadAccepted(
+                            tool_name=dispatch_name,
+                            ok=outcome.ok,
+                            receipt=outcome.receipt,
+                        ),
+                    )
+                    if (
+                        outcome.ok
+                        and outcome.accepted_interim_prose
+                        and on_interim_prose is not None
+                        and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN
+                    ):
+                        await _emit(on_interim_prose, outcome.accepted_interim_prose)
+                        interim_proses_sent += 1
+                    continue
+                if isinstance(outcome, TerminalRefusal):
+                    if is_correction:
+                        retired_candidate_ids.add(candidate_record.candidate_id)
+                        candidates.pop(candidate_record.candidate_id, None)
+                        repair_candidate_id = None
+                    await remember(call, call_id, ToolObservation(outcome.reason, ok=False),
+                                   (candidate_record.arguments if is_draft_merge and candidate_record is not None else params.model_dump(mode="json") if params is not None else {}),
+                                   candidate_record=candidate_record if (is_correction or is_draft_merge) else None,
+                                   candidate_active=is_draft_merge, target_tool=dispatch_name if (is_correction or is_draft_merge) else None)
+                    # The deterministic turn-ending refusal: the REJECTION facts
+                    # all ride the existing seat (ToolRejected — the speech
+                    # retracts, the half-started activity cancels), then the
+                    # loop ends instead of offering the echo's next iteration.
+                    logger.info(
+                        "tool_loop_rejection",
+                        agent=self.name,
+                        iteration=iteration,
+                        kind="execute_terminal_refusal",
+                        tool=dispatch_name,
+                        detail=outcome.reason[:200],
+                    )
+                    await _emit(
+                        on_loop_event,
+                        ToolRejected(
+                            kind="execute_guardrail",
+                            tool_name=dispatch_name,
+                            iteration=iteration,
+                            detail=outcome.reason[:200],
+                            duration_ms=int(
+                                (time.monotonic() - iteration_started) * 1000
+                            ),
+                        ),
+                    )
+                    return _finish(
+                        LoopResult(
+                            prose="",
+                            tool_name=None,
+                            params=None,
+                            iterations=iteration + 1,
+                            calls=calls,
+                            ended_by=dispatch_name,
+                            refusal_facts=outcome.facts,
+                        )
+                    )
+                if outcome is None:
+                    if not tool.terminal:
+                        raise RuntimeError(
+                            f"read tool {dispatch_name!r} returned a terminal accept "
+                            "— the declaration and the execute table skewed "
+                            "(a read never ends the turn)"
+                        )
+                    if is_draft_merge:
+                        assert candidate_record is not None
+                        retired_candidate_ids.add(candidate_record.candidate_id)
+                        drafts.pop(candidate_record.candidate_id, None)
+                        latest_draft_id = None
+                    if is_correction:
+                        retired_candidate_ids.add(candidate_record.candidate_id)
+                        candidates.pop(candidate_record.candidate_id, None)
+                        repair_candidate_id = None
+                    await _emit(on_loop_event, TerminalAccepted(tool_name=dispatch_name))
+                    return _finish(
+                        LoopResult(
+                            prose=speech,
+                            tool_name=dispatch_name,
+                            params=params,
+                            iterations=iteration + 1,
+                            calls=calls,
+                        )
+                    )
                 logger.info(
                     "tool_loop_rejection",
                     agent=self.name,
                     iteration=iteration,
-                    kind="execute_terminal_refusal",
-                    tool=call.name,
-                    detail=outcome.reason[:200],
+                    kind="execute_guardrail",
+                    tool=dispatch_name,
+                    detail=outcome[:200],
                 )
-                await _emit(
-                    on_loop_event,
+                if is_correction:
+                    retired_candidate_ids.add(candidate_record.candidate_id)
+                    candidates.pop(candidate_record.candidate_id, None)
+                    repair_candidate_id = None
+                if batched:
+                    await remember(call, call_id, ToolObservation(outcome, ok=False))
+                    await _emit(on_loop_event, ReadAccepted(tool_name=dispatch_name, ok=False))
+                    continue
+                await remember(call, call_id, ToolObservation(outcome, ok=False),
+                    (candidate_record.arguments if is_draft_merge and candidate_record is not None else params.model_dump(mode="json") if params is not None else {}),
+                    candidate_record=candidate_record if (is_correction or is_draft_merge) else None,
+                    candidate_active=is_draft_merge, target_tool=dispatch_name if (is_correction or is_draft_merge) else None)
+                rejection_digest = (
+                    candidate_progress_digest(candidate_record)
+                    if candidate_record is not None and (is_correction or is_draft_merge)
+                    else tool_progress_digest(dispatch_name, call.arguments)
+                    if dispatch_name in {"design_video", "revise_video"}
+                    else None
+                )
+                stopped = await _reject(
                     ToolRejected(
                         kind="execute_guardrail",
-                        tool_name=call.name,
+                        tool_name=dispatch_name,
                         iteration=iteration,
-                        detail=outcome.reason[:200],
-                        duration_ms=int(
-                            (time.monotonic() - iteration_started) * 1000
-                        ),
+                        detail=outcome[:200],
+                        duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                        candidate_digest=rejection_digest,
                     ),
-                )
-                return _finish(
-                    LoopResult(
-                        prose="",
-                        tool_name=None,
-                        params=None,
-                        iterations=iteration + 1,
-                        calls=calls,
-                        ended_by=call.name,
-                        refusal_facts=outcome.facts,
-                    )
-                )
-            if outcome is None:
-                if not tool.terminal:
-                    raise RuntimeError(
-                        f"read tool {call.name!r} returned a terminal accept "
-                        "— the declaration and the execute table skewed "
-                        "(a read never ends the turn)"
-                    )
-                await _emit(on_loop_event, TerminalAccepted(tool_name=call.name))
-                return _finish(
-                    LoopResult(
-                        prose=speech,
-                        tool_name=call.name,
-                        params=params,
-                        iterations=iteration + 1,
-                        calls=calls,
-                    )
-                )
-            logger.info(
-                "tool_loop_rejection",
-                agent=self.name,
-                iteration=iteration,
-                kind="execute_guardrail",
-                tool=call.name,
-                detail=outcome[:200],
-            )
-            stopped = await _reject(
-                ToolRejected(
-                    kind="execute_guardrail",
-                    tool_name=call.name,
+                    feedback=outcome,
                     iteration=iteration,
-                    detail=outcome[:200],
-                    duration_ms=int((time.monotonic() - iteration_started) * 1000),
-                ),
-                feedback=outcome,
-                iteration=iteration,
-            )
-            if stopped is not None:
-                return stopped
+                )
+                if stopped is not None:
+                    return stopped
+        exhausted_candidate = candidates.get(repair_candidate_id or "")
+        if exhausted_candidate is not None:
+            await retire_failed_candidate(exhausted_candidate, iteration=self.max_iterations - 1, kind="exhausted")
         await _emit(on_loop_event, LoopExhausted(iterations=self.max_iterations))
         return _finish(
             LoopResult(

@@ -7,8 +7,8 @@
 
 import { describe, expect, it } from "vitest"
 
-import { mapHistoryRows, type HistoryRow } from "./history"
-import { buildConversationBlocks, buildConversationUnits } from "./project"
+import { mapHistoryRows, triggerOutputRefs, type HistoryRow } from "./history"
+import { buildConversationBlocks, buildConversationUnits, conversationBlockUnits } from "./project"
 import type { OverlayMessage } from "./types"
 
 /** A t() that echoes the key — the QA archive's localized line is the
@@ -31,9 +31,7 @@ const ctx = { t }
 
 function visibleMessageIds(rows: OverlayMessage[]): string[] {
   return buildConversationBlocks(buildConversationUnits(rows)).flatMap((block) =>
-    block.kind === "runAnchor"
-      ? []
-      : block.units.flatMap((unit) => unit.kind === "message" ? [unit.message.id] : []),
+    conversationBlockUnits(block).flatMap((unit) => unit.kind === "message" ? [unit.message.id] : []),
   )
 }
 
@@ -280,19 +278,13 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
     ]
     const project = (messages: OverlayMessage[]) =>
       buildConversationBlocks(buildConversationUnits(messages)).flatMap((block) =>
-        block.kind === "runAnchor"
-          ? [[`run:${block.runId}`]]
-          : block.units.flatMap((unit) =>
-              unit.kind === "message"
-                ? [[unit.message.id, ...(unit.message.outputRefs ?? [])]]
-                : [],
-            ),
+        conversationBlockUnits(block).flatMap((unit) => unit.kind === "message"
+          ? [[unit.message.id, ...(unit.message.outputRefs ?? [])]] : []),
       )
     const history = mapHistoryRows(persisted, ctx)
     expect(project(history)).toEqual(project(live))
     expect(project(history)).toEqual([
       ["birth"],
-      ["run:run-1"],
       ["delivery-a", "output-a"],
       ["delivery-b", "output-b"],
     ])
@@ -534,50 +526,7 @@ describe("pending questions", () => {
     expect(out).toEqual([])
   })
 
-  it("a pending storyboard_echo task_book replays its echo as a flow message (the dock revives via the pending fetch)", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
-          question: { kind: "task_book", storyboard_echo: true },
-          blocks: [{
-            kind: "video_storyboard",
-            presented_message_id: "m1",
-            composition_id: "composition-1",
-            composition_version_id: "version-1",
-            version: 1,
-            content_digest: "digest-1",
-          }],
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([
-      expect.objectContaining({
-        id: "m1-echo",
-        role: "assistant",
-        content: "prose\n\n| scene | seconds |\n|---|---|\n| words | 3 |\n\n~30 credits",
-        blocks: [expect.objectContaining({
-          presented_message_id: "m1",
-          composition_version_id: "version-1",
-          content_digest: "digest-1",
-        })],
-      }),
-    ])
-  })
 
-  it("a pending storyboard_echo task_book with empty content pushes no echo (no-empty-bubble law)", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: " ",
-          question: { kind: "task_book", storyboard_echo: true },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([])
-  })
 })
 
 describe("plain assistant rows + legacy trigger pills", () => {
@@ -647,6 +596,8 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "turnId",
       // Option-answer duplicate-Slot association — never turn/lifecycle derivation.
       "answeredQuestionId",
+      // Exact Skill reference on its owning user message — not turn state.
+      "skill",
       "hydrated",
       // Explicit block ownership for QA/candidate/trigger/material facts.
       "independentKind",
@@ -1022,4 +973,29 @@ describe("activity array rows (ADR-108 — 每帧一行)", () => {
     )
     expect(out.map((m) => m.id)).toEqual(["r1"])
   })
+})
+
+
+it("upload results attach to the current answer without a Run anchor", () => {
+  expect(triggerOutputRefs({ type: "answer", output_refs: ["uploaded-video"] }))
+    .toEqual(["uploaded-video"])
+  const messages = mapHistoryRows([row({
+    id: "upload-answer", role: "assistant", content: "上传好了",
+    intent: { type: "answer", output_refs: ["uploaded-video"] },
+  })], ctx)
+  expect(messages.find((message) => message.id === "upload-answer"))
+    .toMatchObject({ outputRefs: ["uploaded-video"] })
+})
+
+
+it("upload refs stay on a follow-up question's framing speech through QA hydration", () => {
+  const question = row({
+    id: "upload-question", role: "assistant", content: "上传好了。还要调整吗？",
+    intent: { type: "ask_user", output_refs: ["uploaded-video"] },
+    question: { kind: "question", question: "还要调整吗？", options: [{ id: "yes", label: "调整" }] },
+  })
+  const pending = mapHistoryRows([question], ctx)
+  expect(pending.find((m) => m.id === "upload-question-echo")?.outputRefs).toEqual(["uploaded-video"])
+  const answered = mapHistoryRows([{ ...question, answer: { kind: "option", option_id: "yes" } }], ctx)
+  expect(answered.find((m) => m.id === "upload-question-echo")?.outputRefs).toEqual(["uploaded-video"])
 })

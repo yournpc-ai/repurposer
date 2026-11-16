@@ -62,8 +62,8 @@ async def main() -> None:
         turn = PlanTurn(db, UUID(str(conv.user_id)), conv, project, request)
         await turn.assemble(recent)
         template_kwargs, _media = intent_router.assemble(**turn.infer_kwargs)
-        user_prompt = jinja_env.get_template("intent_router.j2").render(
-            **template_kwargs
+        user_prompt = jinja_env.get_template("chat/user.j2").render(
+            mode="plan", **template_kwargs
         )
         print("=" * 30, "SYSTEM", "=" * 30)
         print(intent_router.system)

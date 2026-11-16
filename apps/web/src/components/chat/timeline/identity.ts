@@ -29,8 +29,9 @@ export function stampServerMessageId(
     )
 }
 
-/** Mount replay fills only missing real identities. Existing optimistic rows
- * keep their birthKey, array position, typing state and visible prefix. */
+/** Mount replay fills missing real identities at their persisted transcript
+ * positions. Existing optimistic rows keep their birthKey, typing state and
+ * visible prefix; unsequenced local rows remain after the archived prefix. */
 export function prependMissingHistory(
   prev: OverlayMessage[],
   history: OverlayMessage[],
@@ -50,5 +51,28 @@ export function prependMissingHistory(
     const serverId = message.id.endsWith("-echo") ? message.id.slice(0, -5) : message.id
     return !aliases.has(serverId)
   })
-  return missing.length > 0 ? [...missing, ...prev] : prev
+  if (missing.length === 0) return prev
+  const merged = [...prev]
+  let legacyPrefix = 0
+  for (const row of missing) {
+    const seq = row.seq
+    if (seq == null) {
+      merged.splice(legacyPrefix, 0, row)
+      legacyPrefix += 1
+      continue
+    }
+    const successor = merged.findIndex(
+      (message) => message.seq != null && message.seq > seq,
+    )
+    if (successor >= 0) {
+      merged.splice(successor, 0, row)
+      continue
+    }
+    let lastSequenced = -1
+    for (let index = 0; index < merged.length; index += 1) {
+      if (merged[index].seq != null) lastSequenced = index
+    }
+    merged.splice(lastSequenced + 1, 0, row)
+  }
+  return merged
 }

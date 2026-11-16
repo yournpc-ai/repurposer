@@ -43,7 +43,7 @@ class ConfigDef:
 
 CONFIG_REGISTRY: dict[str, ConfigDef] = {
     "wallet.signup_grant": ConfigDef(
-        default=100000,
+        default=1000,
         type=int,
         desc="Credits granted when a wallet is opened on first login "
         "(kind=grant, ref.source=signup).",
@@ -75,15 +75,11 @@ CONFIG_REGISTRY: dict[str, ConfigDef] = {
         "the conversation_usage ledger's per-turn-family prompt_tokens "
         "distribution; an operating parameter, never a user setting.",
     ),
-    "film.usd_per_second": ConfigDef(
+    "video.usd_per_second": ConfigDef(
         default=0.002,
         type=float,
-        desc="Menu price (USD) per output second of a film-spec (MG) render "
-        "(ADR-119 D3). launch_film's estimate quotes storyboard seconds × "
-        "this rate and the metering ledger prices the actual seconds "
-        "through the same line (price_units), so one edit moves sticker "
-        "and charge together — the single-conversion-point law applied to "
-        "an own-infra SKU.",
+        desc="Menu price (USD) per output second of a video-spec render. "
+        "ProduceVideo estimates and actual render metering use this same line.",
     ),
 }
 

@@ -24,12 +24,19 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
+      - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
-      - FILM_EDITS_ENABLED=${FILM_EDITS_ENABLED:-false}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-flash}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_REASONING_EFFORT=${DEEPSEEK_REASONING_EFFORT:-high}
+      - DEEPSEEK_MAX_OUTPUT_TOKENS=${DEEPSEEK_MAX_OUTPUT_TOKENS:-32768}
+      - DEEPSEEK_CNY_PER_USD=${DEEPSEEK_CNY_PER_USD:-7.2}
+      - DEEPSEEK_OFFPEAK_DATES=${DEEPSEEK_OFFPEAK_DATES:-}
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
+      - FROM_EMAIL=${FROM_EMAIL:-Rookie Cut <repurposer@yournpc.ai>}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
       - API_PUBLIC_URL=http://api:8000
@@ -63,12 +70,20 @@ services:
     command: python -m app.worker
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/repurposer
+      - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
-      - FILM_EDITS_ENABLED=${FILM_EDITS_ENABLED:-false}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-flash}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_REASONING_EFFORT=${DEEPSEEK_REASONING_EFFORT:-high}
+      - DEEPSEEK_MAX_OUTPUT_TOKENS=${DEEPSEEK_MAX_OUTPUT_TOKENS:-32768}
+      - DEEPSEEK_CNY_PER_USD=${DEEPSEEK_CNY_PER_USD:-7.2}
+      - DEEPSEEK_OFFPEAK_DATES=${DEEPSEEK_OFFPEAK_DATES:-}
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - FROM_EMAIL=${FROM_EMAIL:-Repurposer <repurposer@yournpc.ai>}
+      - FROM_EMAIL=${FROM_EMAIL:-Rookie Cut <repurposer@yournpc.ai>}
+      - PAYMENT_ALERT_RECIPIENTS=${PAYMENT_ALERT_RECIPIENTS:-}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-30}
       - API_PUBLIC_URL=http://api:8000
@@ -109,6 +124,14 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         - VITE_API_URL=${VITE_API_URL}
+        - VITE_DISCORD_URL=${VITE_DISCORD_URL:-}
+        - VITE_YOUTUBE_URL=${VITE_YOUTUBE_URL:-}
+        - VITE_X_URL=${VITE_X_URL:-}
+        - VITE_WECHAT_GROUP_QR_URL=${VITE_WECHAT_GROUP_QR_URL:-}
+        - VITE_SUPPORT_EMAIL=${VITE_SUPPORT_EMAIL:-}
+        - VITE_TERMS_URL=${VITE_TERMS_URL:-}
+        - VITE_PRIVACY_URL=${VITE_PRIVACY_URL:-}
+        - VITE_REFUND_POLICY_URL=${VITE_REFUND_POLICY_URL:-}
     ports:
       - "3000:3000"
     depends_on:

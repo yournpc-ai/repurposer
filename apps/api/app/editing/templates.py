@@ -16,22 +16,31 @@ their part ids from the same derivation the validator/compiler use.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from app.editing.animation import derive_text_parts
+from app.editing.alignment import NarrationPayload
+from app.editing.edits import Op, apply_ops
 from app.editing.grounding import camera_keyframes
-from app.editing.schemas import speech_text_digest
-from app.editing.timing import seconds_to_ticks
+from app.editing.presets import expand_preset
+from app.editing.schemas import (
+    GENERATOR_FPS,
+    CompositionContent,
+    NarrationAlignmentRef,
+    speech_text_digest,
+)
+from app.editing.timing import seconds_to_ticks, source_ticks_to_output_ticks
 
 _SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
 
 # Easing the presets use (the LLM never writes bezier numbers).
 _EASE_OUT = (0.16, 1.0, 0.3, 1.0)
+_OP_BATCH = TypeAdapter(list[Op])
 
 # Code-voiced chrome phrases (the divider kicker), by film language.
 _CHAPTER_KICKER = {
@@ -195,6 +204,34 @@ class ViewFact:
     elements: list[dict[str, Any]]
     heading: str
     page: int  # which bound snapshot (bind order)
+    state_id: str | None = None
+    artifact_role: str | None = None
+    paired_view_id: str | None = None
+    target_id: str | None = None
+    target_element_id: str | None = None
+    route: str | None = None
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    source_y: int = 0
+    css_width: int | None = None
+    css_height: int | None = None
+    device_scale_factor: float = 1.0
+    region_text: str | None = None
+    region_text_truncated: bool | None = None
+    region_visually_truncated: bool | None = None
+    source_url: str | None = None
+
+
+@dataclass(frozen=True)
+class MediaFact:
+    """One frozen real image or video used by a product-promo evidence scene."""
+
+    snapshot_id: UUID
+    snapshot_digest: str
+    kind: Literal["image", "video"]
+    duration_ticks: int | None
+    width: int
+    height: int
+    title: str = ""
 
 
 @dataclass(frozen=True)
@@ -228,6 +265,20 @@ class MusicBed:
     snapshot_id: UUID
     snapshot_digest: str
     duration_ticks: int  # source-time ticks; SOURCE_TIMEBASE == content timebase
+
+
+@dataclass(frozen=True)
+class FixedSoundCue:
+    """One existing fixed SFX source, compensated to a native visual action."""
+
+    snapshot_id: UUID
+    snapshot_digest: str
+    duration_ticks: int
+    source_peak_ticks: int
+    output_offset_ticks: int
+    scene_index: int
+    action_offset_ticks: int
+    gain_db: float = -6.0
 
 
 @dataclass(frozen=True)
@@ -631,12 +682,201 @@ def instantiate_music_bed(
     )
 
 
+def instantiate_fixed_sound_cue(
+    cue: FixedSoundCue,
+    *,
+    scene_id: str,
+    scene_start: int,
+    clip_suffix: str = "keyword",
+) -> list[dict[str, Any]]:
+    """Place the measured source peak on a scene-local visual action."""
+    start = scene_start + cue.action_offset_ticks - cue.source_peak_ticks - cue.output_offset_ticks
+    if start < scene_start:
+        raise TemplateError("fixed SFX peak compensation precedes its scene")
+    return [
+        {"op": "bind_source", "snapshot_id": str(cue.snapshot_id)},
+        {
+            "op": "add_track",
+            "track": {
+                "track_id": "trk_sfx", "kind": "audio", "role": "effect", "order": 1, "clips": [],
+            },
+        },
+        {
+            "op": "add_clip",
+            "track_id": "trk_sfx",
+            "clip": {
+                "clip_id": f"clp_sfx_{clip_suffix}",
+                "range": {"start": start, "end": start + cue.duration_ticks},
+                "scene_id": scene_id,
+                "source": {
+                    "snapshot_id": str(cue.snapshot_id),
+                    "snapshot_digest": cue.snapshot_digest,
+                    "source_range": {"start": 0, "end": cue.duration_ticks},
+                },
+                "object": {"kind": "audio", "object_id": f"obj_sfx_{clip_suffix}", "gain_db": cue.gain_db},
+                "animations": [],
+            },
+        },
+    ]
+
+
+def _insert_product_media_ops(
+    ops: list[dict[str, Any]],
+    media: list[MediaFact],
+    slots: DesignSlots,
+    *,
+    canvas: tuple[int, int],
+    timebase: int,
+    frame_ticks: int,
+) -> int:
+    """Add real image/video evidence scenes before the closing card.
+
+    These are ordinary native Clips on the existing timeline. The video keeps
+    an exact 1× source window; its old demo-film audio is muted so the new
+    work's music and SFX remain the only soundtrack.
+    """
+    image = next((item for item in media if item.kind == "image"), None)
+    video = next((item for item in media if item.kind == "video"), None)
+    if image is None and video is None:
+        return 0
+    end_scene = next(
+        (op for op in ops if op["op"] == "add_scene" and op["scene"]["scene_id"] == "scn_end"),
+        None,
+    )
+    if end_scene is None:
+        raise TemplateError("product media scenes need the launch film's end scene")
+    insert_at = int(end_scene["scene"]["range"]["start"])
+    image_ticks = 6 * timebase
+    video_ticks = 8 * timebase
+    if video is not None:
+        if video.duration_ticks is None or video.duration_ticks <= frame_ticks:
+            raise TemplateError("the product video has no usable probed duration")
+        assert video.duration_ticks is not None
+        video_ticks = min(video_ticks, (video.duration_ticks // frame_ticks) * frame_ticks)
+        if video_ticks <= 0:
+            raise TemplateError("the product video is shorter than one output frame")
+    added = (image_ticks if image is not None else 0) + (video_ticks if video is not None else 0)
+    for op in ops:
+        if op["op"] == "add_scene" and op["scene"]["scene_id"] == "scn_end":
+            op["scene"]["range"]["start"] += added
+            op["scene"]["range"]["end"] += added
+        elif op["op"] == "add_clip" and op["clip"].get("scene_id") == "scn_end":
+            op["clip"]["range"]["start"] += added
+            op["clip"]["range"]["end"] += added
+    end_clip_ops = [
+        op for op in ops if op["op"] == "add_clip" and op["clip"].get("scene_id") == "scn_end"
+    ]
+    ops.remove(end_scene)
+    for op in end_clip_ops:
+        ops.remove(op)
+    ops.append({"op": "add_track", "track": {
+        "track_id": "trk_product_media", "kind": "visual", "role": "main", "order": 50, "clips": [],
+    }})
+    cursor = insert_at
+
+    def add_scene(key: str, duration: int, intent: str, visual: str) -> tuple[str, int, int]:
+        nonlocal cursor
+        scene_id = f"scn_product_{key}"
+        start, end = cursor, cursor + duration
+        ops.append({"op": "add_scene", "scene": {
+            "scene_id": scene_id, "range": {"start": start, "end": end},
+            "intent": intent, "visual_description": visual, "speech_clip_ids": [],
+        }})
+        cursor = end
+        return scene_id, start, end
+
+    def add_text(scene_id: str, start: int, end: int, key: str, text: str,
+                 layout: dict[str, float], font_size: int, color: str) -> None:
+        bp = ClipBlueprint(
+            track="trk_title", slot="caption", layout=layout,
+            style=_Style(font_size=font_size, color=color, weight=700, align="center"),
+        )
+        object_id = f"obj_product_{key}"
+        ops.append({"op": "add_clip", "track_id": "trk_title", "clip": {
+            "clip_id": f"clp_product_{key}", "range": {"start": start, "end": end},
+            "scene_id": scene_id, "source": None,
+            "object": _text_object(bp, object_id=object_id, text=text),
+            "animations": [{
+                "animation_id": f"anm_product_{key}_opacity", "target_object_id": object_id,
+                "text_part": None, "property": "opacity",
+                "keyframes": [_kf(0, 0.0), _kf(min(timebase // 2, end - start), 1.0, "ease")],
+            }],
+        }})
+
+    if image is not None:
+        scene_id, start, end = add_scene(
+            "image", image_ticks, "Establish the product's real brand artwork",
+            f"The bound real brand image {image.title} is held with a slow native entrance.",
+        )
+        ops.append({"op": "bind_source", "snapshot_id": str(image.snapshot_id)})
+        object_id = "obj_product_image"
+        ops.append({"op": "add_clip", "track_id": "trk_product_media", "clip": {
+            "clip_id": "clp_product_image", "range": {"start": start, "end": end},
+            "scene_id": scene_id,
+            "source": {"snapshot_id": str(image.snapshot_id), "snapshot_digest": image.snapshot_digest, "source_range": None},
+            "object": {
+                "kind": "image", "object_id": object_id,
+                "layout": {"x": 300.0, "y": 180.0, "width": 1320.0, "height": 693.0}, "fit": "contain",
+                "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"}, "opacity": 1.0,
+            },
+            "animations": [
+                {"animation_id": "anm_product_image_opacity", "target_object_id": object_id, "text_part": None,
+                 "property": "opacity", "keyframes": [_kf(0, 0.0), _kf(timebase // 2, 1.0, "ease")]},
+                {"animation_id": "anm_product_image_scale", "target_object_id": object_id, "text_part": None,
+                 "property": "transform.scale", "keyframes": [_kf(0, 0.98), _kf(timebase * 4 // 5, 1.0, "ease")]},
+            ],
+        }})
+        add_text(scene_id, start, end, "image_title", slots.end_name,
+                 {"x": 260.0, "y": 60.0, "width": 1400.0, "height": 90.0}, 56, "#F8FAFC")
+
+    if video is not None:
+        scene_id, start, end = add_scene(
+            "video", video_ticks, "Show the disclosed product film excerpt in motion",
+            f"The existing real video {video.title} plays an exact middle source window with its old audio muted.",
+        )
+        source_start = min(
+            (video.duration_ticks // 4 // frame_ticks) * frame_ticks,
+            video.duration_ticks - video_ticks,
+        )
+        ops.append({"op": "bind_source", "snapshot_id": str(video.snapshot_id)})
+        object_id = "obj_product_video"
+        ops.append({"op": "add_clip", "track_id": "trk_product_media", "clip": {
+            "clip_id": "clp_product_video", "range": {"start": start, "end": end},
+            "scene_id": scene_id,
+            "source": {
+                "snapshot_id": str(video.snapshot_id), "snapshot_digest": video.snapshot_digest,
+                "source_range": {"start": source_start, "end": source_start + video_ticks},
+            },
+            "object": {
+                "kind": "video", "object_id": object_id,
+                "layout": {"x": 320.0, "y": 180.0, "width": 1280.0, "height": 720.0}, "fit": "contain",
+                "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
+                "opacity": 1.0, "gain_db": 0.0, "muted": True,
+            },
+            "animations": [
+                {"animation_id": "anm_product_video_opacity", "target_object_id": object_id, "text_part": None,
+                 "property": "opacity", "keyframes": [_kf(0, 0.0), _kf(timebase * 2 // 5, 1.0, "ease")]},
+                {"animation_id": "anm_product_video_scale", "target_object_id": object_id, "text_part": None,
+                 "property": "transform.scale", "keyframes": [_kf(0, 0.98), _kf(timebase * 3 // 5, 1.0, "ease")]},
+            ],
+        }})
+        add_text(scene_id, start, end, "video_title", slots.reveal_lead,
+                 {"x": 260.0, "y": 60.0, "width": 1400.0, "height": 90.0}, 56, "#F8FAFC")
+
+    ops.append(end_scene)
+    ops.extend(end_clip_ops)
+    return added
+
+
 def instantiate_template(
     template: VideoTemplate,
     slots: DesignSlots,
     views: list[ViewFact],
     *,
     music_bed: MusicBed | None = None,
+    capture_views: list[ViewFact] | None = None,
+    media: list[MediaFact] | None = None,
+    fixed_sfx: FixedSoundCue | None = None,
 ) -> list[dict[str, Any]]:
     """Expand the template + resolved slots into the create-path op batch
     (plain op dicts — the caller validates them into the Op union before
@@ -886,6 +1126,31 @@ def instantiate_template(
                 }
             )
         cursor += duration
+    if media:
+        cursor += _insert_product_media_ops(
+            ops, media, slots, canvas=canvas, timebase=timebase, frame_ticks=frame_ticks,
+        )
+    if fixed_sfx is not None:
+        video_scene = next(
+            (op["scene"] for op in ops
+             if op["op"] == "add_scene" and op["scene"]["scene_id"] == "scn_product_video"),
+            None,
+        )
+        if video_scene is None:
+            raise TemplateError("the product fixed SFX needs its real video entrance scene")
+        ops.extend(instantiate_fixed_sound_cue(
+            fixed_sfx,
+            scene_id="scn_product_video",
+            scene_start=int(video_scene["range"]["start"]),
+            clip_suffix="product_video",
+        ))
+    if capture_views:
+        from app.editing.web_shots import insert_capture_shot_ops
+
+        cursor += insert_capture_shot_ops(
+            ops, capture_views, canvas=canvas, timebase=timebase,
+            fps_num=int(fps["num"]), fps_den=int(fps["den"]),
+        )
     if music_bed is not None:
         bed_ops = _music_bed_ops(template, music_bed, total_ticks=cursor, timebase=timebase)
         if any(op["op"] == "bind_source" for op in bed_ops):
@@ -897,6 +1162,14 @@ def instantiate_template(
             kind = lane["kind"]
             lane["order"] = order_by_kind.get(kind, 0)
             order_by_kind[kind] = lane["order"] + 1
+    known_tracks = {lane["track_id"] for lanes in lane_groups.values() for lane in lanes}
+    for op in ops:
+        if op["op"] == "add_track" and op["track"]["track_id"] not in known_tracks:
+            lane = op["track"]
+            kind = lane["kind"]
+            lane["order"] = order_by_kind.get(kind, 0)
+            order_by_kind[kind] = lane["order"] + 1
+            known_tracks.add(lane["track_id"])
     return ops
 
 
@@ -1011,6 +1284,7 @@ def instantiate_mg(
     background: str | None = None,
     narration_voice: dict[str, Any] | None = None,
     music_bed: MusicBed | None = None,
+    preset_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """The MG director's validated answer → the create-path op batch.
     ``direction`` is editing/director.py's MgDirection (imported as Any to
@@ -1092,6 +1366,15 @@ def instantiate_mg(
     if narration_voice is not None:
         caption_track = next(op["track"] for op in ops if op["op"] == "add_track" and op["track"]["track_id"] == "trk_caption")
         caption_track["order"] = shape_lanes + 1
+    text_lanes = max((len(scene.text_beats) for scene in direction.scenes), default=0)
+    for lane in range(1, text_lanes):
+        ops.append({"op": "add_track", "track": {
+            "track_id": f"trk_text_{lane}", "kind": "visual", "role": "title",
+            "order": shape_lanes + lane, "clips": [],
+        }})
+    if narration_voice is not None:
+        caption_track["order"] = shape_lanes + max(text_lanes, 1)
+    text_clip_ids: list[str] = []
     cursor = 0
     for index, scene in enumerate(direction.scenes, start=1):
         duration = max(
@@ -1110,67 +1393,79 @@ def instantiate_mg(
                 },
             }
         )
-        text = "\n".join(line.strip() for line in scene.lines if line.strip())
-        font_size = _MG_FONT_SIZES[scene.size]
-        block_height = max(len(scene.lines), 1) * font_size * 1.15
-        layout = {
-            "x": 120.0,
-            "y": max(120.0, (canvas[1] - block_height) / 2),
-            "width": float(canvas[0] - 240),
-            "height": block_height * 1.25,
-        }
-        object_id = f"obj_mg_{index}"
-        ops.append(
-            {
-                "op": "add_clip",
-                "track_id": "trk_title",
-                "clip": {
-                    "clip_id": f"clp_mg_{index}",
-                    "range": {"start": cursor, "end": cursor + duration},
-                    "scene_id": scene_id,
-                    "source": None,
-                    "object": {
-                        "kind": "text",
-                        "object_id": object_id,
-                        "text": text,
-                        "layout": layout,
-                        "style": {
-                            "font_size": font_size,
-                            "color": scene.color or "#F8FAFC",
-                            "background": None,
-                            "weight": 700,
-                            "align": scene.align,
-                            "line_height": 1.15,
-                        },
-                        "transform": {
-                            "x": 0.0,
-                            "y": 0.0,
-                            "scale": 1.0,
-                            "rotation": 0.0,
-                            "origin": "center",
-                        },
-                        "opacity": 1.0,
-                    },
-                    "animations": _mg_animations(
-                        scene.enter,
-                        object_id=object_id,
-                        text=text,
-                        clip_ticks=duration,
-                        timebase=timebase,
-                        prefix=f"anm_mg_{index}",
-                    ) + ([{
-                        "animation_id": f"anm_mg_{index}_drift",
-                        "target_object_id": object_id,
-                        "text_part": None,
-                        "property": "transform.scale",
-                        "keyframes": [
-                            _kf(0, 1.0 if scene.drift == "push_in" else 1.035),
-                            _kf(duration, 1.035 if scene.drift == "push_in" else 1.0),
-                        ],
-                    }] if scene.drift != "none" else []),
-                },
+        for beat_index, beat in enumerate(scene.text_beats or [scene]):
+            suffix = f"_beat_{beat_index + 1}" if scene.text_beats else ""
+            beat_start = cursor + round(seconds_to_ticks(beat.start_seconds, timebase) / frame_ticks) * frame_ticks if scene.text_beats else cursor
+            beat_end = cursor + round(seconds_to_ticks(beat.end_seconds, timebase) / frame_ticks) * frame_ticks if scene.text_beats else cursor + duration
+            beat_duration = beat_end - beat_start
+            if beat_duration <= 0:
+                raise TemplateError("text beat needs at least one output frame")
+            text = "\n".join(line.strip() for line in beat.lines if line.strip())
+            font_size = beat.font_size if scene.text_beats else _MG_FONT_SIZES[scene.size]
+            block_height = max(len(beat.lines), 1) * font_size * 1.15
+            layout = {
+                "x": 120.0,
+                "y": max(120.0, (canvas[1] - block_height) / 2),
+                "width": float(canvas[0] - 240),
+                "height": block_height * 1.25,
             }
-        )
+            if scene.text_beats:
+                layout = {"x": beat.x * canvas[0], "y": beat.y * canvas[1],
+                          "width": beat.width * canvas[0], "height": beat.height * canvas[1]}
+            object_id = f"obj_mg_{index}" + suffix
+            clip_id = f"clp_mg_{index}" + suffix
+            text_clip_ids.append(clip_id)
+            ops.append(
+                {
+                    "op": "add_clip",
+                    "track_id": "trk_title" if beat_index == 0 else f"trk_text_{beat_index}",
+                    "clip": {
+                        "clip_id": clip_id,
+                        "range": {"start": beat_start, "end": beat_start + beat_duration},
+                        "scene_id": scene_id,
+                        "source": None,
+                        "object": {
+                            "kind": "text",
+                            "object_id": object_id,
+                            "text": text,
+                            "layout": layout,
+                            "style": {
+                                "font_size": font_size,
+                                "color": beat.color or "#F8FAFC",
+                                "background": None,
+                                "weight": beat.weight if scene.text_beats else 700,
+                                "align": beat.align,
+                                "line_height": 1.15,
+                            },
+                            "transform": {
+                                "x": 0.0,
+                                "y": 0.0,
+                                "scale": 1.0,
+                                "rotation": 0.0,
+                                "origin": "center",
+                            },
+                            "opacity": 1.0,
+                        },
+                        "animations": ([] if preset_id is not None else _mg_animations(
+                            beat.enter,
+                            object_id=object_id,
+                            text=text,
+                            clip_ticks=beat_duration,
+                            timebase=timebase,
+                            prefix=f"anm_mg_{index}{suffix}",
+                        )) + ([{
+                            "animation_id": f"anm_mg_{index}{suffix}_drift",
+                            "target_object_id": object_id,
+                            "text_part": None,
+                            "property": "transform.scale",
+                            "keyframes": [
+                                _kf(0, 1.0 if beat.drift == "push_in" else 1.035),
+                                _kf(beat_duration, 1.035 if beat.drift == "push_in" else 1.0),
+                            ],
+                        }] if beat.drift != "none" else []),
+                    },
+                }
+            )
         if narration_voice is not None:
             speech_text = scene.narration or ""
             speech_object_id = f"obj_mg_{index}_speech"
@@ -1280,6 +1575,298 @@ def instantiate_mg(
         cursor += duration
     if music_bed is not None:
         ops.extend(instantiate_music_bed(music_bed, total_ticks=cursor, timebase=timebase))
+    if preset_id is not None:
+        from app.editing.edits import EditTarget
+        from app.editing.presets import expand_preset_at_target
+
+        bound = (
+            {music_bed.snapshot_id: music_bed.snapshot_digest}
+            if music_bed is not None else {}
+        )
+        candidate = apply_ops(
+            CompositionContent(settings=ops[0]["settings"]),
+            _OP_BATCH.validate_python(ops),
+            bound,
+        )
+        for clip_id in text_clip_ids:
+            preset_ops = expand_preset_at_target(
+                preset_id,
+                candidate,
+                EditTarget(kind="clip", id=clip_id),
+            )
+            ops.extend(op.model_dump(mode="json", exclude_unset=True) for op in preset_ops)
+            candidate = apply_ops(candidate, preset_ops, bound)
+    return ops
+
+
+def instantiate_aligned_narration(
+    direction: Any,
+    *,
+    payload: NarrationPayload,
+    alignment: NarrationAlignmentRef,
+    snapshot: Any,
+    aspect: str = "16:9",
+    background: str | None = None,
+    music_bed: MusicBed | None = None,
+) -> list[dict[str, Any]]:
+    """READY sentence facts → native titles, fixed source audio and word anchors."""
+    canvas = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
+    timebase = 90000
+    background = background or direction.background or "#0B1020"
+    sentence_by_id = {sentence.sentence_id: sentence for sentence in payload.sentences}
+    groups = [
+        [sentence_by_id[sentence_id] for sentence_id in scene.sentence_ids]
+        for scene in direction.scenes
+    ]
+    total_ticks = source_ticks_to_output_ticks(payload.duration_ticks, timebase)
+    ops: list[dict[str, Any]] = [
+        {
+            "op": "set_settings",
+            "settings": {
+                "width": canvas[0], "height": canvas[1],
+                "fps": {"num": 30, "den": 1}, "timebase": timebase,
+                "sample_rate": 48000, "channels": 2, "background": background,
+            },
+        },
+        {"op": "bind_source", "snapshot_id": str(snapshot.id)},
+        {
+            "op": "add_track",
+            "track": {"track_id": "trk_title", "kind": "visual", "role": "title", "order": 0, "clips": []},
+        },
+        {
+            "op": "add_track",
+            "track": {"track_id": "trk_dialogue", "kind": "audio", "role": "dialogue", "order": 1 if music_bed is not None else 0, "clips": []},
+        },
+        {
+            "op": "add_track",
+            "track": {"track_id": "trk_caption", "kind": "visual", "role": "caption", "order": 1, "clips": []},
+        },
+    ]
+    shape_lanes = max((len(scene.shapes) for scene in direction.scenes), default=0)
+    if shape_lanes:
+        ops[2]["track"]["order"] = shape_lanes
+        ops[4]["track"]["order"] = shape_lanes + 1
+        for lane in range(1, shape_lanes + 1):
+            ops.insert(
+                2 + lane,
+                {
+                    "op": "add_track",
+                    "track": {
+                        "track_id": "trk_shape" if lane == 1 else f"trk_shape_{lane}",
+                        "kind": "visual", "role": "effect", "order": lane - 1, "clips": [],
+                    },
+                },
+            )
+
+    if any(scene.generator is not None for scene in direction.scenes):
+        for op in ops:
+            if op["op"] == "add_track" and op["track"]["kind"] == "visual":
+                op["track"]["order"] += 1
+        ops.insert(2, {
+            "op": "add_track",
+            "track": {
+                "track_id": "trk_aligned_generator", "kind": "visual", "role": "main",
+                "order": 0, "clips": [],
+            },
+        })
+
+    for index, (scene, sentences) in enumerate(zip(direction.scenes, groups, strict=True), start=1):
+        scene_id = f"scn_aligned_{index}"
+        scene_start = 0 if index == 1 else source_ticks_to_output_ticks(sentences[0].start_tick, timebase)
+        scene_end = (
+            source_ticks_to_output_ticks(groups[index][0].start_tick, timebase)
+            if index < len(groups)
+            else total_ticks
+        )
+        if scene_end <= scene_start:
+            raise TemplateError(f"aligned scene {scene_id} has no positive output window")
+        speech_clip_ids = [f"clp_aligned_{sentence.sentence_id}_speech" for sentence in sentences]
+        ops.append({
+            "op": "add_scene",
+            "scene": {
+                "scene_id": scene_id,
+                "range": {"start": scene_start, "end": scene_end},
+                "intent": scene.intent,
+                "visual_description": scene.visual_description,
+                "speech_clip_ids": speech_clip_ids,
+            },
+        })
+        text = "\n".join(line.strip() for line in scene.lines if line.strip())
+        font_size = _MG_FONT_SIZES[scene.size]
+        block_height = max(len(scene.lines), 1) * font_size * 1.15
+        object_id = f"obj_aligned_{index}"
+        ops.append({
+            "op": "add_clip",
+            "track_id": "trk_title",
+            "clip": {
+                "clip_id": f"clp_aligned_{index}",
+                "range": {"start": scene_start, "end": scene_end},
+                "scene_id": scene_id,
+                "source": None,
+                "object": {
+                    "kind": "text", "object_id": object_id, "text": text,
+                    "layout": {
+                        "x": 120.0,
+                        "y": max(120.0, (canvas[1] - block_height) / 2),
+                        "width": float(canvas[0] - 240), "height": block_height * 1.25,
+                    },
+                    "style": {
+                        "font_size": font_size, "color": scene.color or "#F8FAFC",
+                        "background": None, "weight": 700, "align": scene.align, "line_height": 1.15,
+                    },
+                    "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
+                    "opacity": 1.0,
+                },
+                "animations": _mg_animations(
+                    scene.enter, object_id=object_id, text=text,
+                    clip_ticks=scene_end - scene_start, timebase=timebase,
+                    prefix=f"anm_aligned_{index}",
+                ) + ([{
+                    "animation_id": f"anm_aligned_{index}_drift",
+                    "target_object_id": object_id, "text_part": None,
+                    "property": "transform.scale",
+                    "keyframes": [
+                        _kf(0, 1.0 if scene.drift == "push_in" else 1.035),
+                        _kf(scene_end - scene_start, 1.035 if scene.drift == "push_in" else 1.0),
+                    ],
+                }] if scene.drift != "none" else []),
+            },
+        })
+
+        if scene.generator is not None:
+            generator_object_id = f"obj_aligned_{index}_generator"
+            duration_frames = (scene_end - scene_start) * GENERATOR_FPS // timebase
+            if duration_frames < 1:
+                raise TemplateError(f"aligned scene {scene_id} is too short for its Generator")
+            generator_end = scene_start + duration_frames * (timebase // GENERATOR_FPS)
+            generator = scene.generator
+            source_fields: dict[str, Any]
+            if generator.producer == "remotion-project":
+                assert generator.project is not None
+                source_fields = {
+                    "producer": "remotion-project",
+                    "project": generator.project.model_dump(mode="json"),
+                    "parameters": {},
+                }
+            else:
+                assert generator.code is not None
+                source_fields = {
+                    "producer": "draw-2d",
+                    "code": generator.code,
+                    "parameters": generator.parameters,
+                }
+            ops.append({
+                "op": "add_clip",
+                "track_id": "trk_aligned_generator",
+                "clip": {
+                    "clip_id": f"clp_aligned_{index}_generator",
+                    "range": {"start": scene_start, "end": generator_end},
+                    "scene_id": scene_id,
+                    "source": None,
+                    "object": {
+                        "kind": "generator", "object_id": generator_object_id,
+                        **source_fields,
+                        "output": {
+                            "width": canvas[0], "height": canvas[1],
+                            "fps": GENERATOR_FPS,
+                            "duration_frames": duration_frames,
+                            "background": background,
+                        },
+                        "layout": {
+                            "x": 0.0, "y": 0.0,
+                            "width": float(canvas[0]), "height": float(canvas[1]),
+                        },
+                        "fit": "cover",
+                        "transform": {
+                            "x": 0.0, "y": 0.0, "scale": 1.0,
+                            "rotation": 0.0, "origin": "center",
+                        },
+                        "opacity": 1.0,
+                    },
+                    "animations": [],
+                },
+            })
+
+        for sentence in sentences:
+            start = source_ticks_to_output_ticks(sentence.start_tick, timebase)
+            end = source_ticks_to_output_ticks(sentence.end_tick, timebase)
+            speech_object_id = f"obj_aligned_{sentence.sentence_id}_speech"
+            source = {
+                "snapshot_id": str(snapshot.id), "snapshot_digest": snapshot.digest,
+                "source_range": {"start": sentence.start_tick, "end": sentence.end_tick},
+            }
+            ops.append({
+                "op": "add_clip", "track_id": "trk_dialogue",
+                "clip": {
+                    "clip_id": f"clp_aligned_{sentence.sentence_id}_speech",
+                    "range": {"start": start, "end": end}, "scene_id": scene_id,
+                    "source": source,
+                    "object": {
+                        "kind": "speech", "object_id": speech_object_id, "text": sentence.text,
+                        "provider": None, "model": None, "voice_id": None,
+                        "language": direction.language or "und", "gain_db": 0.0,
+                        "alignment": alignment.model_dump(mode="json"),
+                    },
+                    "animations": [],
+                },
+            })
+
+        for shape_index, shape in enumerate(scene.shapes, start=1):
+            shape_object_id = f"obj_aligned_{index}_shape_{shape_index}"
+            ops.append({
+                "op": "add_clip",
+                "track_id": "trk_shape" if shape_index == 1 else f"trk_shape_{shape_index}",
+                "clip": {
+                    "clip_id": f"clp_aligned_{index}_shape_{shape_index}",
+                    "range": {"start": scene_start, "end": scene_end}, "scene_id": scene_id,
+                    "source": None,
+                    "object": {
+                        "kind": "shape", "object_id": shape_object_id,
+                        "shape": shape.shape,
+                        "layout": {
+                            "x": shape.x * canvas[0], "y": shape.y * canvas[1],
+                            "width": shape.width * canvas[0], "height": shape.height * canvas[1],
+                        },
+                        "fill": shape.fill, "stroke": None, "stroke_width": 0.0,
+                        "corner_radius": shape.corner_radius if shape.shape == "rect" else 0.0,
+                        "path": None,
+                        "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
+                        "opacity": shape.opacity,
+                    },
+                    "animations": _mg_shape_animations(
+                        shape.motion, object_id=shape_object_id,
+                        clip_ticks=scene_end - scene_start, timebase=timebase,
+                        prefix=f"anm_aligned_{index}_shape_{shape_index}",
+                    ),
+                },
+            })
+    bound = {snapshot.id: snapshot.digest}
+    candidate = apply_ops(
+        CompositionContent(settings={"width": canvas[0], "height": canvas[1]}),
+        _OP_BATCH.validate_python(ops),
+        bound,
+    )
+    caption_ops = expand_preset("caption-phrases", candidate, {
+        "payload": payload,
+        "alignment": alignment,
+        "cue": "sentence",
+    })
+    ops.extend(op.model_dump(mode="json", exclude_unset=True) for op in caption_ops)
+    candidate = apply_ops(candidate, caption_ops, bound)
+    for sentence in payload.sentences:
+        semantics = sentence.semantics
+        for word_id in (semantics.emphasis_word_ids if semantics is not None else []):
+            impact_ops = expand_preset("text-impact", candidate, {
+                "narration": {
+                    "payload": payload,
+                    "alignment": alignment,
+                    "word_id": word_id,
+                },
+            })
+            ops.extend(op.model_dump(mode="json", exclude_unset=True) for op in impact_ops)
+            candidate = apply_ops(candidate, impact_ops, bound)
+    if music_bed is not None:
+        ops.extend(instantiate_music_bed(music_bed, total_ticks=total_ticks, timebase=timebase))
     return ops
 
 
@@ -1296,58 +1883,71 @@ def _instantiate_generator(
     animation_prefix: str,
     narration: str | None = None,
     narration_voice: dict[str, Any] | None = None,
+    start_ticks: int = 0,
+    include_structure: bool = True,
+    generator_clip_id: str = "clp_generator",
+    generator_object_id: str = "obj_generator",
 ) -> list[dict[str, Any]]:
     """One fixed-media Generator background plus independent native content."""
     if (narration is None) != (narration_voice is None):
         raise TemplateError("native narration needs exact text and a resolved voice")
     width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
     timebase = 90000
-    duration = max(1, round(direction.duration_seconds * 15)) * timebase // 15
-    ops: list[dict[str, Any]] = [
-        {
+    fps = int(output.get("fps", GENERATOR_FPS))
+    duration_frames = int(output.get(
+        "duration_frames", max(1, round(direction.duration_seconds * fps))
+    ))
+    if timebase % fps:
+        raise TemplateError("Generator fps must divide the Composition timebase exactly")
+    duration = duration_frames * timebase // fps
+    end_ticks = start_ticks + duration
+    scene_op: dict[str, Any] = {
+        "op": "add_scene",
+        "scene": {
+            "scene_id": scene_id,
+            "range": {"start": start_ticks, "end": end_ticks},
+            "intent": direction.intent,
+            "visual_description": direction.visual_description,
+            "speech_clip_ids": [],
+        },
+    }
+    generator_track_op: dict[str, Any] = {
+        "op": "add_track",
+        "track": {"track_id": "trk_generator", "kind": "visual", "role": "main", "order": 0, "clips": []},
+    }
+    generator_clip_op: dict[str, Any] = {
+        "op": "add_clip",
+        "track_id": "trk_generator",
+        "clip": {
+            "clip_id": generator_clip_id,
+            "range": {"start": start_ticks, "end": end_ticks},
+            "scene_id": scene_id,
+            "source": None,
+            "object": {
+                "kind": "generator",
+                "object_id": generator_object_id,
+                **source_fields,
+                "output": output,
+                "layout": {"x": 0.0, "y": 0.0, "width": float(width), "height": float(height)},
+                "fit": "cover",
+                "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
+                "opacity": 1.0,
+            },
+            "animations": [],
+        },
+    }
+    ops: list[dict[str, Any]] = []
+    if include_structure:
+        ops.append({
             "op": "set_settings",
             "settings": {
                 "width": width, "height": height, "fps": {"num": 30, "den": 1},
                 "timebase": timebase, "sample_rate": 48000, "channels": 2,
                 "background": background,
             },
-        },
-        {
-            "op": "add_scene",
-            "scene": {
-                "scene_id": scene_id,
-                "range": {"start": 0, "end": duration},
-                "intent": direction.intent,
-                "visual_description": direction.visual_description,
-                "speech_clip_ids": [],
-            },
-        },
-        {
-            "op": "add_track",
-            "track": {"track_id": "trk_generator", "kind": "visual", "role": "main", "order": 0, "clips": []},
-        },
-        {
-            "op": "add_clip",
-            "track_id": "trk_generator",
-            "clip": {
-                "clip_id": "clp_generator",
-                "range": {"start": 0, "end": duration},
-                "scene_id": scene_id,
-                "source": None,
-                "object": {
-                    "kind": "generator",
-                    "object_id": "obj_generator",
-                    **source_fields,
-                    "output": output,
-                    "layout": {"x": 0.0, "y": 0.0, "width": float(width), "height": float(height)},
-                    "fit": "cover",
-                    "transform": {"x": 0.0, "y": 0.0, "scale": 1.0, "rotation": 0.0, "origin": "center"},
-                    "opacity": 1.0,
-                },
-                "animations": [],
-            },
-        },
-    ]
+        })
+        ops.append(generator_track_op)
+    ops.extend([scene_op, generator_clip_op])
     title = (direction.title or "").strip()
     if title:
         ops.extend([
@@ -1360,7 +1960,7 @@ def _instantiate_generator(
                 "track_id": "trk_title",
                 "clip": {
                     "clip_id": title_clip_id,
-                    "range": {"start": 0, "end": duration},
+                    "range": {"start": start_ticks, "end": end_ticks},
                     "scene_id": scene_id,
                     "source": None,
                     "object": {
@@ -1392,7 +1992,7 @@ def _instantiate_generator(
         speech_clip_id = f"{scene_id.replace('scn_', 'clp_', 1)}_speech"
         caption_clip_id = f"{scene_id.replace('scn_', 'clp_', 1)}_caption"
         speech_object_id = f"{speech_clip_id.replace('clp_', 'obj_', 1)}"
-        ops[1]["scene"]["speech_clip_ids"] = [speech_clip_id]
+        scene_op["scene"]["speech_clip_ids"] = [speech_clip_id]
         ops.extend([
             {
                 "op": "add_track",
@@ -1407,7 +2007,7 @@ def _instantiate_generator(
                 "track_id": "trk_dialogue",
                 "clip": {
                     "clip_id": speech_clip_id,
-                    "range": {"start": 0, "end": duration},
+                    "range": {"start": start_ticks, "end": end_ticks},
                     "scene_id": scene_id,
                     "source": None,
                     "object": {
@@ -1425,7 +2025,7 @@ def _instantiate_generator(
                 "track_id": "trk_caption",
                 "clip": {
                     "clip_id": caption_clip_id,
-                    "range": {"start": 0, "end": duration},
+                    "range": {"start": start_ticks, "end": end_ticks},
                     "scene_id": scene_id,
                     "source": None,
                     "object": {
@@ -1462,19 +2062,21 @@ def _instantiate_generator(
                 },
             },
         ])
+    if not include_structure:
+        ops = [op for op in ops if op["op"] not in {"set_settings", "add_track"}]
     return ops
 
 
 def instantiate_program(
     direction: Any, *, aspect: str = "16:9", background: str | None = None
 ) -> list[dict[str, Any]]:
-    """One Agent-authored drawing-v1 background plus optional native title."""
+    """One Agent-authored draw-2d background plus optional native title."""
     width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
-    duration_frames = max(1, round(direction.duration_seconds * 15))
+    duration_frames = max(1, round(direction.duration_seconds * GENERATOR_FPS))
     output = {
-        "width": width // 2,
-        "height": height // 2,
-        "fps": 15,
+        "width": width,
+        "height": height,
+        "fps": GENERATOR_FPS,
         "duration_frames": duration_frames,
         "background": background or direction.background,
     }
@@ -1484,7 +2086,7 @@ def instantiate_program(
         background=output["background"],
         output=output,
         source_fields={
-            "runtime": "drawing-v1",
+            "producer": "draw-2d",
             "code": direction.code,
             "parameters": direction.parameters,
         },
@@ -1502,34 +2104,121 @@ def instantiate_component(
     background: str | None = None,
     narration: str | None = None,
     narration_voice: dict[str, Any] | None = None,
+    start_ticks: int = 0,
+    include_structure: bool = True,
+    scene_index: int | None = None,
 ) -> list[dict[str, Any]]:
-    """One controlled TSX visual plus independent native title/narration."""
+    """One controlled TSX scene plus independent native title/narration."""
     width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
-    duration_frames = max(1, round(direction.duration_seconds * 15))
+    duration_frames = max(1, round(direction.duration_seconds * GENERATOR_FPS))
     output = {
-        "width": width // 2,
-        "height": height // 2,
-        "fps": 15,
+        "width": width,
+        "height": height,
+        "fps": GENERATOR_FPS,
         "duration_frames": duration_frames,
         "background": background or direction.background,
     }
-    return _instantiate_generator(
+    ops = _instantiate_generator(
         direction,
         aspect=aspect,
         background=output["background"],
         output=output,
         source_fields={
-            "runtime": "component-v1",
-            "code": direction.code,
-            "parameters": direction.parameters,
+            "producer": "remotion-project",
+            "project": {
+                "schema_version": 1,
+                "entry": direction.entry,
+                "composition_id": direction.composition_id,
+                "files": [item.model_dump(mode="json") for item in direction.files],
+                "props": direction.props,
+                "props_schema": direction.props_schema,
+                "resources": [item.model_dump(mode="json") for item in direction.resources],
+            },
+            "parameters": {},
         },
-        scene_id="scn_component",
-        title_clip_id="clp_component_title",
-        title_object_id="obj_component_title",
-        animation_prefix="anm_component_title",
+        scene_id="scn_component" if scene_index is None else f"scn_component_{scene_index}",
+        title_clip_id="clp_component_title" if scene_index is None else f"clp_component_{scene_index}_title",
+        title_object_id="obj_component_title" if scene_index is None else f"obj_component_{scene_index}_title",
+        animation_prefix="anm_component_title" if scene_index is None else f"anm_component_{scene_index}_title",
         narration=narration,
         narration_voice=narration_voice,
+        start_ticks=start_ticks,
+        include_structure=include_structure,
+        generator_clip_id="clp_generator" if scene_index is None else f"clp_component_{scene_index}_generator",
+        generator_object_id="obj_generator" if scene_index is None else f"obj_component_{scene_index}_generator",
     )
+    bindings: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    for resource in direction.resources:
+        if resource.snapshot_id in seen:
+            continue
+        seen.add(resource.snapshot_id)
+        bindings.append({"op": "bind_source", "snapshot_id": str(resource.snapshot_id)})
+    return [*bindings, *ops]
+
+
+def instantiate_component_video(
+    direction: Any,
+    *,
+    aspect: str = "16:9",
+    background: str | None = None,
+    narration_voice: dict[str, Any] | None = None,
+    music_bed: MusicBed | None = None,
+) -> list[dict[str, Any]]:
+    """A coherent multi-scene code animation on the ordinary Composition timeline."""
+    width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[aspect]
+    canvas_background = background or direction.scenes[0].background
+    ops: list[dict[str, Any]] = [
+        {
+            "op": "set_settings",
+            "settings": {
+                "width": width, "height": height, "fps": {"num": 30, "den": 1},
+                "timebase": 90000, "sample_rate": 48000, "channels": 2,
+                "background": canvas_background,
+            },
+        },
+        {"op": "add_track", "track": {
+            "track_id": "trk_generator", "kind": "visual", "role": "main", "order": 0, "clips": [],
+        }},
+        {"op": "add_track", "track": {
+            "track_id": "trk_title", "kind": "visual", "role": "title", "order": 1, "clips": [],
+        }},
+        {"op": "add_track", "track": {
+            "track_id": "trk_caption", "kind": "visual", "role": "caption", "order": 2, "clips": [],
+        }},
+        {"op": "add_track", "track": {
+            "track_id": "trk_dialogue", "kind": "audio", "role": "dialogue", "order": 0, "clips": [],
+        }},
+    ]
+    cursor = 0
+    bound: set[Any] = set()
+    for index, scene in enumerate(direction.scenes, start=1):
+        scene_narration = scene.narration if scene.narration else None
+        scene_ops = instantiate_component(
+            scene,
+            aspect=aspect,
+            background=background,
+            narration=scene_narration,
+            narration_voice=narration_voice if scene_narration is not None else None,
+            start_ticks=cursor,
+            include_structure=False,
+            scene_index=index,
+        )
+        for op in scene_ops:
+            if op["op"] == "bind_source":
+                snapshot_id = op["snapshot_id"]
+                if snapshot_id in bound:
+                    continue
+                bound.add(snapshot_id)
+            ops.append(op)
+        generator = next(
+            op for op in scene_ops
+            if op["op"] == "add_clip" and op["clip"]["clip_id"] == f"clp_component_{index}_generator"
+        )
+        cursor = generator["clip"]["range"]["end"]
+    if music_bed is not None:
+        ops.extend(instantiate_music_bed(music_bed, total_ticks=cursor, timebase=90000))
+    return ops
 
 
 def instantiate_generated_image(
@@ -1542,7 +2231,7 @@ def instantiate_generated_image(
         background=background or "#000000",
         output={"aspect_ratio": "16:9"},
         source_fields={
-            "runtime": "image-v1",
+            "producer": "image-generation",
             "prompt": direction.prompt,
             "provider": "minimax",
             "model": "image-01",

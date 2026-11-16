@@ -117,11 +117,9 @@ describe("projectSettledFrames — C-1 rank projection", () => {
     expect(seated.positions.get("floor")!.y).toBe(100)
   })
 
-  it("错帧双杀 (shared malicious fixture, 用户点名): the same corrupted frames feed BOTH consumers — Canvas projects L→R while (mirror suite API-side) execution orders A→B→C", () => {
-    // Mirror of apps/api/tests/test_graph_wiring_pure.py::
-    // test_run_op_double_kill_shared_fixture — SAME frames, SAME ranks, two
-    // runtimes. If this pair ever diverges, one of the two consumers
-    // re-derived topology on its own.
+  it("错帧双杀: corrupted stored frames never change the execution topology", () => {
+    // Canvas projection and execution consume the same rank contract; neither
+    // side may re-derive topology from stored visual positions.
     const nodes = [
       node("a", 0, { x: 928, y: 0 }),
       node("b", 1, { x: 100, y: 0 }),
@@ -152,14 +150,10 @@ describe("projectSettledFrames — C-1 rank projection", () => {
   })
 })
 
-describe("projectSettledFrames — ADR-098 B3 读时归一 (double-mirror fixtures)", () => {
-  /** 事故同构 fixture（mirror of apps/api/tests/test_product_graph_pure.py::
-   * test_accident_isomorph_mixed_island_both_cohorts_dead — SAME ranks, SAME
-   * stamp shape, two runtimes; 项目 62594b0b 取证原型）: the pre-B1 island
-   * {transcript, quotes} cols=2 split into two rank cohorts at read time;
-   * both corridors fully died server-side, so NEITHER node carries a
-   * spec.island stamp — the client mechanism is untouched (rank × PITCH +
-   * spec.island two entries), the dead cohort simply never arrives. */
+describe("projectSettledFrames — rank-derived read normalization", () => {
+  /** Mixed rank cohorts with no surviving island stamp use the plain column
+   * law; neither node may reserve a ghost corridor. The client mechanism is
+   * rank × PITCH, with spec.island present only for a real surviving island. */
   it("dead corridor: no stamp → plain column law, zero reserved_bottom ghost", () => {
     const nodes = [
       node("asset", 0, { x: 0, y: 0 }),

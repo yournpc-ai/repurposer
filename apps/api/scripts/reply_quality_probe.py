@@ -1,20 +1,20 @@
 """reply_quality_probe.py — 答复质量尺（批0）：场景集 × 质量尺 × 基线对账。
 
-定位（仪表不是闸）: chat_scenarios 断言形态（禁令 #7 永不锁 LLM 文案）、
-prompt_gate 断言行为阈值——本脚本测第三个轴：逐场景答复质量。基线先行
+定位（仪表不是闸）: 真实用户旅程断言可见结果与持久化事实、核心测试断言
+确定性 API/DB 合同——本脚本测第三个诊断轴：逐场景答复质量。基线先行
 （任何质量批施工前 --save-baseline），批后复测 --diff，delta 的分布决定
 后续批（帧级视觉 / 单 prompt 化）的 go/no-go——不评估就施工 = 没有仪表
 就改引擎。
 
-Preflight（同 chat_scenarios）:
-- 活 API（SCENARIO_API_BASE，默认 127.0.0.1:8000——SCENARIO_API_BASE 同
-   chat_scenarios 的环境变量名）;
+Preflight（同 真实用户旅程）:
+- 活 API（JOURNEY_API_BASE，默认 127.0.0.1:8000——JOURNEY_API_BASE 同
+   真实用户旅程 的环境变量名）;
 - dev worker 在跑（S-warm 的 fixture 视频要真 ASR + 真 warm + 真触发回合,
   全程约 5-10 分钟——这不是卡顿，是真实链路）;
 - demo 桶可达（fixture 源 demo/uploads/demo_talk.mp4）。
 fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scenario/
 前缀再 seed——项目删除会 unlink asset 的 file_url，共享 key 直接引用会被
-清理想死（S16 吃过 recipe 卡营销片）。
+清理想死（共享营销片曾被误删）。
 
 场景集（批0 三本 + 批 D 语言矩阵；S-done 收官触发回合待后续——它要真 run
 全程，骑 S4 的链另排）:
@@ -45,8 +45,8 @@ fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scena
                               非被迫 / 选项=可选非已决 / 观察=有据非断言
 
 Judge 的已知偏置: 唯一 provider 座是 minimax——被测与 judge 同族,自偏好
-风险在案,det 半尺是无偏锚;第二 provider 座落地时 --provider 轮转（mirror
-prompt_gate 的 PROVIDERS 纪律,judge 与被测异族）。
+风险在案,det 半尺是无偏锚;第二 provider 座落地时 --provider 轮转（比较时
+round-robin 交错,judge 与被测异族）。
 
 用法:
   uv run python scripts/reply_quality_probe.py                    # 跑+印报告
@@ -72,10 +72,10 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 # Client/fixture helpers ride the scenario script's single source (scripts
 # reach into app internals throughout — the scripts/ 去概念名 doctrine).
-from scripts.chat_scenarios import (  # noqa: E402
+from test.journeys.chat import (  # noqa: E402
     REMIX_SOURCE_KEY,
     Ctx,
-    ScenarioFailure,
+    JourneyFailure,
     copy_fixture,
     make_user,
     seed_asset,
@@ -83,8 +83,8 @@ from scripts.chat_scenarios import (  # noqa: E402
 )
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import AssetStatus, AssetType  # noqa: E402
+from app.providers.llm import get_llm_client  # noqa: E402
 from app.providers.llm.base import LLMError  # noqa: E402
-from app.providers.llm.minimax import minimax_client  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 质量尺 v1
@@ -307,7 +307,7 @@ async def judge_reply(scenario: str, user_prompt: str, reply: str,
     # judge 失败降级不炸场(v1 基线实证): judge 的 JSON 故障 = 该本 judged
     # 半尺缺失,不是整场测量的死刑——det 半尺照常落,维度记 None 标原因。
     try:
-        result = await minimax_client.generate(
+        result = await get_llm_client().generate(
             [
                 {"role": "system", "content": JUDGE_SYSTEM},
                 {"role": "user", "content": _judge_prompt(
@@ -345,11 +345,11 @@ async def _last_assistant_content(ctx: Ctx, conversation_id: str) -> str:
 async def _conversation_id(ctx: Ctx, pid: str) -> str:
     res = await ctx.conversation(pid)
     if res.status_code != 200:
-        raise ScenarioFailure(f"conversation missing for {pid}: {res.text}")
+        raise JourneyFailure(f"conversation missing for {pid}: {res.text}")
     data = res.json()
     cid = data.get("id") or (data.get("conversation") or {}).get("id")
     if not cid:
-        raise ScenarioFailure(f"conversation id unreadable: {list(data)}")
+        raise JourneyFailure(f"conversation id unreadable: {list(data)}")
     return str(cid)
 
 
@@ -366,7 +366,7 @@ async def scenario_cap(ctx: Ctx, scenario: str) -> dict:
         headers={"Accept-Language": floor} if floor else None,
     )
     if res.status_code != 201:
-        raise ScenarioFailure(f"/chat {prompt[:30]!r}: {res.text}")
+        raise JourneyFailure(f"/chat {prompt[:30]!r}: {res.text}")
     turn = res.json()
     reply = ((turn.get("assistant_message") or {}).get("content") or "").strip()
     if not reply:  # 非常规形状兜底: 回读会话
@@ -520,7 +520,7 @@ def save_report(captures: list[dict], path: Path) -> None:
 def diff_baseline(name: str, captures: list[dict]) -> None:
     path = REPORT_DIR / f"baseline-{name}.json"
     if not path.exists():
-        raise ScenarioFailure(f"baseline not found: {path}")
+        raise JourneyFailure(f"baseline not found: {path}")
     base = json.loads(path.read_text())
     if base.get("rubric_version") != RUBRIC_VERSION:
         print(f"⚠ rubric version {base.get('rubric_version')} → "

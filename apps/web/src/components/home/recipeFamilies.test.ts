@@ -1,12 +1,9 @@
-/**
- * 货架纯逻辑套件 (D5 验证仪式链): 族分组 / 空族不渲染 / 预填载荷。
- * 纯函数层 (recipeShelf.ts) — 无 DOM、无 i18n、无网络。
- */
-
 import { describe, expect, it } from "vitest"
 
+import en from "@/lib/i18n/locales/en"
+import zh from "@/lib/i18n/locales/zh"
 import type { RecipePublic } from "@/lib/recipes"
-import type { SkillOption } from "@/lib/skills"
+import { BUILTIN_SKILL_VERSIONS, type SkillOption } from "@/lib/skills"
 import {
   RECIPE_CARD_FAMILY,
   RECIPE_FAMILIES,
@@ -14,6 +11,7 @@ import {
   resolveFamilies,
   resolveRecipeFamilies,
   type RecipeFamilyDef,
+  type ShelfDemo,
 } from "./recipeFamilies"
 
 function card(id: string, status: "live" | "reserved" = "live"): RecipePublic {
@@ -29,10 +27,18 @@ function card(id: string, status: "live" | "reserved" = "live"): RecipePublic {
   }
 }
 
-const ALL_REGISTRY_IDS = Object.keys(RECIPE_CARD_FAMILY)
+function demosIn(families: ReturnType<typeof resolveRecipeFamilies>): ShelfDemo[] {
+  return families.flatMap((family) =>
+    family.subs.flatMap((sub) =>
+      sub.shelves.flatMap((shelf) =>
+        shelf.items.flatMap((item) => (item.kind === "demo" ? [item.demo] : [])),
+      ),
+    ),
+  )
+}
 
-describe("recipeCardFamily — family 字段投影", () => {
-  it("八卡按任务族归位(隐藏卡映射保留,下架 ≠ 删除)", () => {
+describe("non-video Recipe registration", () => {
+  it("keeps the existing family mappings and prompt ownership unchanged", () => {
     expect(RECIPE_CARD_FAMILY).toMatchObject({
       "multilingual-subs": "talks",
       "voice-dub": "talks",
@@ -43,211 +49,240 @@ describe("recipeCardFamily — family 字段投影", () => {
       "quote-cards": "posts",
       "image-video": "templates",
     })
+    expect(recipeCardFamily(card("unregistered"))).toBe("templates")
   })
 
-  it("未登记的新卡归 templates(进现有配方行 — MG 批 D3 口径)", () => {
-    expect(recipeCardFamily(card("launch-film"))).toBe("templates")
-  })
-})
-
-describe("resolveFamilies — 族分组", () => {
-  it("任务族分组: Ads 旗舰居首(默认 tab),talks 四卡 / posts 两卡按注册表序入驻(reserved 保留座位)", () => {
-    const cards = ALL_REGISTRY_IDS.map((id) =>
-      card(id, id === "reframe" ? "reserved" : "live"),
-    )
-    const families = resolveRecipeFamilies(cards)
-    expect(families.map((f) => f.id)).toEqual(["ads", "talks", "posts"])
-    const talksShelf = families[1].subs[0]?.shelves[0]
-    expect(talksShelf?.id).toBe("talks")
-    expect(
-      talksShelf?.items.map((it) => (it.kind === "recipe" ? it.card.id : "")),
-    ).toEqual(["multilingual-subs", "voice-dub", "highlight-clips", "reframe"])
-    const postsShelf = families[2].subs[0]?.shelves[0]
-    expect(
-      postsShelf?.items.map((it) => (it.kind === "recipe" ? it.card.id : "")),
-    ).toEqual(["social-post", "carousel"])
-  })
-
-  it("演示期下架清单: quote-cards / image-video 不上任何货架", () => {
-    const families = resolveRecipeFamilies(
-      ALL_REGISTRY_IDS.map((id) => card(id)),
-    )
-    const onShelf = families.flatMap((f) =>
-      f.subs.flatMap((s) =>
-        s.shelves.flatMap((sh) =>
-          sh.items.map((it) =>
-            it.kind === "recipe" ? it.card.id : it.demo.id,
-          ),
-        ),
-      ),
-    )
-    expect(onShelf).not.toContain("quote-cards")
-    expect(onShelf).not.toContain("image-video")
-  })
-
-  it("卡只落在自己族的 recipes 货架——别族 recipes 货架不串货", () => {
-    const families: RecipeFamilyDef[] = [
-      { id: "templates", subs: [{ id: "all", shelves: [{ id: "featured", kind: "recipes" }] }] },
-      { id: "explainer", subs: [{ id: "anim", shelves: [{ id: "anim", kind: "recipes" }] }] },
-    ]
-    // An unregistered card falls back to templates — it must NOT cross-file
-    // into another family's recipes shelf.
-    const resolved = resolveFamilies(families, [card("some-unregistered-card")])
-    expect(resolved.map((f) => f.id)).toEqual(["templates"])
-  })
-})
-
-describe("resolveFamilies — 空族不渲染(连摆位都不摆)", () => {
-  it("Ads 族: 产品演示在前、文字短片在后,brand/product 空位级联丢弃", () => {
-    const families = resolveRecipeFamilies(ALL_REGISTRY_IDS.map((id) => card(id)))
-    const ads = families.find((f) => f.id === "ads")
-    // The two visible shelves are data-driven; reserved empty siblings never
-    // become extra tabs.
-    expect(ads?.subs.map((s) => s.id)).toEqual(["product-demo", "text-short"])
-  })
-
-  it("空货架 → 空子 tab → 空族 级联丢弃", () => {
+  it("generic Recipe shelves still resolve to their existing prompt payload", () => {
     const families: RecipeFamilyDef[] = [
       {
-        id: "explainer",
-        subs: [
-          // 一空一有: 空货架丢弃,子 tab 存活
-          {
-            id: "anim",
-            shelves: [
-              { id: "empty", kind: "demos", demos: [] },
-              {
-                id: "real",
-                kind: "demos",
-                demos: [{ id: "d1", url: "https://cdn.example.com/d1.mp4", orientation: "wide" }],
-              },
-            ],
-          },
-          // 全空: 子 tab 整丢
-          { id: "motion", shelves: [{ id: "motion", kind: "demos", demos: [] }] },
-        ],
+        id: "talks",
+        subs: [{ id: "all", shelves: [{ id: "talks", kind: "recipes" }] }],
       },
-      // 无子 tab 存活: 族整丢
-      { id: "ads", subs: [{ id: "brand", shelves: [{ id: "brand", kind: "demos", demos: [] }] }] },
     ]
-    const resolved = resolveFamilies(families, [])
-    expect(resolved.map((f) => f.id)).toEqual(["explainer"])
-    expect(resolved[0].subs.map((s) => s.id)).toEqual(["anim"])
-    expect(resolved[0].subs[0].shelves.map((s) => s.id)).toEqual(["real"])
-  })
-
-  it("零卡 → 只剩供货 demo 的族(货架与配方卡解耦)", () => {
-    expect(resolveRecipeFamilies([]).map((f) => f.id)).toEqual(["ads"])
-  })
-})
-
-describe("resolveFamilies — 预填载荷(卡片点击唯一归宿 = composer 预填)", () => {
-  it("recipe 卡 → recipes.<id>.promptTemplate(配方 = 提示词, ADR-040)", () => {
-    const families = resolveRecipeFamilies([card("highlight-clips")])
-    const talks = families.find((f) => f.id === "talks")
-    const item = talks!.subs[0].shelves[0].items[0]
+    const item = resolveFamilies(families, [card("highlight-clips")])[0]
+      ?.subs[0]?.shelves[0]?.items[0]
     expect(item).toMatchObject({
       kind: "recipe",
       prefillKey: "recipes.highlight-clips.promptTemplate",
     })
   })
 
-  it("demo 卡 → recipes.shelf.demos.<id>.prompt", () => {
-    const families: RecipeFamilyDef[] = [
-      {
-        id: "explainer",
-        subs: [
-          {
-            id: "anim",
-            shelves: [
-              {
-                id: "anim",
-                kind: "demos",
-                demos: [{ id: "launch-film", url: "https://cdn.example.com/lf.mp4", orientation: "wide" }],
-              },
-            ],
-          },
-        ],
-      },
-    ]
-    const item = resolveFamilies(families, [])[0].subs[0].shelves[0].items[0]
-    expect(item).toMatchObject({
-      kind: "demo",
-      prefillKey: "recipes.shelf.demos.launch-film.prompt",
-    })
-  })
-
-  it("视频 Skill 卡与手动 picker 共用同一 reference；无声明能力或普通 demo 不伪造绑定", () => {
-    const skill: SkillOption = {
-      reference: { kind: "builtin", skill_id: "launch-film", version: "1.3.0" },
-      skill_id: "launch-film",
-      name: "launch-film",
-      description: "",
-      capabilities: ["website_capture"],
-    }
-    const items = resolveRecipeFamilies([], [skill])
-      .flatMap((family) => family.subs)
-      .flatMap((sub) => sub.shelves)
-      .flatMap((shelf) => shelf.items)
-    const zymix = items.find(
-      (item) => item.kind === "demo" && item.demo.id === "product-demo-zymix",
+  it("does not resurrect retired Home task groups from fetched Recipe cards", () => {
+    const families = resolveRecipeFamilies(
+      Object.keys(RECIPE_CARD_FAMILY).map((id) => card(id)),
     )
-    const textShort = items.find(
-      (item) => item.kind === "demo" && item.demo.id === "text-short-genesis",
-    )
-    expect(zymix?.skill?.reference).toEqual(skill.reference)
-    expect(zymix?.prefillKey).toBe("recipes.shelf.demos.product-demo-zymix.prompt")
-    expect(textShort?.skill).toBeUndefined()
-
-    const withoutDeclaration = resolveRecipeFamilies([])
-      .flatMap((family) => family.subs)
-      .flatMap((sub) => sub.shelves)
-      .flatMap((shelf) => shelf.items)
-      .find((item) => item.kind === "demo" && item.demo.id === "product-demo-zymix")
-    expect(withoutDeclaration?.skill).toBeUndefined()
+    expect(families.map((family) => family.id)).toEqual([
+      "product-promo",
+      "talking-head",
+      "text-animation",
+      "knowledge-explainer",
+    ])
+    expect(
+      families.flatMap((family) =>
+        family.subs.flatMap((sub) => sub.shelves.flatMap((shelf) => shelf.items)),
+      ),
+    ).toHaveLength(5)
   })
 })
 
-describe("RECIPE_FAMILIES 注册表形态守卫", () => {
-  it("族 / 子 tab / 货架 id 各自唯一", () => {
-    const familyIds = RECIPE_FAMILIES.map((f) => f.id)
-    expect(new Set(familyIds).size).toBe(familyIds.length)
+describe("four-product Home shelf", () => {
+  it("shows four products and their eight application seats", () => {
+    const families = resolveRecipeFamilies([])
+    expect(
+      families.map((family) => ({
+        id: family.id,
+        skillId: family.skillId,
+        subs: family.subs.map((sub) => sub.id),
+      })),
+    ).toEqual([
+      {
+        id: "product-promo",
+        skillId: "promo-video",
+        subs: ["website-product", "course-service"],
+      },
+      {
+        id: "talking-head",
+        skillId: "talking-head-video",
+        subs: ["opinion-talking-head", "course-lecture-teaser"],
+      },
+      {
+        id: "text-animation",
+        skillId: "text-animation",
+        subs: ["opinion-text", "quote-announcement"],
+      },
+      {
+        id: "knowledge-explainer",
+        skillId: "knowledge-explainer",
+        subs: ["concept-explainer", "research-report"],
+      },
+    ])
+  })
+
+  it("places exactly five real samples and preserves five honest empty states", () => {
+    const families = resolveRecipeFamilies([])
+    expect(demosIn(families).map((demo) => demo.id)).toEqual([
+      "product-promo-agentveil-the-next-move",
+      "product-promo-oxvalue-product-evidence",
+      "product-promo-oxvalue-energy-arc",
+      "text-short-clear-rhythm",
+      "knowledge-explainer-clear-expression",
+    ])
+    const emptyShelves = families.flatMap((family) =>
+      family.subs.flatMap((sub) =>
+        sub.shelves.filter((shelf) => shelf.items.length === 0).map((shelf) => shelf.id),
+      ),
+    )
+    expect(emptyShelves).toEqual([
+      "course-service",
+      "opinion-talking-head",
+      "course-lecture-teaser",
+      "quote-announcement",
+      "research-report",
+    ])
+    expect(en.recipes.shelf.emptyDemo).toBe("No sample for this application yet.")
+    expect(zh.recipes.shelf.emptyDemo).toBe("该应用暂无样片。")
+  })
+
+  it("does not mix old Film samples or retired video groups into the shelf", () => {
+    const ids = demosIn(resolveRecipeFamilies([])).map((demo) => demo.id)
+    expect(ids).not.toEqual(
+      expect.arrayContaining([
+        "product-demo-zymix",
+        "product-demo-highlights",
+        "product-demo-captioned",
+        "product-demo-walkthrough",
+        "text-short-gentle-close",
+        "text-short-genesis",
+      ]),
+    )
+    expect(RECIPE_FAMILIES.map((family) => family.id)).not.toEqual(
+      expect.arrayContaining(["ads", "talks", "posts", "templates"]),
+    )
+  })
+
+  it("collapses empty generic groups unless a video demo seat opts into visibility", () => {
+    const families: RecipeFamilyDef[] = [
+      {
+        id: "generic",
+        subs: [{ id: "empty", shelves: [{ id: "empty", kind: "demos", demos: [] }] }],
+      },
+      {
+        id: "video",
+        preserveEmptyDemoShelves: true,
+        subs: [{ id: "empty", shelves: [{ id: "empty", kind: "demos", demos: [] }] }],
+      },
+    ]
+    const resolved = resolveFamilies(families, [])
+    expect(resolved.map((family) => family.id)).toEqual(["video"])
+    expect(resolved[0]?.subs[0]?.shelves[0]?.items).toEqual([])
+  })
+})
+
+describe("sample → exact Skill reference + prompt", () => {
+  const liveSkills: SkillOption[] = Object.entries(BUILTIN_SKILL_VERSIONS).map(
+    ([skill_id, version]) => ({
+      reference: { kind: "builtin", skill_id, version },
+      skill_id,
+      name: skill_id,
+      description: "",
+      capabilities: ["declared"],
+    }),
+  )
+
+  const installedPromo: SkillOption = {
+    reference: { kind: "builtin", skill_id: "promo-video", version: "shotcraft-release" },
+    skill_id: "promo-video",
+    name: "video-shotcraft",
+    description: "",
+    capabilities: [],
+  }
+
+  it.each([{ skills: [...liveSkills, installedPromo] }, { skills: [] }])(
+    "binds the exact source version with live options=$skills.length",
+    ({ skills }) => {
+    const families = resolveRecipeFamilies([], skills)
+    const items = families.flatMap((family) =>
+      family.subs.flatMap((sub) => sub.shelves.flatMap((shelf) => shelf.items)),
+    )
+    expect(items).toHaveLength(5)
+    for (const item of items) {
+      expect(item.kind).toBe("demo")
+      if (item.kind !== "demo") continue
+      if (item.demo.skillId === "promo-video") {
+        expect(item.skill).toEqual(skills.length ? installedPromo : undefined)
+        continue
+      }
+      expect(item.skill?.reference).toEqual({
+        kind: "builtin",
+        skill_id: item.demo.skillId,
+        version: item.demo.skillVersion,
+      })
+      expect(item.demo.skillVersion).toBe(
+        BUILTIN_SKILL_VERSIONS[item.demo.skillId as keyof typeof BUILTIN_SKILL_VERSIONS],
+      )
+      expect(item.prefillKey).toBe(`recipes.shelf.demos.${item.demo.id}.prompt`)
+    }
+  })
+
+  it("keeps registry, short/full Skill labels, applications and prompts in en/zh sync", () => {
+    for (const locale of [en, zh]) {
+      for (const family of RECIPE_FAMILIES) {
+        expect(family.skillId).toBeTruthy()
+        expect(locale.skills.builtin).toHaveProperty(`${family.skillId}.name`)
+        expect(locale.skills.builtin).toHaveProperty(`${family.skillId}.shortName`)
+        for (const sub of family.subs) {
+          expect(locale.recipes.shelf.subs).toHaveProperty(sub.id)
+          for (const shelf of sub.shelves) {
+            expect(shelf.id).toBe(sub.id)
+            for (const demo of shelf.demos ?? []) {
+              expect(locale.recipes.shelf.demos).toHaveProperty(`${demo.id}.prompt`)
+            }
+          }
+        }
+      }
+    }
+  })
+
+  it("binds website samples to their actual source Skills and keeps replaceable slots", () => {
+    const family = RECIPE_FAMILIES.find((item) => item.id === "product-promo")
+    expect(family?.skillId).toBe("promo-video")
+    const demos = family?.subs[0]?.shelves[0]?.demos
+    expect(demos?.[0]).toMatchObject({
+      skillId: "launch-film",
+      skillVersion: "1.4.0",
+    })
+    expect(demos?.slice(1)).toMatchObject([
+      { id: "product-promo-oxvalue-product-evidence", skillId: "promo-video" },
+      { id: "product-promo-oxvalue-energy-arc", skillId: "promo-video" },
+    ])
+    for (const locale of [en, zh]) {
+      for (const demo of demos ?? []) {
+        expect(locale.recipes.shelf.demos).toHaveProperty(
+          [demo.id, "prompt"],
+          expect.stringContaining("{{placeholder}}"),
+        )
+      }
+    }
+  })
+})
+
+describe("registry integrity", () => {
+  it("has unique product, application and shelf ids", () => {
+    expect(new Set(RECIPE_FAMILIES.map((family) => family.id)).size).toBe(4)
     for (const family of RECIPE_FAMILIES) {
-      const subIds = family.subs.map((s) => s.id)
-      expect(new Set(subIds).size).toBe(subIds.length)
+      expect(new Set(family.subs.map((sub) => sub.id)).size).toBe(family.subs.length)
       for (const sub of family.subs) {
-        const shelfIds = sub.shelves.map((s) => s.id)
-        expect(new Set(shelfIds).size).toBe(shelfIds.length)
+        expect(new Set(sub.shelves.map((shelf) => shelf.id)).size).toBe(sub.shelves.length)
       }
     }
   })
 
-  it("任务族货架 = RecipeCard(kind = recipes)", () => {
-    for (const id of ["templates", "talks", "posts"]) {
-      const family = RECIPE_FAMILIES.find((f) => f.id === id)
-      for (const sub of family?.subs ?? []) {
-        for (const shelf of sub.shelves) {
-          expect(shelf.kind).toBe("recipes")
-        }
-      }
-    }
-  })
-
-  it("Ads(MG)族货架 = demo 视频族(kind = demos);上架的每一片都是 demo/ 树真片(无真 demo 不成卡)", () => {
-    const ads = RECIPE_FAMILIES.find((f) => f.id === "ads")
-    expect(ads).toBeDefined()
-    for (const sub of ads!.subs) {
-      for (const shelf of sub.shelves) {
-        expect(shelf.kind).toBe("demos")
-        for (const demo of shelf.demos ?? []) {
-          // A shipped seat is a REAL render, content-addressed into the
-          // public demo/ tree — never a placeholder, never a stock URL.
-          expect(demo.url).toMatch(
-            /^https:\/\/repurposer\.tos-ap-southeast-1\.volces\.com\/demo\//,
-          )
-          expect(["wide", "vertical"]).toContain(demo.orientation)
-        }
-      }
+  it("uses only real, content-addressed demo objects with their actual orientation", () => {
+    for (const demo of demosIn(resolveRecipeFamilies([]))) {
+      expect(demo.url).toMatch(
+        /^https:\/\/repurposer\.tos-ap-southeast-1\.volces\.com\/demo\/outputs\/.+-[a-f0-9]{8}\.mp4$/,
+      )
+      expect(demo.orientation).toBe("wide")
     }
   })
 })

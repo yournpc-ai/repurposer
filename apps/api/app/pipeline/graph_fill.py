@@ -103,7 +103,7 @@ _FOLDED_KINDS = frozenset({"align_stills", "materialize_source"})
 # Clip-family kinds — edges between these carry the video flow.
 _CLIP_FAMILY_KINDS = frozenset({
     "select_clips", "materialize_source", "translate_clip", "dub_clip",
-    "remove_filler", "add_music", "reframe_clip",
+    "remove_filler", "add_music", "reframe_clip", "produce_video",
 })
 
 # (_TASK_BOOK_ROLE's one home is graph_store — the door owns the graph's role
@@ -1218,40 +1218,6 @@ async def _stamp_graph_core(
     for asset_node_id, asset in zip(asset_node_ids, assets):
         for step in writer_heads:
             connect(asset_node_id, node_id_by_key[_fill_key_for_step(step)], "text")
-
-    # The captured page feeds the film head (ADR-119): web_page assets carry
-    # their research manifest as the text flow into launch_film — port-legal
-    # (web_page offers "text"; the video node accepts it), and the page is
-    # the family's whole input (it never touches source media). The freeze
-    # law (ADR-098 §2 — Z) binds: rank edges only ever land on DRAFT targets
-    # (newborns / draft re-fills) — a re-run's settled film node keeps its
-    # first-birth edges (the runtime reads ALL ready pages from the DB at
-    # execution; the edge is the canvas's honesty, not the data channel).
-    film_heads = [
-        s for s in steps if s.kind == "launch_film" and node_of(s) is not None
-    ]
-    if film_heads:
-        pre_stamp_state = {str(n.id): str(n.state) for n in existing_nodes}
-        for asset_node_id, asset in zip(asset_node_ids, assets):
-            if asset.type != AssetType.WEB_PAGE:
-                continue
-            for step in film_heads:
-                target = node_id_by_key[_fill_key_for_step(step)]
-                if pre_stamp_state.get(str(target), "draft") != "draft":
-                    continue
-                connect(asset_node_id, target, "text")
-
-    # ── 7b. Edge reconciliation among the stamp's own members (边对账律,
-    # ADR-062, 2026-09-10): the compiled topology OWNS every edge whose both
-    # endpoints it claims — an existing edge the compile no longer emits is
-    # a stale topology claim (born when an older compiler's law differed —
-    # e.g. the pre-ADR-061 modifier chain), and the grow-only run fill would
-    # otherwise carry it forever (have_edge only dedupes adds). Scope is the
-    # ownership boundary: edges with an endpoint outside the claimed set
-    # (other runs' history, transcript docs, revision wiring) are never the
-    # stamp's business. Orphan-swept draft nodes self-exclude (they are
-    # never in the claimed set, so their cascaded edges can't be mis-counted
-    # as stale and double-deleted — the door would raise on the missing row).
     claimed: set[str] = {str(nid) for nid in node_id_by_key.values()}
     claimed.update(str(nid) for nid in asset_node_ids)
     # Disconnects lead the batch: the door's cycle check walks the working
@@ -1361,18 +1327,7 @@ def _frame_class_of(fam_steps: list[WorkflowStep]) -> tuple[str, str | None]:
             if aspect:
                 return "clip", str(aspect)
         return "clip", "original"
-    if any(s.kind == "launch_film" for s in fam_steps):
-        # The film canvas declares its aspect on the slot (ADR-130);
-        # absent = the 16:9 default.
-        for s in fam_steps:
-            if s.kind != "launch_film":
-                continue
-            aspect = ((s.spec or {}).get("slot") or {}).get("aspect")
-            if aspect:
-                return "clip", str(aspect)
-        return "clip", "16:9"
     return "text", None
-
 
 # Cut tools whose RUNTIME aspect fallback bottoms out at SHORTS_DEFAULT_ASPECT
 # (cut.py / node.py) — a chain carrying one never keeps the source frame.

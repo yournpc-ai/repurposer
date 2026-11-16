@@ -41,7 +41,11 @@ def _chat_agents() -> list[ToolLoopAgent]:
 
 async def warm_chat_prefixes() -> None:
     """One throwaway tool-formatted call per chat agent. Fire-and-forget."""
-    if not settings.minimax_warmup_enabled or not settings.minimax_api_key:
+    if (
+        settings.llm_provider != "minimax"
+        or not settings.minimax_warmup_enabled
+        or not settings.minimax_api_key
+    ):
         return
     for agent in _chat_agents():
         try:

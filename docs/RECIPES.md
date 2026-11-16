@@ -9,7 +9,8 @@
 - 服务端 `app/pipeline/recipes.py:RECIPE_REGISTRY` 注册八个配方：`multilingual-subs`、`voice-dub`、`highlight-clips`、`reframe`、`social-post`、`quote-cards`、`carousel` 为 `live`；`image-video` 为 `reserved`。`GET /api/v1/recipes` 提供公共只读投影。
 - Home 前端另以 `components/home/recipeFamilies.ts:RECIPE_FAMILIES` 组织用户任务货架。`ads` 是默认族；`talks` 与 `posts` 当前 `disabled`；`templates` 是未映射服务端卡片的 catch-all。
 - `DEMO_HIDDEN_CARDS` 当前隐藏 `quote-cards` 与 `image-video`。隐藏只影响货架曝光，不删除 live 能力、prompt 注册或公共 API。
-- Home 的 Ads 族只展示 Text Animation（文字短片）与 Product Promo 两个子 tab。Text Animation 使用项目 `9345ddc2` 与 `f52c489c` 的真实文字源 Film；Product Promo 前两张为 ZYMIX / AgentVeil 真片，其余两张仍复用既有片作布局占位。`brand` / `ugc` / `product` 是空货架，按规则不渲染。
+- Home 当前以四产品主 Tab × 八应用子 Tab 组织视频入口：产品宣传、口播动效、文字动画、知识讲解。文字动画、产品宣传、知识讲解各有一张完成内部真实旅程的新链样片，另外五个应用显示统一空态；真实样片与手动 Slash 使用同一 Skill chip + 可编辑 prompt，非 Skill Recipe 仍只预填 PromptTemplate。`promo-video` 是新的核心宣传 Skill，只有其真实链验收后才替换新入口，旧 launch-film 绑定不漂移。
+- 三张开发/手测样片已按内容寻址 key 上传并登记；内部机制、实际帧与浏览器回放证据不等于用户连续看片、实际试听或正式公开 Gallery 通过。知识片的标题/Generator 拥挤、口播指定真人素材 NoSuchKey 及全部剩余验收统一归 `tasks/skill-package-promo-video.md` P6；证据目录继续使用 `scratch/d5-category-anchors/`。
 - `RecipeCard` 只有 `status="live"` 才可点击；`reserved` 显示 Soon 且不可发射。点击不自动发送、不建项目或 run、不打开 overlay。
 - `packages/clip` 同时服务 editor preview 与 render service；clip-spec 与 film-spec 是平级 spec families，按 `spec.family` 分派。配方不得创建第三套 spec 或 renderer。
 - R5 合成发言视频是已拍板但未实施的能力，合同归 `tasks/synthetic-talk-video.md`；`voice_gen` / `synth_visual` 是目标能力名，不表示当前已注册。
@@ -136,6 +137,8 @@ stacking
 5. **全旅程独立验收**：预填 → Chat → 方案 → 授权 → 制作 → 交付 → 修订通过，不能只验卡面。
 6. **完整视听证据**：实际 Output 含所承诺的音乐、SFX、旁白与原声，动态观看和实际试听通过；Home 静音自动播放不等于成片无声，静音或仅 run-less 样片不能上架。
 
+四类视频卡另按任务验收：产品宣传在同一 CompositionVersion 混合图片、原生文字、真实视频和网站，并至少有一个真实页面状态镜头；口播动效在 9:16 真人原片上实现粗白字、黑描边/阴影与胶囊标签且可独立改字；文字动画实际使用本批注册的原生代表 Preset；知识讲解可以只输入知识文字稿，由 READY NarrationAlignment 驱动至少一个具体词锚动画、一个解释知识的 Generator 主视觉和原生讲解字幕，不要求真实图片/视频/网页证据；模拟知识稿必须标明演示用途，不冒充真实采访、研究引用或事实来源，改 Generator 不影响未点名的旁白、字幕和其他对象。
+
 未满足时使用 reserved/disabled/hidden 或保持未注册；不得用占位样片绕过门槛。
 
 ## 5. 声音层
@@ -145,7 +148,7 @@ stacking
 - `STOCK_VOICES` 注册表、系统音色目录与试听仍是 deferred。不得写成已经上线，也不得声称多语言 stock 覆盖已核实。
 - R5 缺声纹时不得静默换 stock；是否阻塞、提问或采用用户明确选择，按该任务合同与当前授权机器执行。
 - 语速、发音纠正与固定术语读法属于后续术语表/声音能力，不由配方卡另建参数面板。
-- SFX 与 voice 分家：统一复用 AudioObject / effect Track / SourceSnapshot，不新增音频作品类型。固定风格可声明默认 SFX cue 与审核资产，用户替换经 `search_sfx → import_sfx → revise_video`；候选必须真实可试听并显示来源/许可证，不能让模型凭元数据声称已听过。具体施工与验收归 Video Project D5。
+- SFX 与 voice 分家：统一复用 AudioObject / effect Track / SourceSnapshot，不新增音频作品类型。固定风格可声明默认 SFX cue 与审核资产，用户替换经 `search_sfx → import_sfx → revise_video`；`search_sfx` 另由服务端按当前用户消息准入，固定模板音效或禁止搜索的表述不得打开 provider 检索。候选必须真实可试听并显示来源/许可证，不能让模型凭元数据声称已听过。具体剩余施工与验收归统一视频合同 P5/P6。
 - 固定风格视频 Demo 使用视频 Skill chip + 可编辑 prompt 确定性绑定；prompt 不携带隐藏模板参数，也不靠意图识别猜测是否复刻风格。
 
 ## 6. 分镜与素材事实
@@ -166,7 +169,7 @@ stacking
 - 可翻译文本走 en/zh i18n；en 是源语言，zh 必须满足同一 `Resources` 类型。
 - demo 资源必须公开可读，不能使用登录态 asset 端点。
 - 前端 `RECIPE_CARD_FAMILY` 决定 RecipeCard 归属；未映射项进入 `templates`。
-- 非 Skill RecipeCard 预填 key = `recipes.<id>.promptTemplate`；非 Skill demo 预填 key = `recipes.shelf.demos.<id>.prompt`。视频 Skill 卡不使用 Recipe 发射载荷，而与 `/skill` 共用 Skill chip + 可编辑 prompt，版本化解算归 VIDEO_PROJECT §7.4。
+- 非 Skill RecipeCard 预填 key = `recipes.<id>.promptTemplate`；非 Skill demo 预填 key = `recipes.shelf.demos.<id>.prompt`。视频 Skill 卡不使用 Recipe 发射载荷，而与 `/任务名` 共用 Skill chip + 可编辑 prompt，版本化解算归 VIDEO_PROJECT §7.4。picker/chip 使用本地化用户任务名，内部 skill id 只作引用，不当用户面命令。
 - 未来真实 Gallery 若复用配方数据包，必须先登记公开性、素材权限、来源谱系与再制作边界；不能默认公开用户项目。
 
 ### 7.2 点击与发送
@@ -194,6 +197,7 @@ stacking
 ### 7.3 布局与播放
 
 - Home 以 hero + composer 为主入口，货架位于其下；composer 滚动后是**视口底部**单行 stadium dock。
+- 首屏视频主分类固定为产品宣传、口播动效、文字动画、知识讲解，不再使用 Ads & UGC 或旧两产品作为可见范围；两级货架中唯一 videos family 不重复渲染父 tab。四类与内置 Skill 一一绑定，无真实样片的应用显示空态，不用旧片填充。Assistant 的全范围回答按这四类陈述视频能力，并另行保留其他真实内容能力，不维护第二份产品菜单。
 - 货架按用户任务组织，不按输出介质或渠道堆卡；空层级不渲染。
 - demo 视频默认静音循环；IntersectionObserver 离屏暂停、回视口恢复；声音遵循 Home 全局单例互斥。
 - 卡片画幅取真实文件，不拉伸；窄屏不得产生页面级横向溢出。

@@ -558,6 +558,11 @@ class SourceSnapshot(Base):
     asset_id = Column(
         UUID(as_uuid=True), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
     )
+    # Birth-Chat provenance also covers prepared asset-less derivatives. It is
+    # not an ownership boundary and never changes when a snapshot is reused.
+    origin_project_id = Column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     kind = Column(String(20), nullable=False)  # image | audio | web | video (speech later)
     # Immutable object key; the digest is of the bytes behind it.
     storage_key = Column(String(512), nullable=False)
@@ -591,8 +596,10 @@ class SkillVersion(Base):
     """One immutable, owner-scoped external Skill package and review policy.
 
     ``references`` retains source text as untrusted evidence, including scripts
-    which are never executable. ``declared_inputs`` and ``policy`` are reviewed
-    product declarations, not permissions inferred from external frontmatter.
+    which are never executable. ``media`` retains only content-addressed gallery
+    identities; bytes stay in object storage and legacy NULL reads as no media.
+    ``declared_inputs`` and ``policy`` are reviewed product declarations, not
+    permissions inferred from external frontmatter.
     A database trigger rejects UPDATE/DELETE; new methods require a new row.
     """
 
@@ -609,6 +616,9 @@ class SkillVersion(Base):
     version = Column(Integer, nullable=False)
     instructions = Column(Text, nullable=False)
     references = Column(JSONB, nullable=False, default=list)
+    # Gallery media identities only; bytes live in content-addressed object
+    # storage. NULL is the immutable legacy-row representation of no media.
+    media = Column(JSONB, nullable=True)
     declared_inputs = Column(JSONB, nullable=False, default=list)
     capability_report = Column(JSONB, nullable=False, default=dict)
     policy = Column(JSONB, nullable=False, default=dict)
@@ -875,6 +885,9 @@ class Conversation(Base):
     asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
     title = Column(String(255), nullable=True)
+    # Server-owned tool history, not a second work model or client input.
+    context = Column(JSONB, nullable=False, default=lambda: {"schema_version": 1, "items": []},
+                     server_default='{"schema_version":1,"items":[]}')
     # The conversation's interface-language owner (ADR-080 单一叙事者律):
     # stamped from the request's Accept-Language on every user chat turn —
     # the ONE speech-language fact every assistant writer (plan / chat /
@@ -1043,59 +1056,6 @@ class Music(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
-class FilmNarration(Base):
-    """Film narration reuse store (ADR-138 R4-A, 总设计 §10.1): one row per
-    (project, content_hash) — the ORIGINAL speed-1.0 synthesis of one
-    narration line, reusable across versions/runs of the same project.
-
-    ``content_hash`` = sha256 over the canonical synthesis identity
-    (normalized text | resolved voice_id | language | synthesis config) —
-    reuse keys on the ACTUAL synthesis configuration, never a display name
-    or an unresolved Auto. The row holds the original audio's object key +
-    its decoded duration; speed adaptation is a runtime transform whose
-    product is a run-level staging file (never stored here, never in the
-    hash — re-derived from the original on recovery).
-
-    Concurrency (闸 16 — the unique index does NOT prevent duplicate TTS
-    calls by itself, every write is ownership-conditioned): a claim is an
-    atomic INSERT … ON CONFLICT DO NOTHING; the placeholder carries
-    ``owner_token`` + ``lease_expires_at``; a timed-out owner is taken over
-    by a conditional UPDATE that lands only while the row is still
-    ``synthesizing`` past its lease; finalize/expire writes carry the
-    ``owner_token + status`` double condition so an expired owner never
-    overwrites or deletes a takeover's result. Rows cascade with the
-    project (same law as assets).
-    """
-
-    __tablename__ = "film_narrations"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    content_hash = Column(String(64), nullable=False)
-    # The synthesized identity facts (the hash's inputs, readable for audit
-    # and the 按需收割 compatibility path).
-    voice_id = Column(String(255), nullable=False)
-    language = Column(String(16), nullable=False)
-    config_hash = Column(String(64), nullable=False)
-    text = Column(Text, nullable=False)
-    # The ORIGINAL synthesis artifact + its decoded truth.
-    storage_key = Column(String(512), nullable=True)  # NULL while synthesizing
-    duration_s = Column(Float, nullable=True)
-    status = Column(String(16), nullable=False, default="synthesizing")
-    owner_token = Column(String(64), nullable=True)
-    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id", "content_hash", name="uq_film_narrations_project_hash"
-        ),
-    )
 
 
 class VideoNarration(Base):
@@ -1134,6 +1094,58 @@ class VideoNarration(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "content_hash", name="uq_video_narrations_user_hash"),
+    )
+
+
+class NarrationAlignment(Base):
+    """One deterministic alignment of an immutable audio snapshot and exact script.
+
+    READY rows are immutable facts referenced by CompositionVersions. Only the
+    PENDING preparation state enters the worker; semantic annotation is a
+    separate ALIGNED → READY write through the Chat tool.
+    """
+
+    __tablename__ = "narration_alignments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    audio_snapshot_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("source_snapshots.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    text = Column(Text, nullable=False)
+    text_digest = Column(String(64), nullable=False)
+    audio_digest = Column(String(64), nullable=False)
+    algorithm = Column(String(64), nullable=False)
+    normalization_version = Column(String(64), nullable=False)
+    provider = Column(String(64), nullable=False)
+    model = Column(String(255), nullable=False)
+    source_timebase = Column(Integer, nullable=False)
+    timing_digest = Column(String(64), nullable=True)
+    content_digest = Column(String(64), nullable=True)
+    payload = Column(JSONB, nullable=False, default=dict)
+    status = Column(String(16), nullable=False, default="PENDING", index=True)
+    claim_token = Column(UUID(as_uuid=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "audio_snapshot_id",
+            "text_digest",
+            "algorithm",
+            "normalization_version",
+            "provider",
+            "model",
+            name="uq_narration_alignments_source_script_algorithm",
+        ),
     )
 
 
@@ -1339,6 +1351,58 @@ class PaymentOrder(Base):
     )
 
 
+class PaymentWebhookEvent(Base):
+    """Durable payment-provider delivery receipt and asynchronous alert outbox.
+
+    Verified provider events have one row per event id; rejected public calls
+    use hourly aggregate rows with NULL event_id to bound unauthenticated
+    writes. This table never grants credits and is not a financial ledger.
+    """
+
+    __tablename__ = "payment_webhook_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider = Column(String(20), nullable=False, default="stripe")
+    dedupe_key = Column(String(255), nullable=False, unique=True)
+    event_id = Column(String(255), nullable=True, unique=True)
+    event_type = Column(String(100), nullable=True)
+    livemode = Column(Boolean, nullable=True)
+    # Audit identifiers intentionally survive unknown or deleted orders.
+    order_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    checkout_session_id = Column(String(255), nullable=True, index=True)
+    payload_hash = Column(String(64), nullable=False)
+    signature_valid = Column(Boolean, nullable=False)
+    status = Column(String(20), nullable=False)  # processing | processed | ignored | failed
+    reason_code = Column(String(100), nullable=True)
+    response_status = Column(Integer, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=1)
+    first_received_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+    last_received_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+
+    alert_status = Column(String(20), nullable=True)  # NULL | pending | sending | sent | failed
+    alert_attempt_count = Column(Integer, nullable=False, default=0)
+    alert_next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    alert_claim_token = Column(UUID(as_uuid=True), nullable=True)
+    alert_started_at = Column(DateTime(timezone=True), nullable=True)
+    alerted_at = Column(DateTime(timezone=True), nullable=True)
+    alert_last_error = Column(String(500), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("attempt_count >= 1", name="ck_payment_webhook_attempts_positive"),
+        CheckConstraint("alert_attempt_count >= 0", name="ck_payment_webhook_alert_attempts"),
+        Index(
+            "ix_payment_webhook_events_alert_due",
+            "alert_status",
+            "alert_next_attempt_at",
+        ),
+        Index(
+            "ix_payment_webhook_events_first_received_at",
+            "first_received_at",
+        ),
+    )
+
+
 class ConversationUsage(Base):
     """One conversation turn's LLM token usage (ADR-117 D3) — the COGS
     ledger for the conversation layer: metered, NEVER billed (the
@@ -1347,8 +1411,9 @@ class ConversationUsage(Base):
     One row per turn — the tool loop's iterations aggregate in memory
     (``app.metering.bind_conversation_turn``) and fold into this row with
     the turn's assistant message in ONE commit (the billing write
-    discipline). ``cost_usd`` is priced at write time via ``price_tokens``
-    — frozen at write, never drifts with the vendor price list.
+    discipline). ``cost_usd`` uses accumulated per-call actual cost when the
+    provider has cache/time-dependent pricing, otherwise the owning provider's
+    token price at fold time; it never drifts after the row is written.
     ``cached_tokens`` records the provider's prefix-cache hit report when
     it returns one (NULL = the provider said nothing). ``project_id`` is
     nullable for project-less conversation surfaces. Uses: COGS visibility

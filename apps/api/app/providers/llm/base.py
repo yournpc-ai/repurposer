@@ -23,8 +23,12 @@ degradation is automatic.
   parallel calls / reasoning control), declared per provider.
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Protocol, TypeVar
+
+from pydantic import BaseModel
 
 
 class LLMError(Exception):
@@ -98,6 +102,9 @@ class ProviderCapabilities:
     reasoning_dialect: str | None = None
     supports_constrained_decoding: bool = False
     prompt_cache: str | None = None
+    supports_image_input: bool = False
+    supports_video_input: bool = False
+    supports_tool_result_images: bool = False
     understands_video_audio: bool = False
 
 
@@ -136,6 +143,61 @@ class ToolGeneration:
 
     content: str
     tool_calls: list[ToolCall]
+
+
+T = TypeVar("T", bound=BaseModel)
+DeltaCallback = Callable[[str], Awaitable[None] | None]
+
+
+class LLMClient(Protocol):
+    """The four text/code generation methods every selectable client speaks."""
+
+    provider: str
+    capabilities: ProviderCapabilities
+
+    @property
+    def model(self) -> str: ...
+
+    async def generate(
+        self,
+        messages: list[dict],
+        response_model: type[T],
+        temperature: float = 0.3,
+        thinking: bool = False,
+        timeout_s: float | None = None,
+    ) -> T: ...
+
+    async def generate_stream(
+        self,
+        messages: list[dict],
+        response_model: type[T],
+        temperature: float = 0.3,
+        thinking: bool = False,
+        on_delta: DeltaCallback | None = None,
+        on_reasoning: DeltaCallback | None = None,
+        timeout_s: float | None = None,
+    ) -> T: ...
+
+    async def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: float = 0.3,
+        thinking: bool | None = None,
+        tool_choice: str | dict = "auto",
+    ) -> ToolGeneration: ...
+
+    async def generate_stream_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: float = 0.3,
+        thinking: bool | None = None,
+        tool_choice: str | dict = "auto",
+        on_delta: DeltaCallback | None = None,
+        on_reasoning: DeltaCallback | None = None,
+        on_tool_call: DeltaCallback | None = None,
+    ) -> ToolGeneration: ...
 
 
 def pick_wire_tier(harness_max: WireTier, capabilities: ProviderCapabilities) -> WireTier:

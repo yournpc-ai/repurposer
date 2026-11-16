@@ -159,30 +159,34 @@ async def music_from_block(
     )
 
 
-# Built-in mood library keys (the 3 default-catalog moods). The DB ``music``
-# table is the source of truth for which pieces exist; this set is the
+# Built-in mood library keys for the five curated Shotcraft pieces. The DB
+# ``music`` table is the source of truth for which pieces exist; this set is the
 # free-text normalization layer (the Clip Agent may emit a synonym).
-_LIBRARY_MOODS = {"calm", "uplifting", "corporate"}
+_LIBRARY_MOODS = {
+    "mixkit-tech-house",
+    "mixkit-cat-walk",
+    "mixkit-g-eazy-nba-type",
+    "mixkit-house-vibez",
+    "mixkit-tonight-hiphop",
+}
 
-# Normalize a free-text mood (e.g. the script agent's suggestion, which may be
-# localized) to a library key. Unknown -> None (no music rather than a 404 URL).
+# Normalize a free-text mood or style to a library key. Unknown -> None (no
+# music rather than silently substituting a differently named recording).
 _MOOD_SYNONYMS = {
-    "calm": "calm",
-    "warm": "calm",
-    "gentle": "calm",
-    "soft": "calm",
-    "peaceful": "calm",
-    "uplifting": "uplifting",
-    "epic": "uplifting",
-    "energetic": "uplifting",
-    "upbeat": "uplifting",
-    "inspiring": "uplifting",
-    "motivational": "uplifting",
-    "light": "uplifting",
-    "corporate": "corporate",
-    "professional": "corporate",
-    "business": "corporate",
-    "neutral": "corporate",
+    "tech house": "mixkit-tech-house",
+    "tech-house": "mixkit-tech-house",
+    "electronic": "mixkit-tech-house",
+    "energetic": "mixkit-tech-house",
+    "corporate": "mixkit-tech-house",
+    "professional": "mixkit-tech-house",
+    "business": "mixkit-tech-house",
+    "cat walk": "mixkit-cat-walk",
+    "g eazy nba type": "mixkit-g-eazy-nba-type",
+    "house": "mixkit-house-vibez",
+    "house vibez": "mixkit-house-vibez",
+    "hip hop": "mixkit-tonight-hiphop",
+    "hip-hop": "mixkit-tonight-hiphop",
+    "tonight": "mixkit-tonight-hiphop",
 }
 
 

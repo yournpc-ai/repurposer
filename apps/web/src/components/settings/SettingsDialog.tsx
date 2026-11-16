@@ -173,9 +173,9 @@ function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(680px,88svh)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
+      <DialogContent className="h-[min(680px,88svh)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-6xl">
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
-        <div className="flex h-full min-h-0">
+        <div className="flex h-full min-h-0 min-w-0 py-4">
           <aside className="flex w-12 flex-none flex-col border-r border-subtle p-2 sm:w-60 sm:p-4">
             <p className="hidden px-2 pb-5 pt-1 text-xl font-semibold sm:block">
               {t("settings.title")}
@@ -223,7 +223,7 @@ function SettingsDialog({
             ref={scroller}
             role="region"
             aria-labelledby={headingId}
-            className="min-w-0 flex-1 overflow-y-auto thin-scroll"
+            className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto thin-scroll"
           >
             <AnimatePresence
               mode="wait"
@@ -232,7 +232,7 @@ function SettingsDialog({
             >
               <motion.div
                 key={active.id}
-                className="flex flex-col gap-6 p-5 sm:p-8"
+                className="flex min-w-0 flex-col gap-6 p-5 sm:p-8"
                 initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}

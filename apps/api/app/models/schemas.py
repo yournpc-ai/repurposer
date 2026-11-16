@@ -14,12 +14,17 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PrivateAttr,
     ValidationInfo,
     computed_field,
     field_validator,
     model_validator,
 )
 import structlog
+
+from app.editing.edits import ClipEntityWrite
+from app.editing.revisions import RevisionAction
+from app.editing.schemas import Scene, Track, Transition
 
 logger = structlog.get_logger(__name__)
 
@@ -139,8 +144,15 @@ class PageElement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str  # s<shot>e<j> — assigned capture-side
+    # CaptureRequest lineage lives on the element as well as its containing
+    # ShotRef: collection members need stable identities for paired geometry
+    # and derived-resource provenance.
+    target_id: str | None = None
+    member_id: str | None = None
+    member_digest: str | None = None
     kind: str  # heading / text / button / image / video / pinned
     text: str = ""
+    selector: str | None = None  # bounded CSS identity used by a later CapturePlan
     x: float
     y: float
     w: float
@@ -150,8 +162,12 @@ class PageElement(BaseModel):
     # the same region in the full-page image; the element crop starts at its
     # own (0, 0). Old captures carry neither enhancement.
     css_box: CaptureBox | None = None
+    full_css_box: CaptureBox | None = None
     pixel_box: CaptureBox | None = None
     device_scale_factor: float = 1.0
+    region_text: str | None = None
+    region_text_truncated: bool | None = None
+    region_visually_truncated: bool | None = None
     image_key: str | None = None
     image_width: int | None = None
     image_height: int | None = None
@@ -172,6 +188,22 @@ class ShotRef(BaseModel):
     css_width: int | None = None
     css_height: int | None = None
     device_scale_factor: float = 1.0
+    view_id: str | None = None
+    state_id: str | None = None
+    output_id: str | None = None
+    artifact_role: Literal["view", "full", "cutout", "blank_plate", "hero"] | None = None
+    paired_view_id: str | None = None
+    target_id: str | None = None
+    target_ids: list[str] | None = None
+    target_element_id: str | None = None
+    member_id: str | None = None
+    transparent: bool | None = None
+    route: str | None = None
+    actions: list[dict] | None = None
+    page_height: int | None = None
+    region_text: str | None = None
+    region_text_truncated: bool | None = None
+    region_visually_truncated: bool | None = None
 
 
 class PageImageRef(BaseModel):
@@ -257,6 +289,7 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     pending_question: ChatMessageResponse | None = None
+    context: dict[str, Any] | None = None
 
 
 class MessageRole(StrEnum):
@@ -265,6 +298,57 @@ class MessageRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
+
+
+class ChatMentionGeometry(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class ChatMentionPixelSize(ChatMentionGeometry):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+class ChatMentionPixelRect(ChatMentionGeometry):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+class ChatMentionFloatRect(ChatMentionGeometry):
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+
+
+class ChatMentionNormalizedRect(ChatMentionGeometry):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+
+class ChatMentionRegion(ChatMentionGeometry):
+    """A user-drawn region on one exact frame of an output video."""
+
+    coordinateSpace: Literal["source_pixels"]
+    mediaTimeMs: int = Field(ge=0)
+    sourceSize: ChatMentionPixelSize
+    sourceRect: ChatMentionPixelRect
+    normalizedRect: ChatMentionNormalizedRect
+    viewportRect: ChatMentionFloatRect
+
+    @model_validator(mode="after")
+    def region_stays_inside_the_source(self):
+        if (self.sourceRect.x + self.sourceRect.width > self.sourceSize.width
+                or self.sourceRect.y + self.sourceRect.height > self.sourceSize.height):
+            raise ValueError("Selected region exceeds the source video dimensions")
+        if (self.normalizedRect.x + self.normalizedRect.width > 1 + 1e-6
+                or self.normalizedRect.y + self.normalizedRect.height > 1 + 1e-6):
+            raise ValueError("Normalized region exceeds the video frame")
+        return self
 
 
 class ChatMention(BaseModel):
@@ -289,6 +373,14 @@ class ChatMention(BaseModel):
     # never guesses which sentence). Absent = the whole output is the referent
     # (the pre-quote behavior; old rows read tolerantly).
     quote: str | None = None
+    # Spatial + temporal scope on one exact output frame. Old rows omit it.
+    region: ChatMentionRegion | None = None
+
+    @model_validator(mode="after")
+    def region_belongs_to_an_output(self):
+        if self.region is not None and self.type != "output":
+            raise ValueError("A selected region can only ride an output mention")
+        return self
 
 
 class BuiltInSkillReference(BaseModel):
@@ -430,16 +522,6 @@ class StartAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["start"]
-    # RETIRED: the film storyboard presents at the design beat (a plain
-    # design_storyboard message); there is no review gate to waive. The
-    # field stays so old clients keep passing it without a 422
-    # (extra="forbid"); the value is accepted and IGNORED, never carried
-    # into the run (the autonomy precedent below).
-    skip_storyboard_review: bool = False
-    # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
-    # every run is an autonomous continuation. The field stays so old
-    # clients keep passing it without a 422 (extra="forbid"); the value is
-    # accepted and IGNORED, never carried into the run.
     autonomy: Literal["auto", "review"] | None = None
     # The review panel's edited plan (hand-edited slots marked explicit).
     # Wins over the stored pending brief, so panel edits reach the run;
@@ -611,8 +693,8 @@ class QuestionProposal(BaseModel):
     ADR-071 ⑤ 方向裁定 (2026-09-11): the provider call sends
     ``response_format: json_object`` — this schema NEVER reaches the model;
     it is the parse-side contract only. The model-facing field spec lives in
-    the prompt templates (``app/prompts/chat/intent_router_system.j2``'s ask
-    rule / ``chat_intent_system.j2``'s shape C) — those are the single
+    the prompt templates (``app/prompts/chat/plan_mode.j2``'s ask
+    rule / ``conversation_mode.j2``'s shape C) — those are the single
     source; the comments here MIRROR them for humans. Edit the templates
     first, then sync this mirror.
     """
@@ -966,175 +1048,6 @@ class PresentPlanArgs(BaseModel):
     )
 
 
-class DesignStoryboardArgs(BaseModel):
-    """``design_storyboard`` params (both paths) — the film family's review
-    beat (分镜不是开工, 分镜也不是方案 dock): a plain tool call that designs
-    the storyboard and presents its markdown as an ordinary message; NO plan
-    docks and NO run starts here. The params mirror the launch_film task's
-    storyboard-relevant fields verbatim — the dock that follows the user's
-    approval reuses THIS board only when the params match (the fingerprint's
-    params half), so carry the same values through."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        # target_seconds / scene_count / group_chars are presence-sensitive:
-        # an omitted key inherits on redraft, while an explicit null clears
-        # the base constraint. Do not pass them through tolerate_null_keys.
-        return tolerate_null_keys(
-            data, "focus", "language", "voiceover", "subtitles", "music_mood", "aspect", "specific_instruction", "material_urls", "pending_disposition", "review_hold", "edits", "base_ref", "text", "verbatim"
-        )
-
-    @model_validator(mode="after")
-    def _edits_branch_exclusive(self) -> "DesignStoryboardArgs":
-        """The patch path's arg discipline: ``edits`` rides ONLY with
-        ``base_ref`` (mandatory — the read-time reference), ``review_hold``
-        and conversation-level ``pending_disposition`` (never a design
-        parameter). Every design param (focus/language/voiceover/subtitles/
-        music_mood/aspect) belongs to the BASE version + the ops themselves
-        (set_music / set_voiceover), and open redraft feedback rides
-        ``specific_instruction`` — mixing the two paths is never legal."""
-        if self.edits:
-            if not self.base_ref:
-                raise ValueError(
-                    "edits require base_ref — re-read the version you are "
-                    "editing (get_output_spec on the film output, or the "
-                    "design beat's own reference line) and echo its base_ref "
-                    "verbatim"
-                )
-            mixed = [
-                name
-                for name in (
-                    "focus", "language", "voiceover", "subtitles", "music_mood", "aspect",
-                    "specific_instruction", "material_urls", "text", "verbatim",
-                    "target_seconds", "scene_count", "group_chars",
-                )
-                if name in self.model_fields_set
-            ]
-            if mixed:
-                raise ValueError(
-                    f"edits never mix with {', '.join(mixed)} — a patch "
-                    "changes the base version through the ops alone; open "
-                    "feedback rides specific_instruction WITHOUT edits"
-                )
-        return self
-
-    focus: str | None = Field(
-        default=None,
-        description="The agreed creative direction as the storyboard's emphasis steer (launch_film's focus, verbatim).",
-    )
-    language: str | None = Field(
-        default=None,
-        description="The film's spoken language when one was agreed or named (launch_film's language, verbatim). Null = the page's own.",
-    )
-    voiceover: bool | None = Field(
-        default=None,
-        description="Spoken narration (launch_film's voiceover, verbatim). A NEW film defaults OFF: pass true ONLY when the user explicitly asked for spoken narration — never on your own initiative; null/false = no spoken narration (no synthesis, no TTS cost). Subtitles and the music bed are independent: 'no voiceover' implies neither 'no subtitles' nor 'no music'. Revising an existing version inherits its pinned setting unless the user names a change.",
-    )
-    subtitles: bool | None = Field(
-        default=None,
-        description="Independent visible subtitle tracks (launch_film's subtitles, verbatim). A NEW film defaults ON, with or without voiceover; pass false only when the user asks for no subtitles. Revising an existing version inherits its pinned setting unless the user names a change. This is separate from spoken narration and from clip caption styles.",
-    )
-    music_mood: str | None = Field(
-        default=None,
-        description="Background-music mood for the bed (launch_film's music_mood, verbatim): on a first version, choose one library mood when the user has not named music; an explicit user choice or 'off' takes precedence. Later versions inherit the pinned choice unless the user asks for a change.",
-    )
-    aspect: Literal["16:9", "1:1", "9:16"] | None = Field(
-        default=None,
-        description="Canvas aspect when one was agreed (launch_film's aspect, verbatim). Null = 16:9.",
-    )
-    text: str | None = Field(
-        default=None,
-        description="The copy for a TEXT film (text planes on solid color — no webpage, no capture): the user's own words when they want them shown, else the copy you distilled or authored from their brief (set verbatim false then). Present = a text film; absent = a web film (the URL rides material_urls). Never both in one call.",
-    )
-    verbatim: bool | None = Field(
-        default=None,
-        description="Only with text: true = the text is the user's own copy AND they asked for it preserved word for word (the system rejects any rewrite/reorder/trim/dropped line); false = you distilled or authored it from their brief. Judge it from the user's stated direction — never from the mere fact that text was pasted. Null reads as true.",
-    )
-    target_seconds: float | None = Field(
-        default=None,
-        description="Only with text: the user's named total duration in seconds (e.g. 20 for '做一个20秒视频'). On a redraft, OMIT to inherit the base duration; explicit null CLEARS it so the system paces the copy naturally; a number overrides it. A named duration is honored even when FASTER than the natural reading pace — it is the user's explicit choice (the presentation notes the readability impact); only a duration over the 120s render frame cap rejects.",
-    )
-    scene_count: int | None = Field(
-        default=None,
-        description="Only with text: the user's named scene count (e.g. 6 for '改成6幕') — the segmentation lands on exactly this count. On a redraft, OMIT to inherit the base count; explicit null CLEARS it so the director picks; a number overrides it.",
-    )
-    group_chars: list[int] | None = Field(
-        default=None,
-        min_length=2,
-        max_length=2,
-        description="Only with text: the user's named ON-SCREEN GROUP size as [min, max] characters per screen ('一次只展示3-5个字' → [3, 5]) — each screen shows ONE group of the copy, the previous group leaving as the next enters; the words stay byte-exact (a citation line splits into pieces, never rewrites). Count: a CJK character or latin letter is 1; punctuation and spaces count 0 (punctuation rides its group, never a screen of its own). On a redraft, OMIT to inherit the base grouping; explicit null CLEARS it so the director paces whole screens itself; a [min, max] value overrides it.",
-    )
-
-    @model_validator(mode="after")
-    def _group_chars_ordered(self) -> "DesignStoryboardArgs":
-        if self.group_chars is not None:
-            lo, hi = self.group_chars
-            if not (1 <= lo <= hi):
-                raise ValueError(
-                    "group_chars is [min, max] with 1 <= min <= max"
-                )
-        return self
-    edits: list[FilmEditOp] | None = Field(
-        default=None,
-        description=(
-            "PATCH TOP-LEVEL CONTRACT: with a non-empty edits array, base_ref is "
-            "required; review_hold and pending_disposition are the only optional "
-            "top-level companions. Omit focus, language, voiceover, subtitles, music_mood, "
-            "aspect, specific_instruction, material_urls, text, verbatim, "
-            "target_seconds, scene_count and group_chars entirely — none of them "
-            "expresses a targeted patch. Change speech with a set_voiceover op "
-            "and music with a set_music op inside edits; there is no aspect edit "
-            "op. Minimal legal patch shape (echo the real base_ref from the "
-            "current-version read): {\"base_ref\":\"<exact base_ref from the "
-            "read>\",\"edits\":[{\"op\":\"set_voiceover\",\"enabled\":false},"
-            "{\"op\":\"update_scene\",\"scene_id\":\"s2\",\"copy_slots\":"
-            "{\"lines\":[\"A talk can become an article,\",\"and spark a wider "
-            "discussion.\"]}}]}. Targeted edits to the version you just read or "
-            "presented (the patch path — a new version, never a silent overwrite): "
-            "set_subtitles (create/replace a scene's independent subtitle_track; "
-            "track=null deletes it; works on ui and every other scene type, "
-            "without voiceover; read current track before replacing it), "
-            "update_scene (one scene's view/seconds/focuses/narration/copy slots), "
-            "update_element (ONE element inside a composite scene, addressed by "
-            "scene_id + element_id — a text element's lines/tone/timing, "
-            "placement/window/fit/z, a video element's source range/play "
-            "window/keep_audio; fields not applying to the element's kind reject; "
-            "an absent field keeps its value, explicit null restores its default; "
-            "the cited asset itself never swaps), reorder_scenes (the full id "
-            "permutation), remove_scene, set_music (mood + retime keep_cut|recut; "
-            "mood 'off' switches the bed off for good), set_voiceover (enabled "
-            "false = no spoken narration; enabled true = re-open synthesis of "
-            "the board's OWN existing narration lines — a board with zero "
-            "narration lines rejects, author the lines first). The system "
-            "applies them atomically against the base version; a stale or "
-            "fabricated base_ref, an empty-effect batch, or a violated "
-            "constraint rejects the WHOLE batch with the reason. Omit for a "
-            "first draft or an open feedback redraft."
-        ),
-    )
-    base_ref: str | None = Field(
-        default=None,
-        description="Mandatory with edits: the read-time reference of the version these edits were formed against, echoed VERBATIM from the read (get_output_spec's film branch or the design beat's own reference line). It proves the world did not move since you read it — a mismatch rejects safely and tells you to re-read.",
-    )
-    specific_instruction: str | None = Field(
-        default=None,
-        description="THIS beat's new storyboard feedback ('重点讲社交功能') — a redraft trigger that revises the CURRENT board (what the feedback does not name stays); omit it when designing the first board.",
-    )
-    review_hold: bool | None = Field(
-        default=None,
-        description="True when the user scoped this to review only ('只看分镜，先别制作') — the hold then persists across turns until they explicitly ask for production after seeing the board; false releases a standing hold when the user explicitly asks for production. Omit = a fresh draft holds for review by default; a re-presentation of the same board keeps the stored hold. A work's FIRST board is the exception: it must always be presented and approved afterward, so neither false nor an opening direct-production delegation skips that first review.",
-    )
-    material_urls: list[str] | None = Field(
-        default=None,
-        description="The site's URL when no captured page exists in the project yet (the direction stage ran as a discussion, or the design beat came first) — copy it verbatim from the conversation; the system captures it BEFORE drafting so the board is grounded.",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1159,139 +1072,118 @@ class VideoVersionRef(BaseModel):
     content_digest: str = Field(min_length=64, max_length=64)
 
 
-class DesignVideoArgs(BaseModel):
-    """``design_video`` params (both paths). A website promo (a URL's
-    captured pages) instantiates the launch-film skill's template; a text
-    input (``text``) designs a free motion-graphics piece; video assets or
-    delivered Outputs used as material design a mixed real-recording piece.
-    ``composition_id`` + ``specific_instruction`` redraft an existing work's
-    direction into a new child version."""
+class VideoSegmentScrubTarget(BaseModel):
+    """One explicit Scene/Clip time window; never the complete timeline."""
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["auto", "motion_graphics", "program", "image", "component"] = Field(
-        default="auto",
-        description="Use program for Agent-authored drawing-v1 motion, component for an Agent-authored controlled TSX visual, image for one MiniMax image-01 still background, motion_graphics for native text/shapes; auto preserves the material-based default.",
-    )
-    scene_count: int | None = Field(default=None, ge=1, le=6, description="MG: exact scene count when the user names it.")
-    target_seconds: float | None = Field(default=None, gt=0, le=118, description="MG: exact total duration when named.")
-    aspect: Literal["16:9", "9:16", "1:1"] | None = Field(default=None, description="MG canvas aspect when named; absent = 16:9.")
-    background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$",
-        description="MG exact canvas background when named, e.g. black=#000000, white=#FFFFFF.")
-    material_asset_ids: list[UUID] | None = Field(default=None, max_length=12,
-        description="Owned source assets explicitly @referenced, including from another Chat. Video assets make a mixed recording composition; captured webpages make a website walkthrough.")
-    material_output_ids: list[UUID] | None = Field(default=None, max_length=12,
-        description="Delivered video Outputs explicitly used AS MATERIAL for a NEW mixed composition. Never use this to continue editing the original work; that path is revise_video with its saved base_ref.")
-    music: Literal["off"] | None = Field(default=None,
-        description='"off" ONLY when the user explicitly asks for no background music; absent = the default bed law (persona skin, then the calm catalog default).')
-    narration: str | None = Field(
+    kind: Literal["segment"] = "segment"
+    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
+    clip_id: str | None = Field(default=None, min_length=1, max_length=64)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _segment_shape(self) -> "VideoSegmentScrubTarget":
+        if (self.scene_id is None) == (self.clip_id is None):
+            raise ValueError("a segment names exactly one scene_id or clip_id")
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("scrub end_seconds must be after start_seconds")
+        return self
+
+
+class VideoObjectScrubTarget(BaseModel):
+    """One authored Object isolated from the scene's other tracks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["object"] = "object"
+    object_id: str = Field(min_length=1, max_length=64)
+
+
+VideoScrubTarget = Annotated[
+    VideoSegmentScrubTarget | VideoObjectScrubTarget,
+    Field(discriminator="kind"),
+]
+
+
+class VideoDraftRef(BaseModel):
+    """An uncommitted working Composition retained in ConversationContext."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str = Field(min_length=1, max_length=80)
+    draft_digest: str = Field(min_length=64, max_length=64)
+
+
+class VideoPresetChoice(BaseModel):
+    """A previously shown Preset member; media and Preset identity are server-resolved."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+
+
+
+
+class PrepareVideoMaterialTarget(BaseModel):
+    """One already-projected source whose exact facts/media are now needed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID
+    view_id: str | None = Field(default=None, min_length=1, max_length=64)
+    element_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class PrepareVideoMaterialsArgs(BaseModel):
+    """Freeze explicitly selected material before incremental Composition authoring."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    material_urls: list[str] | None = Field(
         default=None,
-        max_length=9000,
-        description="MG/component: exact spoken copy. MG paces it across scenes; component uses it as creative input while native Speech/Text objects retain the editable narration and captions. Supplying it explicitly enables narration; the voice is resolved and pinned by code, never synthesized during design.",
+        max_length=4,
+        description="New page URLs copied verbatim from the user. Existing frozen pages need no recapture.",
     )
-    narration_enabled: bool | None = Field(
+    material_asset_ids: list[UUID] | None = Field(
         default=None,
-        description="MG/component: true ONLY when the user explicitly asks for spoken narration; false explicitly turns it off. Null inherits a redraft's setting and defaults a fresh design to off.",
+        max_length=12,
+        description="Owned assets explicitly selected by the user or current work.",
+    )
+    material_output_ids: list[UUID] | None = Field(
+        default=None,
+        max_length=12,
+        description="Owned delivered video Outputs explicitly reused as new material.",
+    )
+
+    material_music_ids: list[UUID] | None = Field(
+        default=None,
+        max_length=12,
+        description="Music-library ids returned by search_music, not Asset ids. Import existing public or user-owned library audio for editing; returns exact SourceSnapshot identifiers, without synthesis or render.",
+    )
+    material_targets: list[PrepareVideoMaterialTarget] | None = Field(
+        default=None,
+        max_length=4,
+        description="Attach and return exact facts for selected existing snapshot/view/element targets. Omit view_id/element_id for ordinary image/video snapshots.",
+    )
+    video_observation: Literal["representative_frames", "continuous"] = Field(
+        default="representative_frames",
+        description="Default representative_frames attaches at most three actual source frames per video, not a continuous review. Use continuous only when the user explicitly asks to inspect continuous playback or motion in an eligible short source; delivered Outputs use review_video instead.",
     )
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(
-            data,
-            "focus",
-            "language",
-            "material_urls",
-            "material_output_ids",
-            "text",
-            "specific_instruction",
-            "composition_id",
-            "pending_disposition",
-            "music",
-            "mode",
-            "narration",
-            "narration_enabled",
-        )
-
-    focus: str | None = Field(
-        default=None,
-        description="The agreed creative direction / emphasis steer for this design, in the user's words.",
-    )
-    material_urls: list[str] | None = Field(
-        default=None,
-        description="Website promo only: the site's URL(s), copied verbatim from the conversation, when the project has no captured page for the site yet — the system captures BEFORE drafting so the storyboard is grounded in the real page. Omit when the project's captured pages already cover the site.",
-    )
-    text: str | None = Field(
-        default=None,
-        description="Motion-graphics video only (no webpage): the exact on-screen copy — the user's own words, or the copy you distilled from their brief. Present = an MG video; absent = a website promo. Never both in one call.",
-    )
-    language: str | None = Field(
-        default=None,
-        description="The video's language when one was agreed or named. Null = the material's own.",
-    )
-    composition_id: UUID | None = Field(
-        default=None,
-        description="Redraft only: the composition to redesign (from its storyboard card or a get_video_version read). Omit for a new work.",
-    )
-    specific_instruction: str | None = Field(
-        default=None,
-        description="Explicit requirements for this design: colors, timing, layout or open direction. With composition_id it redesigns that work; a named-element edit uses revise_video.",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
-    )
+        return tolerate_null_keys(data, "material_urls", "material_asset_ids", "material_output_ids", "material_music_ids", "material_targets", "video_observation")
 
     @model_validator(mode="after")
-    def _shape(self) -> "DesignVideoArgs":
-        if self.material_urls and (self.material_asset_ids or self.material_output_ids):
-            raise ValueError("name captured asset/output ids or new URLs, not both in one design")
-        if self.text and (self.material_urls or self.material_asset_ids or self.material_output_ids):
-            raise ValueError("text and media materials never mix — use an MG video or a media composition")
-        if self.narration_enabled is False and self.narration is not None:
-            raise ValueError("narration text and narration_enabled=false conflict")
-        if self.mode != "component" and (
-            self.narration is not None or self.narration_enabled is True
-        ) and not self.text:
-            raise ValueError("the first narration consumer is an MG design with exact on-screen text")
-        if self.composition_id is None and self.narration_enabled and not self.narration:
-            raise ValueError("a fresh narrated design needs the exact spoken copy")
-        if self.mode in {"program", "image"} and (
-            self.narration is not None or self.narration_enabled is True
-        ):
-            raise ValueError("narration currently belongs to the MG and component design paths")
-        if self.mode == "program":
-            if self.composition_id is not None:
-                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
-            if self.material_urls or self.material_asset_ids or self.material_output_ids:
-                raise ValueError("the first drawing-v1 program consumer takes no media materials")
-            if not self.specific_instruction:
-                raise ValueError("a visual program needs the requested picture in specific_instruction")
-        if self.mode == "component":
-            if self.composition_id is not None:
-                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
-            if self.material_urls or self.material_asset_ids or self.material_output_ids:
-                raise ValueError("the first component-v1 consumer takes no media materials")
-            if not self.specific_instruction:
-                raise ValueError("a visual component needs the requested picture in specific_instruction")
-        if self.mode == "image":
-            if self.composition_id is not None:
-                raise ValueError("revise an existing GeneratorObject with revise_video, not a redraft")
-            if self.material_urls or self.material_asset_ids or self.material_output_ids:
-                raise ValueError("the first image-v1 consumer takes no media materials")
-            if not self.specific_instruction:
-                raise ValueError("a generated image needs the requested picture in specific_instruction")
-            if self.aspect not in (None, "16:9"):
-                raise ValueError("the first image-v1 consumer supports a 16:9 background")
-        if self.mode == "motion_graphics" and not self.text:
-            raise ValueError("native motion graphics needs exact on-screen text")
-        if len(self.material_asset_ids or []) + len(self.material_output_ids or []) > 12:
-            raise ValueError("a design accepts at most 12 referenced media items")
-        if self.composition_id is not None and not self.specific_instruction and not self.focus:
-            raise ValueError(
-                "a redraft needs the new direction: specific_instruction "
-                "(open feedback) or focus"
-            )
+    def _some_material(self) -> "PrepareVideoMaterialsArgs":
+        if not (self.material_urls or self.material_asset_ids or self.material_output_ids or self.material_music_ids or self.material_targets):
+            raise ValueError("select at least one URL, asset, Output, music-library piece or existing source target; existing project resources are already in context")
+        if len(self.material_asset_ids or []) + len(self.material_output_ids or []) + len(self.material_music_ids or []) > 12:
+            raise ValueError("one preparation call accepts at most 12 assets, Outputs and music-library pieces")
         return self
 
 
@@ -1313,6 +1205,12 @@ class ReviewVideoArgs(BaseModel):
         max_length=4,
         description="Specific actual Output times to inspect; when present these times define the sample, especially for rechecking an earlier finding."
     )
+    motion_scene_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Exact scene id in this Output's executed render_spec for a bounded ordered motion-frame review; never a scene from the Composition's current head. Mutually exclusive with at_seconds.",
+    )
     refresh: bool = Field(
         default=False,
         description="True to decode and review again; false reuses this exact Output's saved report when one exists. A new Output always needs its own review."
@@ -1325,449 +1223,150 @@ class ReviewVideoArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "at_seconds", "refresh", "pending_disposition")
-
-
-class VideoEditUpdateText(BaseModel):
-    """Replace one text clip's copy (and optionally its style knobs). The
-    clip_id comes from the storyboard read; fields absent keep their values."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_text"]
-    clip_id: str = Field(min_length=1)
-    text: str | None = None
-    font_size: int | None = Field(default=None, gt=0, le=400)
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    background: str | None = Field(
-        default=None,
-        pattern=r"^#[0-9a-fA-F]{6}$",
-        description="Explicit null clears the chip background; absent keeps it.",
-    )
-    align: Literal["left", "center", "right"] | None = None
-    weight: Literal[400, 500, 600, 700, 800] | None = None
-    x: float | None = Field(default=None, description="Text box left edge in canvas pixels; absent keeps it.")
-    y: float | None = Field(default=None, description="Text box top edge in canvas pixels; absent keeps it.")
-    width: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
-
-
-class VideoEditUpdateSpeech(BaseModel):
-    """Revise one SpeechObject without moving its reviewed output window."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_speech"]
-    clip_id: str = Field(min_length=1)
-    text: str | None = Field(default=None, min_length=1, max_length=9000)
-    voice_id: str | None = Field(default=None, min_length=1, max_length=255)
-    language: str | None = Field(default=None, min_length=2, max_length=16)
-    gain_db: float | None = Field(default=None, ge=-60, le=12)
-
-
-class VideoEditSyncCaptions(BaseModel):
-    """Explicitly replace captions linked to one SpeechClip with its current text."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["sync_captions"]
-    clip_id: str = Field(min_length=1, description="The SpeechClip id from the storyboard read.")
-
-
-class VideoEditAddText(BaseModel):
-    """Add one text clip inside a named scene's window (a new title/caption
-    beat). The system owns the layout for the chosen track role."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["add_text"]
-    scene_id: str = Field(min_length=1)
-    text: str = Field(min_length=1)
-    track: Literal["title", "caption"] = "caption"
-    at_seconds: float | None = Field(
-        default=None, ge=0, description="Start inside the scene; absent = the scene's start."
-    )
-    duration_seconds: float | None = Field(
-        default=None, gt=0, description="How long it shows; absent = to the scene's end."
-    )
-    size: Literal["small", "medium", "large"] = "medium"
-    align: Literal["left", "center", "right"] = "center"
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-
-
-class VideoEditRemoveClip(BaseModel):
-    """Remove one exact clip and its transition links; other clips stay intact."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["remove_clip"]
-    clip_id: str = Field(min_length=1)
-
-
-class VideoEditUpdateVideo(BaseModel):
-    """Adjust one VideoObject or its source window without touching other layers."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_video"]
-    clip_id: str = Field(min_length=1)
-    snapshot_id: UUID | None = Field(default=None, description="Another snapshot ALREADY BOUND to this version; absent keeps the current source.")
-    source_start_seconds: float | None = Field(default=None, ge=0)
-    source_end_seconds: float | None = Field(default=None, gt=0)
-    x: float | None = None
-    y: float | None = None
-    width: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
-    scale: float | None = Field(default=None, gt=0, le=10)
-    fit: Literal["cover", "contain"] | None = None
-    gain_db: float | None = Field(default=None, ge=-60, le=12)
-    muted: bool | None = None
-
-
-class VideoEditSplitClip(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["split_clip"]
-    clip_id: str
-    at_seconds: float = Field(gt=0, description="Absolute output time; linked media follows the split.")
-
-
-class VideoEditTrimClip(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["trim_clip"]
-    clip_id: str
-    start_seconds: float = Field(ge=0)
-    end_seconds: float = Field(gt=0, description="Keep this output subrange; no ripple of other clips.")
-
-
-class VideoEditTarget(BaseModel):
-    """Stable-id addressing for the generic temporal editing algebra."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["clip", "scene", "track", "selection", "timeline"]
-    id: str | None = Field(default=None, min_length=1, max_length=64)
-    clip_ids: list[str] = Field(default_factory=list, max_length=256)
-    scene_ids: list[str] = Field(default_factory=list, max_length=256)
-    track_ids: list[str] = Field(default_factory=list, max_length=256)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "id", "clip_ids", "scene_ids", "track_ids")
-
-    @model_validator(mode="after")
-    def _address_matches_kind(self) -> VideoEditTarget:
-        if self.kind == "selection":
-            if self.id is not None or not (self.clip_ids or self.scene_ids or self.track_ids):
-                raise ValueError("a selection needs explicit clip/scene/track ids and no singular id")
-        else:
-            if self.clip_ids or self.scene_ids or self.track_ids:
-                raise ValueError("selection id lists belong only to a selection target")
-            if self.kind == "timeline":
-                if self.id is not None:
-                    raise ValueError("the timeline target takes no id")
-            elif self.id is None:
-                raise ValueError(f"{self.kind} target needs its stable id")
-        return self
-
-
-class VideoEditMove(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["move"]
-    target: VideoEditTarget
-    start_seconds: float = Field(ge=0, description="New output start of the resolved target set.")
-    ripple: Literal["none", "forward"] = "none"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "ripple")
-
-
-class VideoEditTrim(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["trim"]
-    target: VideoEditTarget
-    start_seconds: float = Field(ge=0)
-    end_seconds: float = Field(gt=0, description="Absolute output subrange to keep.")
-    ripple: Literal["none", "forward"] = "none"
-    source_policy: Literal["crop_1x"] | None = Field(
-        default=None,
-        description="Required when fixed audio/video is cut or recropped; always 1×, never a rate change.",
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "ripple", "source_policy")
-
-
-class VideoEditDelete(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["delete"]
-    target: VideoEditTarget
-    mode: Literal["lift", "ripple"] = Field(
-        default="lift", description="lift leaves a gap; ripple closes structural downstream ranges."
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "mode")
-
-
-class VideoEditTimeMap(BaseModel):
-    """Apply t′=a×t+b to one resolved target set, not a media rate change."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["time_map"]
-    target: VideoEditTarget
-    scale: float = Field(gt=0, allow_inf_nan=False, description="The single positive a term.")
-    offset_seconds: float = Field(default=0, allow_inf_nan=False, description="The signed b term in seconds.")
-    ripple: Literal["none", "forward"] = "none"
-    source_policy: Literal["crop_1x"] | None = Field(
-        default=None,
-        description="Required for fixed audio whose output duration changes; crops/extends its 1× source window.",
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "offset_seconds", "ripple", "source_policy")
-
-
-class VideoEditTransition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["set_transition"]
-    from_clip_id: str
-    to_clip_id: str
-    duration_seconds: float = Field(gt=0)
-    kind: Literal["crossfade"] = "crossfade"
-
-
-class VideoEditRemoveTransition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["remove_transition"]
-    transition_id: str
-
-
-class VideoEditSnapCut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["snap_cut"]
-    from_clip_id: str
-    to_clip_id: str
-    music_clip_id: str
-    tolerance_seconds: float = Field(
-        default=0.2, gt=0, le=1,
-        description="Maximum cut shift in seconds: greater than zero, at most 1; defaults to 0.2.",
-    )
-
-
-class VideoEditFocusWeb(BaseModel):
-    """Recompute one webpage clip's camera from a frozen element id.
-
-    The server owns all coordinates and keyframe numbers; a revision never
-    asks the model to transcribe camera math.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["focus_web"]
-    clip_id: str = Field(min_length=1)
-    element_id: str = Field(min_length=1)
-
-
-class VideoEditUpdateShape(BaseModel):
-    """Adjust one native shape without turning its geometry into baked media."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_shape"]
-    clip_id: str = Field(min_length=1)
-    shape: Literal["rect", "ellipse", "path"] | None = None
-    fill: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    stroke: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    stroke_width: float | None = Field(default=None, ge=0, le=200)
-    corner_radius: float | None = Field(default=None, ge=0, le=1000)
-    path: str | None = Field(default=None, max_length=4096)
-    opacity: float | None = Field(default=None, ge=0, le=1)
-    x: float | None = None
-    y: float | None = None
-    width: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
-    scale: float | None = Field(default=None, gt=0, le=10)
-    rotation: float | None = None
-
-
-class VideoEditUpdateGenerator(BaseModel):
-    """Rewrite a visual program or model-image request, or adjust external layout."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_generator"]
-    clip_id: str = Field(min_length=1)
-    code: str | None = Field(default=None, min_length=1, max_length=24000)
-    prompt: str | None = Field(default=None, min_length=1, max_length=2000)
-    parameters: dict[str, str | float | bool] | None = Field(default=None, max_length=24)
-    x: float | None = None
-    y: float | None = None
-    width: float | None = Field(default=None, gt=0)
-    height: float | None = Field(default=None, gt=0)
-    scale: float | None = Field(default=None, gt=0, le=10)
-    fit: Literal["cover", "contain"] | None = None
-    opacity: float | None = Field(default=None, ge=0, le=1)
-
-
-class VideoEditKeyframe(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    at_seconds: float = Field(ge=0, description="Clip-local time of this keyframe.")
-    value: float | list[float] = Field(description="Scalar, or [x, y] for transform.position.")
-    easing: Literal["linear", "hold", "ease_out"] = "linear"
-
-
-class VideoEditUpdateAnimation(BaseModel):
-    """Replace one existing animation's keyframes (the target object and
-    animated property never move — a different property is a different
-    animation). The animation_id comes from the storyboard read."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_animation"]
-    animation_id: str = Field(min_length=1)
-    keyframes: list[VideoEditKeyframe] = Field(min_length=1)
-
-
-class VideoEditMoveScene(BaseModel):
-    """Move one scene (and everything belonging to it) to a new start time."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["move_scene"]
-    scene_id: str = Field(min_length=1)
-    start_seconds: float = Field(ge=0)
-
-
-class VideoEditRemoveScene(BaseModel):
-    """Remove one scene and the content belonging to it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["remove_scene"]
-    scene_id: str = Field(min_length=1)
-
-
-class VideoEditAddAudio(BaseModel):
-    """Add one fixed audio snapshot to an effect track at exact 1× speed."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["add_audio"]
-    snapshot_id: UUID
-    at_seconds: float = Field(ge=0, allow_inf_nan=False)
-    source_start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    gain_db: float | None = Field(default=None, ge=-60, le=12, allow_inf_nan=False)
-    scene_id: str | None = Field(default=None, min_length=1)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
         return tolerate_null_keys(
-            data, "source_start_seconds", "duration_seconds", "gain_db", "scene_id"
+            data, "at_seconds", "motion_scene_id", "refresh", "pending_disposition"
         )
 
-
-class VideoEditUpdateAudio(BaseModel):
-    """Replace an audio clip's source or gain without changing its identity/window."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_audio"]
-    clip_id: str = Field(min_length=1)
-    snapshot_id: UUID | None = None
-    gain_db: float | None = Field(default=None, ge=-60, le=12, allow_inf_nan=False)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "snapshot_id", "gain_db")
-
     @model_validator(mode="after")
-    def _at_least_one_change(self) -> "VideoEditUpdateAudio":
-        if self.snapshot_id is None and self.gain_db is None:
-            raise ValueError("update_audio needs a replacement snapshot or gain_db")
+    def _one_sampling_mode(self) -> ReviewVideoArgs:
+        if self.at_seconds is not None and self.motion_scene_id is not None:
+            raise ValueError("at_seconds and motion_scene_id are mutually exclusive")
         return self
 
 
-class VideoEditBackground(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["set_background"]
-    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$", description="Exact canvas background, e.g. black=#000000.")
-
-
-VideoEditOp = Annotated[
-    VideoEditUpdateText
-    | VideoEditUpdateSpeech
-    | VideoEditSyncCaptions
-    | VideoEditAddText
-    | VideoEditRemoveClip
-    | VideoEditUpdateVideo
-    | VideoEditAddAudio
-    | VideoEditUpdateAudio
-    | VideoEditSplitClip
-    | VideoEditTrimClip
-    | VideoEditMove
-    | VideoEditTrim
-    | VideoEditDelete
-    | VideoEditTimeMap
-    | VideoEditTransition
-    | VideoEditRemoveTransition
-    | VideoEditSnapCut
-    | VideoEditFocusWeb
-    | VideoEditUpdateShape
-    | VideoEditUpdateGenerator
-    | VideoEditUpdateAnimation
-    | VideoEditMoveScene
-    | VideoEditRemoveScene
-    | VideoEditBackground,
-    Field(discriminator="op"),
-]
-
-
-class ReviseVideoArgs(BaseModel):
-    """``revise_video`` params (both paths): targeted edits against an
-    explicitly-named base version. The system applies the batch atomically
-    through the content write door and returns the computed change set plus
-    the new version's canonical storyboard."""
+class ReviseVideoActionArgs(BaseModel):
+    """One bounded creative action; Chat binds the resolved work's current base."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "visual_descriptions", "pending_disposition")
+        return tolerate_null_keys(data, "base_ref", "pending_disposition", "scrub")
 
-    base_ref: VideoVersionRef
-    edits: list[VideoEditOp] = Field(min_length=1)
-    visual_descriptions: list[dict[str, str]] | None = Field(
+    base_ref: VideoVersionRef | None = Field(
         default=None,
-        description=(
-            "For every scene whose VISUAL content your edits changed: the "
-            "rewritten user-readable 'what the viewer sees' summary of the "
-            "scene's CURRENT content ([{scene_id, text}]) — the edit clears "
-            "the stale one; leave a scene out only when its picture did not "
-            "change. Never describe elements that are not in the version."
-        ),
+        description="Server-bound from the resolved current work; omit from Chat calls.",
+    )
+    action: RevisionAction
+    scrub: VideoScrubTarget | None = Field(
+        default=None,
+        description="Optionally inspect one affected Scene/Clip window or isolated Object after saving. Omit for static-only edits; never target the complete video.",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
+    _request_context: dict[str, Any] | None = PrivateAttr(default=None)
+
+    def bind_request_context(
+        self, *, user_text: str, pending_question: dict[str, Any] | None,
+    ) -> None:
+        self._request_context = {
+            "user_text": user_text,
+            "pending_question": pending_question,
+        }
+
+
+class ReviseVideoArgs(BaseModel):
+    """Complete-entity writes against one exact saved version.
+
+    Every write is the complete final entity; the server applies the batch
+    atomically and validates the complete resulting Composition before saving.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        data = tolerate_null_keys(
+            data, "base_ref", "pending_disposition", "scrub",
+            "scenes", "tracks", "clips", "transitions",
+            "remove_scene_ids", "remove_track_ids", "remove_clip_ids",
+            "remove_transition_ids",
+        )
+        if isinstance(data, dict):
+            for key in ("scenes", "tracks", "clips", "transitions"):
+                if data.get(key) == "" or data.get(key) == {}:
+                    data = {**data, key: []}
+        for key in ("scenes", "tracks", "clips", "transitions"):
+            data = wrap_single_object_list(data, key)
+        return data
+
+    base_ref: VideoVersionRef = Field(
+        description="Exact current saved-version reference, echoed verbatim from a version read.",
+    )
+    scrub: VideoScrubTarget | None = Field(
+        default=None,
+        description="Optionally inspect one affected Scene/Clip window or isolated Object after saving. Omit for static-only edits; never target the complete video.",
+    )
+
+    scenes: list[Scene] = Field(default_factory=list, max_length=64)
+    tracks: list[Track] = Field(default_factory=list, max_length=64)
+    clips: list[ClipEntityWrite] = Field(default_factory=list, max_length=256)
+    transitions: list[Transition] = Field(default_factory=list, max_length=64)
+    remove_scene_ids: list[str] = Field(default_factory=list, max_length=64)
+    remove_track_ids: list[str] = Field(default_factory=list, max_length=64)
+    remove_clip_ids: list[str] = Field(default_factory=list, max_length=256)
+    remove_transition_ids: list[str] = Field(default_factory=list, max_length=64)
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+    )
+
+    @model_validator(mode="after")
+    def _shape(self) -> "ReviseVideoArgs":
+        if not self.entity_writes().has_changes():
+            raise ValueError("supply at least one complete entity write or stable-id removal")
+        return self
+
+    def entity_writes(self):
+        from app.editing.edits import EntityWrites
+
+        return EntityWrites.model_validate({
+            key: getattr(self, key) for key in EntityWrites.model_fields
+        })
+
+
+class ReviseVideoTextArgs(BaseModel):
+    """Replace the text of one independent native Text Clip."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_ref: VideoVersionRef
+    clip_id: str
+    text: str = Field(min_length=1, max_length=9000)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+
+class ShowVideoPresetsArgs(BaseModel):
+    """Show 2–4 registered native Presets; the server owns every member fact."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    preset_ids: list[str] = Field(min_length=2, max_length=4)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class SelectVideoPresetArgs(BaseModel):
+    """Repaint one shown Preset as selected; never edits a version or starts a Run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
 
 
 class SearchSfxArgs(BaseModel):
@@ -1799,6 +1398,107 @@ class ImportSfxArgs(BaseModel):
         return tolerate_null_keys(data, "pending_disposition")
 
 
+class ShowMusicCandidatesArgs(BaseModel):
+    """Show playable local-library Music candidates; never create an Asset/version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str | None = Field(default=None, max_length=200)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "query", "pending_disposition")
+
+
+class SelectMusicArgs(BaseModel):
+    """Select one previously settled Music candidate by its server-owned identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class PrepareNarrationArgs(BaseModel):
+    """Freeze final audio and exact script, then enqueue deterministic alignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=9000)
+    audio_asset_id: UUID | None = Field(
+        default=None,
+        description="The exact AUDIO asset the user explicitly @referenced for this recording.",
+    )
+    voice_id: str | None = Field(default=None, min_length=1, max_length=255)
+    language: str | None = Field(default=None, min_length=2, max_length=16)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "audio_asset_id", "voice_id", "language", "pending_disposition")
+
+    @model_validator(mode="after")
+    def _source(self) -> "PrepareNarrationArgs":
+        if not self.text.strip():
+            raise ValueError("the final narration script must not be blank")
+        if self.audio_asset_id is not None:
+            if self.voice_id is not None:
+                raise ValueError("an existing recording does not take a TTS voice")
+        elif self.voice_id is None or self.language is None:
+            raise ValueError("TTS preparation needs voice_id and language, or name an AUDIO asset")
+        return self
+
+
+class GetNarrationAlignmentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    alignment_id: UUID
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class NarrationSentenceSemanticsArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sentence_id: str = Field(min_length=1, max_length=64)
+    role: Literal["definition", "process", "comparison", "evidence", "example", "summary", "transition"]
+    weight: Literal["main", "sub"]
+    entities: list[str] = Field(default=[], max_length=12)
+    needs: list[Literal["native_text", "diagram", "real_media", "data", "generator"]] = Field(
+        default=[], max_length=5
+    )
+    emphasis_word_ids: list[str] = Field(default=[], max_length=24)
+
+
+class AnnotateNarrationArgs(BaseModel):
+    """Complete sentence semantics only; text and ticks have no tool fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alignment_id: UUID
+    expected_timing_digest: str = Field(min_length=64, max_length=64)
+    sentences: list[NarrationSentenceSemanticsArgs] = Field(min_length=1)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
 class GetVideoVersionParams(BaseModel):
     """``get_video_version`` params — the explicit version read (§2.2)."""
 
@@ -1807,7 +1507,10 @@ class GetVideoVersionParams(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "version_id", "composition_id", "output_id", "present")
+        return tolerate_null_keys(
+            data, "version_id", "composition_id", "output_id", "present", "scrub",
+            "purpose", "scene_id", "clip_id",
+        )
 
     version_id: UUID | None = Field(
         default=None, description="Read this exact version (from a storyboard card or a previous read)."
@@ -1818,12 +1521,29 @@ class GetVideoVersionParams(BaseModel):
     output_id: UUID | None = Field(
         default=None, description="Resolve an owned @output to the EXACT version it delivered, across Chats."
     )
+    purpose: Literal["read", "edit"] = Field(
+        default="read", description="edit reads only the current head's base_ref and relevant Scene/Clip values."
+    )
+    scene_id: str | None = Field(default=None, description="With purpose=edit, limit current values to this Scene.")
+    clip_id: str | None = Field(default=None, description="With purpose=edit, limit current values to this Clip.")
     present: bool = Field(default=False, description="Show this saved version's canonical storyboard card again for review/recovery.")
+    scrub: VideoScrubTarget | None = Field(
+        default=None,
+        description="With present=true, optionally show one bounded Scene/Clip window or one isolated Object. Never request the complete video.",
+    )
 
     @model_validator(mode="after")
     def _one_address(self) -> "GetVideoVersionParams":
         if sum(v is not None for v in (self.version_id, self.composition_id, self.output_id)) != 1:
             raise ValueError("name exactly one of version_id / composition_id / output_id")
+        if self.scrub is not None and not self.present:
+            raise ValueError("scrub requires present=true")
+        if self.purpose == "edit" and (
+            self.composition_id is None or self.present or self.scrub is not None
+        ):
+            raise ValueError("purpose=edit reads only a work's current head without presentation")
+        if self.purpose != "edit" and (self.scene_id is not None or self.clip_id is not None):
+            raise ValueError("scene_id/clip_id narrowing requires purpose=edit")
         return self
 
 
@@ -1894,19 +1614,6 @@ class StartRunArgs(BaseModel):
     """``start_run`` params, plan path — start the confirmed plan's run."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "skip_storyboard_review")
-
-    # RETIRED: the film storyboard presents at the design beat (a plain
-    # design_storyboard message), so no review gate remains to waive. The
-    # field stays so cached tool calls keep validating (extra="forbid");
-    # the value is accepted and IGNORED, never consulted.
-    skip_storyboard_review: bool = False
-
-
 class PlanAnswerArgs(BaseModel):
     """``answer`` params, plan path — a purely informational reply. The
     answer text itself is your spoken message; the envelope seats ride here."""
@@ -2115,9 +1822,9 @@ class ReviseOutputTarget(BaseModel):
     unclear (ask, never guess)."""
 
     model_config = ConfigDict(extra="forbid", coerce_numbers_to_str=True)
-    # coerce_numbers_to_str (2026-09-23, prompt_gate probe G 实测): the
-    # provider emits the ordinal as a bare NUMBER ('plan 2' → plan_ref: 2)
-    # and never recovers from the strict-string rejection — the pointing
+    # coerce_numbers_to_str absorbs the provider's numeric-string dialect:
+    # the ordinal can arrive as a bare NUMBER ('plan 2' → plan_ref: 2), and
+    # strict-string rejection does not help the model recover — the pointing
     # words are the user's, so the schema absorbs the dialect (顺形律).
 
     @model_validator(mode="before")
@@ -2594,21 +2301,6 @@ class IntentSlot(BaseModel):
     focus: str | None = None
     language: str | None = None
     tone_override: str | None = None
-    # Film-family slots (launch_film): spoken narration / independent visible
-    # subtitles / BGM mood / canvas aspect — None = plan default.
-    voiceover: bool | None = None
-    subtitles: bool | None = None
-    music_mood: str | None = None
-    aspect: str | None = None
-    # Text-source films (ADR-138 §7.6): the copy + its role + the user's
-    # named shape. None = a web-source film (the keys stay out).
-    text: str | None = None
-    verbatim: bool | None = None
-    target_seconds: float | None = None
-    scene_count: int | None = None
-    group_chars: list[int] | None = None  # [min, max] 字 per screen
-    # iter-2 ② (N-57): the writer's source narrowing — compiler-emitted on
-    # plan-sourced chains, None on every existing path (the whole material).
     source_span: SourceSpan | None = None
     explicit: bool = False
 
@@ -2748,7 +2440,7 @@ class Brief(BaseModel):
     ADR-071 ⑤ signpost (2026-09-11): the model-facing brief spec (which
     slots exist, emit-only-what-you-have-a-view-on, source precedence
     user-stated > inferred > default) lives in
-    ``app/prompts/chat/intent_router_system.j2``'s brief rule — the schema
+    ``app/prompts/chat/plan_mode.j2``'s brief rule — the schema
     never reaches the model (json_object response format, parse-side only).
     Edit the template first, then sync this mirror.
     """
@@ -3130,23 +2822,6 @@ class QuestionPayload(BaseModel):
     # compiled tasks (evidence layer) + estimate_credits (费用语义五面).
     # Empty on every non-exploration dock (读容忍: 旧行无此键).
     plans: list[dict] = Field(default_factory=list)
-    # task_book only, server-stamped: the dock echo's content carries the
-    # film storyboard's code-rendered markdown. On refresh the row's content
-    # replays as a flow message while the dock revives separately. Absent on
-    # legacy / non-film rows (读容忍 — reads False).
-    storyboard_echo: bool = False
-    # task_book only, film chains (ADR-129): the draft token of the
-    # storyboard version this dock presents. A newer design beat mints a new
-    # token, and the start gate rejects this row's Start as stale (旧 Start
-    # 失效, nothing deleted). Absent on non-film and pre-version rows
-    # (读容忍: the gate then falls back to the fingerprint comparison).
-    film_draft_token: str | None = None
-    # The presented version stamped with the draft token. Start compares
-    # both — token binds the draft identity, version makes the compared
-    # revision explicit. Absent on legacy rows (读容忍).
-    film_storyboard_version: int | None = None
-
-
 class PendingPlan(BaseModel):
     """Unconfirmed plan persisted on ``projects.pending_brief``.
 
@@ -3208,127 +2883,15 @@ class PendingPlan(BaseModel):
     # None on router-drafted / legacy rows — the revision router degrades
     # honestly to the @output channel (读容忍).
     plan_task_map: dict[str, list[int]] | None = None
-    # The docked film storyboard handoff (internal, never user-facing
-    # structure): the RESOLVED FilmStoryboard dump whose code-rendered
-    # markdown rode the dock echo — Start stamps it onto run.context so the
-    # run consumes exactly the storyboard the user last saw (the node
-    # revalidates against the current pages). ``film_storyboard_fingerprint``
-    # is the dock seat's reuse key (launch_film params + the instruction —
-    # a revision that moves either redrafts; anything else reuses). None on
-    # non-film / pre-storyboard rows (读容忍).
-    film_storyboard: dict | None = None
-    film_storyboard_fingerprint: str | None = None
-    # 版本化分镜状态 (ADR-129, film 旅程闭环 Batch 1): the presented board is
-    # a VERSIONED draft — every field below is stamped by the design beat
-    # (design_storyboard) and only READ by the dock / start / worker seats
-    # (禁 dock 期重起草). All read-tolerant: None/absent on legacy rows.
-    #
-    # ``film_storyboard_version``: 1 on the first presented board, +1 per
-    # redraft; a reuse (same fingerprint, no fresh feedback) keeps it.
-    film_storyboard_version: int | None = None
-    # The design params that produced the current version (focus / language /
-    # voiceover / subtitles / music_mood / aspect as named — nulls preserved): the dock
-    # seats rewrite the launch_film task's params from THIS, so the confirmed
-    # chain carries exactly what the presented board was designed with.
-    film_storyboard_params: dict | None = None
-    # sha256 over the resolved board's canonical dump — the presented-draft
-    # identity (呈现稿 digest = run context digest = render spec digest).
-    film_storyboard_content_digest: str | None = None
-    # The execution snapshot frozen at design time (ADR-130 §1): the pages
-    # the board was grounded on, the resolved music grid (track id / bpm /
-    # beats), the timing constants, and its own ``digest`` — LaunchFilm
-    # consumes THIS, and drift against it fails honestly (never a silent
-    # re-orchestration).
-    film_storyboard_execution: dict | None = None
-    # Provenance: the user message that authorized THIS version's design
-    # (the direction yes / the revision request), and the assistant message
-    # that presented its markdown.
-    film_design_authorized_by: str | None = None
-    film_presented_message_id: str | None = None
-    # 「只看分镜」review hold (ADR-129): set by the design beat's
-    # review_hold param, cleared only by an explicit production request (a
-    # film proposal docking) — never by a new turn, a refresh, or an
-    # unrelated Q&A. The start gate blocks while it stands.
-    film_review_hold: bool = False
-    # Per-version draft token: a fresh draft mints a new one; the dock
-    # stamps it onto the task_book payload, and the start gate rejects a
-    # Start whose stamped token is not the current draft's (旧 Start 失效 —
-    # the row, its messages, assets and run history all stay).
-    film_draft_token: str | None = None
-    # In-flight draft marker (并发护栏): written by the design beat's BEGIN
-    # in its own committed mini-transaction ({draft_id, base_version,
-    # started_at, user_message_id}), before the long draft starts; a fresh
-    # begin supersedes the old film confirmation (the token clears). While a
-    # non-stale marker stands, Start fails closed and a second begin is
-    # refused; the publish beat writes only if the marker still names ITS
-    # draft; failure clears only its own marker; a marker older than the
-    # design budget is stale.
-    film_draft_inflight: dict | None = None
-    # 未接受文字漂移 (7276ef13 定点收尾②复审): ``{baseline_sha256}`` = the
-    # LAST PROVABLY-ACCEPTED copy's digest, set when a verbatim publish's
-    # pinned text drifted from that baseline without user proof. Carried
-    # forward by every later version until one of the three provable
-    # releases (restore / user-pasted / the copy_drift dock's explicit
-    # confirm — the start consumes the pending); the dock seats read it as
-    # ``copy_drift`` (``film_text_drift_held`` — the world truth, never a
-    # turn-local flag, so a rebuilt turn never loses the protection).
-    film_text_drift: dict | None = None
-    # Version envelope (the patch path's lineage — ADR-134 修订后 edit/
-    # variant 不新增 hold): ``film_created_via`` = compose|patch|variant
-    # (None on a legacy row); ``film_base_version`` = the version this one
-    # was built from (None on a first draft); ``film_change_set`` = the
-    # SYSTEM-computed diff for patch versions (never the op echo — None on
-    # compose); ``film_kept_frames`` = the version's frozen cut (冻结时间轴
-    # = 版本状态 — the base version's own established per-scene frames,
-    # frozen at patch time by a keep_cut swap OR inherited by any
-    # timeline-preserving edit; consumed fail-closed by the run whenever
-    # present; None on a compose/recut/timeline-changing birth);
-    # ``film_constraints_choice`` reserved for the constraint provenance
-    # (四层约束的 source 记录, 写座在 validator 分层落地时). All
-    # read-tolerant: absent/None on pre-envelope rows.
-    film_base_version: int | None = None
-    film_created_via: str | None = None
-    film_change_set: dict | None = None
-    film_kept_frames: list[int] | None = None
-    # Video Project presentation receipt (ADR-145 phase B, §2.3): the
-    # canonical storyboard presentation's proof — which composition version
-    # was presented, its content + presentation digests, and the presenting
-    # message (null until that row persists). Read-tolerant: absent on
-    # pre-video rows; carried verbatim across PendingPlan rewrites by
-    # editing/service.video_carry_state.
     video_presentation: dict | None = None
     # The frozen cut's other half (冻结场内切点 = 冻结时间轴同一继承律):
     # the reveal words' landing beats, one entry per scene (None per
     # non-reveal scene); consumed fail-closed by the run whenever the kept
     # cut covers a reveal scene. Read-tolerant: absent on pre-envelope
     # rows.
-    film_kept_reveal_onsets: list[int | None] | None = None
-    film_constraints_choice: dict | None = None
 
-    @property
-    def film_cut_frames(self) -> list[int] | None:
-        """The revision-base read surface (与 resolve_film_revision_base 的
-        命名空间同形): a live pending's own established cut = its frozen
-        kept frames, else None."""
-        return self.film_kept_frames
 
-    @property
-    def film_cut_reveal_onsets(self) -> list[int | None] | None:
-        """The frozen cut's other half on the revision-base read surface
-        (与命名空间同座): a live pending's frozen reveal onsets ride its
-        kept cut — None when no cut is frozen."""
-        if not isinstance(self.film_kept_frames, list):
-            return None
-        return self.film_kept_reveal_onsets
 
-    @property
-    def film_cut_state(self) -> str:
-        """The cut's provenance on the revision-base read surface (与命名空
-        间同座): a live pending never ran — ``"kept"`` when the version
-        carries a frozen cut, else ``"draft"`` (its PRESENTED plan timeline
-        is the trustworthy cut; never "unreadable" — that state belongs to
-        an executed work whose spec went missing/corrupt)."""
-        return "kept" if isinstance(self.film_kept_frames, list) else "draft"
 
 
 class ProjectBase(BaseModel):
@@ -4443,38 +4006,6 @@ class ClipPayload(BaseModel):
     # pattern as image products). None when dims are unknown or the chain
     # carries an explicit aspect (render_spec declares then).
     aspect: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# film family (MG film skill — ADR-119): the LLM-authored storyboard is the
-# orchestration-side contract; the render-side boundary (shape-only zod)
-# lives in apps/render/src/film/schema.ts. Semantic grounding / content
-# constraints are the grounding validator's seat (app/tools/film/storyboard.py)
-# — ONE law, one seat: these models carry shape, never content bounds.
-#
-# Deterministic frame allocation: the LLM writes a bounded SECONDS intent per
-# scene; integer frames are assigned by code (fixed fps, structural minimums,
-# total = Σ scene frames). The renderer only sums integers.
-# ---------------------------------------------------------------------------
-
-
-class FilmFocus(BaseModel):
-    """One camera beat of a ui scene (the screenshot walk). Two legal forms
-    (ADR-121 B2): **element-named** — ``element`` ids the shot's captured
-    inventory and the spec builder resolves x/y/zoom deterministically (the
-    model never invents coordinates); or the **raw triple** ``x``/``y``/
-    ``zoom`` (the pre-B2 form — read tolerance for stored storyboards, and
-    the fallback when a shot lists no elements)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    at: float  # seconds from scene start
-    element: str | None = None  # s<shot>e<j> from the page block's inventory
-    x: float | None = None  # normalized [0,1] camera center — bounds are the validator's seat
-    y: float | None = None
-    zoom: float | None = None  # magnification (1 = full frame)
-
-
 class SubtitleCue(BaseModel):
     """One subtitle, in seconds relative to its scene (independent of audio)."""
 
@@ -4518,837 +4049,10 @@ class SubtitleTrack(BaseModel):
         if any(b.at < a.end for a, b in zip(self.cues, self.cues[1:])):
             raise ValueError("subtitle cues must be ordered and nonoverlapping")
         return self
-
-
-class FilmSceneBase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    subtitle_track: SubtitleTrack | None = None
-
-
-class FilmSceneWords(FilmSceneBase):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["words"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    dark: bool
-    lines: list[str] = Field(min_length=1)
-    # Text-plane vocabulary (ADR-138 §7.6 — closed enums, renderer-implemented):
-    # ``motion`` = the camera move on the text plane (null = static);
-    # ``enter`` = the text's entrance rhythm ("lines" = per-line stagger —
-    # the pre-vocabulary default; "words" = word-by-word). Null reads as the
-    # default and is EXCLUDED from the content digest, so legacy boards keep
-    # their byte-identical digests (the scene_id law's twin).
-    motion: Literal["static", "push", "pull"] | None = None
-    enter: Literal["lines", "words"] | None = None
-    # Precise entrance/motion timing (Batch B): scene-relative seconds,
-    # quantized by the film's fixed fps at the render seat. ``enter_*``
-    # parameterizes the selected entrance (word tokens or whole lines): the
-    # first unit's start, adjacent-unit start interval, one unit's entrance
-    # duration, and the hold endpoint. Null keeps the pre-parameterization
-    # default; lines default to their legacy 8-frame stagger. An explicit
-    # ``enter_hold_until`` is a HARD endpoint — the text leaves at that frame
-    # (with exit_duration it fades out across the final stretch); null = hold
-    # to the scene end.
-    # ``motion_start``/``motion_end`` bound a push/pull move inside the scene.
-    # Explicit zero stays zero — presence, not truthiness, carries intent.
-    enter_start: float | None = Field(default=None, ge=0.0)
-    enter_interval: float | None = Field(default=None, ge=0.0)
-    enter_duration: float | None = Field(default=None, ge=0.0)
-    enter_hold_until: float | None = Field(default=None, ge=0.0)
-    motion_start: float | None = Field(default=None, ge=0.0)
-    motion_end: float | None = Field(default=None, ge=0.0)
-    # The text's OWN exit fade (seconds at the window's end — the hold
-    # endpoint when set, else the scene's end): the words fade out over the
-    # final N seconds of their window; null = no exit fade (the boundary's
-    # own transition carries the leave). The background never fades with
-    # the text. Explicit values quantize to frames like the enter timing.
-    exit_duration: float | None = Field(default=None, gt=0.0)
-    # The push/pull move's end scale (push: 1 → scale; pull: scale → 1);
-    # null = the legacy 1.06. Subtle drifts live around 1.02–1.04. Requires
-    # motion="push"|"pull".
-    motion_scale: float | None = Field(default=None, gt=1.0, le=1.25)
-    # Horizontal text alignment: null/"left" = the legacy left edge;
-    # "center" centers every line (and the camera's zoom origin).
-    align: Literal["left", "center"] | None = None
-    # Font size tier: null/"medium" = the legacy 168px grid size;
-    # "small"/"large" = 120/232. The line-wrap capacity scales with it, so
-    # a larger tier never clips or drops copy.
-    size: Literal["small", "medium", "large"] | None = None
-    # How *emphasized* spans render: null/"chip" = the legacy inverted
-    # chip; "color" = the theme's accent color as plain text (a colored
-    # word, not a highlighted tile).
-    accent_style: Literal["chip", "color"] | None = None
-    # The entrance EFFECT (orthogonal to ``enter``'s organization — lines
-    # vs words is WHO arrives together, this is HOW each token appears):
-    # null/"rise" = the legacy fade+rise+blur entrance; "fade" = opacity
-    # only; "slide" = deterministic translate-only entrance, no fade/blur.
-    enter_style: Literal["rise", "fade", "slide"] | None = None
-    narration: str | None = None
-    # The scene's PRE-WRAP corpus (逐字律的场级锚点): ``lines`` above is the
-    # layout RESULT of wrapping this text for the screen — a visual wrap is
-    # not a paragraph break, so the version's pinned ``text`` re-derives
-    # from these per-scene sources, never from the display lines. Kept
-    # accent-free (emphasis is presentation, not corpus). Null = a legacy
-    # board assembled before the anchor existed; excluded from the content
-    # digest while null (the ``_LEGACY_ABSENT_SCENE_KEYS`` law's sibling).
-    copy_text: str | None = None
-
-
-class FilmSceneHero(FilmSceneBase):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["hero"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    word: str
-    sub: str
-    narration: str | None = None
-
-
-class FilmSceneUi(FilmSceneBase):
-    """The page walk: the LLM names the page by its index in the presented
-    manifest list; the screenshot URL / display URL are baked BY CODE (the
-    model never invents URLs). ``shot`` picks WHICH captured view of the page
-    (0 = the fold; sections beyond it — ADR-121 B1). ``frame`` chooses the
-    presentation: True = the browser-chrome card (the "this is a real product
-    page" beat), False = full-bleed (the immersive push-in — the camera fills
-    the canvas with the page itself)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["ui"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    page: int  # 0-based index into the presented pages
-    shot: int = 0  # 0-based index into the page's captured shots
-    frame: bool = True  # browser chrome card vs full-bleed
-    focuses: list[FilmFocus] = Field(min_length=1)
-    narration: str | None = None
-
-
-class FilmPlateCard(BaseModel):
-    """One glass card: a big number/short mark over a small label. ``big`` is
-    null for a phrase card (the label carries it, slightly larger)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    big: str | None = None
-    label: str
-
-
-class FilmScenePlate(FilmSceneBase):
-    """The numbers beat: 2-4 glass cards over a calm procedural backdrop —
-    the film's "proof by specs" moment. Only legal when the page actually
-    carries numbers or very short labels (the grounding validator enforces
-    it). ``backdrop`` names a code-rendered scenery variant (a closed enum —
-    never an image URL, never a free prompt)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["plate"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    title: str
-    cards: list[FilmPlateCard] = Field(min_length=2, max_length=4)
-    backdrop: Literal["aurora", "dunes", "mist", "tide"] = "mist"
-    narration: str | None = None
-
-
-class FilmSceneDivider(FilmSceneBase):
-    """Section break with a rolling word list. The ordinal index ("01") is
-    chrome — code assigns it, the model never writes it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["divider"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    label: str
-    roll: list[str] = Field(min_length=1)
-    # Grounding memory for later compose revisions: the full cited pillar,
-    # not the condensed display title in roll[-1]. Never emitted to film-spec.
-    source_text: str | None = None
-    narration: str | None = None
-
-
-class FilmSceneReveal(FilmSceneBase):
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["reveal"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    lead: str
-    word: str
-    sub: str
-    # The lead-in holds alone for the scene's FIRST HALF, then a one-beat
-    # black pause, then the word lands on the music grid (the split reveal's
-    # lead → beat → word arc); seconds-from-scene-start, code-assigned at
-    # assembly. The default only covers pre-split persisted boards.
-    lead_seconds: float = 1.5
-    narration: str | None = None
-
-
-class FilmSceneEnd(FilmSceneBase):
-    """Closing brand card. The display URL is baked by code from the page's
-    real URL; logo stays text-only in v1 (logo_url never LLM-written)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["end"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    name: str
-    tagline: str
-    narration: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Composite scene elements (ADR-140): a composite scene is a theme-colored
-# background plus an ordered element list. Screen recordings, camera videos
-# and plain uploads are all just VIDEO assets here; image assets ride the
-# same structure; text is an independently controllable element that shares
-# the words plane's ONE animation implementation (renderer-side TextPlane).
-# Two time spaces, never mixed: ``source_start``/``source_end`` are SOURCE
-# media seconds (video only); ``at``/``until``/``duration`` are scene-relative
-# OUTPUT seconds; the enter/motion timing fields are ELEMENT-WINDOW-relative
-# seconds (the element window is the text's own mini-scene).
-# ---------------------------------------------------------------------------
-
-
-class FilmElementRect(BaseModel):
-    """A normalized placement box {x, y, w, h} ∈ [0,1] — the clip-spec
-    layers' coordinate law. The default is the full canvas."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    x: float = Field(default=0.0, ge=0.0, le=1.0)
-    y: float = Field(default=0.0, ge=0.0, le=1.0)
-    w: float = Field(default=1.0, gt=0.0, le=1.0)
-    h: float = Field(default=1.0, gt=0.0, le=1.0)
-
-    @model_validator(mode="after")
-    def _inside_canvas(self) -> "FilmElementRect":
-        if self.x + self.w > 1.0 + 1e-9 or self.y + self.h > 1.0 + 1e-9:
-            raise ValueError(
-                f"rect ({self.x:g},{self.y:g},{self.w:g},{self.h:g}) extends past the canvas"
-            )
-        return self
-
-
-class FilmElementVideo(BaseModel):
-    """A video asset playing one SOURCE range inside one OUTPUT window.
-
-    ``asset`` is the asset id — code resolves the storage key (the model
-    never invents URLs, the ui scene's law). The play window length is
-    ``duration`` (null = the full source range); a window LONGER than the
-    source range rejects — no speed change, no looping, no tail freeze, no
-    replay-from-zero. When the window ends the element LEAVES the screen.
-    ``keep_audio`` (default false) is the original-sound switch: the source
-    trim and the audio trim are the same cut (one startFrom/endAt pair), so
-    original sound exists only inside the element's own window."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["video"]
-    # Stable element identity (the scene_id law's twin): assigned at birth
-    # or derived positionally on first patch; NEVER part of the content
-    # digest.
-    element_id: str | None = None
-    asset: str  # the project asset's id (uuid string)
-    source_start: float = Field(ge=0.0)
-    source_end: float = Field(gt=0.0)
-    at: float = Field(default=0.0, ge=0.0)  # scene-relative output start
-    duration: float | None = Field(default=None, gt=0.0)
-    rect: FilmElementRect = Field(default_factory=FilmElementRect)
-    fit: Literal["cover", "contain"] = "cover"
-    keep_audio: bool = False
-    z: int = 0
-
-    @model_validator(mode="after")
-    def _range_ordered(self) -> "FilmElementVideo":
-        if self.source_end <= self.source_start:
-            raise ValueError(
-                f"source_end {self.source_end:g}s must stay after source_start "
-                f"{self.source_start:g}s"
-            )
-        if self.duration is not None and self.duration > (
-            self.source_end - self.source_start
-        ) + 1e-9:
-            raise ValueError(
-                f"the play window {self.duration:g}s is longer than the source "
-                f"range {self.source_end - self.source_start:g}s — the clip "
-                "never loops, stretches, or freezes to fill time"
-            )
-        return self
-
-
-class FilmElementImage(BaseModel):
-    """An image asset placed in a rect for a scene-relative window
-    (``until`` null = the scene's end)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["image"]
-    element_id: str | None = None  # identity handle; never in the digest
-    asset: str  # the project asset's id (uuid string)
-    at: float = Field(default=0.0, ge=0.0)
-    until: float | None = Field(default=None, gt=0.0)
-    rect: FilmElementRect = Field(default_factory=FilmElementRect)
-    fit: Literal["cover", "contain"] = "cover"
-    z: int = 0
-
-    @model_validator(mode="after")
-    def _window_ordered(self) -> "FilmElementImage":
-        if self.until is not None and self.until <= self.at:
-            raise ValueError(
-                f"until {self.until:g}s must stay after at {self.at:g}s"
-            )
-        return self
-
-
-class FilmElementText(BaseModel):
-    """An independently controllable text block: content (``lines``), ink
-    polarity (``tone`` — light/dark, the two-stop vocabulary, plus "accent"
-    = the theme's accent color for the whole element; accent *chips* invert
-    the same way), placement (``rect``), display window (``at`` /
-    ``until``, null = scene end — the window's end is the leave; a set
-    ``exit_duration`` fades the text out over the window's final seconds,
-    the background never fades with it), and the words plane's
-    entrance/motion vocabulary (``enter`` / ``motion`` + the timing fields,
-    ELEMENT-WINDOW-relative seconds — ``enter_hold_until`` does not exist
-    here, ``until`` plays that role). ``copy_text`` is the pre-wrap corpus
-    anchor (the words scene's 逐字律 seat, per element)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["text"]
-    element_id: str | None = None  # identity handle; never in the digest
-    lines: list[str] = Field(min_length=1)
-    tone: Literal["light", "dark", "accent"] = "light"
-    at: float = Field(default=0.0, ge=0.0)
-    until: float | None = Field(default=None, gt=0.0)
-    rect: FilmElementRect = Field(default_factory=FilmElementRect)
-    enter: Literal["lines", "words"] | None = None
-    motion: Literal["static", "push", "pull"] | None = None
-    enter_start: float | None = Field(default=None, ge=0.0)
-    enter_interval: float | None = Field(default=None, ge=0.0)
-    enter_duration: float | None = Field(default=None, ge=0.0)
-    motion_start: float | None = Field(default=None, ge=0.0)
-    motion_end: float | None = Field(default=None, ge=0.0)
-    # The words plane's style/exit knobs, element-scoped (the words scene's
-    # field law verbatim): exit_duration = fade-out seconds at the window's
-    # end; motion_scale = the push/pull end scale (null = 1.06); align =
-    # horizontal centering; size = the font tier (element grid: 56/80/120);
-    # accent_style = chip (legacy inverted tile) vs color (accent ink);
-    # enter_style = rise (legacy fade+rise+blur), fade (opacity only), or
-    # slide (translate only, no fade/blur).
-    exit_duration: float | None = Field(default=None, gt=0.0)
-    motion_scale: float | None = Field(default=None, gt=1.0, le=1.25)
-    align: Literal["left", "center"] | None = None
-    size: Literal["small", "medium", "large"] | None = None
-    accent_style: Literal["chip", "color"] | None = None
-    enter_style: Literal["rise", "fade", "slide"] | None = None
-    copy_text: str | None = None
-    z: int = 0
-
-    @model_validator(mode="after")
-    def _window_ordered(self) -> "FilmElementText":
-        if self.until is not None and self.until <= self.at:
-            raise ValueError(
-                f"until {self.until:g}s must stay after at {self.at:g}s"
-            )
-        return self
-
-
-FilmSceneElement = Annotated[
-    FilmElementVideo | FilmElementImage | FilmElementText,
-    Field(discriminator="kind"),
-]
-
-
-class FilmSceneComposite(FilmSceneBase):
-    """The composition scene (ADR-140): a theme-colored background (``dark``
-    polarity, the words scene's two-stop vocabulary) plus an ordered element
-    list — video/image media elements and independent text elements composing
-    one screen. "Video with a left title", "recording with bottom text" and
-    "image with word-by-word copy" are CONFIGURATIONS of this one structure,
-    never separate scene types with separate text implementations. At least
-    one media element (pure full-screen text stays with the words scene).
-    Elements overlap freely; ``z`` orders them (ties keep list order)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["composite"]
-    # Stable scene identity (ADR: film edits) — assigned at birth or
-    # derived positionally on first patch (读容忍: legacy boards carry none).
-    # Identity handle only; NEVER part of the content digest.
-    scene_id: str | None = None
-    seconds: float
-    dark: bool = False
-    elements: list[FilmSceneElement] = Field(min_length=1)
-    narration: str | None = None
-
-
-FilmScene = Annotated[
-    FilmSceneWords
-    | FilmSceneHero
-    | FilmSceneUi
-    | FilmSceneDivider
-    | FilmScenePlate
-    | FilmSceneReveal
-    | FilmSceneComposite
-    | FilmSceneEnd,
-    Field(discriminator="type"),
-]
-
-
-class FilmStoryboardTheme(BaseModel):
-    """Optional monochrome pair + accent override (hex). Absent = the code
-    default. ``accent`` colors *emphasized* spans when a scene asks for
-    accent-color text (accent_style="color" / tone="accent"); absent = the
-    default accent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    canvas: str
-    ink: str
-    accent: str | None = None
-
-
-class FilmStoryboard(BaseModel):
-    """The launch film's storyboard — the LLM's ONE artifact in the film
-    chain (grounding-validated, frame-allocated by code, then baked into a
-    film-spec). ``name`` is the two-source display-copy seat: LLM-chosen,
-    null-read tolerant (打字机牙①).
-
-    Per-scene ``narration`` (配音词) is SPOKEN copy — code synthesizes it and
-    does not implicitly create a subtitle track; it
-    is never grounding-checked verbatim (the director rephrases the page's
-    facts into speech), and reads as no-voiceover when null
-    (打字机牙① applies to every prose field)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = None
-    theme: FilmStoryboardTheme | None = None
-    # The film's SPOKEN language, declared by the drafter (2026-10-15 语言钉
-    # 参): the plan's pin when one rode the proposal, else the page's own
-    # language (the product's voice — never the conversation's). Null =
-    # undeclared (legacy rows, 读容忍); the node's output stamp then falls
-    # to the run's legacy language chain.
-    language: str | None = None
-    scenes: list[FilmScene] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def subtitle_windows(self) -> FilmStoryboard:
-        for scene in self.scenes:
-            if scene.subtitle_track and scene.subtitle_track.cues[-1].end > scene.seconds:
-                raise ValueError("subtitle cues must fit within their scene duration")
-        return self
-
-
-# ---------------------------------------------------------------------------
-# Film edit ops (the patch path's contract) + the system-computed change_set.
-# Application semantics live in app/tools/film/edits.py — the model authors
-# ops, the SYSTEM applies them; these models only pin the wire shape.
-# ---------------------------------------------------------------------------
-
-
-class FilmViewRef(BaseModel):
-    """``update_scene``'s view replacement (ui scenes only): which captured
-    view the scene walks, and optionally the presentation (``frame`` None =
-    keep the scene's current presentation)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    page: int
-    shot: int = 0
-    frame: bool | None = None
-
-
-class FilmEditUpdateScene(BaseModel):
-    """Field-level scene edit. Absent fields keep the current value;
-    ``narration`` is presence-sensitive (an explicit null CLEARS the line —
-    ``model_fields_set`` distinguishes, never the value). ``copy_slots`` addresses
-    the scene type's prose slots (hero word/sub, words lines, divider
-    label/roll, reveal lead/word/sub, plate title, end name/tagline);
-    unknown keys for the scene type reject at apply time. ``motion`` /
-    ``enter`` are the words plane's text vocabulary (static/push/pull camera
-    settle; lines/word-by-word entrance) — words scenes only. The ``enter_*``
-    timing fields parameterize that entrance in scene-relative
-    seconds (start / adjacent-unit interval / one unit's entrance duration /
-    hold endpoint); words mode animates tokens, lines mode animates whole lines. ``motion_start``/``motion_end`` bound a push/pull move.
-    These timing fields are presence-sensitive: absent keeps the value, an
-    explicit null restores the default, and explicit zero stays zero.
-    ``dark`` is
-    the words plane's background polarity (deep/light — a two-stop
-    vocabulary, never an arbitrary color) — words scenes only."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_scene"]
-    scene_id: str
-    view: FilmViewRef | None = None
-    seconds: float | None = None
-    focuses: list[FilmFocus] | None = None
-    narration: str | None = None
-    copy_slots: dict[str, str | list[str]] | None = Field(
-        default=None,
-        description=(
-            "Scene-type prose slots. A words scene uses ONLY 'lines', and its "
-            "value is a JSON array of strings: copy_slots={\"lines\":[\"见阳光的人\",\"眼里全是温柔和笑意\"]}. "
-            "Never put 'words' around it and never pass the lines as a string. "
-            "When the user asks for complete sentences, the entries read in "
-            "order must form complete grammatical sentences; split them only "
-            "at semantic boundaries. Line breaks are layout, not a waiver of "
-            "any per-line, line-count, scene-duration or timing bound. When "
-            "the user asked to preserve the original copy, rewrap only with "
-            "its wording and order intact — never truncate, drop or rewrite "
-            "copy just to pass validation. To make whole lines enter "
-            "sequentially, set enter='lines', enter_style='slide', "
-            "enter_duration and enter_interval>=duration; clear stale word "
-            "timing keys explicitly in the same op."
-        ),
-    )
-    motion: Literal["static", "push", "pull"] | None = None
-    enter: Literal["lines", "words"] | None = None
-    dark: bool | None = None
-    enter_start: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="Entrance start in scene-relative seconds (first token or line). Absent = keep; explicit null = restore the default (0); explicit 0 is a real value.",
-    )
-    enter_interval: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="Interval between adjacent token or line entrance starts, in seconds. Absent = keep; explicit null = restore the cadence default; explicit 0 means simultaneous starts. For strict sequential line entrances, use slide with interval >= duration.",
-    )
-    enter_duration: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="One token or line entrance duration, in seconds. Absent = keep; explicit null = restore the default entrance; explicit 0 means an instant appearance.",
-    )
-    enter_hold_until: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="The entrance hold endpoint, seconds after scene start: a set value is the leave moment — the text leaves at that frame (with exit_duration it fades out across the final stretch). Absent = keep; explicit null = hold to the scene end; a value beyond the scene window rejects with the concrete overflow.",
-    )
-    motion_start: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="Push/pull motion start, seconds after scene start. Absent = keep; explicit null = restore the full-scene default start.",
-    )
-    motion_end: float | None = Field(
-        default=None,
-        ge=0.0,
-        description="Push/pull motion end, seconds after scene start. Absent = keep; explicit null = restore the full-scene default end. Must stay after motion_start and inside the scene window.",
-    )
-    exit_duration: float | None = Field(
-        default=None,
-        gt=0.0,
-        description="Text fade-out seconds at the window's end (the hold endpoint when set, else the scene's end) — the words fade out; the background never fades with them. Absent = keep; explicit null = no exit fade (the scene boundary's own transition carries the leave).",
-    )
-    motion_scale: float | None = Field(
-        default=None,
-        gt=1.0,
-        le=1.25,
-        description="The push/pull move's end scale (null/legacy = 1.06; subtle drift lives around 1.02–1.04). Requires motion push/pull. Absent = keep; explicit null = restore 1.06.",
-    )
-    align: Literal["left", "center"] | None = Field(
-        default=None,
-        description="Horizontal text alignment on the words plane (center also centers the camera's zoom origin). Absent = keep; explicit null = restore left.",
-    )
-    size: Literal["small", "medium", "large"] | None = Field(
-        default=None,
-        description="Font size tier (medium = the legacy default). Absent = keep; explicit null = restore medium.",
-    )
-    accent_style: Literal["chip", "color"] | None = Field(
-        default=None,
-        description="How *emphasized* spans render: chip = the legacy inverted tile; color = the theme's accent color as plain text. Absent = keep; explicit null = restore chip.",
-    )
-    enter_style: Literal["rise", "fade", "slide"] | None = Field(
-        default=None,
-        description="The entrance EFFECT (orthogonal to enter's organization): rise = the legacy fade+rise+blur; fade = opacity only — no translate, no blur; slide = deterministic translate only — no opacity ramp, no blur, exact start/end frames. Absent = keep; explicit null = restore rise.",
-    )
-
-
-class FilmEditReorderScenes(BaseModel):
-    """``order`` must be an exact permutation of the current scene ids."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["reorder_scenes"]
-    order: list[str]
-
-
-class FilmEditRemoveScene(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["remove_scene"]
-    scene_id: str
-
-
-class FilmEditSetMusic(BaseModel):
-    """``mood``: a library mood name — or ``"off"`` to switch the bed OFF
-    (a real terminal state: later versions inherit it, the persona/default
-    never re-opens it). ``retime``: keep_cut = swap/remove the track,
-    frames untouched (the honest presentation: cuts do NOT ride the new
-    beat grid); recut = re-snap beat boundaries and re-check every
-    narration window (execution seats, R4). Switching OFF with recut
-    re-establishes the timeline on NO grid (a music-less cut)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["set_music"]
-    mood: str
-    retime: Literal["keep_cut", "recut"] = "keep_cut"
-
-
-class FilmEditSetVoiceover(BaseModel):
-    """Both directions ride this op. ``enabled=false`` = the pure
-    subtraction (the lines stay in the board, unsynthesized).
-    ``enabled=true`` re-opens synthesis of the version's OWN existing
-    narration lines — zero redesign, never a director call. A board
-    carrying NO narration lines rejects with a content-gap refusal
-    (``voiceover_needs_narration``): author the lines first
-    (``update_scene`` … ``narration=…``), then re-issue — the refusal names
-    a writing gap, never a synthesis/voice problem."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["set_voiceover"]
-    enabled: bool
-
-
-class FilmEditUpdateElement(BaseModel):
-    """Field-level edit of ONE element inside a composite scene (ADR-140).
-
-    Addressing is by stable identity — ``scene_id`` + ``element_id`` — never
-    by array position. Presence semantics follow the timing fields' law:
-    absent = keep the current value; an explicit null restores the field's
-    DEFAULT (``at``→0, ``until``/``duration``→the window/range default,
-    ``rect``→full canvas, ``fit``→cover, ``tone``→light, ``enter``/``motion``
-    and the timing fields→absent default, ``keep_audio``→false, ``z``→0);
-    an explicit zero stays zero. ``lines`` and ``source_start``/``source_end``
-    have no default to restore — an explicit null on them is an error. Fields
-    that do not apply to the element's kind reject ``field_not_applicable``
-    (text knobs on a video element, source ranges on a text element, …).
-    Changing the asset IDENTITY is not an edit — a different video is a
-    different composition, never a silent swap."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["update_element"]
-    scene_id: str
-    element_id: str
-    # Text element content (lines are accent-marked copy; an edit re-anchors
-    # the element's copy_text corpus and preserves still-corresponding
-    # emphasis — the words scene's copy-edit law).
-    lines: list[str] | None = Field(default=None, min_length=1)
-    tone: Literal["light", "dark", "accent"] | None = None
-    # Shared placement / window (scene-relative output seconds).
-    at: float | None = Field(default=None, ge=0.0)
-    until: float | None = Field(default=None, gt=0.0)
-    rect: FilmElementRect | None = None
-    z: int | None = None
-    # Media fit (video + image).
-    fit: Literal["cover", "contain"] | None = None
-    # Video element source range / play window / original sound.
-    source_start: float | None = Field(default=None, ge=0.0)
-    source_end: float | None = Field(default=None, gt=0.0)
-    duration: float | None = Field(default=None, gt=0.0)
-    keep_audio: bool | None = None
-    # Text element animation vocabulary (element-window-relative seconds).
-    enter: Literal["lines", "words"] | None = None
-    motion: Literal["static", "push", "pull"] | None = None
-    enter_start: float | None = Field(default=None, ge=0.0)
-    enter_interval: float | None = Field(default=None, ge=0.0)
-    enter_duration: float | None = Field(default=None, ge=0.0)
-    motion_start: float | None = Field(default=None, ge=0.0)
-    motion_end: float | None = Field(default=None, ge=0.0)
-    # Text element style/exit knobs (the words scene's update law,
-    # element-scoped): exit_duration = fade-out seconds at the window's
-    # end (the background never fades with the text); motion_scale = the
-    # push/pull end scale (requires motion push/pull; null restores 1.06);
-    # align = horizontal centering; size = the font tier (56/80/120);
-    # accent_style = chip (inverted tile) vs color (accent-ink text);
-    # enter_style = rise (fade+rise+blur), fade (opacity only), or slide
-    # (translate only, no fade/blur).
-    exit_duration: float | None = Field(default=None, gt=0.0)
-    motion_scale: float | None = Field(default=None, gt=1.0, le=1.25)
-    align: Literal["left", "center"] | None = None
-    size: Literal["small", "medium", "large"] | None = None
-    accent_style: Literal["chip", "color"] | None = None
-    enter_style: Literal["rise", "fade", "slide"] | None = None
-
-
-class FilmEditSetSubtitles(BaseModel):
-    """Create or replace a scene's entire subtitle track; null deletes it.
-    Read the current track first when modifying cues/style, preserve everything
-    not requested. Times are scene-relative seconds. Works on ALL scene types,
-    without narration, audio synthesis, or redesign. Batch one op per scene.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["set_subtitles"]
-    scene_id: str
-    track: SubtitleTrack | None
-
-
-FilmEditOp = Annotated[
-    FilmEditSetSubtitles
-    | FilmEditUpdateScene
-    | FilmEditUpdateElement
-    | FilmEditReorderScenes
-    | FilmEditRemoveScene
-    | FilmEditSetMusic
-    | FilmEditSetVoiceover,
-    Field(discriminator="op"),
-]
-
-
-class FilmChangeMoved(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str
-    from_index: int
-    to_index: int
-
-
-class FilmChangeEdited(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str
-    fields: list[str]
-    # Deterministic side-facts the field list cannot say (e.g. an emphasis
-    # whose phrase survived a copy edit but lost its mark) — computed by the
-    # diff, never authored. Read-tolerant default: older change sets carry
-    # none.
-    notes: list[str] = Field(default_factory=list)
-
-
-class FilmChangeAdded(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str
-    scene_type: str
-
-
-class FilmChangeRemoved(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str
-    scene_type: str
-
-
-class FilmChangeRetimed(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str
-    seconds_before: float
-    seconds_after: float
-
-
-class FilmChangeMusic(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    mood_before: str | None
-    mood_after: str
-    retime: Literal["keep_cut", "recut"]
-
-
-class FilmChangeSet(BaseModel):
-    """The version-to-version diff — computed BY THE SYSTEM from the base
-    and result boards (scene-digest comparison keyed by scene_id), never
-    echoed from the requested ops. ``seconds`` deltas live in ``retimed``
-    (never double-counted in ``edited``); ``warnings`` carries the
-    validator's quality reminders (design-layer seat, empty from ops)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    moved: list[FilmChangeMoved] = []
-    edited: list[FilmChangeEdited] = []
-    added: list[FilmChangeAdded] = []
-    removed: list[FilmChangeRemoved] = []
-    retimed: list[FilmChangeRetimed] = []
-    music: FilmChangeMusic | None = None
-    voiceover: bool | None = None  # the new value when the op flipped it
-    warnings: list[str] = []
-
-
-class FilmProvenance(BaseModel):
-    """交付物血缘 (ADR-129): the presented storyboard's content digest + the
-    execution snapshot digest this film was built from — written by the
-    birth node after re-proof, never copied blind. Absent on rows born
-    before versioning."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    storyboard_digest: str | None = None
-    execution_digest: str | None = None
-
-
-class FilmPayload(BaseModel):
-    """Payload for ``outputs[type=film]`` — the launch film's creative facts.
-
-    Timeline semantics: none (a film has no source span — its "source" is the
-    captured page, carried in ``source_ref.pages``); the render pipeline rides
-    ``render_spec``/``render_status`` exactly like clips (ADR-030 rules 2/3).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = ""  # the storyboard's LLM-chosen name (null read as "")
-    duration: int = 0  # seconds — the allocated total (Σ frames / fps)
-    scene_count: int = 0
-    # The display-class stamp (same write-point law as ClipPayload.aspect):
-    # v1 films are landscape-only, so the stamp is constant at birth.
-    aspect: str | None = "16:9"
-    provenance: FilmProvenance | None = None
-
-
-class FilmSpecEnvelope(BaseModel):
-    """film-spec read envelope for OutputResponse.render_spec.
-
-    ADR-016 unchanged: the render-side zod schema (apps/render/src/film/
-    schema.ts) is THE film contract — the API never re-validates film
-    content. This envelope exists so a film output's render_spec survives
-    serialization without impersonating ClipSpec (a clip dict fails the
-    ``family`` literal, a film dict fails ClipSpec's required ``source`` —
-    the union's two branches split deterministically).
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    family: Literal["film"]
-
-
 class VideoSpecEnvelope(BaseModel):
     """video-spec read envelope (ADR-145) — the third spec family's read side.
 
-    Same posture as FilmSpecEnvelope: the contract lives in
+    The read envelope stays thin: the contract lives in
     ``packages/video-spec`` (zod) and the API never re-validates content;
     the envelope exists so a video output's render_spec round-trips
     ``OutputResponse`` serialization without impersonating ClipSpec.
@@ -5650,7 +4354,6 @@ class CraftSkeleton(BaseModel):
 # forward reference to CraftSkeleton made the whole module unimportable.
 OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "clip": ClipPayload,
-    "film": FilmPayload,
     "video": VideoPayload,
     "post": Post,
     "quotes": Quotes,
@@ -5819,7 +4522,7 @@ class OutputResponse(BaseModel):
     payload: dict
     files: dict = Field(default_factory=dict)
     source_ref: dict | None = None
-    render_spec: ClipSpec | FilmSpecEnvelope | VideoSpecEnvelope | None = None
+    render_spec: ClipSpec | VideoSpecEnvelope | None = None
     render_status: RenderStatus | None = None
     render_error: str | None = None
     # Composition lineage (ADR-145): set on video-family outputs only.

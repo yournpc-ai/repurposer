@@ -71,7 +71,7 @@ export function MobileHeader() {
         className="-ml-2 flex items-center gap-2 rounded-lg px-2 py-1 transition-colors active:bg-accent"
       >
         <LogoMark className="h-6 w-6" />
-        <span className="font-semibold tracking-tight max-[400px]:hidden">Repurposer</span>
+        <span className="font-semibold tracking-tight max-[400px]:hidden">Rookie Cut</span>
       </Link>
 
       <div className="flex items-center gap-1">

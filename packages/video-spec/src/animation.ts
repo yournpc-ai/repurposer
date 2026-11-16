@@ -17,7 +17,7 @@
 import type { VideoKeyframe } from "./schema";
 
 type Vec2 = [number, number];
-export type AnimValue = number | Vec2;
+export type AnimValue = number | Vec2 | string;
 
 function isVec2(v: AnimValue): v is Vec2 {
   return Array.isArray(v);
@@ -39,10 +39,13 @@ function cubicBezierY(x: number, [x1, y1, x2, y2]: [number, number, number, numb
 }
 
 function interpolate(from: AnimValue, to: AnimValue, p: number): AnimValue {
+  if (typeof from === "string" || typeof to === "string") {
+    throw new Error("string keyframe values require hold segments");
+  }
   if (isVec2(from) && isVec2(to)) {
     return [from[0] + (to[0] - from[0]) * p, from[1] + (to[1] - from[1]) * p];
   }
-  if (!isVec2(from) && !isVec2(to)) {
+  if (typeof from === "number" && typeof to === "number") {
     return from + (to - from) * p;
   }
   throw new Error("keyframe value shapes differ within one animation");

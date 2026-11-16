@@ -2,15 +2,19 @@
 
 import { useTranslation } from "react-i18next"
 
-import type { SkillOption } from "@/lib/skills"
+import { skillDisplayName, type SkillOption } from "@/lib/skills"
 import { cn } from "@/lib/utils"
 
 /** Shared by the React history chip and MentionEditor's DOM-owned inline chip. */
 export const SKILL_CHIP_CLASS_NAME =
   "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-success-subtle px-1.5 py-0.5 text-success"
 
-export function skillChipLabel(option: SkillOption, externalLabel: string): string {
-  const name = option.name || externalLabel
+export function skillChipLabel(
+  option: SkillOption,
+  externalLabel: string,
+  displayName?: string,
+): string {
+  const name = displayName || option.name || externalLabel
   const version = option.version_number != null ? ` v${option.version_number}` : ""
   return `/${name}${version}`
 }
@@ -28,7 +32,11 @@ export function SkillChip({
   return (
     <span className={cn(SKILL_CHIP_CLASS_NAME, "text-xs", className)}>
       <span className="max-w-56 truncate">
-        {skillChipLabel(option, t("skills.external"))}
+        {skillChipLabel(
+          option,
+          t("skills.external"),
+          skillDisplayName(option, t),
+        )}
       </span>
     </span>
   )

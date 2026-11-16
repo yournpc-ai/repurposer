@@ -1,4 +1,4 @@
-// Video family render driver — the video-spec peer of film/render.ts.
+// Video family render driver for video-spec.
 // Reuses the shared staging cache (../stage) and the clip path's loudnorm
 // post-pass (../render), bundles its own entry (./remotion/entry.tsx).
 import fs from "node:fs/promises";
@@ -39,7 +39,7 @@ export async function renderVideo(
   assertVideoSupported(spec);
   await fs.mkdir(outDir, { recursive: true });
 
-  // Stage remote sources into the shared local cache first (the film path's
+  // Stage remote sources into the shared local cache first (the renderer's
   // law: Remotion's internal asset fetch ignores HTTPS_PROXY and downloads
   // inside the delayRender budget). Dedup per URL is stageRemoteSource's.
   const stagedSpec: VideoSpec = {

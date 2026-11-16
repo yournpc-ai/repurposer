@@ -67,7 +67,7 @@ class Config(Base):                       # configs — 公共运营参数表（
                      （用户级 shortfall）            ✅ 失败不扣费（§6）
 ```
 
-1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=100000`），`kind=grant, ref={source:"signup"}`。
+1. **授予（grant）**：开户赠额（默认 `wallet.signup_grant=1000`），`kind=grant, ref={source:"signup"}`。
 2. **预扣（hold）**：`create_run` 折完全图报价后按 **high 端**写 hold（idem `run:{id}:hold`）。余额 < hold → 出生地拒绝（422 `credits.insufficient` + 入流灰行；**用户级"积分不足"与 provider 级 MiniMax 402 严格两词**）。并发 run 各自 hold，`wallets.version` 乐观锁防超扣。
 3. **实扣（capture）**：先锁钱包，同一事务释放实际费用覆盖的预扣（`release`，idem `step:{id}:capture:hold-release`，增量 capture 使用对应增量键），再记实际扣费。两条台账同事务提交，余额只减少超出预扣的部分，禁止 hold 和 capture 重复扣款。在每个 step 收尾、metering 归并 `cost` 的**同一写入点**（ADR-050 会话纪律不破）按 actual 实扣（idem `step:{id}:capture`）。成功 step 收全量（含内部重试消耗——那是真实成本）；**failed/skipped 不写 capture 行**。provider cost 照记 `workflow_steps.cost` 供对账，不上用户账单。
 4. **释放（release）**：run 终态释放 `hold − Σrelease` 的剩余预扣（idem `run:{id}:release`）。终态恒等式：`Σrelease = hold`，净支出仅为 `Σcapture`；无预扣的实际扣费合法。历史重复扣款由 `scripts/repair_credit_reservations.py` 审计，默认只读，`--apply` 追加幂等释放行，不改旧记录。
@@ -93,8 +93,8 @@ class Config(Base):                       # configs — 公共运营参数表（
 - 调参不改已经写入的 ledger 积分额；USD 成本仍保留在 `workflow_steps.cost`。**读面不是全部冻结**：历史 step 的 `cost_credits` 也由持久 USD × 当前比例重新序列化，估价贴同样随参数变化；只有已写 transaction 金额与幂等事实不随比例重写。
 - render_seconds 价目当前为 0（自家 infra）——估价贴不含渲染成本，诚实；将来定价只改 PRICING 一行。
 - **voice_clones 报价幂等**：声纹克隆按「每个新声一次」计费（provider 规则——首次 T2A 使用触发），一条链多站 dub 逐节点各自声明 would-be clone 时 fold 只收一次（钳制在 `fold_estimates` 一座，报价=fold 的唯一缝合点；与计量同律——`record_media_usage` 只在 voice_id 缺失时记账）——估价 ≡ 计量，多语言配音链的克隆费如实计一次。
-- **image-v1 图片报价与计量同源**：produce_video 只按本次缺失的固定图片数报价；普通恢复、原生内容修订与缓存命中为 0 张，明确重生成的新 Run 为 1 张，同 Run 重试复用其固定结果。供应商返回图片后按实际返回数 `record_media_usage`，随后仍走既有 step actual capture 与 run release，不在设计/修订阶段生成或收费。请求可能已提交但结果未确认时，不写 `images=0` 或 `images=1` 冒充确定消耗；失败信息明确结果未确认，须核对供应商用量后再由用户决定是否明确重生成。
-- **Speech/TTS 报价只覆盖授权 Run 的剩余付费合成**：缺原速原件时按归一化文本的 MiniMax 计费字符上界预留至多两次；已有原件只在确需有界加速时按其实际 `usage_characters` 预留一次，缓存命中为 0。`NarrationPolicy.max_tts_characters` 同时钉入 Run context 与 produce step spec；实际供应商用量经 `record_media_usage` 由 produce step capture，render mirror 只计 `film_seconds`，永不重复计 TTS。失败 Run 保留真实媒体成本事实但不 capture，未用 hold 按既有规则 release。
+- **image-generation 图片报价与计量同源**：produce_video 只按本次缺失的固定图片数报价；普通恢复、原生内容修订与缓存命中为 0 张，明确重生成的新 Run 为 1 张，同 Run 重试复用其固定结果。供应商返回图片后按实际返回数 `record_media_usage`，随后仍走既有 step actual capture 与 run release，不在设计/修订阶段生成或收费。请求可能已提交但结果未确认时，不写 `images=0` 或 `images=1` 冒充确定消耗；失败信息明确结果未确认，须核对供应商用量后再由用户决定是否明确重生成。
+- **Speech/TTS 报价只覆盖授权 Run 的剩余付费合成**：缺原速原件时按归一化文本的 MiniMax 计费字符上界预留至多两次；已有原件只在确需有界加速时按其实际 `usage_characters` 预留一次，缓存命中为 0。`NarrationPolicy.max_tts_characters` 同时钉入 Run context 与 produce step spec；实际供应商用量经 `record_media_usage` 由 produce step capture，render mirror 只计 `video_seconds`，永不重复计 TTS。失败 Run 保留真实媒体成本事实但不 capture，未用 hold 按既有规则 release。
 - **配方卡估价贴的可报价域**：translate / dub / reframe 挂在 materialize_source 上的链，live 计划诚实 NULL（编译期片段未生——「估价随运行」），配方卡贴纸按 RECIPE_QUOTE_FACTS 声明的典型素材可报价（`quote_scope="recipe"` 单座豁免，传进 `compile_recipe_quote` 的 ctx）。
 
 **公共 config 表（configs）**——运营参数的统一家（admin 预备），三条防腐纪律：
@@ -103,7 +103,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 2. **读取只有一个漏斗**：`get_config(key)` 类型化取值（进程内缓存 + 写失效）；其他模块永不直接查表；未知 key 直接报错。
 3. **两分界**：**运营参数（改了不该要发版）→ config 表**；**工程参数（改错会炸部署）→ env `config.py` 不动**（连接串 / 密钥 / DB 保险丝）。
 
-首批住户：`wallet.signup_grant` / `credits.per_cost_usd` / `billing.always_confirm_above`（确认守卫线，ADR-117 D6——方案 fold high 端越线或含 NULL 节点时任何权限档恒带价问一次；ops 参数，永不是用户设置）/ `chat.context_budget_tokens`（装配滑动窗口预算，ADR-117 D4——消息历史超预算折叠近端窗口；ops 参数，永不上 UI）/ `film.usd_per_second`（MG film-spec 成片秒费率，ADR-119 D3——自家 infra 首个带菜单价的 SKU：launch_film 报价 = storyboard 秒数典型值 × 费率 + 编排 tokens 平项，实扣 = 分配后真实秒数经 `record_media_usage` 入 `fixed_cost`；报价与实扣过同一条 `price_units` 价目线（费率同步读 = `peek_config` 预热缓存），clip 族 `render_seconds` 仍是零价计量单位，两不相干）。
+首批住户：`wallet.signup_grant` / `credits.per_cost_usd` / `billing.always_confirm_above`（确认守卫线；ops 参数，永不是用户设置）/ `chat.context_budget_tokens`（装配预算）/ `video.usd_per_second`（video-spec 成片秒费率）：ProduceVideo 报价与实际秒数计量共用 `price_units` 的 `video_seconds` 价目线；Clip 的 `render_seconds` 仍是零价计量单位。
 
 ## 5. 负余额语义
 
@@ -120,14 +120,14 @@ class Config(Base):                       # configs — 公共运营参数表（
 ## 6. 失败不扣费语义
 
 - **step 级**：终态 failed / skipped → 该 step 用户 charge = 0（不写 capture 行）；成功 step 收 actual 全量（含其内部瞬时重试的真实消耗）。
-- provider 侧成本（`workflow_steps.cost`，含失败尝试）照记不误——那是我们对账与偏差回归的事实，只是不上用户账单。
+- provider 侧成本（`workflow_steps.cost`，含失败尝试）照记不误——那是我们对账与偏差回归的事实，只是不上用户账单。缓存/峰谷定价的模型在每次响应时计算 `token_cost_usd` 并累加，实扣优先读该实际成本；无此字段的旧行保持 MiniMax 历史计价路径。
 - estimate 已 hold 的部分随 run 终态 release 自动结清，无人工介入。
 
 ## 6.5 会话层计量与 context 预算（ADR-117 §5）
 
-**会话层 LLM 调用（路由 / 理解 / 规划 / 应答 / 探索 / 触发回合）只计量、不收费。** 对话是产品界面本身——按回合计价 = 出租车计价器焦虑，无一主流 agent 产品这么做；但成本是真实的（m3 $0.30/$1.20 per 1M token，重度话痨项目的会话成本可超生产成本），必须入账可见。
+**会话层 LLM 调用（路由 / 理解 / 规划 / 应答 / 探索 / 触发回合）只计量、不收费。** 对话是产品界面本身——按回合计价 = 出租车计价器焦虑，无一主流 agent 产品这么做；但成本是真实的（按当前文本模型的实际 token、缓存与价格表入账），必须入账可见。
 
-- **`conversation_usage` 表**（owner = 平台层）：每回合一行（user / project / prompt_tokens / completion_tokens / cached_tokens / cost_usd 写入时定型 / model / created_at）。chat 回合入口绑 `bind_conversation_turn()` contextvar，复用 `record_usage` 唯一咽喉（`minimax.py` provider 层），tool loop 多轮迭代聚合为一行；写纪律 = 与回合 assistant 消息同一 commit；计量永不打断生成。
+- **`conversation_usage` 表**（owner = 平台层）：每回合一行（user / project / prompt_tokens / completion_tokens / cached_tokens / cost_usd 写入时定型 / model / created_at）。chat 回合入口绑 `bind_conversation_turn()` contextvar，复用 `record_usage` 唯一咽喉（`providers/llm` 边界），tool loop 多轮迭代聚合为一行；写纪律 = 与回合 assistant 消息同一 commit；计量永不打断生成。
 - 会话计量按真实调用聚合；空回合无调用时零 usage 行，记录失败不能打断回复。取证级 agent_calls envelope 是独立需求，不由 conversation_usage 冒充。真实 tokens/cache/cost/model/project 归属与窗口边界验收仍开放，见验证登记 §4.2。
 - **永不上用户账单、永不上 UI**。用途三：COGS 可见性（会话/生产成本比）/ 商业化 fair-use 配额的数据基础 / context 预算校准数据源。
 - **context 预算**（纯后端零 UI）：装配超 `chat.context_budget_tokens`（ops 参数）→ 消息历史滑动窗口收编（现有 `history[-n:]` 散座归一预算谓词）；世界状态（图快照 / 资产元数据）不走消息窗，天然幸存。LLM 滚动摘要 = 缓做项（真实溢出率由台账观察后再评）。prefix cache 友好装配顺序不动。
@@ -142,7 +142,7 @@ GET /wallet                                → {balance, held}
 GET /wallet/transactions?limit&cursor      → per-run/per-event 语义交易行
 ```
 
-`/wallet/transactions` 不是裸台账查询：hold/capture/release 在服务端按 run 折叠为一条 spend，grant/refund/positive adjust 归为 grant，purchase 归为 topup。wire 字段为 `id / family / amount / label? / output_types / hint? / project_name? / created_at`；raw `kind / ref / balance_after / idempotency_key` 留在内部。keyset 在原始 append-only ledger 上分页，语义 fold 在每页内进行，跨页 run 显示该页净额。
+`/wallet/transactions` 不是裸台账查询：hold/capture/release 在服务端按 run 折叠为一条 spend，grant/refund/positive adjust 归为 grant，purchase 归为 topup。wire 字段为 `id / family / amount / label? / output_types / hint? / project_name? / created_at / payment_order_id? / payment_provider? / payment_amount_minor? / payment_currency? / paid_at?`；后四项是 purchase 从关联 `payment_orders` 批量补充的法币事实，grant 与无关联历史 purchase 读为 NULL，禁止从积分反推法币。raw `kind / ref / balance_after / idempotency_key` 留在内部。`direction=in` 在原始 append-only ledger 上按入账事件 keyset 分页；`direction=out` 先按 captured Run / 负向非 Run 记录形成消费事件并分页，再取回这些事件的完整台账，保证每页至多 limit 条真实消费记录。定向响应携带精确语义 `total`，前端据此显示当前页/总页数；未定向读不计算 total，跨页 run 仍显示该页净额。
 
 **跨读面的派生字段**：credits 在各自序列化边界以 fold × 当前比例派生，**不落重复列**；USD 继续住 `estimate` / `cost`。不是只有 `outputs` 一个序列化器：
 
@@ -159,7 +159,7 @@ ledger 已写金额不变，历史 step 的 credits 读投影可随比例变化�
 
 **语义账本塌缩**（ADR-057）：hold / release 永不上 UI——CreditsPill popover 的台账投影 = **per-run-event 语义行**（「Post 修订 −3」「初始生成 −42」：一次用户可感知动作 = 一行，hold/capture/release 内部时序折叠进该行净额）；用户面只显**花费 / 赠送 / 充值**三族。裸 kind 列表（`hold`/`capture`/`release` 逐行）是机器视角泄漏，不上 UI。
 
-**展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（概览卡 + 语义行 + 查看全部），与 CreditsPill / 账户控制台三面同源同一投影，零新端点；轻量充值 Dialog 独占金额 input、固定档位、换算 tooltip 与 Checkout 启动（唯一 `CreditPackagePicker`），Settings 只保留余额、记录与购买入口，不在管理页内嵌支付表单。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
+**展示主轴抉择（ADR-117 同批拍板）**：积分余额是唯一的用户面数字——**百分比永不做主轴**（估价四面同源律：dock 总价 / 修改单价 / 估价贴 / 节点估价全说积分，余额讲 % 则用户无法对账；且 % 的分母在赠额+充值+订阅混合钱包下无意义）。ring 类可视化只是将来订阅落地后的可选 garnish（配额的可视化，不是第二货币）。**SettingsDialog「积分」section** = 余额与台账的全貌座位（上方余额与购买入口 + 下方充值/消费双 Table），与 CreditsPill / 账户控制台三面同源同一投影，零新端点；轻量充值 Dialog 独占金额 input、到账积分、固定档位与 Checkout 启动（唯一 `CreditPackagePicker`），Settings 只保留余额、记录与购买入口，不在管理页内嵌支付表单。**确认闸形态**（ADR-117）：默认 auto 档无闸——方案呈现即开工；ask 档与守卫线触发时 Start 钮带价（`开始 · 约 N 积分` / NULL 族「估价随运行确定」），复用既有 pill 零新 chrome。
 
 旧 `billing.confirm_large_threshold` 不再读取，不能建立第二套确认语义；目标环境是否残留与是否实际清理须分别记录。删除前执行只读查询 `SELECT * FROM configs WHERE key='billing.confirm_large_threshold'`，按已有目标环境授权处理；文档收敛不代表已执行 SQL。确认/计量/配置的剩余检查统一归 [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置)。
 

@@ -4,7 +4,7 @@ description: Launch-film direction craft — pillar picking, hook writing, citat
 license: Proprietary
 compatibility: Repurposer design_video tool (video_director agent prompt injection).
 metadata:
-  version: "1.3.0"
+  version: "1.4.0"
   author: repurposer
   tags:
     - launch-film
@@ -14,7 +14,8 @@ metadata:
 
 ## Launch-film direction craft
 
-A launch film is **an evidence-led telling**: within ninety seconds the
+A launch film is **an evidence-led telling**: within the template's bounded
+duration the
 viewer must be able to answer "what is this, what does it do for me, where
 do I go next". The film's skeleton is fixed — a quiet cold open, the hero
 card, a walk of the home page, one chapter per pillar (a divider, then a
@@ -23,12 +24,13 @@ reveal, a proof walk, the closing card, 70–118 seconds in all. Everything
 on screen is one of those elements — motion text, the brand hero, camera
 walks over the page's real screenshots, chapter cards, a numbers-evidence
 plate, the reveal and the closing card, plus the music bed and independent
-visible subtitles; the film never shows live-action footage, staged scenes
-or camera work beyond these walks, and it carries NO spoken narration. You
-never arrange scenes. Your craft is: **which chapters the film tells, which
-lines carry the factual beats, how their short display titles read, where
-each page walk focuses, and what the creative channel and the subtitles
-say.**
+visible subtitles. When the user explicitly binds real images or video,
+code adds short evidence scenes for those frozen inputs and one measured
+fixed SFX cue; the old source video's audio is muted so it never becomes a
+second music bed. The film carries NO spoken narration. You never arrange
+scenes. Your craft is: **which chapters the film tells, which lines carry
+the factual beats, how their short display titles read, where each page
+walk focuses, and what the creative channel and the subtitles say.**
 
 ### The answer's shape
 

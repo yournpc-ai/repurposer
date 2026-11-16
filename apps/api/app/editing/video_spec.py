@@ -34,6 +34,9 @@ from app.editing.schemas import (
 from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
 
 SPEC_FORMAT = 1
+# Current production policy, mirrored by apps/render's VIDEO_MAX_FRAMES.
+# This is not a permanent Composition schema limit.
+VIDEO_MAX_FRAMES = 3600
 
 
 class CompileError(ValueError):
@@ -88,6 +91,19 @@ def _compile_animation(
 def _compile_animations(clip: Clip, content: CompositionContent) -> list[dict[str, Any]]:
     compiled: list[dict[str, Any]] = []
     for anim in clip.animations:
+        if anim.narration_anchor is not None:
+            caption = clip.object.caption if isinstance(clip.object, TextObject) else None
+            anchor = anim.narration_anchor
+            if (
+                caption is None
+                or caption.state != "derived"
+                or caption.narration_alignment_id != anchor.alignment_id
+                or caption.narration_content_digest != anchor.content_digest
+                or caption.speech_object_id != anchor.speech_object_id
+            ):
+                raise CompileError(
+                    f"animation {anim.animation_id}: narration anchor provenance is stale"
+                )
         if anim.text_part is None:
             compiled.append(_compile_animation(anim, content))
             continue
@@ -180,7 +196,7 @@ def _compile_object(clip: Clip) -> dict[str, Any]:
             "transform": obj.transform.model_dump(mode="json"),
             "opacity": obj.opacity,
         }
-        if obj.runtime == "image-v1":
+        if obj.producer == "image-generation":
             return {"kind": "image", **common}
         return {
             "kind": "video",
@@ -247,6 +263,51 @@ def _compile_speech_clip(
             "digest": prepared["media"]["digest"],
             "start_frame": 0,
             "end_frame": audio_frames,
+        },
+        "object": {
+            "kind": "audio",
+            "object_id": speech.object_id,
+            "gain_db": speech.gain_db,
+        },
+        "animations": _compile_animations(clip, content),
+    }
+
+
+def _compile_aligned_speech_clip(
+    clip: Clip,
+    content: CompositionContent,
+    snapshots: dict[UUID, dict],
+) -> dict[str, Any]:
+    speech = clip.object
+    assert isinstance(speech, SpeechObject) and speech.alignment is not None
+    if clip.source is None or clip.source.source_range is None:
+        raise CompileError(f"clip {clip.clip_id}: aligned speech lacks its fixed source window")
+    facts = snapshots.get(clip.source.snapshot_id)
+    if (
+        facts is None
+        or facts["digest"] != clip.source.snapshot_digest
+        or clip.source.snapshot_id != speech.alignment.audio_snapshot_id
+        or clip.source.snapshot_digest != speech.alignment.audio_digest
+    ):
+        raise CompileError(f"clip {clip.clip_id}: aligned speech audio identity is not resolved")
+    start = _quantize_frames(clip.range.start, content)
+    end = _quantize_frames(clip.range.end, content)
+    source_start = ticks_to_frames(
+        clip.source.source_range.start,
+        SOURCE_TIMEBASE,
+        content.settings.fps.num,
+        content.settings.fps.den,
+    )
+    return {
+        "clip_id": clip.clip_id,
+        "start_frame": start,
+        "end_frame": end,
+        "scene_id": clip.scene_id,
+        "source": {
+            "url": facts["storage_key"],
+            "digest": facts["digest"],
+            "start_frame": source_start,
+            "end_frame": source_start + end - start,
         },
         "object": {
             "kind": "audio",
@@ -340,6 +401,8 @@ def _compile_clip(
     speech_media: dict[str, dict],
 ) -> dict[str, Any]:
     if isinstance(clip.object, SpeechObject):
+        if clip.object.alignment is not None:
+            return _compile_aligned_speech_clip(clip, content, snapshots)
         return _compile_speech_clip(clip, content, speech_media)
     settings = content.settings
     out: dict[str, Any] = {
@@ -364,7 +427,7 @@ def _compile_clip(
             "url": media["storage_key"],
             "digest": media["digest"],
         }
-        if clip.object.runtime in {"drawing-v1", "component-v1"}:
+        if clip.object.producer in {"draw-2d", "remotion-project"}:
             out["source"].update({
                 "start_frame": 0,
                 "end_frame": out["end_frame"] - out["start_frame"],
@@ -412,14 +475,25 @@ def _compile_clip(
 
 
 def _compile_fonts(content: CompositionContent) -> list[dict[str, Any]]:
-    resources: dict[tuple[str, str, int], dict[str, Any]] = {}
+    resources: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     for track in content.timeline.tracks:
         for clip in track.clips:
             if not isinstance(clip.object, TextObject):
                 continue
             font = clip.object.style.font
-            for resource in font_resources(font.font_id, font.digest, {clip.object.style.weight}):
-                key = (resource["font_id"], resource["family"], resource["weight"])
+            weights = {clip.object.style.weight}
+            weights.update(
+                int(keyframe.value)
+                for animation in clip.animations
+                if animation.property == "text.weight"
+                for keyframe in animation.keyframes
+                if isinstance(keyframe.value, (int, float))
+            )
+            for resource in font_resources(font.font_id, font.digest, weights):
+                key = (
+                    resource["font_id"], resource["font_set_digest"],
+                    resource["family"], resource["weight"],
+                )
                 resources[key] = resource
     return [resources[key] for key in sorted(resources)]
 
@@ -444,6 +518,12 @@ def compile_video_spec(
     )
     if total_ticks <= 0:
         raise CompileError("nothing to render: the timeline has no clips")
+    total_frames = _quantize_frames(total_ticks, content)
+    if total_frames > VIDEO_MAX_FRAMES:
+        raise CompileError(
+            f"video production supports at most {VIDEO_MAX_FRAMES} frames; "
+            f"the timeline has {total_frames}. Shorten the work before production."
+        )
     tracks = []
     for track in content.timeline.tracks:
         clips = []
@@ -452,6 +532,7 @@ def compile_video_spec(
                 isinstance(clip.object, TextObject)
                 and clip.object.caption is not None
                 and clip.object.caption.state == "derived"
+                and clip.object.caption.alignment != "faster-whisper-script-v1"
             ):
                 clips.extend(_compile_derived_caption(clip, content, speech_media))
             else:
@@ -491,7 +572,7 @@ def compile_video_spec(
         "height": settings.height,
         "background": settings.background,
         "sample_rate": settings.sample_rate,
-        "duration_frames": _quantize_frames(total_ticks, content),
+        "duration_frames": total_frames,
         "fonts": _compile_fonts(content),
         "tracks": tracks,
         **({"transitions": transitions} if transitions else {}),

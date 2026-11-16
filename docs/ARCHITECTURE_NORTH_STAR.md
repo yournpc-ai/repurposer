@@ -148,7 +148,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ### 8.1 当前基线（CURRENT）
 
-执行层六条现行不变量（合同归 ADR-079 / ADR-017；实现以当前代码为准，自动守卫包括 `apps/api/tests/test_execution_fencing_pure.py`；本列表不把旧审计截图当成当前回归证据）：
+执行层六条现行不变量（合同归 ADR-079 / ADR-017；实现以当前代码为准，自动守卫包括 `apps/api/test/core/test_execution_fencing.py`；本列表不把旧审计截图当成当前回归证据）：
 
 1. **节点终态写带围栏（ADR-079）**：execute_step 四尾 = 条件 UPDATE `WHERE id=:id AND claim_token=:mine` + rowcount；fenced → rollback + 零副作用（不 capture / 不 sync / 不 cascade / 不写 run）。
 2. **渲染终态写带围栏（ADR-079）**：render 三处终态写谓词 = `render_claim_token=:mine`；全部 10 处 re-pend 置 NULL；入口 token NULL 提前 return。
@@ -235,7 +235,7 @@ Decompiler 当前谨慎定位仍为 observable facts + deterministic structure +
 | 决策集 | `DECISIONS.md` |
 | 用户旅程 | `JOURNEYS.md` |
 | 命名 | `NAMING.md` |
-| **执行围栏合同与当前守卫** | `DECISIONS.md` ADR-079 + 当前执行代码 + `apps/api/tests/test_execution_fencing_pure.py` |
+| **执行围栏合同与当前守卫** | `DECISIONS.md` ADR-079 + 当前执行代码 + `apps/api/test/core/test_execution_fencing.py` |
 | **围栏前竞态证据（仅机制动机）** | `POST_T5_DELTA_AUDIT.md`（仓库根；不证明当前状态） |
 | 排期 / 需求池 | `PROGRESS.md` |
 

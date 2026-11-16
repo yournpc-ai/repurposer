@@ -83,7 +83,7 @@ import {
 } from "@/lib/credits"
 import { createTypewriter } from "@/lib/typewriter"
 import { downloadOutput } from "@/components/results/downloadOutput"
-import { useRunEvents } from "@/lib/use-run-events"
+import { nextRunAttachment, useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/LogoMark"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
@@ -94,6 +94,7 @@ import {
   type ChatMention,
   type MentionContext,
 } from "@/lib/mentions"
+import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { isChatVideoOutput, zeroDeliveryVideoOutputs } from "@/lib/anchorCards"
 import {
   MentionEditor,
@@ -170,6 +171,7 @@ import {
   runReviewerLanded,
   shouldAdmitPolledTrigger,
   stampServerMessageId,
+  stampMessagePresentation,
 } from "./liveMessageReconcile"
 import { matchOptionByText } from "./optionMatch"
 import {
@@ -998,9 +1000,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // fails; completed turns persist the same post-reply order in candidates_log.
   const liveCandidateRowsRef = useRef<Set<string>>(new Set())
   const pendingCandidateRowsRef = useRef<OverlayMessage[]>([])
+  const candidateTurnSnapshotRef = useRef<Map<string, number[]>>(new Map())
   const handleCandidatesFrame = useCallback((event: CandidateEventPayload) => {
     const at = new Date().toISOString()
-    if (event.kind === "set") {
+    if (event.kind === "set" || event.kind === "sfx_set" || event.kind === "music_set" || event.kind === "video_preset_set") {
       liveCandidateRowsRef.current.add(`live-cand-${event.candidate_set_id}`)
     }
     if (event.kind === "selection" || event.turn_id) {
@@ -1014,7 +1017,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const exists = prev.some(
         (message) => message.candidates?.candidateSetId === event.candidate_set_id,
       )
-      if (!exists && (event.kind !== "set" || event.turn_id)) return prev
+      if (!exists && (event.kind === "selection" || event.turn_id)) return prev
       return reduceCandidateFrame(prev, event, at)
     })
   }, [])
@@ -1024,8 +1027,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const rollbackCandidateRows = useCallback(() => {
     pendingCandidateRowsRef.current = []
     const doomed = liveCandidateRowsRef.current
-    if (doomed.size === 0) return
-    setMessages((prev) => prev.filter((m) => !doomed.has(m.id)))
+    const selections = candidateTurnSnapshotRef.current
+    setMessages((prev) => prev
+      .filter((m) => !doomed.has(m.id))
+      .map((m) => {
+        if (!m.candidates) return m
+        const selected = selections.get(m.candidates.candidateSetId)
+        return selected && m.candidates.selected !== selected
+          ? { ...m, candidates: { ...m.candidates, selected: [...selected] } }
+          : m
+      }))
     doomed.clear()
   }, [])
   const [input, setInput] = useState("")
@@ -1400,8 +1411,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         const history = mapHistoryRows(data.items ?? [], { t })
-        // Prepend only missing archive ids — anything pushed locally since
-        // mount is newer, and an already-live row keeps its typing state.
+        // Fill missing archive rows at their persisted seq positions. Live
+        // rows keep their identity and typing state; a recovered live tail
+        // cannot pull the final archive reply ahead of its own activities.
         if (!cancelled) {
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
@@ -1934,8 +1946,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [chatOutputEntries, setChatOutputEntries] = useState<ChatOutputEntry[] | null>(null)
   const [viewerOutputId, setViewerOutputId] = useState<string | null>(null)
   const deliveryMessageKey = messages
-    .filter((message) => message.runId)
-    .map((message) => `${message.id}:${message.runId}`)
+    .filter((message) => message.runId || message.outputRefs?.length)
+    .map((message) => `${message.id}:${message.runId ?? ""}:${(message.outputRefs ?? []).join(",")}`)
     .join("|")
   useEffect(() => {
     let cancelled = false
@@ -1979,12 +1991,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const viewerTriggerRef = useRef<HTMLElement | null>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const openOutputViewer = useCallback((outputId: string) => {
-    if (!chatOutputs.some((output) => output.id === outputId)) return
     viewerTriggerRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null
     setViewerOutputId(outputId)
-  }, [chatOutputs])
+  }, [])
   const closeOutputViewer = useCallback(() => {
     setViewerOutputId(null)
     requestAnimationFrame(() => {
@@ -1993,12 +2004,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       else chatContainerRef.current?.focus({ preventScroll: true })
     })
   }, [])
-  const mentionViewerOutput = useCallback((output: Output) => {
+  const mentionViewerOutput = useCallback((output: Output, region?: MediaRegionSelection) => {
     setDockHidden(false)
     editorRef.current?.insertMention({
       type: "output",
       id: output.id,
       label: outputMentionLabel(output, t(`chat.anchorCards.types.${output.type}`)),
+      ...(region ? { region } : {}),
     })
     setViewerOutputId(null)
     requestAnimationFrame(() => editorRef.current?.focus())
@@ -2038,30 +2050,36 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // Registry feeds handed to the editor's picker (memoized — the picker
   // reloads when the identity changes).
   const mentionContext = useMemo<MentionContext>(
-    () => ({
-      assets: [...new Map([...globalReferences.assets, ...assets].map((a) => [a.id, a])).values()]
-        .filter((a) => a.title)
-        .map((a) => ({
-          id: a.id,
-          name: a.title as string,
-          kind: assetTypeKind(a.type),
-        })),
-      outputs: [...new Map([
-        ...globalReferences.outputs.map((o) => ({
-          id: o.id,
-          label: o.name || t("chat.videoStoryboard.title"),
-          chipLabel: o.name || t("chat.videoStoryboard.title"),
-          kind: o.type,
-        })),
-        ...outputs.map((o) => ({
-        id: o.id,
-        label: outputMentionName(o, t(`chat.anchorCards.types.${o.type}`)),
-        chipLabel: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
-        kind: o.type,
-      })),
-      ].map((o) => [o.id, o])).values()]
-        .filter((o) => ["clip", "film", "video"].includes(o.kind)),
-    }),
+    () => {
+      // The owner-wide feed stays available for a future cross-project picker;
+      // this project's @ surface admits only entities in its current results.
+      const currentAssetIds = new Set(assets.map((asset) => asset.id))
+      const currentOutputIds = new Set(outputs.map((output) => output.id))
+      return {
+        assets: [...new Map([...globalReferences.assets, ...assets].map((a) => [a.id, a])).values()]
+          .filter((a) => currentAssetIds.has(a.id) && a.title)
+          .map((a) => ({
+            id: a.id,
+            name: a.title as string,
+            kind: assetTypeKind(a.type),
+          })),
+        outputs: [...new Map([
+          ...globalReferences.outputs.map((o) => ({
+            id: o.id,
+            label: o.name || t("chat.videoStoryboard.title"),
+            chipLabel: o.name || t("chat.videoStoryboard.title"),
+            kind: o.type,
+          })),
+          ...outputs.map((o) => ({
+            id: o.id,
+            label: outputMentionName(o, t(`chat.anchorCards.types.${o.type}`)),
+            chipLabel: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
+            kind: o.type,
+          })),
+        ].map((o) => [o.id, o])).values()]
+          .filter((o) => currentOutputIds.has(o.id) && ["clip", "film", "video"].includes(o.kind)),
+      }
+    },
     [assets, outputs, globalReferences, t],
   )
 
@@ -2104,8 +2122,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const sameRun = runIdRef.current === startedRunId
     const newAttachment = !sameRun || terminalRef.current
     if (newAttachment) {
-      const attempt = sameRun ? runAttemptRef.current + 1 : 0
-      const retryCount = sameRun ? currentUploadRetryCountRef.current + 1 : 0
+      const { attempt, uploadRetryCount: retryCount } = nextRunAttachment(
+        runAttemptRef.current,
+        sameRun,
+      )
+      // The server may already have pushed upload_retry_count=N before this
+      // Chat envelope lands. The attachment epoch is the client's recovery
+      // ordinal; incrementing that already-advanced server count again would
+      // wait for upload-retry-(N+1) and never seal the real retry-N delivery.
       runAttemptRef.current = attempt
       runIdRef.current = startedRunId
       currentRunAttemptRef.current = { runId: startedRunId, attempt }
@@ -2443,6 +2467,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         if (!opts?.echoCarried) {
           pushMessage({
             role: "assistant",
+            outputRefs: triggerOutputRefs(message.intent),
+            proseDrainedAtMs: Date.now(),
             content: message.content ?? "",
             turnId: message.turn_id ?? undefined,
             runId: message.workflow_run_id,
@@ -2459,10 +2485,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // Rows whose content IS the bare question (code-composed, legacy)
         // carry no echo — the pill's title already says it.
         const echo = questionEcho(message)
-        if (echo) {
+        if (echo || triggerOutputRefs(message.intent).length > 0) {
           pushMessage({
             role: "assistant",
-            content: echo,
+            outputRefs: triggerOutputRefs(message.intent),
+            proseDrainedAtMs: Date.now(),
+            content: echo ?? "",
             turnId: message.turn_id ?? undefined,
             seq: message.seq ?? undefined,
             at: message.created_at,
@@ -2507,6 +2535,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (!opts?.echoCarried) {
       pushMessage({
         role: "assistant",
+        outputRefs: triggerOutputRefs(message.intent),
+        proseDrainedAtMs: Date.now(),
         content: message.content ?? "",
         runId: message.workflow_run_id,
         blocks: message.blocks?.length ? message.blocks : undefined,
@@ -2664,6 +2694,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // by earlier turns are no longer this turn's to roll back.
     liveCandidateRowsRef.current.clear()
     pendingCandidateRowsRef.current = []
+    candidateTurnSnapshotRef.current = new Map(messagesRef.current.flatMap((message) =>
+      message.candidates
+        ? [[message.candidates.candidateSetId, [...message.candidates.selected]] as [string, number[]]]
+        : [],
+    ))
     const streamId = crypto.randomUUID()
     const localTurnId = opts?.rollbackId ?? streamId
     const turnOwner = { localId: localTurnId, serverId: null, adoptLocal: true }
@@ -2776,23 +2811,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         await segments.drain()
       }
     }
-    /** The presenting row's structured blocks (Video Project phase B): the
+    /** The presenting row's blocks and message-owned upload results: the
      * completed envelope's assistant_message carries the server-stamped
      * references; the VISIBLE row is the finalized preview bubble (same
      * key, streamId) — a pushed echo row instead carries them via
      * handleAssistantMessage's own threading. Stamps only after the prose
      * landed (散文永远在先 — the card follows the speech). */
     const stampEnvelopeBlocks = (message: QuestionMessage) => {
-      if (!ownsTurn() || !message.blocks?.length) return
-      const blocks = message.blocks
-      // Like finalizePreview, this id-scoped write may be applied after the
-      // turn releases ownership; eligibility was already proved above.
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === streamId)) {
-          return prev.map((m) => (m.id === streamId ? { ...m, blocks } : m))
-        }
-        return prev.map((m) => (m.id === message.id ? { ...m, blocks } : m))
-      })
+      if (!ownsTurn()) return
+      setMessages((prev) => stampMessagePresentation(prev, streamId, message))
     }
     try {
       const data = await streamChat<{
@@ -3559,6 +3586,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
     pendingCandidateRowsRef.current = []
+    candidateTurnSnapshotRef.current = new Map(messagesRef.current.flatMap((message) =>
+      message.candidates
+        ? [[message.candidates.candidateSetId, [...message.candidates.selected]] as [string, number[]]]
+        : [],
+    ))
     const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
     stashedAnswerRef.current = null
     const previewId = `answer-preview-${optimisticId}`

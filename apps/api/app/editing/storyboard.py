@@ -49,6 +49,7 @@ def _clip_summary(
     clip: Clip,
     content: CompositionContent,
     *,
+    track_id: str,
     track_role: str,
     view_facts: dict[tuple[UUID, str], dict[str, Any]],
 ) -> dict[str, Any]:
@@ -57,9 +58,11 @@ def _clip_summary(
     fps_num, fps_den = settings.fps.num, settings.fps.den
     summary: dict[str, Any] = {
         "clip_id": clip.clip_id,
+        "clip": clip.model_dump(mode="json"),
         "linked_group_id": clip.linked_group_id,
         "object_id": clip.object.object_id,
         "object_kind": clip.object.kind,
+        "track_id": track_id,
         "track_role": track_role,
         "range_ticks": {"start": clip.range.start, "end": clip.range.end},
         "range_seconds": {
@@ -83,6 +86,10 @@ def _clip_summary(
         ],
     }
     obj = clip.object
+    if hasattr(obj, "transform"):
+        summary["transform"] = obj.transform.model_dump(mode="json")
+    if hasattr(obj, "opacity"):
+        summary["opacity"] = obj.opacity
     if clip.source is not None:
         summary["snapshot_id"] = str(clip.source.snapshot_id)
         if clip.source.source_range is not None:
@@ -112,6 +119,8 @@ def _clip_summary(
         summary["layout"] = obj.layout.model_dump(mode="json")
         summary["opacity"] = obj.opacity
     elif isinstance(obj, WebObject):
+        summary["layout"] = obj.layout.model_dump(mode="json")
+        summary["fit"] = obj.fit
         view = view_facts.get((clip.source.snapshot_id, obj.view_id)) if clip.source else None
         summary["view_id"] = obj.view_id
         if view is not None:
@@ -124,8 +133,9 @@ def _clip_summary(
         summary["gain_db"] = obj.gain_db
         summary["muted"] = obj.muted
     elif isinstance(obj, GeneratorObject):
-        summary["runtime"] = obj.runtime
+        summary["producer"] = obj.producer
         summary["code"] = obj.code
+        summary["project"] = obj.project.model_dump(mode="json") if obj.project else None
         summary["prompt"] = obj.prompt
         summary["provider"] = obj.provider
         summary["model"] = obj.model
@@ -143,6 +153,8 @@ def _clip_summary(
         summary["language"] = obj.language
         summary["gain_db"] = obj.gain_db
         summary["role"] = track_role
+        if obj.alignment is not None:
+            summary["narration_alignment"] = obj.alignment.model_dump(mode="json")
     elif isinstance(obj, AudioObject):
         summary["gain_db"] = obj.gain_db
         summary["role"] = track_role
@@ -179,12 +191,19 @@ def storyboard_payload(
                 "heading": str(view.get("heading") or ""),
                 "width": view.get("width"),
                 "height": view.get("height"),
+                "state_id": view.get("state_id"),
+                "artifact_role": view.get("artifact_role"),
+                "paired_view_id": view.get("paired_view_id"),
+                "target_element_id": view.get("target_element_id"),
+                "source_y": view.get("source_y"),
+                "region_text_truncated": view.get("region_text_truncated"),
+                "region_visually_truncated": view.get("region_visually_truncated"),
             }
 
-    clip_tracks: dict[str, str] = {}
+    clip_tracks = {}
     for track in content.timeline.tracks:
         for clip in track.clips:
-            clip_tracks[clip.clip_id] = track.role
+            clip_tracks[clip.clip_id] = track
 
     all_clips = [c for t in content.timeline.tracks for c in t.clips]
     scenes = []
@@ -212,7 +231,8 @@ def storyboard_payload(
             "narration": "\n".join(obj.text for obj in speech) if speech else None,
             "clips": [
                 _clip_summary(
-                    c, content, track_role=clip_tracks[c.clip_id], view_facts=view_facts
+                    c, content, track_id=clip_tracks[c.clip_id].track_id,
+                    track_role=clip_tracks[c.clip_id].role, view_facts=view_facts
                 )
                 for c in scene_clips
             ],
@@ -259,7 +279,8 @@ def storyboard_payload(
                          "duration_seconds": transition.duration / content.settings.timebase}
                         for transition in content.timeline.transitions],
         "unassigned_clips": [
-            _clip_summary(c, content, track_role=clip_tracks[c.clip_id], view_facts=view_facts)
+            _clip_summary(c, content, track_id=clip_tracks[c.clip_id].track_id,
+                    track_role=clip_tracks[c.clip_id].role, view_facts=view_facts)
             for c in all_clips
             if c.scene_id is None
         ],

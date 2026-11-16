@@ -1,26 +1,19 @@
 """MiniMax M3 client."""
 
 import asyncio
-import base64
-import hashlib
 import json
 import re
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, TypeVar
-from urllib.parse import urlsplit, urlunsplit
-from uuid import uuid4
 
 import httpx
 import structlog
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     retry,
-    retry_if_not_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -33,123 +26,19 @@ from app.providers.llm.base import (
     ToolCall,
     ToolGeneration,
 )
+from app.providers.llm.openai_chat import (
+    _AccCall,
+    _ToolCallAccumulator,
+    _parse_tool_arguments,
+    _payload_chars,
+    _pooled_client,
+    _raise_for_status,
+    _retryable_provider_error,
+    _tool_call_from_object,
+)
+from app.providers.llm.trace import trace_finish, trace_start
 
 logger = structlog.get_logger()
-
-
-def _trace_path() -> Path | None:
-    raw = settings.minimax_journey_trace.strip()
-    return Path(raw) if raw else None
-
-
-def _trace_safe(value: Any, path: Path) -> Any:
-    """Keep business payloads verbatim except credentials and inline bytes."""
-    if isinstance(value, dict):
-        safe = {}
-        for key, item in value.items():
-            if key.lower() in {"authorization", "cookie", "api_key", "apikey", "token"}:
-                safe[key] = "<redacted>"
-            else:
-                safe[key] = _trace_safe(item, path)
-        return safe
-    if isinstance(value, list):
-        return [_trace_safe(item, path) for item in value]
-    if isinstance(value, str):
-        if value.startswith("data:") and ";base64," in value:
-            header, encoded = value.split(",", 1)
-            raw = base64.b64decode(encoded)
-            digest = hashlib.sha256(raw).hexdigest()
-            media_dir = path.parent / "media"
-            media_dir.mkdir(parents=True, exist_ok=True)
-            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "video/mp4": ".mp4"}.get(
-                header[5:].split(";", 1)[0], ".bin"
-            )
-            target = media_dir / f"{digest}{suffix}"
-            if not target.exists():
-                target.write_bytes(raw)
-            return {"binary_ref": str(target), "sha256": digest, "bytes": len(raw)}
-        if value.startswith(("https://", "http://")):
-            parts = urlsplit(value)
-            if parts.query:
-                return urlunsplit((parts.scheme, parts.netloc, parts.path, "", "")) + "?<redacted-query>"
-        return value
-    return value
-
-
-def _trace_write(record: dict[str, Any]) -> None:
-    path = _trace_path()
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(_trace_safe(record, path), ensure_ascii=False) + "\n")
-
-
-def _trace_start(payload: dict[str, Any], seat: str) -> str:
-    call_id = str(uuid4())
-    from app.metering import current_conversation_trace
-
-    _trace_write({
-        "phase": "request",
-        "model_call_id": call_id,
-        "seat": seat,
-        "started_at": datetime.now(UTC).isoformat(),
-        **(current_conversation_trace() or {}),
-        "payload": payload,
-    })
-    return call_id
-
-
-def _trace_finish(call_id: str, *, response: Any = None, error: BaseException | None = None) -> None:
-    if _trace_path() is None:
-        return
-    from app.metering import current_conversation_trace
-
-    _trace_write({
-        "phase": "response" if error is None else "error",
-        "model_call_id": call_id,
-        "finished_at": datetime.now(UTC).isoformat(),
-        **(current_conversation_trace() or {}),
-        "response": response,
-        "error": None if error is None else {"type": type(error).__name__, "message": str(error)},
-    })
-
-
-# Process-wide connection pool (provider 硬化批 1, 2026-09-27): every call
-# site below used to build a fresh ``httpx.AsyncClient`` per attempt, paying
-# DNS+TCP+TLS on EVERY LLM round-trip. One shared pool per event loop
-# (uvicorn / worker / ``asyncio.run`` scripts each own theirs — the pool
-# rebinds when the running loop changes); ``_pooled_client`` keeps the call
-# sites' ``async with`` shape while never closing the shared client.
-# Default reads allow five minutes; explicit per-request overrides still apply.
-_client_pool: tuple[asyncio.AbstractEventLoop, httpx.AsyncClient] | None = None
-
-
-def _shared_client() -> httpx.AsyncClient:
-    loop = asyncio.get_running_loop()
-    global _client_pool
-    if (
-        _client_pool is None
-        or _client_pool[0] is not loop
-        or _client_pool[1].is_closed
-    ):
-        _client_pool = (
-            loop,
-            httpx.AsyncClient(
-                timeout=httpx.Timeout(120, read=300),
-                limits=httpx.Limits(
-                    max_connections=20, max_keepalive_connections=10
-                ),
-            ),
-        )
-    return _client_pool[1]
-
-
-@asynccontextmanager
-async def _pooled_client() -> AsyncIterator[httpx.AsyncClient]:
-    """Yield the shared pool WITHOUT closing it — a drop-in for the retired
-    per-call ``async with httpx.AsyncClient(...)`` blocks."""
-    yield _shared_client()
 
 
 def _log_usage(usage: dict | None) -> None:
@@ -163,25 +52,6 @@ def _log_usage(usage: dict | None) -> None:
         **{k: v for k, v in usage.items() if "token" in k or "cache" in k},
     )
 
-
-def _payload_chars(messages: list[dict]) -> int:
-    """Approximate request size for transport logs (2026-10-16 全链日志律):
-    text parts + media data-url lengths — content itself never logs."""
-    total = 0
-    for m in messages:
-        c = m.get("content")
-        if isinstance(c, str):
-            total += len(c)
-        elif isinstance(c, list):
-            for part in c:
-                if not isinstance(part, dict):
-                    continue
-                total += len(part.get("text") or "")
-                for key in ("image_url", "video_url", "audio_url"):
-                    v = part.get(key)
-                    if isinstance(v, dict) and v.get("url"):
-                        total += len(v["url"])
-    return total
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -228,12 +98,9 @@ def price_units(units: dict[str, float]) -> float:
     Each unit kind prices against the SKU line that meters it — unit 种类 →
     model 价目行是该 SKU 的固定归属（TTS chars 永远按 speech 行计价）.
 
-    ``film_seconds`` (MG film-spec, ADR-119 D3) is the one own-infra SKU
-    with a menu price: the rate is an operating parameter (``configs`` table
-    ``film.usd_per_second``), read through the warmed-cache peek — the
-    estimate fold and the metering ledger price through this same line, so
-    the knob moves sticker and charge together (单一换算点不破: the value
-    is still USD, credits appear only at the ratio seam)."""
+    ``video_seconds`` is the own-infra video-spec SKU with a menu price. The
+    estimate fold and metering ledger read the same ``video.usd_per_second``
+    operating parameter through the warmed config cache."""
     from app.platform.configs import peek_config  # deferred: provider layer stays a leaf
 
     return (
@@ -241,7 +108,7 @@ def price_units(units: dict[str, float]) -> float:
         + units.get("voice_clones", 0.0) * PRICING["voice-clone"]["voice_clone_per_use"]
         + units.get("images", 0.0) * PRICING["image-01"]["image_per_piece"]
         + units.get("music_pieces", 0.0) * PRICING["music-2.6-free"]["music_per_piece"]
-        + units.get("film_seconds", 0.0) * peek_config("film.usd_per_second")
+        + units.get("video_seconds", 0.0) * peek_config("video.usd_per_second")
     )
 
 
@@ -346,9 +213,7 @@ def _minimax_tool_markup_start(text: str) -> int:
     starts = [text.find(marker) for marker in _MINIMAX_TOOL_MARKERS]
     starts = [index for index in starts if index >= 0]
     sentinel = text.find(_MINIMAX_SENTINEL)
-    if sentinel >= 0 and text[sentinel + len(_MINIMAX_SENTINEL):].startswith(
-        _MINIMAX_TOOL_MARKERS
-    ):
+    if sentinel >= 0:
         starts.append(sentinel)
     return min(starts, default=-1)
 
@@ -405,144 +270,14 @@ class _MiniMaxToolMarkupStripper:
         return tail
 
 
-def _parse_tool_arguments(name: str, raw: str, finish_reason: str | None) -> dict:
-    """Parse one tool call's accumulated argument text (ONE parse law for the
-    non-streaming object form and the streaming fragment form alike).
-
-    Empty text is a legal zero-argument call (``{}``). Unparseable text is
-    the TRUNCATION SIGNATURE (spike 2026-09-11/12: ~11% at the default token
-    budget — finish_reason says tool_calls but the arguments hit EOF) or
-    outright malformation; both are the schema class — ``LLMSchemaError`` so
-    the harness's one feedback repair round carries the reason back to the
-    model, never a blind re-roll, never a half-call.
-    """
-    if not raw:
-        return {}
-    try:
-        arguments = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise LLMSchemaError(
-            f"tool call {name!r} arguments did not parse "
-            f"(finish_reason={finish_reason}; truncation or malformation): {e}\n"
-            f"Raw: {raw[:500]}"
-        ) from e
-    if not isinstance(arguments, dict):
-        raise LLMSchemaError(
-            f"tool call {name!r} arguments are not a JSON object: {raw[:200]}"
-        )
-    return arguments
-
-
-def _tool_call_from_object(tc: dict, finish_reason: str | None) -> ToolCall:
-    """Parse one COMPLETE tool_calls[] object (the non-streaming form) —
-    same law as ``_ToolCallAccumulator.finish``: a missing function name is
-    wire-malformation (schema class), arguments go through the one parse law.
-    """
-    fn = tc.get("function") or {}
-    name = fn.get("name") or ""
-    if not name:
-        raise LLMSchemaError(
-            f"tool call {tc.get('id')!r} carried no function name "
-            f"(finish_reason={finish_reason})"
-        )
-    return ToolCall(
-        id=tc.get("id"),
-        name=name,
-        arguments=_parse_tool_arguments(name, fn.get("arguments") or "", finish_reason),
-    )
-
-
-@dataclass
-class _AccCall:
-    """One in-flight tool call inside ``_ToolCallAccumulator``."""
-
-    id: str | None = None
-    name: str | None = None
-    arg_parts: list[str] = field(default_factory=list)
-
-
-class _ToolCallAccumulator:
-    """Pure assembler for the streaming tool_calls dialect (OpenAI-compatible):
-    fragments arrive as ``delta.tool_calls[]`` entries keyed by ``index`` — a
-    call's ``id`` / ``name`` arrive once (its first fragment), the arguments
-    arrive as JSON text shards to concatenate. Pure state machine, no I/O:
-    the parse law lives in ``_parse_tool_arguments`` and fires only at
-    ``finish()``, so mid-stream fragments never raise.
-    """
-
-    def __init__(self) -> None:
-        self._calls: dict[int, _AccCall] = {}
-
-    def feed(self, deltas: list[dict]) -> list[str]:
-        """Consume one chunk's ``delta.tool_calls``; return the names of calls
-        whose name just became known — the ``on_tool_call`` hook's payload
-        (the phase-frame seam: T2's 「正在查曲库…」inspecting frames ride it)."""
-        named: list[str] = []
-        for tc in deltas:
-            idx = int(tc.get("index") or 0)
-            call = self._calls.setdefault(idx, _AccCall())
-            if tc.get("id"):
-                call.id = tc["id"]
-            fn = tc.get("function") or {}
-            if fn.get("name"):
-                if call.name is None:
-                    named.append(fn["name"])
-                call.name = fn["name"]
-            fragment = fn.get("arguments")
-            if fragment:
-                call.arg_parts.append(fragment)
-        return named
-
-    def finish(self, finish_reason: str | None) -> list[ToolCall]:
-        """Assemble the final calls in wire order (index ascending). A call
-        whose name never arrived is wire-malformation — same schema class as
-        an arguments parse failure."""
-        calls: list[ToolCall] = []
-        for idx in sorted(self._calls):
-            call = self._calls[idx]
-            if not call.name:
-                raise LLMSchemaError(
-                    f"tool call #{idx} never carried a function name "
-                    f"(finish_reason={finish_reason})"
-                )
-            arguments = _parse_tool_arguments(
-                call.name, "".join(call.arg_parts), finish_reason
-            )
-            calls.append(ToolCall(id=call.id, name=call.name, arguments=arguments))
-        return calls
-
-
-def _raise_for_status(
-    response: httpx.Response, *, unavailable_key: str = "provider_unavailable"
-) -> None:
-    """``raise_for_status`` that speaks LLMError.
-
-    Callers up the stack (intent agents, chat loop) all catch LLMError to
-    degrade gracefully — a raw httpx.HTTPStatusError (402/429/5xx from the
-    provider) would slip past every one of them and surface as a bare 500.
-    Rate limiting gets its own user key (the honest "busy, try again" line);
-    402 billing exhaustion gets its own ("out of quota" — the Claude-style
-    exhausted line, 2026-08-14 裁定: a quota failure must SAY quota, never
-    hide behind a generic unavailable line or a fabricated default answer);
-    every other status reads as unavailable."""
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise LLMError(
-            f"MiniMax HTTP {exc.response.status_code}: "
-            f"{exc.response.text[:300]}",
-            user_key=(
-                "provider_rate_limited"
-                if exc.response.status_code == 429
-                else "provider_quota_exhausted"
-                if exc.response.status_code == 402
-                else unavailable_key
-            ),
-        ) from exc
-
-
 class MiniMaxClient:
     """MiniMax M3 API client with structured output."""
+
+    provider = "minimax"
+
+    @property
+    def model(self) -> str:
+        return settings.minimax_model
 
     # Capability declaration (ADR-077 判词④): M3's ONLY schema-following
     # channel is native tool_calls (spike 2026-09-11/12 — json_schema is
@@ -563,6 +298,9 @@ class MiniMaxClient:
         # ~2 折）——逐字节重放实测 17221/17222 命中（2026-09-27 取证）；
         # 逐 pod 独立 + 负载自适应 TTL，冷 pod 首调必 miss，故配启动预热。
         prompt_cache="passive_prefix",
+        supports_image_input=True,
+        supports_video_input=True,
+        supports_tool_result_images=True,
         # 视频输入 = 抽帧看画面、音轨丢弃（spike 2026-10-05：原视频直发，
         # 模型自答「无法处理音频」）——语音主导素材走 ASR 文本进上下文。
         understands_video_audio=False,
@@ -577,7 +315,7 @@ class MiniMaxClient:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         # Transport/HTTP hiccups only — a schema rejection is NEVER re-rolled
         # blind here; the harness answers it with one feedback repair round.
-        retry=retry_if_not_exception_type(LLMSchemaError),
+        retry=retry_if_exception(_retryable_provider_error),
         reraise=True,
     )
     async def generate(
@@ -605,10 +343,9 @@ class MiniMaxClient:
             # Thinking out of the content channel (see capabilities note).
             "reasoning_split": True,
         }
-        if thinking:
-            payload["thinking"] = True
+        payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
-        trace_id = _trace_start(payload, "generate")
+        trace_id = trace_start(payload, "generate", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -630,9 +367,9 @@ class MiniMaxClient:
                 )
                 _raise_for_status(response)
                 data = response.json()
-                _trace_finish(trace_id, response=data)
+                trace_finish(trace_id, provider="minimax", model=settings.minimax_model, response=data)
         except Exception as e:
-            _trace_finish(trace_id, error=e)
+            trace_finish(trace_id, provider="minimax", model=settings.minimax_model, error=e)
             logger.warning(
                 "llm_request_failed",
                 model=settings.minimax_model,
@@ -654,7 +391,7 @@ class MiniMaxClient:
         from app.metering import record_usage
 
         _log_usage(data.get("usage"))
-        await record_usage(data.get("usage"))
+        await record_usage(data.get("usage"), provider=self.provider, model=self.model)
 
         raw_content = data["choices"][0]["message"]["content"]
         content = self._clean_json(raw_content)
@@ -717,10 +454,9 @@ class MiniMaxClient:
             "stream_options": {"include_usage": True},
             "reasoning_split": True,
         }
-        if thinking:
-            payload["thinking"] = True
+        payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
-        trace_id = _trace_start(payload, "generate_stream")
+        trace_id = trace_start(payload, "generate_stream", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -821,8 +557,12 @@ class MiniMaxClient:
                                     await result
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
-                if emitted or attempt == 2:
-                    _trace_finish(trace_id, error=exc)
+                if (
+                    emitted
+                    or attempt == 2
+                    or not _retryable_provider_error(exc)
+                ):
+                    trace_finish(trace_id, provider="minimax", model=settings.minimax_model, error=exc)
                     logger.warning(
                         "llm_request_failed",
                         model=settings.minimax_model,
@@ -844,6 +584,7 @@ class MiniMaxClient:
                 raise last_exc
             raise LLMError(str(last_exc), user_key="provider_unreachable")
 
+        trace_finish(trace_id, provider="minimax", model=settings.minimax_model, response={"content": accumulated, "usage": usage})
         logger.info(
             "llm_response",
             model=settings.minimax_model,
@@ -858,10 +599,9 @@ class MiniMaxClient:
         from app.metering import record_usage
 
         _log_usage(usage)
-        await record_usage(usage)
+        await record_usage(usage, provider=self.provider, model=self.model)
 
         content = self._clean_json(accumulated)
-        _trace_finish(trace_id, response={"content": accumulated, "usage": usage})
         try:
             return response_model.model_validate_json(content)
         except ValidationError as e:
@@ -879,7 +619,7 @@ class MiniMaxClient:
         # schema rejection (truncated/malformed tool arguments) is NEVER
         # re-rolled blind here; the harness answers it with one feedback
         # repair round.
-        retry=retry_if_not_exception_type(LLMSchemaError),
+        retry=retry_if_exception(_retryable_provider_error),
         reraise=True,
     )
     async def generate_with_tools(
@@ -887,7 +627,7 @@ class MiniMaxClient:
         messages: list[dict],
         tools: list[dict],
         temperature: float = 0.3,
-        thinking: bool = False,
+        thinking: bool | None = None,
         tool_choice: str | dict = "auto",
     ) -> ToolGeneration:
         """Tier-1 wire format (ADR-077 判词④), non-streaming: the provider
@@ -910,29 +650,40 @@ class MiniMaxClient:
             "temperature": temperature,
             "reasoning_split": True,
         }
-        if thinking:
-            payload["thinking"] = True
+        if thinking is not None:
+            payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
-        trace_id = _trace_start(payload, "generate_with_tools")
-        async with _pooled_client() as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+        trace_id = trace_start(payload, "generate_with_tools", provider="minimax", model=settings.minimax_model)
+        try:
+            async with _pooled_client() as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                _raise_for_status(response)
+                data = response.json()
+                trace_finish(trace_id, provider="minimax", model=settings.minimax_model, response=data)
+        except (httpx.HTTPError, LLMError, json.JSONDecodeError) as exc:
+            trace_finish(trace_id, provider="minimax", model=settings.minimax_model, error=exc)
+            logger.warning(
+                "llm_request_failed",
+                model=settings.minimax_model,
+                stream=False,
+                tool_calls=True,
+                error=f"{type(exc).__name__}: {str(exc)[:300]}",
             )
-            _raise_for_status(response)
-            data = response.json()
-            _trace_finish(trace_id, response=data)
+            raise
 
         # ADR-025 metering: report usage to the bound workflow step (no-op when
         # unbound). Done before validation — tokens were consumed either way.
         from app.metering import record_usage
 
         _log_usage(data.get("usage"))
-        await record_usage(data.get("usage"))
+        await record_usage(data.get("usage"), provider=self.provider, model=self.model)
 
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
@@ -962,7 +713,7 @@ class MiniMaxClient:
         messages: list[dict],
         tools: list[dict],
         temperature: float = 0.3,
-        thinking: bool = False,
+        thinking: bool | None = None,
         tool_choice: str | dict = "auto",
         on_delta: Callable[[str], Awaitable[None] | None] | None = None,
         on_reasoning: Callable[[str], Awaitable[None] | None] | None = None,
@@ -999,10 +750,10 @@ class MiniMaxClient:
             "stream_options": {"include_usage": True},
             "reasoning_split": True,
         }
-        if thinking:
-            payload["thinking"] = True
+        if thinking is not None:
+            payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
-        trace_id = _trace_start(payload, "generate_stream_with_tools")
+        trace_id = trace_start(payload, "generate_stream_with_tools", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
         logger.info(
             "llm_request",
@@ -1102,8 +853,12 @@ class MiniMaxClient:
                                             await result
             except (httpx.TransportError, LLMError) as exc:
                 last_exc = exc
-                if emitted or attempt == 2:
-                    _trace_finish(trace_id, error=exc)
+                if (
+                    emitted
+                    or attempt == 2
+                    or not _retryable_provider_error(exc)
+                ):
+                    trace_finish(trace_id, provider="minimax", model=settings.minimax_model, error=exc)
                     logger.warning(
                         "llm_request_failed",
                         model=settings.minimax_model,
@@ -1132,6 +887,12 @@ class MiniMaxClient:
             if result is not None:
                 await result
 
+        trace_finish(trace_id, provider="minimax", model=settings.minimax_model, response={
+            "content": accumulated,
+            "tool_calls": accumulator.raw_calls(),
+            "finish_reason": finish_reason,
+            "usage": usage,
+        })
         logger.info(
             "llm_response",
             model=settings.minimax_model,
@@ -1147,24 +908,16 @@ class MiniMaxClient:
         from app.metering import record_usage
 
         _log_usage(usage)
-        await record_usage(usage)
+        await record_usage(usage, provider=self.provider, model=self.model)
 
         content = _strip_minimax_tool_markup(
             _THINK_BLOCK.sub("", accumulated).strip()
         )
         # The truncation signature raises HERE (after the stream drained):
         # schema class, so the harness's repair round answers it with
-        # feedback — never a blind client-side re-roll.
+        # feedback — never a blind client-side re-roll. Raw arguments were
+        # already persisted before this parse.
         calls = accumulator.finish(finish_reason)
-        _trace_finish(trace_id, response={
-            "content": accumulated,
-            "tool_calls": [
-                {"id": call.id, "name": call.name, "arguments": call.arguments}
-                for call in calls
-            ],
-            "finish_reason": finish_reason,
-            "usage": usage,
-        })
         if not content and not calls:
             # 空响应信标: the turn's words and calls BOTH came back empty —
             # log the raw finish_reason/usage so the next occurrence is

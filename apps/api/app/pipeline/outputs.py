@@ -102,10 +102,18 @@ def chat_delivery_output_ids(messages: list) -> list[UUID]:
     seen: set[UUID] = set()
     for message in messages:
         intent = message.intent or {}
+        run_delivery = (
+            message.workflow_run_id is not None
+            and intent.get("type") == "trigger_review"
+            and intent.get("trigger") in {"run_completed", "run_failed"}
+        )
+        # Foreground upload results belong to their closing assistant message
+        # (including a follow-up question), never to the failed production Run.
+        # The server stamps these refs; no Run or tool-name guess grants ownership.
+        upload_answer = intent.get("type") != "trigger_review"
         if (
-            message.workflow_run_id is None
-            or intent.get("type") != "trigger_review"
-            or intent.get("trigger") not in {"run_completed", "run_failed"}
+            getattr(message, "role", "assistant") != "assistant"
+            or not (run_delivery or upload_answer)
             or not isinstance(intent.get("output_refs"), list)
         ):
             continue
@@ -299,13 +307,6 @@ def compose_spec_prompt(step: WorkflowStep, ui_language: str) -> str | None:
             return base
         return f"配音成 {lang}" if zh else f"Dub into {lang}"
 
-    if step.kind == "launch_film":
-        parts = ["生成发布短片" if zh else "Generate a launch film"]
-        if slot.get("focus"):
-            parts.append(
-                f"主题：{slot['focus']}" if zh else f"focus: {slot['focus']}"
-            )
-        return ("，" if zh else ", ").join(parts)
 
     node_cls = node_for(step.kind)
     if node_cls is None or not node_cls.produces_outputs or not node_cls.output_type:
@@ -340,7 +341,6 @@ _LLM_PRODUCT_KINDS = (
     "write_article",
     "write_quotes",
     "write_carousel",
-    "launch_film",  # the storyboard's creative slots are LLM-answered (grounding-validated, code skeleton + fixed fallback)
 )
 
 

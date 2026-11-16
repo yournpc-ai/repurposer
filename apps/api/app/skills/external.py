@@ -25,6 +25,9 @@ _MAX_PATH_LENGTH = 240
 _MAX_PATH_DEPTH = 8
 _MAX_FRONTMATTER_BYTES = 64 * 1024
 _MAX_REFERENCES = 1536
+_MAX_MEDIA_FILES = 256
+_MAX_MEDIA_FILE_BYTES = 32 * 1024 * 1024
+_MAX_MEDIA_BYTES = 96 * 1024 * 1024
 _NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _FRONTMATTER_KEYS = {
     "name",
@@ -48,6 +51,16 @@ _TEXT_SUFFIXES = {
     ".css",
 }
 _CODE_SUFFIXES = {".ts", ".tsx", ".js", ".mjs", ".cjs", ".py", ".css"}
+_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+}
+_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ExternalSkillError(ValueError):
@@ -113,8 +126,23 @@ class SkillPolicy(BaseModel):
     mode: Literal["strict", "adaptive"] = "adaptive"
     scene_count: int | None = Field(default=None, ge=1, le=6)
     duration_seconds: float | None = Field(default=None, gt=0, le=118)
-    generator_runtime: Literal["drawing-v1", "image-v1"] | None = None
+    generator_runtime: Literal["draw-2d", "image-generation", "remotion-project"] | None = None
     adaptation_bounds: list[str] = Field(default=[], max_length=16)
+
+
+class SkillMedia(BaseModel):
+    """Content-addressed gallery media; raw bytes never enter version JSON."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    digest: str = Field(min_length=64, max_length=64)
+    storage_key: str | None = None
+    mime_type: str
+    byte_size: int = Field(gt=0, le=_MAX_MEDIA_FILE_BYTES)
+    # Present only between package parsing and the storage write. Exclusion
+    # keeps both SkillDraft JSON and SkillVersion JSON free of media bytes.
+    data: bytes | None = Field(default=None, exclude=True, repr=False)
 
 
 class SkillDraft(BaseModel):
@@ -126,6 +154,7 @@ class SkillDraft(BaseModel):
     description: str
     instructions: str
     references: list[SkillSource] = []
+    media: list[SkillMedia] = []
     source_hash: str = Field(min_length=64, max_length=64)
     source_uri: str | None = None
     source_revision: str | None = None
@@ -152,6 +181,65 @@ def _safe_path(value: str) -> PurePosixPath:
     return path
 
 
+def skill_media_storage_key(path: str, digest: str) -> str:
+    """Derive the only legal object key for one gallery media payload."""
+    suffix = _safe_path(path).suffix.lower()
+    if suffix not in _MEDIA_TYPES or not _DIGEST_RE.fullmatch(digest):
+        raise ExternalSkillError(f"invalid Skill media identity: {path!r}")
+    return f"skill-media/{digest[:2]}/{digest}{suffix}"
+
+
+def _matches_media_type(data: bytes, suffix: str) -> bool:
+    if suffix == ".png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    if suffix in {".jpg", ".jpeg"}:
+        return data.startswith(b"\xff\xd8\xff")
+    if suffix == ".webp":
+        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    if suffix == ".gif":
+        return data.startswith((b"GIF87a", b"GIF89a"))
+    if suffix == ".mp4":
+        return len(data) >= 12 and data[4:8] == b"ftyp"
+    if suffix == ".webm":
+        return data.startswith(b"\x1a\x45\xdf\xa3")
+    return False
+
+
+def validate_skill_media_identity(media: SkillMedia) -> None:
+    """Validate path, type, digest and the optional content-addressed key."""
+    path = _safe_path(media.path)
+    suffix = path.suffix.lower()
+    expected_mime = _MEDIA_TYPES.get(suffix)
+    expected_key = skill_media_storage_key(media.path, media.digest)
+    if (
+        path.parts[:2] != ("gallery", "media")
+        or expected_mime is None
+        or media.mime_type != expected_mime
+        or not _DIGEST_RE.fullmatch(media.digest)
+        or (media.storage_key is not None and media.storage_key != expected_key)
+    ):
+        raise ExternalSkillError(f"invalid Skill media identity: {media.path}")
+
+
+def validate_skill_media_bytes(media: SkillMedia, data: bytes) -> None:
+    """Fail closed on identity, size, content-type or object-key drift."""
+    validate_skill_media_identity(media)
+    if not data or len(data) > _MAX_MEDIA_FILE_BYTES or len(data) != media.byte_size:
+        raise ExternalSkillError(f"Skill media byte size mismatch: {media.path}")
+    if hashlib.sha256(data).hexdigest() != media.digest:
+        raise ExternalSkillError(f"Skill media digest mismatch: {media.path}")
+    if not _matches_media_type(data, PurePosixPath(media.path).suffix.lower()):
+        raise ExternalSkillError(f"Skill media content does not match its type: {media.path}")
+
+
+def skill_draft_payload(draft: SkillDraft) -> dict[str, Any]:
+    """Serialize immutable identity without bytes or a new empty-field digest bump."""
+    return draft.model_dump(
+        mode="json",
+        exclude={"media"} if not draft.media else None,
+    )
+
+
 def _role(path: PurePosixPath) -> Literal["reference", "implementation", "script"]:
     if "scripts" in path.parts:
         return "script"
@@ -160,11 +248,13 @@ def _role(path: PurePosixPath) -> Literal["reference", "implementation", "script
     return "reference"
 
 
-def _source_hash(sources: Mapping[str, str]) -> str:
+def _source_hash(sources: Mapping[str, str], media: Mapping[str, str]) -> str:
     rows = [
         {"path": path, "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()}
-        for path, text in sorted(sources.items())
+        for path, text in sources.items()
     ]
+    rows.extend({"path": path, "digest": digest} for path, digest in media.items())
+    rows.sort(key=lambda row: row["path"])
     encoded = json.dumps(rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -186,7 +276,9 @@ def _frontmatter(text: str) -> tuple[dict[str, Any], str]:
         raise ExternalSkillError("SKILL.md frontmatter must be a mapping")
     unknown = set(meta) - _FRONTMATTER_KEYS
     if unknown:
-        raise ExternalSkillError(f"unsupported SKILL.md frontmatter keys: {sorted(unknown)}")
+        raise ExternalSkillError(
+            f"unsupported SKILL.md frontmatter keys: {sorted(unknown, key=str)}"
+        )
     body = text[end + 5 :].strip()
     if not body:
         raise ExternalSkillError("SKILL.md instructions must not be empty")
@@ -252,6 +344,8 @@ def build_skill_draft(
     ``files`` is an already-enumerated package, keyed by relative POSIX paths.
     Unsupported text/media types are reported and excluded; unsafe paths,
     oversized input, malformed UTF-8 and an invalid root SKILL.md fail closed.
+    Accepted gallery media retains only its content identity in the draft; the
+    persistence layer writes bytes to content-addressed object storage.
     ``source_hash`` covers the root instructions and every accepted source.
     """
     if source_revision is not None and source_uri is None:
@@ -262,9 +356,30 @@ def build_skill_draft(
         raise ExternalSkillError("Skill package exceeds its raw package size limit")
 
     decoded: dict[str, str] = {}
+    media: dict[str, SkillMedia] = {}
     rejected: dict[str, str] = {}
     for raw_path, data in sorted(files.items()):
         path = _safe_path(raw_path)
+        if path.parts[:2] == ("gallery", "media"):
+            mime_type = _MEDIA_TYPES.get(path.suffix.lower())
+            if mime_type is None:
+                rejected[raw_path] = "unsupported_media_type"
+                continue
+            if len(data) > _MAX_MEDIA_FILE_BYTES:
+                raise ExternalSkillError(f"Skill media exceeds its file size limit: {raw_path}")
+            if not _matches_media_type(data, path.suffix.lower()):
+                rejected[raw_path] = "invalid_media_content"
+                continue
+            digest = hashlib.sha256(data).hexdigest()
+            media[raw_path] = SkillMedia(
+                path=raw_path,
+                digest=digest,
+                storage_key=skill_media_storage_key(raw_path, digest),
+                mime_type=mime_type,
+                byte_size=len(data),
+                data=data,
+            )
+            continue
         if path.suffix.lower() not in _TEXT_SUFFIXES:
             rejected[raw_path] = "unsupported_source_type"
             continue
@@ -275,6 +390,10 @@ def build_skill_draft(
         except UnicodeDecodeError as exc:
             raise ExternalSkillError(f"Skill source is not valid UTF-8: {raw_path}") from exc
 
+    if len(media) > _MAX_MEDIA_FILES:
+        raise ExternalSkillError("Skill package exceeds its accepted-media limit")
+    if sum(item.byte_size for item in media.values()) > _MAX_MEDIA_BYTES:
+        raise ExternalSkillError("Skill package exceeds its accepted media size limit")
     if "SKILL.md" not in decoded:
         raise ExternalSkillError("Skill package needs a root SKILL.md text source")
     if sum(len(text.encode("utf-8")) for text in decoded.values()) > _MAX_TOTAL_BYTES:
@@ -329,7 +448,11 @@ def build_skill_draft(
         description=description.strip(),
         instructions=instructions,
         references=references,
-        source_hash=_source_hash(source_texts),
+        media=list(media.values()),
+        source_hash=_source_hash(
+            source_texts,
+            {path: item.digest for path, item in media.items()},
+        ),
         source_uri=source_uri,
         source_revision=source_revision,
         capability_report=SkillCapabilityReport(

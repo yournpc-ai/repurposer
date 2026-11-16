@@ -1,6 +1,6 @@
 # Module Architecture — 模块划分与边界契约
 
-> Status: 当前系统架构（2026-10-26；模块、表归属、队列与代码地图事实源）
+> Status: 当前系统架构（2026-11-10；模块、表归属、队列与代码地图事实源）
 > 排期见 [PROGRESS.md](./PROGRESS.md)；决策见 [DECISIONS.md](./DECISIONS.md)（现行决策集）。
 
 本文回答三个问题：**有哪些模块、每张表归谁、模块之间怎么通信**。当前能力与 PLANNED 边界分行标记；未实施的子能力不回写成整个模块未建。
@@ -32,10 +32,10 @@
 │ （操作日志层，      │   │ ┌── RunPlan 内核（施工图，ADR-028 ✅）───┐│
 │  三前端共用）      │   │ │ workflow_steps：前奏两步/工具节点/质检节点   ││
 └─────────┬─────────┘   │ │ orchestrator 走图 · worker 认领节点       ││
-          │             │ │ 链：clip 链 ✅/文案链 ✅/Film 链 ✅/合成链 📋R5 ││
+          │             │ │ 链：clip 链 ✅/文案链 ✅/Video 链已落码/合成链 📋R5 ││
           │             │ └───────────────────────────────────────────┘│
           │             └──────────────────┬────────────────────────────┘
-          ▼ spec diff                      ▼ clip-spec / film-spec（spec.family 分派）
+          ▼ spec diff                      ▼ clip-spec / video-spec（spec.family 分派）
         outputs ◄────────────── Remotion 渲染服务 ✅（可替换黑盒）
        （统一产物表 ✅，ADR-030）
 
@@ -80,7 +80,7 @@
 | 上传 → 预处理 | `assets` 行 + worker `SKIP LOCKED` 认领 | ✅ |
 | 预处理 → 生成 | ready `workflow_steps`（上游完成 + 当前项目素材门）；run 状态随节点认领翻转 | ✅ |
 | 生成计划图 | `workflow_steps`——计划作为一等对象，节点级血统/成本/重跑（ADR-028） | ✅ |
-| 生成 → 精修 | `outputs.render_spec` / `outputs.payload`（clip-spec / film-spec 双家族） | ✅ |
+| 生成 → 精修 | `outputs.render_spec` / `outputs.payload`（clip-spec / video-spec 两家族） | ✅ |
 | 精修 → 渲染 | `outputs.render_status=PENDING` + writer barrier + `render_claim_token` | ✅ |
 | 精修操作记录 | `operations` 表——Edit/Chat 已写入（MCP 座位） | ✅（ADR-032） |
 | 分发 | `publications` 状态机 + `channel_accounts`；worker 认领 scheduled 与 publishing poll lease | ✅（外部平台联调仍开） |
@@ -130,7 +130,7 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | **Memory / Context** | Persona（人设：风格 / 策略 / 皮肤块 `brand` / 声音块 `voice`）、术语表（📋）；向 understand/plan prompt / chat 上下文 / 分发调性注入 | `agents/registry.py`（persona 等共享声明）、`memory/brand.py`（人设皮肤 → clip-spec 烘焙）、`memory/routes.py` | ✅ 主体落地（定位根升级为已定方向、未实施——见 `POSITIONING.md` / ADR-042） |
 | **合规与计费底座** | AI 内容机器可读标识（C2PA/元数据）、披露、逐节点成本计量、积分钱包（credit / wallet / 台账）、EU 数据驻留 | `metering.py`、`providers/llm/minimax.py`、`platform/billing.py`、`platform/configs.py`、`platform/routes.py` | 计量与 credits/wallet/ledger ✅；C2PA/披露与 EU 驻留 📋，验收归 PROGRESS/ADR-026 |
 
-**精修三角（Editor / Chat / Regenerate）**：精确文字/参数修改走确定性 edit operations 或卡面直改；模糊方向和跨产物修改走项目 Chat，并用 `output` mention 或计划引用确定目标；需要新版本时走当前 regenerate/revision 路径。资产作用域 Modal 已退役。Film 的修改必须先形成并呈现新分镜版本，不走普通 clip 编辑旁路。具体工具、版本与授权边界见 CHAT_ARCHITECTURE、VIDEO_EDITOR 和 Film 当前合同。
+**精修三角（Editor / Chat / Regenerate）**：精确文字/参数修改走确定性 edit operations 或卡面直改；模糊方向和跨产物修改走项目 Chat，并用 `output` mention 或计划引用确定目标；需要新版本时走当前 regenerate/revision 路径。资产作用域 Modal 已退役。Composition 的修改必须形成并呈现新版本，不走普通 clip 编辑旁路；最小 Scrub 也只经唯一内容写口。具体工具、版本与授权边界见 CHAT_ARCHITECTURE、VIDEO_EDITOR 和 VIDEO_PROJECT。
 
 ## 4. 表归属契约
 
@@ -159,15 +159,15 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | `wallets` | （平台层，暂不属于任何模块） | 积分余额（ADR-055，`docs/BILLING.md`）；只由 `platform/billing.py` 写（乐观锁 `version`）；读收口于 `/wallet` 路由 |
 | `credit_transactions` | （平台层，暂不属于任何模块） | 积分台账（append-only）；只由 `platform/billing.py` 写（`idempotency_key` UNIQUE 去重）；读收口于 `/wallet/transactions` |
 | `payment_orders` | （平台层，暂不属于任何模块） | 法币积分包购买订单（PAYMENTS）；只由 `platform/payments.py` 创建与迁移状态，`credit_transaction_id` 唯一关联一条 purchase 台账；积分余额仍只经 `platform/billing.py` 写，订单读收口于 `/payments/orders/{id}` |
+| `payment_webhook_events` | （平台层，暂不属于任何模块） | Stripe 投递审计 + 告警 outbox（PAYMENTS）；只由 `platform/payment_webhooks.py` 写，支付业务通过该服务记录结果，worker 经同一服务认领/发送告警；不参与订单或积分幂等裁决，未知/删除订单的审计 ID 不设外键 |
 | `conversation_usage` | （平台层，暂不属于任何模块） | 会话层 LLM 计量台账（ADR-117 D3——计量不收费，永不上账单/UI）；每回合一行，只由 `metering.fold_conversation_usage` 在回合入口缝（execute_chat_turn / answer_question / run_trigger_turn）随回合自身 commit 写；读 = 内部审计（COGS / W11 fair-use 数据基础 / context 预算校准），无路由 |
 | `configs` | （平台层，暂不属于任何模块） | 公共运营参数表（key 点号命名空间）；`CONFIG_REGISTRY` 是唯一事实源，一切读取走 `platform/configs.get_config()` 漏斗，模块禁直查表 |
 | `page_readings` | Tools（world 座位层，`app/tools/world.py`） | 项目级页面读本（ADR-124：(project_id, url) 主键 + text + fetched_at，快照语义，随项目级联）；读收口于 `world.page_reading_for_url` 一座，写只经 `world.upsert_page_reading`（chat 读工具写穿走 `world.write_page_reading` 独立短事务；capture 链在 `process_asset` 会话内写） |
-| `film_narrations` | Tools（film 座位层，`app/tools/film/narration_store.py`） | 旁白复用库（ADR-138 §10.1）：`(project_id, content_hash)` 唯一，一行 = 一条旁白词的 speed-1.0 原速原件（storage_key + duration_s；适配产物是 run 级 staging，永不住本表）；复用键 = 归一化文本｜已解 voice_id｜语言｜合成配置；一切读写经 `narration_store` 一座（resolve / finalize / fail——原子占位 + 有界接管 + owner 条件写，全独立短会话，run 回滚不带走已完成的行）；消费面 = `narration.py` 合成链，随项目级联删除 |
 | `compositions` / `composition_versions` | Editing（ADR-145，A 批 1 已建表） | 内容只经 `app/editing/store.apply_composition_edits`（Composition 行锁序列化 + base_ref CAS + request_id 幂等 + 整批原子）；版本行 append-only 不可改写，`version` 在 Composition 内单调递增；其他模块只读；`origin_project_id` 记来源 Chat 但 SET NULL——删 Chat 不级联毁作品；Composition 删除是未来的显式 op（本批无删除口） |
 | `source_snapshots` | Editing（A 批 1 已建表） | 不可变内容快照（owner + asset_id SET NULL 溯源 + storage_key + digest + duration_ticks @SOURCE_TIMEBASE）；行不可原地改写，refresh/换素材 = 新行；登记写口为 editing/sources.register_snapshot；tools/video/preparation 负责从既有 Asset/Output 冻结资源并调用登记，B-III 已接视频 Chat 素材 |
 | `user_skills` / `skill_versions` | Skills（C1 已建表） | 外部包只经 `app/skills/store.import_external_skill` 保存；UserSkill 按 `(owner_id,name)` 唯一，SkillVersion 按 `(skill_id,version)` 与 `(skill_id,version_digest)` 唯一，owner 双重校验；`source_hash` 只标识原始来源，`version_digest` 覆盖来源与审阅声明/policy；版本保存原始 instructions/references、声明输入、能力报告、来源与 Strict/Adaptive policy，数据库触发器拒绝 UPDATE/DELETE；加载只读，外部脚本永不执行 |
 
-**outputs 共享聚合的细则**：Pipeline/worker 负责创建、渲染状态、执行身份与产物文件；Operation Model 负责其注册范围内的 payload/render_spec 编辑与 operation journal；Distribution 只写 publishing 表单。任何写者只碰自己的字段子集，终态渲染写必须匹配 `render_claim_token`。Operation Model 覆盖的内容修改必须产生 operation 记录；Film 版本编辑、系统反写和发布字段不得被伪装成 clip operation。
+**outputs 共享聚合的细则**：Pipeline/worker 负责创建、渲染状态、执行身份与产物文件；Operation Model 负责其注册范围内的 payload/render_spec 编辑与 operation journal；Distribution 只写 publishing 表单。任何写者只碰自己的字段子集，终态渲染写必须匹配 `render_claim_token`。Chat 的独立上传工具经 Pipeline `upload_finished_output` 使用同一 Output token 直调 `/upload`，不进入 worker 渲染队列、不改写原 Run/step；崩溃恢复保持上传失败，不转成重新渲染。Operation Model 覆盖的内容修改必须产生 operation 记录；Composition 版本编辑、系统反写和发布字段不得被伪装成 clip operation。
 
 ### 4.1 行业词汇对照（Mastra / Agno / OpenAI ↔ 本系统）
 
@@ -200,21 +200,22 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 | `compositions` / `composition_versions` | Editing（app/editing）；内容只经 apply_composition_edits，CAS/事务由 store 实现 | **A 批 1 已落地**（见 §4 当前表）；不把 Project/Output 表转移到 Editing |
 | `source_snapshots` | Editing 的 sources 服务 | 已建表与登记写口；tools/video/preparation 从 Asset/Output 冻结资源，B-III 已接视频；原 Asset 处理状态仍归 Pipeline，不能变成第二 Asset 库 |
 | `video_narrations` | Tools（app/tools/video/narration_store.py） | `(user_id, content_hash)` 唯一的 speed-1.0 原速原件与真实句级对齐；复用键 = 归一化文本｜voice｜语言｜完整合成配置。pre-submit 占位、`synthesizing/aligning/done/unknown`、owner/lease 与音频/对齐 digest 均经 narration_store 的独立短会话写；Run 回滚不删除已确认结果，未知结果失败闭，音频已确认时只恢复字幕下载。加速适配与执行 manifest 住 Run 命名空间，不住共享原件行 |
+| `narration_alignments`（已落码并完成最小真实冒烟，完整验收待用户） | Tools（`app/tools/video/alignment_store.py`）；worker 只执行确定性准备，语义只经 `annotate_narration` 工具写 | 一行 = 最终音频快照 + 精确讲稿 + 算法/归一化/provider/model 的一次对齐。保存完整 sentences/words/source ticks/text ranges、anchored/interpolated、语义和 digest；PENDING/PROCESSING/ALIGNED/READY/FAILED 使用 String 列。ALIGNED 才可由 Agent 填语义，READY 后不可变并可被 SpeechObject 引用；文本或音频变化产生新行，不原地改写已引用事实。当前可准备已有录音、已固定 TTS 原件，或经单任务 narration-only Run 授权新合成：复用普通 plan/Start/create_run/worker、VideoNarration 与实际计量，只登记 AUDIO Asset/SourceSnapshot 并请求对齐，不创建 CompositionVersion、render 或视频 Output；终态与 Chat delivery 复核真实音频/对齐/用量，Chat 工具不直接发起付费合成 |
 | `user_skills` / `skill_versions` | Skills 的 store/import 服务 | **C1 已落地**（见 §4 当前表）；用户显式版本绑定不替代 Tool 注册/执行授权，平台内置包仍沿现有注册表 |
 | `editing` 模块 | 内容/版本/快照的领域与应用服务，有独立表归属 | **A 批 1 + B 上半批已落地**（A：schemas/timing/edits/validators/store/video_spec/storyboard；B 上半批：service/director/grounding/templates）；不认领 Run/render 队列，不创建第二 scheduler |
-| `tools/video` / `packages/video-spec` / renderer adapter | 分别为执行能力、纯渲染契约与具体引擎实现 | A/B 已接 produce_video、Run/估价/计费/交付、B-III 混合视频、B-IV 原生图形/drawing-v1 固定媒体、B-V image-v1 单图固定媒体及 B-VI 首个 MG Speech/TTS 消费者；Speech 在执行层解析为普通 audio 与真实句级 TextClip，renderer 不调用模型。D5 的 SFX provider/tool 与 component-v1 上游烘焙仍归这些既有座位，不新增模块、表或认领源；Render/Output/Run owner 继续按现行 Pipeline 合同 |
-| `GeneratorObject`（版本内 Object，非新表） | editing 按 runtime 保存可审阅来源、参数与 digest；tools/video 组织创作调用、受限运行或授权模型请求、预览和固定媒体，provider/受控运行时承担实际生产 | B-IV drawing-v1 与 B-V MiniMax image-01 单图消费者已接；D5 component-v1 只允许声明 API/依赖与固定素材，经上游 bake 成为普通媒体，不改变最终 renderer 不执行程序的事实。复用既有 Run/队列/计量，renderer 只消费已解析媒体，不建独立 Generator 数据库、全供应商框架或调度链 |
-| 镜头素材采集（无新增表） | Research 采集；Pipeline 写 Asset；tools/video 冻结 SourceSnapshot，editing 只登记/绑定不可变事实 | 首个静态镜头已接；新快照冻结 `body_truncated` 并单独送入 Director，长页补读/空底板/交互状态按后续镜头需要扩展；规则归 VIDEO_PROJECT §9.2，复用既有处理链 |
-| 时间点预览与帧证据（TARGET，无新增作品根） | editing 解算版本/时间/权限；tools/video 准备固定资源与证据；video-spec 纯投影；adapter 输出画面 | D4 从单个版本/时间点/对象的实际编辑需求起步；B reviewer 可直接抽帧，不以通用时间点接口为前置。规则归 VIDEO_PROJECT §11.3 |
+| `tools/video` / `packages/video-spec` / `packages/video-remotion` / renderer adapter | 分别为执行能力、纯渲染契约、共享 Remotion composition/能力声明与具体服务实现；Chat PreviewAdapter 复用同一 composition，Player 只在 `components/chat/video/preview/` | A/B 已接 produce_video、Run/估价/计费/交付、B-III 混合视频、B-IV 原生图形/draw-2d 固定媒体、B-V image-generation 单图固定媒体及 B-VI 首个 MG Speech/TTS 消费者；Speech 在执行层解析为普通 audio 与真实句级 TextClip，renderer 不调用模型。当前十六个分类代表 Preset 在保存前展开为普通时间线与整数关键帧，renderer 不识别 preset/alignment/provider/model。当前 SFX provider/tool 与 remotion-project 上游烘焙仍归既有座位且不新增表/认领源；NarrationAlignment 是登记在案的派生事实与准备队列例外。Render/Output/Run owner 继续按现行 Pipeline 合同 |
+| `GeneratorObject`（版本内 Object，非新表） | editing 按 producer 保存可审阅来源、参数与 digest；tools/video 组织创作调用、受限运行或授权模型请求、预览和固定媒体，provider/受控运行时承担实际生产 | B-IV draw-2d 与 B-V MiniMax image-01 单图消费者已接；当前 remotion-project 只允许声明 API/依赖与固定素材，经上游 bake 成为普通媒体，不改变最终 renderer 不执行程序的事实。复用既有 Run/队列/计量，renderer 只消费已解析媒体，不建独立 Generator 数据库、全供应商框架或调度链 |
+| 镜头素材采集（无新增表） | Research 采集；Pipeline 写 Asset；tools/video 冻结 SourceSnapshot，editing 只登记/绑定不可变事实 | 初始侦察保留通用 `capture_page`；最终采集由 `capture_director` 形成 CapturePlan，`bind_capture_plan` 冻结侦察身份与 selector，`create_capture_plan_asset_committed` 复用 WEB_PAGE Asset 预处理认领源生成新 Asset，`web_capture.py` 分派 `capture_shots`，`snapshot_web_asset` 冻结新快照。populated/blank_plate/cutout/hero 均作为同一 web SourceSnapshot 的独立 views 供 WebObject 引用；交互后重测坐标，失败必需状态即设计失败。规则归 VIDEO_PROJECT §9.2 |
+| 时间点预览与帧证据（TARGET，无新增作品根） | editing 解算版本/时间/权限；tools/video 准备固定资源与证据；video-spec 纯投影；adapter 输出画面 | 精确编辑从单个版本/时间点/对象的实际编辑需求起步；B reviewer 可直接抽帧，不以通用时间点接口为前置。规则归 VIDEO_PROJECT §11.3 |
 | 视频内容 reviewer（无独立调度链） | tools/video + 既有 Agent harness；`Output.quality.content_review` 承接报告，verify 沿既有职责裁决 | 首个 exact-Output 静帧审片 → 局部修订 → 制作 → 同点复核已接；run_review 只做事实聚合，render_probe 保留文件硬门，主观模型判决不替代交付事实；运动/音频等完整检查仍开放，规则归 VIDEO_PROJECT §8.5 |
 
 ## 5. 跨模块通信规则
 
-1. **长任务与可重试生产链走队列**：生成写 `WorkflowRun`/`workflow_steps`，渲染写 `outputs.render_status`，发布写 `publications`，由 worker `FOR UPDATE SKIP LOCKED` 认领。**禁止 FastAPI BackgroundTasks**，禁止为新的跨模块重活直接调 service 绕开队列。当前有明确请求内联例外：`POST /music/generate`、cover、revise、translate-captions 与 dub 在各自路由内执行；这些例外不得被推广成“所有重活都可 inline”，新增或改为长任务时必须回到队列合同。
+1. **长任务与可重试生产链走队列**：生成写 `WorkflowRun`/`workflow_steps`，渲染写 `outputs.render_status`，发布写 `publications`，旁白对齐准备写 `narration_alignments`，支付异常告警写 `payment_webhook_events.alert_status`，由 worker `FOR UPDATE SKIP LOCKED` 认领。**禁止 FastAPI BackgroundTasks**，禁止为新的跨模块重活直接调 service 绕开队列。当前有明确请求内联例外：`POST /music/generate`、cover、revise、translate-captions 与 dub 在各自路由内执行；这些例外不得被推广成“所有重活都可 inline”，新增或改为长任务时必须回到队列合同。
 2. **读路径走 API 服务层**：模块间同步读数据经服务函数/路由，不跨域直写对方的表。
-3. **clip-spec / film-spec 是 Pipeline ↔ 渲染的平级契约**：渲染服务不读 DB，按 `spec.family` 分派；Operation Model 的编辑使用对应 spec 的受控 diff/operation，不引入第三契约或 renderer 概念。
+3. **clip-spec / video-spec 是 Pipeline ↔ 渲染的平级契约**：渲染服务不读 DB，按 `spec.family` 分派；Operation Model 的编辑使用对应 spec 的受控 diff/operation，不引入第三契约或 renderer 概念。
 4. **Memory 注入是单向的**：Memory 模块只暴露"注入载荷"（persona block / brand block / glossary），不知道谁在消费；消费者（understand/plan / chat / distribution）各自拉取。
-5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `workflow_steps.cost`）；内容标识按 clip-spec/film-spec 与 generated provenance 分类，在渲染嵌入与 Distribution 披露元数据两处落地，不分散到各模块自行判断。
+5. **合规与计费是横切切面**：LLM 调用统一经 ADR-025 接口层（计量落 `workflow_steps.cost`）；内容标识按 clip-spec/video-spec 与 generated provenance 分类，在渲染嵌入与 Distribution 披露元数据两处落地，不分散到各模块自行判断。
 6. **内核重建接缝稳定**：模块内核可重建，只要表归属与通信规则不变，其他模块零感知——已有先例：Pipeline 的 RunPlan（DAG）化时，Distribution / Memory / Editor GUI / Operation Model 全部零改动（缝 = 产物表与 clip-spec）。新内核设计必须守住既有接缝，不得以内核升级为借口移动缝。
 
 ## 6. 演进规则
@@ -222,7 +223,7 @@ Distribution ✅：channel_accounts ──► publications（直发状态机与�
 - **新功能先问归属**：归属不清时按"谁写这张表"判定；都不写表的功能（纯 UI）归最近的前端模块。
 - **新模块准入**：必须有独立的表归属或独立的队列认领源，否则只是现有模块的职责扩充。
 - **命名注意**：竞品文档中 "pipeline" 也指 Opus 范式（见 DECISION_MATRIX 范式短名）；内部模块语境下 Pipeline = 我们的生成管线，引用竞品时写 `Pipeline 范式`。
-- **新世界事件/阶段的用户可感效果 = 五座位登记**：任何新的异步阶段或世界事件上线时，必须逐一登记——① trigger 白名单条目 + fire 点（`pipeline/trigger_events.py`，扩名单 = ADR 评审）；② `chat/trigger_turn.py` 的 case；③ 对应 prompt bullet（`trigger_system.j2` 或当事 prompt）；④ 前端到达通道（SSE 帧或 watch-window 轮询——**轮询续航 ≥ 该阶段的最坏时长包络**，保险丝短于包络 = 页面假死）；⑤ activity / i18n 键（如该阶段有 live 里程碑行）。缺任何一个座位，该阶段就在某一面对用户失声。
+- **新世界事件/阶段的用户可感效果 = 五座位登记**：任何新的异步阶段或世界事件上线时，必须逐一登记——① trigger 白名单条目 + fire 点（`pipeline/trigger_events.py`，扩名单 = ADR 评审）；② `chat/trigger_turn.py` 的 case；③ 对应 prompt bullet（`event_mode.j2` 或当事 prompt）；④ 前端到达通道（SSE 帧或 watch-window 轮询——**轮询续航 ≥ 该阶段的最坏时长包络**，保险丝短于包络 = 页面假死）；⑤ activity / i18n 键（如该阶段有 live 里程碑行）。缺任何一个座位，该阶段就在某一面对用户失声。
 - **本契约的变更 = ADR**：表归属调整、新横切切面、认领源增减都要写 ADR 并更新本文。
 
 ## 7. 代码地图与运行约定
@@ -250,8 +251,10 @@ apps/api/
 │   │                    #   R15 停顿；execute 走 plan_turn 的探索座位，写一律经 exploration_store 门）
 │   │                    #   / seams.py（wire_pipeline_seams：trigger handler + conversation bridge 注册，
 │   │                    #   组合根 app.main / app.worker 各调一次）
-│   │                    #   / video_turn_seats.py（ADR-145 B 上半批：design_video/revise_video
-│   │                    #   两路径共用一个座位实现——专用会话驱动写门，finish 时把呈现回执
+│   │                    #   / video_turn_seats.py（ADR-145 B 上半批：design_video/revise_video；
+│   │                    #   show_video_presets/select_video_preset 只走既有 candidates 协议，
+│   │                    #   prepare_narration / get_narration_alignment / annotate_narration
+│   │                    #   同样两路径共用一个座位实现——专用会话驱动写门，finish 时把呈现回执
 │   │                    #   （pending_brief.video_presentation）与 storyboard block 戳到持久化行；
 │   │                    #   plan/propose runner 只留薄镜像；分镜 DTO 读口 = chat/routes.py
 │   │                    #   GET /chat/video/versions/{id}/storyboard，组件凭 block 引用解 DTO）
@@ -320,12 +323,13 @@ apps/api/
 │   │   ├── errors.py              # 执行错误分类：TransientNodeError（step 级重试判定）
 │   │   ├── jobs.py                # 队列认领（SKIP LOCKED）+ reap_stale
 │   │   ├── asset_processing.py    # 预处理分发（PROCESSORS 链）：内容哈希 → ASR / 文本提取 / 幻灯片转图 → speaker_map / prosody
-│   │   ├── web_capture.py         # WEB_PAGE 采集 processor（MG D1b）：capture 编排 + 截图入对象存储 + meta 回写
+│   │   ├── web_capture.py         # WEB_PAGE 采集 processor：无计划走 capture_page；有 CapturePlan 走 capture_shots，
+│   │   │                        #   截图入对象存储并把 state/role/pair/action/boxes/region 事实回写 meta
 │   │   │                        #   （research 清单为 substance，截图可诚实缺席）；出生时 SSRF 静态门在 assets.py
 │   │   ├── speaker_map.py / prosody.py  # asset 级确定性工序：说话人话轮（ADR-045）/ 韵律特征（期 1，ASR 同族）
 │   │   ├── visual_anchors.py      # IMAGE 确定性视觉半（期 1）：YuNet 人脸/主体框/安全区（归一化坐标）
 │   │   ├── beat_map.py            # 节拍地图代码半（期 1）：LLM 文本锚吸附 ASR 词轴 + 金句自包含检查 + 理解 prompt 源块装配
-│   │   ├── assets.py              # 服务端源素材创建（chat 声明文本 → transcript 资产）
+│   │   ├── assets.py              # 服务端源素材创建（chat 声明文本/URL/最终 CapturePlan → 独立短事务的队列资产）
 │   │   ├── tracks.py              # TRACK_REGISTRY 可执行 catalog：轨分区 fold（烘焙缝/C2PA/ops 寻址/一轨一写者 422，ADR-044）
 │   │   ├── track_stack.py         # 轨道栈读面投影（ADR-113 §4，纯模块）：render_spec → 视频轨（保留段
 │   │   │                        #   产出轴拼接 + 源区间 + 源资产 id）+ 文字轨（字幕句按段分组，切断 = 硬断句）
@@ -337,8 +341,8 @@ apps/api/
 │   │   ├── output_posters.py      # exact Output 的真实视频帧 → 确定性非空封面；不可变对象键，不改 Output、不新建 Run
 │   │   ├── render_probe.py      # 产物文件校验闸纯核（MG D4 放行闸③，禁无文件校验的成功态）：
 │   │   │                        #   rendering.py 成功路径落 COMPLETED 前唯一闸门，家族分派检查项
-│   │   │                        #   （film：h264/1920×1080/流帧计数 ±1 帧——容器时长有 muxer 衬垫，
-│   │   │                        #   永不作契约面；clip：存在/非零/可读 + sidecar 存在即法、非零
+│   │   │                        #   （video：spec 自带尺寸/fps/流帧计数 ±1 帧；
+│   │   │                        #   clip：存在/非零/可读 + sidecar 存在即法、非零
 │   │   │                        #   当且仅当 caption_track 非空）；未过 = FAILED +
 │   │   │                        #   spec.failure{stage:probe} 盖 render 镜像节点（台账读单字段）；
 │   │   │                        #   video 家族（ADR-145）：spec 自带 width/height/duration_frames/
@@ -360,22 +364,35 @@ apps/api/
 │   │                    #   分镜读面）/ sources（快照登记）/ fonts（纯资源描述）；
 │   │                    #   B 上半批：service（design/revise/read 共用应用服务 + 修订翻译 +
 │   │                    #   change_set + 呈现回执/blocks）/ templates（VideoTemplate 声明式骨架
-│   │                    #   实例化 + MG/混合/drawing-v1/image-v1 实例化）/ grounding（引用/焦点校验 + 相机数学）/
+│   │                    #   实例化 + MG/混合/draw-2d/image-generation 实例化）/ grounding（引用/焦点校验 + 相机数学）/
 │   │                    #   director（导演答复 schema + 违例裁决，纯数据无 LLM 调用）；
-│   │                    #   存储/字体发布 IO 在 tools/video/preparation，依赖方向由 gate 6a 检查
+│   │                    #   alignment（完整句/词 payload、canonical digest 与词锚解算）+
+│   │                    #   presets（十六个文字/标注/信息结构/图文编排/落版代表 Preset
+│   │                    #   保存前确定性展开；apply_preset 只返回普通 ops；path.reveal 仅作用于
+│   │                    #   原生 ShapeObject.path）+ preset_previews.json（内容寻址动态预览事实）
+│   │                    #   + templates 源对齐实例化；
+│   │                    #   TextStyle 结构化 stroke/shadow 与真实 900，fonts 保留旧 digest 并新增
+│   │                    #   Noto Sans SC Black 字体集；固定源 Speech 只经 video_spec 编译成普通
+│   │                    #   audio/TextClips 与最终整数 keyframes，对齐/provider/model/preset 不进 spec；
+│   │                    #   存储/字体发布 IO 在 tools/video/preparation，依赖方向由 gate 6a 检查；
+│   │                    #   web_shots 将同一 CapturePlan 快照的 selected/before/after/plate/cutout
+│   │                    #   展开为普通 Scene、WebObject、crossfade 与原生 Animation，无新 Object/renderer 分支
 │   ├── agents/          # agent 声明 + harness 漏斗（ADR-039）：base.py（Agent / StreamingAgent）/
 │   │                    #   registry.py（共享 crew：understand·plan/persona/translator 等）/
 │   │                    #   contexts.py（GenerationContext + output_one_liner 装配层；
 │   │                    #   chat 意图上下文住 chat/context.py）/
 │   │                    #   tool_loop.py（有界工具 loop harness，ADR-077；typed LoopEvent 内部事件通道——
 │   │                    #   内核只说「发生了什么」，用户语义归 chat/activity.py，ADR-087 §3 U1 冻结边界）
+│   │                    #   tools/project_context.py：公共资源只读投影，plan/propose/trigger 每次模型请求刷新，
+│   │                    #   Director 复用同一冻结来源投影；无新表、无第二持久化写口。
 │   ├── tools/           # 工具包（能力唯一家，N-42）：article / captions / carousel / clips /
 │   │                    #   dub / filler / music / posts / quotes / reframe / research / revise / stills
 │   │                    #   （节点类+params+私有工序+估价+私有 agent 声明）；
 │   │                    #   research = 有界 loop 节点首座（ADR-052 B4）：node（BoundedLoopNode，
 │   │                    #   max_iterations=8）+ agents（researcher）+ web（零键 DDG search/fetch，
 │   │                    #   诚实降级）+ spec.research_brief 钢印 → consumes_research 写手注入；
-│   │                    #   + capture（网页素材采集：结构化抽取 + 受控浏览器截图；与讨论高度 web 读面分工）；
+│   │                    #   + capture（网页素材采集：结构化抽取 + 受控浏览器截图；CapturePlan 有界状态重放；
+│   │                    #   与讨论高度 web 读面分工）；
 │   │                    #   浏览器级 SSRF 边界：顶层导航、重定向、子资源同一策略——协议白名单、
 │   │                    #   私网/保留地址拒绝、DNS 解析后重验，配合请求数/字节/时间帽与隔离无凭证上下文；
 │   │                    #   _PolicyProxy 是唯一浏览器拦截座，截图失败可 degrade-honest，manifest 仍是本体
@@ -388,21 +405,29 @@ apps/api/
 │   │                    #   复用 workflow_steps.spec 与 attempt/claim_token 围栏，不建事件总线；
 │   │                    #   design.py = design_video 编排座（采集/快照/
 │   │                    #   导演调用/写门驱动，专用事务会话）；agents.py = video_director /
-│   │                    #   mg_director / mixed_director / program_director / image_director 声明（复用 agents
-│   │                    #   harness，packs 织入 launch-film SKILL）；programs.py + program_runner.mjs =
-│   │                    #   drawing-v1 命令校验、权限受限执行、MP4/PNG 固定、预览与 digest 复用；
-│   │                    #   generated_images.py = image-v1 授权单图生产、执行 manifest 与最新媒体复用指针
+│   │                    #   capture_director / mg_director / aligned_narration_director / mixed_director /
+│   │                    #   program_director / image_director 声明（复用 agents
+│   │                    #   harness，packs 织入 launch-film SKILL）；两个 drawing Director 共同 include
+│   │                    #   prompts/_draw_2d_contract.j2；programs.py + program_runner.mjs =
+│   │                    #   draw-2d 命令校验、权限受限执行、MP4/PNG 固定、预览与 digest 复用；
+│   │                    #   generated_images.py = image-generation 授权单图生产、执行 manifest 与最新媒体复用指针；
+│   │                    #   narration_alignment.py = 精确讲稿约束的确定性句/词对齐；
+│   │                    #   alignment_store.py = 请求去重、READY 校验/语义冻结与第五认领源 lease/fencing；
+│   │                    #   presets.py = 注册 Preset → 完整动态候选/服务端持久成员解算；
+│   │                    #   music_candidates.py = 本地 Music 试听候选与后续序号选择，只解算 Music 身份；
+│   │                    #   两者与 sfx.py 共用 persisted_candidate_events，不新增表或查询端点
 │   ├── skills/          # 指令包（SKILL.md 领域知识即数据，装配期注入，模型无感）：SKILL_REGISTRY 收编；
 │   │                    #   linkedin-longform / stills-editing-craft（期 2 剪辑工艺先验表）/
-│   │                    #   launch-film（ADR-145 B 上半批：SKILL.md 创作工艺 + video-template.json
-│   │                    #   声明式固定骨架——只有槽位/结构/有界变化，非通用模板语言）
+│   │                    #   launch-film / talking-head-video / text-animation / knowledge-explainer
+│   │                    #   四个内置视频包（SKILL.md + 可选 video-template.json；resolution.py
+│   │                    #   登记精确版本、设计能力与 en/zh 唯一别名；Skill 只参与首版设计）
 │   ├── providers/       # 外部服务包装（禁 import agents/LLM 决策层）：
 │   │                    #   llm/minimax.py（M3 client、PRICING、usage 捕获）/
 │   │                    #   asr / voice / vision（YuNet + vendored weights）/ storage
 │   ├── memory/          # Memory：personas 端点、人设皮肤块 → clip-spec 烘焙
 │   ├── distribution/    # Distribution：core / channels / publishing / adapters / routes
 │   ├── operations/      # Operation Model：registry / service / routes（ADR-032）
-│   ├── platform/        # 平台层：auth / email / notifications / project_context / conversation_context
+│   ├── platform/        # 平台层：auth / email / notifications / project_context / conversation_context / billing / payments / payment_webhooks
 │   │                    #   （会话只读协议座——§4「Pipeline 只读」批准座：find_conversation /
 │   │                    #   latest_pending_question / is_pending_plan / get_project_prompt，零写）/
 │   │                    #   configs（公共参数表漏斗）/ billing（积分钱包：hold→capture→release，ADR-055）/ routes
@@ -412,30 +437,35 @@ apps/api/
 │   └── metering.py      # 逐节点计量（usage → workflow_steps.cost，ADR-025）
 ├── migrations/          # Alembic
 apps/web/                # TanStack Start 前端
-apps/render/             # Remotion 渲染服务（Node）：server.ts 按 spec.family 三分派
-                         #   （clip 缺省 / film / video——ADR-145）；src/video/ = video 家族
+apps/render/             # Remotion 渲染服务（Node）：server.ts 按 spec.family 分派
+                         #   （clip 缺省 / video——ADR-145）；src/video/ = video 家族
                          #   adapter（capabilities 声明 + Remotion 实现限 src/video/remotion/）；
                          #   scripts/render-video-local.ts = 本地渲染调试入口
 packages/clip/           # 共享 <Clip> 组件 + clip-spec TS 类型（镜像 Pydantic）
 packages/video-spec/     # video-spec 契约包（ADR-145，A 批 1）：zod schema + 纯量化/插值
                          #   求值 + golden fixtures（与 app/editing/timing.py 共享）；零
-                         #   React/Remotion 依赖（check_gates gate 6b）
+                         #   React/Remotion 依赖（由 video-spec schema 与核心契约测试约束）
+packages/video-remotion/ # video-spec 的共享 Remotion composition + capability declaration；
+                         #   renderer 与 Chat PreviewAdapter 共用，Chat 只有 preview/ 一个 Player 座位
 ```
 
 ### 7.2 队列机制（ADR-017）
 
 - **Postgres 即队列**：`FOR UPDATE SKIP LOCKED` 认领；独立 worker 进程（`python -m app.worker`），与 API 进程物理隔离；不引入 Redis/Celery，横向扩容时再换 arq/Celery，调用方不变。
-- **四个认领源**：
+- **六个认领源**：
   1. **资产预处理**：`assets.processing_status=PENDING` 且 `processing_requested_at IS NOT NULL`；休眠上传不会被无条件加工，读取或 `create_run` 先登记真实处理请求。
   2. **生成节点**：ready `workflow_steps`，不是 `workflow_runs.status`。谓词要求 step pending、上游 inputs 全 done、非 runtime fanout，并遵守当前项目素材门；认领铸造 `claim_token`，同时把 owning run 从 PENDING 翻为 RUNNING。
-  3. **渲染**：`outputs.render_status=PENDING` 且 writer barrier 已满足；认领铸造 `render_claim_token`。状态本身不是终态写权，所有终态写都必须匹配 token。chat `retry_upload` 只复位同一 Output 行与原 render step，`upload_only` 骑内部请求 envelope，不新增认领源、不进入 clip-spec / film-spec。
+  3. **渲染**：`outputs.render_status=PENDING` 且 writer barrier 已满足；认领铸造 `render_claim_token`。状态本身不是终态写权，所有终态写都必须匹配 token。chat `retry_upload` 只复位同一 Output 行与原 render step，`upload_only` 骑内部请求 envelope，不新增认领源、不进入 clip-spec / video-spec。
   4. **发布**：`publications.due_at <= now` 且 state 为 `scheduled`（开始发布）或 `publishing`（poll lease 续轮询），不只认 scheduled。
+  5. **旁白对齐准备（已落码并完成最小真实冒烟，完整验收待用户）**：`narration_alignments.status=PENDING` 且 lease 可用，由 worker `FOR UPDATE SKIP LOCKED` 认领并铸造独立 claim token；只执行音频/文本确定后的 ASR 对齐与结构校验。ALIGNED 等 Agent 语义、READY 供作品引用，二者都不再被 worker 认领；失败保留具体原因，旧 READY 行不受影响。
+  6. **支付异常告警**：`payment_webhook_events.alert_status=pending` 且到达下次投递时间，或 sending 租约过期；worker 铸造独立 `alert_claim_token`，经 Resend 发送邮件，按指数退避至多 5 次。超过 10 分钟的 processing 收据由 worker 转为 `processing_timeout` 并进入告警。API 只写审计/outbox，外部邮件故障不改变 webhook 或入账结果。
 - **渲染执行形态（MG D4）**：渲染认领后跑 asyncio task（与节点同构），并发上限 `settings.render_concurrency`（默认 2，争用资源 = 渲染服务的 headless Chrome）、单渲染栅栏 `settings.render_timeout_seconds`（默认 1800）——两者住 env Settings（工程参数座位，configs 边界律 = `platform/configs.py` 头 §3）；任务化同时消除了单渲染内联等待堵 tick 环的旧形态。产物落 COMPLETED 前必过 probe 闸（`render_probe.py`，见 §7.1）。
+- **staging GC 不占认领循环**：每小时由 worker 在六个认领源处理完后调度一个后台 task，同任务不重叠，后续 tick 不等待清理；存储 listing 保持用户前缀隔离，以 8 路有界并发执行，引用检查使用独立短 DB session，不跨远程存储调用持事务。清理失败记录并在下一周期重试，不影响资产、Run 或渲染认领。
 - **孤儿回收**：worker 启动时 `reap_stale` 重置中断任务；失败写 `*_error` 列，认领循环不崩。
 - **step 级瞬时重试**：runner 把 provider/网络/存储瞬时故障抛为 `TransientNodeError`（`pipeline/errors.py`）；`execute_step` 按节点类 `retries` 预算（NodeBase 声明，dub/translate = 2）把节点复位 pending（worker 下一 tick 即退避），**不级联跳过下游**；确定性失败（缺输入/空批次）普通异常快速失败。LLM HTTP 层另有 client 内 tenacity，两层不叠加。
 - **morph 记账**：modifier runner（dub/translate/add_music/remove_filler）的 render_spec 改写一律经 `apply_precomputed` 入 operations 账（source 由 `messages.workflow_run_id` 反链派生 chat/system）——chat  morph 可撤销、hash 链不断、ADR-032 写纪律补齐。
 - **会话纪律（ADR-050）**：session 不跨长等待，且 **Session 2 永不脏 step 行**——计量 = contextvar 内存台账，`execute_step` 尾段一次归并写 `workflow_steps.cost`（五终态分支同记）；`render_output` 短 session 快照 → 无 session 横跨渲染 POST → 新短 session guarded 写入；runner 中途写 spec 只走 `step_display` own-session 原子写（`_pop_spec_field` / `_set_*`），ORM 赋值 = 自死锁；`outputs.workflow_step_id` / `outputs.project_id` / `operations.project_id` / `workflow_steps.run_id` 四条 FK = DEFERRABLE INITIALLY DEFERRED（父行锁窗口挪到 COMMIT）。DB 保险丝 `idle_in_transaction_session_timeout=3600s`（部署必配——Session 2 横跨单次 LLM await 是保留设计，provider 慢窗口单次调用纯等待可达数十分钟；排队/制作的小时级等待走队列行、永不持事务；保险丝只防永久 wedge）。
-- 队列边界与当前 request-inline 例外见 §5 规则 1；任何新增 processor 或认领源都必须同时登记 §4/§5/§7，不得只看本节的四个现有源。
+- 队列边界与当前 request-inline 例外见 §5 规则 1；任何新增 processor 或认领源都必须同时登记 §4/§5/§7，不得只看本节清单。
 
 ### 7.3 横切数据约定
 

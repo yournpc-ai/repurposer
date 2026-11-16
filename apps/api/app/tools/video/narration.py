@@ -76,6 +76,35 @@ def narration_content_hash(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest(), config_hash
 
 
+def narration_original_request_key(*, text: str, voice_id: str, language: str) -> str:
+    """The shared quote/execution identity for one original-only request."""
+    content_hash, _ = narration_content_hash(
+        text=text,
+        voice_id=voice_id,
+        language=language,
+        config=narration_synth_config(),
+    )
+    return content_hash
+
+
+async def narration_original_quote_characters(
+    *, text: str, voice_id: str, language: str, user_id: UUID
+) -> int:
+    """One missing speed-1.0 synthesis; a fixed original needs no new charge."""
+    from app.tools.video.narration_store import peek_original
+
+    speech = SpeechObject(
+        kind="speech",
+        object_id="obj_prepare_narration",
+        text=text,
+        voice_id=voice_id,
+        language=language,
+    )
+    if await peek_original(user_id, speech) is not None:
+        return 0
+    return narration_billable_upper_bound(" ".join(text.split()))
+
+
 def narration_alignment_digest(text: str, cues: list[dict]) -> str:
     payload = {"alignment": NARRATION_ALIGNMENT, "text": text, "cues": cues}
     return hashlib.sha256(
@@ -125,7 +154,7 @@ def _speech_clips(content: CompositionContent) -> list[Clip]:
             clip
             for track in content.timeline.tracks
             for clip in track.clips
-            if isinstance(clip.object, SpeechObject)
+            if isinstance(clip.object, SpeechObject) and clip.object.alignment is None
         ),
         key=lambda clip: (clip.range.start, clip.clip_id),
     )

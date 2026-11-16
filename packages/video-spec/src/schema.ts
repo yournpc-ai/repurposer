@@ -40,11 +40,26 @@ const fontResourceSchema = z
     font_id: z.string().min(1),
     font_set_digest: z.string().length(64),
     family: z.string().min(1),
-    weight: z.union([z.literal(400), z.literal(700)]),
+    weight: z.union([z.literal(400), z.literal(700), z.literal(900)]),
     format: z.enum(["opentype", "truetype"]),
     url: z.string().min(1),
     digest: z.string().length(64),
     unicode_range: z.string().min(1).optional(),
+  })
+  .strict();
+
+const textStrokeSchema = z
+  .object({
+    color: hexColor,
+    width: z.number().finite().min(0).max(64),
+  })
+  .strict();
+
+const textShadowSchema = z
+  .object({
+    color: hexColor,
+    offset: z.tuple([z.number().finite(), z.number().finite()]),
+    blur: z.number().finite().min(0).max(100),
   })
   .strict();
 
@@ -59,10 +74,13 @@ const textStyleSchema = z
       z.literal(600),
       z.literal(700),
       z.literal(800),
+      z.literal(900),
     ]),
     align: z.enum(["left", "center", "right"]),
     line_height: z.number().finite().positive(),
     letter_spacing: z.number().finite().min(-0.2).max(0.5).default(0),
+    stroke: textStrokeSchema.nullable().default(null),
+    shadow: textShadowSchema.nullable().default(null),
     font: fontRefSchema,
   })
   .strict();
@@ -199,10 +217,22 @@ const easingSchema = z
 const keyframeSchema = z
   .object({
     at: z.number().int().nonnegative(),
-    value: z.union([z.number().finite(), z.tuple([z.number().finite(), z.number().finite()])]),
+    value: z.union([
+      z.number().finite(),
+      z.tuple([z.number().finite(), z.number().finite()]),
+      hexColor,
+    ]),
     easing: easingSchema,
   })
   .strict();
+
+const holdOnlyTextProperties = new Set([
+  "text.color",
+  "text.stroke_color",
+  "text.weight",
+  "text.stroke_width",
+]);
+const stringTextProperties = new Set(["text.color", "text.stroke_color"]);
 
 const animationSchema = z
   .object({
@@ -216,11 +246,67 @@ const animationSchema = z
       "transform.rotation",
       "filter.blur",
       "text.letter_spacing",
+      "text.color",
+      "text.stroke_color",
+      "text.weight",
+      "text.stroke_width",
+      "path.reveal",
       "audio.gain",
     ]),
     keyframes: z.array(keyframeSchema).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((animation, ctx) => {
+    const holdOnly = holdOnlyTextProperties.has(animation.property);
+    const expectsString = stringTextProperties.has(animation.property);
+    animation.keyframes.forEach((keyframe, index) => {
+      const validShape = expectsString
+        ? typeof keyframe.value === "string"
+        : animation.property === "transform.position"
+          ? Array.isArray(keyframe.value)
+          : typeof keyframe.value === "number";
+      if (!validShape) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: expectsString
+            ? `${animation.property} requires color string values`
+            : `${animation.property} does not accept string values`,
+          path: ["keyframes", index, "value"],
+        });
+      }
+      if (animation.property === "path.reveal" &&
+          (typeof keyframe.value !== "number" || keyframe.value < 0 || keyframe.value > 1)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "path.reveal must stay in [0, 1]",
+          path: ["keyframes", index, "value"],
+        });
+      }
+      if (animation.property === "text.weight" &&
+          (typeof keyframe.value !== "number" || ![400, 500, 600, 700, 800, 900].includes(keyframe.value))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "text.weight has an unsupported font weight",
+          path: ["keyframes", index, "value"],
+        });
+      }
+      if (animation.property === "text.stroke_width" &&
+          (typeof keyframe.value !== "number" || keyframe.value < 0 || keyframe.value > 64)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "text.stroke_width must stay in [0, 64]",
+          path: ["keyframes", index, "value"],
+        });
+      }
+      if (holdOnly && index < animation.keyframes.length - 1 && keyframe.easing.kind !== "hold") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${animation.property} supports hold segments only`,
+          path: ["keyframes", index, "easing", "kind"],
+        });
+      }
+    });
+  });
 
 const clipSourceSchema = z
   .object({
@@ -256,6 +342,23 @@ const clipSchema = z
     if (["text", "shape"].includes(clip.object.kind) && clip.source) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "native objects take no media source" });
     }
+    clip.animations.forEach((animation, index) => {
+      if (animation.property !== "path.reveal") return;
+      if (clip.object.kind !== "shape" || clip.object.shape !== "path" || !clip.object.path) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "path.reveal requires a path shape with non-empty path data",
+          path: ["animations", index, "property"],
+        });
+      }
+      if (animation.target_text_part_id !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "path.reveal does not accept TextPart targets",
+          path: ["animations", index, "target_text_part_id"],
+        });
+      }
+    });
   });
 
 const trackSchema = z

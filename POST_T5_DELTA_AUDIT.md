@@ -206,7 +206,7 @@ current main 仍然存在可实际触发的 FK failure。最短路径：
 | 4 | canvas 孤儿节点 | **STILL PRESENT** | `Decompile` 类只声明 kind/task_name/agents（`decompile.py:381-391`），无 `node_type/prototype` → `_decl_of` 落默认 **text×manual**（`graph_fill.py:152-153`）；不在 `_PRELUDE_KINDS`（`graph_fill.py:71`） |
 | 5 | run 路径不触发 craft 触发回合 | **STILL PRESENT** | `TRIGGER_CRAFT_DECOMPILED` 唯一发座 = warm 新鲜物化（`decompile.py:357`）；run 路径物化（411-505）无 fire_trigger |
 | 6 | skeleton 时序结构无消费者 | **PARTIALLY FALSE POSITIVE** | 原报告「无消费者」**说过头**：prompt 侧消费者存在——plan 输入注入完整 `craft_skeleton`（`registry.py:175-178`）、perception 读工具渲染 `hook_device`（`perception/executes.py:462-463`）。准确重述：**确定性参数消费者仍只有 count/aspect/captions/music**（`clips/node.py:225/325/341/368`），时序结构零确定性消费 —— 「结构级 remix 未实现」成立，「无消费者」不成立 |
-| 7 | 无 remix e2e 剧本 | **STILL PRESENT** | `chat_scenarios.py` 全文 grep decompile/remix/craft/exemplar = 0 命中 |
+| 7 | 无 remix e2e 剧本 | **RESOLVED（旅程已登记，live 运行另计）** | `test/journeys/chat.py` 的 `remix` 当前旅程覆盖完整 remix 主链 |
 | 8 | gaps 无确定性 plan 路径 | **FALSE POSITIVE（按原表述）** | 确定性**注入**存在：`craft_skeleton`（含 gaps）作为只读 facts 固定进 plan 输入（`registry.py:166-178`）。无确定性**强制**——但「纠偏决策由 LLM 做」是 ADR-052 顾问姿态的设计，不是缺陷 |
 
 ## 6. New Risks

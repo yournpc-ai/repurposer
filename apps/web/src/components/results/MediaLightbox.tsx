@@ -16,6 +16,7 @@ import {
 import { useSoundMutexHold } from "@/components/flow/sound-mutex"
 import { MediaLightboxStage } from "./MediaLightboxStage"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
+import type { MediaRegionSelectionControl } from "./mediaRegionSelection"
 
 export type { MediaChip, MediaLightboxData } from "./mediaLightboxTypes"
 
@@ -26,6 +27,7 @@ export function MediaLightbox({
   gallery,
   actions,
   getSlot,
+  regionSelection,
 }: {
   data: MediaLightboxData | null
   onOpenChange: (open: boolean) => void
@@ -42,10 +44,16 @@ export function MediaLightbox({
   }
   actions?: ReactNode
   getSlot?: (slotId: string) => HTMLElement | null
+  regionSelection?: MediaRegionSelectionControl
 }) {
   useSoundMutexHold(!!data && data.kind === "video", "lightbox")
   const requestCloseRef = useRef<(() => void) | null>(null)
+  const finalFocusRef = useRef<HTMLElement | null>(null)
   const veil = useMotionValue(0)
+  const dataId = data?.id
+  useEffect(() => {
+    if (dataId) finalFocusRef.current = null
+  }, [dataId])
   useEffect(() => {
     // Mention / revise intentionally bypasses the return flight and focuses
     // the composer. Reset the shared backdrop for the next opening.
@@ -63,6 +71,10 @@ export function MediaLightbox({
   const activeId = gallery?.activeId ?? data?.id
   const start = items.findIndex((item) => item.id === activeId)
   const resolvedStart = start >= 0 ? start : navigation?.index ?? 0
+  const closeAndRestoreFocus = () => {
+    finalFocusRef.current = data?.slotId ? getSlot?.(data.slotId) ?? null : null
+    onOpenChange(false)
+  }
 
   return (
     <Dialog
@@ -74,6 +86,7 @@ export function MediaLightbox({
       <DialogContent
         variant="lightbox"
         showCloseButton={false}
+        finalFocus={getSlot ? () => finalFocusRef.current : undefined}
         overlayClassName="z-[70] bg-background duration-0 backdrop-blur-none data-open:animate-none data-closed:animate-none dark:bg-background supports-backdrop-filter:backdrop-blur-none"
         overlayRender={<motion.div style={{ opacity: veil }} />}
       >
@@ -87,8 +100,9 @@ export function MediaLightbox({
             start={resolvedStart}
             actions={actions}
             getSlot={getSlot}
+            regionSelection={regionSelection}
             onNavigate={(id) => gallery?.onSelect(id)}
-            onClosed={() => onOpenChange(false)}
+            onClosed={closeAndRestoreFocus}
             requestCloseRef={requestCloseRef}
             veil={veil}
           />

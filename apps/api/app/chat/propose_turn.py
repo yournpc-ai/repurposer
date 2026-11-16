@@ -54,13 +54,16 @@ in ``app/chat/exploration_compile.py`` (ONE seat shared with the plan path
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from app.tools.video.design import CompositionDesignVideoArgs
 
 from app.chat.context import build_context
 from app.agents.tool_loop import (
@@ -70,6 +73,8 @@ from app.agents.tool_loop import (
     # chain-adjudication exception, imported below) shadows the loop event's
     # name in this module — the retract seat must match the LOOP's class
 )
+from app.agents.candidate_correction import CandidateRejected, CandidateScope
+from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.exploration_compile import (
     compile_plan_rows_package,
@@ -88,19 +93,19 @@ from app.chat.exploration_tools import (
 )
 from app.chat.intent import chat_intent_agent
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
-from app.chat.turn_tools import film_rejection_stop
+from app.chat.turn_tools import video_rejection_stop
+from app.tools.project_context import project_context_reader
 from app.chat.service import (
-    _ASK_BACK_TEXT,
     _ask_content,
     _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
+    _loop_incomplete_text,
     _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
     _create_run_from_tasks,
     _derive_chat_caption_mode,
-    _design_blocked_text,
     _design_no_progress_text,
     _dock_question,
     _estimate_tail,
@@ -112,6 +117,7 @@ from app.chat.service import (
     _sfx_import_failure_text,
     _video_capability_text,
     _video_review_failure_text,
+    _video_review_report_text,
     latest_pending_question,
     resolve_confirmation_need,
     resolve_suggestion_note,
@@ -120,20 +126,20 @@ from app.chat.service import (
 from app.models.schemas import (
     AnswerPayload,
     AnswerProposal,
+    AnnotateNarrationArgs,
     AssetType,
     Brief,
     ChatAnswerArgs,
     ChatAskArgs,
     ChatMention,
-    DesignStoryboardArgs,
-    DesignVideoArgs,
     EditGraphArgs,
     EditOutputArgs,
-    FilmStoryboard,
+    GetNarrationAlignmentArgs,
     InferredIntent,
     ImportSfxArgs,
     PendingPlan,
     PlanEstimate,
+    PrepareNarrationArgs,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
@@ -141,8 +147,14 @@ from app.models.schemas import (
     RetryUploadArgs,
     ReviewVideoArgs,
     ReviseOutputArgs,
+    ReviseVideoActionArgs,
     ReviseVideoArgs,
+    ReviseVideoTextArgs,
     SearchSfxArgs,
+    SelectMusicArgs,
+    SelectVideoPresetArgs,
+    ShowMusicCandidatesArgs,
+    ShowVideoPresetsArgs,
     SkillReference,
     SuggestionRef,
     WiringProposal,
@@ -294,47 +306,17 @@ class ChatTurn:
         # row mid-turn — the presenting model's ONE message carries the
         # board. The param stays for the runner's signature parity.
         self.on_row_append = on_row_append
-        # 呈现关联挂号 (2026-10-18 裁决, the plan path's mirror): set by a
-        # successful design execute ({"version": N}); finish stamps the
-        # TERMINAL speech row's id onto film_presented_message_id — only
-        # after that row actually persists, version-guarded.
-        self._presentation_pending: dict | None = None
         # 视频呈现挂号 (ADR-145 phase B, the plan path's mirror): a
         # successful design_video / revise_video stashes the saved
         # version's read dict; finish stamps the receipt + the storyboard
         # block onto the persisted terminal row (shared seat:
         # video_turn_seats).
         self._video_presentation_pending: dict | None = None
+        # A completed review is a world fact even if the outer prose
+        # continuation later fails; finish closes from this persisted report.
+        self._video_review_report: dict | None = None
         self._video_call_counter: int = 0
-        # 同回合纠正道 (7276ef13 修复批 ②, the plan path's mirror — its
-        # init comment carries the full forensics): a successful design's
-        # version number; further design_storyboard calls THIS turn are
-        # CORRECTIONS of that standing version — drafted against the
-        # in-turn version under the turn's own standing marker (never a
-        # second begin — the self-lock), bounded by
-        # MAX_DESIGN_CORRECTIONS_PER_TURN.
-        self._designed_this_turn: int | None = None
-        # The turn's own committed marker's draft id (the correction
-        # publish guard compares against it).
-        self._design_draft_id: str | None = None
-        # 首 begin 拒绝锁存 (the begin-refusal latch — the plan path's
-        # mirror): a refused FIRST begin latches the refusal reason here
-        # ("in_flight" / "locked" / "gone"); every later design_storyboard
-        # call this turn ends the loop deterministically (TerminalRefusal)
-        # instead of re-hitting the row, and finish() speaks the
-        # busy/conflict line — never _cannot_do_text.
-        self._design_begin_refusal: str | None = None
-        # Corrections admitted this turn (counted at ADMISSION).
-        self._design_corrections: int = 0
-        # 带条件授权守卫 (7276ef13 ③, the plan path's mirror; 定点收尾①签名
-        # 台账, 复审两度收紧销账律): a record ledger of THIS turn's failed
-        # design calls — every failed exit appends its
-        # ``design_call_record`` (mechanical key + requested normalized
-        # target values); the ONE clearing seat is a successful PATCH whose
-        # record is EXACTLY EQUIVALENT (key AND target — a different value
-        # or a dropped field never clears); a COMPOSE success NEVER clears;
-        # the dock seat passes ``bool(...)`` as ``unmet_condition``.
-        self._design_shortfalls: list[dict] = []
+        self._video_target_ambiguity = None
         self.pending: Message | None = None
         self.pending_judgable = False
         self.context: dict = {"text": ""}
@@ -342,6 +324,7 @@ class ChatTurn:
         self.settled_question: Message | None = None
         self.outcome: ProposeTurnOutcome | None = None
         self._bailed_on_skip: list[UUID] = []
+        self._uploaded_output_refs: list[str] = []
         self.deferred: DeferredFrames | None = None
         # 建议点选 provenance (ADR-099 §4): this turn's message IS a
         # suggestion pick → the resolution note rides into the agent-facing
@@ -399,6 +382,7 @@ class ChatTurn:
                 confirmation=confirmation,
                 skill=self.skill,
                 skill_ambiguity=self.skill_ambiguity,
+                include_pending=False,
             )
             if project
             else {"text": ""}
@@ -423,9 +407,6 @@ class ChatTurn:
         from app.pipeline.graph import node_for_output
 
         def _task_tool(t) -> str | None:
-            # Shape-tolerant read (the launch_film params seat's same
-            # convention): the proposal seats pass TaskItem objects, the
-            # film design beat's synthetic chain is plain dicts.
             return t.get("tool") if isinstance(t, dict) else getattr(t, "tool", None)
 
         project = self.project
@@ -455,67 +436,84 @@ class ChatTurn:
 
     # ---- the pending-disposition preamble (ADR-053 R2) ----------------------
 
-    async def _settle_by_disposition(self, disposition: str) -> bool:
-        """The accepted call's pending-question judgment, settled by code.
-        Returns True when the turn ENDS here (a parked interrupt's answer —
-        the wake IS the continuation, the tool's own dispatch is skipped)."""
-        if not self.pending_judgable or disposition == "none":
+    async def _wake_by_disposition(self, disposition: str) -> bool:
+        """Wake a parked interrupt when its judged answer is the continuation.
+        Ordinary tools settle their judgment only after terminal acceptance."""
+        if not self.pending_judgable or disposition != "answer":
             return False
         db, pending, text = self.db, self.pending, self.text
-        assert pending is not None
+        if pending is None or pending.workflow_run_id is None:
+            return False
+        from app.pipeline.orchestrator import resume_waiting_interrupt
+
+        run = await _parked_interrupt_run(db, pending.workflow_run_id)
+        if run is None:
+            return False
+        pending.answer = AnswerPayload(
+            kind="freeform",
+            text=text,
+            answered_at=datetime.now(UTC),
+        ).model_dump(mode="json")
+        await db.flush()
+        self.settled_question = pending
+        self.pending = None
+        self.pending_judgable = False
+        outcome = await resume_waiting_interrupt(db, run, pending.answer)
+        decided = (pending.answer or {}).get("text") or ""
+        # A blocked arbitration (another run holds the authority) speaks the
+        # parked line instead. The wake is the continuation; the proposed
+        # tool's own dispatch is skipped.
+        assistant_message = await _create_message(
+            db,
+            self.conversation_id,
+            "assistant",
+            _resume_ack_line(decided, outcome),
+        )
+        self.outcome = (assistant_message, None, [], self.settled_question)
+        return True
+
+    async def _settle_by_disposition(self, disposition: str) -> None:
+        """Settle a pending question after the carrying tool was accepted."""
+        if not self.pending_judgable or disposition == "none":
+            return
+        db, pending, text = self.db, self.pending, self.text
+        if pending is None:
+            self.pending_judgable = False
+            return
         if disposition == "answer":
             pending.answer = AnswerPayload(
                 kind="freeform",
                 text=text,
                 answered_at=datetime.now(UTC),
             ).model_dump(mode="json")
-            await db.flush()
-            self.settled_question = pending
-            self.pending = None
-            if pending.workflow_run_id is not None:
-                from app.pipeline.orchestrator import resume_waiting_interrupt
-
-                run = await _parked_interrupt_run(db, pending.workflow_run_id)
-                if run is not None:
-                    outcome = await resume_waiting_interrupt(db, run, pending.answer)
-                    decided = (pending.answer or {}).get("text") or ""
-                    # Same deterministic acknowledgment as the option-hit wake in
-                    # prepare_chat_turn — R1 B3: a blocked arbitration (another
-                    # run holds the authority) speaks the parked line instead.
-                    assistant_message = await _create_message(
-                        db,
-                        self.conversation_id,
-                        "assistant",
-                        _resume_ack_line(decided, outcome),
-                    )
-                    self.outcome = (assistant_message, None, [], self.settled_question)
-                    return True
-            return False
-        # "skip" — an explicit decline settles bail (the text question's only
-        # ×); the tool's own dispatch still runs.
-        pending.answer = AnswerPayload(
-            kind="bail",
-            answered_at=datetime.now(UTC),
-        ).model_dump(mode="json")
+        else:
+            # "skip" — an explicit decline settles bail (the text question's
+            # only ×); the accepted tool's own dispatch has already run.
+            pending.answer = AnswerPayload(
+                kind="bail",
+                answered_at=datetime.now(UTC),
+            ).model_dump(mode="json")
         await db.flush()
         self.settled_question = pending
-        if pending.workflow_run_id is not None:
+        if disposition != "answer" and pending.workflow_run_id is not None:
             from app.pipeline.orchestrator import bail_waiting_interrupt
 
             run = await db.get(WorkflowRun, pending.workflow_run_id)
             if run is not None and await bail_waiting_interrupt(db, run) is not None:
                 self._bailed_on_skip = [UUID(str(run.id))]
         self.pending = None
-        return False
+        self.pending_judgable = False
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal:
-        """The LoopExecute seat: the disposition preamble, then the tool's
-        validate → (reject: feedback, zero writes) → accept: writes + the
-        outcome stashed → None (terminal stop). A PERCEPTION call never
-        carries a disposition and never ends the turn — it dispatches to the
-        family registry and rides back as a ToolObservation."""
+    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
+        """The LoopExecute seat: a parked wake, then the tool's validate →
+        (reject: feedback, zero writes) → accept: writes + pending settlement
+        + outcome. A PERCEPTION call never carries a disposition and never
+        ends the turn — it dispatches to the family registry and rides back
+        as a ToolObservation."""
+        if name == "read_conversation_context":
+            return await self._conversation_context.read(params)
         if name in PERCEPTION_TOOLS:
             if name == "get_video_version" and params.present:
                 from app.chat.video_turn_seats import read_video_for_presentation
@@ -529,13 +527,45 @@ class ChatTurn:
                 name,
                 params,
             )
+        answering_current_ambiguity = (
+            self._video_target_ambiguity is not None
+            and name == "revise_video"
+            and self.pending is not None
+            and self.pending_judgable
+            and getattr(params, "pending_disposition", None) == "answer"
+            and params.base_ref.model_dump(mode="json") == self._video_target_ambiguity.base_ref
+        )
+        if (
+            self._video_target_ambiguity is not None
+            and name != "ask_user"
+            and not answering_current_ambiguity
+        ):
+            return (
+                "the current video revision has unresolved target candidates. "
+                "Call ask_user with those facts; prose, answer and further writes cannot close this turn."
+            )
+        if (
+            name in {"design_video", "revise_video"}
+            and self.pending_judgable
+            and params is not None
+            and "pending_disposition" not in params.model_fields_set
+        ):
+            return (
+                "a question is pending and this write omitted pending_disposition. "
+                "Judge the current message as answer/skip/none and retry the intended call "
+                "with that field; no write was executed."
+            )
         disposition = (
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
-        if await self._settle_by_disposition(disposition):
-            result: str | None | ToolObservation | TerminalRefusal = None  # the parked interrupt's wake IS the continuation
+        if await self._wake_by_disposition(disposition):
+            result: str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated = None
         else:
             result = await self._dispatch(name, params, prose)
+            if result is None:
+                if name == "ask_user":
+                    self._video_target_ambiguity = None
+                await self._settle_by_disposition(disposition)
         # The speech-commit resolution (言语提交协议): a terminal accept
         # closes the frame buffer (a rejection-marked turn drops — its
         # words were retracted speech). Rejections retract at the loop's
@@ -546,30 +576,66 @@ class ChatTurn:
             await self._resolve_deferred()
         return result
 
-    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal:
+    def _remember_video_review(self, report: dict) -> None:
+        self._video_review_report = report
+
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         if name in EXPLORATION_TOOLS:
             return await self._explore(name, params, prose)
         if name == "propose_tasks":
             assert isinstance(params, ProposeTasksArgs)
             return await self._propose_tasks(params, prose)
-        if name == "design_storyboard":
-            assert isinstance(params, DesignStoryboardArgs)
-            return await self._design_storyboard(params, prose)
+        if name in {"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"}:
+            from app.chat.video_turn_seats import skill_read_seat
+            return await skill_read_seat(
+                project=self.project,
+                skill=self.skill,
+                package_sessions=self.__dict__.setdefault("_skill_package_sessions", {}),
+                name=name,
+                args=params,
+            )
+        if name == "prepare_video_materials":
+            from app.chat.video_turn_seats import prepare_video_materials_seat
+            return await prepare_video_materials_seat(project=self.project, args=params)
+        if name == "capture_web":
+            from app.chat.video_turn_seats import capture_web_seat
+            return await capture_web_seat(project=self.project, args=params)
         if name == "design_video":
-            assert isinstance(params, DesignVideoArgs)
+            from app.tools.video.design import CompositionDesignVideoArgs
+            assert isinstance(params, CompositionDesignVideoArgs)
             return await self._design_video(params)
         if name == "revise_video":
-            assert isinstance(params, ReviseVideoArgs)
+            assert isinstance(params, (ReviseVideoArgs, ReviseVideoActionArgs, ReviseVideoTextArgs))
             return await self._revise_video(params)
+        if name == "review_working_draft":
+            from app.chat.video_turn_seats import review_working_draft_seat
+            return await review_working_draft_seat(project=self.project, args=params)
         if name == "review_video":
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
-            return await review_video_seat(project=self.project, args=params)
+            return await review_video_seat(
+                project=self.project,
+                args=params,
+                on_report=self._remember_video_review,
+            )
+        if name == "show_video_presets":
+            assert isinstance(params, ShowVideoPresetsArgs)
+            from app.chat.video_turn_seats import show_video_presets_seat
+            return await show_video_presets_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "select_video_preset":
+            assert isinstance(params, SelectVideoPresetArgs)
+            from app.chat.video_turn_seats import select_video_preset_seat
+            return await select_video_preset_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
         if name == "search_sfx":
             assert isinstance(params, SearchSfxArgs)
             from app.chat.video_turn_seats import search_sfx_seat
             return await search_sfx_seat(
-                project=self.project, args=params, on_candidates=self._emit_candidates
+                project=self.project, args=params, user_text=self.text,
+                on_candidates=self._emit_candidates,
             )
         if name == "import_sfx":
             assert isinstance(params, ImportSfxArgs)
@@ -577,6 +643,32 @@ class ChatTurn:
             return await import_sfx_seat(
                 project=self.project, args=params, on_candidates=self._emit_candidates
             )
+        if name == "show_music_candidates":
+            assert isinstance(params, ShowMusicCandidatesArgs)
+            from app.chat.video_turn_seats import show_music_candidates_seat
+            return await show_music_candidates_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "select_music":
+            assert isinstance(params, SelectMusicArgs)
+            from app.chat.video_turn_seats import select_music_seat
+            return await select_music_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "prepare_narration":
+            assert isinstance(params, PrepareNarrationArgs)
+            from app.chat.video_turn_seats import prepare_narration_seat
+            return await prepare_narration_seat(
+                project=self.project, args=params, mentions=self.mentions
+            )
+        if name == "get_narration_alignment":
+            assert isinstance(params, GetNarrationAlignmentArgs)
+            from app.chat.video_turn_seats import get_narration_alignment_seat
+            return await get_narration_alignment_seat(project=self.project, args=params)
+        if name == "annotate_narration":
+            assert isinstance(params, AnnotateNarrationArgs)
+            from app.chat.video_turn_seats import annotate_narration_seat
+            return await annotate_narration_seat(project=self.project, args=params)
         if name == "edit_graph":
             assert isinstance(params, EditGraphArgs)
             return await self._edit_graph(params, prose)
@@ -625,6 +717,14 @@ class ChatTurn:
         dock; the birthplace's remaining constraints (media gates /
         transform targets / active-run guard) fire at Start, the plan
         path's own posture."""
+        if getattr(self, "video_confirmation", None) and self.video_confirmation["action"] == "produce":
+            from app.chat.video_turn_seats import confirmed_video_task
+
+            params = params.model_copy(update={
+                "tasks": [confirmed_video_task(self.video_confirmation)],
+                "production_intent": True,
+                "material_urls": None,
+            })
         db, project, text = self.db, self.project, self.text
         assert project is not None  # propose_tasks is project-bound
         from app.chat.video_turn_seats import video_proposal_guard
@@ -645,15 +745,6 @@ class ChatTurn:
             # adjudication _create_run_from_tasks ran at the birthplace,
             # now BEFORE the dock so only registry-valid chains ever dock.
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
-        from app.chat.turn_tools import film_revision_proposal_guard
-
-        revision_guard = film_revision_proposal_guard(
-            designed_version=self._designed_this_turn,
-            tasks=params.tasks,
-            production_intent=params.production_intent,
-        )
-        if revision_guard is not None:
-            return revision_guard
         # Declared-URL capture (same absorb seat as the plan path): a link
         # the user offered as material becomes a WEB_PAGE asset BEFORE the
         # dock — committed in its own transaction so the capture worker can
@@ -678,7 +769,7 @@ class ChatTurn:
             answer=prose,
             # P0-② 对账 (2026-09-22): the distilled EXTRA instruction wins
             # when the model supplies it (the one contract with the plan
-            # path — schemas.py / intent_router_system.j2); an absent field
+            # path — schemas.py / plan_mode.j2); an absent field
             # falls back to the turn's raw text (the pre-fix behavior), so
             # the writers' trust chain never loses the instruction whole.
             specific_instruction=params.specific_instruction or text or None,
@@ -699,38 +790,27 @@ class ChatTurn:
         the turn's one transaction, so a failed/cancelled turn never
         leaves a phantom "presented" mark."""
         await self._stamp_video_presentation(message)
-        pending = self._presentation_pending
-        self._presentation_pending = None
-        if pending is None or message is None or self.project is None:
-            return
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            presentation_stamp_update,
-        )
-
-        updated = presentation_stamp_update(
-            self.project.pending_brief,
-            version=pending["version"],
-            message_id=str(message.id),
-        )
-        if updated is not None:
-            self.project.pending_brief = updated
-
     async def _stamp_video_presentation(self, message) -> None:
         """The video family's presentation association (ADR-145 phase B,
         the plan path's mirror): delegates to the shared seat
         (video_turn_seats) — the receipt + the storyboard block land on
-        the persisted terminal row, never on a degrade row."""
+        the persisted row that actually presents the saved facts."""
         pending = self._video_presentation_pending
         self._video_presentation_pending = None
         if self.project is None:
             return
         from app.chat.video_turn_seats import (  # deferred: same layer
+            requested_video_production,
             stamp_video_presentation,
         )
 
-        stamp_video_presentation(self.project, message, pending)
+        stamp_video_presentation(
+            self.project, message, pending,
+            production_requested=bool(pending and pending.get("fresh_design"))
+            and requested_video_production(self.text),
+        )
 
-    async def _design_video(self, params: DesignVideoArgs) -> str | ToolObservation:
+    async def _design_video(self, params: "CompositionDesignVideoArgs") -> str | ToolObservation | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         """design_video → the video family's design beat (ADR-145 phase B,
         the plan path's mirror): the shared seat saves the version through
         the write door on its OWN session; the model's ONE next message
@@ -742,6 +822,9 @@ class ChatTurn:
             video_request_id,
         )
 
+        stopped = getattr(self, "_video_design_stopped", None)
+        if stopped is not None:
+            return stopped
         self._video_call_counter += 1
         read, feedback = await design_video_seat(
             project=self.project,
@@ -749,883 +832,60 @@ class ChatTurn:
             request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
             skill=self.skill,
             skill_ambiguity=self.skill_ambiguity,
+            package_sessions=self.__dict__.setdefault("_skill_package_sessions", {}),
+            user_text=self.text,
         )
         if read is None:
+            if isinstance(feedback, ToolObservation) and not feedback.ok:
+                self._video_design_stopped = feedback
             return feedback
+        await self._settle_by_disposition(params.pending_disposition)
+        read["fresh_design"] = True
         self._video_presentation_pending = read
         return feedback
 
-    async def _revise_video(self, params: ReviseVideoArgs) -> str | ToolObservation | TerminalRefusal:
+    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoActionArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         """revise_video → the targeted-revision beat (ADR-145 phase B, the
-        plan path's mirror): the shared seat applies the ops through the
-        write door; the observation carries the system-computed change set
-        + the full current facts. The revision alone never starts
+        plan path's mirror): the shared seat applies bounded actions or complete entity writes
+        through the write door; the observation carries the system-computed
+        change set + the full current facts. The revision alone never starts
         production."""
         if self.project is None:
             return "a video work lives in a project — there is no project context here."
         from app.chat.video_turn_seats import (  # deferred: same layer
+            VideoTargetAmbiguityFeedback,
+            bind_video_revision_base,
             revise_video_seat,
             video_request_id,
         )
 
         from app.chat.video_turn_seats import video_mention_guard
-        guard = await video_mention_guard(self.db, self.project, self.mentions, params.base_ref.composition_id)
-        if guard:
-            return guard
+        params = bind_video_revision_base(params, getattr(self, "_video_base_ref", None))
+        if params.base_ref is not None:
+            guard = await video_mention_guard(
+                self.db, self.project, self.mentions, params.base_ref.composition_id
+            )
+            if guard:
+                return guard
         self._video_call_counter += 1
         read, feedback = await revise_video_seat(
             project=self.project,
             args=params,
             request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
+            conversation_id=self.conversation_id,
+            user_text=self.text,
+            pending_question=self.pending,
         )
         if read is None:
+            if isinstance(feedback, VideoTargetAmbiguityFeedback):
+                self._video_target_ambiguity = feedback
             return feedback
+        self._video_target_ambiguity = None
+        await self._settle_by_disposition(params.pending_disposition)
         self._video_presentation_pending = read
         return feedback
 
-    async def _design_storyboard(self, params: DesignStoryboardArgs, prose: str) -> str | ToolObservation | TerminalRefusal:
-        """design_storyboard → the film family's design beat (ADR-129 非终
-        态, the plan path's mirror): draft (or fingerprint-reuse) the
-        storyboard, stamp the VERSIONED film state onto the PendingPlan
-        (version / params / content digest / execution snapshot / review
-        hold / draft token — the dock, start and worker seats only READ
-        it), and hand the saved board's FULL fact sheet back to the loop
-        (2026-10-18 裁决): the model's ONE next message is the
-        presentation; ``finish`` stamps its provenance once that row
-        persists. NO plan docks, NO run starts, NO program markdown
-        row."""
-        # 同回合纠正道 (the plan path's mirror — the flag's init comment
-        # carries the forensics): a further design call this turn is a
-        # CORRECTION of the standing version — admitted within the cap,
-        # never a second begin; past the cap the refusal names the standing
-        # version and marks the shortfall (the dock's confirmation law then
-        # holds the spend).
-        from app.chat.turn_tools import (  # deferred: same layer
-            MAX_DESIGN_CORRECTIONS_PER_TURN,
-            design_begin_refusal_feedback,
-            design_call_record,
-            design_correction_cap_refusal,
-        )
 
-        correction = self._designed_this_turn is not None
-        if correction:
-            if self._design_corrections >= MAX_DESIGN_CORRECTIONS_PER_TURN:
-                # 台账记账 (定点收尾①): the cap refusal is a FAILED design
-                # call — its signature joins the ledger so the dock's
-                # unmet_condition hold survives until a matching success.
-                entry = design_call_record(params)
-                if entry not in self._design_shortfalls:
-                    self._design_shortfalls.append(entry)
-                return design_correction_cap_refusal(self._designed_this_turn)
-            self._design_corrections += 1
-        if not correction and self._design_begin_refusal is not None:
-            # 入口锁存 (the latch's repeat seat — the plan path's mirror):
-            # the begin was already refused this turn; the repeat never
-            # touches the database and ends the loop deterministically
-            # (TerminalRefusal). The failed call still joins the ledger.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            return TerminalRefusal(
-                "design entry closed: the begin was already refused this "
-                "turn (a same-turn retry cannot recover it)"
-            )
-        db, project = self.db, self.project
-        assert project is not None
-        # Non-terminal interim_prose law (the plan path's mirror): with an
-        # on_interim_prose channel, the framing prose has already been emitted
-        # and is deliberately absent from the execute speech. Empty prose
-        # here is legal, never a "missing explanation" rejection.
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            begin_film_draft,
-            clear_film_draft_marker,
-            film_design_state,
-            film_draft_inflight_live,
-            film_text_drift_next,
-            film_text_source_birth_pin,
-            film_subtitles_birth_pin,
-            film_verbatim_birth_pin,
-            film_voiceover_birth_pin,
-            prepare_dock_storyboard,
-            read_committed_film_marker,
-            resolve_film_revision_base,
-            text_source_drift_note,
-        )
-
-        # The authorizing message (设计授权消息): the current turn's user
-        # row — the direction yes / the design request / the revision words.
-        authorized_by = (
-            await db.execute(
-                select(Message.id)
-                .where(
-                    Message.conversation_id == self.conversation_id,
-                    Message.role == "user",
-                )
-                .order_by(Message.seq.desc().nulls_last(), Message.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        stored_pb = project.pending_brief if isinstance(project.pending_brief, dict) else {}
-        stored = (
-            PendingPlan.model_validate(stored_pb) if stored_pb else None
-        )
-        # Birth-narrative freeze (the plan path's same law — stored.prompt
-        # wins): the approval dock reads this same prompt back, so the
-        # design beat's fingerprint IS the dock's.
-        birth_prompt = (
-            stored.prompt if stored is not None and stored.prompt else None
-        ) or self.text
-        # 修订基准 (ADR-129, the plan path's mirror): 钉恒胜 — an explicit
-        # @output pin names THE film whose board the revision re-enters,
-        # beating any live pending draft; an unrecoverable pinned target
-        # yields NO base (a fresh draft), never a silent swap. Without a
-        # pin: the live pending design wins; after a Start cleared
-        # pending_brief the current board recovers from run provenance.
-        # A correction's base is fixed BY CONSTRUCTION (the plan path's
-        # mirror): the version THIS turn just published — an @output pin
-        # never reroutes a same-turn correction onto another film.
-        mentioned_output_id = (
-            pinned_output_id(self.mentions, None) if not correction else None
-        )
-        base_is_live_pending = False
-        if mentioned_output_id is not None:
-            design_base = await resolve_film_revision_base(
-                db, project, output_id=UUID(str(mentioned_output_id))
-            )
-        elif stored is not None and stored.film_storyboard:
-            design_base = stored
-            base_is_live_pending = True
-        else:
-            design_base = await resolve_film_revision_base(db, project)
-        # The patch path (编辑拍): targeted ops against the resolved base —
-        # its own seat, never a director re-design. The capability is
-        # deployment-gated (settings.film_edits_enabled — internal-test
-        # while the edit journey closes up): with the gate OFF the model
-        # was never told about edits (the wire view prunes schema,
-        # description, prompt law and read-back hints), and a direct call
-        # still refuses here — declaration and enforcement gate together;
-        # the compose path is unaffected.
-        if params.edits:
-            from app.config import settings  # deferred: config leaf
-
-            if not settings.film_edits_enabled:
-                # 台账记账 (定点收尾①): the gate-off refusal is a FAILED
-                # design call — the requested edits never landed.
-                entry = design_call_record(params)
-                if entry not in self._design_shortfalls:
-                    self._design_shortfalls.append(entry)
-                return (
-                    "design_storyboard does not accept edits in this "
-                    "deployment — no change was made and the current "
-                    "version stands untouched. Re-issue the call WITHOUT "
-                    "edits: open feedback rides specific_instruction alone."
-                )
-            return await self._design_storyboard_patch(
-                params,
-                design_base=design_base,
-                stored=stored,
-                birth_prompt=birth_prompt,
-                authorized_by=authorized_by,
-                base_is_live_pending=base_is_live_pending,
-                base_is_pinned=mentioned_output_id is not None,
-                correction=correction,
-            )
-        # 并发护栏 BEGIN (the plan path's mirror): the in-flight marker
-        # lands COMMITTED before the long draft — Start fails closed while
-        # it stands, a concurrent begin is refused (never queued), and the
-        # publish below only lands if the committed marker still names THIS
-        # draft. No turn-transaction fallback. A CORRECTION never
-        # re-begins: the turn's first begin's committed marker still
-        # stands and a second side-session NOWAIT would read the turn's
-        # OWN row lock — the self-lock.
-        if correction:
-            draft_id = self._design_draft_id
-            assert draft_id is not None  # set by this turn's first begin
-        else:
-            begin = await begin_film_draft(
-                db,
-                project,
-                base_version=(
-                    design_base.film_storyboard_version if design_base else None
-                ),
-                user_message_id=str(authorized_by) if authorized_by else None,
-            )
-            if begin.draft_id is None:
-                # 台账记账 (定点收尾①): the begin refusal is a FAILED design
-                # call — the requested change never landed. The refusal
-                # REASON latches (入口锁存): the entry closes for the rest
-                # of the turn, so this turn never polls the hold.
-                entry = design_call_record(params)
-                if entry not in self._design_shortfalls:
-                    self._design_shortfalls.append(entry)
-                refusal = begin.refusal or "locked"
-                self._design_begin_refusal = refusal
-                return design_begin_refusal_feedback(refusal)
-            draft_id = begin.draft_id
-            self._design_draft_id = draft_id
-        try:
-            # Declared-URL capture (the proposal seats' same absorb law):
-            # the design beat DRAFTS from the captured page, so a URL the
-            # conversation carries becomes a WEB_PAGE asset BEFORE the
-            # draft — committed in its own transaction so the capture
-            # worker can claim it while this chat turn stays open (the
-            # draft waits for that capture; a flush-only row would deadlock
-            # the wait). CaptureBlocked propagates — through the marker
-            # cleanup below, like every drafting failure.
-            if params.material_urls:
-                await create_web_page_assets_committed_from_urls(
-                    UUID(str(project.id)), self.user_id, params.material_urls
-                )
-
-            # The synthetic launch_film task carries ONLY the design params —
-            # the approval dock's real task must repeat them verbatim (the
-            # fingerprint's params half), or it steers back here. Voiceover
-            # pins EXPLICITLY at birth (默认无配音 — the one seat is
-            # film_voiceover_birth_pin: a new film defaults off, a redraft
-            # inherits the base version's pinned setting).
-            # Text-source fields inherit at redraft (the one seat is
-            # film_text_source_birth_pin): an open-feedback redraft that
-            # does not re-paste the copy keeps the base version's source —
-            # never falls into the website chain.
-            _text_pin, _target_pin, _count_pin, _group_pin = film_text_source_birth_pin(
-                params.text,
-                params.target_seconds,
-                params.scene_count,
-                params.group_chars,
-                (
-                    design_base.film_storyboard_params
-                    if design_base
-                    else None
-                ),
-                base_present=design_base is not None,
-                target_seconds_present="target_seconds" in params.model_fields_set,
-                scene_count_present="scene_count" in params.model_fields_set,
-                group_chars_present="group_chars" in params.model_fields_set,
-            )
-            design_params = {
-                k: v
-                for k, v in {
-                    "focus": params.focus,
-                    "language": params.language,
-                    "voiceover": film_voiceover_birth_pin(
-                        params.voiceover,
-                        (
-                            design_base.film_storyboard_params
-                            if design_base
-                            else None
-                        ),
-                        base_present=design_base is not None,
-                    ),
-                    "subtitles": film_subtitles_birth_pin(
-                        params.subtitles,
-                        (
-                            design_base.film_storyboard_params
-                            if design_base
-                            else None
-                        ),
-                        base_present=design_base is not None,
-                        base_storyboard=(
-                            design_base.film_storyboard if design_base else None
-                        ),
-                    ),
-                    "music_mood": params.music_mood,
-                    "aspect": params.aspect,
-                    # Text source (ADR-138 §7.6): the copy pins verbatim with
-                    # its role — verbatim's birth pin (贴文 ≠ 逐字): an unset
-                    # verbatim inherits the base version's pinned mode; only a
-                    # first text version reads null as preserve (never a
-                    # re-guess from the mere fact text was pasted).
-                    "text": _text_pin,
-                    "verbatim": film_verbatim_birth_pin(
-                        params.verbatim,
-                        (
-                            design_base.film_storyboard_params
-                            if design_base
-                            else None
-                        ),
-                        base_present=design_base is not None,
-                        text_present=bool(_text_pin),
-                    ),
-                    "target_seconds": _target_pin,
-                    "scene_count": _count_pin,
-                    "group_chars": _group_pin,
-                }.items()
-                if v is not None
-            }
-            # 抄录漂移注记 (7276ef13 v3 取证, the plan path's mirror): a
-            # verbatim redraft that RE-PASTES a drifted copy publishes (a
-            # deliberate copy edit stays legal) with the honest
-            # clause-level note riding the observation.
-            drift_note = (
-                text_source_drift_note(
-                    params.text,
-                    (design_base.film_storyboard_params or {}).get("text")
-                    if design_base
-                    else None,
-                )
-                if design_params.get("verbatim") is True
-                and params.text is not None
-                else None
-            )
-            tasks = [{"tool": "launch_film", "params": design_params}]
-            # Pinned media (ADR-140 发现面): the @asset selections on the
-            # request lead the director's candidate listing — a pick beyond
-            # the print cap still reaches its context (tenant scoping is
-            # enforced at the listing seat, never by trusting these ids).
-            pinned_asset_ids = [
-                str(m.id)
-                for m in (self.mentions or [])
-                if getattr(m, "type", None) == "asset"
-            ] or None
-            film = await prepare_dock_storyboard(
-                db,
-                project,
-                on_progress=self.on_phase,
-                tasks=tasks,
-                instruction=birth_prompt,
-                fresh_instruction=params.specific_instruction or None,
-                cached_storyboard=design_base.film_storyboard if design_base else None,
-                cached_fingerprint=design_base.film_storyboard_fingerprint if design_base else None,
-                pinned_asset_ids=pinned_asset_ids,
-            )
-        except BaseException:
-            # 并发护栏 step 3: failure/timeout/cancel — capture failures
-            # included — clears ONLY this draft's marker (committed side
-            # channel; the turn holds no project lock on this path). A
-            # CORRECTION's failure never clears: the marker belongs to the
-            # turn's first begin and must keep Start failed-closed until
-            # the turn commits.
-            if not correction:
-                await clear_film_draft_marker(db, project, draft_id=draft_id)
-            # 台账记账 (定点收尾①): the exception path is a failed design
-            # call too — if the turn survives to dock, the hold must stand.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            raise
-        assert film is not None  # the synthetic task always carries launch_film
-        # 并发护栏 PUBLISH (step 2): publish only while the COMMITTED marker
-        # still names THIS draft on ITS base version AND still LIVE (the
-        # patch branch's same liveness half — 定点收尾③ consistency fix).
-        # A CORRECTION builds on THIS turn's own (still uncommitted)
-        # version, so the committed marker's base_version legitimately
-        # names the PRE-turn base — the guard then checks only that the
-        # marker still names this turn's draft (a lapsed-budget takeover
-        # discards honestly).
-        live_marker = await read_committed_film_marker(UUID(str(project.id)))
-        marker_ok = (
-            isinstance(live_marker, dict)
-            and live_marker.get("draft_id") == draft_id
-            and film_draft_inflight_live(live_marker)
-        )
-        if marker_ok and not correction:
-            marker_ok = live_marker.get("base_version") == (
-                design_base.film_storyboard_version if design_base else None
-            )
-        if not marker_ok:
-            # The discard releases its OWN marker before answering (the
-            # clear is draft-scoped — a newer draft's marker is never
-            # touched); a leaked marker would block redesigns and Start
-            # until the staleness sweep. A CORRECTION's discard never
-            # clears (the marker it read is the takeover's or gone). Either
-            # path is a FAILED design call: the failure joins the ledger
-            # (定点收尾①).
-            if not correction:
-                await clear_film_draft_marker(db, project, draft_id=draft_id)
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            logger.info(
-                "film_draft_publish_superseded",
-                project_id=str(project.id),
-                draft_id=draft_id,
-            )
-            return (
-                "a newer storyboard design (or a production start) landed "
-                "while this draft was in flight — this draft is discarded; "
-                "the current version stands. Call design_storyboard again "
-                "to revise the CURRENT board."
-            )
-        version_state = film_design_state(
-            design_base,
-            film=film,
-            design_params=design_params,
-            review_hold=params.review_hold,
-            authorized_by=str(authorized_by) if authorized_by else None,
-        )
-        # 未接受文字漂移 (定点收尾②复审, the plan path's mirror — the A→B→
-        # 继承 B hole): the drift state rides the VERSION ENVELOPE, computed
-        # against the LAST PROVABLY-ACCEPTED baseline — an inherited drifted
-        # copy CARRIES the hold; only restore / user-pasted / the dock's
-        # explicit confirm releases it.
-        if design_params.get("verbatim") is True and design_params.get("text"):
-            version_state["film_text_drift"] = film_text_drift_next(
-                getattr(design_base, "film_text_drift", None),
-                (design_base.film_storyboard_params or {}).get("text")
-                if design_base
-                else None,
-                design_params["text"],
-                self.text,
-            )
-        else:
-            version_state["film_text_drift"] = (
-                getattr(design_base, "film_text_drift", None)
-                if design_base
-                else None
-            )
-        source_pin, exemplar_pin = await self._role_pins_for(tasks)
-        from app.editing.service import video_carry_state  # deferred: editing seam
-        project.pending_brief = PendingPlan(
-            prompt=birth_prompt,
-            intent=stored.intent if stored else None,
-            brief=stored.brief if stored else Brief(),
-            reasons=stored.reasons if stored else [],
-            persona_id=stored.persona_id if stored else None,
-            source_asset_id=source_pin,
-            exemplar_asset_id=exemplar_pin,
-            derived=stored.derived if stored else [],
-            plans=stored.plans if stored else [],
-            plan_task_map=stored.plan_task_map if stored else None,
-            **version_state,
-            **video_carry_state(stored),
-        ).model_dump(mode="json")
-        # 呈现挂号 (2026-10-18 裁决, the plan path's mirror): no program
-        # message publishes — the model's ONE next message presents the
-        # board, and finish stamps the association once that row persists.
-        self._presentation_pending = {
-            "version": version_state["film_storyboard_version"]
-        }
-        self._designed_this_turn = version_state["film_storyboard_version"]
-        # 台账不销 (定点收尾复审①, the plan path's mirror): a landed COMPOSE
-        # NEVER clears the ledger — 重稿成功不证明原请求落实. The ONE
-        # clearing seat is the patch branch's matching-signature success.
-        hold_fact = (
-            "review hold ON — production waits for the user's explicit request"
-            if version_state["film_review_hold"]
-            else "review hold off"
-        )
-        draft_fact = (
-            "re-presented unchanged"
-            if film.reused
-            else "new draft — any earlier film confirmation is void"
-        )
-        # base 引用协议 step 1 (the read-time mint): the saved version's
-        # identity reference rides the observation — targeted edits to THIS
-        # version echo it back as base_ref. The mint is part of the gated
-        # edit capability: gate OFF = no reference line at all (the model
-        # is never invited to a patch the deployment refuses).
-        from app.config import settings  # deferred: config leaf
-
-        base_ref_line = ""
-        if settings.film_edits_enabled:
-            from app.tools.film.edits import (  # deferred: tool seam
-                film_base_cut,
-                film_version_identity_digest,
-            )
-
-            minted_base_ref = film_version_identity_digest(
-                FilmStoryboard.model_validate(version_state["film_storyboard"]),
-                version_state["film_storyboard_params"] or {},
-                version=version_state["film_storyboard_version"],
-                cut=film_base_cut(version_state),
-            )
-            base_ref_line = (
-                f"\nThis version's base_ref: {minted_base_ref} — targeted edits "
-                "(one scene's view or narration, a reorder, a removal, a music "
-                "or voiceover swap) ride design_storyboard's edits with this "
-                "reference echoed verbatim (re-read via get_output_spec if "
-                "lost); open feedback keeps riding specific_instruction "
-                "WITHOUT edits."
-            )
-        return ToolObservation(
-            f"Storyboard version {version_state['film_storyboard_version']} "
-            f"designed and saved ({draft_fact}; {hold_fact}; no plan docked, "
-            "no run started, and no film has been produced). Your next "
-            "message is its ONLY presentation — no system message carries "
-            "the board. Present a short intro, the COMPLETE scene table "
-            "built from THESE facts verbatim, then the cumulative production "
-            "settings and any concrete unresolved items. A storyboard is not "
-            "a rendered film: never say production is underway or complete "
-            "before a real run says so.\n"
-            "SAVED BOARD (execution truth — the times ARE the render "
-            "timeline, never recompute them):\n"
-            + film.presentation
-            + "\nLaw: the next step keys on the CURRENT request's production "
-            "intent, not on an older run or approval. With production intent "
-            "present, present the full board and continue to propose_tasks "
-            "with these design params verbatim; the existing review-hold "
-            "release and global confirmation settings govern starting, with "
-            "no extra approval question invented. Without production intent, "
-            "call answer: an ordinary design/revision asks the ONE direct "
-            "question whether to make THIS version, while an explicit "
-            "review-only request stops after the full presentation with no "
-            "production question. The user's later APPROVAL of the presented "
-            "board docks the proposal with the same params and ONE honest "
-            "setup line — it never re-designs or re-prints the table. Board "
-            "feedback re-enters through design_storyboard's "
-            "specific_instruction — the user's change words only, never a "
-            "restated direction; an explanation question gets an answer, "
-            "never a redraft."
-            + base_ref_line
-            + (f"\n{drift_note}" if drift_note else "")
-        )
-
-    async def _design_storyboard_patch(
-        self,
-        params: DesignStoryboardArgs,
-        *,
-        design_base,
-        stored,
-        birth_prompt: str,
-        authorized_by,
-        base_is_live_pending: bool,
-        base_is_pinned: bool,
-        correction: bool = False,
-    ) -> str | ToolObservation:
-        """The design beat's PATCH branch (the plan path's mirror): targeted
-        ops against the resolved base version — applied atomically by the
-        SYSTEM (``prepare_film_patch``), validated by the real validator,
-        published as a new version with the system-computed change_set. NO
-        director call lives here (闸 2: the edit path burns zero
-        orchestration), NO silent overwrite of the current version.
-
-        base 引用协议: ``params.base_ref`` is the READ-TIME reference the
-        model echoes verbatim — checked against the resolved base BEFORE the
-        begin marker (a stale read rejects without churn) and re-checked by
-        the apply seat; the publish beat then re-reads the COMMITTED state
-        and compares FULL identity (content + canonical params + ordered
-        scene ids + version + frozen cut — the same
-        ``film_version_identity_digest`` seats), never a version-number or
-        content-digest handshake: a base that rode the live pending must
-        still find it standing and identical; a provenance-recovered base
-        that met no pending at read time tolerates only a byte-identical
-        re-committed world (anything else, and any unprovable legacy
-        envelope, discards honestly). An explicit @output pin branches from
-        THAT version — the live pending's movement is then irrelevant by
-        design (永不静默换最新版)."""
-        db, project = self.db, self.project
-        assert project is not None
-        from app.chat.turn_tools import (  # deferred
-            design_begin_refusal_feedback,
-            design_call_record,
-        )
-        from app.tools.film.edits import (  # deferred: tool seam
-            FilmEditError,
-            committed_film_state_identity,
-            film_base_cut,
-            film_edit_repair_echo,
-            film_version_identity_digest,
-            prepare_film_patch,
-        )
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            begin_film_draft,
-            clear_film_draft_marker,
-            film_design_state,
-            film_draft_inflight_live,
-            film_text_drift_next,
-            read_committed_film_state,
-        )
-
-        if design_base is None or not getattr(design_base, "film_storyboard", None):
-            # 台账记账 (定点收尾①): a FAILED design call — no base exists and
-            # the requested edits never landed.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            return (
-                "there is no film storyboard version to edit yet — design one "
-                "first (design_storyboard without edits), or @-mention the "
-                "film output whose version you mean."
-            )
-        # Fast stale reject (no marker churn): the reference must name the
-        # base AS RESOLVED NOW. A corrupt stored base rejects honestly too.
-        try:
-            current_ref = film_version_identity_digest(
-                FilmStoryboard.model_validate(design_base.film_storyboard),
-                design_base.film_storyboard_params or {},
-                version=design_base.film_storyboard_version,
-                cut=film_base_cut(design_base),
-            )
-        except (TypeError, ValueError):
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            return (
-                "the stored base version no longer parses — re-read the "
-                "current version (get_output_spec on the film output) before "
-                "editing."
-            )
-        if params.base_ref != current_ref:
-            # 台账记账 (定点收尾①): the stale-base_ref refusal is a FAILED
-            # design call — the edits were minted against a moved version.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            return (
-                "the film's current version moved since these edits were "
-                "minted — re-read the current version (get_output_spec on the "
-                "film output) and re-issue the edits with its base_ref. The "
-                "current version stands untouched."
-            )
-        # 并发护栏 BEGIN (the compose branch's same law): the in-flight
-        # marker lands COMMITTED before the patch; Start fails closed while
-        # it stands, a concurrent begin is refused, and the publish below
-        # lands only while the committed marker still names THIS draft. A
-        # CORRECTION never re-begins — the turn's own marker still stands
-        # (the plan path's compose branch carries the self-lock forensics).
-        if correction:
-            draft_id = self._design_draft_id
-            assert draft_id is not None  # set by this turn's first begin
-        else:
-            begin = await begin_film_draft(
-                db,
-                project,
-                base_version=design_base.film_storyboard_version,
-                user_message_id=str(authorized_by) if authorized_by else None,
-            )
-            if begin.draft_id is None:
-                # 台账记账 (定点收尾①): the begin refusal is a FAILED design
-                # call — the requested change never landed. The refusal
-                # REASON latches (入口锁存 — the compose branch's law): the
-                # entry closes for the rest of the turn.
-                entry = design_call_record(params)
-                if entry not in self._design_shortfalls:
-                    self._design_shortfalls.append(entry)
-                refusal = begin.refusal or "locked"
-                self._design_begin_refusal = refusal
-                return design_begin_refusal_feedback(refusal)
-            draft_id = begin.draft_id
-            self._design_draft_id = draft_id
-        try:
-            prepared = await prepare_film_patch(
-                db,
-                project,
-                base=design_base,
-                ops=params.edits,
-                base_ref=params.base_ref or "",
-                instruction=birth_prompt,
-            )
-        except FilmEditError as exc:
-            # A structured op rejection is LOOP FEEDBACK, not a turn failure:
-            # clear only this draft's marker and hand the model the repair
-            # echo — the base version stands untouched. A CORRECTION's
-            # rejection never clears: the marker belongs to the turn's first
-            # begin and keeps Start failed-closed until the turn commits.
-            if not correction:
-                await clear_film_draft_marker(db, project, draft_id=draft_id)
-            # 台账记账 (定点收尾①): the rejected ops never landed — the
-            # failure joins the ledger; the repair retry's matching
-            # signature is what clears it.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            logger.info(
-                "film_patch_rejected",
-                project_id=str(project.id),
-                code=exc.code,
-                detail=exc.detail[:300],
-            )
-            return film_edit_repair_echo(exc)
-        except BaseException:
-            if not correction:
-                await clear_film_draft_marker(db, project, draft_id=draft_id)
-            # 台账记账 (定点收尾①): the exception path is a failed design
-            # call too — if the turn survives to dock, the hold must stand.
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            raise
-        # 并发护栏 PUBLISH (base 引用协议 step 4 — the commit-time recheck):
-        # the COMMITTED marker must still name THIS draft on ITS base AND
-        # still be LIVE (our own staleness = ownership expired by the
-        # protocol's own rules — fail closed, never overwrite a takeover's
-        # world), and every NON-PINNED base must still BE the committed
-        # world — compared by FULL identity (``committed_film_state_identity``
-        # vs the read-time reference: content + canonical params + ordered
-        # scene ids + version + frozen cut), never a version-number or
-        # content-digest handshake. A base that rode the live pending
-        # re-proves unconditionally (a vanished pending = a moved world); a
-        # provenance-recovered base that met NO pending at read time meets
-        # an appeared one here: byte-identical identity = the same version
-        # state re-committed (safe to build on), ANYTHING ELSE = a moved
-        # world — and an unprovable committed envelope (a legacy row whose
-        # board/params/version no longer parse) discards honestly rather
-        # than passing on a version number. An explicit @output pin is the
-        # ONE exemption (branch semantics — 钉恒胜). The residual
-        # check→commit window: the write rides the turn transaction
-        # (version + presentation commit atomically — deliberate), so a
-        # world moving strictly AFTER this read still lands under our
-        # commit; the marker protocol covers it while our marker is live
-        # (a concurrent begin is refused, Start fails closed), and the
-        # liveness precondition above fails our own publish closed once the
-        # design budget lapses — the straddle that remains needs a full
-        # concurrent turn nested inside this turn's final seconds after a
-        # near-exhausted budget, and is accepted over moving the version
-        # write out of the turn's atomicity.
-        live_marker, committed_film = await read_committed_film_state(
-            UUID(str(project.id))
-        )
-        superseded = not (
-            isinstance(live_marker, dict)
-            and live_marker.get("draft_id") == draft_id
-            and film_draft_inflight_live(live_marker)
-        )
-        # A CORRECTION's base is this turn's own (uncommitted) version, so
-        # the committed world legitimately reads PRE-turn (the plan path's
-        # mirror): only the marker's draft ownership guards the publish —
-        # the base_version and committed-identity halves would discard
-        # every correction by construction.
-        if not correction:
-            superseded = superseded or (
-                isinstance(live_marker, dict)
-                and live_marker.get("base_version")
-                != design_base.film_storyboard_version
-            )
-            if not superseded and not base_is_pinned:
-                if committed_film is None:
-                    superseded = base_is_live_pending
-                elif committed_film_state_identity(committed_film) != current_ref:
-                    superseded = True
-        if superseded:
-            # The discard releases its OWN marker before answering (the
-            # clear is draft-scoped: a marker already taken over by a newer
-            # draft is never touched) — a leaked marker would block later
-            # edits and Start until the staleness sweep. A CORRECTION's
-            # discard never clears (the standing marker is the turn's own
-            # or the takeover's). Either path is a FAILED design call: the
-            # failure joins the ledger (定点收尾①).
-            if not correction:
-                await clear_film_draft_marker(db, project, draft_id=draft_id)
-            entry = design_call_record(params)
-            if entry not in self._design_shortfalls:
-                self._design_shortfalls.append(entry)
-            logger.info(
-                "film_patch_publish_superseded",
-                project_id=str(project.id),
-                draft_id=draft_id,
-            )
-            return (
-                "a newer storyboard design (or a production start) landed "
-                "while this edit was in flight — this patch is discarded; "
-                "the current version stands. Re-read the current version and "
-                "re-issue the edits with its base_ref."
-            )
-        version_state = film_design_state(
-            design_base,
-            film=prepared.film,
-            design_params=prepared.params,
-            review_hold=params.review_hold,
-            authorized_by=str(authorized_by) if authorized_by else None,
-            created_via="patch",
-            change_set=prepared.change_set.model_dump(mode="json"),
-            kept_frames=prepared.kept_frames,
-            kept_reveal_onsets=prepared.kept_reveal_onsets,
-        )
-        # 未接受文字漂移 (定点收尾②复审, the plan path's mirror): a
-        # structured copy patch CAN create an unproven drift; it carries a
-        # standing hold and releases only on the provable paths (baseline
-        # restored / the user pasted the standing copy). Exact before/after
-        # copy facts ride the patch presentation for review.
-        if (prepared.params or {}).get("verbatim") is True and (
-            prepared.params or {}
-        ).get("text"):
-            version_state["film_text_drift"] = film_text_drift_next(
-                getattr(design_base, "film_text_drift", None),
-                (design_base.film_storyboard_params or {}).get("text"),
-                prepared.params["text"],
-                self.text,
-            )
-        else:
-            version_state["film_text_drift"] = getattr(
-                design_base, "film_text_drift", None
-            )
-        tasks = [{"tool": "launch_film", "params": prepared.params}]
-        source_pin, exemplar_pin = await self._role_pins_for(tasks)
-        from app.editing.service import video_carry_state  # deferred: editing seam
-        project.pending_brief = PendingPlan(
-            prompt=birth_prompt,
-            intent=stored.intent if stored else None,
-            brief=stored.brief if stored else Brief(),
-            reasons=stored.reasons if stored else [],
-            persona_id=stored.persona_id if stored else None,
-            source_asset_id=source_pin,
-            exemplar_asset_id=exemplar_pin,
-            derived=stored.derived if stored else [],
-            plans=stored.plans if stored else [],
-            plan_task_map=stored.plan_task_map if stored else None,
-            **version_state,
-            **video_carry_state(stored),
-        ).model_dump(mode="json")
-        # 呈现挂号 (the compose branch's same seat): the model's ONE next
-        # message presents the change_set, finish stamps its provenance.
-        self._presentation_pending = {
-            "version": version_state["film_storyboard_version"]
-        }
-        self._designed_this_turn = version_state["film_storyboard_version"]
-        # 台账销账 (定点收尾①, the plan path's mirror; 复审再收紧): a
-        # landed PATCH removes only the EXACTLY EQUIVALENT record (key AND
-        # requested target values) — a different value, a dropped field, or
-        # an unrelated change never clears; 「已经呈现」≠ 用户接受.
-        _landed = design_call_record(params)
-        self._design_shortfalls = [
-            e for e in self._design_shortfalls if e != _landed
-        ]
-        hold_fact = (
-            "review hold ON — production waits for the user's explicit request"
-            if version_state["film_review_hold"]
-            else "review hold off"
-        )
-        drift_fact = ""
-        if isinstance(version_state.get("film_text_drift"), dict):
-            drift_fact = (
-                "\nCOPY REVIEW REQUIRED: this version still carries "
-                "unaccepted wording drift from the last accepted copy. "
-                "The exact before/after copy facts in CHANGES show this "
-                "patch's actual delta; the full current board below is the "
-                "wording to review. Never call it the original unchanged, "
-                "and never treat this notice as production authorization."
-            )
-        return ToolObservation(
-            f"Storyboard version {version_state['film_storyboard_version']} "
-            f"saved — a PATCH of version {design_base.film_storyboard_version} "
-            f"({len(params.edits)} ops applied atomically; {hold_fact}; no "
-            "plan docked, no run started, and no new film has been produced). "
-            "The previous film remains unchanged. Your next message is its "
-            "ONLY presentation — no system message carries the revision. "
-            "Say the STORYBOARD is updated, never that a new film is already "
-            "being made. Present BOTH the system-computed change summary "
-            "(including every exact before/after copy fact) and the COMPLETE "
-            "CURRENT SAVED BOARD as a Markdown scene table, followed by the "
-            "cumulative production settings and concrete unresolved items. "
-            "Use the facts below, not an old table plus an inferred diff; "
-            "scene_id, base_ref and digests are internal and never user copy.\n"
-            "CHANGES:\n"
-            + prepared.change_presentation
-            + "\nFULL CURRENT SAVED BOARD (execution truth — keep scene "
-            "order, time windows, copy, motion/camera and narration exactly "
-            "as given):\n"
-            + prepared.film.presentation
-            + f"\nEdits against THIS new version carry base_ref "
-            f"{prepared.next_base_ref} (echo it verbatim; re-read via "
-            "get_output_spec if lost).\n"
-            "The next step keys on the CURRENT request, never on an old "
-            "run's completion or an older version's approval. If this "
-            "message explicitly delegates making THIS revised version "
-            "(production_intent=true), present the full facts and continue "
-            "to propose_tasks with the same params; do not add a second "
-            "approval question, and the existing review-hold, drift, quote "
-            "and Start guards still decide execution. Otherwise call "
-            "answer, NOT propose_tasks: an ordinary modification ends with "
-            "the one question whether to remake this version, while an "
-            "explicit review-only request stops after the full presentation "
-            "with no production question. Review hold off never creates "
-            "production intent; review hold on still requires an explicit "
-            "production request. Open feedback on the board still rides "
-            "specific_instruction WITHOUT edits; the next targeted change "
-            "rides edits again with the new base_ref."
-            + drift_fact
-        )
 
     async def _dock_plan_as_question(
         self,
@@ -1652,7 +912,7 @@ class ChatTurn:
         (never a run). Returns None when docked; a STRING is the film
         guardrail's steering observation (the storyboard was never presented
         for this exact chain — the call never docked, the tool loop's repair
-        iteration carries the redirect to design_storyboard).
+        iteration carries the redirect to design_video).
 
         iter-3 S2 (R6 parity): the exploration dock rides the SAME seat —
         ``plans`` (the decision package's reading layer) + ``plan_task_map``
@@ -1679,9 +939,6 @@ class ChatTurn:
         # ADR-117 §4: one confirmation-need computation per dock — the
         # echo's held clause (keyed on the stamped reason) reads it, the
         # payload stamp takes it by pass-through below.
-        from app.tools.film.storyboard import (
-            film_text_drift_held,
-        )  # deferred: tool seam
 
         need = await resolve_confirmation_need(
             db,
@@ -1693,23 +950,10 @@ class ChatTurn:
             # intent).
             production_intent=production_intent,
             # 7276ef13 ③: a change refused THIS turn holds the auto start.
-            unmet_condition=bool(self._design_shortfalls),
             # 定点收尾②复审: the drift hold reads the STANDING VERSION's
             # persisted state (world truth — a rebuilt turn never loses
             # it), never a turn-local flag.
-            copy_drift=film_text_drift_held(project.pending_brief),
         )
-        # 分镜节拍守卫 + dock 只读当前版本 (the plan path's dock seats'
-        # same law — the chat path docks through the SAME seat, ADR-129):
-        # the shared resolver first restores the CURRENT presented version's
-        # canonical launch_film params (fresh wording is not drift), then
-        # validates fingerprint/version/digests/token. A miss steers back to
-        # design_storyboard. The dock NEVER redrafts — a non-empty
-        # specific_instruction remains plan feedback only.
-        from app.tools.film.storyboard import (  # deferred: tool seam
-            resolve_film_dock_state,
-        )
-
         stored_pb = project.pending_brief if isinstance(project.pending_brief, dict) else {}
         stored = (
             PendingPlan.model_validate(stored_pb) if stored_pb else None
@@ -1720,10 +964,6 @@ class ChatTurn:
         birth_prompt = (
             stored.prompt if stored is not None and stored.prompt else None
         ) or self.text
-        film_resolution = resolve_film_dock_state(stored, tasks, birth_prompt)
-        if isinstance(film_resolution, str):
-            return film_resolution
-        film_state = film_resolution.state
         answer = (
             (answer or "")
             # 展示一座 (ADR-129): the storyboard markdown's presentation seat
@@ -1764,7 +1004,6 @@ class ChatTurn:
             derived=derived or [],
             plans=plans or [],
             plan_task_map=plan_task_map,
-            **film_state,
             **video_carry_state(stored),
         ).model_dump(mode="json")
         bailed_run_ids = await sync_plan_question(
@@ -1776,16 +1015,6 @@ class ChatTurn:
             derived=derived,
             plans=plans,
             need=need,
-            film_draft_token=(
-                film_state["film_draft_token"]
-                if film_resolution.film_chain
-                else None
-            ),
-            film_storyboard_version=(
-                film_state["film_storyboard_version"]
-                if film_resolution.film_chain
-                else None
-            ),
         )
         docked = await latest_pending_question(db, self.conversation_id)
         self.outcome = (docked, None, bailed_run_ids, self.settled_question)
@@ -2269,7 +1498,6 @@ class ChatTurn:
         message; dock: the package's answer) — the reminder-tail precedent
         (世界自证: a partial cover says what it skipped, never silent)."""
         db, project = self.db, self.project
-        from app.chat.turn_tools import film_wiring_guard
         from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
         from app.pipeline.graph_revise import tasks_for_graph_nodes
         from app.pipeline.scope_classifier import (
@@ -2293,9 +1521,6 @@ class ChatTurn:
             # run-born graph. The classifier never sees ops — it compares
             # plain facts gathered before and after the door (D4).
             pre_nodes, pre_edges = await load_graph_facts(db, project_id)
-            film_guard = film_wiring_guard(ops=p.ops, pre_nodes=pre_nodes)
-            if film_guard is not None:
-                raise WiringRejected(film_guard)
             # The dock's quote — computed on the dock branch so
             # sync_plan_question never recomputes it.
             estimate: PlanEstimate | None = None
@@ -2321,9 +1546,6 @@ class ChatTurn:
                 tasks = tasks_for_graph_nodes(ordered)
                 if not tasks:
                     raise WiringRejected("run: the resolved subgraph has nothing executable")
-                film_guard = film_wiring_guard(tasks=tasks)
-                if film_guard is not None:
-                    raise WiringRejected(film_guard)
                 post_nodes, post_edges = await load_graph_facts(db, project_id)
                 verdict = classify_graph_scope(
                     pre_nodes=pre_nodes,
@@ -2401,46 +1623,20 @@ class ChatTurn:
         self.outcome = (assistant_message, run_id, [], self.settled_question)
         return None
 
-    async def _retry_upload(self, params: RetryUploadArgs, prose: str) -> str | None:
-        """retry_upload → reopen only the failed render/upload stage.
-
-        This is recovery inside an already authorized run: no proposal, no
-        new paid work, no new run. The Output queue performs the upload after
-        this chat transaction commits.
-        """
-        if not prose.strip():
-            return (
-                "an empty recovery message says nothing — tell the user the "
-                "upload is being retried, then call retry_upload."
-            )
-        from app.pipeline.rendering import (  # deferred: chat → pipeline leaf
-            queue_upload_retry,
-            resolve_upload_retry,
-        )
+    async def _retry_upload(self, params: RetryUploadArgs, prose: str) -> ToolObservation:
+        from app.pipeline.upload_recovery import upload_finished_output
 
         output_id = pinned_output_id(
             self.mentions,
             str(params.output_id) if params.output_id is not None else None,
         )
-        target = await resolve_upload_retry(
-            self.db,
-            self.project,
-            output_id=UUID(output_id) if output_id is not None else None,
+        uploaded_id, detail = await upload_finished_output(
+            self.project.id, self.project.user_id,
+            UUID(output_id) if output_id is not None else None,
         )
-        if isinstance(target, str):
-            return target
-        run_id = await queue_upload_retry(self.db, self.project, target)
-        if isinstance(run_id, str):
-            return run_id
-        assistant_message = await _create_message(
-            self.db,
-            self.conversation_id,
-            "assistant",
-            prose,
-            workflow_run_id=run_id,
-        )
-        self.outcome = (assistant_message, run_id, [], self.settled_question)
-        return None
+        if uploaded_id is not None:
+            self._uploaded_output_refs.append(str(uploaded_id))
+        return ToolObservation(text=detail, ok=uploaded_id is not None)
 
     # ---- revise_output (iter-3 S3, N-58 — R19 修订二分律的 craft 半边) --------
 
@@ -2799,7 +1995,10 @@ class ChatTurn:
             self.conversation_id,
             "assistant",
             prose,
-            intent=AnswerProposal(text=prose).model_dump(mode="json"),
+            intent={
+                **AnswerProposal(text=prose).model_dump(mode="json"),
+                "output_refs": self._uploaded_output_refs,
+            },
         )
         self.outcome = (assistant_message, None, [], self.settled_question)
         return None
@@ -2823,15 +2022,22 @@ class ChatTurn:
             # rejection-marked queue drops (every word was rejected speech).
             await self._resolve_deferred()
             if result is not None and result.no_progress_tool is not None:
+                video_read = self._video_presentation_pending
                 assistant_message = await _create_message(
                     self.db,
                     self.conversation_id,
                     "assistant",
                     _design_no_progress_text(
                         self.text,
-                        version_saved=self._designed_this_turn is not None,
+                        version_saved=(
+                            video_read is not None
+                        ),
+                        video_read=video_read,
                     ),
                 )
+                # Preserve and present the direct video save that preceded the
+                # unsuccessful correction; the first-version review hold remains.
+                await self._stamp_video_presentation(assistant_message)
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
             elif result is not None and result.ended_by is not None:
                 # Mirror the plan path: a media-capability refusal closes
@@ -2844,7 +2050,7 @@ class ChatTurn:
                     if facts.get("kind") == "video_review_failure"
                     else _video_capability_text(self.text, facts)
                     if facts.get("kind") == "video_capability"
-                    else _design_blocked_text(self.text, self._design_begin_refusal)
+                    else _loop_incomplete_text(self.text, result)
                 )
                 assistant_message = await _create_message(
                     self.db,
@@ -2853,17 +2059,19 @@ class ChatTurn:
                     content,
                 )
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
-            elif result is None or result.exhausted:
-                # result None = provider failure (the caller maps LLMError here);
-                # exhausted = every call rejected. ask-back is the only failure
-                # form (prohibition #7); adjudication exhaustion reads as
-                # cannot-do (the retired degrade's honest line) — EXCEPT a
-                # latched begin refusal, which speaks the busy/conflict line.
-                content = (
-                    _design_blocked_text(self.text, self._design_begin_refusal)
-                    if (result is not None and self._design_begin_refusal is not None)
-                    else _ASK_BACK_TEXT if result is None else _cannot_do_text(self.text)
+            elif result is None and getattr(self, "_video_review_report", None) is not None:
+                assistant_message = await _create_message(
+                    self.db,
+                    self.conversation_id,
+                    "assistant",
+                    _video_review_report_text(self.text, self._video_review_report),
                 )
+                run_id, bailed_run_ids, settled = None, [], self.settled_question
+            elif result is None or result.exhausted:
+                # A provider failure without a completed review propagates to
+                # the localized failure frame; this branch is loop exhaustion
+                # (or a defensive None), never an ambiguity claim about the user.
+                content = _loop_incomplete_text(self.text, result)
                 if result is not None:
                     logger.info("chat_turn_loop_exhausted", calls=result.calls)
                 assistant_message = await _create_message(
@@ -2887,6 +2095,11 @@ class ChatTurn:
                 # a design beat without a further call — same seat.
                 await self._stamp_presentation(assistant_message)
                 run_id, bailed_run_ids, settled = None, [], self.settled_question
+        if assistant_message is not None and self._uploaded_output_refs:
+            assistant_message.intent = {
+                **(assistant_message.intent or {}),
+                "output_refs": self._uploaded_output_refs,
+            }
         bailed_run_ids = [*self._bailed_on_skip, *bailed_run_ids]
         if (
             assistant_message is not None
@@ -2930,19 +2143,28 @@ async def run_propose_turn(
     turn_id: UUID | None = None,
 ) -> ProposeTurnOutcome:
     """The chat path's turn: assemble → the bounded tool loop → the outcome
-    mapping. Provider failure keeps its retired posture: the ask-back line is
-    the only failure form (prohibition #7) — EXCEPT the tier gate (ADR-077
-    判词④), which fails LOUD: a tools-blind client is a deployment error,
-    never the ask-back line. ``on_row_append`` is the generic persisted-row
-    channel (currently unused by this path — the design beat's
-    program-markdown publication retired with the 2026-10-18 裁决)."""
+    mapping. Provider failure reaches the localized failure frame; a completed
+    video review instead closes from its persisted report. The tier gate
+    (ADR-077 判词④) fails LOUD: a tools-blind client is a deployment error.
+    ``on_row_append`` is the generic persisted-row channel (currently unused
+    by this path — the design beat's program-markdown publication retired
+    with the 2026-10-18 裁决)."""
     turn = ChatTurn(
         db, user_id, conversation, project, text,
         skill=skill, skill_ambiguity=skill_ambiguity,
         on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
         on_row_append=on_row_append, turn_id=turn_id,
     )
+    from app.chat.video_turn_seats import prepare_bound_skill_context, requested_video_production, video_target_hint
+    context_reader = await prepare_bound_skill_context(
+        project=project, skill=skill, message=text,
+        package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}),
+    )
     await turn.assemble(mentions, recent, suggestion_ref)
+    mention_target = await video_target_hint(db, project, mentions) if project is not None else None
+    opening = await db.get(Message, turn_id) if turn_id is not None else None
+    confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
+    turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7, the plan path's
     # mirror): on the SSE path every turn arms the terminal buffer —
     # iteration 0 is the only streaming iteration, so its prose / preview
@@ -2991,9 +2213,42 @@ async def run_propose_turn(
             if turn.project is not None
             else None
         )
+    from app.chat.turn_tools import tools_for_bound_skill
+    from app.chat.conversation_context import ConversationContext, conversation_context_tool
+    conversation_context = (
+        ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
+                            turn_id=turn_id, skill=getattr(turn, "skill", None))
+        if turn_id is not None else None
+    )
+    turn._conversation_context = conversation_context
+    context_tools = [conversation_context_tool()] if conversation_context is not None else []
+
     try:
+        from app.pipeline.assets import urls_in_text
+        from app.chat.prompts import assemble_video_round
+
+        def assemble_round(**facts):
+            assembly = assemble_video_round({
+                **facts,
+                "mode": "conversation",
+                "skill": getattr(turn, "skill", None),
+                "user_text": text,
+                "video_confirmation": confirmation,
+                "production_requested": requested_video_production(text),
+                "pending_question": lambda: turn.pending,
+                "target_hint": mention_target or turn._video_target_ambiguity,
+                "material_pending": bool(urls_in_text(text) or mentions),
+                "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
+            })
+            turn._video_base_ref = (
+                (assembly.caller_state or {}).get("video_target") or {}
+            ).get("base_ref")
+            return assembly
+
         result = await chat_intent_agent.call_loop(
             turn.execute,
+            tools=[*tools_for_bound_skill(chat_intent_agent.tools, getattr(turn, "skill", None)), *context_tools],
+            round_assembler=assemble_round,
             message=(
                 f"{text}\n{turn.suggestion_note}"
                 if turn.suggestion_note
@@ -3006,14 +2261,30 @@ async def run_propose_turn(
             on_tool_ready=on_tool_ready,
             on_loop_event=on_loop_event,
             on_interim_prose=interim_prose_hook,
-            should_stop_rejection=film_rejection_stop,
+            should_stop_rejection=video_rejection_stop,
+            bare_rejection_feedback=lambda: (
+                str(turn._video_target_ambiguity)
+                if turn._video_target_ambiguity is not None else None
+            ),
+            refresh_context=context_reader,
+            restore_context=conversation_context.restore if conversation_context else None,
+            on_context_event=conversation_context.record if conversation_context else None,
+            candidate_scope=CandidateScope(owner_id=str(user_id), conversation_id=str(turn.conversation_id)),
         )
     except LLMError as exc:
-        if (exc.user_key or "").startswith("film_storyboard_"):
-            raise
+        logger.warning(
+            "chat_turn_provider_failed",
+            agent="chat_intent",
+            conversation_id=str(turn.conversation_id),
+            turn_id=str(turn_id) if turn_id is not None else None,
+            user_key=exc.user_key,
+            error=f"{type(exc).__name__}: {str(exc)[:300]}",
+        )
         capabilities = getattr(chat_intent_agent.client, "capabilities", None)
         if capabilities is None or not capabilities.supports_native_tools:
             raise  # the tier gate fails loud, never the ask-back line
+        if turn._video_review_report is None:
+            raise  # the localized provider failure line, never a false ask-back
         result = None
     outcome = await turn.finish(result)
     if (

@@ -2,8 +2,6 @@ import type { ClipSpec } from "@repurposer/clip";
 import { videoSpecSchema } from "@repurposer/video-spec";
 import express from "express";
 
-import { renderFilm } from "./film/render";
-import { filmSpecSchema, filmTotalFrames } from "./film/schema";
 import { renderClip } from "./render";
 import { CACHE_DIR } from "./stage";
 import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts";
@@ -13,12 +11,12 @@ import { renderVideo } from "./video";
 import {
   bakeComponent,
   componentBakeEnabled,
+  componentIsolation,
   ComponentBakeError,
 } from "./component-runtime/bake";
 import { componentBakeRequestSchema } from "./component-runtime/contract";
 
 const app = express();
-app.use(express.json({ limit: "8mb" }));
 
 // Locally staged sources (see stage.ts), served back to Remotion over
 // loopback. CORS "*" because the composition's <Audio> fetches the staged URL
@@ -33,11 +31,6 @@ app.use(
 );
 
 const PORT = Number(process.env.RENDER_PORT ?? 3001);
-
-// Film family resource cap (config): total storyboard frames allowed per
-// render. fps is fixed at 30, so this is also the duration cap — the default
-// 3600 = 120 s @ 30 fps.
-const FILM_MAX_FRAMES = Number(process.env.FILM_MAX_FRAMES ?? 3600);
 
 // Video family resource cap (same role, separate dial): the spec carries its
 // own fps, so this is a pure frame budget, not a seconds claim.
@@ -76,17 +69,24 @@ function failureBody(err: unknown) {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    component_bake: {
+      enabled: componentBakeEnabled(),
+      isolation: componentIsolation(),
+      max_concurrency: 1,
+    },
+  });
 });
 
 // Upstream controlled Generator bake. This is deliberately separate from the
 // renderer-neutral /render endpoint: authored TSX never enters a video-spec.
 // Static source diagnostics are not a security boundary, so the route is
 // fail-closed until a deployment supplies actual runner isolation.
-app.post("/component-bake", async (req, res) => {
+app.post("/component-bake", express.json({ limit: "64mb" }), async (req, res) => {
   if (!componentBakeEnabled()) {
     res.status(503).json({
-      error: "component-v1 bake is unavailable: no verified isolated component runner",
+      error: "remotion-project bake is unavailable: no verified isolated component runner",
       code: "COMPONENT_RUNNER_UNAVAILABLE",
     });
     return;
@@ -108,7 +108,34 @@ app.post("/component-bake", async (req, res) => {
     res.status(error instanceof ComponentBakeError ? 422 : 500).json({
       error: message,
       code: "COMPONENT_BAKE_FAILED",
+      source_repairable: error instanceof ComponentBakeError ? error.sourceRepairable : false,
     });
+  }
+});
+
+app.use(express.json({ limit: "8mb" }));
+
+// Bounded working-draft evidence only: the API has already sliced and pinned
+// the spec. This path neither uploads nor creates an Output or saved version.
+app.post("/preview", async (req, res) => {
+  const parsed = videoSpecSchema.safeParse(req.body?.spec);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid preview video spec" });
+    return;
+  }
+  if (parsed.data.family !== "video" || parsed.data.duration_frames > 720) {
+    res.status(422).json({ error: "a working-draft preview is limited to 720 frames" });
+    return;
+  }
+  try {
+    const { videoPath } = await renderArtifacts(
+      { preview: parsed.data },
+      (outDir) => renderVideo(parsed.data, outDir, "video"),
+    );
+    res.type("video/mp4").sendFile(videoPath);
+  } catch (err) {
+    console.error("video_preview_failed", { error: err });
+    res.status(500).json({ error: "Working-draft preview rendering failed" });
   }
 });
 
@@ -116,17 +143,18 @@ app.post("/component-bake", async (req, res) => {
  * Black-box render endpoint: spec in -> rendered artifacts out.
  * Body: { spec, out_subdir?, basename?, outputs: { video: { key, put_url, content_type? }, srt: { key, put_url, content_type? } } }.
  *
- * The envelope is the shared minimal envelope for both spec families; the
- * `spec` payload is per-family (clip-spec vs film-spec, each with its own
- * schema). Dispatch reads only `spec.family` ("film" -> film path; absent ->
- * clip path) — never node type/name or any out-of-spec field. Every
+ * The envelope is shared by clip-spec and video-spec. Dispatch reads only
+ * `spec.family` ("video" -> video path; absent -> clip path), never node
+ * type/name or any out-of-spec field. Every
  * lifecycle event (first render / preview / retry / revision / recovery)
  * arrives as this same POST, so this single fork covers the whole lifecycle.
  *
  * The render service renders to a temp dir, PUTs the rendered files to the
  * supplied presigned URLs, and returns the object keys.
  */
-app.post("/render", async (req, res) => {
+// Upload has its own route and cannot fall through to a render on cache miss.
+app.post(["/render", "/upload"], async (req, res) => {
+  if (req.path === "/upload") req.body.upload_only = true;
   const { spec, outputs, source_key, render_id, upload_only } = req.body as {
     render_id?: string;
     upload_only?: boolean;
@@ -140,49 +168,6 @@ app.post("/render", async (req, res) => {
     // clip-spec) — indexes the shared source cache (see stage.ts).
     source_key?: string;
   };
-
-  // --- film family fork ---------------------------------------------------
-  if ((spec as unknown as { family?: unknown } | undefined)?.family === "film") {
-    const parsed = filmSpecSchema.safeParse(spec);
-    if (!parsed.success) {
-      const issues = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-        .join("; ");
-      res.status(400).json({ error: `invalid film spec: ${issues}` });
-      return;
-    }
-
-    // A film renders to video alone (no caption track -> no SRT artifact).
-    if (!outputs?.video?.put_url) {
-      res.status(400).json({ error: "outputs.video.put_url is required" });
-      return;
-    }
-
-    const totalFrames = filmTotalFrames(parsed.data);
-    if (totalFrames > FILM_MAX_FRAMES) {
-      res
-        .status(400)
-        .json({ error: `film spec total frames ${totalFrames} exceeds cap ${FILM_MAX_FRAMES}` });
-      return;
-    }
-
-    try {
-      const { videoPath } = await artifactsForRequest(
-        { id: render_id ?? outputs.video.key, spec: parsed.data },
-        upload_only === true,
-        (outDir) => renderFilm(parsed.data, outDir, "video"),
-      );
-
-      await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
-
-      res.json({ ok: true, video: outputs.video.key });
-    } catch (err) {
-      console.error("film_render_failed", { render_id, error: err });
-      const failure = failureBody(err);
-      res.status(failure.status).json(failure.body);
-    }
-    return;
-  }
 
   // --- video family fork --------------------------------------------------
   if ((spec as unknown as { family?: unknown } | undefined)?.family === "video") {

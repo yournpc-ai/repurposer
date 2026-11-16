@@ -1,0 +1,45 @@
+{# reviewer.j2 — frame-evidenced review of one exact delivered Output.
+   Media are decoded frames from that Output's own file. The schema lives in
+   tools/video/review.py; frame ids and active object facts are server-issued. #}
+Review the delivered video against the user's requirements. The attached images are ACTUAL frames decoded from the exact Output's media file, not a storyboard preview. Each image caption binds its server-issued frame id to the actual time and frame.
+
+USER REQUIREMENTS (requirements to check, not a review conclusion):
+{{ requirements }}
+
+EXACT OUTPUT AND EXECUTION IDENTITY:
+{{ output_facts }}
+
+SAVED CONTENT VERSION (for comparison and reliable revision references):
+{{ storyboard }}
+
+CURRENT DECODED FRAME INDEX (the active clip/object facts available at each new actual frame):
+{{ frame_facts }}
+
+CURRENT DETERMINISTIC MEDIA CHECKS (measured independently from this exact Output's bytes; these include the real audio-stream/RMS/peak facts that still images cannot show):
+{{ deterministic_checks }}
+
+MOTION SEQUENCE FACTS (null for still-scene or point reviews; otherwise the one actual Scene, its ordered current frame ids, decoded time window and sampling intervals):
+{{ motion_review }}
+
+EARLIER SUCCESSFUL REVIEW FACTS (the prior report's sampling scope and deterministic checks only; null when no earlier report exists):
+{{ previous_review_facts }}
+
+Evidence rules:
+- Base every visual finding on something directly visible in a cited CURRENT attached frame. Earlier scope and deterministic checks remain world facts, but they are not new frames, new visual observations, or proof of continuous motion.
+- When MOTION SEQUENCE FACTS is null, perform the ordinary still-frame or requested-point review only. Do not judge action phases, camera movement, internal scene transitions or whether motion completed.
+- When MOTION SEQUENCE FACTS is present, judge motion only for that named Scene and its listed ordered frames. You may compare adjacent samples to assess whether required phases occur and how the visible states connect. A finding still needs one current `frame_id`; when comparing two samples, identify the other current frame in `evidence` without inventing intermediate frames.
+- Discrete samples can show a visible state change between two times; they cannot prove what every frame between them did. Say the sampling is insufficient when it cannot support the requested judgment, and return no invented finding.
+- For a requested spotlight-style action arc, use the actual sequence to check whether page and subject are distinguishable, the subject rises independently, metrics appear in their required phases, the subject returns, and a final reading hold is visible. Check only phases present in the requirements or saved version.
+- Flat or repeated samples and different-looking samples are candidates, not defects by themselves. An intentional static reading hold at the end is not an observed issue merely because adjacent frames repeat.
+- Audio presence, decode state, RMS, peak and clipping come from the deterministic checks, not from the pixels. Those measurements do not establish perceived mix quality or audio-visual synchronization; never claim that you heard the audio.
+- Check title/caption legibility, clipping or occlusion, control/text padding, whether page framing contains the intended content, and whether visible content matches the saved version and user requirements.
+- Meaningful words whose beginning or end is cut off by the canvas are an `observed_issue`, even when a camera move or entrance animation caused it. Intentional cinematic framing is not a reason to excuse unreadable copy; distinguish decorative/background crops from text the viewer is meant to read.
+- When the current requirements call for music, a silent or effectively silent full-stream audio measurement is a mismatch even if the executed spec did not declare an audio expectation. The spec expectation describes what was implemented, not whether the user's requirement was met.
+- `summary` states the actual checked result and sampling limits without a score. If no issue is visible in these frames, return an empty `findings` list and say so honestly; never invent a defect to make a review useful. Keep `aesthetic_suggestion` separate from observed mismatches.
+- Do not claim to have watched continuous playback, checked uncovered Scenes or inter-Scene transitions, or heard audio.
+
+Return only one JSON object with this exact schema; do not rename or add fields:
+- Top level: `summary` (string or null, optional) and `findings` (array, defaults to an empty array).
+- Every finding REQUIRES `kind` (`observed_issue` or `aesthetic_suggestion`), `frame_id` (a current attached frame id), `observed` (the directly witnessed fact), and `suggestion` (the smallest useful change).
+- A finding MAY also include `requirement` (the affected current requirement), `evidence` (the visual evidence), `clip_id`, and `object_id`; each is a string or null. Fill clip/object identity only when the current frame index proves it.
+- Use `observed_issue` for a concrete observable mismatch or readability/framing problem; use `aesthetic_suggestion` only for an optional taste improvement and keep the difference explicit.

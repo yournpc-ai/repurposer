@@ -1,4 +1,4 @@
-"""Controlled drawing-v1 previews and fixed Generator media.
+"""Controlled draw-2d previews and fixed Generator media.
 
 The Agent authors source in a CompositionVersion. This tools-layer producer
 executes it without business capabilities, stores immutable MP4/PNG bytes and
@@ -16,6 +16,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 import av
 from PIL import Image, ImageDraw
@@ -88,6 +89,29 @@ _COMMANDS = TypeAdapter(list[DrawCommand])
 class ProgramError(ValueError):
     """A bounded execution/validation diagnostic safe to return to Chat."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        source_repairable: bool = False,
+        clip_id: str | None = None,
+        program_digest: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.source_repairable = source_repairable
+        self.clip_id = clip_id
+        self.program_digest = program_digest
+
+    def at_clip(self, clip: Clip, obj: GeneratorObject) -> ProgramError:
+        if self.clip_id is not None:
+            return self
+        return ProgramError(
+            f"clip {clip.clip_id}: {self}",
+            source_repairable=self.source_repairable,
+            clip_id=clip.clip_id,
+            program_digest=obj.program_digest(),
+        )
+
 
 def validate_drawing_commands(value: Any) -> list[DrawCommand]:
     try:
@@ -102,7 +126,7 @@ def validate_drawing_commands(value: Any) -> list[DrawCommand]:
 async def _execute_program(obj: GeneratorObject) -> list[list[DrawCommand]]:
     node = shutil.which("node")
     if node is None:
-        raise ProgramError("drawing-v1 requires the Node.js runtime")
+        raise ProgramError("draw-2d requires the Node.js runtime")
     request = json.dumps(
         {
             "code": obj.code,
@@ -112,7 +136,7 @@ async def _execute_program(obj: GeneratorObject) -> list[list[DrawCommand]]:
         ensure_ascii=False,
     ).encode("utf-8")
     timeout = min(60.0, max(10.0, obj.output.duration_frames * 0.25 + 5))
-    with tempfile.TemporaryDirectory(prefix="drawing-v1-") as workdir:
+    with tempfile.TemporaryDirectory(prefix="draw-2d-") as workdir:
         process = await asyncio.create_subprocess_exec(
             node,
             "--experimental-permission",
@@ -292,10 +316,10 @@ def _validate_cached_manifest(value: Any, obj: GeneratorObject) -> dict[str, Any
     if not isinstance(value, dict) or value.get("program_digest") != obj.program_digest():
         raise ProgramError("cached Generator manifest does not match the requested program")
     if (
-        value.get("runtime") != obj.runtime
+        value.get("producer") != obj.producer
         or value.get("output") != obj.output.model_dump(mode="json")
     ):
-        raise ProgramError("cached Generator runtime/output identity mismatch")
+        raise ProgramError("cached Generator producer/output identity mismatch")
     media = value.get("media") or {}
     preview = value.get("preview_frame") or {}
     if not media.get("storage_key") or len(str(media.get("digest") or "")) != 64:
@@ -329,21 +353,34 @@ async def ensure_generator_clip(
 ) -> dict[str, Any]:
     """Reuse or produce the exact program; return its fixed execution facts."""
     obj = clip.object
-    if not isinstance(obj, GeneratorObject) or obj.runtime != "drawing-v1":
-        raise ProgramError(f"clip {clip.clip_id} is not a drawing-v1 GeneratorObject")
+    if not isinstance(obj, GeneratorObject) or obj.producer != "draw-2d":
+        raise ProgramError(f"clip {clip.clip_id} is not a draw-2d GeneratorObject")
     cached = await _cached_manifest(obj, verify_media=True)
     if cached is not None:
         if on_reuse is not None:
             on_reuse(True)
         return {**cached, "clip_id": clip.clip_id, "object_id": obj.object_id}
 
-    frames = await _execute_program(obj)
-    video, preview, unique_frames = _encode_program(frames, obj.output)
+    try:
+        frames = await _execute_program(obj)
+        video, preview, unique_frames = _encode_program(frames, obj.output)
+    except ProgramError as exc:
+        detail = str(exc)
+        repairable = not any(
+            marker in detail
+            for marker in ("Node.js runtime", "execution budget", "command-output budget")
+        )
+        raise ProgramError(
+            detail,
+            source_repairable=repairable,
+            clip_id=clip.clip_id,
+            program_digest=obj.program_digest(),
+        ) from exc
     media_key, media_digest = await store_source_bytes(video, ".mp4", "video/mp4")
     preview_key, preview_digest = await store_source_bytes(preview, ".png", "image/png")
     manifest = {
         "schema_version": 1,
-        "runtime": obj.runtime,
+        "producer": obj.producer,
         "program_digest": obj.program_digest(),
         "resources": [],
         "output": obj.output.model_dump(mode="json"),
@@ -376,6 +413,7 @@ async def ensure_generator_clip(
 
 async def prepare_generator_media(
     content: CompositionContent,
+    snapshots: dict[UUID, dict[str, Any]] | None = None,
     *,
     execution_id: str | None = None,
     composition_id: str | None = None,
@@ -390,15 +428,15 @@ async def prepare_generator_media(
         for clip in track.clips:
             if not isinstance(clip.object, GeneratorObject):
                 continue
-            if clip.object.runtime == "drawing-v1":
+            if clip.object.producer == "draw-2d":
                 prepared[clip.object.object_id] = await ensure_generator_clip(
                     clip, on_reuse=on_reuse
                 )
-            elif clip.object.runtime == "component-v1":
+            elif clip.object.producer == "remotion-project":
                 from app.tools.video.components import ensure_component_clip
 
                 prepared[clip.object.object_id] = await ensure_component_clip(
-                    clip, on_reuse=on_reuse
+                    clip, snapshots=snapshots, on_reuse=on_reuse
                 )
             elif execution_id is not None:
                 prepared[clip.object.object_id] = await ensure_generated_image_clip(
@@ -421,13 +459,17 @@ def _generator_clips(read: dict[str, Any]) -> list[dict[str, Any]]:
     ] + [clip for clip in storyboard["unassigned_clips"] if clip["object_kind"] == "generator"]
 
 
-async def _preview_manifests(read: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+async def _preview_manifests(
+    read: dict[str, Any], *, clip_ids: set[str] | None = None
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for clip in _generator_clips(read):
-        runtime = clip.get("runtime")
-        if runtime == "drawing-v1":
+        if clip_ids is not None and clip["clip_id"] not in clip_ids:
+            continue
+        producer = clip.get("producer")
+        if producer == "draw-2d":
             key = _manifest_key(clip["program_digest"])
-        elif runtime == "component-v1":
+        elif producer == "remotion-project":
             from app.tools.video.components import component_manifest_key
 
             key = component_manifest_key(clip["program_digest"])
@@ -436,16 +478,18 @@ async def _preview_manifests(read: dict[str, Any]) -> list[tuple[dict[str, Any],
         if not await storage.exists(key):
             continue
         manifest = json.loads(await storage.read(key))
-        if manifest.get("program_digest") != clip["program_digest"] or manifest.get("runtime") != runtime:
+        if manifest.get("program_digest") != clip["program_digest"] or manifest.get("producer") != producer:
             raise ProgramError("preview identity does not match the saved program")
         rows.append((clip, manifest))
     return rows
 
 
-async def enrich_generator_previews(read: dict[str, Any]) -> dict[str, Any]:
+async def enrich_generator_previews(
+    read: dict[str, Any], *, clip_ids: set[str] | None = None
+) -> dict[str, Any]:
     """Attach only exact-version preview URLs; missing previews stay absent."""
     previews = []
-    for clip, manifest in await _preview_manifests(read):
+    for clip, manifest in await _preview_manifests(read, clip_ids=clip_ids):
         previews.append({
             "clip_id": clip["clip_id"],
             "object_id": clip["object_id"],
@@ -459,12 +503,14 @@ async def enrich_generator_previews(read: dict[str, Any]) -> dict[str, Any]:
     return {**read, "generator_previews": previews}
 
 
-async def generator_preview_images(read: dict[str, Any]) -> list[Any]:
+async def generator_preview_images(
+    read: dict[str, Any], *, clip_ids: set[str] | None = None
+) -> list[Any]:
     """Representative pixels for the Agent; no automatic aesthetic claim."""
     from app.pipeline.step_context import media_input_for_image
 
     images = []
-    for clip, manifest in await _preview_manifests(read):
+    for clip, manifest in (await _preview_manifests(read, clip_ids=clip_ids))[:8]:
         image = await media_input_for_image(
             manifest["preview_frame"]["storage_key"],
             caption=(

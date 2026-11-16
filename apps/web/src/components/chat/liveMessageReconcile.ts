@@ -12,6 +12,7 @@ import type {
   VideoStoryboardBlock,
 } from "./timeline/types"
 import { stampServerMessageId } from "./timeline/identity"
+import { triggerOutputRefs } from "./timeline/history"
 
 export { prependMissingHistory, stampServerMessageId } from "./timeline/identity"
 
@@ -168,6 +169,25 @@ export function buildRecoveredActivityRow({
     },
     registerHost: !material,
   }
+}
+
+/** Apply an accepted envelope only to its existing speech seat. Ownership
+ * is checked by the caller before scheduling; a deferred updater never
+ * appends a vanished stopped row or rewrites the successor's presentation. */
+export function stampMessagePresentation(
+  messages: OverlayMessage[],
+  previewId: string,
+  message: { id: string; blocks?: VideoStoryboardBlock[]; intent?: unknown },
+): OverlayMessage[] {
+  const blocks = message.blocks?.length ? message.blocks : undefined
+  const outputRefs = triggerOutputRefs(message.intent)
+  if (!blocks && outputRefs.length === 0) return messages
+  const targetId = messages.some((row) => row.id === previewId) ? previewId : message.id
+  return messages.map((row) => row.id === targetId ? {
+    ...row,
+    ...(blocks ? { blocks } : {}),
+    outputRefs,
+  } : row)
 }
 
 /** Stream ownership is the owner object's identity, not the latest turn id.

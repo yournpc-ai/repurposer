@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.tables import PaymentOrder, User, now_utc
+from app.platform import payment_webhooks
 from app.platform.billing import purchase_credits
 
 logger = structlog.get_logger()
@@ -289,24 +290,67 @@ def _ignored(reason: str, **log_fields: Any) -> dict[str, Any]:
     return {"received": True, "ignored": reason}
 
 
+async def _record_rejected_delivery(
+    db: AsyncSession,
+    *,
+    payload: bytes,
+    signature_valid: bool,
+    reason_code: str,
+    response_status: int,
+) -> None:
+    """Rejection audit is best-effort; it never hides the security response."""
+    try:
+        await payment_webhooks.record_rejected_delivery(
+            db,
+            payload=payload,
+            signature_valid=signature_valid,
+            reason_code=reason_code,
+            response_status=response_status,
+        )
+    except Exception:  # noqa: BLE001 — preserve the original auth/config result
+        await db.rollback()
+        logger.exception("payment_webhook_rejection_audit_failed", reason_code=reason_code)
+
+
 async def process_stripe_webhook(
     db: AsyncSession, *, payload: bytes, signature: str | None
 ) -> dict[str, Any]:
-    """Verify and apply one Stripe event; only a paid Session moves credits."""
+    """Verify, durably audit and apply one Stripe event exactly once."""
     secret = settings.stripe_webhook_secret.strip()
     if not signature:
         logger.warning("stripe_webhook_signature_missing", payload_bytes=len(payload))
         raise InvalidStripeSignature()
     if not secret:
         logger.error("stripe_webhook_not_configured", payload_bytes=len(payload))
+        await _record_rejected_delivery(
+            db,
+            payload=payload,
+            signature_valid=False,
+            reason_code="webhook_not_configured",
+            response_status=503,
+        )
         raise PaymentConfigurationError()
     try:
         event = stripe.Webhook.construct_event(payload, signature, secret)
     except stripe.error.SignatureVerificationError as e:
         logger.warning("stripe_webhook_signature_invalid", payload_bytes=len(payload))
+        await _record_rejected_delivery(
+            db,
+            payload=payload,
+            signature_valid=False,
+            reason_code="invalid_signature",
+            response_status=400,
+        )
         raise InvalidStripeSignature() from e
     except ValueError as e:
         logger.warning("stripe_webhook_payload_invalid", payload_bytes=len(payload))
+        await _record_rejected_delivery(
+            db,
+            payload=payload,
+            signature_valid=False,
+            reason_code="payload_invalid",
+            response_status=400,
+        )
         raise InvalidStripeSignature() from e
 
     data = event.to_dict()
@@ -314,13 +358,98 @@ async def process_stripe_webhook(
     event_type = str(data.get("type") or "")
     if not event_id:
         logger.warning("stripe_webhook_event_invalid", reason="missing_event_id")
+        await _record_rejected_delivery(
+            db,
+            payload=payload,
+            signature_valid=True,
+            reason_code="missing_event_id",
+            response_status=400,
+        )
         raise InvalidStripeSignature()
+
+    session = (data.get("data") or {}).get("object") or {}
+    if isinstance(session, dict):
+        metadata = session.get("metadata") or {}
+        checkout_session_id = session.get("id")
+    else:
+        metadata = {}
+        checkout_session_id = None
+    if not isinstance(metadata, dict):
+        metadata = {}
+    try:
+        audit_order_id = UUID(str(metadata.get("order_id") or ""))
+    except ValueError:
+        audit_order_id = None
     logger.info(
         "stripe_webhook_received",
         event_id=event_id,
         event_type=event_type,
         event_livemode=data.get("livemode"),
     )
+    payload_matches = await payment_webhooks.begin_verified_event(
+        db,
+        event_id=event_id,
+        event_type=event_type,
+        event_livemode=(
+            data.get("livemode") if isinstance(data.get("livemode"), bool) else None
+        ),
+        payload=payload,
+        order_id=audit_order_id,
+        checkout_session_id=(
+            checkout_session_id if isinstance(checkout_session_id, str) else None
+        ),
+    )
+    if not payload_matches:
+        result = _ignored(
+            "event_payload_mismatch", event_id=event_id, event_type=event_type
+        )
+        await payment_webhooks.finish_verified_event(
+            db,
+            event_id=event_id,
+            status="ignored",
+            reason_code="event_payload_mismatch",
+            response_status=200,
+        )
+        return result
+
+    try:
+        result = await _process_verified_stripe_event(
+            db, data=data, event_id=event_id, event_type=event_type
+        )
+        reason_code = result.get("ignored") or (
+            "duplicate" if result.get("duplicate") else None
+        )
+        await payment_webhooks.finish_verified_event(
+            db,
+            event_id=event_id,
+            status="ignored" if reason_code else "processed",
+            reason_code=reason_code,
+            response_status=200,
+        )
+        return result
+    except Exception as exc:
+        await db.rollback()
+        reason_code = exc.code if isinstance(exc, PaymentError) else "internal_error"
+        try:
+            await payment_webhooks.finish_verified_event(
+                db,
+                event_id=event_id,
+                status="failed",
+                reason_code=reason_code,
+                response_status=(
+                    503 if isinstance(exc, PaymentConfigurationError) else 500
+                ),
+            )
+        except Exception:  # noqa: BLE001 — retain the original processing failure
+            await db.rollback()
+            logger.exception("payment_webhook_failure_audit_failed", event_id=event_id)
+        raise
+
+
+async def _process_verified_stripe_event(
+    db: AsyncSession, *, data: dict[str, Any], event_id: str, event_type: str
+) -> dict[str, Any]:
+    """Apply a verified event; its caller owns receipt finalization."""
     if event_type not in {"checkout.session.completed", "checkout.session.expired"}:
         return _ignored("unsupported_event", event_id=event_id, event_type=event_type)
 

@@ -8,6 +8,8 @@
 
 **用户画像**：有素材、不懂自媒体的知识专家；到来即彷徨，每步都要答「下一步是什么」。
 
+首产入口允许四类明确任务：产品宣传混合图片、文字、真实视频和网站；口播动效包装用户真人原片；文字动画以用户文案组织原生动效；知识讲解先确定最终讲稿/音频与语义，再呈现依赖真实词锚的分镜。用户可直接描述目标，由 Assistant 推断任务；Home 与本地化 `/任务名` 仅提供可选的确定起点，显式 Skill 才绑定固定风格。需要比较动效时在 Chat 内展示真实 Preset 动态候选，用户下一轮用普通语言选择，不跳转外部 Gallery。四类只在素材准备与画面创作上分支，随后仍共用下方呈现、授权、交付与持续修订旅程，不建立第二意图面；交付后由正文和产物卡收口，后续修改直接继续 Chat。
+
 | 拍 | 用户感知 | 系统支撑 | 状态 |
 |---|---|---|---|
 | 0. 入口 | 配方卡（预填模板）或 composer 乱输入；空指令本地拦截 | composer = chat 第一条消息（ADR-051）；配方 = 提示词（ADR-040） | ✅ |
@@ -63,7 +65,7 @@
 
 | 拍 | 用户感知 | 系统支撑 | 状态 |
 |---|---|---|---|
-| 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | ✅（R6 生产接线：EXPLORATION_TOOLS 入 intent_router 工具集 + 判定段 prompt + prompt_gate 探针 D；live 复跑待配额） |
+| 0. 目标抵达 | agent 复述目标后**直接开始干活**（「我先看看素材和内容」）——无 dock、无任务清单复述 | 意图路由识别**发现型目标**（R6：实现空间未定 → 探索链；范围清晰的干脆请求走既有短路径） | ✅（R6 生产接线：EXPLORATION_TOOLS 入 intent_router 工具集 + 判定段 prompt；`guided_exploration` 真实旅程复跑待配额） |
 | 1. 理解/索引 | 素材卡只在真实处理状态出现后显示处理中/失败/就绪；理解结果供后续读取，不创建独立 transcript 图节点 | 休眠素材按需处理 + understand 链，内容寻址复用 | ✅ 机制；live 验收开放 |
 | 2. 搜索候选 | Activity「Searching… / Found 14 relevant sections」→ **chat-born 候选合集卡**：默认三条推荐 + 有界展开；成员带 ordinal/time/excerpt/speaker 等真实事实 | `get_understanding` 锚点全文（短中素材零检索往返；长素材 `search_transcript` + `get_segment`）→ `propose_candidates`（探索写门，range 提案 + 摘录服务端派生 ADR-107）；Candidate Surface 不落 Product Graph，不铺独立执行节点 | ✅ 代码层；live/replay、失败回滚与 CJK 长素材验收开放 |
 | 3. 评估 | Activity「Comparing 14 candidates…」 | LLM 逐段判完整性（时长/边界 = 代码算）；**R3：理由 = artifact 属性**（结论 + 证据指针），reasoning 永不持久化 | ✅（写门 range 校验（ADR-107）+ `selectsReady` 里程碑） |

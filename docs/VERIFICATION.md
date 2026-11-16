@@ -1,8 +1,8 @@
-# Verification — 测试政策、合同守卫与当前验收
+# Verification — 测试政策、核心覆盖与当前验收
 
-> Status: 当前规范（2026-10-31）。本文是测试运行纪律、合同↔守卫映射与跨模块验收的唯一母文档；排期仍归 PROGRESS。测试/文档退役不是产品验收通过，绿色历史标记不等于当前 HEAD 或真实旅程已通过。
+> Status: 当前规范（2026-11-10）。本文是测试运行纪律、核心合同↔测试映射与跨模块验收的唯一母文档；排期仍归 PROGRESS。测试/文档退役不是产品验收通过，绿色历史标记不等于当前 HEAD 或真实旅程已通过。
 >
-> 新视频只按 VIDEO_PROJECT 与 video-project-implementation 施工。旧 Film 固定骨架、pending 信封、legacy 指纹和旧 schema 的专属测试不再作为新链兼容目标；共享权限、授权、计费、执行身份、Clip 和消息回放守卫继续有效。新 Composition/时间/spec/旅程覆盖按 A/B 出口补齐，未建覆盖明确记缺口，不用删测试制造“生产已就绪”。
+> 新视频只按 VIDEO_PROJECT 与 video-project-implementation 施工。旧 Film 固定骨架、pending 信封、legacy 指纹和旧 schema 的专属实现与测试已删除；共享权限、授权、计费、执行身份、Clip 和消息回放守卫继续有效。新 Composition/时间/spec/旅程覆盖按 A/B 出口补齐，未建覆盖明确记缺口，不用删测试制造“生产已就绪”。
 
 ## 1. 测试运行政策
 
@@ -10,17 +10,17 @@
 
 只保留两类测试资产：
 
-1. **用户主流程旅程矩阵**：各种用户经 chat 完成各类创作流程的全旅程；以 `apps/api/scripts/chat_scenarios.py` 当前 `SCENARIOS` 注册表为准，不在文档复制固定数量。
-2. **承重架构防漂移守卫**：唯一写口、依赖方向、registry↔prompt 一致性、执行身份、授权与数据完整性等全站铁律。
+1. **用户主流程旅程矩阵**：`apps/api/test/journeys/chat.py` 的当前 `JOURNEYS` 注册表。各种用户经普通 HTTP Chat 多轮完成创作、修订与交付；文档不复制固定数量或编号。
+2. **核心 API/DB 确定性测试**：`apps/api/test/core/`，覆盖支付、上传、工具协议、权限、计费、作品数据、执行与交付等用户直接依赖的合同。
 
-事故回归锁、批次产物和镜像实现形态的锁不单独保留。新覆盖必须能指出所属旅程与步骤，或所守的承重合同；重构使测试失去合同依据时逐案删除，不留注释尸体。
+内部 helper、提示词文案、实现形态、重复 ToolLoop 机制和事故编号不另立永久测试。同一用户行为已有真实旅程证明时，不复制内部锁；重构使测试失去合同依据时逐案删除，不留注释尸体。
 
 ### 1.2 当前验证层
 
-- 部署前依次运行纯 pytest、check_gates、prompt 面变化时的 prompt_gate、当前注册旅程矩阵；web 按改动面运行纯 node 测试与类型检查。
-- 剧本只锁服务端真值与形态，不锁 LLM 文案；打字机、remount、布局形态等客户端法律归 web 纯测试与 live 走查。
-- 仪表脚本用于诊断，不阻塞部署；读数不能替代门禁，也不能为放行调整阈值。
-- 测试迁移必须先裁决现行合同；“base 也失败”既不自动证明测试该删，也不证明应保留失败。
+- 核心测试：`cd apps/api && uv run --extra dev python -m pytest test/core -q`。不调用真实模型、不执行付费制作；事务测试使用独立临时 PostgreSQL 数据库。
+- 真实旅程：`cd apps/api && uv run python test/journeys/chat.py`，或用 `--only <name>[,<name>]` 选择当前注册表子集。需要活 API、当前 migration、fresh dev worker 和模型配额；制作媒体的旅程须单独明确授权。
+- Web 按改动面运行 vitest 与 TypeScript 检查。旅程只锁用户可见结果及服务端/数据库真值，不锁 LLM 文案；打字机、remount、布局与最终视听仍归 Web 检查和真实 UI 验收。
+- 诊断脚本不是部署门禁，读数不能替代核心测试、真实旅程或人工验收，也不能为放行调整断言。
 
 ### 1.3 Fixture 与 flake 处置
 
@@ -31,21 +31,22 @@
 
 #### 已知方差与覆盖边界
 
-- S1 / S6f / S10 的 baseline LLM 方差是开放观察项，不自动放大为新的 release regression；每次仍需在当前 HEAD 归因。
-- prompt_gate I 需以新目标的实际读数完成校准；校准与回归放行是两件事。
+- 真实旅程的模型输出方差是开放观察项，不自动放大为新的 release regression；每次仍需在当前 HEAD 按当前旅程名称归因。
 - 以下风险目前没有完整活旅程自动化看护：计费失败、孤儿 hold 回收、run 执行权仲裁、turn durability、SSE 断流复连、repair 静默/泄漏。相关纯函数覆盖不能冒充全链覆盖；是否补入矩阵须按用户旅程归属评估。
 - 保留历史消息的环境，migrate_activity_log_rows.py 退役前仍须迁移与回放证明；本轮已授权 reset 的无用户环境可重建空数据，不承担旧行兼容回填。reset 未执行不等于旧行已清零。
 - trigger `/event/sync` 无 Activity 行是 parity 观察，不自动等同于缺陷或新需求。
 
-### 1.4 Harness 纪律
+### 1.4 运行纪律
 
 - **进程卫生**：`uv run` 包装器被 kill 可能留下孤儿 worker；手工 harness 使用 `start_new_session` + `killpg`，结束时核对实际进程。
+- **dev 退出自动重启**：`scripts/dev.sh` 为 API、worker、render、Web 各持一个 supervisor，服务退出后间隔 2 秒重启；再次启动先经 `$TMPDIR/repurposer-dev-supervisors/` 清理旧 supervisor，再清理服务家族，避免旧进程复活成双实例。日志只在整栈启动时截断，单次自动重启继续追加。supervisor 只处理进程退出，**不是代码热加载**；修改 worker 消费的代码后仍须按上条在无活跃任务时重启 worker。
 - **live / 付费预检**：同时核对服务健康、进程加载的代码新鲜度和当前 schema/migration；修改 worker 消费的代码后必须重启 worker。进程“在运行”不证明它已加载当前代码，未取得根因前不得重复付费重试。
 - **证据分级**：函数调用、state updater 已调度、React 已 commit、内容用户可见、ACK/状态已持久化、Run terminal、delivery 可见与媒体可播放是不同事实。DTO/HTTP 200 只证明其响应层级；每个验收结论必须对应实际取得的证据，旧自动门结果不得写成当前 HEAD 证据。
 - **归因先行**：一条假设只配一个能证伪它的实验。两个独立实验仍未推进归因，就停止新建业务版本、浏览器探针或付费执行，回到真实 payload 与代码状态链；不得为探针机械创建新版本，也不得在未证明机制相关时调整实现顺序。
-- **配额**：全量剧本/gate 可能产生显著模型费用；合并改动后一次跑，所有真实模型 HTTP 计入预算，warmup 默认关闭。付费运行需明确授权。
+- **配额**：全量真实旅程可能产生显著模型费用；合并改动后一次跑，所有真实模型 HTTP 计入预算，warmup 默认关闭。付费运行需明确授权。
 - **探针采样**：需要比较 provider/prompt 时采用 round-robin，避免顺序批把 provider 漂移误判为改动效果；保留原始读数。
-- **升编**：scratch 工具一旦被现行文档或部署仪式引用，就应迁入受维护的 harness/scripts 位置；不要长期让关键验收依赖一次性目录。
+- **scratch 边界**：根 `/scratch/` 是本机工作区，已整体加入 `.gitignore`，不纳入版本库。一次性探针、HTML 原型、原始响应、帧图、音视频和验收证据可以留在这里；文档中的此类路径只表示取证位置，不是新克隆必有的运行输入。现行规则、开放事项和验收步骤必须在正式文档中自足，不能只剩 scratch 链接。
+- **升编**：可复用工具一旦被现行验收步骤或部署仪式引用，就应迁入受维护的 `test/` 或 `scripts/` 位置；历史决策中的原型与证据指针不等于正式工具。不要长期让关键验收依赖一次性目录。
 - **文档**：当前注册表、命令和已知限制就地更新；不保存历史测试输出、调用量日志或旧矩阵副本。
 ### 1.5 合同迁移原则
 
@@ -58,40 +59,48 @@
 3. **Scenario fixtures must explicitly establish the state under test.**
    剧本前置条件由 fixture 显式声明，background worker 的 timing / race
    永不定义剧本语义（fixture 纪律见 `docs/VERIFICATION.md`
-   §1.3/§1.4 与 `chat_scenarios.py` 头部）。
+   §1.3/§1.4 与 `test/journeys/chat.py` 头部）。
 
-## 2. 合同 ↔ 承重守卫映射
+### 1.6 按身份核对实际模型请求
 
-剧本座列以 `apps/api/scripts/chat_scenarios.py` 当前 `SCENARIOS` 注册表为准（ADR-114），不在这里固定矩阵数量；「harness 公共断言」= 每本自动携带的 SSE 线格式 / Activity 帧形态 / dock 形态 / 估价三断言。
+MiniMax 与 DeepSeek 共用 `app/providers/llm/trace.py`；`LLM_TRACE_PATH` 指向受控本地 JSONL 文件，旧 `MINIMAX_JOURNEY_TRACE` 环境名继续作为配置别名，未配置时不保存正文。请求在 transport 前记录实际发送的完整 payload，包括 messages、tools 与参数；响应在 schema/工具 JSON 参数解析前记录完整内容，流式工具调用保存未截断、未解析的原始 `arguments` 字符串。每次模型请求/响应/异常以 `model_call_id` 关联，普通 Chat、回答续聊与 trigger 携带 `project_id`、`conversation_id`、`turn_id`。标准日志的 `model_request_started/finished` 给出身份、trace 路径、输入清单、usage 与终态；详细提示词、工具 schema、逐条上下文、实际请求和原始响应归 JSONL，不在普通日志重复打印正文。凭据脱敏、签名 URL query 脱敏，inline 媒体以 digest 与本地 binary_ref 保留，不声明 trace 是未脱敏 HTTP 抓包。
 
-| Contract | Owner | Canonical source | Pure tests | Scenario / script 座 | Static guards | Status / Known limitations |
-|:---|:---|:---|:---|:---|:---|:---|
-| Lifecycle 谓词（五态 + 四合取 + blocker 谓词序） | `app/pipeline/lifecycle.py` | ADR-087 §2 + NAMING 固定不等式 | `test_lifecycle_pure.py` | 矩阵 S1（lifecycle stamp 三拍：preparing / dock 四合取 / active_run blocker） | gate 5b + 牙口（`test_check_gates_pure`） | 🟢 ｜ gatherer（DB 事实解析）无纯测试座，由矩阵真实 run 覆盖 ｜ run 活性/存在 = transport 事实、非 lifecycle 推导——三读者合法在册：ChatDock `runAttached` / `projects.$id.index` `hasRuns` / `runActive`；禁补戳读者 ｜ 「lifecycle 键恒在」：graph 响应零节点早退同带 lifecycle 键 |
-| Material Readiness（pending/processing/failed 归并 + required-input） | lifecycle gatherer + Asset 状态机 | ADR-087 §2 | `test_lifecycle_pure.py` | 矩阵 S2（真字节素材全链） | — | 🟢 ｜ 素材处理态由 fixture 显式声明，worker 调度永不定义剧本语义 |
-| Upload-on-birth（素材节点随 asset 行出生，幂等，`spec.asset_id` 寻回） | `app/pipeline/graph_fill.py` `stamp_asset_node` | ADR-087 §2 | `test_graph_wiring_pure.py` 边界型 | — | — | 🟢 |
-| Confirmation Doctrine（呈现 + 制作意图 + 当前授权通道 + 费用守卫） | lifecycle + `chat/service.py` | ADR-087 / ADR-117 / ADR-139 | `test_lifecycle_pure.py` | 当前矩阵的 dock/typed Start 与付费边界旅程 | gate 5c（客户端不推导 readiness） | 🟢 ｜ auto 只免批准拍、不创造意图；ask 与守卫线仍确认 ｜ Charge 等价见 §3 |
-| /generate Paid Authorization（approved retry 两级证明 exact/family + 不可证 → machine-readable `scope.unproven` 阻断，先于余额检查） | `app/pipeline/scope_classifier.py` + `routes/projects.py` 门 | ADR-087 §4 + Frozen Rule 9/10 | `test_scope_classifier_pure.py`（链分类矩阵 + family tier） | 矩阵 S9（typed Start 与 /generate 双路 422 同形同义 + 不可证载荷 `scope.unproven` + 台账零行） | — | ⚠️ ｜ targeted scopes（tasks=None）与 legacy slot-run 整类重做不可证在册（dock 路径覆盖；false negative = 安全向）｜ **approval provenance 仍待对账**：loader 目前纳入带 `context.tasks` 的历史 run，须验证无有效 confirmed/approved provenance 的 legacy run 不能授权，或明确重裁；生产暴露面未核实，见 lifecycle §0 |
-| Start seat 服务端强制（`evaluate_start_gate` + 机器可读 blocker；dock Start、口头与 typed answer 同一机器） | `app/pipeline/lifecycle.py` + `chat/service.py` Start 分支 | ADR-087 §4 + ADR-117/139 | `test_lifecycle_pure.py` | 当前矩阵的活跃 run 阻断、合法 Start 与 422 旅程 | — | 🟢 ｜ 客户端只读服务端旗标，服务端阻断兜底竞态；Film 首稿 review hold 另有硬门 ｜ `pending_plan=True` 直传约束：answer 先写后 dispatch，门内读取不得复用旧戳 |
-| `autonomy="review"` 退役（understand→plan 恒直通；interrupt 机器〔SuspendRun / resume / bail / expiry sweep / verify escalation〕保留） | `app/pipeline/orchestrator.py`（compile）+ interrupt 机器 | ADR-087 §4 | `test_decompile_pure.py`（无 direction interrupt 编译入图）；`test_scope_classifier_pure.py` autonomy fixtures（读容忍证明座） | 矩阵 S2（途中插话：提醒尾 + pending 保持 + 下轮回填） | — | 🟢 ｜ schema 读容忍：`StartAnswerRequest`/`ChatRequest.autonomy` accepted+IGNORED（`extra="forbid"` 下移除会 422 旧客户端）｜ run 执行权仲裁无自动化看护（ADR-114 知情放弃，Consequences 在案） |
-| Charge Semantics | （合同层，无独立实现站） | ADR-063 | `test_lifecycle_pure.py::test_charge_semantics_ready_is_exactly_the_docked_plan` | — | — | 🟢 ｜ 当前 ≡ has_pending_plan（故意等价，§3） |
-| Scope 分类（continuation/expansion/unproven + 链逐字 retry 证明 + 零 op 语义可扩展锁 + registry-known 即付费） | `app/pipeline/scope_classifier.py` + chat 提案出口 | ADR-087 §4 + ADR-117/139 | `test_scope_classifier_pure.py` | 当前矩阵的 continuation、expansion、授权与 422 旅程 | — | 🟢 ｜ continuation 可在既有授权内续跑；expansion 按 auto/ask 与制作意图分流；unproven 失败闭；/generate 不可证先于余额检查；gatherer 无纯测试座 |
-| Activity 投影（白名单字段 / 用户语义 kind / seq 严增 / 翻转律 / N→1 repair 聚合 / 终态唯一） | `app/chat/activity.py` + routes 缝 | ADR-087 §3 | `test_activity_pure.py` | harness 公共断言（Activity 帧形态，矩阵每本自动携带） | gate 5a（内核侧反向） | 🟢 ｜ ActivityStream 渲染级（DOM）无单测——reducer / replay / stream dispatch 三套件在 vitest 层 |
-| ToolLoop 内核边界（LoopEvent 只说 WHAT HAPPENED，无 Activity 构造词汇） | `app/agents/tool_loop.py` | ADR-087 §5 | `test_tool_loop_pure.py` + gate 5a 牙口 | — | gate 5a | 🟢 |
-| Lifecycle/Presentation 依赖方向（lifecycle 禁 app.chat） | `app/pipeline/lifecycle.py` | ADR-087 §5 | gate 5b 牙口 | — | gate 5b | 🟢 |
-| 客户端 lifecycle 读取纪律（读戳合法，本地生成 truth 非法） | `apps/web` ChatDock | ADR-087 §5 | gate 5c 牙口（正反探针） | — | gate 5c | 🟢 ｜ 禁的是「生成」，读 server projection 恒合法 |
-| Import 方向（pipeline ↛ chat 任意深度零命中；跨顶层包私有名 import 清零；组合根双缝接线） | `app/pipeline/trigger_events.py` + `conversation_bridge.py` + `app/chat/seams.py` | ADR-087 §6 | `test_import_direction_pure.py`（AST 双门 + 冷导入双子进程探针 + 接线保险 + 同名局部碰撞扫描） | — | AST 门全树扫描（含 deferred）；组合根源码断言 | 🟢 ｜ 冷导入探针 = 验收主依据：pipeline 全模块新鲜解释器批量导入 `sys.modules` 零 `app.chat*`；反向 `app.chat.service` 冷导入合法落 pipeline（单向街）｜ app 树 only 扫描（scripts/tests 豁免）；组合根注册 = 唯一合法 pipeline→chat 缝 |
-| 戳消费谓词三态（missing ≠ ready） | `apps/web/src/lib/lifecycleStamp.ts` | ADR-087 §2 | `lifecycleStamp.test.ts`（vitest） | — | gate 5c | 🟢 |
-| Web 纯缝（activity reducer / replay 映射器 / stream dispatch） | `apps/web` activityReducer / historyReplay / chatStreamFrames | ADR-087 §1/§3 + 打字机律 | 三套件（vitest 纯 node 零 DOM） | — | — | 🟢 ｜ DOM 渲染级无单测（live-only） |
-| Canvas / Chat Start 入口（画布不另建执行 chrome；dock Start、口头与 typed answer 共用服务端 gate） | `apps/web` flow/ + ChatDock + `chat/service.py` | ADR-111 / ADR-117 / ADR-139 | — | 当前矩阵的确认与 Start 旅程 | 退役的画布独立 Start 标识符清零（grep 可证） | 🟢 ｜ 画布 DOM 负向与真实口头路径仍需 live 验收；auto 无制作意图时必须安全挂起 |
-| Product Graph（词表 v3 / apply_wiring_ops 唯一写口 / 读面映射） | `app/pipeline/graph_*` | ADR-057 / ADR-076 | `test_graph_wiring_pure.py` + `test_product_graph_pure.py` | 矩阵 S2（chat 修订 wiring 横切：同 id 原地改写无双生 → 子图重跑） | — | 🟢 |
-| C-0/C-1/C-2 拓扑空间权威三律（membership / rank / RunOp 拓扑序） | `app/pipeline/product_graph.py` | ADR-086 | `test_product_graph_pure.py` | — | — | 🟢 ｜ legacy `materialize` 行的读面可见性与谓词不一致 = 已知残留；生产 DB 清零证据与删除条件归 本文 §5.3/§5.6 |
-| Execution（fenced 零副作用 / SKIP LOCKED 认领 / 毒丸护栏 / run 执行权） | `app/pipeline/jobs.py` + worker | ADR-017 / ADR-039 | `test_execution_fencing_pure.py` / `test_poison_pill_pure.py` / `test_run_authority_pure.py` | 矩阵 S9（付费边界双路 422） | — | 🟢 ｜ 失败不扣费 / 孤儿 hold 回收无自动化看护（ADR-114 知情放弃，Consequences 在案） |
-| 计费账本（hold→capture→release / 负余额语义） | `app/platform/billing` | ADR-055 | — | `scripts/reconcile_credits.py`（仪表层）+ 矩阵 S9（负余额 hold 必拒） | — | 🟢 |
-| Prompt 面（当前注册探针与绝对阈值 / 枚举漂移） | `app/prompts/chat/` | ADR-071 T2 | `test_prompt_registry_consistency_pure.py`（registry ↔ prompt 枚举一致性） | `scripts/prompt_gate.py` | — | 🟢 ｜ I 探针改靶后仍需按读数校准，永不为放行回归调阈；Film 专属探针族仍缺 |
-| 三通道分家（System Status / Activity / Conversation） | routes + ChatDock | ADR-087 §1 | `test_activity_pure.py`（投影器无 phase 面反向锁） | harness 公共断言（SSE/Activity 帧形态；相位文案永不锁） | gate 5a / 5c | 🟢 ｜ 永不建「相位帧 → lifecycle readiness」正向锁 |
-| Agent Working Loop 修订回路 + 收官审计 + 记忆窄切（revise_plan / revise_selects / revise_output / run_review / 快照路由 / get_artifact + Past journeys + exemplar） | `app/pipeline/exploration_store.py` + `run_review.py` + `scope_compile.py` + `app/chat/perception` | ADR-088 §6~§8·§10 / ADR-089 §4·§6·§8 / ADR-117/139 | `test_revise_selects_pure.py` / `test_run_review_pure.py` / `test_memory_narrow_pure.py` + scope_compile / exploration_tools / perception 守卫 | 当前矩阵的探索与修订旅程 + 六段 live 走查 | — | 代码层已落；live 与 edit_graph 退役证明开放。交付是否有建议/下一步按 ADR-135/141 对账，不恢复旧 pills 断言 |
-| Agent Tools 长程序修订与读面 | `chat/propose_turn.py` + perception `get_node` / pending-plan / run-history reads | 当前 Chat 工具合同 + Working Loop | 现有 tool/perception 纯守卫 | 当前注册矩阵 + live API/dev worker 复跑：长程序先 `get_node` 再改、distilled `specific_instruction` 保留用户范围、pending-plan 与 run-history 读数一致 | — | ⚠️ e2e 未运行；不得恢复退役剧本名或用静态代码审查替代 |
-| 精确编辑四族与归档恢复 | `chat/propose_turn.py` + `operations/` + outputs read model | ADR-090/091 + VIDEO_EDITOR §11 | `test_edit_output_pure.py` / `test_edit_span_pure.py` | 真实 run 覆盖 remove_range、set_trim、set_caption_style、set_title、journal/undo、rerun/archive/restore、归档写 409；pin 非焦点目标 | — | ⚠️ 精确编辑的现有 live 证据需在当前 HEAD 复核；pin 强制覆盖的分歧分支只有纯件证据，尚需自然分歧 live 或明确只接受纯件层级；provider 方差与未复现异常不写成当前缺陷 |
+从 `apps/api` 执行：
+
+```sh
+uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/model-call UUID> --out ../../artifacts/model-traces/<id>
+```
+
+可用 `--trace <jsonl路径>` 指定记录。导出只读，不调用模型、不重新发送 Chat、不修改作品。旧记录缺少 project_id 时，仅通过既有 conversations 表解析 project → conversation；每个调用导出 request/response/error、完整 message 文本、各 tool schema、inventory 与总索引。没有响应记录写 pending，不将其等同于进程仍在执行；项目终态仍须读 Turn/Run。
+
+首次模型请求前的静态 Skill 文件装配记录 `initial_chat_dependency_started/completed/interrupted`，带 project/conversation/turn 身份、读取名、状态和耗时；不执行长耗时采集、不冒充模型工具活动。素材准备归普通 ToolLoop：首轮模型先发言并调用工具，等待明确结果后才请求下一轮；取消不继续。首轮上下文保留根方法/索引/模板原文，实际图片随准备工具结果交付。基础层回归比较完整共享来源及哈希，不设提示词长度目标。
+
+请求的 `assembly` 记录 Agent、ToolLoop 迭代序号、实际执行到的 Jinja root/include 路径、完整源码及 SHA256，系统提示在声明时渲染的源码随其最终字符串保留，不在发送时用磁盘新文件覆盖。条件分支未执行的 include 不列入来源，缓存命中也记录。普通 Chat 另记本轮 message 分区、拒绝候选的完整参数/结构化错误、候选是否真的出现在发送消息中、已成功读取与本轮折叠/保留的 call id。诊断信息不注入模型输入，不改变提示词正文或工具执行。
+
+导出同时生成每个调用的 `assembly.json`、来源模板文件与相邻请求的 `messages-diff.patch`。这些差异基于实际存下来的 messages，包括最新反馈、公共资源和工具协议对，不凭日志摘要推断。旧 trace 没有来源清单时明确标为 unavailable，只提供原始渲染文本，不追认当前源码为历史输入。Skill 按需读取的路径/digest/正文仍在相应工具结果中，非文件系统数据不伪造为 Jinja 来源。
+
+跨回合 context 验收：检查请求 assembly.conversation_context 的 retained_ids、omitted 原因、媒体未附带记录及预算；对照 Conversation.context 中原始调用、规范化执行参数、完整结果与源 Turn。目录本身有界，omitted_catalog_truncated=true 表示还有未列出的历史条目。当前 Turn 的结果只出现在 tail，不能又从历史恢复一次。两回合连续性、实例重建、取消/失败、锁与并发、媒体和权限须由当前核心测试或真实多轮旅程取得证据，不引用已删除的内部上下文套件。
+
+
+数值兼容的 `arguments_normalized` 记录与原始 request/response 使用同一 model_call_id，并记录 tool_call_id、实际字段路径、原始字符串和转换数值；inspect_model_trace 索引展示转换表，不覆盖原始响应。转换发生在历史包装解包后及参数模型校验中；原始 wire 始终留在原始 response，业务校验仍决定可否执行。
+
+输入清单逐消息、逐工具记录 compact JSON 字符数、UTF-8 字节数与 SHA256，正文另列文本字符数和媒体 part 类型。新记录清单在媒体替换/脱敏前计算，旧记录只能按存下来的内容重算；索引明确区分。provider 的 `prompt_tokens` 是实际总读数，各区段只有字符/字节精确值，未获得 provider 分项 tokenizer 时不得按比例宣称精确 tokens。二进制、工具 schema 与消息封装开销不能冒充普通文本。请求详情可能含业务内容，沿用本地诊断产物管理，不上传为公开页面。
+
+## 2. 核心合同 ↔ 当前测试映射
+
+旅程名称只以 `test/journeys/chat.py` 的 `JOURNEYS` 注册表为准；下表不声明未运行项已通过。核心文件可以按领域拆分或合并，但不另建第二注册表。
+
+| 用户依赖的合同 | 核心测试座 | 真实旅程 / 额外证据 |
+|:---|:---|:---|
+| 应用组合根可启动 | `test/core/test_app_boot.py` | 活 API 健康检查与真实请求 |
+| 支付、积分、计量与报价 | `test_payments.py` / `test_metering.py` / `test_pricing.py` | `credits_boundary`；真实 webhook、费用确认与钱包台账 |
+| 执行身份、交付、渲染归属与产物检查 | `test_execution_fencing.py` / `test_run_authority.py` / `test_delivery.py` / `test_render_ownership.py` / `test_render_probe.py` / `test_output_checks.py` / `test_staging.py` | 明确授权的制作旅程；worker 恢复、上传重试与真实媒体 |
+| 上传、媒体准备与导入 | `test_media_preparation.py` / `test_media_import.py` / `test_web_capture.py` | `material_to_clips` / `remix`；真实上传进度、失败与删除 |
+| 内置与外部 Skill、包权限和读取边界 | `test_skill_store.py` / `test_skill_packages.py` / `test_skill_catalog.py` | `builtin_promo_skill` / `external_skill`；恶意包与真实 Skill 多轮对话 |
+| Composition、版本、预览与 video-spec | `test_compositions.py` / `test_previews.py` / `test_video_spec.py` / `test_generator.py` | `temporal_revision` / `builtin_promo_skill`；浏览器预览、Scrub 与最终视听 |
+| Provider 工具协议与原始 trace | `test_provider_tools.py` | 各真实旅程的完整工具调用与 `inspect_model_trace.py` 取证 |
+
+真实旅程注册表还覆盖迷失用户、探索、无素材写作、研究、咨询、修订、访谈、时间编辑与能力拒绝等主流程。新增旅程必须来自真实用户需求；新增核心测试必须能指出其保护的用户合同，不能仅为内部实现形态提高覆盖率。
 
 ## 3. Charge Semantics 等价登记（ADR-063 终读）
 
@@ -105,30 +114,29 @@
 - 若未来要支持「Plan Ready + 费用语义未完整 + Canvas 可审阅 + Confirm
   disabled」：那是 **ADR-063 / ADR-087 的产品合同翻案**，不是普通 bug
   fix——先拍板再动代码，届时本条目与等价钉同批改写。
-- 钉位：`test_lifecycle_pure.py::test_charge_semantics_ready_is_exactly_the_docked_plan`。
+- 该等价是当前产品合同；若实现引入独立收费语义准备态，必须先修订上述 ADR，再调整核心测试与真实旅程。
 
 ## 4. 未闭环验收与实现差异
 
-本节只维护剩余检查、实现差异与证据要求；产品规则分别归 CHAT_ARCHITECTURE、BILLING 与现行 ADR。下面各项仍待运行/核对，不继承 §2 的绿色符号作为 live 通过证明。按改动运行相关 pytest、check_gates、prompt_gate、当前注册旅程矩阵与 web 测试/tsc/build；付费检查遵循既有预算授权。
+本节只维护剩余检查、实现差异与证据要求；产品规则分别归 CHAT_ARCHITECTURE、BILLING 与现行 ADR。下面各项仍待运行/核对，不继承 §2 的绿色符号作为 live 通过证明。按改动运行 `test/core`、当前 `JOURNEYS` 与 Web 测试/tsc/build；付费检查遵循既有预算授权。
 
 ### 4.1 选项唯一座位
 
 Canonical：CHAT_ARCHITECTURE §8.5/§8.8，ADR-081/099/100/116。
 
-- **实现差异待核对**：chat_intent_system.j2 的小写字母选项 ID 指令与 check_options_dock 的数字语法覆盖须按 ADR-081 对账；本次未修改 prompt/守卫，不能宣称已修复。
+- **实现差异待核对**：conversation_mode.j2 的小写字母选项 ID 指令与 check_options_dock 的数字语法覆盖须按 ADR-081 对账；本次未修改 prompt/守卫，不能宣称已修复。
 - ADR-099 只保留三种现行终态形态与 trigger-only provenance；四层架构、交互宪法、Speech Commit Protocol 与默认吸收边界继续有效。NAMING 的 suggestion_ref/source_state 与终态形态须收窄到 trigger，不恢复 answer+suggestions。
-- prompt_gate I 以 browse→ask_user 为目标，先取实际读数再校准；建议/ask_user 发射率固定模型/参数/场景取基线，区分模型未提、未调用与应用丢弃，不降阈或放松剧本放行。路由劫持零容忍，substrate 取证方法归 PROGRESS 对应需求。
-- 自动检查至少包含 test_suggestion_provenance_pure.py、trigger 点击→下一回合编译、stale trigger 的具名原因、数字 id 与 1–5 结构外界、历史 answer replay 安全。
+- 自动检查至少包含 trigger 点击→下一回合编译、stale trigger 的具名原因、数字 id 与 1–5 结构外界、历史 answer replay 安全；这些检查归入当前核心合同或真实旅程，不恢复独立内部套件。
 - live：浏览问题产生可用 dock（推荐、×/pencil 退出、合法且不外露宣告的 default path）；能力问答/闲聊只产纯 answer；有效 suggestion trigger 可 dock/点选/解算；历史 answer 硬刷新只读散文，无建议卡和崩溃。run_completed 不作为建议来源，使用 run_failed/craft_decompiled。
 
 ### 4.2 授权、会话计量与配置
 
-Canonical：CHAT_ARCHITECTURE §3.1，BILLING §6.5/§7，ADR-117/139；Film 首稿另按 ADR-144。
+Canonical：CHAT_ARCHITECTURE §3.1，BILLING §6.5/§7，ADR-117/139；Video 首稿按 VIDEO_PROJECT 的呈现与授权合同。
 
 - 设置读写覆盖缺席/非法值/部分键/同会话生效，确认控件只在 Settings「助手」，composer/dock 不出现偏好开关。
-- auto/ask × quote=0/正价 × 守卫线 × NULL × 有无制作意图：服务端矩阵与真实 Chat 各覆盖代表路径；dock Start、口头/typed answer 共用 gate，Film 首稿不得同回合开工，confirmed_via/scope 证明真实。
+- auto/ask × quote=0/正价 × 守卫线 × NULL × 有无制作意图：服务端矩阵与真实 Chat 各覆盖代表路径；dock Start、口头/typed answer 共用 gate，Video 首稿不得同回合开工，confirmed_via/scope 证明真实。
 - 真实回合检查 conversation_usage：每回合一行，tokens/cache/cost/model/project 归属正确，多迭代聚合、无调用空回合零行、记录失败不打断回复；永不上用户账单/UI，不替代 agent_calls。
-- context 窗口边界与世界状态幸存有纯覆盖；预算是否调整由真实 usage 分布决定，保持 prefix-cache 稳定顺序，滚动摘要不能代替溢出证据。
+- context 窗口边界与世界状态幸存需要核心覆盖；预算是否调整由真实 usage 分布决定，保持 prefix-cache 稳定顺序，滚动摘要不能代替溢出证据。
 - 费用四面同源、NULL/守卫线文案诚实，积分余额/冻结/台账一致；工作段、Dock 两形态、打字机与信封权威不回退。
 - 查询目标环境的 configs 旧 key billing.confirm_large_threshold，按已授权范围清理真实残留并记录执行状态；旧 confirm_strategy 不新增兼容语义。本次未查/改目标 DB，也未运行以上仪式链或 live 检查。
 
@@ -136,7 +144,7 @@ Canonical：CHAT_ARCHITECTURE §3.1，BILLING §6.5/§7，ADR-117/139；Film 首
 
 Canonical：CHAT_ARCHITECTURE §3.5/§8，ADR-102/113。
 
-- prompt_gate、当前素材/咨询旅程矩阵、相关纯测试与 web 检查仍待完成；不恢复已删除的 material-wait 事故套件。
+- 当前素材/咨询旅程、相关核心测试与 Web 检查仍待完成；不恢复 material-wait 事故套件。
 - live：① 寒暄/能力问答零 worker 事件与素材处理；② 视频提问出现真实 read-active，等待实际 ASR 后同回合 grounded answer/诚实失败；③ 同素材追问 digest 命中、零等待。
 - ④ 硬刷新每条 opening/user message 恰好出现一次，不丢不重；⑤ 无素材读取问题的上传不产生处理活动或虚假叙事；⑥ 素材读取回合只有一个 read Activity 生命周期，回答有依据，不逐资产重复叙事。
 - ⑦ ask_user 不可见/散文宣告 default-path，不复读内部法条；⑧ in-flight beat 被抑制时，无 in-flight 的合法 run-birth beat 仍可出现；⑨ read/plan 都没有独立 transcript 节点/卡，资产卡只反映真实状态。
@@ -190,7 +198,7 @@ fresh 首/后续 conversation 分别检查 FK/seq、刷新切 tab、WorkSegment 
 
 Canonical：ADR-087/089/117/139。待验 derived/reasons、PLAN_READY≠CONFIRMATION_READY、missing stamp=unknown、估价完整性非 PLAN_READY 前置；/generate 的历史 context.tasks 不得在无有效 confirmed/approved provenance 时充当授权，生产暴露尚未核实，需修实现或明确重裁。
 
-scope 不可证保持 unproven；targeted tasks=None、legacy slot-run 安全 false negative 不强行放行。pipeline↛chat，trigger 白名单仅 run_completed/run_failed/craft_decompiled。旧 plan-card disclosure 按当前面清理并过 prompt_gate。旧 HOLD/相位退休记录不是当前证据，按 fresh 行为重验，不复做过时施工。
+scope 不可证保持 unproven；targeted tasks=None、legacy slot-run 安全 false negative 不强行放行。pipeline↛chat，trigger 白名单仅 run_completed/run_failed/craft_decompiled。旧 plan-card disclosure 按当前面清理由真实旅程复核。旧 HOLD/相位退休记录不是当前证据，按 fresh 行为重验，不复做过时施工。
 
 若删除 _read_face，先证明目标实例 generator/processor/agent/modifier/materialize 及旧 toolset 无消费者/存量；允许本轮授权 reset 后查零，不伪造迁移或已执行。已应用 Alembic 历史保留；无用户旧数据不再要求兼容搬运，仍保留数据的其他环境须先读容忍再收窄，不得混用授权范围。
 
@@ -201,9 +209,3 @@ scope 不可证保持 unproven；targeted tasks=None、legacy slot-run 安全 fa
 Canonical：UI_GUIDELINES、CHAT_ARCHITECTURE、ADR-118/122/143。待验移动纯 Chat 上传→授权→生成→delivered/partial/failed→修订；unknown 能力、无 world、pending plan、缺/重复 output_refs、失败不出假锚卡。桌面 auto/chat 切换按当前渲染能力，不钉历史设备；锚卡只是收据投影，N 个平铺/稳定去重，无新订阅、合集卡或第二 live 状态源。
 
 真实 MediaLightbox 播放、跨 Home/Lightbox 声音互斥、离屏暂停所有权、copy/免责声明、双主题/无横溢、MentionEditor 不 remount、背景相机不动、WorkSegment 正确收口都未自动通过。交付正文始终只讲实际结果，不给界面引导或内部 ID。Home 真片状态只读 home-creation-entry-refresh；空货架/假 Queue/mic/反馈按钮不复活。
-
-## 6. 后续验证仪器归位（PLANNED，非当前前置）
-
-未来可把现有 live 验证移到 apps/api/harness（README、scenarios/core+按旅程拆分、prompt_gate、长期 probes），apps/api/tests 与 web 测试位置不变；scripts 只留运维/demo。先核对当前 app.* import 引导，保持注册表、阈值、断言与行为不变、零 schema/新依赖；只搬活跃仪器，fixture/worker/进程/配额/round-robin 按 §1。
-
-实施时同批全仓更新命令/引用、不留复制件或第二注册表；以 collect/import 冒烟、受影响 pytest/check_gates/web 检查验证，付费全量仍按授权。本文已作为验证母文档启用，不代表 harness 代码已经搬迁；当前 scripts/chat_scenarios.py 与 scripts/prompt_gate.py 路径继续有效。

@@ -1,6 +1,6 @@
 # Repurposer Agent Architecture
 
-> Status: Active（2026-10-25）。会话层 = ADR-077 有界工具 loop（读工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；会话行为现行规范 = `CHAT_ARCHITECTURE.md`。
+> Status: Active（2026-11-10）。会话层 = ADR-077 有界工具 loop（读工具 + 终态工具停环，ToolLoopAgent），生产层 Graph/Harness/Model 脊柱；会话行为现行规范 = `CHAT_ARCHITECTURE.md`。视频工作草稿与条件工具是 ADR-146 的待实施目标，当前 direct-Composition/fresh-design 代码不续写成目标法律。
 > 本文是 agent 架构的唯一事实源：**四层工程地图（Model / Harness / Graph / Loop）+ 工具包 + 花名册 + 估价**。排期见 PROGRESS.md；表归属见 MODULE_ARCHITECTURE.md；词汇见 NAMING.md（N-29 起）；loop 层行为规格见 CHAT_ARCHITECTURE.md；行业座位映射见 §2.5；**概念层母文档（厚 agent 判词 / 双引擎 workflow / 有界 loop 节点）见 `DIALOG_WORKFLOW.md`（ADR-052）**。
 
 ## 1. 叙事
@@ -122,7 +122,7 @@ class NodeBase:
 ### 4.3 业务执行图的拓扑边界
 
 - **业务执行拓扑由系统代码裁决**（ADR-028）：LLM 通过受支持的意图/修订工具提出请求，`compile_graph` 等确定性编译与校验处理，持久图只经 `apply_wiring_ops` 写入，Run 只经 `create_run` 创建；不允许模型脚本接管调度、授权或计费。
-- **视觉程序与模型请求是内容，不是业务编排**：GeneratorObject 允许 Agent 编写/修改受控程序或可审阅模型请求，当前 runtime 为 drawing-v1 与 image-v1；内容仍只经 `apply_composition_edits` 落版。drawing-v1 在权限受限 Node 进程中只返回绘图命令；image-v1 只在授权 produce Run 内请求 MiniMax image-01 并固定单图。二者都不能访问业务数据库、改图或自行发起 Run，来源、预览、固定媒体与复用合同归 [VIDEO_PROJECT §4.3.2/§8.1.1](VIDEO_PROJECT.md#432-generatorobject可再次生产的画面drawing-v1--image-v1-已接)。GeneratorObject 与执行节点的 `prototype="generator"` 分属不同层，不一一映射。
+- **视觉程序与模型请求是内容，不是业务编排**：GeneratorObject 允许 Agent 编写/修改受控程序或可审阅模型请求，当前 producer 为 draw-2d 与 image-generation；内容仍只经 `apply_composition_edits` 落版。draw-2d 在权限受限 Node 进程中只返回绘图命令；image-generation 只在授权 produce Run 内请求 MiniMax image-01 并固定单图。二者都不能访问业务数据库、改图或自行发起 Run，来源、预览、固定媒体与复用合同归 [VIDEO_PROJECT §4.3.2/§8.1.1](VIDEO_PROJECT.md#432-generatorobject可再次生产的画面draw-2d--image-generation-已接)。GeneratorObject 与执行节点的 `prototype="generator"` 分属不同层，不一一映射。
 - `create_run` 是 WorkflowRun 唯一出生地：clips-media 门、count 边界、requires 校验全部集中于此，入口点零门禁代码。
 - 失败语义：确定性失败快速失败 + 下游级联 skipped；provider/网络/存储瞬时故障抛 `TransientNodeError`，按节点 `retries` 预算复位 pending 不级联；`checkpoint` 瘦节点 `Suspend` 挂起等答（waiting / WAITING_HUMAN），bail 优雅退出永不标 failed。
 - 失败判决（ADR-074）：任一步骤 failed 即判 run FAILED；render 节点计入 active（hold run 到自身渲染终态落地），render/upload/recovery 失败同样是交付判决。上传失败的 chat `retry_upload` 不是新生产节点，也不进入 `TOOL_REGISTRY`：它重开原 run/render step，仍由 Output 渲染队列原座认领，不创建第二 scheduler 或付费生产步骤。
@@ -178,7 +178,11 @@ class Agent[OutT]:
 - `agents/base.py` = 唯一 Agent 类；`agents/registry.py` = 共享 crew 声明（understand / plan / persona / translator…）；**工具私有声明住工具包**（选段编剧、各 writer、reviser）。
 - `AGENTS` dict 收编全部声明，可枚举；启动自检节点→agent 引用存在。
 - 流式 = chat 侧形态（ToolLoopAgent 的言语直推 `assistant.delta`，N-26；pipeline 侧 StreamingAgent 子类照旧服务 researcher/judge 家族）。
-- ToolLoopAgent 的拒绝停止是**调用方策略**，不是内核业务规则：可选 `should_stop_rejection(current, previous)` 读取真实 `ToolRejected` 历史，命中即返回独立 `no_progress_tool` 终态（非 exhausted / TerminalRefusal），不再发起模型调用；当前只有 Chat 的 `design_storyboard` 使用它（同签名第 2 次即停；同回合累计第 3 次设计拒绝无论签名都停）。内核不 import Film，其他 agent 的默认重试不变，统一嵌套预算仍属 R8-M。
+- ToolLoopAgent 的拒绝停止是**调用方策略**，不是内核业务规则：可选 `should_stop_rejection(current, previous)` 读取真实 `ToolRejected` 历史，命中即返回独立 `no_progress_tool` 终态（非 exhausted / TerminalRefusal），不再发起模型调用；当前 Chat 对 `design_storyboard` / `design_video` / `revise_video` 使用它。相同工具/kind/detail 且 candidate digest 也相同的第 2 次拒绝即停；digest 变化代表候选已实质改变，不冒充无进展；同回合累计第 3 次设计拒绝无论签名都停。通用候选修正与批量修正的拒绝也归属原目标工具，不能借 `correct_tool_candidate` 名称绕过预算。内核不 import Film，其他 agent 的默认重试不变，统一嵌套预算仍属 R8-M。
+- ToolLoopAgent 遍历全部 tool_calls；只有显式 `ChatTool.batchable` 的独立读取/资源准备可同批顺序执行，逐项保留 call id、结果和媒体。内容/终态写入须单独调用，混合批执行前拒绝；局部 observation 折叠不破坏批内剩余协议配对。Skill 读取超时仅覆盖当前 IO，内部 Agent 单次模型请求使用声明的 `timeout_s`，不从包会话年龄扣除模型或浏览器等待。
+- `agents/arguments.py` 是无 IO 的参数兼容/路径助手：只按声明 schema 转换合法数字字符串，字符串/引用身份不猜测；错误 loc 中的 discriminator 标签先解析分支再定位真实字段。校验约束保持不变，原始模型返回与数值转换分开记录。Composition 的动画联合 value 由其父 property 明确数值/颜色语义，不靠全局字符串弱比较。
+- 视频创作与修订共用 `design_video` / `revise_video` 和 `apply_composition_edits` 唯一写口。自由创作逐步写完整实体工作草稿；内置 promo 只提交封闭 shot/action union，服务端展开普通 Op、完整校验并落版，一次高层首稿调用即可保存。参数法律只住实际 args/EntityWrites schema，草稿观察只报身份/digest/errors，ToolLoop 只做每轮条件工具投影与执行，prompt 只讲创作方法。高层候选修正复用 `correct_tool_candidate`；builder 失败不进入底层纠错。实施细节与当前缺口唯一归 [Composition 创作循环与上下文收敛](tasks/composition-authoring-context-convergence.md)；不新增模型 Op 语言、第二 harness 或持久阶段机。现有 owner/Conversation/target/base 绑定、Stop、过期与失败闭规则不变。
+- Chat 的 System/User 分别只有 `prompts/chat/system.j2` 与 `user.j2` 一个渲染入口，按调用方已有路由装载 plan/conversation/event/delivery mode；共享法律只在真实共享 partial 中保留一份，不合并两个运行时 Agent。`system_prompt` 为当前调用的可选投影，`project_round_system` 在每轮工具投影后按实际 wire tools 重渲染 System，不修改共享声明；`ContextSnapshot` 同时携带刷新后的业务文本与实际媒体。Chat 入口只静态读取绑定 Skill 根文件、索引和模板。direct promo 首轮只投当前准备/Skill/上下文与 answer/ask 能力；明确素材尚待准备时延后完整 design schema，快照证明准备完成后恢复，保存版出现后恢复制作计划工具。首轮普通模型先发言并调用素材准备，工具等待明确结果后才进入 continuation，不另建开场模型、Director 或阶段机。
 - context 装配：`agents/contexts.py` = 节点侧装配层（GenerationContext，run 计划 → GenerationContext）；chat 意图上下文（项目摘要 / per-step 状态段 / mentions 注入 / recent 轮次收口）住 `chat/context.py`（ADR-087 §6，各层自装上下文）。各 agent 声明的 `assemble` 回调是每 agent 的输入契约（签名即纯度）。`pipeline/step_context.py` 只留机械助手（多模态收集 / 素材摘要 / 行助手）。
 
 ### 5.4 明确不建的 harness 部件
@@ -187,14 +191,15 @@ class Agent[OutT]:
 - **无界 tool-call loop 脚手架**（loop detection / steering / 运行期工具发现）：开放式自主永拒。有界形态全仓库只有两座，各守一层——会话层 = `agents/tool_loop.py` 的 **ToolLoopAgent**（终态工具一调即停 + 迭代上界 + 只读感知族，ADR-077）；生产层 = §4.6 的 **BoundedLoopNode**（三护栏：迭代上限 / 报价=fold / 对外=DAG 单节点）。
 - **Memory 写入冲突管理**：agent 无共享可变状态（中间产物落库、单写者），结构性规避。
 
-视觉程序的设计/预览/修订复用既有声明式 Agent 与有界机制，在首个消费者明确预算和停止条件，不另建第三套 loop/harness。内容已确认后的制作/恢复不得调用 Director 重新设计；用户反馈引发的新创作走显式修订，细则归 VIDEO_PROJECT §8.1.1。
+视觉程序的设计/预览/修订复用既有普通 Chat 工具循环与有界机制，不因新增 Skill 强制增加 Shot/Final Director 等创作流水线，不另建第三套 loop/harness。promo 的目标是在同一循环按需读取 Skill/准备资源、逐步更新工作草稿并保存版本；当前一次性完整 Composition 首稿协议由 ADR-146 替换，不能继续扩展。公共业务资源与本轮成功工具事实的确定性组装、持久化归属及本地验证按创作循环合同执行；不引入共享可变作品副本或 Memory 框架。内容已确认后的制作/恢复不得调用 Director 重新设计；用户反馈引发的新创作走显式完整实体修订或用户要求的开放重稿，生产边界归 VIDEO_PROJECT §8.1.1。
 
 ## 6. Model 层
 
-- `MiniMaxClient` 单边界：`generate(response_model=T)` / `generate_stream`——结构化输出在边界单点强制（`model_validate_json`）；usage 捕获点 → `app/metering.py` → `workflow_steps.cost`（ADR-025 不变）。
-- 多模态 / 图像 / 音乐生成同边界（`generate_image` / `generate_music`）。
-- **模型无关的领域边界**：Composition、Skill 和内容编辑操作不绑定 MiniMax 或其他品牌；上文是当前实现，不是永久供应商限制。文本/代码创作与媒体生产可使用不同模型，provider 私有配置、能力差异、错误与用量在适配边界处理，不泄漏进通用对象语义。
-- **provider 扩展按真实需求实施**：触发可为代码/视觉创作能力、成本或 EU 驻留，不仅限于 EU 客户。在既有调用边界增补实际需要的能力声明/适配；用户政策与底层模型 SKU 分开，不预建全供应商框架。每个接入分别验证工具调用、结构化输出、视觉输入和计量等所需能力，模型可替换不等于所有模型已支持或质量等价。
+- 文本/代码模型经 `providers/llm.get_llm_client()` 按 `LLM_PROVIDER` 选择；`LLMClient` 统一 `generate(response_model=T)` / `generate_stream` / 两种 native-tool 调用，结构化输出在边界单点强制（`model_validate_json`）。MiniMax 与 DeepSeek 各自声明能力、维护价目表；usage 捕获点 → `app/metering.py` → `workflow_steps.cost` / `conversation_usage`（ADR-025 不变）。两者共用 `providers/llm/trace.py`：配置 `LLM_TRACE_PATH` 后在 transport 前保存实际完整请求，并在内容/schema/工具参数解析前保存完整响应；流式工具参数保留原始字符串，关联与脱敏规则见 VERIFICATION §1.6。
+- 多模态 / 图像 / 音乐生成仍由各自媒体 provider 承担（MiniMax `generate_image` / `generate_music`），切换文本模型不切换媒体生产。
+- DeepSeek 使用 OpenAI-compatible Chat Completions；工具循环显式 non-thinking，直到 harness 能完整回放其要求的历史 `reasoning_content`。所有调用显式设置 `DEEPSEEK_MAX_OUTPUT_TOKENS`（默认 32768），避免 non-thinking 的 8K 默认上限截断大型 Composition 工具参数。JSON Output 仍由本地 Pydantic 校验，不冒充 JSON Schema；Strict Tools 需另行完成 wire-schema 适配。Flash 图片可进 user 消息，tool-result 图片由客户端投影为完整工具结果组后的 user evidence；视频继续走抽帧 + ASR。
+- **模型无关的领域边界**：Composition、Skill 和内容编辑操作不绑定 MiniMax、DeepSeek 或其他品牌。provider 私有配置、能力差异、错误与用量在适配边界处理，不泄漏进通用对象语义。
+- **provider 扩展按真实需求实施**：在既有调用边界增补实际需要的能力声明/适配；用户政策与底层模型 SKU 分开，不预建全供应商框架。每个接入分别验证工具调用、结构化输出、视觉输入和计量等所需能力，模型可替换不等于所有模型已支持或质量等价。
 
 ## 7. 工具包（`app/tools/`）
 
@@ -226,16 +231,17 @@ tools/dub/           配音工具
 
 `verify` 是当前注册可执行的内部节点：编译时挂在相应生成执行器之后，确定性检查矩阵负责文件、保真、锚点、响度、数量与计划意图等校验；声明式 judge 只承担其注册的辅助检查，失败不得伪装成质检通过。QualityBounce 有界打回上游，支持 best-not-last 快照恢复与 needs_human 升级；在 Product Graph 中折叠进执行器家族，不成为用户可提议工具或独立产品节点。
 
-首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`。视频内容级 reviewer 已纳入 Video Project B 支撑增量，目标规则归 VIDEO_PROJECT §8.5，D4 时间点预览归 §11.3；具体代码归属只在该文 §12 登记。模型审片能力归 tools/video 与既有 Agent harness，verify 负责既有检查/裁决，run_review 保持纯事实聚合；三者不互相替代。全片跨产物矛盾检查与更多 modifier 质检不随此增量自动完成，实施状态归 PROGRESS 与四阶段施工合同。
+首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`。视频内容级 reviewer 已纳入 Video Project B 支撑增量，目标规则归 VIDEO_PROJECT §8.5，精确时间点预览归 §11.3 与统一施工合同 P10；具体代码归属只在该文 §12 登记。模型审片能力归 tools/video 与既有 Agent harness，verify 负责既有检查/裁决，run_review 保持纯事实聚合；三者不互相替代。全片跨产物矛盾检查与更多 modifier 质检不随此增量自动完成，实施状态归 PROGRESS 与统一视频施工合同。
 
 ## 10. 验收器
 
-验证资产只保留两类（ADR-114）：**用户主流程旅程矩阵**与**承重架构防漂移守卫**；事故锁 / 批次产物 / 镜像实现形态的锁不立，退役 = 自然死亡、逐案过堂。
+验证资产只保留两类（ADR-114）：**用户主流程旅程矩阵**与**核心 API/DB 确定性测试**；内部实现形态和重复 ToolLoop 机制不另立永久锁。
 
-- **剧本矩阵**：`scripts/chat_scenarios.py` S1–S10——每本 = 一种用户 × 一种创作流 × 全旅程，对活 API 真实 LLM 跑形态级断言（永不锁 LLM 文案），本架构的活 LLM 回归网。harness 公共断言每本自动携带：SSE 工具 loop 线格式 / Activity 帧形态 / dock 形态 / 估价三断言（fold 对账 / 报价单调性：子图 ≤ 全图、非负 / repair 恰一轮）。
-- **承重守卫**：`tests/*_pure.py` 纯函数套件（无 DB / LLM / HTTP）+ `scripts/check_gates.py` 静态架构门（boot 冒烟 / 依赖方向 / 盲重试禁令 / 退役节点 kind 不回魂）+ web vitest 十本组件旁置套件。
+- **真实用户旅程**：`test/journeys/chat.py` 的当前 `JOURNEYS` 注册表——每本 = 一种用户 × 一种创作流 × 全旅程，对活 API 和真实模型验证用户可见结果与服务端/数据库真值，永不锁 LLM 文案。
+- **核心 API/DB**：`test/core/`——支付、上传、工具协议、权限、计费、作品数据、执行与交付等确定性合同；不调用真实模型、不执行付费制作，事务测试使用独立临时 PostgreSQL 数据库。
+- **Web**：组件旁置 vitest 与 TypeScript 检查；真实浏览器和最终视听另行验收。
 - **启动自检**：runner 注册一致性（`assert_runners_registered` 同款）+ 节点→agent 引用存在 + 配方 flow 对账（§4.2）。
-- 部署前仪式链与仪表层登记归 CLAUDE.md Testing；fixture / worker 抢跑 / flake 处置纪律归 `docs/VERIFICATION.md` §3.6 / §5；改 pipeline 代码必重启常驻 worker。
+- 运行命令归 CLAUDE.md Testing；fixture / worker 抢跑 / flake 处置纪律归 `docs/VERIFICATION.md` §1；改 pipeline 代码必重启常驻 worker。
 
 ## 11. Critical files
 
@@ -250,3 +256,6 @@ tools/dub/           配音工具
 - `app/providers/llm/minimax.py` — Model 单边界；`app/metering.py` — 计量
 - `app/models/schemas.py` — GenerationContext / TaskSpec / IntentSlot（编译期投影 `spec.slot`，非请求层语法）/ 输出契约（OUTPUT_PAYLOAD_SCHEMAS）
 - `app/prompts/*.j2` — prompt 模板（版本随代码）
+
+
+Conversation 跨回合延续：ToolLoop 通过调用方 `on_context_event` 输出 ToolExchange，通过 `restore_context` 接收 ConversationHistory，不直接接触数据库、Activity 或视频业务。Chat 层将实际工具交互保存到唯一 Conversation.context，并按最新项目事实、预算和媒体可用性恢复成对协议；无需新增 Director、会话状态机或客户端 ref。详见 Composition 创作循环收敛合同 §4.3.3。

@@ -1,0 +1,152 @@
+[
+  {
+    "n": 1,
+    "scope": {
+      "target": {
+        "kind": "segment",
+        "scene_id": "input",
+        "clip_id": null,
+        "start_seconds": 0.0,
+        "end_seconds": 4.0
+      },
+      "source_range_seconds": {
+        "start": 0.0,
+        "end": 4.0
+      },
+      "isolated_object": false,
+      "clip_ids": [
+        "clp_input_headline",
+        "clp_input_web"
+      ],
+      "review_target": {
+        "scene_id": "input",
+        "include_previous_scene": false,
+        "start_seconds": 0.0,
+        "end_seconds": 4.0
+      },
+      "scene_ids": [
+        "input"
+      ],
+      "current_scene_ordinal": 1
+    },
+    "observation": {
+      "mode": "continuous_mp4",
+      "continuous": true,
+      "media_digest": "deb5d036ccf0311b6c7d90ba33104f66de25484acca332599c3707ede485743b",
+      "size_bytes": 1111393,
+      "duration_seconds": 4.0
+    },
+    "media_refs": [
+      {
+        "mime": "video/mp4",
+        "type": "video",
+        "digest": "deb5d036ccf0311b6c7d90ba33104f66de25484acca332599c3707ede485743b",
+        "caption": "Working draft cnd_oxvalue_sequential content 1dc63f7d6cc9100db23332f87984714ea02bf3353ad8c0b1fbfb2eadf880512e; continuous MP4 covering {\"start\": 0.0, \"end\": 4.0} in Scenes ['input']. Media SHA-256 deb5d036ccf0311b6c7d90ba33104f66de25484acca332599c3707ede485743b. This is not a saved-version Scrub or delivered Output.",
+        "size_bytes": 1111393,
+        "storage_key": "1291c14d-fdae-406a-8be4-7585f2e213a0/chat-context/3f5764bd-28c1-48df-88ff-72dc5a9d435d/deb5d036ccf0311b6c7d90ba33104f66de25484acca332599c3707ede485743b"
+      }
+    ]
+  },
+  {
+    "n": 2,
+    "scope": {
+      "target": {
+        "kind": "segment",
+        "scene_id": "review",
+        "clip_id": null,
+        "start_seconds": 2.5,
+        "end_seconds": 8.0
+      },
+      "source_range_seconds": {
+        "start": 2.5,
+        "end": 8.0
+      },
+      "isolated_object": false,
+      "clip_ids": [
+        "clp_input_headline",
+        "clp_input_web",
+        "clp_review_headline",
+        "clp_review_web"
+      ],
+      "review_target": {
+        "scene_id": "review",
+        "include_previous_scene": true,
+        "start_seconds": 2.5,
+        "end_seconds": 8.0
+      },
+      "scene_ids": [
+        "input",
+        "review"
+      ],
+      "current_scene_ordinal": 2
+    },
+    "observation": {
+      "mode": "continuous_mp4",
+      "continuous": true,
+      "media_digest": "fd7d2f8bc077028aa2e7f4b7f26885641d2af095aef27895718e4830f9da822b",
+      "size_bytes": 1328814,
+      "duration_seconds": 5.5
+    },
+    "media_refs": [
+      {
+        "mime": "video/mp4",
+        "type": "video",
+        "digest": "fd7d2f8bc077028aa2e7f4b7f26885641d2af095aef27895718e4830f9da822b",
+        "caption": "Working draft cnd_oxvalue_sequential content 1dc63f7d6cc9100db23332f87984714ea02bf3353ad8c0b1fbfb2eadf880512e; continuous MP4 covering {\"start\": 2.5, \"end\": 8.0} in Scenes ['input', 'review']. Media SHA-256 fd7d2f8bc077028aa2e7f4b7f26885641d2af095aef27895718e4830f9da822b. This is not a saved-version Scrub or delivered Output.",
+        "size_bytes": 1328814,
+        "storage_key": "1291c14d-fdae-406a-8be4-7585f2e213a0/chat-context/3f5764bd-28c1-48df-88ff-72dc5a9d435d/fd7d2f8bc077028aa2e7f4b7f26885641d2af095aef27895718e4830f9da822b"
+      }
+    ]
+  },
+  {
+    "n": 3,
+    "scope": {
+      "target": {
+        "kind": "segment",
+        "scene_id": "review",
+        "clip_id": null,
+        "start_seconds": 0.0,
+        "end_seconds": 8.0
+      },
+      "source_range_seconds": {
+        "start": 0.0,
+        "end": 8.0
+      },
+      "isolated_object": false,
+      "clip_ids": [
+        "clp_input_headline",
+        "clp_input_web",
+        "clp_review_headline",
+        "clp_review_web"
+      ],
+      "review_target": {
+        "scene_id": "review",
+        "include_previous_scene": true,
+        "start_seconds": 0.0,
+        "end_seconds": 8.0
+      },
+      "scene_ids": [
+        "input",
+        "review"
+      ],
+      "current_scene_ordinal": 2
+    },
+    "observation": {
+      "mode": "continuous_mp4",
+      "continuous": true,
+      "media_digest": "a59cb07df020bff22216db747b59006bba3e3a6e157b61d0c021db40bbf5dc91",
+      "size_bytes": 2227502,
+      "duration_seconds": 8.0
+    },
+    "media_refs": [
+      {
+        "mime": "video/mp4",
+        "type": "video",
+        "digest": "a59cb07df020bff22216db747b59006bba3e3a6e157b61d0c021db40bbf5dc91",
+        "caption": "Working draft cnd_oxvalue_sequential content 29057915bc235be74f58ee8cdab83f74ef372469cd4f674b19846655d4a8e7a7; continuous MP4 covering {\"start\": 0.0, \"end\": 8.0} in Scenes ['input', 'review']. Media SHA-256 a59cb07df020bff22216db747b59006bba3e3a6e157b61d0c021db40bbf5dc91. This is not a saved-version Scrub or delivered Output.",
+        "size_bytes": 2227502,
+        "storage_key": "1291c14d-fdae-406a-8be4-7585f2e213a0/chat-context/3f5764bd-28c1-48df-88ff-72dc5a9d435d/a59cb07df020bff22216db747b59006bba3e3a6e157b61d0c021db40bbf5dc91"
+      }
+    ]
+  }
+]

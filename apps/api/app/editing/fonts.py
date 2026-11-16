@@ -8,13 +8,14 @@ font against the per-file digest in video-spec.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
 
 FONT_ID = "noto-sans-sc"
 FONT_FAMILY = "Noto Sans SC"
-FONT_SET_DIGEST = "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d272b3"
 SEGMENTATION_VERSION = "scalar-grapheme-v1"
 LAYOUT_VERSION = "explicit-line-inline-v1"
 
@@ -28,30 +29,59 @@ _EMOJI_UNICODE_RANGE = (
     "U+2B00-2BFF, U+1F000-1FAFF, U+FE0F"
 )
 
-FONT_FILES = (
-    {
-        "family": FONT_FAMILY,
-        "weight": 400,
-        "filename": "NotoSansSC-Regular.otf",
-        "format": "opentype",
-        "digest": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
-    },
-    {
-        "family": FONT_FAMILY,
-        "weight": 700,
-        "filename": "NotoSansSC-Bold.otf",
-        "format": "opentype",
-        "digest": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0",
-    },
-    {
-        "family": "Noto Emoji",
-        "weight": 400,
-        "filename": "NotoEmoji-Regular.ttf",
-        "format": "truetype",
-        "digest": "988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8",
-        "unicode_range": _EMOJI_UNICODE_RANGE,
-    },
-)
+_REGULAR = {
+    "family": FONT_FAMILY,
+    "weight": 400,
+    "filename": "NotoSansSC-Regular.otf",
+    "format": "opentype",
+    "digest": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+}
+_BOLD = {
+    "family": FONT_FAMILY,
+    "weight": 700,
+    "filename": "NotoSansSC-Bold.otf",
+    "format": "opentype",
+    "digest": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0",
+}
+# Unmodified NotoSansCJKsc-Black.otf from notofonts/noto-cjk (SIL OFL 1.1).
+# FontFace registers the bytes under the same explicit CSS family alias as the
+# other SC faces; only the storage filename is shortened.
+_BLACK = {
+    "family": FONT_FAMILY,
+    "weight": 900,
+    "filename": "NotoSansSC-Black.otf",
+    "format": "opentype",
+    "digest": "2267c4a0312d267dff8c0d1609948f7d949a3da8be3e126f5e2690cb9cc883b4",
+}
+_EMOJI = {
+    "family": "Noto Emoji",
+    "weight": 400,
+    "filename": "NotoEmoji-Regular.ttf",
+    "format": "truetype",
+    "digest": "988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8",
+    "unicode_range": _EMOJI_UNICODE_RANGE,
+}
+
+LEGACY_FONT_SET_DIGEST = "11c92f6b5efd1a6b91ed87e04d82ddbf961fd40a6d5d6be2e36d33b2e0d272b3"
+_LEGACY_FONT_FILES = (_REGULAR, _BOLD, _EMOJI)
+FONT_FILES = (_REGULAR, _BOLD, _BLACK, _EMOJI)
+
+
+def _font_set_digest(files: tuple[dict[str, Any], ...]) -> str:
+    identity = json.dumps(
+        {"font_id": FONT_ID, "files": files},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(identity).hexdigest()
+
+
+FONT_SET_DIGEST = _font_set_digest(FONT_FILES)
+_FONT_SETS = {
+    LEGACY_FONT_SET_DIGEST: _LEGACY_FONT_FILES,
+    FONT_SET_DIGEST: FONT_FILES,
+}
 
 
 def font_storage_key(filename: str, digest: str) -> str:
@@ -62,17 +92,27 @@ def font_storage_key(filename: str, digest: str) -> str:
 def font_resources(font_id: str, set_digest: str, weights: set[int]) -> list[dict[str, Any]]:
     """Resolve the immutable files needed by the requested CSS weights.
 
-    With the two pinned faces, Chromium's established matching law is made
-    explicit: 400/500 use Regular; 600/700/800 use Bold. No system fallback or
-    renderer-local font discovery participates in the compiled spec.
+    Chromium's established matching law is explicit: 400/500 use Regular,
+    600/700/800 use Bold, and 900 uses the pinned Black face. Historical
+    font-set digests retain their original files and cannot silently acquire
+    a face that did not exist when their versions were saved.
     """
-    if font_id != FONT_ID or set_digest != FONT_SET_DIGEST:
+    if font_id != FONT_ID or set_digest not in _FONT_SETS:
         raise ValueError(f"unsupported font resource {font_id}:{set_digest}")
-    wanted = {400 if weight in (400, 500) else 700 for weight in weights}
-    if not wanted <= {400, 700}:
+    files = _FONT_SETS[set_digest]
+    if not weights <= {400, 500, 600, 700, 800, 900}:
         raise ValueError(f"unsupported font weights: {sorted(weights)}")
+    wanted = {
+        400 if weight in (400, 500) else 700 if weight in (600, 700, 800) else 900
+        for weight in weights
+    }
+    available = {int(item["weight"]) for item in files if item["family"] == FONT_FAMILY}
+    if not wanted <= available:
+        raise ValueError(
+            f"font set {set_digest} lacks requested weights: {sorted(wanted - available)}"
+        )
     resources: list[dict[str, Any]] = []
-    for item in FONT_FILES:
+    for item in files:
         weight = int(item["weight"])
         if item["family"] == FONT_FAMILY and weight not in wanted:
             continue
@@ -80,7 +120,7 @@ def font_resources(font_id: str, set_digest: str, weights: set[int]) -> list[dic
         digest = str(item["digest"])
         resource: dict[str, Any] = {
             "font_id": FONT_ID,
-            "font_set_digest": FONT_SET_DIGEST,
+            "font_set_digest": set_digest,
             "family": item["family"],
             "weight": weight,
             "format": item["format"],

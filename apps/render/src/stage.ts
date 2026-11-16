@@ -34,6 +34,12 @@ export const CACHE_DIR = path.join(os.tmpdir(), "repurposer-source-cache");
 const CACHE_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 /** Hard cap for one source download; stalls die much earlier via bodyTimeout. */
 const HARD_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_STAGE_ATTEMPTS = 3;
+const TRANSIENT_STAGE_CODES = new Set([
+  "ECONNRESET", "EPIPE", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN",
+  "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+]);
 
 const RENDER_PORT = Number(process.env.RENDER_PORT ?? 3001);
 
@@ -88,6 +94,21 @@ function toLoopbackUrl(filePath: string): string {
   return `http://127.0.0.1:${RENDER_PORT}/cache/${path.basename(filePath)}`;
 }
 
+function transientStageFailure(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const item = current as { name?: string; code?: unknown; cause?: unknown };
+    if (item.name === "TimeoutError") return true;
+    if (typeof item.code === "string" && TRANSIENT_STAGE_CODES.has(item.code)) return true;
+    current = item.cause;
+  }
+  return false;
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Stage a remote source URL into the local cache; returns its loopback URL.
  * Non-http(s) inputs are returned unchanged (already local). `cacheKey` is
@@ -104,7 +125,19 @@ export async function stageRemoteSource(
   const requestKey = `${cacheKey ?? url}:${expectedSha256 ?? ""}`;
   const pending = inflight.get(requestKey);
   if (pending) return pending;
-  const p = doStage(url, cacheKey, expectedSha256).finally(() => inflight.delete(requestKey));
+  const p = (async () => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await doStage(url, cacheKey, expectedSha256);
+      } catch (error) {
+        // A source is downloaded once per render. A transient connect/stall
+        // must not kill the whole paid production on its first attempt;
+        // HTTP, digest and unknown programming errors still fail immediately.
+        if (attempt >= MAX_STAGE_ATTEMPTS || !transientStageFailure(error)) throw error;
+        await wait(250 * 2 ** (attempt - 1));
+      }
+    }
+  })().finally(() => inflight.delete(requestKey));
   inflight.set(requestKey, p);
   return p;
 }

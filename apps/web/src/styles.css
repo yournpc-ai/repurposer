@@ -4,6 +4,8 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/cormorant-garamond";
+@import "@fontsource-variable/noto-serif-sc";
 /* Streamdown (assistant markdown in chat surfaces): base styles + Tailwind
  * v4 source scan so its utility classes are generated. */
 @import "streamdown/styles.css";
@@ -31,6 +33,17 @@
 
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     background-color: var(--popover);
+  }
+}
+
+@utility landing-header-glass {
+  background-color: color-mix(in oklch, var(--landing-header-background) 93%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  box-shadow: none;
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: var(--landing-header-background);
   }
 }
 
@@ -212,12 +225,17 @@
  * second dotted surface is a violation. */
 
 /*
- * Display typeface for the landing hero: SF Pro on Apple devices (what the
- * v3 wireframe was rendered in), falling back to Inter elsewhere. Scoped to
- * marketing surfaces — the product UI keeps Inter via --font-sans.
+ * Display typeface for marketing section headings: SF Pro on Apple devices,
+ * falling back to Inter elsewhere. Scoped to marketing surfaces — the product
+ * UI keeps Inter via --font-sans.
  */
 @utility font-display {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter Variable", "PingFang SC", sans-serif;
+}
+
+/* The landing hero uses a high-contrast editorial serif in both scripts. */
+@utility font-hero {
+  font-family: "Cormorant Garamond Variable", "Noto Serif SC Variable", "Songti SC", serif;
 }
 
 /* Ambient glow — the landing hero's atmosphere: two soft opal-tinted radial
@@ -626,6 +644,12 @@ body {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-media-scrim: var(--media-scrim);
+  --color-media-foreground: var(--media-foreground);
+  --color-media-muted-foreground: var(--media-muted-foreground);
+  --color-media-control: var(--media-control);
+  --color-media-control-hover: var(--media-control-hover);
+  --color-media-control-foreground: var(--media-control-foreground);
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.625rem;
@@ -643,7 +667,8 @@ body {
   color-scheme: light;
 
   /* Arc foundation. Components consume the semantic aliases below, not these
-   * source tokens directly. Neutral surfaces and text are zero-chroma OKLCH. */
+   * source tokens directly. Neutral surfaces and text are zero-chroma OKLCH;
+   * the public landing's paper surface is the sole warm foundation token. */
   --arc-neutral-0: oklch(1 0 0);
   --arc-neutral-1: oklch(0.99 0 0);
   --arc-neutral-2: oklch(0.978 0 0);
@@ -656,6 +681,7 @@ body {
   --arc-neutral-9: oklch(0.34 0 0);
   --arc-neutral-10: oklch(0.23 0 0);
   --arc-neutral-11: oklch(0.15 0 0);
+  --arc-paper-0: #f9f8f6;
   --arc-background: var(--arc-neutral-0);
   --arc-surface: var(--arc-neutral-0);
   --arc-surface-raised: var(--arc-neutral-0);
@@ -737,6 +763,15 @@ body {
   /* shadcn semantic roles. Quiet fills share surface-muted: hover states,
    * wells, chips and secondary surfaces intentionally speak one tonal step. */
   --background: var(--arc-background);
+  --landing-background: var(--arc-paper-0);
+  --landing-header-background: #f2f1ee;
+  /* Media overlays stay constant across page themes. */
+  --media-scrim: var(--arc-neutral-11);
+  --media-foreground: var(--arc-neutral-3);
+  --media-muted-foreground: color-mix(in oklab, var(--media-foreground) 62%, transparent);
+  --media-control: color-mix(in oklab, var(--arc-neutral-11) 68%, transparent);
+  --media-control-hover: color-mix(in oklab, var(--arc-neutral-11) 82%, transparent);
+  --media-control-foreground: var(--media-foreground);
   --foreground: var(--arc-foreground);
   --card: var(--arc-surface);
   --card-foreground: var(--arc-foreground);
@@ -797,6 +832,8 @@ body {
 .dark {
   color-scheme: dark;
   --arc-background: oklch(0.19 0 0);
+  --landing-background: oklch(0.12 0 0);
+  --landing-header-background: #171612;
   --arc-surface: oklch(0.215 0 0);
   --arc-surface-raised: oklch(0.24 0 0);
   --arc-surface-muted: oklch(0.26 0 0);
@@ -844,6 +881,12 @@ body {
   --track-audio-foreground: oklch(0.87 0.08 350);
   --inverse: var(--arc-surface-muted);
   --inverse-foreground: var(--arc-foreground);
+}
+
+/* The public page has its own quieter surface while inheriting every other
+ * semantic foreground, control, border and overlay token from the theme. */
+.landing-surface {
+  --background: var(--landing-background);
 }
 
 @layer base {
@@ -990,4 +1033,74 @@ body {
   .dock-panel-in {
     animation: none;
   }
+}
+
+/* Public demo scenes: directional satin light and coarse static grain.
+   The palette is independent of the Studio surfaces. */
+.landing-showcase {
+  --scene-base: #f8f7f5;
+  --scene-glow: #e9babb;
+  --scene-beam: #afc7f6;
+  --scene-accent: #e8d9ad;
+  --landing-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
+  background: var(--scene-base);
+  isolation: isolate;
+  transition: background-color 600ms ease;
+}
+.landing-showcase.scene-1 { --scene-glow: #d7c6e8; --scene-beam: #b8d8e8; --scene-accent: #ecd8b6; }
+.landing-showcase.scene-2 { --scene-glow: #b9d8cf; --scene-beam: #b9ccec; --scene-accent: #e9c3cf; }
+.landing-showcase.scene-3 { --scene-glow: #e3bed2; --scene-beam: #c9bde5; --scene-accent: #d8dfba; }
+.landing-scene-wash {
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 8% 96%, var(--scene-glow), transparent 62%),
+    radial-gradient(ellipse at 96% 2%, color-mix(in oklch, var(--scene-beam) 58%, transparent), transparent 58%),
+    radial-gradient(ellipse 45% 45% at 50% 110%, var(--scene-accent), transparent 100%);
+}
+.landing-scene-wash::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      126deg,
+      transparent 0%,
+      transparent 8%,
+      color-mix(in oklch, var(--scene-beam) 14%, transparent) 13%,
+      color-mix(in oklch, var(--scene-beam) 76%, transparent) 21%,
+      color-mix(in oklch, var(--scene-glow) 30%, transparent) 28%,
+      transparent 38%,
+      transparent 48%,
+      color-mix(in oklch, var(--scene-beam) 58%, transparent) 57%,
+      transparent 68%,
+      transparent 76%,
+      color-mix(in oklch, var(--scene-beam) 68%, transparent) 85%,
+      transparent 96%
+    );
+  background-size: 100% 100svh;
+  filter: blur(10px);
+}
+.landing-scene-wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--landing-grain);
+  background-size: 220px 220px;
+  filter: contrast(1.5);
+  mix-blend-mode: overlay;
+  opacity: 0.95;
+  -webkit-mask-image: linear-gradient(135deg, rgb(0 0 0 / 0.2), black 78%);
+  mask-image: linear-gradient(135deg, rgb(0 0 0 / 0.2), black 78%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-showcase { transition: none; }
+}
+
+/* A dense caption floor protects copy even over white frames and embedded type. */
+.landing-gallery-scrim {
+  background: linear-gradient(to top,
+    var(--media-scrim) 0%,
+    color-mix(in oklab, var(--media-scrim) 94%, transparent) 30%,
+    color-mix(in oklab, var(--media-scrim) 65%, transparent) 65%,
+    transparent 100%);
 }

@@ -51,6 +51,7 @@ from app.editing.schemas import (
     Scene,
     SourceBinding,
     SpeechObject,
+    TextObject,
     TimeRange,
     Track,
     Transition,
@@ -60,6 +61,10 @@ from app.editing.schemas import (
 
 class EditError(ValueError):
     """One op of the batch failed to apply; the whole batch is rejected."""
+
+
+class TextAnimationTargetLost(EditError):
+    """The replacement has too few text parts for the existing animation."""
 
 
 class SetSettings(BaseModel):
@@ -229,6 +234,256 @@ class TemporalEdit(BaseModel):
         return self
 
 
+class ClipEntityWrite(BaseModel):
+    """One complete Clip plus its parent Track identity.
+
+    Clip deliberately has no parent pointer in CompositionContent, so the
+    placement envelope carries only the target track_id; ``clip`` itself is
+    byte-for-byte the final persisted entity.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    track_id: str = Field(min_length=1, max_length=64)
+    clip: Clip
+
+
+class EntityWrites(BaseModel):
+    """Declarative whole-entity writes against one working Composition.
+
+    There is no operation vocabulary or execution order in the payload. An
+    existing stable id is updated, a fresh id is added, and the remove lists
+    delete entities. The server applies one atomic batch and validates the
+    complete resulting Composition.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenes: list[Scene] = Field(default_factory=list, max_length=64)
+    tracks: list[Track] = Field(default_factory=list, max_length=64)
+    clips: list[ClipEntityWrite] = Field(default_factory=list, max_length=256)
+    transitions: list[Transition] = Field(default_factory=list, max_length=64)
+    remove_scene_ids: list[str] = Field(default_factory=list, max_length=64)
+    remove_track_ids: list[str] = Field(default_factory=list, max_length=64)
+    remove_clip_ids: list[str] = Field(default_factory=list, max_length=256)
+    remove_transition_ids: list[str] = Field(default_factory=list, max_length=64)
+
+    def has_changes(self) -> bool:
+        return any(
+            getattr(self, field)
+            for field in (
+                "scenes", "tracks", "clips", "transitions",
+                "remove_scene_ids", "remove_track_ids", "remove_clip_ids",
+                "remove_transition_ids",
+            )
+        )
+
+
+def _entity_list(container: dict, key: str) -> list:
+    value = container.get(key)
+    if value is None:
+        value = []
+        container[key] = value
+    if not isinstance(value, list):
+        raise EditError(f"{key} must be an array before entity writes can apply")
+    return value
+
+
+def _upsert_raw(items: list, entity: dict, id_key: str) -> None:
+    entity_id = entity[id_key]
+    for index, current in enumerate(items):
+        if isinstance(current, dict) and current.get(id_key) == entity_id:
+            items[index] = copy.deepcopy(entity)
+            return
+    items.append(copy.deepcopy(entity))
+
+
+def _reject_duplicate_ids(writes: EntityWrites) -> None:
+    groups = (
+        ("scene", [item.scene_id for item in writes.scenes], writes.remove_scene_ids),
+        ("track", [item.track_id for item in writes.tracks], writes.remove_track_ids),
+        ("clip", [item.clip.clip_id for item in writes.clips], writes.remove_clip_ids),
+        ("transition", [item.transition_id for item in writes.transitions], writes.remove_transition_ids),
+    )
+    for kind, ids, removals in groups:
+        if len(ids) != len(set(ids)):
+            raise EditError(f"a {kind} may be written only once per batch")
+        if len(removals) != len(set(removals)):
+            raise EditError(f"a {kind} may be removed only once per batch")
+        if set(ids) & set(removals):
+            raise EditError(f"a {kind} cannot be written and removed in the same batch")
+    track_clip_ids = [
+        clip.clip_id for track in writes.tracks for clip in track.clips
+    ]
+    if len(track_clip_ids) != len(set(track_clip_ids)):
+        raise EditError("a Clip may appear in only one complete Track write per batch")
+    track_clips = set(track_clip_ids)
+    clip_writes = {item.clip.clip_id for item in writes.clips}
+    if track_clips & clip_writes:
+        raise EditError("a Clip in a complete Track write cannot also be written separately")
+    if track_clips & set(writes.remove_clip_ids):
+        raise EditError("a Clip in a complete Track write cannot also be removed separately")
+    if set(writes.remove_track_ids) & {item.track_id for item in writes.clips}:
+        raise EditError("a Clip cannot be written into a Track removed by the same batch")
+
+
+def apply_entity_writes_raw(content: dict, writes: EntityWrites) -> dict:
+    """Apply complete final entities to raw working JSON without field patches.
+
+    Raw input is intentional: even a first draft with schema errors remains
+    correctable at entity granularity. Structural errors in the containers
+    themselves fail closed; no malformed parent is silently discarded.
+    """
+    if not isinstance(content, dict):
+        raise EditError("the working Composition must be a JSON object")
+    _reject_duplicate_ids(writes)
+    candidate = copy.deepcopy(content)
+    scenes = _entity_list(candidate, "scenes")
+    timeline = candidate.get("timeline")
+    if timeline is None:
+        timeline = {}
+        candidate["timeline"] = timeline
+    if not isinstance(timeline, dict):
+        raise EditError("timeline must be an object before entity writes can apply")
+    tracks = _entity_list(timeline, "tracks")
+    transitions = _entity_list(timeline, "transitions")
+
+    def clip_location(clip_id: str) -> tuple[dict, dict] | None:
+        for track in tracks:
+            if not isinstance(track, dict):
+                continue
+            for clip in track.get("clips") or []:
+                if isinstance(clip, dict) and clip.get("clip_id") == clip_id:
+                    return track, clip
+        return None
+
+    affected_scenes: set[str] = set()
+    for track in writes.tracks:
+        affected_scenes.update(
+            str(clip.scene_id) for clip in track.clips if clip.scene_id is not None
+        )
+        for clip in track.clips:
+            old_clip = clip_location(clip.clip_id)
+            if old_clip is not None and old_clip[1].get("scene_id") is not None:
+                affected_scenes.add(str(old_clip[1]["scene_id"]))
+        old = next((item for item in tracks if isinstance(item, dict) and item.get("track_id") == track.track_id), None)
+        if old is not None:
+            affected_scenes.update(
+                str(clip.get("scene_id")) for clip in old.get("clips") or []
+                if isinstance(clip, dict) and clip.get("scene_id") is not None
+            )
+    for item in writes.clips:
+        if item.clip.scene_id is not None:
+            affected_scenes.add(item.clip.scene_id)
+        old = clip_location(item.clip.clip_id)
+        if old is not None and old[1].get("scene_id") is not None:
+            affected_scenes.add(str(old[1]["scene_id"]))
+    for clip_id in writes.remove_clip_ids:
+        old = clip_location(clip_id)
+        if old is not None and old[1].get("scene_id") is not None:
+            affected_scenes.add(str(old[1]["scene_id"]))
+
+    for track in tracks:
+        if not isinstance(track, dict) or track.get("track_id") not in set(writes.remove_track_ids):
+            continue
+        affected_scenes.update(
+            str(clip.get("scene_id")) for clip in track.get("clips") or []
+            if isinstance(clip, dict) and clip.get("scene_id") is not None
+        )
+    for transition in transitions:
+        if not isinstance(transition, dict) or transition.get("transition_id") not in set(writes.remove_transition_ids):
+            continue
+        for clip_id in (transition.get("from_clip_id"), transition.get("to_clip_id")):
+            location = clip_location(str(clip_id)) if clip_id is not None else None
+            if location is not None and location[1].get("scene_id") is not None:
+                affected_scenes.add(str(location[1]["scene_id"]))
+
+    remove_transitions = set(writes.remove_transition_ids)
+    transitions[:] = [
+        item for item in transitions
+        if not isinstance(item, dict) or item.get("transition_id") not in remove_transitions
+    ]
+    remove_clips = set(writes.remove_clip_ids)
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        clips = track.get("clips")
+        if isinstance(clips, list):
+            clips[:] = [
+                clip for clip in clips
+                if not isinstance(clip, dict) or clip.get("clip_id") not in remove_clips
+            ]
+    remove_tracks = set(writes.remove_track_ids)
+    tracks[:] = [
+        track for track in tracks
+        if not isinstance(track, dict) or track.get("track_id") not in remove_tracks
+    ]
+    remove_scenes = set(writes.remove_scene_ids)
+    scenes[:] = [
+        scene for scene in scenes
+        if not isinstance(scene, dict) or scene.get("scene_id") not in remove_scenes
+    ]
+
+    # A complete Track owns its complete Clip list. Contained stable ids move
+    # globally, rather than leaving a second copy in their previous Track.
+    track_clips = {
+        clip.clip_id for track in writes.tracks for clip in track.clips
+    }
+    for existing in tracks:
+        if not isinstance(existing, dict):
+            continue
+        clips = existing.get("clips")
+        if isinstance(clips, list):
+            clips[:] = [
+                clip for clip in clips
+                if not isinstance(clip, dict) or clip.get("clip_id") not in track_clips
+            ]
+    for track in writes.tracks:
+        _upsert_raw(tracks, track.model_dump(mode="json"), "track_id")
+    for item in writes.clips:
+        target = next(
+            (track for track in tracks if isinstance(track, dict) and track.get("track_id") == item.track_id),
+            None,
+        )
+        if target is None:
+            raise EditError(f"track {item.track_id} does not exist")
+        target_clips = _entity_list(target, "clips")
+        for track in tracks:
+            if not isinstance(track, dict):
+                continue
+            clips = track.get("clips")
+            if isinstance(clips, list):
+                clips[:] = [
+                    clip for clip in clips
+                    if not isinstance(clip, dict) or clip.get("clip_id") != item.clip.clip_id
+                ]
+        target_clips.append(item.clip.model_dump(mode="json"))
+    for transition in writes.transitions:
+        _upsert_raw(transitions, transition.model_dump(mode="json"), "transition_id")
+        for clip_id in (transition.from_clip_id, transition.to_clip_id):
+            location = clip_location(clip_id)
+            if location is not None and location[1].get("scene_id") is not None:
+                affected_scenes.add(str(location[1]["scene_id"]))
+
+    for scene in scenes:
+        if isinstance(scene, dict) and scene.get("scene_id") in affected_scenes:
+            scene["visual_description"] = None
+    # A complete Scene write is applied last so its fresh visual_description
+    # wins over deterministic invalidation in the same atomic batch.
+    for scene in writes.scenes:
+        _upsert_raw(scenes, scene.model_dump(mode="json"), "scene_id")
+    return candidate
+
+
+def apply_entity_writes(
+    content: CompositionContent,
+    writes: EntityWrites,
+) -> CompositionContent:
+    return CompositionContent.model_validate(
+        apply_entity_writes_raw(content.model_dump(mode="json"), writes)
+    )
+
+
 Op = Annotated[
     SetSettings
     | TemporalEdit
@@ -264,6 +519,42 @@ def _find_clip(content: CompositionContent, clip_id: str) -> Clip:
             if clip.clip_id == clip_id:
                 return clip
     raise EditError(f"clip {clip_id} does not exist")
+
+
+def replace_text_ops(clip: Clip, text: str) -> list[Op]:
+    """Replace one native Text Clip while preserving its animation targets."""
+    if not isinstance(clip.object, TextObject) or clip.object.caption is not None:
+        raise EditError("set_text supports only independent native Text Clips")
+    if clip.object.text == text:
+        return []
+    from app.editing.animation import derive_text_parts
+
+    animations = copy.deepcopy(clip.animations)
+    for animation in animations:
+        target = animation.text_part
+        if target is None:
+            continue
+        previous = derive_text_parts(clip.object.text, target.kind)
+        following = derive_text_parts(text, target.kind)
+        positions = {part.part_id: index for index, part in enumerate(previous)}
+        indexes = [positions.get(part_id) for part_id in target.part_ids]
+        if any(index is None or index >= len(following) for index in indexes):
+            raise TextAnimationTargetLost(
+                "the new text no longer contains the animated text parts; "
+                "apply a preset after changing it"
+            )
+        animation.text_part = target.model_copy(
+            update={"part_ids": [following[index].part_id for index in indexes]}
+        )
+    return [
+        UpdateClip(
+            op="update_clip",
+            clip_id=clip.clip_id,
+            object=clip.object.model_copy(update={"text": text}),
+            animations=animations,
+        )
+    ]
+
 
 
 def _find_scene(content: CompositionContent, scene_id: str) -> Scene:
@@ -332,10 +623,15 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
         if "visual_description" in op.model_fields_set:
             scene.visual_description = op.visual_description
         if "range" in op.model_fields_set and op.range is not None:
-            if op.range != scene.range and any(
-                c.scene_id == scene.scene_id for t in content.timeline.tracks for c in t.clips
+            members = [
+                clip for track in content.timeline.tracks for clip in track.clips
+                if clip.scene_id == scene.scene_id
+            ]
+            if any(
+                clip.range.start < op.range.start or clip.range.end > op.range.end
+                for clip in members
             ):
-                raise EditError("scene has clips: use move_scene; resizing populated scenes is unsupported")
+                raise EditError("a populated Scene's new range must contain every owning Clip")
             scene.range = op.range
     elif isinstance(op, MoveScene):
         _apply_temporal_in_place(content, TemporalEdit(

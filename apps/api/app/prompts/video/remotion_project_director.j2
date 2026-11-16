@@ -1,0 +1,30 @@
+{# remotion_project_director.j2 — Agent-authored multi-scene remotion-project work; fields mirror editing/director.py ComponentVideoDirection. #}
+Create an original animated work for this request:
+
+{{ instruction }}
+
+{% if repair_feedback %}SOURCE / VALIDATION REPAIR FEEDBACK (world facts, not a new creative request):
+{{ repair_feedback }}
+{% endif %}
+{% if text %}USER REQUEST / SUPPLIED COPY:
+{{ text }}
+Preserve its subject, language and explicit requirements. Do not turn the whole instruction into a title. When it supplies exact standalone on-screen copy, keep that copy unchanged in native `title` fields; otherwise use only short necessary titles grounded in the request.{% endif %}
+{% if narration %}NARRATION (exact spoken copy): {{ narration }}
+Split it across scene `narration` fields in order without changing its characters. A scene may be silent, but the complete narration must appear exactly once across the work. The system keeps spoken audio and captions as separate native objects; component audio is forbidden.{% endif %}
+{% if language %}Language: {{ language }}.{% endif %}
+{% if focus %}Creative direction: {{ focus }}{% endif %}
+{% if current %}CURRENT DESIGN — preserve the work identity and change only what the new direction requires:
+{{ current }}{% endif %}
+{% if target_seconds %}Required TOTAL duration: {{ target_seconds }} seconds.{% endif %}
+{% if available_resources %}FIXED USER IMAGES available to this design. Use only these exact snapshot identities, or none:
+{{ available_resources | tojson }}{% endif %}
+{% set dims = {'16:9': '1920x1080', '9:16': '1080x1920', '1:1': '1080x1080'} %}
+Each scene's Composition output: {{ dims.get(aspect or '16:9', '1920x1080') }}, 30fps, `durationInFrames = round(duration_seconds * 30)`. The same source and output contract is used for its playable preview and final production.
+
+Organize the complete work as 1–6 coherent scenes. Use multiple scenes when the content has distinct stages, and a continuous longer scene when uninterrupted transformation or motion serves it better. Keep palette, geometry and visual continuity deliberate across cuts. Each scene is longer than 0 and at most 30 seconds and their total is at most 118 seconds; respect the user's exact total and scene count when supplied. Do not pad a simple request into a fixed template or repeat a short loop to fill time. Native objects remain preferable for standalone important text and sound; use the code visual for the movement, layout and drawn relationships that need it.
+
+{% include "video/_component_project_contract.j2" %}
+
+Answer JSON with top-level `name` (short or null), `language`, and `scenes`. Every scene contains `name` (usually null), `language`, `title` (native editable title or null), `intent` (at most 120 characters), `visual_description` (at most 240 characters; what this scene actually shows), `duration_seconds`, `background` (hex), `narration` (exact scene spoken copy or null), plus the complete project fields from the contract above. Each scene needs a distinct `composition_id`.
+
+When the harness supplies a rejection with a failed scene and its current source, return the COMPLETE direction but change only that scene's source or parameters needed to fix the concrete diagnostic. Preserve every successful scene byte-for-byte, including its native content and timing; do not restart the creative design. If the rejection concerns total duration, scene count or supplied copy, correct only the fields needed to satisfy it.

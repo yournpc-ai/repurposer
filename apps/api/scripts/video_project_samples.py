@@ -45,9 +45,9 @@ from app.editing.video_spec import compile_video_spec  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import AssetStatus, AssetType, canonical_json_hash  # noqa: E402
 from app.models.tables import Asset, Project, SourceSnapshot  # noqa: E402
-from app.pipeline.rendering import _absolutize_video  # noqa: E402
+from app.pipeline.rendering import absolutize_video  # noqa: E402
 
-FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "tests/fixtures/video_project"
+FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "test/fixtures/video_project"
 MEDIA_ROOT = FIXTURE_ROOT / "media"
 SAMPLE_FILES = {"website": "website.json", "mg": "mg.json"}
 OPS = TypeAdapter(list[Op])
@@ -404,9 +404,9 @@ async def _build_sample(
     _write_json(sample_dir / "edited.content.json", edited_content.model_dump(mode="json"))
     _write_json(sample_dir / "base.video-spec.json", base_spec)
     _write_json(sample_dir / "edited.video-spec.json", edited_spec)
-    _write_json(sample_dir / "base.render-spec.json", _absolutize_video(copy.deepcopy(base_spec)))
+    _write_json(sample_dir / "base.render-spec.json", absolutize_video(copy.deepcopy(base_spec)))
     _write_json(
-        sample_dir / "edited.render-spec.json", _absolutize_video(copy.deepcopy(edited_spec))
+        sample_dir / "edited.render-spec.json", absolutize_video(copy.deepcopy(edited_spec))
     )
     result = {
         "sample_id": fixture.sample_id,

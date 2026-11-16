@@ -1,0 +1,18 @@
+{# draw_2d_director.j2 — Agent-authored draw-2d source; fields mirror editing/director.py ProgramDirection. #}
+Create an original animated 2D picture for this request:
+
+{{ instruction }}
+
+{% if repair_feedback %}SOURCE / VALIDATION REPAIR FEEDBACK (world facts, not a new creative request):
+{{ repair_feedback }}
+{% endif %}
+{% if text %}NATIVE TITLE (kept as a separate editable TextObject, exact copy): {{ text }}{% endif %}
+{% if language %}Language: {{ language }}.{% endif %}
+{% if focus %}Creative direction: {{ focus }}{% endif %}
+{% if target_seconds %}Required duration: {{ target_seconds }} seconds.{% endif %}
+The server supplies the full Composition raster at 30fps and the same source/output contract for preview and production. Choose a continuous duration up to 30 seconds when the requested motion needs it; do not loop a shorter result merely to fill time.
+
+{% include "video/_draw_2d_contract.j2" %}
+Do not substitute a preset identifier. Keep important standalone text in the native title. Use this bounded path for pictures its four drawing primitives can express well; do not approximate websites, arbitrary media, complex interface states or intricate multi-stage motion that needs the controlled component path.
+
+Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent` (at most 120 characters), `visual_description` (at most 240 characters; only what the program and native title actually show), `duration_seconds` (up to 30), `background` (hex), `parameters` (meaningful scalar knobs the program reads), and `code` (the complete function source). Do not include markdown fences. If the harness returns an execution diagnostic, preserve the valid design and repair the concrete source failure rather than starting an unrelated drawing.

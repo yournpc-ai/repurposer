@@ -23,7 +23,7 @@
 2. 详情弹窗四轴与总体评价来自同一产物版本；深浅主题、en/zh 均完整。
 3. 修订后核对 overall/axes/reason 的版本一致性，不出现混合快照。
 4. 构造不同内容证据，检查 reason 能指向对应驱动轴；不断言固定 LLM 分值或文案。
-5. 当前相关纯测试、prompt_gate 与受影响旅程通过；全片质检、LLM judge、modifier 质检不随本项自动扩 scope。
+5. 当前相关核心测试与受影响真实旅程通过；全片质检、LLM judge、modifier 质检不随本项自动扩 scope。
 
 ## Prohibited Behaviors
 

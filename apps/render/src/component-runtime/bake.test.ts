@@ -5,11 +5,12 @@ import { bakeComponent, ComponentBakeError } from "./bake";
 import { COMPONENT_DEPENDENCIES, type ComponentBakeRequest } from "./contract";
 
 const request: ComponentBakeRequest = {
-  runtime: "component-v1",
+  producer: "remotion-project",
   program_digest: "a".repeat(64),
   dependencies: COMPONENT_DEPENDENCIES,
   code: "export default () => <AbsoluteFill />",
   parameters: {},
+  resources: [],
   output: { width: 640, height: 360, fps: 15, duration_frames: 60, background: "#101010" },
 };
 

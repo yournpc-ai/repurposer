@@ -1,8 +1,34 @@
-"""The LLM provider seam (Model 缝, N-42 批⑥): one client per vendor, the
-price tables (``PRICING`` / ``price_units`` / ``price_tokens``) living beside
-their client. ``base`` holds the vendor-neutral vocabulary — the error types
-(``LLMError`` / ``LLMSchemaError``, user_key 税制不动), the capability flags
-and the three-tier wire-format law (ADR-077 判词④: 层只换线格式，永不动判决
-契约). A second provider lands here (ADR-025's thin interface); the decision
-layer never reaches past this seam.
-"""
+"""Selectable text/code LLM boundary; media providers stay independent."""
+
+from app.config import settings
+from app.providers.llm.base import LLMClient
+
+
+def get_llm_client() -> LLMClient:
+    """Return the deployment's text/code client without cross-provider fallback."""
+    if settings.llm_provider == "deepseek":
+        from app.providers.llm.deepseek import deepseek_client
+
+        return deepseek_client
+    from app.providers.llm.minimax import minimax_client
+
+    return minimax_client
+
+
+def price_text_tokens(
+    prompt_tokens: int,
+    completion_tokens: int,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+) -> float:
+    """Price an estimate or a legacy aggregate against its owning provider."""
+    selected = provider or ("deepseek" if model and model.startswith("deepseek-") else None)
+    selected = selected or settings.llm_provider
+    if selected == "deepseek":
+        from app.providers.llm.deepseek import price_tokens
+
+        return price_tokens(prompt_tokens, completion_tokens, model=model)
+    from app.providers.llm.minimax import price_tokens
+
+    return price_tokens(prompt_tokens, completion_tokens, model=model)

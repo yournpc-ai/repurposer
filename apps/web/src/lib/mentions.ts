@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 
 import i18n from "@/lib/i18n"
+import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
 
 /** An @ entity reference pinned to a definite id — same name, same shape as
  * the backend `ChatMention` schema (NAMING §1). `"recipe"` is a render
@@ -39,6 +40,8 @@ export interface ChatMention {
   id: string
   label: string
   quote?: string
+  /** A user-drawn spatial region on one exact video frame. */
+  region?: MediaRegionSelection
 }
 
 /** One picker row. `hint` is the muted subtitle (asset: the file kind);

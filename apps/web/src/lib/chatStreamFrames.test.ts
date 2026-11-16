@@ -12,6 +12,7 @@ import {
 } from "./chatStreamFrames"
 import {
   buildConversationBlocks,
+  conversationBlockUnits,
   buildConversationUnits,
 } from "@/components/chat/timeline/project"
 import type { OverlayMessage } from "@/components/chat/timeline/types"
@@ -64,6 +65,10 @@ describe("conversation channel", () => {
     expect(
       routeStreamFrame("assistant.candidates", JSON.stringify(selection), ANSWER_TERMINAL),
     ).toEqual({ kind: "candidates", event: selection })
+    const musicSet = { ...set, kind: "music_set", candidate_set_id: "music-set-1" }
+    expect(
+      routeStreamFrame("assistant.candidates", JSON.stringify(musicSet), CHAT_TERMINAL),
+    ).toEqual({ kind: "candidates", event: musicSet })
   })
 
   it("question.preview → the pill payload", () => {
@@ -166,7 +171,7 @@ describe("candidate live reducer identity", () => {
     const blocks = buildConversationBlocks(buildConversationUnits(settled))
     expect(blocks).toHaveLength(1)
     expect(blocks[0].kind).toBe("turn")
-    expect(blocks[0].kind === "turn" && blocks[0].units.map((unit) =>
+    expect(blocks[0].kind === "turn" && conversationBlockUnits(blocks[0]).map((unit) =>
       unit.kind === "message" ? unit.message.id : unit.rowKey,
     )).toEqual(["turn-server", "reply-local", "live-cand-set-1"])
 

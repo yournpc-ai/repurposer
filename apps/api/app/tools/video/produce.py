@@ -76,6 +76,7 @@ async def queue_composition_render(
         )
         generator_media = await prepare_generator_media(
             content,
+            snapshots=facts,
             execution_id=execution_id,
             composition_id=str(composition.id),
             regenerate_media=regenerate_media,

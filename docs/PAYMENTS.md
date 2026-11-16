@@ -1,6 +1,6 @@
 # PAYMENTS — 支付、订单与 Stripe 接入架构
 
-> Status: 当前规范（2026-11-02）。Stripe 一次性积分充值首批已落码，本地真实 Checkout → webhook → paid/purchase → UI 主旅程已验证且订单仅有一条入账台账；预设与自由金额已统一为服务端 `price_data` 下单，该改动后的真实联调、重放、并发等剩余验收、测试套件与公网联调未运行。剩余范围与验收欠账归 `tasks/stripe-credit-topup.md`，积分、钱包与扣费语义归 `BILLING.md`，排期归 `PROGRESS.md`。
+> Status: 当前规范（2026-11-06）。Stripe 一次性积分充值首批已落码，本地真实 Checkout → webhook → paid/purchase → UI 主旅程已验证且订单仅有一条入账台账；预设与自由金额已统一为服务端 `price_data` 下单，该改动后的真实联调、重放、并发等剩余验收、测试套件与公网联调未运行。webhook 持久审计与 worker 邮件告警已落码，尚未执行其 migration 或真实故障/投递验收。剩余范围与验收欠账归 `tasks/stripe-credit-topup.md`，积分、钱包与扣费语义归 `BILLING.md`，排期归 `PROGRESS.md`。
 
 ## 0. 边界与目标形态
 
@@ -32,6 +32,7 @@ SettingsDialog 积分 section
 |---|---|---|---|
 | `STRIPE_SECRET_KEY` | 公司 Stripe 账号的 test/live secret | 后端创建 Checkout Session 等 Stripe API 调用 | 仅服务端 secret store |
 | `STRIPE_WEBHOOK_SECRET` | 本地 CLI 或 Dashboard webhook endpoint | 验证 `Stripe-Signature` | 仅对应环境的服务端 |
+| `PAYMENT_ALERT_RECIPIENTS` | 运维邮箱列表（逗号分隔） | worker 异步发送支付异常告警；复用 Resend | 仅 worker 环境 |
 | `WEB_PUBLIC_URL` | 本项目公网 Web origin | 生成 Checkout success/cancel URL | 现有部署配置 |
 
 公司 `sk_test_...` 只代表公司账号的 **test mode**，不代表已经取得 webhook secret 或 live 收款能力。本地不需要注册个人 Stripe 账号，也不需要 `stripe login`；CLI 直接读取公司 test key。
@@ -45,9 +46,10 @@ test 与 live 的 API key、webhook secret 全部独立。live key 由有权限�
 ```dotenv
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+PAYMENT_ALERT_RECIPIENTS=ops@example.com
 ```
 
-当前预设 registry 为 `starter = €10 / 10,000 积分`、`topup_20 = €20 / 20,000 积分`、`topup_50 = €50 / 50,000 积分`，不代表 live 定价承诺。预设与自定义金额都使用服务端 `price_data`，没有 `STRIPE_PRICE_*` 配置或按环境隐藏档位的规则。自定义金额的 EUR 汇率与上下限由服务端 `CUSTOM_TOPUP_POLICY` 定义并随 packages 响应下发。`docker-compose.yml` 只把 API key 与 webhook secret 传进 `api` 容器；`web` 与首批 `worker` 不需要支付 secret。
+当前预设 registry 为 `starter = €10 / 10,000 积分`、`topup_20 = €20 / 20,000 积分`、`topup_50 = €50 / 50,000 积分`，不代表 live 定价承诺。预设与自定义金额都使用服务端 `price_data`，没有 `STRIPE_PRICE_*` 配置或按环境隐藏档位的规则。自定义金额的 EUR 汇率与上下限由服务端 `CUSTOM_TOPUP_POLICY` 定义并随 packages 响应下发。`docker-compose.yml` 只把 API key 与 webhook secret 传进 `api` 容器；`PAYMENT_ALERT_RECIPIENTS` 只传进 `worker`，告警复用 worker 已有的 `RESEND_API_KEY` / `FROM_EMAIL`。`web` 不需要支付或告警配置。
 
 ### 1.3 本地 Stripe CLI
 
@@ -139,7 +141,9 @@ credits           支付成功授予的积分
 
 金额非负、积分正数由应用与 DB 约束共同保证；状态字符串不使用 Postgres enum。`credit_transaction_id` 与订单行锁共同防止不同事件给同一订单重复入账。
 
-首批不建独立 webhook event 表：Stripe Dashboard 保存事件与投递证据，`payment_orders` + `credit_transactions.idempotency_key` 已能保证入账正确性。确需本地长期留存完整事件/离线重放时另立 `payment_events`，但正确性不得依赖它。默认不保存完整 webhook payload、银行卡资料或敏感认证数据。
+`payment_webhook_events` 是投递审计与告警 outbox，不是第三套财务事实源：每个验签成功的 Stripe event 按 `event_id` 聚合一行，保存事件/订单/Session 标识、payload SHA-256、处理结果、原因码、HTTP 状态、投递次数和时间；同一事件重放只递增投递计数。缺签名请求只记运行日志；其它验签/配置拒绝按“原因 + UTC 小时”聚合成一行，限制公开端点带来的存储增长。事件 ID 相同但 payload 哈希不同的事件不得进入入账处理。
+
+`order_id` 在审计表中刻意不设外键：未知订单与订单删除后的历史仍需可查。审计失败可以令 Stripe 重试，但永不绕过 `payment_orders` 行锁与 `credit_transactions.idempotency_key`。默认不保存完整 webhook payload、签名、secret、银行卡资料或告警收件人。
 
 ### 4.2 积分台账接缝
 
@@ -195,6 +199,8 @@ Checkout 创建顺序：
 7. `expired` 只允许 `pending → expired`；对 paid 订单单调无效，永不回滚已入账事实。
 8. 签名错误返回 400；临时 DB/内部故障返回 500 让 Stripe 重试。未知订单、永久校验不符与不支持的事件类型不加积分，记录安全/运营信号后按确定策略 ACK，避免无意义重试风暴。
 9. webhook 不调用 LLM、不排队执行生产任务、不做慢速外部动作；需要补数据时以有界 Stripe 读取或后续对账工具完成，不把收款确认依赖第三方非关键服务。
+10. 验签成功后先写 `payment_webhook_events(status=processing)` 再进入业务处理；所有返回与异常最终落成 `processed / ignored / failed + reason_code + response_status`。业务入账与审计最终化是两个提交点，审计最终化失败仍返回 500 让 Stripe 重试，订单与台账幂等规则保持不变。
+11. 处理失败及订单/环境/金额等安全边界不符时，把同一审计行置为 `alert_status=pending`。只有 worker 认领 outbox 并调用 Resend；邮件告警至少一次投递，使用 claim token、租约、指数退避与 5 次上限。`processing` 超过 10 分钟由 worker 转为 `processing_timeout`，覆盖进程崩溃无法写异常终态的窗口。告警失败不改变支付结果，也不在 API 请求内发送邮件。
 
 状态终态：
 
@@ -208,22 +214,46 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 
 ## 7. 前端座位与返回行为
 
-- `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、预设按钮、换算 tooltip、取消与 Checkout 跳转都在该轻量弹窗内完成。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
-- `components/settings/CreditsSection.tsx` 只承载余额/held、购买入口、支付返回确认与语义台账，不内嵌金额选择或支付表单；余额区唯一主行动为 Add credits，Recent 仅作台账标题，不设同页滚动按钮。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
+- `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、到账积分、预设按钮、取消与 Checkout 跳转都在该轻量弹窗内完成。到账积分行旁的 Info tooltip 根据服务端 policy 说明购买换算与单次金额限制。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
+- `components/settings/CreditsSection.tsx` 承载余额/held、购买入口、支付返回确认与下方两张 Table：充值记录（类型、订单号、充值时间、支付渠道、支付金额、到账积分、状态）与消费记录（消费编号、制作、产物类型、项目、消费时间、消耗积分）。双表所有字段完整显示，不做文字截断；记录区以 `px-4` 在 Settings 内左右留白，表容器居中且宽度受限，超出时在各自表容器内部横向滚动，Settings 本身不横向滚动。充值记录与消费记录每页 10 条，分别使用 `direction=in|out` 的服务端分页与独立上一页游标历史，互不影响，并显示当前页/总页数；消费方向先按语义事件分页再完整折叠 Run，不会用内部台账行挤占每页名额；充值读投影批量关联 `payment_orders`，不从积分反推法币；赠送/正向调整留在充值侧并明确标为非购买，历史缺少订单关联的购买显示“—”。余额区唯一主行动为 Add credits。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
 - `lib/payments.ts` 统一 packages / checkout / order 的 wire types 与 `apiFetch`；金额用 `Intl.NumberFormat` 按 EUR 与当前语言格式化，积分沿用 `formatCredits`。
 - `routes/_app.settings.tsx` 复用为 Checkout return shim：接收 `checkout=success|cancelled&order_id=...`，打开积分 section 后回 `/home`；不新建支付设置页。
-- 返回 success 只显示“正在确认付款”，有界轮询订单（2 秒一次、至多 30 秒）。只有服务端 `paid` 才显示充值成功并刷新 wallet/transactions；超时仍 pending 显示稍后刷新，不重复下单。
+- 返回 success 只显示“正在确认付款”，有界轮询订单（2 秒一次、至多 30 秒）。只有服务端 `paid` 才显示支付成功 Dialog 并刷新 wallet/transactions；完成按钮关闭 Dialog 并定位到充值记录，成功状态不是持久回执。超时仍 pending 显示稍后刷新，不重复下单。
 - cancelled 回到购买面且不入账，不显示伪造支付错误。所有新文案同步 `en.ts` / `zh.ts`。
-- Landing 的 Pro / Institution 订阅卡与 AccountConsole 的订阅升级入口在订阅批之前不接一次性 Checkout，避免把不同商品混为同一承诺。
+- Landing 的 Pro / Institution 订阅卡在订阅批之前不接一次性 Checkout，AccountConsole 也不显示订阅或升级入口，避免把不同商品混为同一承诺。
 
-## 8. 订阅、退款与后续商业语义
+## 8. 后续商业语义与公开收款前置
 
-以下均为 **PLANNED，未实现**，不得以支付首批落地自动宣称支持：
+以下均为 **PLANNED，未实现、未排期**，不得以支付首批落地自动宣称支持。
+
+### 8.1 订阅
 
 - 订阅需要 recurring Price、用户与 Stripe Customer/Subscription 映射、`invoice.paid` 周期 grant、续费/升级/降级/取消/支付失败状态机与 Customer Portal。
-- 启动订阅前必须拍板周期额度是否清零、未用积分是否结转、取消生效时点、fair-use 与分桶消耗顺序；周期额度使用 `kind=grant`，不与一次性 `purchase` 混写。
-- 自动退款/拒付需要独立事件、原订单关联和积分扣回政策。现有积分 `refund` 语义不得直接冒充法币退款；未拍板前只走人工退款与人工台账调整流程。
-- VAT、发票、 receipts、退款政策、服务条款与隐私文案是 live 前置，不由 Stripe Checkout 自动代表完成。
+- 启动前必须拍板周期额度是否清零、未用积分是否结转、取消生效时点、fair-use 与分桶消耗顺序；周期额度使用 `kind=grant`，不与一次性 `purchase` 混写。
+
+### 8.2 VAT、收据与发票
+
+**当前事实**：Checkout 未接 Stripe Tax，不采集税务所需地址或 VAT ID，也不生成 VAT invoice；Settings 只有充值记录，没有 Receipt / Invoice 下载入口。Stripe Dashboard 不会因创建 Checkout 自动完成这些事项。
+
+**实施门**：先由公司与会计师确认销售主体、税务注册/OSS、B2C/B2B 边界、含税或裸价、发票与申报责任。是否使用 Stripe Tax 是技术选型，是否存在 VAT 义务则由适用法规决定；不接功能不等于免除义务。
+
+建议的最小实施路径（仍需上述拍板）：
+
+1. 用户侧继续使用 EUR 最终含税总价；若选择 Stripe Tax，Dashboard 配置税务注册与商品税务分类，Checkout 同批增加地址采集、自动税额与含税价格行为。订单金额快照和 webhook 校验必须继续对应**用户最终支付总额**，不能在结账时未经呈现地加价。
+2. Receipt 可由 Dashboard 开启 Stripe 邮件收据，初期不需要前端入口；receipt 不等于 VAT invoice。
+3. VAT invoice 按真实 B2B/合规需求接 Stripe Invoicing，保存真实发票 ID/URL 后再在 Settings 已支付订单行开放下载；没有真实文件时永不显示 Invoice。
+4. UI 只有在真实税务链生效后才显示 `VAT included`；付款前提供 Terms / Refund policy，隐私文案与必要同意按法务结论落实。
+
+### 8.3 退款与拒付
+
+- 当前只有人工退款与人工台账调整，没有自助退款、自动积分扣回或 `refunded` 订单状态。Stripe Dashboard 的法币退款不会自动反向修改积分钱包。
+- 公开政策至少需要拍板：未使用/已消费充值积分如何处理、赠送积分不可兑现、申请渠道与处理时限、拒付和异常账户处理。欧盟消费者即时交付与撤回权所需的确认由法务决定，不能在付款后补取。
+- 初期推荐客服人工审核 → Stripe 原路退款 → 内部台账调整；自动化另需原订单关联、幂等事件、退款状态机与积分扣回政策。现有积分 `refund` 语义不得冒充法币退款。
+
+### 8.4 国际卡与币种边界
+
+- 当前只提供单一 **EUR** 价格，不接 Adaptive Pricing 或多币种目录。美国等使用其他币种银行卡的用户通常仍可直接支付 EUR，由发卡行换算成本币扣款，可能产生汇率差或境外交易费；退款同样按 EUR 原路退回。这种基础国际卡付款不需要额外前端开发，但不等于向用户提供了 USD 定价。
+- 有真实美国市场需求后，再增加独立 USD 服务端价格表与明确币种选择；不按浏览器语言静默换币种，不在界面展示未经 Checkout 确认的换算价。内部供应商成本仍以 USD 计量，和用户 EUR 定价互不替代。
 
 ## 9. 上线、对账与安全门
 
@@ -236,6 +266,7 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 ### live mode
 
 - 管理者直接配置 `sk_live` 与 live webhook secret；test/live 配置不得混用。一次性充值沿用服务端金额 registry / policy，无需 live Price IDs。
+- worker 配置 `PAYMENT_ALERT_RECIPIENTS`，并确认 `RESEND_API_KEY` / `FROM_EMAIL` 可用；未配置收件人时审计仍落库，worker 启动明确记录 `payment_alerts_not_configured`，但不宣称邮件告警已启用。
 - 明确商品价格是否含税、VAT/发票、退款与拒付处理、客服与监控责任人。
 - 完成小额真实付款及按已拍板政策的退款演练；test 通过不等于 live 通过。
 
@@ -251,3 +282,5 @@ paid 永不被 expired / failed / 浏览器返回覆盖
   docker compose logs --since 1h api 2>&1 | grep -E 'stripe_|http_'
   ```
   正常链可按事件名核对：下单 `stripe_order_pending` → `stripe_checkout_created`；已验签 webhook `stripe_webhook_received` → `stripe_order_crediting` → `stripe_order_paid`；重放为 `stripe_webhook_duplicate`，过期为 `stripe_order_expired`。Stripe 拒绝看 `stripe_checkout_failed`，签名为 `stripe_webhook_signature_missing` / `stripe_webhook_signature_invalid`，订单边界校验为 `stripe_webhook_validation_failed`，入账事务异常为 `stripe_order_credit_failed`（含 traceback）；配置错误看 `stripe_environment_invalid` / `stripe_webhook_not_configured`。最终 HTTP 状态与同请求的 `http_request` / `http_error` 日志互证。
+
+持久化排查直接读 `payment_webhook_events`：按 `event_id`、`order_id` 或 `checkout_session_id` 定位，核对 `status / reason_code / response_status / attempt_count / processed_at`。告警链看 `alert_status / alert_attempt_count / alert_next_attempt_at / alerted_at / alert_last_error`，运行日志对应 `payment_webhook_receipt_finished`、`payment_webhook_processing_timeout`、`payment_alert_sent`、`payment_alert_failed` 与 `payment_alert_attempt_cap`。告警邮件只含内部审计 ID 与支付关联 ID，不含原始 payload 或收件人列表。

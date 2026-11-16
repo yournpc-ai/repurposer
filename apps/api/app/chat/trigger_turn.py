@@ -13,7 +13,7 @@ first):
   (ADR-088 §8 R21): the turn's event line carries the deterministic
   DELIVERY FACTS block (``run_review``'s pure core — the latest tool/run
   outcome); the delivery turn's branch law lives in
-  ``delivery_system.j2``.
+  ``delivery_mode.j2``.
 - ``run_failed`` — a run FAILED and nothing landed
   (``orchestrator.maybe_finalize_run``; ADR-135). The receipt alone can
   carry neither the reason nor the next step, so the turn speaks: the
@@ -28,8 +28,9 @@ first):
 The loop itself: the perception family's reads are the agent's eyes for
 run_failed / craft_decompiled (look BEFORE speaking — read-before-speak is
 the reviewer's honesty base); run_completed rides the READLESS
-``delivery_agent`` and its dedicated ``delivery_system.j2`` (deterministic
-outcome facts + conversation context, one matching reply branch). ONE terminal tool (``wrap_up``) closes the turn with the
+``delivery_agent`` and its dedicated ``delivery_mode.j2`` (deterministic
+outcome facts + conversation context, one matching reply branch). ONE terminal
+tool (``wrap_up``) closes the turn with the
 spoken review plus 0-3 next-step option labels that dock as a REAL
 numbered options question on the review row (ADR-081 选项语法统一律 — the
 pill form is retired; the picked label rides the answer endpoint's generic
@@ -46,8 +47,10 @@ assistant row — ``intent`` carries the trigger dump
 verbatim on refresh / another device; 刷新/跨设备恢复 = 消息行持久化).
 Fire-and-forget: a trigger failure logs and never raises into the pipeline
 — the world event already landed truthfully (the understanding row, the
-run verdict); the speech layer degrades to silence, never to a
-fabrication.
+run verdict); ordinary proactive speech degrades to silence, never to a
+fabrication. The one exception is ``run_failed``'s honesty floor: when its
+LLM reviewer cannot close, the already-known deterministic step errors are
+persisted instead of leaving a silent red receipt (ADR-135).
 """
 
 import asyncio
@@ -60,8 +63,8 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.context import build_context, recent_history_within_budget
 from app.agents.tool_loop import ChatTool, ToolLoopAgent
+from app.chat.context import build_context, recent_history_within_budget
 from app.chat.intent import _speech_language_line
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.prompts import delivery_system, trigger_system
@@ -116,9 +119,8 @@ TRIGGER_DUMP_TYPE = "trigger_review"
 # Two static predicates (no arbiter layer): in-flight → defer in bounded
 # cycles (the user row is durable from the turn's first beat — 交互完整性
 # 批 A — so the gate is a plain DB read); pending task_book → silence (the
-# plan echo already narrates); exhaustion → the silence doctrine (a blind
-# review is worse than none — the world event already landed truthfully on
-# its own).
+# plan echo already narrates); exhaustion normally keeps the silence doctrine,
+# except run_failed's deterministic failure-facts fallback (ADR-135).
 _TRIGGER_DEFER_SECONDS = 20
 _TRIGGER_DEFER_MAX_ATTEMPTS = 15  # 15 × 20s = a 5-minute politeness bound
 # A stranded in_flight row (a crashed turn whose 'failed' stamp never
@@ -268,19 +270,19 @@ def _assemble_trigger_turn(
 
 trigger_agent = ToolLoopAgent(
     name="trigger_turn",
-    prompt="trigger.j2",
+    prompt="chat/user.j2",
     system=trigger_system(),
     temperature=0.3,
     assemble=_assemble_trigger_turn,
-    # run_failed / craft_decompiled keep the perception reads plus the ONE
-    # terminal. design_storyboard is filtered OUT: a system-initiated beat
-    # never launches the minutes-long design beat. User-driven SFX search and
-    # import are likewise excluded; run_completed uses the separate readless
-    # delivery_agent below.
     tools=[
         WRAP_UP,
         *(t for t in CHAT_READ_TOOLS if t.name not in {
-            "design_storyboard", "search_sfx", "import_sfx",
+            "design_video", "revise_video", "search_sfx", "import_sfx",
+            "show_video_presets", "select_video_preset",
+            "show_music_candidates", "select_music",
+            "prepare_narration", "get_narration_alignment", "annotate_narration",
+            "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
+            "prepare_video_materials", "capture_web",
         }),
     ],
     max_iterations=6,
@@ -293,7 +295,7 @@ trigger_agent = ToolLoopAgent(
 # causes and skeleton gaps are not pre-assembled facts.
 delivery_agent = ToolLoopAgent(
     name="trigger_delivery",
-    prompt="trigger.j2",
+    prompt="chat/user.j2",
     system=delivery_system(),
     temperature=0.3,
     assemble=_assemble_trigger_turn,
@@ -407,6 +409,34 @@ def _new_delivery_output_refs(
     return [ref for ref in refs if ref not in previous]
 
 
+async def _narration_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> list[str]:
+    """Output-free narration facts; no video delivery is synthesized."""
+    from app.tools.video.production.narration import narration_preparation_fact
+
+    try:
+        facts = await narration_preparation_fact(db, run, steps)
+    except ValueError:
+        return ["delivery=failed", "GAP narration_preparation_invalid"]
+    status = str(facts["alignment_status"])
+    preparation = (run.context or {}).get("narration_preparation") or {}
+    request = preparation.get("request") or {}
+    script = str(request.get("text") or "")
+    lines = [
+        f"delivery={'partial' if status == 'FAILED' else 'delivered'}",
+        (
+            "- landed narration_audio "
+            f"duration={facts['duration_seconds']:.3f}s "
+            f"source={'reused' if facts['cache_hit'] else 'new'} "
+            f"script_unicode_chars={len(script)} "
+            f"provider_reported_tts_chars={facts['usage_characters']}"
+        ),
+        f"alignment_status={status} alignment_id={facts['alignment_id']}",
+    ]
+    if status == "FAILED":
+        lines.append("GAP narration_alignment_failed")
+    return lines
+
+
 async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list[str], list[str]]:
     """Build deterministic closing facts and the delivery's exact Output refs.
 
@@ -429,6 +459,10 @@ async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list
         .scalars()
         .all()
     )
+    from app.tools.video.production.narration import has_narration_preparation_scope
+
+    if has_narration_preparation_scope(run):
+        return await _narration_delivery_lines(db, run, steps), []
     output_ids = [oid for step in steps for oid in (step.output_refs or [])]
     outputs = []
     if output_ids:
@@ -440,21 +474,9 @@ async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list
             .all()
         )
     ctx = run.context or {}
-    # The film confirmed-vs-landed check reads the version THIS run consumed
-    # (stamped on the context at Start) — never the current live draft
-    # (d08af2af: the closing beat fabricated a drift when no fact existed).
-    film_confirmed = None
-    if isinstance(ctx.get("prepared_storyboard"), dict):
-        film_confirmed = {
-            "board": ctx["prepared_storyboard"],
-            "params": ctx.get("film_storyboard_params") or {},
-            "version": ctx.get("film_storyboard_version"),
-            "digest": ctx.get("film_storyboard_content_digest"),
-        }
     review = compute_run_review(
         confirmed_scope=ctx.get("confirmed_scope"),
-        landed=[landed_fact(o, film_confirmed=film_confirmed,
-                            video_confirmed=ctx.get("version_ref")) for o in outputs],
+        landed=[landed_fact(output, video_confirmed=ctx.get("version_ref")) for output in outputs],
     )
     return review_fact_lines(review), delivered_output_refs(steps, outputs)
 
@@ -493,7 +515,8 @@ def _failure_fact_lines(
     steps: list[WorkflowStep], fanout_kinds: frozenset[str]
 ) -> list[str]:
     """The FAILURE FACTS block's pure core (ADR-135): one line per failed
-    step, including render/upload fan-out failures. ``step.error`` is already the baked user-facing line in the
+    step, including render/upload fan-out failures. ``step.error`` is already the
+    baked user-facing line in the
     run's UI locale (bake-at-write discipline, errors.py) — the turn
     narrates it verbatim, never re-derives a cause. Bounded by
     ``_FAILURE_FACT_CAP`` (a dying run rarely fails more steps than a
@@ -513,7 +536,7 @@ def _failure_fact_lines(
 async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     """Fetch the failed run's steps and project the FAILURE FACTS block
     (ADR-135). Zero LLM here, same doctrine as ``_run_review_snapshot``; the
-    prose law lives in ``trigger_system.j2``."""
+    prose law lives in ``event_mode.j2``."""
     from app.pipeline.graph import runtime_fanout_kinds  # deferred: pipeline weight
 
     steps = list(
@@ -525,7 +548,61 @@ async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
         .scalars()
         .all()
     )
-    return _failure_fact_lines(steps, runtime_fanout_kinds()) or ([f"DELIVERY FAILED: {run.error}"] if run.error else [])
+    return _failure_fact_lines(steps, runtime_fanout_kinds()) or (
+        [f"DELIVERY FAILED: {run.error}"] if run.error else []
+    )
+
+
+def _run_failed_fallback_speech(failure_lines: list[str], language: str) -> str:
+    """ADR-135's honesty floor when the reviewer itself cannot finish.
+
+    The deterministic step errors are already safe user-facing facts. Reusing
+    them is not a fabricated review: no new cause, output or success claim is
+    introduced, and the ordinary trigger persistence/typewriter path remains
+    unchanged. Other trigger kinds retain their silence-on-failure doctrine.
+    """
+    reasons = [line.split(" — ", 1)[-1].strip() for line in failure_lines]
+    reasons = [reason for reason in reasons if reason]
+    if language.startswith("zh"):
+        detail = f"已知原因：{'；'.join(reasons)}。" if reasons else ""
+        return (
+            f"这次制作没有完成，也没有生成可交付的视频。{detail}"
+            "你可以告诉我是要调整方案，还是重新制作。"
+        )
+    detail = f"Recorded cause: {'; '.join(reasons)}. " if reasons else ""
+    return (
+        f"This production did not finish, and no deliverable video was produced. {detail}"
+        "Tell me whether you want to adjust the plan or produce it again."
+    )
+
+
+async def _run_trigger_read(db, project, name, params):
+    if name in PERCEPTION_TOOLS:
+        return await run_perception_tool(db, project, name, params)
+    if name == "review_video":
+        from app.chat.video_turn_seats import review_video_seat
+
+        return await review_video_seat(project=project, args=params)
+    raise ValueError(f"Unsupported trigger read: {name}")
+
+
+async def _call_trigger_reviewer(agent, execute, *, trigger, ref, **kwargs):
+    try:
+        return await agent.call_loop(execute, **kwargs)
+    except Exception as error:
+        if trigger != TRIGGER_RUN_FAILED:
+            raise
+        # Known failure facts must still reach the persistence path when
+        # the reviewer itself fails, including during tool execution.
+        logger.warning(
+            "trigger_turn_reviewer_failed",
+            trigger=trigger,
+            ref=ref,
+            error_type=type(error).__name__,
+            error=str(error) or repr(error),
+            exc_info=True,
+        )
+        return None
 
 
 async def run_trigger_turn(
@@ -587,18 +664,15 @@ async def run_trigger_turn(
                     "trigger_turn_deduped", trigger=trigger, ref=ref
                 )
                 return None
-            # 单一叙事者律第二谓词 (ADR-080): no turn in flight, but a plan
-            # sits docked awaiting Start — the plan's own echo prose already
-            # narrates "what I saw / what I'll do", so a proactive review
-            # now is pure microphone-grabbing (the 2026-09-16 contradiction:
-            # "review the plan and hit Start" vs "already queued, how about
-            # these three other things"). Silence, not defer — a pending
-            # plan can sit for hours, and the world event already landed
-            # truthfully on the canvas.
+            # A pending user decision owns the microphone. Run delivery still
+            # lands; craft suggestions never supersede that original question.
             pending_question = await latest_pending_question(db, conversation_id)
-            if is_pending_plan(pending_question):
+            if pending_question is not None and (
+                is_pending_plan(pending_question)
+                or trigger not in {TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED}
+            ):
                 logger.info(
-                    "trigger_turn_silenced_pending_plan",
+                    "trigger_turn_silenced_pending_question",
                     trigger=trigger,
                     ref=ref,
                 )
@@ -629,6 +703,7 @@ async def run_trigger_turn(
             )
             language = _trigger_language(run, history, conversation)
             upload_retry_available = False
+            failure_lines: list[str] = []
             delivery_output_refs: list[str] = []
             if trigger == TRIGGER_RUN_COMPLETED:
                 assert run is not None
@@ -689,8 +764,8 @@ async def run_trigger_turn(
                 family (never terminal); ``wrap_up``'s labels are already
                 dock-worthy by schema (blank dropped, overlong rejected into
                 the loop) — persist the review row and stop the loop."""
-                if name in PERCEPTION_TOOLS:
-                    return await run_perception_tool(db, project, name, params)
+                if name != "wrap_up":
+                    return await _run_trigger_read(db, project, name, params)
                 assert isinstance(params, WrapUpArgs)
                 if not prose.strip():
                     return (
@@ -704,7 +779,7 @@ async def run_trigger_turn(
                 return None
 
             with bind_conversation_turn(
-                conversation_id=conversation_id, turn_id=ref
+                conversation_id=conversation_id, turn_id=ref, project_id=project_id
             ) as _usage_bind:
                 # — the facts block is its whole record, so the review is
                 # written once and closed; the other triggers keep the
@@ -714,10 +789,15 @@ async def run_trigger_turn(
                     if trigger == TRIGGER_RUN_COMPLETED
                     else trigger_agent
                 )
-                result = await agent.call_loop(
+                from app.tools.project_context import project_context_reader
+                result = await _call_trigger_reviewer(
+                    agent,
                     execute,
+                    trigger=trigger,
+                    ref=ref,
                     event_line=event_line,
                     context_text=context.get("text", ""),
+                    refresh_context=project_context_reader(project.id, project.user_id),
                     language=language,
                 )
             # 会话层计量 (ADR-117 D3): the proactive turn IS a conversation
@@ -729,30 +809,29 @@ async def run_trigger_turn(
                 project_id=project_id,
                 accrued=_usage_bind.accrued,
             )
-            if result.exhausted:
+            if result is not None and result.exhausted:
                 logger.info(
                     "trigger_turn_exhausted",
                     trigger=trigger,
                     ref=ref,
                     calls=result.calls,
                 )
+            if result is not None and not result.exhausted and result.prose.strip():
+                speech = result.prose.strip()
+            elif trigger == TRIGGER_RUN_FAILED:
+                speech = _run_failed_fallback_speech(failure_lines, language)
+                logger.info("trigger_turn_failure_fallback", ref=ref)
+            else:
                 return None
-            speech = result.prose.strip()
-            if not speech:
-                return None
-            # 落点拍 (ADR-080 第二谓词补齐, 2026-09-21 拍板): the admission
-            # check ran before our LLM loop — a user turn may have docked a
-            # plan since (S16-P2 实证: the review's suggestion dock landed
-            # the same second as present_plan and superseded it, stealing
-            # the confirmation seat). Re-check at the landing beat: a plan
-            # now pending holds the microphone — the world event already
-            # landed truthfully on the canvas, so silence overall (never a
-            # dock, never a bare message). Not deduped: once the plan
-            # clears, a later fire of the same world event may speak.
+            # Recheck at landing because a user question may have docked while
+            # the proactive model call was running. Craft never replaces it.
             landing_question = await latest_pending_question(db, conversation_id)
-            if is_pending_plan(landing_question):
+            if landing_question is not None and (
+                is_pending_plan(landing_question)
+                or trigger not in {TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED}
+            ):
                 logger.info(
-                    "trigger_turn_silenced_pending_plan_at_landing",
+                    "trigger_turn_silenced_pending_question_at_landing",
                     trigger=trigger,
                     ref=ref,
                 )
@@ -821,7 +900,12 @@ async def run_trigger_turn(
         return None
     except Exception as e:  # noqa: BLE001 — fire-and-forget: silence, never a pipeline failure
         logger.warning(
-            "trigger_turn_failed", trigger=trigger, ref=ref, error=str(e)
+            "trigger_turn_failed",
+            trigger=trigger,
+            ref=ref,
+            error_type=type(e).__name__,
+            error=str(e) or repr(e),
+            exc_info=True,
         )
         return None
 

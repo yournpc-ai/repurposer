@@ -1134,7 +1134,7 @@ async def list_chat_delivered_outputs(
         await db.execute(
             select(Message)
             .join(Conversation, Message.conversation_id == Conversation.id)
-            .where(Conversation.project_id == project_id, Message.workflow_run_id.is_not(None))
+            .where(Conversation.project_id == project_id, Message.role == "assistant")
             .order_by(Message.seq, Message.created_at)
         )
     ).scalars().all())

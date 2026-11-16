@@ -112,9 +112,9 @@ async def _mood_catalog(db: AsyncSession) -> list[str]:
     catalog's moods plus every library piece's mood (the unique natural
     key). The postprocess clamps to exactly this list — an unknown pick
     reads as None, never a free string reaching a spec."""
-    from app.pipeline.music import DEFAULT_MUSIC_CATALOG
+    from app.pipeline.music import CURATED_MUSIC_CATALOG
 
-    moods: list[str] = [entry["mood"] for entry in DEFAULT_MUSIC_CATALOG]
+    moods: list[str] = [entry["mood"] for entry in CURATED_MUSIC_CATALOG]
     seen = set(moods)
     rows = (
         (await db.execute(select(Music.mood).where(Music.mood.isnot(None))))

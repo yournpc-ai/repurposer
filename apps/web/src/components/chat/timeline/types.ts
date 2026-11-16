@@ -13,7 +13,7 @@ import type { SkillReference } from "@/lib/skills"
  * i18n copy identity for THAT status (active = progressive form, completed =
  * past-tense form, failed/cancelled = the active form, the ✗ says the rest).
  * The field set is the contract's whitelist — no params, raw results, or
- * reasoning; the accepted video review's typed receipt is the sole exception. */
+ * reasoning; accepted typed work receipts are the sole exception. */
 export interface ActivityFramePayload {
   activity_id: string
   seq: number
@@ -35,8 +35,8 @@ export interface ActivityFramePayload {
    * entry (the honest-duration re-anchor), not at the mid-generation
    * name_known beat. */
   duration_ms?: number
-  /** Accepted video review's typed evidence; never a raw tool result dump. */
-  receipt?: VideoReviewReceipt
+  /** Accepted work's typed evidence; never a raw tool result dump. */
+  receipt?: ActivityReceipt
 }
 
 export type VideoReviewIssueCode =
@@ -66,6 +66,93 @@ export interface VideoReviewReceipt {
   }
 }
 
+export interface ComponentClipReceipt {
+  clip_id: string
+  program_digest: string
+  media_digest: string
+  poster_url: string
+  preview_frame: number
+  dynamic_sample_frames: number[]
+  duration_frames: number
+  fps: number
+}
+
+export interface ComponentReceipt {
+  kind: "component"
+  components: ComponentClipReceipt[]
+}
+
+export interface VideoRevisionReceipt {
+  kind: "video_revision"
+  version: number
+  settings: string[]
+  scenes: {
+    added: string[]
+    removed: string[]
+    moved: { scene_id: string; from_seconds: number; to_seconds: number }[]
+  }
+  clips: {
+    added: { clip_id: string; kind: string }[]
+    removed: string[]
+    updated: {
+      clip_id: string
+      changes: ("range" | "object" | "animations" | "scene_id" | "source" | "linked_group_id")[]
+    }[]
+  }
+  transitions_changed: boolean
+  components: ComponentClipReceipt[]
+}
+
+export interface AudioCandidateReceipt {
+  member_index: number
+  ordinal: number
+  title: string
+  duration_seconds: number
+}
+
+export interface SfxSearchReceipt {
+  kind: "sfx_search"
+  candidate_set_id: string
+  topic: string
+  members: AudioCandidateReceipt[]
+}
+
+export interface SfxImportReceipt {
+  kind: "sfx_import"
+  candidate_set_id: string
+  member_index: number
+  asset_id: string
+  snapshot_id: string
+  snapshot_digest: string
+  title: string
+  duration_seconds: number
+}
+
+export interface MusicSearchReceipt {
+  kind: "music_search"
+  candidate_set_id: string
+  topic: string
+  members: AudioCandidateReceipt[]
+}
+
+export interface MusicSelectionReceipt {
+  kind: "music_selection"
+  candidate_set_id: string
+  member_index: number
+  music_id: string
+  title: string
+  duration_seconds: number
+}
+
+export type ActivityReceipt =
+  | VideoReviewReceipt
+  | ComponentReceipt
+  | VideoRevisionReceipt
+  | SfxSearchReceipt
+  | SfxImportReceipt
+  | MusicSearchReceipt
+  | MusicSelectionReceipt
+
 /** Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26) — one candidate
  * member: the source range + the source-faithful excerpt (C4 锚链) + the
  * speaker when the ASR named one. The ordinal IS the member's array index
@@ -75,9 +162,11 @@ export interface CandidateMemberPayload {
   end: number
   excerpt: string
   speaker?: string | null
-  /** Optional SFX facts. Their presence never changes transcript candidates. */
+  /** Optional audio-provider facts. Their presence never changes transcript candidates. */
   provider?: "freesound" | string | null
   provider_id?: string | null
+  /** Local Music library identity; mirrors provider_id on music_library members. */
+  music_id?: string | null
   title?: string | null
   author?: string | null
   duration_seconds?: number | null
@@ -86,6 +175,12 @@ export interface CandidateMemberPayload {
   license?: string | null
   attribution?: string | null
   query?: string | null
+  /** Complete native-Preset facts on video_preset_set members. */
+  preset_id?: string | null
+  preview_digest?: string | null
+  aspect?: string | null
+  width?: number | null
+  height?: number | null
 }
 
 /** The typed answer payload mirrored from the API (messages.answer). */
@@ -113,6 +208,16 @@ export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
   assetType?: string
 }
 
+export type VideoScrubTarget =
+  | {
+      kind: "segment"
+      scene_id?: string
+      clip_id?: string
+      start_seconds: number
+      end_seconds: number
+    }
+  | { kind: "object"; object_id: string }
+
 /** A structured presentation block stamped on an assistant row (Video
  * Project phase B): a REFERENCE the named component resolves to its server
  * DTO — never the payload itself. Unknown kinds render nothing (读容忍). */
@@ -124,6 +229,8 @@ export interface VideoStoryboardBlock {
   version: number
   content_digest?: string
   presentation_digest?: string
+  /** Optional bounded local inspection; its absence means no dynamic preview. */
+  scrub?: VideoScrubTarget
   /** Server-persisted completion receipt; old/live blocks omit it until the
    * presentation ACK lands. */
   presentation_complete?: boolean
@@ -255,6 +362,7 @@ export interface OverlayMessage {
  * payload carries every rendered fact, so a deleted source asset leaves
  * nothing dangling (读面容忍: an off-shape dump simply renders no card). */
 export interface CandidateSurface {
+  kind?: "video_preset_set" | "music_set"
   candidateSetId: string
   topic: string
   assetId: string | null
@@ -353,7 +461,6 @@ export interface QuestionPayload {
    * estimate tail), which replays as a normal flow message even while the
    * dock is still pending (the dock itself revives via the pending
    * fetch). Absent on every other dock shape. */
-  storyboard_echo?: boolean
 }
 
 /** A question-carrying chat message (the ask_user machinery): the dock's pending
@@ -476,21 +583,33 @@ export type ComponentSlot =
       history?: boolean
     }
 
-/** A ordered presentation block. Turn membership comes only from explicit
- * turnId; a legacy/independent fact never gets adopted by a neighbouring
- * TurnBlock. The key uses the first host row, not turnId, so reconciling an
- * optimistic turn id to its server id cannot remount the block. */
+/** Run identity stays independent of the containing Turn. Only contiguous,
+ * explicitly associated speech is composed with its single work surface. */
+export interface RunResponseSlot {
+  kind: "run"
+  key: string
+  runId: string
+  opening: ConversationUnit[]
+  deliveries: ConversationUnit[]
+}
+
+export type AssistantResponseSlot = ConversationUnit | RunResponseSlot
+
+/** The conversation arranges complete presentation containers. A Turn owns
+ * its user boundary and one assistant response; independent facts retain their
+ * identity. Source message/Activity identities remain on the internal slots. */
 export type ConversationBlock =
   | {
       kind: "turn"
       key: string
       turnId: string
-      units: ConversationUnit[]
+      user: OverlayMessage | null
+      slots: AssistantResponseSlot[]
     }
   | {
       kind: "standalone"
       key: string
       factKind: NonNullable<OverlayMessage["independentKind"]> | "legacy"
-      units: ConversationUnit[]
+      slots: AssistantResponseSlot[]
     }
-  | { kind: "runAnchor"; key: string; runId: string }
+  | RunResponseSlot

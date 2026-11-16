@@ -1,6 +1,5 @@
 // Public contract surface of the video-spec family. This package never
-// imports React/Remotion (check_gates enforces) — renderer adapters consume
-// it from the outside.
+// imports React/Remotion — renderer adapters consume it from the outside.
 export { videoSpecSchema } from "./schema";
 export type {
   VideoSpec,
