@@ -8,6 +8,8 @@ import { presentationAckReady } from "../timeline/reveal"
 import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
 import { TextSizeScrubInput, type ScrubVersionRead } from "./TextSizeScrubInput"
 
+const SHOW_TEXT_SIZE_SCRUB = false
+
 interface VideoVersionRead extends ScrubVersionRead {
   composition_id: string
   composition_version_id: string
@@ -187,11 +189,13 @@ export function StoryboardCard({
             {t("chat.videoStoryboard.scrub.openCurrent")}
           </Button>
         )}
-      <TextSizeScrubInput
-        read={read}
-        onDraftChange={handleDraftChange}
-        onApplied={handleApplied}
-      />
+      {SHOW_TEXT_SIZE_SCRUB && (
+        <TextSizeScrubInput
+          read={read}
+          onDraftChange={handleDraftChange}
+          onApplied={handleApplied}
+        />
+      )}
     </>
   )
 }

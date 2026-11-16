@@ -3301,9 +3301,6 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
     _check_complete_video_storyboard(read, "website Promo first storyboard")
     check(ack.get("accepted") and await count_runs(pid) == 0,
           "the storyboard is presented before a Run exists", ack)
-    check("按这版开始制作吗？" in first["assistant_message"]["content"]
-          or "Shall I produce this version?" in first["assistant_message"]["content"],
-          "the storyboard asks for production approval", first["assistant_message"]["content"])
     versions = await composition_versions_of(pid)
     check(len(versions) == 1, "one saved storyboard", versions)
     from app.editing.store import content_of

@@ -1423,7 +1423,7 @@ def stamp_video_presentation(
     A rejection stop that presents the saved version's complete facts is a
     presentation row too; a degrade without that presentation never stamps.
 
-    A first design can invite production after presentation.
+    The first design records whether the user requested production.
     """
     if read is None or message is None:
         return None
@@ -1434,12 +1434,7 @@ def stamp_video_presentation(
 
     receipt = video_presentation_receipt(read, review_hold=True)
     if production_requested and read["version"] == 1:
-        from app.ui_locale import current_ui_language
-
         receipt["production_invited"] = True
-        zh = (current_ui_language() or project.language or "").startswith("zh")
-        invitation = "按这版开始制作吗？" if zh else "Shall I produce this version?"
-        message.content = f"{(message.content or '').rstrip()}\n\n{invitation}"
     for key in ("authorized_revision_message_id", "prior_presented_message_id", "prior_reviewed_output_id"):
         if read.get(key):
             receipt[key] = read[key]

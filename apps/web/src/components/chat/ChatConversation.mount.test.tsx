@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react"
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 import { ChatConversation } from "./ChatConversation"
 import { buildConversationUnits } from "./timeline/project"
@@ -26,8 +26,10 @@ vi.mock("./RunTaskList", async () => {
 vi.mock("./AnchorCards", () => ({ AnchorCards: () => null }))
 vi.mock("./rows/AssistantText", () => ({ AssistantText: ({ text }: { text: string }) => <p>{text}</p> }))
 vi.mock("./rows/UserMessage", () => ({ UserBubble: ({ text }: { text: string }) => <p>{text}</p> }))
-vi.mock("./ActivityStream", () => ({
-  WorkSegmentRow: () => <div>Chat work</div>, ActivityRow: () => <div>Activity</div>,
+vi.mock("./ActivityStream", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./ActivityStream")>(),
+  WorkSegmentRow: ({ liveLabel }: { liveLabel?: ReactNode }) => <div>{liveLabel ?? "Chat work"}</div>,
+  ActivityRow: () => <div>Activity</div>,
 }))
 vi.mock("./blocks/ComponentSlot", () => ({ ComponentSlot: () => <div>Delivered video</div> }))
 vi.mock("@/components/ui/message-scroller", () => {
@@ -43,7 +45,7 @@ vi.mock("@/components/ui/message-scroller", () => {
   }
 })
 
-afterEach(() => { cleanup(); state.mounts = 0; state.reads = []; state.snapshot = { steps: [], status: null, createdAt: null, terminal: false } })
+afterEach(() => { cleanup(); vi.useRealTimers(); state.mounts = 0; state.reads = []; state.snapshot = { steps: [], status: null, createdAt: null, terminal: false } })
 function props(rows: OverlayMessage[], extra: Partial<ComponentProps<typeof ChatConversation>> = {}): ComponentProps<typeof ChatConversation> {
   return {
     messages: rows, conversationUnits: foldActivityUnits(buildConversationUnits(rows)),
@@ -75,6 +77,7 @@ it("keeps user outside one assistant container with prose and work inside", () =
 })
 
 it("does not give an empty streaming speech row its own flex gap", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
   const rows: OverlayMessage[] = [user, { ...opening, runId: null }, {
     id: "completed-capture", role: "assistant", content: "", turnId: "turn",
     activity: { activity_id: "a1", kind: "read", status: "completed", key: "chat.activity.videoCapturePlanDone" },
@@ -88,10 +91,43 @@ it("does not give an empty streaming speech row its own flex gap", () => {
   render(<ChatConversation {...props(rows, {
     chatBusy: true, activeTurnId: "turn", nowRow: thinking, bottomNowRow: thinking,
   })} />)
+  act(() => vi.advanceTimersByTime(1000))
   const items = Array.from(document.querySelectorAll('[data-slot="message-scroller-item"]'))
   expect(items.map((item) => item.textContent)).toEqual([
-    "Make a video", "Starting", "Chat work", "Chat work",
+    "Make a video", "Starting", "Chat work", "chat.thinking",
   ])
+})
+
+it("skips brief standalone waits and shows only the latest status after a second", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
+  const renderStatus = (key: string | null) => {
+    const activity = key === null ? null : {
+      activity_id: "__now__", kind: "think" as const, status: "active" as const, key,
+    }
+    return <ChatConversation {...props([user], {
+      chatBusy: true, activeTurnId: "turn", nowRow: activity, bottomNowRow: activity,
+    })} />
+  }
+  const view = render(renderStatus("chat.thinking"))
+  act(() => vi.advanceTimersByTime(999))
+  expect(screen.queryByText("chat.thinking")).toBeNull()
+  view.rerender(renderStatus(null))
+  act(() => vi.advanceTimersByTime(1000))
+  expect(screen.queryByText("chat.thinking")).toBeNull()
+
+  view.rerender(renderStatus("chat.thinking"))
+  act(() => vi.advanceTimersByTime(1000))
+  expect(screen.getByText("chat.thinking")).toBeTruthy()
+  view.rerender(renderStatus("chat.activity.read"))
+  act(() => vi.advanceTimersByTime(500))
+  view.rerender(renderStatus("chat.activity.write"))
+  act(() => vi.advanceTimersByTime(499))
+  expect(screen.getByText("chat.thinking")).toBeTruthy()
+  act(() => vi.advanceTimersByTime(1))
+  expect(screen.getByText("chat.activity.write")).toBeTruthy()
+  expect(screen.queryByText("chat.activity.read")).toBeNull()
+  view.rerender(renderStatus(null))
+  expect(screen.queryByText("chat.activity.write")).toBeNull()
 })
 
 it("preserves the Run work instance while delivery grows inside the same response", () => {

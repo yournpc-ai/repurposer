@@ -2,11 +2,11 @@
  * The dock owns form geometry and state; this component owns no second message
  * truth and mounts no additional scroller. */
 
-import { Fragment, useEffect, type ReactNode, type RefObject } from "react"
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { Download } from "lucide-react"
 
-import { ActivityRow, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, activityText, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { RunCard } from "@/components/chat/RunCard"
@@ -104,6 +104,45 @@ interface ChatConversationProps {
   scrollerSendRef: RefObject<(() => void) | null>
 }
 
+const CHAT_STATUS_MIN_DISPLAY_MS = 1000
+
+function useChatStatusLabel(label: string | null, standalone: boolean) {
+  const [displayedLabel, setDisplayedLabel] = useState<string | null>(null)
+  const nextChangeAt = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (label === null) {
+      nextChangeAt.current = null
+      setDisplayedLabel(null)
+      return
+    }
+    if (label === displayedLabel) return
+
+    const showLabel = () => {
+      nextChangeAt.current = performance.now() + CHAT_STATUS_MIN_DISPLAY_MS
+      setDisplayedLabel(label)
+    }
+    if (displayedLabel === null && !standalone) {
+      showLabel()
+      return
+    }
+
+    // Suppress short gaps before mounting the standalone row. Once visible,
+    // coalesce updates into the latest label at the end of the display window.
+    nextChangeAt.current ??= performance.now() + CHAT_STATUS_MIN_DISPLAY_MS
+    const remainingMs = nextChangeAt.current - performance.now()
+    if (remainingMs <= 0) {
+      showLabel()
+      return
+    }
+    const timer = window.setTimeout(showLabel, Math.ceil(remainingMs))
+    return () => window.clearTimeout(timer)
+  }, [label, standalone, displayedLabel])
+
+  if (label === null) return null
+  return displayedLabel ?? (standalone ? null : label)
+}
+
 export function ChatConversation({
   messages,
   planVersions,
@@ -139,6 +178,12 @@ export function ChatConversation({
 }: ChatConversationProps) {
   const { t } = useTranslation()
   const { openCreditTopup } = useSettingsDialog()
+  const liveActivity = liveWorkFoldKey != null ? nowRow : bottomNowRow
+  const chatStatusLabel = useChatStatusLabel(
+    liveActivity ? activityText(liveActivity, t) : null,
+    liveWorkFoldKey == null,
+  )
+  const bottomStatusLabel = bottomNowRow != null ? chatStatusLabel : null
 
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
@@ -340,7 +385,7 @@ export function ChatConversation({
         <WorkSegmentRow
           rows={unit.rows}
           elapsedMs={unit.elapsedMs}
-          activity={live ? nowRow : null}
+          liveLabel={live ? chatStatusLabel : null}
           failed={unit.failure != null}
           failure={unit.failure}
         />
@@ -443,9 +488,9 @@ export function ChatConversation({
               return (
                 <TurnBlock key={block.key} user={block.user ? renderConversationMessage(block.user) : null}>
                   {slots}
-                  {block.key === bottomSeatBlockKey && bottomNowRow ? (
+                  {block.key === bottomSeatBlockKey && bottomStatusLabel !== null ? (
                     <MessageScrollerItem key={`now:${block.key}`}>
-                      <WorkSegmentRow rows={[]} activity={bottomNowRow} />
+                      <WorkSegmentRow liveLabel={bottomStatusLabel} />
                     </MessageScrollerItem>
                   ) : null}
                 </TurnBlock>
@@ -456,10 +501,10 @@ export function ChatConversation({
                 durable activity fold can own the live row in the
                 timeline (and for pure, non-expandable Thinking). The
                 SAME WorkSegmentRow covers both seats and both poses. */}
-            {bottomNowRow && bottomSeatBlockKey == null ? (
+            {bottomStatusLabel !== null && bottomSeatBlockKey == null ? (
               <AssistantResponse>
                 <MessageScrollerItem>
-                  <WorkSegmentRow rows={[]} activity={bottomNowRow} />
+                  <WorkSegmentRow liveLabel={bottomStatusLabel} />
                 </MessageScrollerItem>
               </AssistantResponse>
             ) : null}

@@ -84,6 +84,7 @@ async def test_video_production_pins_reviewed_version_and_uses_run_render_billin
         stamp_video_presentation(project, shown, read)
         assert await short_video_confirmation(db, project, conversation.id, "OK", None) is None
         stamp_video_presentation(project, shown, read, production_requested=True)
+        assert shown.content == "Storyboard"
         assert (await short_video_confirmation(db, project, conversation.id, "OK", None))["action"] == "wait"
         task = TaskItem(tool="produce_video", params={"version_ref": read["base_ref"]})
         with pytest.raises(ValueError, match="finished presenting"):

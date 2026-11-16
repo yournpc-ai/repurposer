@@ -86,7 +86,7 @@ export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
   assetType?: string
 }
 
-function activityText(activity: NowRowPayload, t: TFunction): string {
+export function activityText(activity: NowRowPayload, t: TFunction): string {
   const { status } = activity
   // 归档归类目: a COMPLETED row drops the instance name and speaks the
   // category. A FAILED row uses terminal failure copy (an explicit failure

@@ -673,7 +673,7 @@ Canvas 近期不开放，保留的 Graph 与基础 CRUD 仅作后续迭代的底
 - `design_video` / `revise_video` 在 plan/propose 两路共用 `chat/video_turn_seats.py` 与 `editing/service.py`；内容只经 `apply_composition_edits`。
 - `GET /chat/video/versions/{id}/storyboard` 同时提供 canonical Storyboard、完整 Clip 读面与按内容需要的精确版本预览；不存在第二作品读面或平行预览路由。
 - 呈现回执住 `pending_brief.video_presentation`，Run 钉 `run.context.version_ref`；`produce_video` 只消费已呈现、获授权的确切 CompositionVersion，不在生产内重设计。
-- 最小 Scrub 的 Apply 是确定性完整 Clip 修订，不经 POST /chat，不调 LLM，不创建 Run 或 Output。
+- 最小 Scrub 的字号编辑底座保留，但分镜卡当前不展示调整字号入口；Apply 是确定性完整 Clip 修订，不经 POST /chat，不调 LLM，不创建 Run 或 Output。
 - Graph/Run/Node、队列、fencing、计费、Output render ownership、probe 与终态写继续共享；Clip 当前能力不因新视频链删除。
 
 ### 8.5 基于画面证据的内容质量检查（静帧与确定性信号检查已接，完整检查待扩）
