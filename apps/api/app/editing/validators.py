@@ -21,8 +21,10 @@ from app.editing.schemas import (
     GeneratorObject,
     ImageObject,
     ShapeObject,
+    SourceCaptionDerivation,
     SpeechObject,
     TextObject,
+    TimeRange,
     VideoObject,
     WebObject,
     speech_text_digest,
@@ -584,6 +586,47 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
         if not isinstance(clip.object, TextObject) or clip.object.caption is None:
             continue
         derivation = clip.object.caption
+        if isinstance(derivation, SourceCaptionDerivation):
+            fact = snapshots.get(derivation.snapshot_id) or {}
+            if fact.get("kind") not in {"video", "audio"} or fact.get("digest") != derivation.snapshot_digest:
+                _fail(problems, f"clip {clip.clip_id}: source caption identity is invalid")
+                continue
+            source_clip = next(
+                (
+                    candidate for candidate in clips_by_id.values()
+                    if candidate.scene_id == clip.scene_id
+                    and isinstance(candidate.object, (VideoObject, AudioObject))
+                    and candidate.source is not None
+                    and candidate.source.snapshot_id == derivation.snapshot_id
+                ),
+                None,
+            )
+            if source_clip is None or source_clip.source.source_range is None:
+                _fail(problems, f"clip {clip.clip_id}: ASR caption has no source video window")
+                continue
+            source_range = source_clip.source.source_range
+            if (
+                derivation.source_range.start < source_range.start
+                or derivation.source_range.end > source_range.end
+            ):
+                _fail(problems, f"clip {clip.clip_id}: ASR caption escapes its source video window")
+            expected_start = source_clip.range.start + source_ticks_to_output_ticks(
+                derivation.source_range.start - source_range.start,
+                content.settings.timebase,
+            )
+            expected_end = source_clip.range.start + source_ticks_to_output_ticks(
+                derivation.source_range.end - source_range.start,
+                content.settings.timebase,
+            )
+            if clip.range != TimeRange(start=expected_start, end=expected_end):
+                _fail(problems, f"clip {clip.clip_id}: ASR caption output time differs from its source window")
+            if derivation.state == "derived" and derivation.source_text_digest != speech_text_digest(clip.object.text):
+                _fail(problems, f"clip {clip.clip_id}: derived source caption has stale text identity")
+            if fact.get("kind") == "audio" and derivation.alignment != "faster-whisper-source-v1" and (
+                derivation.narration_alignment_id is None or derivation.narration_content_digest is None
+            ):
+                _fail(problems, f"clip {clip.clip_id}: narration caption lacks alignment provenance")
+            continue
         speech_clip = speech_clips.get(derivation.speech_object_id)
         if speech_clip is None:
             _fail(problems, f"clip {clip.clip_id}: caption speech source does not exist")

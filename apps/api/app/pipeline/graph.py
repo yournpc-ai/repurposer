@@ -211,34 +211,7 @@ class NodeBase:
     requires: tuple[Requirement, ...] = ()  # birthplace gate inputs
     agents: tuple[Any, ...] = ()  # declared agent references (startup self-check)
     runtime_fanout: bool = False  # may materialize outside compile (render, D2)
-    # 词表 v3 (ADR-076): the graph node's MEDIUM type — one of the five
-    # generic workflow-node values (text/table/image/video/audio), never a
-    # business word (业务身份 = spec.summary + spec.tool). Card anatomy
-    # derives from it (text/table → 全文卡, image/video/audio → 媒体卡).
-    # Declared per node class (注册表纪律: 禁平行映射表 — this attribute
-    # replaced graph_fill's retired _graph_kind_of central mapping). Kinds
-    # that never own a stamp declare the type of the node they FOLD INTO:
-    # revise_script rides its target writer's text node; materialize_source /
-    # align_stills ride the downstream producer's video node. The internal
-    # crew (app.pipeline.*) never stamps — the declaration is moot there.
-    node_type: str | None = None
-    # 能力原型 (ADR-076): the program region's form — "generator" (散文程序:
-    # PROMPT 区 = 用户原话) / "editor" (参数程序: 杠杆行) / "manual" (无程序
-    # 区, 改动 = 直操内容本体). Stamped into spec.prototype; execution
-    # semantics (估价折叠 / 修订通道 / 版本分页) untouched.
-    prototype: str | None = None
-    # 两站拆分 (ADR-072): when set, the stamp derives a second DOCUMENT-station
-    # family (the translated script — cue rows, the persistent editable
-    # artifact) next to this kind's assemble station; the value is the doc's
-    # spec.role. The doc station is always type=table × prototype=manual.
-    # First seats: translate_clip ("translation") / dub_clip ("dub_script").
-    doc_station: str | None = None
-    # Internal topology node (ADR-043): compile-injected, never a registered
-    # tool — users never say its name (materialize_source is the whole-
-    # source materialization, the transform chain's implied object). The
-    # startup self-check exempts internal nodes from the registry-membership
-    # requirement (same standing as the app.pipeline.* crew, declared here
-    # because the class lives in its tool package for cohesion).
+    # Internal execution-only node, never a manual Canvas node.
     internal: bool = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -370,7 +343,7 @@ def node_for_output(output_type: str) -> NodeBase | None:
     """The producer node owning an output type (outputs = tool attribute, N-32).
 
     N-56: a type may also carry a COMPILER-ONLY claimant (``ToolEntry.
-    llm_visible=False`` — e.g. cut_segments on "clips"). Every consumer here
+    llm_visible=False`` — an internal execution-only producer). Every consumer here
     is a proposal path (role-pin dispatch, targeted dispatch, existence
     checks), so routing always resolves the proposal-space owner regardless
     of registration order; compiler-only claimants are skipped. The registry

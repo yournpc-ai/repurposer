@@ -32,11 +32,11 @@ export function videoContentRect(container: PixelSize, source: PixelSize): Pixel
     return { x: 0, y: 0, width: 0, height: 0 }
   }
   const scale = Math.min(container.width / source.width, container.height / source.height)
-  const width = source.width * scale
-  const height = source.height * scale
+  const width = Math.min(container.width, source.width * scale)
+  const height = Math.min(container.height, source.height * scale)
   return {
-    x: (container.width - width) / 2,
-    y: (container.height - height) / 2,
+    x: clamp((container.width - width) / 2, 0, container.width - width),
+    y: clamp((container.height - height) / 2, 0, container.height - height),
     width,
     height,
   }

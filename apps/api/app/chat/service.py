@@ -42,7 +42,6 @@ option letter/number/label hit answers with that option; otherwise
 is a new intent and the question stays pending.
 """
 
-import json
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -104,18 +103,12 @@ from app.models.tables import (
     Conversation,
     Message,
     MessageSeqCounter,
-    Persona,
     Project,
     User,
     WorkflowRun,
     WorkflowStep,
 )
-from app.pipeline.asset_processing import has_any_text_material, has_renderable_media
-from app.pipeline.derivative_dispatch import (
-    DerivativeWriterNode,
-    project_source_language,
-    derive_quote_alt_language,
-)
+from app.pipeline.asset_processing import has_renderable_media
 from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
 from app.platform.configs import get_config
@@ -409,10 +402,6 @@ def _auto_start_rejected_line(detail: dict[str, Any] | None) -> str:
 
 
 
-# Final Hardening B1 (2026-09-24): ``_edit_op_items`` / ``_validate_edit_ops``
-# retired with the raw-ops chat verb ``apply_edit_ops`` — the Agent's only
-# edit entry is ``edit_output`` (ADR-090); the REST operations door keeps
-# its own validation in ``app.operations.service``.
 
 
 async def _get_or_create_project_conversation(
@@ -618,7 +607,6 @@ async def _create_run_from_tasks(
     project: Project,
     tasks: list[TaskItem],
     summary: str,
-    caption_mode: str | None = None,
     instruction: str | None = None,
     name: str | None = None,
     source_asset_id: str | None = None,
@@ -666,7 +654,6 @@ async def _create_run_from_tasks(
                 target_language=first_task_language(tasks) or project.language or "en",
                 instruction=instruction or summary,
                 scope="full",
-                caption_mode=caption_mode,
                 source_asset_id=source_asset_id,
                 exemplar_asset_id=exemplar_asset_id,
                 name=name or None,
@@ -730,7 +717,7 @@ async def resolve_confirmation_need(
     pass the birth turn's drift hold (the published copy drifted from the
     user-verifiable original) — auto start holds until the user sees the
     drift note and chooses."""
-    from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
+    from app.pipeline.lifecycle import confirmation_need
 
     user = await db.get(User, user_id)
     execution, credits = read_confirmation_prefs(
@@ -935,12 +922,6 @@ async def _stamp_role_pins(
         source=str(source.id),
         exemplar=str(exemplar.id) if exemplar is not None else None,
     )
-    if exemplar is not None and exemplar.processing_status == AssetStatus.COMPLETED:
-        from app.pipeline.decompile import (  # deferred: pipeline edge
-            fire_warm_craft_skeleton,
-        )
-
-        fire_warm_craft_skeleton(UUID(str(project.id)), UUID(str(exemplar.id)))
 
 
 async def _settle_role_answer(
@@ -984,143 +965,22 @@ async def _settle_default_role_pins(db: AsyncSession, project: Project) -> None:
     await _stamp_role_pins(db, project, videos[0], videos[1])
 
 
-# Caption mode for captioned-video runs (RECIPES §4.7, ADR-099 §8 default
-# absorption): a parameter a default can carry, so it never blocks the user
-# with a question. Derivation funnel, in priority order:
-#
-#  1. LLM-set on InferredIntent.caption_mode (the intent router recognises the
-#     user's wording — "bilingual subtitles" / "中英双语字幕" — and sets it).
-#  2. Code-level keyword scan on the user prompt (defence-in-depth: the LLM
-#     may miss the phrasing, but a literal "bilingual"/"双语" is unambiguous).
-#  3. The previous dock's value, inherited across refinement turns that don't
-#     re-mention it.
-#  4. source_only — stamped only when a distinct second language makes the
-#     choice real; the plan card then shows it as a visible, changeable fact.
-#     With no distinct alt language nothing is stamped (bilingual would print
-#     one language twice — there is no choice to show, and the run narrows
-#     bilingual → source_only on its own at dispatch).
-_CAPTION_MODE_KEYWORDS_BILINGUAL: tuple[str, ...] = (
-    "bilingual",
-    "bilingual subtitles",
-    "bilingual captions",
-    "双语",
-    "中英双语",
-    "中英对照",
-    "双语字幕",
-    "中英",
-)
-
-
-def _detect_caption_mode(prompt: str) -> str | None:
-    """Code-level keyword scan — the LLM may set caption_mode too, but a
-    literal "bilingual"/"双语" is unambiguous so the funnel never derives
-    past it. Source/target-only stays LLM-only: their reading is genuinely
-    ambiguous without knowing the source language."""
-    text = (prompt or "").lower()
-    if any(kw in text for kw in _CAPTION_MODE_KEYWORDS_BILINGUAL):
-        return "bilingual"
-    return None
-
-
-async def _caption_choice_is_meaningful(
-    db: AsyncSession, project: Project, tasks: list
-) -> bool:
-    """Is there a DISTINCT second language to offer?
-
-    Bilingual/target-only only make sense when an alt language exists that
-    differs from the source material's language. Derivation order (same as
-    the run-time path): the task's own target language (user-named) → the
-    project/UI locale. When every candidate equals the source there is no
-    choice to show — the funnel stamps nothing and the run narrows
-    bilingual → source_only on its own at dispatch.
-    """
-    source = await project_source_language(db, project)
-    task_language = next(
-        (
-            (t.params or {}).get("language")
-            for t in tasks
-            if getattr(t, "tool", None) == "write_quotes"
-        ),
-        None,
-    )
-    return (
-        derive_quote_alt_language(source, task_language, project.language)
-        is not None
-    )
-
-
-def _resolved_caption_mode(project: Project) -> str | None:
-    """The caption mode the previous dock stamped, if any.
-
-    A refinement turn's fresh call arrives with ``caption_mode=None`` unless
-    the user re-mentions it — None means "not mentioned this turn", never
-    "retracted". The stored ``pending_brief.intent.caption_mode`` is the
-    inherit source the funnel consults before defaulting, and every dock
-    inherits it the same way (a follow-up "改成 5 张" never drops the mode).
-    """
-    pending = project.pending_brief if isinstance(project.pending_brief, dict) else None
-    if not pending:
-        return None
-    intent = pending.get("intent") or {}
-    mode = intent.get("caption_mode")
-    return str(mode) if mode else None
-
-
-async def _derive_chat_caption_mode(
-    db: AsyncSession, project: Project, tasks: list, text: str
-) -> str | None:
-    """The caption-mode funnel for a caption-bearing chain: fresh keyword >
-    the previous dock's value > source_only when the choice is real (a
-    distinct second language exists). Returns None for chains without a
-    caption-bearing task — and for caption chains with no distinct alt
-    language, where nothing is stamped because there is nothing to choose.
-
-    Registry-native chain check (DerivativeWriterNode), no parallel "which
-    tools need subtitles" list."""
-    if not any(
-        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
-        and t.tool == "write_quotes"
-        for t in tasks
-    ):
-        return None
-    mode = _detect_caption_mode(text) or _resolved_caption_mode(project)
-    if mode is None and await _caption_choice_is_meaningful(db, project, tasks):
-        mode = "source_only"
-    return mode
-
-
 async def _compute_plan_reasons(
     db: AsyncSession,
     project: Project,
     intent: InferredIntent,
 ) -> list[str]:
-    """Re-derive the soft-signal reasons for a docked plan (Phase 1
-    answer path needs this — the caption_mode replay rebuilds the
-    PendingPlan from the stashed intent and the reasons computed in
-    _plan_turn are scoped to that function's stack).
+    """Re-derive the soft-signal reasons for a docked plan.
 
     Pure function over (db, project, intent) — the answer path passes the
-    replay_intent (caption_mode already stamped) and the project, and gets
-    back the same reasons the original dock would have. Registry-native
-    checks; no parallel tool lists.
+    Registry-native checks over the current production tools.
     """
     reasons: list[str] = []
     if not intent.tasks_explicit:
         reasons.append("chain_default")
-    clips_task = next((t for t in intent.tasks if t.tool == "select_clips"), None)
-    if clips_task is not None and (clips_task.params or {}).get("count") is None:
-        reasons.append("clip_count_default")
     has_media = await has_renderable_media(db, UUID(str(project.id)))
     if not has_media and any(_needs_media(t.tool) for t in intent.tasks):
         reasons.append("clips_without_media")
-    has_text_tribe = any(
-        isinstance(NODE_KINDS.get(t.tool), DerivativeWriterNode)
-        for t in intent.tasks
-    )
-    if has_text_tribe and not await has_any_text_material(
-        db, UUID(str(project.id))
-    ):
-        reasons.append("text_without_material")
     return reasons
 
 
@@ -1135,9 +995,7 @@ def _needs_media(tool: str) -> bool:
     node = NODE_KINDS.get(tool)
     if node is None:
         return False
-    return any(r.key == MEDIA.key for r in node.requires) or (
-        "materialize_source" in (node.after or ())
-    )
+    return any(r.key == MEDIA.key for r in node.requires)
 
 
 def _run_active_text(text: str) -> str:
@@ -1201,13 +1059,10 @@ def _cannot_do_text(text: str) -> str:
     (2026-08-20 review: the null-params incident had ~50% of recipe launches
     reading this line in English with tool slugs in it)."""
     if _prefers_zh(text):
-        return (
-            "这个我现在还做不了。可以点名想要什么——"
-            "比如竖屏短片、帖子、金句卡，或者另一个语言的版本。"
-        )
+        return "这个我现在还做不了。请描述要制作或修改的视频、要整理的画布，或想咨询的问题。"
     return (
-        "I can't do that yet. Try naming what you want — like vertical "
-        "clips, a post, quote cards, or a version in another language."
+        "I can't do that yet. Try describing a video to create or edit, "
+        "a canvas to organize, or a question to answer."
     )
 
 
@@ -1787,29 +1642,6 @@ async def sync_plan_question(
         ),
         intent=intent.model_dump(mode="json"),
     )
-    # Draft graph (ADR-057 K5 — 图先展示后运行): the docked chain stamps the
-    # canvas's preview as DRAFT nodes through the birthplace's own compile
-    # (same fill keys → Start fills them in place). A chain the birthplace
-    # would reject degrades exactly like the quote-less dock (the derived
-    # preview's posture): the plan docks, the stale preview tears down, and
-    # Start 422s for real.
-    from app.pipeline.graph_fill import (  # deferred: import cycle
-        clear_draft_graph,
-        stamp_draft_graph,
-    )
-    from app.ui_locale import current_ui_language  # deferred: request ctx
-
-    try:
-        await stamp_draft_graph(
-            db, project, intent.tasks, current_ui_language()
-        )
-    except (ToolRejected, ValueError):
-        logger.warning(
-            "draft_graph_stamp_failed",
-            project_id=str(project.id),
-            exc_info=True,
-        )
-        await clear_draft_graph(db, UUID(str(project.id)))
     return bailed_run_ids
 
 
@@ -2420,12 +2252,7 @@ async def answer_question(
             # Graceful exit: the unconfirmed plan is dropped, the project
             # stays a draft and the prompt stays in the conversation — the
             # setup can be reopened any time. Never a failure. The plan's
-            # draft graph goes with it (K5 — asset nodes stay: they are the
-            # project's inputs, never the plan's).
             project.pending_brief = None
-            from app.pipeline.graph_fill import clear_draft_graph  # deferred
-
-            await clear_draft_graph(db, UUID(str(project.id)))
         else:
             # kind == "start" (the only other kind a task_book accepts).
             pending = (
@@ -2439,23 +2266,6 @@ async def answer_question(
             # structure the LLM proposes, so the confirmed chain ships
             # verbatim — no merge machinery.
             intent = (data.intent or pending.intent) if pending is not None else None
-            # caption_mode is intent metadata the review panel never edits —
-            # a panel-submitted intent without it (client-side normalize may
-            # strip fields it doesn't know) says "not mentioned", never
-            # "retracted". Inherit the answered mode from the stored pending
-            # intent (2026-08-29 — the same doctrine as the plan-turn
-            # overwrite fix; without it, answer→Start via the PANEL dropped
-            # the mode even though answer→Start via prose kept it).
-            if (
-                intent is not None
-                and intent.caption_mode is None
-                and pending is not None
-                and pending.intent is not None
-                and pending.intent.caption_mode is not None
-            ):
-                intent = intent.model_copy(
-                    update={"caption_mode": pending.intent.caption_mode}
-                )
             tasks = list(intent.tasks) if intent is not None else []
             # D3 (Phase 4 B6): the Start seat enforces the SAME four-
             # conjunction lifecycle truth the client reads (门禁三) — "the
@@ -2494,22 +2304,6 @@ async def answer_question(
                 if gate.blockers:
                     detail["blockers"] = list(gate.blockers)
                 raise HTTPException(gate.http_status, detail)
-            # The confirmed chain's draft twin must mirror what Start
-            # actually runs (K5): the review panel's hand edits (data.intent)
-            # may diverge from the last docked stamp — re-sync idempotently
-            # (a no-op when unchanged). A chain the birthplace would reject
-            # tears the preview down; create_run then 422s as today.
-            from app.pipeline.graph_fill import (  # deferred: import cycle
-                clear_draft_graph,
-                stamp_draft_graph,
-            )
-
-            try:
-                await stamp_draft_graph(
-                    db, project, tasks, current_ui_language()
-                )
-            except (ToolRejected, ValueError):
-                await clear_draft_graph(db, UUID(str(project.id)))
             try:
                 # Entry constraints (clips-media gate included) reject at the
                 # birthplace — ValueError here is a client-facing 422.
@@ -2546,7 +2340,6 @@ async def answer_question(
                         # Caption mode rides the run context verbatim from
                         # the InferredIntent — the chat path's caption-mode
                         # question stores it on the intent (RECIPES §4.7).
-                        caption_mode=intent.caption_mode,
                         # 资产角色 pins (ADR-078 判词④): settled on the
                         # PendingPlan by the role question / the mention,
                         # riding TaskSpec → run.context verbatim. The panel
@@ -2558,6 +2351,7 @@ async def answer_question(
                         # the receipt title and completion line read it.
                         name=intent.name or None,
                     ),
+                    reuse_video_production=True,
                 )
             except ToolRejected as exc:
                 raise HTTPException(
@@ -2591,48 +2385,27 @@ async def answer_question(
             # authorization is only auditable against its frozen basis).
             # Stamped post-birthplace so a rejected Start never leaves a
             # snapshot.
-            from app.pipeline.scope_compile import (  # deferred: pipeline edge
-                build_confirmed_scope,
-            )
-
             _scope_user = await db.get(User, user_id)
             _scope_execution, _scope_credits = read_confirmation_prefs(
                 _scope_user.settings if _scope_user is not None else None
             )
             run.context = {
                 **(run.context or {}),
-                "confirmed_scope": build_confirmed_scope(
-                    confirmation_id=str(message.id),
-                    confirmed_at=datetime.now(UTC).isoformat(),
-                    confirmed_via=confirmed_via,
-                    plans=list(pending.plans) if pending is not None else [],
-                    tasks=tasks,
-                    quote=(message.question or {}).get("estimate_credits"),
-                    plan_task_map=(
-                        pending.plan_task_map if pending is not None else None
-                    ),
-                    settings={
+                "confirmed_scope": {
+                    "confirmation_id": str(message.id),
+                    "confirmed_at": datetime.now(UTC).isoformat(),
+                    "confirmed_via": confirmed_via,
+                    "compiled_scope": [task.model_dump(mode="json") for task in tasks],
+                    "quote": (message.question or {}).get("estimate_credits"),
+                    "settings": {
                         "confirm_execution": _scope_execution,
                         "confirm_credits": _scope_credits,
                         "billing.always_confirm_above": await get_config(
                             db, "billing.always_confirm_above"
                         ),
                     },
-                ),
+                },
             }
-            from app.pipeline.exploration_store import (  # deferred: pipeline edge
-                mark_compiled,
-            )
-
-            await mark_compiled(
-                db,
-                project,
-                plan_ids=[
-                    UUID(str(p["plan_id"]))
-                    for p in (pending.plans if pending is not None else [])
-                    if p.get("plan_id")
-                ],
-            )
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4) — but the run-id column alone does NOT

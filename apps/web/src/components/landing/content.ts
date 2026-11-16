@@ -17,7 +17,7 @@ export type LandingGalleryItem = {
 export const LANDING_GALLERY: readonly LandingGalleryItem[] = [
   {
     id: "product-promo",
-    skill: { kind: "builtin", skill_id: "launch-film", version: "1.4.0" },
+    skill: { kind: "builtin", skill_id: "promo-video", version: "bdd94be16d60fa8f" },
     videoUrl:
       "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/product-demo-agentveil-in-motion-420b7ffe.mp4",
     posterUrl: "/gallery/product-demo-agentveil-in-motion-420b7ffe.jpg",

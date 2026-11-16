@@ -19,6 +19,7 @@ from app.editing.fonts import font_resources
 from app.editing.schemas import (
     Animation,
     AudioObject,
+    CaptionDerivation,
     Clip,
     CompositionContent,
     Easing,
@@ -531,6 +532,7 @@ def compile_video_spec(
             if (
                 isinstance(clip.object, TextObject)
                 and clip.object.caption is not None
+                and isinstance(clip.object.caption, CaptionDerivation)
                 and clip.object.caption.state == "derived"
                 and clip.object.caption.alignment != "faster-whisper-script-v1"
             ):

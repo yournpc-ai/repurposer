@@ -1,24 +1,4 @@
-"""Tool registry (ADR-039 P2, N-42) — the single door for LLM-proposed work.
-
-This module IS the registry door: importing it imports the internal crew
-(``pipeline/node_runners``) and every tool package's ``node.py``, which
-self-registers each node into ``pipeline/graph.py``'s ``NODE_KINDS`` (import
-order below is the curated proposal order). Three consumers, three views of
-the same table:
-
-- the intent agent (LLM) sees the proposal space (``tool_catalog_lines``
-  feeds its prompt);
-- ``compile_graph`` adjudicates existence / params / topology against it;
-- progress display and metering read ``summary_templates`` / ``behavior``.
-
-It is NOT a plugin system (static dict, deployed with the code). Admission
-discipline: a new tool passes the NAMING §7/§8 review before it is
-registered here.
-
-A ``ToolEntry`` carries only proposal/display data (description / params /
-summary template); all execution and topology knowledge lives on the node
-classes (N-35: a tool's name IS its node's kind — no parallel fields).
-"""
+"""Executable tasks for the saved-Composition production RunPlan."""
 
 from __future__ import annotations
 
@@ -27,105 +7,28 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-# The registry door: these imports populate NODE_KINDS (side effect). The
-# internal crew first, then tool packages in curated proposal order.
 import app.pipeline.node_runners  # noqa: F401
-import app.pipeline.verify  # noqa: F401 — the 质检环 node (期 3), internal crew
-import app.pipeline.decompile  # noqa: F401 — the decompiler node (ADR-078), internal crew
-from app.tools.clips.node import SelectClips  # noqa: F401
-from app.tools.clips.cut import CutSegments  # noqa: F401
-from app.tools.clips.materialize import MaterializeSource  # noqa: F401 — NODE_KINDS only; an internal node (ADR-043), never a registry entry
-from app.tools.clips.params import CutSegmentsParams, SelectClipsParams
-from app.pipeline.derivative_dispatch import CopyWriterParams
-from app.tools.posts.node import WritePost  # noqa: F401
-from app.tools.quotes.node import WriteQuotes  # noqa: F401
-from app.tools.quotes.params import WriteQuotesParams
-from app.tools.carousel.node import WriteCarousel  # noqa: F401
-from app.tools.carousel.params import WriteCarouselParams
-from app.tools.article.node import WriteArticle  # noqa: F401
-from app.tools.revise.node import ReviseScript  # noqa: F401
-from app.tools.revise.params import ReviseScriptParams
-from app.tools.dub.node import DubClip  # noqa: F401
-from app.tools.dub.params import DubClipParams
-from app.tools.captions.node import TranslateClip  # noqa: F401
-from app.tools.captions.params import TranslateClipParams
-from app.tools.filler.node import RemoveFiller  # noqa: F401
-from app.tools.music.node import AddMusic  # noqa: F401
-from app.tools.music.params import AddMusicParams
-from app.tools.reframe.node import ReframeClip  # noqa: F401
-from app.tools.reframe.params import ReframeClipParams
-from app.tools.align_stills.node import AlignStills  # noqa: F401
-from app.tools.research.node import ResearchNode  # noqa: F401
-from app.tools.research.params import ResearchParams
 from app.tools.video.production.node import ProduceVideo  # noqa: F401
 from app.tools.video.params import PrepareNarrationParams, ProduceVideoParams
-
 from app.pipeline.graph import NODE_KINDS
 
 
 class ToolRejected(ValueError):
-    """A proposed task failed registry adjudication (unknown tool, bad
-    params, or a registered-but-not-implemented tool). Carries the closest
-    available tools so the caller can let the intent agent repair once."""
-
     def __init__(self, message: str, *, suggestions: list[str] | None = None) -> None:
         super().__init__(message)
         self.suggestions = suggestions or []
 
 
-# ---- params schemas ---------------------------------------------------------
-#
-# Tool params models live in their packages (``tools/<pkg>/params.py``)
-# and are imported above. Field descriptions are injected into the intent
-# agent's proposal prompt (agent-loop-upgrade W2) — they ARE the LLM's
-# parameter documentation, so write them as "when to use / what null
-# means", not as type restatements.
-#
-# Only node-less seats keep their params model here.
-
-
-class SynthesizeTalkVideoParams(BaseModel):
-    instruction: str | None = None
-
-
-# ---- registry --------------------------------------------------------------
-
-
 class ToolEntry(BaseModel):
-    """One registered tool (NAMING §5 registry, third member).
-
-    Proposal/display data only — execution knowledge (run / requires /
-    retries / topology) and the quotation (``estimate``, N-34) live on the
-    node class in ``NODE_KINDS`` under the same name (N-35). A seat
-    (``seat=True``) is a registered-but-not-implemented tool: propose-able
-    nowhere, excluded from dispatchable.
-    """
-
     model_config = {"arbitrary_types_allowed": True}
 
     name: str
-    description: str  # "when to use" — injected into the intent prompt
+    description: str
     behavior: Literal["deterministic", "probabilistic"]
     params_model: type[BaseModel] | None = None
-    # Per-locale display templates ("en" required, others fall back to it):
-    # fill_summary picks by the run's pinned UI locale — step lines follow
-    # the UI language, never the material's.
     summary_templates: dict[str, str] = {}
-    seat: bool = False  # registered-but-not-implemented (no node yet)
-    # Needs an uploaded media FILE (video/audio/image) — never satisfiable by
-    # pasted text. Display/proposal metadata only (zero behavior change); the
-    # prompt's no-material enumeration must be reviewed against this registry
-    # when either side changes. align_stills is the designed counter-example —
-    # requires=(TRANSCRIPT,) yet serves the NO-recording case, so TRANSCRIPT
-    # membership is NOT this axis.
+    seat: bool = False
     needs_media_file: bool = False
-    # Compiler-only citizenship (N-56, iter-2 ①): False = the tool is
-    # registry-legal (adjudication / dispatch / display all work) but NEVER
-    # appears in the LLM-facing catalog — the agent cannot propose what it
-    # cannot see; only the deterministic compiler emits it. Same word as
-    # OpDef.llm_visible (operations/registry.py), same law one layer down.
-    # First seat: cut_segments. dispatchable_tools() is NOT filtered —
-    # compiled chains must adjudicate normally.
     llm_visible: bool = True
 
 
@@ -143,354 +46,71 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="prepare_narration",
-            description=(
-                "Prepare one exact final script as a speed-1.0 narration original, "
-                "freeze its real AUDIO snapshot and request NarrationAlignment. "
-                "Runs as the only task in its Run; it creates no video or Composition."
-            ),
+            description="Prepare one exact final script as a speed-1.0 narration original, "
+            "freeze its real AUDIO snapshot and request NarrationAlignment. "
+            "Runs as the only task in its Run; it creates no video or Composition.",
             behavior="deterministic",
             params_model=PrepareNarrationParams,
-            summary_templates={
-                "en": "Prepared narration · {duration_seconds:g}s",
-                "zh": "已准备旁白原音 · {duration_seconds:g} 秒",
-            },
-        ),
-        ToolEntry(
-            name="select_clips",
-            description="Cut highlight clips from the source media (batch re-cut)",
-            needs_media_file=True,
-            behavior="probabilistic",
-            params_model=SelectClipsParams,
-            summary_templates={
-                "en": "Selected {n} clip{n_s} · {total_seconds}s total",
-                "zh": "选出了 {n} 个片段 · 共 {total_seconds} 秒",
-            },
-        ),
-        ToolEntry(
-            name="cut_segments",
-            description="Materialize the named source spans into clips "
-            "(compiler-emitted, deterministic — no selection, no LLM)",
-            needs_media_file=True,
-            behavior="deterministic",
-            params_model=CutSegmentsParams,
-            llm_visible=False,
-            summary_templates={
-                "en": "Cut {n} segment{n_s} · {total_seconds}s total",
-                "zh": "裁出 {n} 段 · 共 {total_seconds} 秒",
-            },
-        ),
-        ToolEntry(
-            name="write_post",
-            description="Write a long-form social post from the talk",
-            behavior="probabilistic",
-            params_model=CopyWriterParams,
-            summary_templates={
-                "en": "Wrote a post · {word_count} word{word_count_s}",
-                "zh": "写好了帖子 · {word_count} 词",
-            },
-        ),
-        ToolEntry(
-            name="write_quotes",
-            description="Write quote cards from the talk's best lines",
-            behavior="probabilistic",
-            params_model=WriteQuotesParams,
-            summary_templates={
-                "en": "Wrote quote cards · {word_count} word{word_count_s}",
-                "zh": "写好了金句卡 · {word_count} 词",
-            },
-        ),
-        ToolEntry(
-            name="write_carousel",
-            description="Write a social carousel (slide deck copy)",
-            behavior="probabilistic",
-            params_model=WriteCarouselParams,
-            summary_templates={
-                "en": "Wrote a carousel · {word_count} word{word_count_s}",
-                "zh": "写好了轮播 · {word_count} 词",
-            },
-        ),
-        ToolEntry(
-            name="write_article",
-            description="Write a long-form article draft",
-            behavior="probabilistic",
-            params_model=CopyWriterParams,
-            summary_templates={
-                "en": "Wrote an article · {word_count} word{word_count_s}",
-                "zh": "写好了文章 · {word_count} 词",
-            },
-        ),
-        ToolEntry(
-            name="revise_script",
-            description="Revise one existing output (shorter/longer/tone/language) in place",
-            behavior="probabilistic",
-            params_model=ReviseScriptParams,
-            summary_templates={
-                "en": "Revised · {title}",
-                "zh": "修订了 · {title}",
-            },
-        ),
-        ToolEntry(
-            name="dub_clip",
-            description="Dub existing clips with the persona's cloned voice into a target language, then re-render",
-            needs_media_file=True,
-            behavior="probabilistic",
-            params_model=DubClipParams,
-            summary_templates={
-                "en": "Dubbed {n} clip{n_s} · {lang}",
-                "zh": "配音了 {n} 个片段 · {lang}",
-            },
-        ),
-        ToolEntry(
-            name="translate_clip",
-            description="Translate existing clips' captions into another language, then re-render",
-            needs_media_file=True,
-            behavior="probabilistic",
-            params_model=TranslateClipParams,
-            summary_templates={
-                "en": "Translated {n} clip{n_s} · {lang}",
-                "zh": "翻译了 {n} 个片段 · {lang}",
-            },
-        ),
-        ToolEntry(
-            name="remove_filler",
-            description="Remove filler words and repeated takes from existing clips, then re-render",
-            needs_media_file=True,
-            behavior="deterministic",
-            summary_templates={
-                "en": "Removed {filler_count} filler{filler_count_s} · {repeat_count} repeated take{repeat_count_s}",
-                "zh": "剪掉了 {filler_count} 处口水词 · {repeat_count} 处重拍",
-            },
-        ),
-        ToolEntry(
-            name="add_music",
-            description="Score existing clips with a music bed, then re-render",
-            needs_media_file=True,
-            behavior="deterministic",
-            params_model=AddMusicParams,
-            summary_templates={
-                "en": "Scored · {mood} bed",
-                "zh": "配乐完成 · {mood} 风格",
-            },
-        ),
-        ToolEntry(
-            name="reframe_clip",
-            description="Reframe existing clips for the output aspect — the camera sits on "
-            "whoever is talking, or follows a moving speaker — then re-render",
-            needs_media_file=True,
-            behavior="deterministic",
-            params_model=ReframeClipParams,
-            summary_templates={
-                "en": "Reframed {n} clip{n_s}",
-                "zh": "分镜完成 · {n} 个片段",
-            },
-        ),
-        ToolEntry(
-            name="align_stills",
-            description="Build an estimated speaking timeline from the transcript so a photo "
-            "slideshow gets word-level caption timing — use when there is NO recording "
-            "(transcript + photos only; RECIPES §2's third time source: reading pace)",
-            behavior="deterministic",
-            summary_templates={
-                "en": "Aligned transcript · {n} word{n_s} · {total_seconds}s",
-                "zh": "对齐了逐字稿 · {n} 词 · {total_seconds} 秒",
-            },
-        ),
-        ToolEntry(
-            name="research",
-            description="Research a topic on the web first (fresh facts + named sources) so the "
-            "run's copy is grounded — ONLY when the request names a research / fact-check / "
-            "latest-developments need or the topic is time-sensitive; never for evergreen copy "
-            "from the user's own material",
-            behavior="probabilistic",
-            params_model=ResearchParams,
-            summary_templates={
-                "en": "Researched · {n} source{n_s}",
-                "zh": "调研完成 · {n} 个来源",
-            },
-        ),
-        ToolEntry(
-            name="synthesize_talk_video",
-            description="Synthesize a talking-head video from transcript + persona photo + voiceprint",
-            behavior="probabilistic",
-            params_model=SynthesizeTalkVideoParams,
-            summary_templates={
-                "en": "Synthesized a talk video",
-                "zh": "合成了口播视频",
-            },
-            seat=True,  # seat: virtual chain lands with docs/tasks/synthetic-talk-video.md
+            summary_templates={"en": "Prepared narration · {duration_seconds:g}s",
+                               "zh": "已准备旁白原音 · {duration_seconds:g} 秒"},
         ),
     ]
 }
 
 
-# ---- consumers' views ------------------------------------------------------
-
-
-# Billing guardrail (2026-08-20 ruling): every task in a chain is paid work
-# (LLM / image / render) — an unbounded list is an unbounded bill.
-MAX_TASKS_PER_RUN = 10
-
-
 def dispatchable_tools() -> list[ToolEntry]:
-    """Tools the intent agent may propose: a live node exists in
-    ``NODE_KINDS``. Seats (synthesize) are excluded automatically."""
-    return [
-        entry
-        for entry in TOOL_REGISTRY.values()
-        if not entry.seat and entry.name in NODE_KINDS
-    ]
+    return [entry for entry in TOOL_REGISTRY.values() if not entry.seat and entry.name in NODE_KINDS]
 
 
 def _params_doc(model: type[BaseModel]) -> str:
-    """"name: description" pairs for a params model (agent-loop-upgrade W2).
-
-    Falls back to the bare name when a field carries no description — the
-    prompt degrades to the pre-W2 shape for that field instead of breaking.
-    """
-    parts = []
-    for fname, field in model.model_fields.items():
-        parts.append(f"{fname}: {field.description}" if field.description else fname)
-    return ", ".join(parts)
+    return ", ".join(
+        f"{name}: {field.description}" if field.description else name
+        for name, field in model.model_fields.items()
+    )
 
 
 def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
-    """The registry's self-projection as prompt lines (N-42 裂脑修复): one
-    ``- name: description (params: …)`` line per dispatchable tool. The chat
-    intent agents consume this verbatim — the catalog is projected here, at
-    the registry's home, never re-assembled per consumer. Compiler-only
-    citizens (``llm_visible=False``, N-56) never project — the agent cannot
-    propose what it cannot see."""
     return "\n".join(
         f"- {entry.name}: {entry.description}"
-        + (
-            f" (params: {_params_doc(entry.params_model)})"
-            if entry.params_model
-            else ""
-        )
+        + (f" (params: {_params_doc(entry.params_model)})" if entry.params_model else "")
         for entry in dispatchable_tools()
         if entry.llm_visible and entry.name not in exclude
     )
 
 
-# The user-language menu projection (批「身份核」2026-09-27): (tool, spoken
-# deliverable phrase) pairs in display order. The catalog above is BUILDER
-# vocabulary (names + params); this is SPEAKER vocabulary (what the user
-# GETS) — both projected here at the registry's home, never re-assembled per
-# consumer. A tool dropped from the registry drops from the menu; seats and
-# hidden citizens never advertise. Channel-neutral phrasing by construction —
-# venue words never enter either vocabulary: the catalog description is
-# venue-free too (a venue word in it once surfaced in user speech as 通讯稿,
-# 批5 v2); venues are the user's to name.
-_MENU_PHRASES: list[tuple[str, str]] = [
-    ("produce_video", "product promo videos from captured websites, vertical talking-head "
-     "motion videos from real footage, native text animations, evidence-led knowledge "
-     "explainers from ready narration alignments or bounded drawings, and mixed videos "
-     "from saved storyboards; compare real native motion presets, revise individual "
-     "elements, split/trim clips without moving later clips, crossfade adjacent full-frame "
-     "fixed media with enough source footage, and align existing cuts to known music beats "
-     "within a chosen tolerance"),
-    ("select_clips", "highlight clips cut from the source media"),
-    ("write_post", "social posts"),
-    ("write_article", "long-form articles"),
-    ("write_quotes", "quote cards"),
-    ("write_carousel", "carousels (multi-page image cards)"),
-    ("translate_clip", "captions / translated subtitles"),
-    ("dub_clip", "voice dubbing into another language"),
-    ("remove_filler", "filler-word removal"),
-    ("add_music", "background music"),
-    ("reframe_clip", "speaker-aware reframing (vertical / square / horizontal) — "
-    "the camera sits on whoever is talking or follows a moving speaker, "
-    "matched automatically to the footage"),
-    ("align_stills", "photo-slideshow videos from stills + audio"),
-]
-
-
 def capability_menu_lines() -> str:
-    """The menu every chat surface speaks from (the identity partial's data
-    seat): one user-language deliverable phrase per dispatchable, visible,
-    non-seat tool, in ``_MENU_PHRASES`` order."""
-    registry = {entry.name: entry for entry in dispatchable_tools()}
-    return "\n".join(
-        f"- {phrase}"
-        for name, phrase in _MENU_PHRASES
-        if (entry := registry.get(name)) is not None
-        and entry.llm_visible
-        and not entry.seat
-        and entry.name in NODE_KINDS
-    )
+    entry = TOOL_REGISTRY["produce_video"]
+    return f"- {entry.description}" if entry in dispatchable_tools() else ""
 
 
 def strip_null_params(params: dict | None) -> dict:
-    """The proposal convention is "null = take the default" (the params field
-    descriptions say so) — drop explicit nulls before schema validation so an
-    optional-in-spirit field never dies on a strict-typed schema (2026-08-19:
-    a bare `count: null` sank ~half of recipe-template plan turns after the
-    repair round repeated it; the STORED plan then 500'd the same way at
-    compile time — every params-validation site goes through here).
-
-    2026-09-24 (probe scratch/probe_plan_reject_processing.py, production
-    incident 641cb9fc): M3 also serializes absent params as the STRING
-    "null" — the same intent in the provider's dialect, invisible to the
-    ``is not None`` guard, and it sank present_plan at the birthplace
-    (7-minute repair loop after the speech had already promised the plan).
-    顺形律: provider dialects are absorbed HERE, at the one deterministic
-    funnel, never prompt-side."""
     return {
-        k: v
-        for k, v in (params or {}).items()
-        if v is not None and not (isinstance(v, str) and v.strip().lower() == "null")
+        key: value
+        for key, value in (params or {}).items()
+        if value is not None and not (isinstance(value, str) and value.strip().lower() == "null")
     }
 
 
 def validate_task_list(tasks: list[Any]) -> list[ToolEntry]:
-    """Adjudicate a proposed task list. Returns the resolved entries in order;
-    raises ToolRejected (with close-match suggestions) on the first offense."""
-    # Billing guardrail (2026-08-20 ruling): every task in the chain is paid
-    # work (LLM / image / render) — an unbounded list is an unbounded bill.
-    if len(tasks) > MAX_TASKS_PER_RUN:
-        raise ToolRejected(
-            f"Plan too large: {MAX_TASKS_PER_RUN} tasks max per run "
-            f"(got {len(tasks)})",
-            suggestions=[],
-        )
+    if len(tasks) > 1:
+        raise ToolRejected("One saved Composition production takes exactly one task", suggestions=[])
     dispatchable = {entry.name: entry for entry in dispatchable_tools()}
     entries: list[ToolEntry] = []
     for task in tasks:
         entry = dispatchable.get(task.tool)
         if entry is None:
-            known = task.tool in TOOL_REGISTRY
-            message = (
-                f"Tool '{task.tool}' is registered but not yet implemented"
-                if known
-                else f"'{task.tool}' is not a runnable plan task"
-            )
             raise ToolRejected(
-                message,
-                suggestions=difflib.get_close_matches(
-                    task.tool, dispatchable.keys(), n=3, cutoff=0.4
-                )
+                f"'{task.tool}' is not a runnable plan task",
+                suggestions=difflib.get_close_matches(task.tool, dispatchable.keys(), n=3, cutoff=0.4)
                 or sorted(dispatchable.keys()),
             )
         if entry.params_model is not None:
             try:
-                params = entry.params_model.model_validate(strip_null_params(task.params))
-            except Exception as e:
+                entry.params_model.model_validate(strip_null_params(task.params))
+            except Exception as exc:
                 raise ToolRejected(
-                    f"Tool '{task.tool}' rejected its params: {e}",
+                    f"Tool '{task.tool}' rejected its params: {exc}",
                     suggestions=[entry.name],
-                ) from e
-            # Count bounds adjudication (birthplace C3's mode② form): the
-            # node's count_limits declaration is the single source — an
-            # out-of-bounds count is real money (999 quotes = 999 images).
-            node = NODE_KINDS.get(entry.name)
-            count = getattr(params, "count", None)
-            if node is not None and node.count_limits and count is not None:
-                lo, hi = node.count_limits
-                if not lo <= count <= hi:
-                    raise ToolRejected(
-                        f"Tool '{task.tool}' count must be between {lo} and "
-                        f"{hi} (got {count})",
-                        suggestions=[entry.name],
-                    )
+                ) from exc
         entries.append(entry)
     return entries

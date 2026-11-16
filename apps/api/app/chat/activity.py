@@ -94,7 +94,7 @@ from app.chat.activity_receipts import (
     VideoReviewReceipt,
     VideoRevisionReceipt,
 )
-from app.chat.exploration_tools import EXPLORATION_TOOLS
+EXPLORATION_TOOLS = ()
 from app.chat.perception import PERCEPTION_TOOLS
 
 # The user-semantic kind vocabulary (冻结: user-semantic, never tool names).
@@ -108,7 +108,7 @@ STATUS_ACTIVE = "active"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"  # schema-complete; see the module docstring
-_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "revise_output", "edit_output", "design_video", "revise_video", "review_video", "review_working_draft"})
+_DRAFT_TOOLS = frozenset({"present_plan", "propose_tasks", "edit_graph", "design_video", "revise_video", "review_video", "review_working_draft"})
 _RUN_TOOLS = frozenset({"start_run"})
 _CONVERSATION_TOOLS = frozenset({"ask_user", "answer"})
 # The exploration proposal verbs (iter-2 ⑤/⑥, ADR-088 旅程四): their user
@@ -139,7 +139,7 @@ _ACTIVITY_KEYS = {
 
 # The draft bucket's revision verbs → the edit key pair (the plan verbs
 # propose_tasks / present_plan keep the kind default above).
-_EDIT_TOOLS = frozenset({"edit_graph", "revise_output", "edit_output"})
+_EDIT_TOOLS = frozenset({"edit_graph"})
 _EDIT_KEYS = ("chat.activity.edit", "chat.activity.editDone")
 _STORYBOARD_TOOLS = frozenset({"design_video", "revise_video", "review_video", "review_working_draft"})
 # The patch variant's pair (same span anatomy, its own vocabulary): a call

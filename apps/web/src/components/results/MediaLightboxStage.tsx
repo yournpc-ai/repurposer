@@ -19,8 +19,6 @@ import {
 } from "motion/react"
 import type { MotionValue, Transition } from "motion/react"
 import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   FileText,
   Info,
@@ -776,9 +774,7 @@ export function MediaLightboxStage({
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-3 sm:px-5"
         style={{ opacity: chrome, height: c.top }}
       >
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {t("chat.outputViewer.position", { current: index + 1, total: items.length })}
-        </p>
+        <div />
         {actions ? (
           <div className="pointer-events-auto absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-2">
             {actions}
@@ -874,31 +870,6 @@ export function MediaLightboxStage({
         </div>
       </motion.div>
 
-      <motion.div className="pointer-events-none absolute inset-0 z-20" style={{ opacity: chrome }}>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="pointer-events-auto absolute top-1/2 left-5 size-10 -translate-y-1/2 rounded-full max-sm:hidden"
-          onClick={() => goTo(index - 1)}
-          disabled={index === 0}
-          aria-label={t("chat.outputViewer.previous")}
-          title={t("chat.outputViewer.previous")}
-        >
-          <ChevronLeft className="size-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="pointer-events-auto absolute top-1/2 right-5 size-10 -translate-y-1/2 rounded-full max-sm:hidden"
-          onClick={() => goTo(index + 1)}
-          disabled={index === items.length - 1}
-          aria-label={t("chat.outputViewer.next")}
-          title={t("chat.outputViewer.next")}
-        >
-          <ChevronRight className="size-5" />
-        </Button>
-      </motion.div>
-
       <motion.div
         className="absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end gap-2 px-3 pb-3 sm:px-5"
         style={{ opacity: chrome, height: c.bottom }}
@@ -922,33 +893,6 @@ export function MediaLightboxStage({
               ) : null}
             </motion.div>
           </AnimatePresence>
-        </div>
-
-        <div
-          ref={stripRef}
-          className="thin-scroll relative mx-auto flex h-12 max-w-full items-center gap-1 self-center overflow-x-auto"
-          role="group"
-          aria-label={t("chat.outputViewer.allOutputs")}
-        >
-          {items.map((item, i) => {
-            const width = clamp(48 * aspectOf(item), 36, 72)
-            const active = i === index
-            return (
-              <button
-                key={item.id ?? item.url ?? i}
-                type="button"
-                data-index={i}
-                className="relative h-12 shrink-0 overflow-hidden rounded-md bg-muted transition-[width] motion-reduce:transition-none"
-                data-active={active || undefined}
-                style={{ width: active ? width : 36 }}
-                onClick={() => goTo(i)}
-                aria-label={t("chat.anchorCards.view", { name: item.title })}
-                aria-current={active ? "true" : undefined}
-              >
-                <MediaThumbnail item={item} />
-              </button>
-            )
-          })}
         </div>
       </motion.div>
     </div>

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from copy import deepcopy
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -16,8 +15,6 @@ from app.editing.edits import (
     Op,
     RemoveClip,
     TextAnimationTargetLost,
-    UpdateClip,
-    UpdateScene,
     replace_text_ops,
 )
 from app.editing.schemas import (
@@ -25,6 +22,7 @@ from app.editing.schemas import (
     EditTarget,
     ImageObject,
     LayoutBox,
+    SourceCaptionDerivation,
     TextObject,
     TimeRange,
     VideoObject,
@@ -65,14 +63,6 @@ class SetTextAction(BaseModel):
         ),
     )
     text: str = Field(min_length=1, max_length=9000)
-
-
-class SetClipDurationAction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["set_clip_duration"]
-    clip_id: str = Field(min_length=1, max_length=64)
-    duration_seconds: float = Field(gt=0, le=118, allow_inf_nan=False)
 
 
 class ApplyPresetAction(BaseModel):
@@ -117,6 +107,18 @@ class AddMediaOverlayAction(BaseModel):
         return self
 
 
+class AddNarrationAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["add_narration"]
+    source_id: UUID = Field(description="Frozen audio SourceSnapshot from prepare_narration")
+    alignment_id: UUID = Field(description="READY NarrationAlignment for this exact audio")
+    scene_id: str | None = Field(
+        default=None,
+        description="Scene receiving the narration and aligned captions; omit only when one Scene exists",
+    )
+
+
 class RemoveClipAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -126,9 +128,9 @@ class RemoveClipAction(BaseModel):
 
 RevisionAction = Annotated[
     SetTextAction
-    | SetClipDurationAction
     | ApplyPresetAction
     | AddMediaOverlayAction
+    | AddNarrationAction
     | RemoveClipAction,
     Field(discriminator="action"),
 ]
@@ -206,13 +208,22 @@ def _one_clip(content: CompositionContent, clip_id: str | None) -> tuple[Any, An
 
 def set_text_ops(content: CompositionContent, action: SetTextAction) -> list[Op]:
     _, clip = _one_clip(content, action.clip_id)
-    if not isinstance(clip.object, TextObject) or clip.object.caption is not None:
+    if not isinstance(clip.object, TextObject) or (
+        clip.object.caption is not None
+        and not isinstance(clip.object.caption, SourceCaptionDerivation)
+    ):
         raise RevisionInputError(
-            "set_text supports only independent native Text Clips",
+            "set_text supports native Text Clips and upload-ASR captions",
             loc=["action", "clip_id"],
             kind="unsupported_target",
         )
     try:
+        if isinstance(clip.object.caption, SourceCaptionDerivation):
+            clip = clip.model_copy(update={
+                "object": clip.object.model_copy(update={
+                    "caption": clip.object.caption.model_copy(update={"state": "independent"})
+                })
+            })
         return replace_text_ops(clip, action.text)
     except TextAnimationTargetLost as exc:
         raise RevisionInputError(
@@ -222,102 +233,8 @@ def set_text_ops(content: CompositionContent, action: SetTextAction) -> list[Op]
         ) from exc
 
 
-def _set_duration(content: CompositionContent, action: SetClipDurationAction) -> list[Op]:
-    _, clip = _one_clip(content, action.clip_id)
-    duration = seconds_to_ticks(action.duration_seconds, content.settings.timebase)
-    if duration == clip.range.duration:
-        return []
-    old_end = clip.range.end
-    new_end = clip.range.start + duration
-    delta = new_end - old_end
-    source = deepcopy(clip.source)
-    if source is not None and source.source_range is not None:
-        source_duration = output_ticks_to_source_ticks(duration, content.settings.timebase)
-        source.source_range = TimeRange(
-            start=source.source_range.start, end=source.source_range.start + source_duration
-        )
-    updated = clip.model_copy(
-        update={"range": TimeRange(start=clip.range.start, end=new_end), "source": source}
-    )
-    ops: list[Op] = [
-        UpdateClip(op="update_clip", clip_id=clip.clip_id, range=updated.range, source=source)
-    ]
-    for track in content.timeline.tracks:
-        for other in track.clips:
-            if other.clip_id != clip.clip_id and other.range.start >= old_end:
-                ops.append(
-                    UpdateClip(
-                        op="update_clip",
-                        clip_id=other.clip_id,
-                        range=TimeRange(
-                            start=other.range.start + delta,
-                            end=other.range.end + delta,
-                        ),
-                    )
-                )
-    for scene in content.scenes:
-        if clip.scene_id == scene.scene_id:
-            ops.append(
-                UpdateScene(
-                    op="update_scene",
-                    scene_id=scene.scene_id,
-                    range=TimeRange(
-                        start=scene.range.start,
-                        end=scene.range.end + delta,
-                    ),
-                )
-            )
-        elif scene.range.start >= old_end:
-            ops.append(
-                UpdateScene(
-                    op="update_scene",
-                    scene_id=scene.scene_id,
-                    range=TimeRange(
-                        start=scene.range.start + delta,
-                        end=scene.range.end + delta,
-                    ),
-                )
-            )
-    return ops
 
 
-def _stable_overlay_ids(action: AddMediaOverlayAction) -> tuple[str, str, str]:
-    digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
-    return f"trk_overlay_{digest}", f"clp_overlay_{digest}", f"obj_overlay_{digest}"
-
-
-def _overlay_layout(
-    content: CompositionContent, action: AddMediaOverlayAction, fact: dict[str, Any]
-) -> LayoutBox:
-    media = fact.get("meta") or {}
-    dimensions = media.get("media") or media
-    width, height = dimensions.get("width"), dimensions.get("height")
-    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
-        raise RevisionInputError(
-            "overlay source lacks probed pixel dimensions",
-            loc=["action", "source_id"],
-            kind="source_not_ready",
-        )
-    box_width = content.settings.width * action.width_ratio
-    box_height = box_width * height / width
-    available_height = content.settings.height - 2 * action.margin_px
-    if box_height > available_height:
-        raise RevisionInputError(
-            "width_ratio and source aspect do not fit inside the canvas margins",
-            loc=["action", "width_ratio"],
-            kind="layout_out_of_bounds",
-        )
-    x = (
-        action.margin_px
-        if action.position.endswith("left")
-        else content.settings.width - action.margin_px - box_width
-    )
-    y = (
-        action.margin_px
-        if action.position.startswith("top")
-        else content.settings.height - action.margin_px - box_height
-    )
-    return LayoutBox(x=x, y=y, width=box_width, height=box_height)
 
 
 def _confirmed_overlay_scenes(content: CompositionContent, user_text: str) -> list[Any]:
@@ -541,19 +458,97 @@ def _add_overlay(
     return ops
 
 
+def _add_narration(
+    content: CompositionContent,
+    action: AddNarrationAction,
+    fact: dict[str, Any] | None,
+    alignment: Any,
+) -> list[Op]:
+    if fact is None or fact.get("kind") != "audio" or not fact.get("storage_key"):
+        raise RevisionInputError(
+            "narration source is not a prepared audio snapshot",
+            loc=["action", "source_id"], kind="source_not_ready",
+        )
+    scene = next((item for item in content.scenes if item.scene_id == action.scene_id), None)
+    if scene is None and action.scene_id is None and len(content.scenes) == 1:
+        scene = content.scenes[0]
+    if scene is None:
+        candidates = [{"scene_id": item.scene_id} for item in content.scenes]
+        if action.scene_id is None:
+            raise RevisionTargetAmbiguityError(
+                "narration Scene is not uniquely specified", candidates=candidates,
+            )
+        raise RevisionInputError(
+            "narration scene does not exist in the base version",
+            loc=["action", "scene_id"], kind="target_not_found",
+        )
+    from app.editing.narration_audio import narration_audio_ops
+
+    try:
+        return narration_audio_ops(
+            content,
+            scene_id=scene.scene_id,
+            snapshot_id=action.source_id,
+            snapshot_digest=fact["digest"],
+            alignment=alignment,
+        )
+    except ValueError as exc:
+        raise RevisionInputError(
+            str(exc), loc=["action", "alignment_id"], kind="source_not_ready",
+        ) from exc
+
+
+def _overlay_layout(
+    content: CompositionContent, action: AddMediaOverlayAction, fact: dict[str, Any]
+) -> LayoutBox:
+    media = fact.get("meta") or {}
+    dimensions = media.get("media") or media
+    width, height = dimensions.get("width"), dimensions.get("height")
+    if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        raise RevisionInputError(
+            "overlay source lacks probed pixel dimensions",
+            loc=["action", "source_id"],
+            kind="source_not_ready",
+        )
+    box_width = content.settings.width * action.width_ratio
+    box_height = box_width * height / width
+    available_height = content.settings.height - 2 * action.margin_px
+    if box_height > available_height:
+        raise RevisionInputError(
+            "width_ratio and source aspect do not fit inside the canvas margins",
+            loc=["action", "width_ratio"],
+            kind="layout_out_of_bounds",
+        )
+    x = (
+        action.margin_px
+        if action.position.endswith("left")
+        else content.settings.width - action.margin_px - box_width
+    )
+    y = (
+        action.margin_px
+        if action.position.startswith("top")
+        else content.settings.height - action.margin_px - box_height
+    )
+    return LayoutBox(x=x, y=y, width=box_width, height=box_height)
+
+
+def _stable_overlay_ids(action: AddMediaOverlayAction) -> tuple[str, str, str]:
+    digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
+    return f"trk_overlay_{digest}", f"clp_overlay_{digest}", f"obj_overlay_{digest}"
+
+
 def expand_revision_action(
     action: RevisionAction,
     content: CompositionContent,
     *,
     facts: dict[UUID, dict[str, Any]],
     request_context: dict[str, Any] | None = None,
+    narration_alignment: Any = None,
 ) -> list[Op]:
     from app.editing.presets import expand_preset_at_target
 
     if isinstance(action, SetTextAction):
         return set_text_ops(content, action)
-    if isinstance(action, SetClipDurationAction):
-        return _set_duration(content, action)
     if isinstance(action, ApplyPresetAction):
         _one_clip(content, action.clip_id)
         return expand_preset_at_target(
@@ -561,6 +556,8 @@ def expand_revision_action(
         )
     if isinstance(action, AddMediaOverlayAction):
         return _add_overlay(content, action, facts.get(action.source_id), request_context)
+    if isinstance(action, AddNarrationAction):
+        return _add_narration(content, action, facts.get(action.source_id), narration_alignment)
     _one_clip(content, action.clip_id)
     if sum(len(track.clips) for track in content.timeline.tracks) == 1:
         raise RevisionInputError(
@@ -573,12 +570,12 @@ def expand_revision_action(
 
 __all__ = [
     "AddMediaOverlayAction",
+    "AddNarrationAction",
     "ApplyPresetAction",
     "RemoveClipAction",
     "RevisionAction",
     "RevisionInputError",
     "RevisionTargetAmbiguityError",
-    "SetClipDurationAction",
     "SetTextAction",
     "expand_revision_action",
     "set_text_ops",

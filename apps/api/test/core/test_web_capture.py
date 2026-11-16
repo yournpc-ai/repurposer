@@ -41,7 +41,7 @@ from app.tools.research.capture import (
 )
 from app.tools.video import preparation
 from app.tools.video.design import _view_media_inputs
-from app.editing.templates import ViewFact
+from app.editing.web_shots import ViewFact
 
 # ---------------------------------------------------------------------------
 # Extraction
@@ -235,31 +235,8 @@ async def test_snapshot_freezes_rendered_lines_page_and_element_images(monkeypat
     assert element["pixel_box"]["width"] == 80
 
 
-def test_director_reads_only_known_fixed_arc_group_echoes():
-    from app.editing.director import LaunchFilmDirection
-
-    payload = {
-        "cold_open": ["Who decides?"],
-        "hero": {"hero_word": "L1", "hero_sub": "L3"},
-        "chapters": [
-            {"pillar": "L4", "chapter_title": "One"},
-            {"pillar": "L5", "chapter_title": "Two"},
-            {"pillar": "L6", "chapter_title": "Three"},
-        ],
-        "reveal": {"reveal_lead": "One more thing", "reveal_word": "L7", "reveal_sub": "L8"},
-        "proof": {"citation": "L47"},
-        "end": {"end_name": "L1", "end_tagline": "L9"},
-    }
-    direction = LaunchFilmDirection.model_validate(payload)
-    assert direction.hero_word.line == 1
-    assert direction.reveal_lead == "One more thing"
-    assert direction.end_tagline.line == 9
-    with pytest.raises(ValueError, match="proof"):
-        LaunchFilmDirection.model_validate({**payload, "proof": {"text": "Not a slot"}})
-    with pytest.raises(ValueError, match="hero"):
-        LaunchFilmDirection.model_validate({
-            **payload, "hero": {"hero_word": "L1", "hero_sub": "L3", "unknown": "reject"},
-        })
+# Fixed launch-film Director contracts are retired; current CapturePlan tests
+# below exercise the shared frozen-web evidence path.
 
 
 @pytest.mark.asyncio

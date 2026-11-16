@@ -16,7 +16,7 @@ import {
   useReducedMotion,
 } from "motion/react"
 import { useTranslation } from "react-i18next"
-import { Cpu, PanelsTopLeft, Share2, Zap } from "lucide-react"
+import { Cpu, Share2, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { CreditTopupRequest } from "@/lib/credits"
@@ -28,7 +28,6 @@ import {
 import { AssistantSection } from "@/components/settings/AssistantSection"
 import { ChannelsSection } from "@/components/settings/ChannelsSection"
 import { CreditsSection } from "@/components/settings/CreditsSection"
-import { GeneralSection } from "@/components/settings/GeneralSection"
 import { CreditTopupDialog } from "@/components/credits/CreditTopupDialog"
 import {
   SettingsDialogContext,
@@ -55,13 +54,6 @@ const SECTIONS: SettingsSectionDef[] = [
     labelKey: "channels.title",
     descriptionKey: "channels.subtitle",
     render: () => <ChannelsSection />,
-  },
-  {
-    id: "general",
-    icon: PanelsTopLeft,
-    labelKey: "general.title",
-    descriptionKey: "general.subtitle",
-    render: () => <GeneralSection />,
   },
   {
     id: "assistant",

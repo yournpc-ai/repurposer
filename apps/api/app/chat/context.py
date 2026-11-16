@@ -28,12 +28,7 @@ from app.models.tables import (
     Project,
     WorkflowRun,
 )
-from app.pipeline.exploration_store import (
-    journey_summary_line,
-    read_journey_summaries,
-)
 from app.pipeline.outputs import list_visible_outputs
-from app.pipeline.product_graph import EXPLORATION_NODE_TYPE
 from app.platform.configs import get_config
 from app.platform.conversation_context import is_pending_plan
 
@@ -180,7 +175,6 @@ async def build_context(
                 select(GraphNode)
                 .where(
                     GraphNode.project_id == project.id,
-                    GraphNode.type != EXPLORATION_NODE_TYPE,
                 )
                 .order_by(GraphNode.created_at)
             )
@@ -243,18 +237,6 @@ async def build_context(
     )
     if env:
         lines.insert(1, env)
-
-    # iter-3 S6 (E5, Memory 窄切 ②): the project's recent journeys ride as
-    # ONE bounded identity-level block (goal + counts + the newest plan's
-    # output facts) — the agent can answer "what have we done before" and
-    # ground a "same as last time" reference WITHOUT a read tool; the full
-    # artifact fields stay behind get_artifact (digest doctrine — anything
-    # a read tool reads is never pre-injected in full).
-    past_journeys = await read_journey_summaries(db, project.id, cap=_PAST_JOURNEYS_CAP)
-    if past_journeys:
-        lines.append("Past journeys (newest first):")
-        for summary in past_journeys:
-            lines.append(f"- {journey_summary_line(summary)}")
 
     if recent:
         lines.append("Recent rounds:")

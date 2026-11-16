@@ -20,7 +20,7 @@
 | UI、画布、工作区与卡面 | 035–038、041–042、046、048、051、056–058、061–063、067–076、082、098、111–115、118、122、143 | `UI_GUIDELINES.md` / `CHAT_ARCHITECTURE.md` |
 | 身份、定位与国际化 | 013、037–038、042 | `POSITIONING.md` / `PRD.md` |
 | 渲染、clip-spec、媒体与音乐 | 016、018、020、023–024、044–045、096、113、115、130、136、140、145 | `RENDERING.md` / `MUSIC_ARCHITECTURE.md`；视频目标归 `VIDEO_PROJECT.md` |
-| Film/MG | 119、121、123、127、129–132、134–148 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/video-project-implementation.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
+| Film/MG | 119、121、123、127、129–132、134–148 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/skill-package-promo-video.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
 | 测试与验证治理 | 114 | `VERIFICATION.md` / `PROGRESS.md` |
 
 ## 退役编号与别名解析
@@ -507,7 +507,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 - editor 历史面板/版本时间线 UI 后置（反过度设计裁决）；undo 能力经端点 + chat 撤销按钮先行可用。
 - 校准回流的读路径（按 project/op/时间窗聚合 params）落成文档座位，消费端后建。
 
-**Related**: ADR-016（clip-spec 在本操作域的契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；现行规范 `VIDEO_EDITOR.md`（D1–D7 全文）；`docs/MODULE_ARCHITECTURE.md` §2/§4
+**Related**: ADR-016（clip-spec 在本操作域的契约）、ADR-028（RunPlan 同构对偶）、ADR-030（outputs 统一产物表）；现行 Composition 修订契约见 `VIDEO_EDITOR.md`；`docs/MODULE_ARCHITECTURE.md` §2/§4
 
 ## ADR-033: 编辑面分层——能力层唯一（ops+tools 双海拔），适配层多前端并存
 
@@ -2339,7 +2339,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-119: film-spec 第二家族——storyboard 编排 + grounding validator + skill 接入装配线
 
-**Status**: Decided；新视频目标/有效需求 = `docs/VIDEO_PROJECT.md`，施工验收 = `docs/tasks/video-project-implementation.md`；旧实现事实查代码/RENDERING。
+**Status**: Decided；新视频目标/有效需求 = `docs/VIDEO_PROJECT.md`，施工验收 = `docs/tasks/skill-package-promo-video.md`；旧实现事实查代码/RENDERING。
 
 **Decision**:
 
@@ -2460,7 +2460,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-129: film 分镜 = 设计拍普通工具调用——版本化呈现 / 全局生产授权 / 禁静默换稿
 
-**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段与 `docs/VIDEO_PROJECT.md`，施工与验证状态 = `docs/tasks/video-project-implementation.md`）
+**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段与 `docs/VIDEO_PROJECT.md`，施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
 
 **Decision**:
 
@@ -2482,7 +2482,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 1. **同一时序源**：分镜展示、执行快照与 film-spec 读同一 resolved music grid；曲目缺节奏信息时先走现有分析补齐，仍无法获得才诚实失败。
 2. **spec 自带执行血缘**：film-spec 携带 fps、帧数、音乐节奏信息、逐幕 narration audio 与同文本 captions、camera/reveal 的执行锚点。
 3. **真实 beat 律**：reveal 黑场是一拍真实 beat interval；固定 0.5s 不得被当作一拍。
-4. **字段契约一座**：字段级渲染契约只维护在 `docs/RENDERING.md`；Film 版本、音频与质量约束归 `VIDEO_PROJECT.md`，实际验证状态归 `docs/tasks/video-project-implementation.md`。
+4. **字段契约一座**：字段级渲染契约只维护在 `docs/RENDERING.md`；Film 版本、音频与质量约束归 `VIDEO_PROJECT.md`，实际验证状态归 `docs/tasks/skill-package-promo-video.md`。
 
 **Consequences**: 渲染器只求和、播放并消费 spec 中的锚点，不发明时长、字幕或 reveal 停顿；旧 spec 由 schema 读容忍处理。
 
@@ -2581,7 +2581,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-137: film 编辑拍（patch path）——结构化 ops / 版本信封 / base 引用协议 / 报价分叉
 
-**Status**: Decided（2026-10-20；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
+**Status**: Decided（2026-10-20；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
 
 **Decision**:
 
@@ -2609,7 +2609,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 3. **试听（PLANNED / 条件触发）**：声音目录、试听系统和设计期选声体系不是当前闭环前置；当前默认不配音，用户明确要求才走现有 TTS 链。用户重新提出“先听再决定”时启用以下合同：用户说「先听一下再决定」时，chat 提供真正可播放的声音样例或音乐预览并等待这次选择——只显示声音名/音乐名不算试听完成。优先已有样例、已有音乐或短样例（声音目录最小注册表 + 预生成短样例 reconcile 种子；音乐库曲目文件直接预览），不为试听生成整片旁白，并说明实际调用成本。试听与随后制作绑定同一音频配置——不能试听一种、成片换另一种。不对所有创作强制新增确认步骤（ADR-117 授权律不动）；用户明确要求先试听、先审阅时不得提前制作。试听 UI 骑结构化卡片面（助理消息 markdown 不渲染裸 HTML——只发链接文本不可播放）。
 4. **完整知识视频移出本期**：资料检索、事实核查、复杂知识图解、专业图表、自动教学结构不新增专项建设。已有能力自然支持的简单解释内容可以制作，但不据此宣称完整知识视频能力上线。不设「知识视频预备批」。
 5. **Chat 展示 = 交付面**：制作前的真实工具调用 = Activity 行；Start 后的真实执行 = Tasks。当前执行是单体 `launch_film`，Tasks 只显示这个真实步骤；R5 宏阶段是 PLANNED，重启合同见 `VIDEO_PROJECT.md` §4.1。无配音或复用音频时不得虚报「正在生成配音」，不为显示进度伪造准备/配音/装配步骤。最终界面验收含浏览器人工核验，不以 SSE key 与 i18n 测试替代。
-6. **实施边界与状态座位**：画幅变体、声音设计期钉版与试听未实现；文字源、组合幕与编辑能力已在本地/测试门控下落地，生产默认仍关闭。当前优先级只读 `PROGRESS.md` §0；剩余能力与验收只读 `VIDEO_PROJECT.md` §0～§4；验证层级只读 `docs/tasks/video-project-implementation.md`。旧 R 批次编号与冲刺估时不再是当前计划。
+6. **实施边界与状态座位**：画幅变体、声音设计期钉版与试听未实现；文字源、组合幕与编辑能力已在本地/测试门控下落地，生产默认仍关闭。当前优先级只读 `PROGRESS.md` §0；剩余能力与验收只读 `VIDEO_PROJECT.md` §0～§4；验证层级只读 `docs/tasks/skill-package-promo-video.md`。旧 R 批次编号与冲刺估时不再是当前计划。
 
 **Consequences**: 文字排版/运动枚举遵守 L3 枚举纪律，不开放自由版式；字段级契约归 `VIDEO_PROJECT.md`，剩余验收与发布条件归 execution，实际验证状态归 progress。估时、旧冲刺顺序与逐轮测试数字不再充当决策条款。
 
@@ -2617,7 +2617,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-139: auto 只免批准、不创造制作意图——生产意图入 dock 出生事实 + 确认前呈现累计方案
 
-**Status**: Decided（2026-10-22 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §11；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
+**Status**: Decided（2026-10-22 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §11；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
 
 **Decision**:
 
@@ -2632,7 +2632,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-140: film 组合幕（composite）——视频/图片素材元素 + 独立文字元素的最小组合结构
 
-**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；剩余实施、验收与实际状态 = `docs/tasks/video-project-implementation.md`。
+**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；剩余实施、验收与实际状态 = `docs/tasks/skill-package-promo-video.md`。
 
 **Decision**:
 
@@ -2650,7 +2650,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-141: Film 逐字子句粒度 / 同回合纠正道 / 带条件授权守卫 / 交付收敛
 
-**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15、§11；剩余验收与实际状态 = `docs/tasks/video-project-implementation.md`。
+**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15、§11；剩余验收与实际状态 = `docs/tasks/skill-package-promo-video.md`。
 
 **Decision**:
 
@@ -2682,7 +2682,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-144: 作品首稿强制审阅——呈现持久化前任何 Start 均失败闭
 
-**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §2/§8/§15；施工与验证状态 = `docs/tasks/video-project-implementation.md`）
+**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §2/§8/§15；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
 
 **Decision**:
 
@@ -2697,7 +2697,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-145: 视频编辑本体——Composition / CompositionVersion / Track·Clip·Object / Skill / video-spec
 
-**Status**: Decided（2026-11-04 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；全部剩余施工与验收 = `docs/tasks/skill-package-promo-video.md` 的六个实际批次与并行依赖；A–C 实现证据 = `docs/tasks/video-project-implementation.md`，完整 B/C 与发布门未关闭）
+**Status**: Decided（2026-11-04 用户拍板；目标契约 = `docs/VIDEO_PROJECT.md`；全部剩余施工与验收 = `docs/tasks/skill-package-promo-video.md`；完整验收与发布门仍开放）
 
 **Decision**:
 

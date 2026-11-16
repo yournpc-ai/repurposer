@@ -13,23 +13,11 @@ import type { FlowEdge, FlowNode, FlowNodeKind, GraphEdgeType, OutPortType } fro
  * the recipe surface's own asset/step/output rows ride along. */
 export const FLOW_NODE_SIZE: Record<FlowNodeKind, { width: number; height: number }> = {
   asset: { width: 280, height: 260 },
-  output: { width: 128, height: 216 },
-  /** 配方说明书 step pills：小尺寸，不抢产物节点视觉权重。 */
-  step: { width: 144, height: 48 },
-  /** 全文卡 family (text/table — the 2026-09-13 增大批 lane, 260 → 340):
-   * the glass text card; the measurement law's chars-per-line scales with
-   * the column (see documentTextHeight), floor = the DOCUMENT_MIN_H
-   * reading surface. */
   text: { width: 340, height: 280 },
   table: { width: 340, height: 280 },
-  /** Media cards (the graph canvas's server-settled frame supersedes these
-   * regardless — the Record's completeness forces the rows): the media
-   * anatomy's box; modifier/materialize ride the same media card. */
   image: { width: 280, height: 268 },
   video: { width: 280, height: 268 },
   audio: { width: 280, height: 268 },
-  modifier: { width: 280, height: 268 },
-  materialize: { width: 280, height: 268 },
 }
 
 /** The results canvas's product card (ADR-041 D5 大卡, 2026-08-17 二轮走查
@@ -60,263 +48,34 @@ export function displayAspectClass(width: number, height: number): string {
   return "16:9"
 }
 
-/** Non-clip products (no aspect) get the 16:9 strip. */
-export const PRODUCT_THUMB_DEFAULT_PX = 158
-
-/** The card-face program region (ADR-057 §5 — the generator's prompt).
- * 程序区门控 (ADR-076): the region belongs to GENERATOR media cards alone —
- * editor/manual cards (and the prototype-less transitional words) have no
- * program region at all and drop this reservation from their anatomy
- * (graphNodeSize below; one law, two mirrors — graph_store._frame_of
- * subtracts the same px). */
-export const PROGRAM_REGION_PX = 88
-
-/** The media-card family (the GraphCard skins) — the program-region anatomy
- * applies only to these kinds; text/table/asset have their own anatomies. */
-const MEDIA_CARD_KINDS: ReadonlySet<FlowNodeKind> = new Set([
-  "video",
-  "image",
-  "audio",
-  "modifier",
-  "materialize",
-])
-
-/** Whether the node's card anatomy carries the program region. */
-export function hasProgramRegion(node: FlowNode): boolean {
-  return MEDIA_CARD_KINDS.has(node.kind) && node.spec?.prototype === "generator"
-}
-
-/** 角落栈谓词: a media card without a program region has no prompt divider
- * to anchor a second in-port seat above — ALL its in-ports share one stack
- * at the card's bottom-left corner, in port order (declaredHandles ↔
- * FlowNodeCard NodePorts, 一条律两镜像). */
-export function cornerStackedInPorts(node: FlowNode): boolean {
-  return MEDIA_CARD_KINDS.has(node.kind) && !hasProgramRegion(node)
-}
-
-/** The artifact facet strip (deliverable cards, ADR-097 §3/§4) — failure-only
- * chrome (2026-10-09 用户拍板): a healthy artifact renders NO strip (成功安静,
- * the card stays a clean media face), so there is NO birth-time reservation;
- * runtime failed rows grow the strip (border 1 + padding 12 + rows) and the
- * flex media region absorbs them inside the frame. One law, two mirrors —
- * graph_store._frame_of reserves nothing for facets either. */
-export const FACET_STRIP_ROW_PX = 16
-export function facetStripPx(node: FlowNode): number {
-  const artifact = node.artifact
-  if (!artifact || artifact.facets.length === 0) return 0
-  const failed = new Set(artifact.activity.failed_node_ids)
-  const rows = artifact.facets.filter((f) => failed.has(f.node_id)).length
-  return rows > 0 ? 1 + 12 + rows * FACET_STRIP_ROW_PX : 0
-}
-
-/** The draft/quiet body (ADR-057 §5 — 虚线空态): the dashed region's
- * reserved height (「运行后生成 · 约 N 积分」). */
-export const DRAFT_BODY_PX = 120
-
-/** Node-box bands around the product card: corner info above, the action
- * bar below (reserved even while a render leaves it empty — geometry never
- * shifts). Band budgets mirror FlowNodeCard's real chrome: caption = 26px
- * (4px inset + 8px breath), factsbar band = 44px (8px gap + the 36px
- * frosted bar). */
 export const PRODUCT_LABEL_PX = 26
 export const PRODUCT_TOOLBAR_PX = 44
 
-/** The version pager's own band row (2026-09-13 用户拍板): when a node holds
- * more than one product the pager stacks ABOVE the factsbar (never beside it
- * — the side-by-side row outgrew the card's width), one more 8px gap + its
- * 36px pill on top of the 44px factsbar band. Client-side addendum only:
- * frames are born with zero outputs (统一摆位律 stamps the 44px band), so the
- * server mirror never carries this row — the +44 lands on the same beat as
- * the second version's arrival, one coherent reflow, never a quiet shift. */
-export const PRODUCT_PAGER_PX = 44
-
-/** NLE 检视轴 (ADR-115 — the deliverable card's inspection anatomy): below
- * the media, a timeline face — the axis HEAD (the clip's score, right end),
- * the RULER (server-formatted scale), the VIDEO lane (kept segments as real
- * clip objects), the TEXT lane (caption blocks, zero inner text — readings
- * ride the hover chip), and any MODIFIER lanes (music/dub, presence face).
- * All lanes are in the anatomy FROM BIRTH (draft renders muted empty rows —
- * the waiting seat, FLORA 空态先例), so the video in-port's anchor never
- * moves mid-life; modifier lanes arrive on the product-landing beat and
- * shift the anchor on that same beat (the version pager's precedent — one
- * coherent reflow, never a quiet shift). ONE law, two mirrors — the
- * server's frame reservation (graph_store._NLE_AXIS_PX /
- * _TRACKED_CLIP_TOOLS) lands in the same batch; change one, change both. */
-export const NLE_RULER_PX = 22
-export const NLE_VIDEO_LANE_PX = 34
-export const NLE_TEXT_LANE_PX = 34
-export const NLE_MODIFIER_LANE_PX = 34
-export const NLE_LANE_GAP_PX = 8
-export const NLE_RULER_GAP_PX = 6
-export const NLE_PAD_TOP_PX = 4
-export const NLE_PAD_BOTTOM_PX = 4
-/** One modifier lane's arrival grows the axis by this (lane + its gap) —
- * and shifts the video in-port's bottom-anchored seat by the same. */
-export const NLE_MODIFIER_ROW_PX = NLE_MODIFIER_LANE_PX + NLE_LANE_GAP_PX
-/** 112 = pad + ruler + ruler gap + video lane + gap + text lane + pad; the
- * lanes are ONE height (2026-10-11 走查拍板) and there is no head row (the
- * score rides the media's hover chrome). Modifier lanes add
- * NLE_MODIFIER_ROW_PX each at runtime (never in the birth reservation —
- * their presence is unknown at draft; the arrival grows INTO the media's
- * flex). */
-export const NLE_AXIS_PX =
-  NLE_PAD_TOP_PX +
-  NLE_RULER_PX +
-  NLE_RULER_GAP_PX +
-  NLE_VIDEO_LANE_PX +
-  NLE_LANE_GAP_PX +
-  NLE_TEXT_LANE_PX +
-  NLE_PAD_BOTTOM_PX
-
-/** The tracked clip families — tool-set parity with the server mirror
- * (graph_store._TRACKED_CLIP_TOOLS). NEVER a kind+prototype proxy:
- * reframe/music share video×editor without carrying the lanes. */
-export const TRACKED_CLIP_TOOLS: ReadonlySet<string> = new Set([
-  "select_clips",
-  "translate_clip",
-  "dub_clip",
-])
-/** Whether the node's card anatomy carries the track stack (ADR-113 §4). */
-export function hasTrackStack(node: FlowNode): boolean {
-  return node.kind === "video" && TRACKED_CLIP_TOOLS.has(String(node.spec?.tool ?? ""))
-}
-
-/** Declared handle geometry (2026-09-13 深夜, the draft-time missing-edge
- * 走查): the port law's numeric half, declared INTO the node payload so edge
- * anchors never wait for xyflow's DOM measurement. xyflow rebuilds
- * handleBounds only from a ResizeObserver pass and drops them whenever the
- * controlled `nodes` prop arrives with fresh identities (every refetch) — a
- * handle whose measure pass is lost keeps its edges invisible until remount
- * (the asset's out:video at draft time, terminal remount the only healer).
- * The port seats are pure math off the pinned box, so declare them:
- * parseHandles adopts these bounds on every rebuild and the DOM measure
- * degrades to a confirming backstop reading the same numbers. 判词② mirror:
- * these constants ARE FlowNodeCard NodePorts' CSS seats (28px circle,
- * left/right -34, 34px stack, bottom-anchored in-bases, out top 40) — the
- * card keeps the visual seat, this is the data seat; change one, change
- * both. */
 export const PORT_PX = 28
 export const PORT_SIDE_PX = 34
 export const PORT_STEP_PX = 34
 export const OUT_PORT_TOP_PX = 40
-export const IN_MEDIA_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + PROGRAM_REGION_PX + 16
-/** 角落栈基座 (无程序区媒体卡): every in-port parks at the card's
- * bottom-left corner — the same seat as the media card's text port (60). */
-export const IN_CORNER_PORT_BASE_PX = PRODUCT_TOOLBAR_PX + 16
-/** 锚点律 (ADR-113 §5; ADR-115 NLE 轴): on a tracked card the video in-port
- * leaves the corner stack and parks at the VIDEO lane's Y-center — the edge
- * lands on the lane it feeds. Circle bottom = the factsbar band + the axis's
- * below-video-lane anatomy (bottom pad 4 + text lane 34 + gap 8) + half the
- * video lane − half the circle (PORT_PX/2); each live modifier lane (below
- * the text lane) raises the seat by NLE_MODIFIER_ROW_PX. Mirror of
- * FlowNodeCard NodePorts' CSS seat (一条律两镜像 — change one, change both). */
-export const trackVideoPortBasePx = (pagerPx = 0, modifierLanes = 0): number =>
-  PRODUCT_TOOLBAR_PX +
-  pagerPx +
-  modifierLanes * NLE_MODIFIER_ROW_PX +
-  NLE_PAD_BOTTOM_PX +
-  NLE_TEXT_LANE_PX +
-  NLE_LANE_GAP_PX +
-  NLE_VIDEO_LANE_PX / 2 -
-  PORT_PX / 2
-
-/** 锚点律第二座 (2026-10-11 拍板 — 文字流接线): on a tracked card the TEXT
- * in-port likewise leaves the corner stack and parks at the TEXT lane's
- * Y-center — the wire lands on the lane it feeds (its words ARE the
- * captions). Mirror of FlowNodeCard NodePorts' CSS seat (一条律两镜像). */
-export const trackTextPortBasePx = (pagerPx = 0, modifierLanes = 0): number =>
-  PRODUCT_TOOLBAR_PX +
-  pagerPx +
-  modifierLanes * NLE_MODIFIER_ROW_PX +
-  NLE_PAD_BOTTOM_PX +
-  NLE_TEXT_LANE_PX / 2 -
-  PORT_PX / 2
-
-/** 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
- * modifier term. Reads the MAX across the node's products so a pager flip
- * never re-seats the port (the largest anatomy wins the seat, smaller
- * members render air in the freed row — the reservation posture). */
-export function nleModifierLanes(node: FlowNode): number {
-  let lanes = 0
-  for (const o of node.outputs ?? []) {
-    const mods = o.track_stack?.modifiers
-    if (!mods) continue
-    lanes = Math.max(lanes, (mods.music ? 1 : 0) + (mods.dub ? 1 : 0))
-  }
-  return lanes
-}
-/** 词表 v3 (C5): the 全文卡 family (text/table) in-text port base = 16 —
- * its tail furniture lives INSIDE the card (the version pager never adds
- * an external band), so the pager offset applies only to the media-card
- * anatomies. Mirror of FlowNodeCard NodePorts' CSS seat (一条律两镜像). */
-export const inTextPortBasePx = (kind: FlowNodeKind, pagerPx = 0): number =>
-  kind === "text" || kind === "table" ? 16 : 60 + pagerPx
-
-/** The node payload's declared handles (xyflow first-class `node.handles`).
- * Undefined for portless nodes — their invisible fallback handles keep the
- * DOM-measured path (static surfaces, no churn). x/y = the handle box's
- * node-relative top-left (getHandleBounds semantics): in-ports sit
- * bottom-anchored at their region's corner (y = H − base − circle), the out
- * port top-anchored on the right (x = W + gap). */
 export function declaredHandles(
   node: FlowNode,
   size: { width: number; height: number },
   ports?: { in: Exclude<GraphEdgeType, "ctx">[]; out: OutPortType[] } | null,
 ): NodeHandle[] | undefined {
   if (!ports) return undefined
-  const handles: NodeHandle[] = []
-  // The version pager's stacked row grows the factsbar band by
-  // PRODUCT_PAGER_PX when the node holds more than one product — both
-  // bottom-anchored in-port seats ride the band, so both bases shift (the
-  // NodePorts mirror applies the same offset; top-anchored out ports don't).
-  const pagerPx = (node.outputs?.length ?? 0) > 1 ? PRODUCT_PAGER_PX : 0
-  const unified = cornerStackedInPorts(node)
-  let corner = 0
-  let media = 0
-  let text = 0
-  for (const t of ports.in) {
-    const isMedia = t === "video" || t === "audio"
-    // 角落栈 (无程序区媒体卡): one seat at the card's bottom-left, stacking
-    // upward in port order — there is no prompt divider to anchor a second
-    // seat above. Generator cards keep the two-family law. 锚点律
-    // (ADR-113 §5): a tracked card's video in-port leaves the corner stack
-    // for the video lane's Y-center — the edge lands on the lane it feeds —
-    // and does NOT consume a corner-stack slot (the remaining ports stack
-    // gapless). 锚点律第二座 (2026-10-11 拍板): the text in-port likewise
-    // parks at the TEXT lane's Y-center (the wire lands on the lane it
-    // feeds).
-    const laneSeat = (t === "video" || t === "text") && hasTrackStack(node)
-    const base = laneSeat
-      ? t === "video"
-        ? trackVideoPortBasePx(pagerPx, nleModifierLanes(node))
-        : trackTextPortBasePx(pagerPx, nleModifierLanes(node))
-      : unified
-        ? IN_CORNER_PORT_BASE_PX + pagerPx + corner++ * PORT_STEP_PX
-        : isMedia
-          ? IN_MEDIA_PORT_BASE_PX + pagerPx + media++ * PORT_STEP_PX
-          : inTextPortBasePx(node.kind, pagerPx) + text++ * PORT_STEP_PX
-    handles.push({
-      id: `in:${t}`,
-      type: "target",
-      position: Position.Left,
-      x: -PORT_SIDE_PX,
-      y: size.height - base - PORT_PX,
-      width: PORT_PX,
-      height: PORT_PX,
-    })
-  }
+  const handles: NodeHandle[] = ports.in.map((type, index) => ({
+    id: `in:${type}`,
+    type: "target" as const,
+    position: Position.Left,
+    x: -PORT_SIDE_PX,
+    y: size.height - 16 - index * PORT_STEP_PX - PORT_PX,
+    width: PORT_PX,
+    height: PORT_PX,
+  }))
   let outStack = 0
-  for (const t of ports.out) {
-    // 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
-    // region's top-right. A media asset's T flow leaves from the transcript
-    // section's top-right (bottom-anchored constant — the wire grows out of
-    // the words) and does NOT consume a top-stack slot; every other out
-    // anchor keeps the card's top-right stack.
+  for (const type of ports.out) {
     const assetType = node.asset?.type
-    const regionSeat =
-      t === "text" && (assetType === "video" || assetType === "audio")
+    const regionSeat = type === "text" && (assetType === "video" || assetType === "audio")
     handles.push({
-      id: `out:${t}`,
+      id: `out:${type}`,
       type: "source",
       position: Position.Right,
       x: size.width + PORT_SIDE_PX - PORT_PX,
@@ -328,53 +87,6 @@ export function declaredHandles(
     })
   }
   return handles
-}
-
-/** Clip-product card height by aspect (the graph canvas's media node):
- * caption + the aspect-exact thumb + the program region + the factsbar
- * band — the GENERATOR anatomy; cards without a program region subtract
- * PROGRAM_REGION_PX and add their facet strip in graphNodeSize. Width is
- * the frame's (per-aspect lane since 2026-09-13). */
-export function clipNodeHeight(aspect?: string | null): number {
-  const thumb = (aspect && PRODUCT_THUMB_PX[aspect]) || PRODUCT_THUMB_DEFAULT_PX
-  return PRODUCT_LABEL_PX + thumb + PROGRAM_REGION_PX + PRODUCT_TOOLBAR_PX
-}
-
-/** Text-product body height by preview line count (post / article — no
- * baked media): padding + optional title + clamped body + hashtag band.
- * The line cap is DERIVED FROM THE NODE'S OWN FRAME RESERVATION
- * (2026-09-10 用户拍板——内容长度驱动卡高): taller reservations show more
- * lines, and by construction the body never exceeds the reservation, so
- * settled columns never overlap for ANY generation of nodes (the 2026-09-06
- * 2–12 band becomes the 440-reservation's derived value, unchanged for
- * nodes born under it). The cap bounds the NODE's height only — the full
- * body SCROLLS inside it (2026-09-08: line-clamp truncation retired for
- * in-place scroll, nowheel+nopan). */
-export function textBodyHeight(lineCount: number, hasTitle: boolean): number {
-  const clamped = Math.max(2, lineCount)
-  const lineHeight = 18 // text-xs leading-relaxed ≈ 18px per line
-  const titleHeight = hasTitle ? 22 : 0
-  const hashtagsHeight = 20 // one-row hashtag band
-  return 12 + titleHeight + clamped * lineHeight + hashtagsHeight + 12
-}
-
-/** How many preview lines fit inside a frame reservation, by the same
- * anatomy math as textBodyHeight (inverse of it). A 440 reservation → 12
- * lines (the legacy band); 560 (the 2026-09-10 raise) → 18. */
-export function textLineCap(frameH: number, hasTitle: boolean): number {
-  const bodyPx = frameH - PRODUCT_LABEL_PX - PROGRAM_REGION_PX - PRODUCT_TOOLBAR_PX
-  const titleHeight = hasTitle ? 22 : 0
-  return Math.max(2, Math.floor((bodyPx - 12 - titleHeight - 20 - 12) / 18))
-}
-
-/** Estimate visible lines from the body at the text card's width (~312px
- * inside the 340 text card, text-xs): ~68 chars per line for Latin, ~44 for
- * CJK. The caller clamps with textLineCap (reservation-derived). */
-export function textLineCount(body: string, hasTitle: boolean): number {
-  const cjk = /[一-龥぀-ゟ゠-ヿ]/.test(body)
-  const charsPerLine = cjk ? 44 : 68
-  const bodyLines = Math.max(1, Math.ceil(body.length / charsPerLine))
-  return Math.max(2, (hasTitle ? 1 : 0) + bodyLines)
 }
 
 /** The document card's height cap (2026-09-11 封顶滚动律 — the transcript
@@ -460,58 +172,15 @@ export function graphNodeSize(node: FlowNode): { width: number; height: number }
     // outgrows the reservation (new frames are born with exactly this via
     // the server's mirror math, so the two agree; a legacy frame may be
     // taller than the cap — extra whitespace, never overlap).
-    const text = (node.spec?.text as string | undefined) ?? ""
+    const text = (node.spec?.prompt ?? node.spec?.text ?? "") as string
     // Floor + cap (DOCUMENT_MIN_H / MAX_H, one law with the server mirror):
     // the body scrolls past the cap; short texts fill the floor with air.
     return { width, height: Math.min(Math.max(documentTextHeight(text), DOCUMENT_MIN_H), DOCUMENT_MAX_H) }
   }
-  // 媒介卡 (video/image/audio + modifier/materialize 过渡词): product
-  // region + program region (generator 独享——editor/manual 撤预留, 媒体区
-  // 吃满) + facet strip + bar.
-  const outputs = node.outputs ?? []
-  const programPx = hasProgramRegion(node) ? PROGRAM_REGION_PX : 0
-  // The facet strip is failure-only chrome: it eats the generator program
-  // region's slack when one exists, and reserves its own px only when failed
-  // rows actually render (healthy = 0, the frame carries no reservation —
-  // server mirror: _frame_of).
-  const facetPx = programPx > 0 ? 0 : facetStripPx(node)
-  // NLE 检视轴 (ADR-115): the tracked clip families carry the inspection
-  // axis in EVERY state (draft renders muted empty lanes — the anchor seat
-  // never moves mid-life), so the reservation rides both the quiet-body and
-  // the product anatomy. Server mirror: graph_store._frame_of's clip branch.
-  const trackPx = hasTrackStack(node) ? NLE_AXIS_PX : 0
-  if (outputs.length === 0) {
-    // Draft / queued / running / quiet-done body (the dashed region reads
-    // the estimate while unrun; a landed-empty node (research) reads its
-    // summary in the same body).
-    return {
-      width,
-      height: PRODUCT_LABEL_PX + DRAFT_BODY_PX + programPx + facetPx + trackPx + PRODUCT_TOOLBAR_PX,
-    }
-  }
-  // The version pager's stacked row (2026-09-13 用户拍板): one extra band
-  // row above the factsbar once the node holds more than one product.
-  const pagerPx = outputs.length > 1 ? PRODUCT_PAGER_PX : 0
-  const first = outputs[0]
-  const isText = first.type === "post" || first.type === "article"
-  if (isText) {
-    const title = first.publishing.title ?? (first.payload.title as string | undefined) ?? null
-    const body = (first.payload.content as string | undefined) ?? ""
-    const lines = Math.min(textLineCount(body, !!title), textLineCap(frame?.h ?? 440, !!title))
-    return {
-      width,
-      height: PRODUCT_LABEL_PX + textBodyHeight(lines, !!title) + programPx + facetPx + PRODUCT_TOOLBAR_PX + pagerPx,
-    }
-  }
-  // Never outgrow the born frame (the reservation law, 判词②): a node
-  // stamped before the source dims were known keeps its conservative
-  // frame — the card's media region flexes to fit (FlowNodeCard's fill
-  // mode), never an overlap. Frames born with dims are aspect-exact — the
-  // flex is inert. The pager row rides ON TOP of the capped frame (frames
-  // are born with zero outputs, so the reservation never carries it).
-  const clipH = clipNodeHeight(first.aspect ?? null) - (PROGRAM_REGION_PX - programPx) + facetPx + trackPx
-  return { width, height: (frame?.h ? Math.min(clipH, frame.h) : clipH) + pagerPx }
+  return { width, height: frame?.h ?? fallback.height }
 }
+
+/** The asset node's content height}
 
 /** The asset node's content height from the source's real dims (media +
  * caption + bar) — the client mirror of graph_store._ASSET_FRAME. Null when
@@ -583,11 +252,6 @@ export const ASSET_TEXT_ONLY_H = 266
 const GAP_MAIN = 124
 const GAP_CROSS = 16
 
-// 投影律横向间距 (I-PFA-02/03, C-1): display x = rank × PITCH. One law with
-// TWO mirrors — product_graph.PITCH (the contract module) ↔
-// graph_store._PITCH (the birth-frame law) ↔ this seat (the projection);
-// never a third value. 524 = 最宽帧类 400 + GAP_MAIN 124 (2026-09-28).
-const PITCH = 524
 
 /** Birth-choreography stagger quantum (ADR-036 补记 3): the delay between
  * consecutive nodes' entrances in compile-order replay — shared by the node
@@ -605,157 +269,10 @@ export interface FlowLayout {
   height: number
 }
 
-export interface SettledProjection {
-  positions: Map<string, { x: number; y: number }>
-  revealOrder: Map<string, number>
-  /** The direction invariant as named violations (I-PFA-03; 合同 §7 C-1
-   * 约束❷): empty = green. Ranked edges must satisfy rank(to) > rank(from)
-   * AND x(to) > x(from); ANY product edge touching a rank-null endpoint is
-   * named — compatibility display is never legal topology. */
-  violations: string[]
-}
-
-/** The settled canvas's display projection (I-PFA-02, 合同 §7 C-1): pure.
- *
- * - **x = rank × PITCH** — rank is the server's read-time Product Graph
- *   projection (`GraphNode.rank`, product_ranks over the read frame); this
- *   function NEVER derives depth from edges, and a ranked node NEVER reads
- *   its stored `frame.x` (the frame's x lost topology authority at C-1 —
- *   projection migration, not data migration).
- * - **Column key = rank** (not the exact `frame.x` value — L3's 436-pitch
- *   legacy frames are digested by the projection, zero migration).
- * - **rank-null = the legacy compatibility state** (a B4-lite-gate survivor
- *   the predicate does not rank): it displays on its stored `frame.x` as a
- *   COMPATIBILITY seat and every product edge touching it is a named
- *   violation — the fallback draws the orphan, it never acquits it.
- * - **y = the ADR-082 air-compression, unchanged**: within a column (sorted
- *   by the frame's y seat — the sibling-order law), displayY =
- *   min(serverY, prevDisplayBottom + GAP_CROSS); server frames untouched.
- * - **revealOrder = rank-major, then frame y** — one semantic truth feeding
- *   both the x projection and the birth choreography. */
-export function projectSettledFrames(
-  nodes: FlowNode[],
-  edges: FlowEdge[],
-): SettledProjection {
-  const positions = new Map<string, { x: number; y: number }>()
-  const violations: string[] = []
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-
-  // Columns keyed by rank; a rank-null node falls back to its stored frame.x
-  // bucket (the legacy orphan case — the two key namespaces can only meet
-  // there, and each node's display x still follows its own rule).
-  const columns = new Map<number, FlowNode[]>()
-  for (const n of nodes) {
-    const key = n.rank ?? n.frame!.x
-    columns.set(key, [...(columns.get(key) ?? []), n])
-  }
-  for (const ns of columns.values()) {
-    ns.sort((a, b) => a.frame!.y - b.frame!.y)
-    let prevBottom: number | null = null
-    for (const n of ns) {
-      // 岛内格 (Workspace 合同 v4.2 C6 — mirror of graph_store's birth-frozen
-      // cell law): an island member renders at its FROZEN cell y verbatim
-      // (容量预留的空白即廊道 — in-island cells never air-compress), and the
-      // column's compression floor rises to the island's RESERVED bottom so
-      // a later band-mate never invades empty corridor cells. One law, two
-      // mirrors: spec.island.reserved_bottom rides the read face's stamp.
-      const island = n.spec?.island as { reserved_bottom?: number } | undefined
-      const serverY = n.frame!.y
-      const y: number = island
-        ? serverY
-        : prevBottom === null
-          ? serverY
-          : Math.min(serverY, prevBottom + GAP_CROSS)
-      const x = n.rank != null ? n.rank * PITCH : n.frame!.x
-      positions.set(n.id, { x, y })
-      prevBottom = Math.max(
-        y + flowNodeSize(n).height,
-        island?.reserved_bottom ?? 0,
-        prevBottom ?? 0,
-      )
-    }
-  }
-
-  // The direction invariant, named per edge (ctx 引用流不算 product edge —
-  // the same boundary as the server's RANK_EDGE_TYPES; ADR-097 §5 lineage
-  // 血缘边同律豁免 — display-only, 永不是 product edge, 一条律两镜像 =
-  // product_graph.validate_product_graph)。
-  for (const e of edges) {
-    if (e.edgeType === "ctx" || e.lineage) continue
-    const from = byId.get(e.from)
-    const to = byId.get(e.to)
-    if (!from || !to) continue
-    if (from.rank == null || to.rank == null) {
-      violations.push(
-        `rank-null endpoint on product edge: ${e.from} (rank ${from.rank}) -> ${e.to} (rank ${to.rank})`,
-      )
-      continue
-    }
-    if (to.rank <= from.rank) {
-      violations.push(
-        `rank violation: ${e.from} (rank ${from.rank}) -> ${e.to} (rank ${to.rank})`,
-      )
-      continue
-    }
-    const fx = positions.get(e.from)!.x
-    const tx = positions.get(e.to)!.x
-    if (tx <= fx) {
-      violations.push(`projection violation: ${e.from} (x ${fx}) -> ${e.to} (x ${tx})`)
-    }
-  }
-
-  const ranked = [...nodes].sort(
-    (a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.frame!.y - b.frame!.y,
-  )
-  const revealOrder = new Map<string, number>()
-  ranked.forEach((n, i) => revealOrder.set(n.id, i))
-
-  return { positions, revealOrder, violations }
-}
-
-/** Deterministic layered layout. Two surfaces, two laws (合同 §7 C-1 约束❸):
- *
- * - **Graph canvas (settled — every node carries a server-settled frame,
- *   draft nodes included)**: positions come from `projectSettledFrames` —
- *   the Product Graph rank projection. This path NEVER derives depth from
- *   edges; `GraphNode.rank` is its only rank source.
- * - **Recipe surface (frame-less)**: the static 说明书 diagram has no
- *   Product Graph and no rank source — it keeps its local layered layout
- *   (depthOf below serves THIS branch only; it is not a second Canvas
- *   topology authority). A graph-canvas node without a frame is C-3's
- *   explicit-failure territory, never this branch's business.
- *
- * 画布定居取景 (ADR-057) + 空气压缩 (ADR-082 判词①): the server reservation
- * is the FULL-GROWN footprint; within each rank column, followers compact up
- * to their predecessor's CURRENT render bottom (min(serverY, …) is the
- * structural safety — never past the server seat, append-only stays
- * structural). */
+/** Layer asset and manual nodes by their real connections. */
 export function layoutFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowLayout {
   const positions = new Map<string, { x: number; y: number }>()
   const revealOrder = new Map<string, number>()
-
-  // ── 定居取景: every node framed → the Product Graph rank projection ────
-  const settled = nodes.length > 0 && nodes.every((n) => n.frame)
-
-  if (settled) {
-    const projection = projectSettledFrames(nodes, edges)
-    if (projection.violations.length > 0 && import.meta.env.DEV) {
-      // 合同 §7 C-1: dev 可观测, prod graceful — the dev-throw / L4 disposal
-      // is C-3's seat; this batch never breaks the render path.
-      console.error("[layout] product-graph projection violations:", projection.violations)
-    }
-    for (const [id, pos] of projection.positions) positions.set(id, pos)
-    for (const [id, ord] of projection.revealOrder) revealOrder.set(id, ord)
-    let width = 0
-    let height = 0
-    for (const n of nodes) {
-      const size = flowNodeSize(n)
-      const pos = positions.get(n.id)!
-      width = Math.max(width, pos.x + size.width)
-      height = Math.max(height, pos.y + size.height)
-    }
-    return { positions, revealOrder, width, height }
-  }
 
   // ── Recipe surface (frame-less): the local layered layout ─────────────
   const parents = new Map<string, string[]>()

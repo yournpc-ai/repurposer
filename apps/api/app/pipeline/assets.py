@@ -73,7 +73,7 @@ async def create_transcript_asset_from_text(
     # 上传即落图 (ADR-057 K2): the chat-declared transcript gets its asset
     # node in the same flush — the graph's asset family stays complete
     # regardless of which door the asset row came through.
-    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+    from app.pipeline.graph_store import stamp_asset_node  # deferred: import cycle
 
     await stamp_asset_node(db, project_id, asset)
     await db.flush()
@@ -128,7 +128,7 @@ async def create_web_page_asset_from_url(
     db.add(asset)
     # 上传即落图 (ADR-057 K2) — same flush, same wiring door as the
     # transcript promotion.
-    from app.pipeline.graph_fill import stamp_asset_node  # deferred: import cycle
+    from app.pipeline.graph_store import stamp_asset_node  # deferred: import cycle
 
     await stamp_asset_node(db, project_id, asset)
     await db.flush()
@@ -341,3 +341,16 @@ async def prime_web_page_captures_from_text(
         except CaptureBlocked as e:
             logger.info("web_capture_prime_blocked", url=url, error=str(e))
     return created
+
+
+async def project_source_language(db: AsyncSession, project) -> str | None:
+    """Read the source language from existing asset facts, then the project."""
+    assets = (
+        await db.execute(select(Asset).where(Asset.project_id == project.id))
+    ).scalars().all()
+    for asset in assets:
+        if asset.type in (AssetType.VIDEO, AssetType.AUDIO, AssetType.TRANSCRIPT):
+            language = (asset.meta or {}).get("language")
+            if language:
+                return str(language)
+    return project.language or None

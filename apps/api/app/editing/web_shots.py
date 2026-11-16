@@ -6,10 +6,39 @@ existing crossfade, and plate/cutout uses ordinary native animations.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from app.editing.grounding import camera_keyframes, resolve_focus
 from app.editing.timing import seconds_to_ticks
+
+
+@dataclass(frozen=True)
+class ViewFact:
+    snapshot_id: UUID
+    snapshot_digest: str
+    view_id: str
+    width: int
+    height: int
+    elements: list[dict[str, Any]]
+    heading: str
+    page: int
+    state_id: str | None = None
+    artifact_role: str | None = None
+    paired_view_id: str | None = None
+    target_id: str | None = None
+    target_element_id: str | None = None
+    route: str | None = None
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    source_y: int = 0
+    css_width: int | None = None
+    css_height: int | None = None
+    device_scale_factor: float = 1.0
+    region_text: str | None = None
+    region_text_truncated: bool | None = None
+    region_visually_truncated: bool | None = None
+    source_url: str | None = None
 
 
 def _view(views: list[Any], state_id: str, role: str) -> Any:
@@ -139,7 +168,7 @@ def insert_capture_shot_ops(
         None,
     )
     if end_scene is None:
-        raise ValueError("the launch-film CapturePlan consumer needs its end scene")
+        raise ValueError("the CapturePlan consumer needs its end scene")
     insert_at = int(end_scene["scene"]["range"]["start"])
     frame_ticks = seconds_to_ticks(fps_den / fps_num, timebase)
 

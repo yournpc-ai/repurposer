@@ -45,7 +45,6 @@ from app.pipeline.assets import asset_text_content
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
-from app.pipeline.speaker_map import speaker_map_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.web_capture import web_capture_processor
 from app.tools.world import upsert_page_reading
@@ -297,7 +296,7 @@ PROCESSORS: dict[AssetType, list[Processor]] = {
     # speaker_map is VIDEO's second processor (ADR-045 D4); AUDIO stays
     # ASR-only for it — the attribution signal is visual. prosody is the
     # third/second for VIDEO/AUDIO (its signal is audio — both carry one).
-    AssetType.VIDEO: [_content_hash_processor, _asr_processor, speaker_map_processor, prosody_processor],
+    AssetType.VIDEO: [_content_hash_processor, _asr_processor, prosody_processor],
     AssetType.AUDIO: [_content_hash_processor, _asr_processor, prosody_processor],
     AssetType.VOICE_SAMPLE: [_content_hash_processor, _noop_processor],
     # IMAGE: content hash + deterministic visual anchors (faces / subject /
@@ -559,22 +558,6 @@ async def process_asset(asset_id: UUID) -> None:
                 task = asyncio.create_task(warm_understanding(asset.project_id))
                 _warm_tasks.add(task)
                 task.add_done_callback(_warm_tasks.discard)
-                # 案例拆解前移 (ADR-078): when the pending plan pins THIS asset
-                # as the exemplar, its craft skeleton warms alongside the
-                # understanding, so the decompile node reuses at zero cost.
-                # Tolerant dict read — the pin seats land with the chat layer.
-                project_row = await db.get(Project, asset.project_id)
-                pin = (
-                    (project_row.pending_brief or {}).get("exemplar_asset_id")
-                    if project_row is not None
-                    else None
-                )
-                if pin == str(asset_id):
-                    from app.pipeline.decompile import (  # deferred: runtime-only edge
-                        fire_warm_craft_skeleton,
-                    )
-
-                    fire_warm_craft_skeleton(asset.project_id, asset_id)
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
             asset.processing_status = AssetStatus.FAILED

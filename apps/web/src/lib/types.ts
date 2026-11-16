@@ -88,34 +88,20 @@ export interface Asset {
 }
 
 export interface OutputPayload {
-  // clip
-  hook?: string
-  title_options?: string[]
-  music_mood?: string
-  duration?: number
-  // post / article
-  content?: string
-  hashtags?: string[]
-  title?: string
-  // quotes
-  quotes?: { quote: string; attribution: string }[]
-  // quote_frame (single card: quote + attribution mirror the baked PNG's
-  // text; aspect pin feeds the server-derived Output.aspect)
-  quote?: string
-  attribution?: string
-  // carousel
-  slides?: { title: string; body?: string }[]
-  // film
   name?: string
-  // article extras
-  tldr?: string
-  key_points?: string[]
-  full?: string
+  duration_seconds?: number
+  duration?: number
+  aspect?: string | null
+  content_language?: string | null
+  execution_digest?: string | null
+  composition_digest?: string
+  generator_media?: Record<string, unknown>
+  speech_media?: Record<string, unknown>
+  narration_policy?: Record<string, unknown> | null
 }
 
 export interface OutputFiles {
   video?: string
-  srt?: string
   image?: string
 }
 
@@ -129,14 +115,6 @@ export interface OutputSourceRef {
    * the motion clip names the composite. The flow canvas draws N→1
    * lineage edges off this. */
   parents?: string[]
-  /** quote_frame / quote_chain markers ride source_ref verbatim — the
-   * canvas distinguishes the composite (quote_chain) from frame cards. */
-  quote_frame?: boolean
-  quote_chain?: boolean
-  /** Fork lineage (translate/dub "再来一版"): the output THIS row was
-   * derived from. The fork family it forms (ADR-051 F2 变体分页) is the
-   * version-pager's data — distinct from `parents` (sub-artifact lineage). */
-  derived_from_output_id?: string
 }
 
 export interface OutputPublishing {
@@ -145,13 +123,6 @@ export interface OutputPublishing {
   hashtags?: string[] | null
   cover_image_url?: string | null
   topic?: string | null
-}
-
-/** First-post recommendation score (1-100) + one-sentence reason — answers
- * "which clip is most worth posting first", never predicts views/reach. */
-export interface OutputScore {
-  value?: number
-  reason?: string | null
 }
 
 /** Unified product row (ADR-030): a clip is the type carrying timeline
@@ -185,15 +156,7 @@ export interface OutputContentReview {
     object_id: string | null
   }[]
 }
-/** 质检裁决 (产物质量线期 3): the verify node's verdict on the product row.
- * null = never verified (legacy rows / verify-less graphs). needs_human is
- * non-blocking — the badge is the only surface (成功安静). */
 export interface OutputQuality {
-  status?: "passed" | "needs_human"
-  checks?: { id: string; ok: boolean | null; detail: string; cls: string }[]
-  attempt?: number
-  checked_at?: string
-  /** Advisory frame-evidenced review; independent of the delivery verdict above. */
   content_review?: OutputContentReview
 }
 
@@ -220,28 +183,12 @@ export interface Output {
   render_spec: unknown | null
   render_status: string | null
   render_error: string | null
-  score: OutputScore | null
   quality: OutputQuality | null
   publishing: OutputPublishing
   /** Server-derived display aspect (产物展示统一, 2026-08-27): "9:16" |
    * "1:1" | "16:9" | arbitrary "W:H"; null = unknown/original frame —
    * surfaces fall back to their default tier. Never probe when set. */
   aspect?: string | null
-  /** The product's own spec as a prompt-style line (ADR-051 F — hover
-   * prompt 框): composed server-side from the producing step's slot/params
-   * in the run's pinned ui_language; stamped only by /results. The card's
-   * hover 框 prefills with it; null = carried row (the 框 opens empty). */
-  spec_prompt?: string | null
-  /** The product's model/provider facts (ADR-051 H — 详情面模型事实):
-   * server-projected from the producing step's kind (a fact registry, never
-   * a selector); stamped only by /results. The lightbox info column is the
-   * display surface — the node caption never carries a model name. */
-  model_facts?: ModelFact[] | null
-  /** The deliverable card's track-stack inspection face (ADR-113 §4) —
-   * server-derived from render_spec at read time (labels arrive
-   * preformatted; the client never formats time); null on non-clip
-   * products. Stamped by /results AND /graph (both product-join seats). */
-  track_stack?: TrackStack | null
   created_at: string
   updated_at: string | null
 }
@@ -252,73 +199,7 @@ export interface ChatOutputEntry {
   output: Output | null
 }
 
-/** One kept segment of a clip product on the OUTPUT timeline (ADR-113 §4):
- * its output span + its SOURCE span + the source asset's id (the
- * cross-highlight's address). */
-export interface TrackStackVideoBlock {
-  out_start: number
-  out_end: number
-  src_start: number
-  src_end: number
-  asset_id: string | null
-  /** Preformatted `m:ss–m:ss` source range (server-formatted). */
-  src_label: string
-  /** Preformatted `m:ss–m:ss` output range (server-formatted, ADR-115). */
-  out_label: string
-}
-
-/** One caption sentence on the OUTPUT timeline — text + preformatted
- * `m:ss–m:ss` label. */
-export interface TrackStackTextBlock {
-  out_start: number
-  out_end: number
-  text: string
-  label: string
-}
-
-/** One scale tick on the NLE axis's ruler (ADR-115): `label` preformatted
- * (the origin reads bare "0"). Every rendered tick is labeled — a major
- * cramped by the named end leaves the scale, never rides unlabeled. */
-export interface TrackStackRulerTick {
-  t: number
-  label: string
-}
-
-/** The track-stack read-face projection (ADR-113 §4; ADR-115 NLE 轴): video
- * lane (kept segments concatenated on the output clock) + text lane
- * (caption sentences per segment, a cut = a hard break) + the ruler scale +
- * modifier presence. Read-only — never an orchestration surface (L3). */
-export interface TrackStack {
-  video_lane: TrackStackVideoBlock[]
-  text_lane: TrackStackTextBlock[]
-  ruler: TrackStackRulerTick[]
-  modifiers: Record<string, boolean>
-}
-
-/** One model/provider fact about a product (ADR-051 H): `modality` is the
- * grouping key (copy / voice / captions / music — localized via the composer
- * models panel's keys); `model` is the display name, DATA (a proper noun). */
-export interface ModelFact {
-  modality: string
-  model: string
-}
-
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
-
-export type IntentSlotType = "clips" | "post" | "quotes" | "carousel" | "article"
-
-/** 任务槽 (IntentSlot, N-20 request layer): one line of the plan — one
- * requested output. `null` fields mean task-book defaults (count → per-type
- * default, language → the run's target language); `explicit` marks
- * user-edited slots that pin through re-inference. */
-export interface IntentSlot {
-  type: IntentSlotType
-  count: number | null
-  focus: string | null
-  language: string | null
-  tone_override: string | null
-  explicit: boolean
-}
 
 /** One safe, replayable produce_video stage inside a step attempt. */
 export interface ProductionStage {
@@ -372,39 +253,15 @@ export interface WorkflowStep {
  * orthogonal dimension; edges are typed flows (the port law: in = the
  * consumption region's bottom-left, out = the production region's
  * top-right). */
-// 词表 v3 (ADR-076, C5 收窄): the five MEDIUM values are generic
-// workflow-node concepts (never business words — 业务身份 = spec.summary +
-// spec.tool). Card anatomy derives from type directly (text/table → the
-// document card, image/video/audio → the media card); the program region
-// derives from spec.prototype. The server's read face (routes/projects
-// _read_face, C4) maps every legacy row before it lands — asset rows arrive
-// as their medium × manual (the joined `asset` dossier is their birth
-// certificate), so the legacy five kinds never reach the client. The two
-// transitional words ride for rows whose node species retires later:
-// ``modifier`` (morph modifiers — 批 B4 退役) and ``materialize``
-// (pre-fold whole-source nodes — 历史清理收). (C5b: the field itself
-// renamed kind → type — the graph node's family word, 词表 v3.)
-// Workspace 合同 v4.2 C1 (2026-09-26 封板): the exploration family NEVER
-// enters the graph — ``exploration`` is out of the vocabulary (legacy rows
-// are read-filtered server-side; the family's home is the exploration_rows
-// table, its surface the message-borne chat chain).
+// Source assets and ordinary manual nodes use these five media types.
 export type GraphNodeType =
   | "text"
   | "table"
   | "image"
   | "video"
   | "audio"
-  | "modifier"
-  | "materialize"
 
-export type GraphNodeState =
-  | "draft"
-  | "queued"
-  | "running"
-  | "done"
-  | "failed"
-  | "skipped"
-  | "stale"
+export type GraphNodeState = "draft" | "done"
 
 export type GraphEdgeType = "video" | "audio" | "text" | "ctx"
 
@@ -433,50 +290,17 @@ export interface GraphNodeAsset {
 export interface GraphNode {
   id: string
   type: GraphNodeType
-  /** The row's own machine's word (the product machine's vocabulary). */
   state: GraphNodeState
-  /** The node's program: prompt / params / role / fill_key / frame_class /
-   * summary — the node type's own shape, rendered as-is. */
   spec: {
     summary?: string | null
-    prompt?: string | null
-    params?: Record<string, unknown> | null
-    role?: string | null
-    text?: string | null
-    /** 岛内格镜像 (Workspace 合同 v4.2 C6): present on island members — the
-     * island's frozen reserved bottom, the projection's compression floor. */
-    island?: { reserved_bottom?: number }
-    asset_id?: string | null
-    asset_type?: string | null
     title?: string | null
-    output_ids?: string[]
-    frame_class?: string | null
-    /** 能力原型 (ADR-076, stamped at birth; absent on pre-v3 rows):
-     * generator = 散文程序 (the PROMPT region carries the user's verbatim
-     * words) / editor = 参数程序 (the lever row) / manual = no program
-     * region. Drives the program region's form, never execution semantics. */
-    prototype?: "generator" | "editor" | "manual"
+    prompt?: string | null
+    text?: string | null
+    prototype?: "manual"
     [key: string]: unknown
   }
-  /** 画布定居取景: the settled frame {x, y, w, h} — server-assigned once,
-   * append-only; existing frames never move. Since C-1 the frame's x is NOT
-   * the display x authority — it narrows to y seat / w·h reservation /
-   * stability anchor (I-PFA-02). */
-  layout: { x?: number; y?: number; w?: number; h?: number }
-  /** Read-time Product Graph projection (I-PFA-02, 合同 §7 C-1 约束❶): the
-   * node's topological depth, computed server-side by product_ranks() over
-   * the read frame. NEVER recompute client-side — this is the settled
-   * canvas's ONLY rank source. null = legacy compatibility state (a
-   * B4-lite-gate survivor the predicate does not rank). */
-  rank?: number | null
-  /** The node's quotation folded to credits at read time (BILLING §7);
-   * null = unquoted. */
-  estimate_credits?: [number, number] | null
-  /** Asset nodes: the joined asset row. */
+  layout?: { x?: number; y?: number; w?: number; h?: number } | null
   asset?: GraphNodeAsset | null
-  /** Producer nodes: the joined visible product rows (created_at asc — the
-   * card's pager order). */
-  outputs?: Output[]
   created_at: string
   updated_at?: string | null
 }
@@ -490,42 +314,10 @@ export interface GraphEdge {
   edge_type: GraphEdgeType
 }
 
-export interface ProjectArtifactFacet {
-  /** One hidden station's summary on the deliverable card (ADR-097 §3 —
-   * the facet exits the default projection; its program/state stay
-   * inspectable here). `surface="hidden_modifier"` marks the lever
-   * surfaces. */
-  node_id: string
-  tool?: string | null
-  label?: string | null
-  state: string
-  surface?: string | null
-}
-
-export interface ProjectArtifact {
-  /** One product artifact's read-face block (ADR-097 Phase 1): membership
-   * is a compile-time stamp fact, never read-time inference. The canvas
-   * contracts each block to ONE deliverable card — facets summarized
-   * read-only, companions first-class, one activity owner. */
-  artifact_key: string
-  work_key: string
-  name?: string | null
-  deliverable_node_id?: string | null
-  facet_node_ids: string[]
-  facets: ProjectArtifactFacet[]
-  companion_node_ids: string[]
-  current_output_id?: string | null
-  archived_output_ids: string[]
-  activity: { state: GraphNodeState; failed_node_ids: string[] }
-}
-
 export interface ProjectGraph {
   nodes: GraphNode[]
   edges: GraphEdge[]
   lifecycle?: LifecycleStamp | null
-  /** ADR-097 Phase 1: the artifact projection — unknown/legacy nodes never
-   * appear here (they pass through on the default projection). */
-  artifacts?: ProjectArtifact[]
 }
 
 /** The server-named lifecycle projection (ADR-087 §2, Phase 1) — the ONE

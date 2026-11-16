@@ -26,9 +26,23 @@
 
 ### 首屏动态演示与滚动叙事
 
-`CreationShowcase` 使用四个产品 Tab、左对话/右样片的展示界面和各自的通栏彩色背景。四个 Tab 共用 `#f8f7f5` 暖白基底与左下、右上、底部三层浅色径向光场，分别以粉蓝淡黄、薰衣草青浅杏、薄荷蓝粉、粉紫浅绿区分；外部背景还包含斜向柔光与静态 SVG 颗粒噪点，噪点沿左上至右下斜向渐显，内部对话面板、输入框和选中 Tab 使用 `bg-card`（浅色主题为纯白）与暖色页面底拉开层级，预览区保持实色媒体表面；噪点不动画，reduced-motion 不增加额外动态。桌面展示区为 160svh，面板 sticky，Tab 在该区域经过视口期间固定于视口底部，离开区域随区块退出。8 秒自动切换；四个类别分别使用符合自身制作链的工序名称，执行中使用进行时与省略号，完成后切换为完成时动词短语、去除省略号并将文字与图标降为 `text-meta-foreground`；当前工序状态行使用 `shimmer`，完成回复按类别给出交付摘要和可操作的修订示例。回复与视频在约 4 秒的交付节拍同步淡入，视频此时才开始静音播放；手动选择重置计时并继续轮播。后台、离屏与 reduced-motion 不自动播放，Tab 支持方向键/Home/End。左侧使用用户气泡、活动图标、Agent 回复和多行发送框；发送框入口进入真实应用，不在 Landing 调用制作接口。手机收起活动与辅助回复。移除演示说明标签、独立播放按钮、创作按钮与 Tab 进度条。复用公开候选媒体，动画为展示投影，并非真实 Studio / Chat 制作回放。
+`CreationShowcase` 使用四个产品 Tab、左对话/右样片的展示界面和各自的通栏彩色背景。四个 Tab 共用 `#f8f7f5` 暖白基底与左下、右上、底部三层浅色径向光场，分别以粉蓝淡黄、薰衣草青浅杏、薄荷蓝粉、粉紫浅绿区分；外部背景还包含斜向柔光与静态 SVG 颗粒噪点，噪点沿左上至右下斜向渐显，内部对话面板、输入框和选中 Tab 使用 `bg-card`（浅色主题为纯白）与暖色页面底拉开层级，预览区保持实色媒体表面；噪点不动画，reduced-motion 不增加额外动态。桌面展示区为 160svh，面板 sticky，Tab 在该区域经过视口期间固定于视口底部，离开区域随区块退出。8 秒自动切换；四个类别分别使用符合自身制作链的工序名称，执行中使用进行时与省略号，完成后切换为完成时动词短语、去除省略号并将文字与图标降为 `text-meta-foreground`；当前工序状态行使用 `shimmer`，完成回复按类别给出交付摘要和可操作的修订示例。回复与视频在约 4 秒的交付节拍同步淡入，视频此时才开始静音播放；手动选择重置计时并继续轮播。后台、离屏与 reduced-motion 不自动播放，Tab 支持方向键/Home/End。左侧使用用户气泡、活动图标、Agent 回复和多行发送框；发送框入口进入真实应用，不在 Landing 调用制作接口。手机收起活动与辅助回复。移除独立播放按钮、创作按钮与 Tab 进度条。首屏四条样片以 Pexels 公开素材剪辑，媒体和封面位于 `apps/web/public/gallery/showcase/`。预览区标注素材剪辑示例。
 
-`CreationStory` 使用 520svh 滚动区与同一个 sticky 对话舞台：输入文字、发送为用户气泡，首轮只呈现 3 条 Agent 回复与 3 条状态行，顺序为开场说明 → 梳理目标 → 设计分镜 → 分镜摘要 → 制作画面与字幕 → 交付样片；随后进入修改要求、建议确认与第二次交付。舞台与发送按钮不做滚动缩放，只保留高度、透明度和文字揭示过渡。首次制作和修订制作的工序均靠左并与正文穿插，执行中使用进行时与省略号，完成后切换为完成时动词短语、去除省略号并降为 `text-meta-foreground`；只渲染已经到达的步骤，当前步的 `shimmer` 结束后正文逐字出现，正文完整后才出现下一行状态，不提前展示未来步骤。分镜摘要与修订说明不虚构素材参数或工作耗时。消息区限定视口高度，随内容展开自动跟随末条消息，但容器不接收独立滚轮滚动、不截获页面滚动。用户气泡按内容宽度排列并保留 85% 的最大宽度，短句不撑满整行。两次交付当前复用同一公开样片以演示交互，不作为修改前后效果证据。标题在原位置变化，不另起三个场景或重挂载舞台；继续滚动提示固定于底部。倒滚可回看，离屏/后台暂停视频；reduced-motion 直接显示完整对话。删除样片和修改要求的说明文字。开场输入卡展示图片缩略图与 PDF 文件 chip，发送后输入卡消费附件、首条用户消息保留同一组附件；这些附件只演示素材输入形态，不响应选择或上传。对话卡与输入框使用 `bg-card`，输入框以 `border-subtle` 在同色卡面上分出边界。该演示仍为展示投影，不调用制作接口，也不展示未经验证的修改后成片。
+- 产品宣传以滴管使用特写配产品片名。 [Los Muertos Crew](https://www.pexels.com/video/person-using-a-dropper-for-a-serum-7615790/)
+- 口播动效用竖屏录音室镜头配栏目标签和入场标题。 [cottonbro studio](https://www.pexels.com/video/a-woman-talking-over-the-microphone-7599377/)
+- 文字动画以霓虹灯镜头作为文字入场的背景。 [Maksim Goncharenok](https://www.pexels.com/video/a-neon-sign-turning-on-and-off-5820390/)
+- 知识讲解将满月延时与月相解释并排。 [Dr Photographer](https://www.pexels.com/video/full-moon-across-night-sky-timelapse-30785080/) · [NASA 月相说明](https://science.nasa.gov/moon/moon-phases/)
+
+`CreationStory` 在同一个吸附对话舞台展示提出需求、从分镜到成片和继续修改。桌面滚动区为 280svh，移动端为 240svh。首条消息带图片和 PDF 示例附件，随后显示一句分镜方向、一条制作状态和一条公开样片。用户提出修改后，助手说明会如何调整开头。消息区域跟随最新消息，页面滚动仍由浏览器处理，回滚可重新查看前面的步骤。离屏和切到后台时暂停视频，减少动态效果模式直接展示完整对话和样片封面。
+
+### 技能滚动展示
+
+`LandingSkills` 位于 FAQ 前。四组装饰图片来自 [Pexels](https://www.pexels.com/license/)，裁成 3:4 WebP 后存放在 `apps/web/public/gallery/skills/`。下列顺序对应文件后缀 `-1` 至 `-4`。
+
+- 宣传视频：[滴管瓶](https://www.pexels.com/photo/brown-bottle-with-dropper-7796985/)、[镜面精华瓶](https://www.pexels.com/photo/brown-serum-bottle-on-a-round-mirror-7796455/)、[沙面香水瓶](https://www.pexels.com/photo/close-up-shot-of-a-green-perfume-bottle-on-the-sand-8361516/)、[棕色泵瓶](https://www.pexels.com/photo/brown-glass-pump-bottle-on-a-surface-7795404/)。
+- 口播动效：[主播特写](https://www.pexels.com/photo/a-woman-talking-on-a-microphone-7598560/)、[双人访谈](https://www.pexels.com/photo/women-having-conversation-inside-the-studio-while-looking-at-each-other-7600887/)、[录音侧面](https://www.pexels.com/photo/a-woman-in-a-studio-7598559/)、[录音棚肖像](https://www.pexels.com/photo/a-woman-in-white-long-sleeves-with-her-hand-on-her-face-7600886/)。
+- 文字动画：[竖排字标](https://www.pexels.com/photo/style-neon-signage-2442430/)、[手写霓虹](https://www.pexels.com/photo/good-vibes-only-neon-lights-11256676/)、[室内霓虹](https://www.pexels.com/photo/neon-light-signage-on-a-wall-5182375/)、[粉色霓虹](https://www.pexels.com/photo/pink-neon-on-a-wall-18262649/)。
+- 知识讲解：[星空下的天文台](https://www.pexels.com/photo/stars-in-night-sky-over-observatory-buildings-26987730/)、[月相特写](https://www.pexels.com/photo/close-up-shot-of-a-crescent-moon-8810608/)、[望远镜与银河](https://www.pexels.com/photo/telescope-pointing-at-milky-way-galaxy-at-night-2646380/)、[夜间天文台](https://www.pexels.com/photo/observatory-during-nighttime-2928587/)。
 
 ## 4. Final CTA（保留 Early access 锚点）
 

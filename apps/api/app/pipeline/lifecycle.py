@@ -58,7 +58,6 @@ from app.pipeline.graph import (
     TRANSCRIPT,
     VOICEPRINT,
 )
-from app.pipeline.morph import check_transform_targets, _faced_source_languages
 from app.pipeline.orchestrator import has_active_run
 from app.tools import ToolRejected, validate_task_list
 
@@ -561,49 +560,7 @@ async def project_lifecycle(
             if req is not None and await req.missing(db, project):
                 missing.append(key)
 
-    # --- Transform language facts (U5 split): unknown faced language is
-    # a missing content fact; a KNOWN language hitting the same-language
-    # rule is the adjudication failure.
     language_unknown = False
-    if pending_plan and not adjudication_error and plan_tasks:
-        transform_tasks = [
-            t
-            for t in plan_tasks
-            if t.get("tool") in ("translate_clip", "dub_clip")
-            and (t.get("params") or {}).get("target_language")
-        ]
-        if transform_tasks:
-            # "The chain births clips" reads the output_type declaration
-            # (N-56: select_clips and the compiler-only cut_segments both
-            # claim "clips") — never a tool name.
-            chain_births_clips = any(
-                t.get("tool") in NODE_KINDS
-                and NODE_KINDS[t.get("tool")].output_type == "clips"
-                for t in plan_tasks
-            )
-            scopes = {
-                str((t.get("params") or {}).get("target_output_id") or "") or None
-                for t in transform_tasks
-            }
-            faced_sets = {
-                scope: await _faced_source_languages(
-                    db, project, scope, chain_births_clips=chain_births_clips
-                )
-                for scope in scopes
-            }
-            if any(not faced for faced in faced_sets.values()):
-                language_unknown = True
-            else:
-                try:
-                    await check_transform_targets(
-                        db,
-                        project,
-                        [_TaskShim(t) for t in plan_tasks],
-                        zh=ui_language.startswith("zh"),
-                    )
-                except (ToolRejected, ValueError) as e:
-                    adjudication_error = str(e)
-
     active = await has_active_run(db, project.id)
 
     return compute_lifecycle(

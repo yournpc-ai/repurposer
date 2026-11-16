@@ -33,6 +33,8 @@ export function CreationShowcase() {
   const id = useId()
   const running = visible && !reduce && !background
   const item = LANDING_GALLERY[active]
+  const mediaPath = `/gallery/showcase/${item.id}`
+  const preview = { ...item, videoUrl: `${mediaPath}.mp4`, posterUrl: `${mediaPath}.webp` }
   useEffect(() => {
     if (!root.current) return
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.15 })
@@ -101,9 +103,9 @@ export function CreationShowcase() {
             </div>
           </div>
           <div className="relative flex min-h-[300px] items-center justify-center overflow-hidden bg-muted p-6 sm:p-10 md:min-h-[480px]">
-            <div className={`absolute top-5 left-6 flex items-center gap-2 text-xs text-meta-foreground transition-opacity ${previewReady ? "opacity-100" : "opacity-0"}`}><span className="size-1.5 rounded-full bg-current" />{t("landing.showcase.preview")}</div>
+            <div className={`absolute top-5 left-6 flex items-center gap-2 text-xs text-meta-foreground transition-opacity ${previewReady ? "opacity-100" : "opacity-0"}`}><span className="size-1.5 rounded-full bg-current" />{t("landing.showcase.disclosure")}</div>
             <div aria-hidden={!previewReady} className={`w-full transition-[opacity,transform] duration-500 ease-enter motion-reduce:transform-none motion-reduce:transition-none ${previewReady ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"}`}>
-              <DemoVideo key={item.id} item={item} playing={running && previewReady} className={`max-h-[430px] w-full rounded-lg object-contain ${item.id === "talking-head" ? "mx-auto max-w-[260px]" : "aspect-video"}`} />
+              <DemoVideo key={item.id} item={preview} playing={running && previewReady} className={`max-h-[430px] w-full rounded-lg object-contain ${item.id === "talking-head" ? "mx-auto max-w-[260px]" : "aspect-video"}`} />
             </div>
           </div>
         </div>

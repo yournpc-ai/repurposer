@@ -1,8 +1,6 @@
 # Repurposer web (TanStack Start, SSR). Node + pnpm workspace.
 #
-# Build context is the REPO ROOT: this app imports the workspace package
-# @repurposer/clip (for the <Player> preview), so it needs pnpm-workspace.yaml,
-# the lockfile, and packages/clip.
+# Build context is the REPO ROOT so the native video workspace packages resolve.
 #
 # NOTE: serves the built SSR app via `vite preview`. That's fine for MVP/staging;
 # a high-traffic deploy would swap in a small node http adapter around the
@@ -17,13 +15,15 @@ WORKDIR /repo
 
 # Workspace descriptors first for a cached install layer.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/clip/package.json packages/clip/package.json
+COPY packages/video-spec/package.json packages/video-spec/package.json
+COPY packages/video-remotion/package.json packages/video-remotion/package.json
 COPY apps/render/package.json apps/render/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter web... --frozen-lockfile
 
 # Source + build.
-COPY packages/clip packages/clip
+COPY packages/video-spec packages/video-spec
+COPY packages/video-remotion packages/video-remotion
 COPY apps/web apps/web
 WORKDIR /repo/apps/web
 ARG VITE_API_URL

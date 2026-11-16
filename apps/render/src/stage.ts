@@ -10,7 +10,7 @@ import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { Agent, fetch, ProxyAgent } from "undici";
 
 /**
- * Source staging: a clip-spec's remote `source.url` is downloaded once into a
+ * Source staging: a video-spec's remote `source.url` is downloaded once into a
  * local cache and served back to Remotion over loopback (`/cache/*` in
  * server.ts).
  *
@@ -26,7 +26,7 @@ import { Agent, fetch, ProxyAgent } from "undici";
  * (providers/storage.download_to_cache) — the render payload's optional
  * `source_key` envelope field names the object key, and both sides hash it
  * with the same sha1 law, so a source the processing chain already pulled
- * (ASR / speaker_map / reframe) is a zero-network hit here. Without the key
+ * (ASR / source preparation) is a zero-network hit here. Without the key
  * the cache falls back to URL hashing (legacy payloads, non-asset sources).
  */
 

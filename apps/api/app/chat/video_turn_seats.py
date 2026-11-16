@@ -14,7 +14,7 @@ import re
 import time
 import structlog
 from typing import TYPE_CHECKING, Any, Callable
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 from app.agents.tool_loop import TerminalRefusal, ToolObservation
 from app.agents.working_drafts import (
@@ -46,7 +46,6 @@ from app.models.schemas import (
     PendingPlan,
     PrepareNarrationArgs,
     ReviewVideoArgs,
-    ReviseVideoArgs,
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
@@ -58,7 +57,7 @@ from app.models.schemas import (
 from app.models.tables import Message, Project
 
 if TYPE_CHECKING:
-    from app.tools.video.design import CompositionDesignVideoArgs
+    pass
 
 
 class VideoTargetAmbiguityFeedback(str):
@@ -226,9 +225,8 @@ async def video_context_lines(
 ):
     """Skill, candidate and presentation facts; resources have one fresh assembler."""
     import json
-    from app.config import settings
     from sqlalchemy import select
-    from app.models.tables import Asset, Conversation, Output
+    from app.models.tables import Asset, Conversation
     candidate_logs = list((await db.execute(
         select(Message.intent)
         .join(Conversation, Message.conversation_id == Conversation.id)
@@ -327,7 +325,6 @@ async def review_video_seat(
     on_report: Callable[[dict[str, Any]], None] | None = None,
 ) -> str | ToolObservation | TerminalRefusal:
     """Decode and review the exact Output; persist its advisory report."""
-    from app.config import settings
 
     import json
     from app.models.database import AsyncSessionLocal
@@ -745,9 +742,7 @@ async def design_video_seat(
     user_text: str = "",
 ) -> tuple[dict[str, Any] | None, Any]:
     """Merge one draft write or save the assembled version through the write door."""
-    from app.config import settings  # deferred: config leaf
 
-    from app.agents.candidate_correction import CandidateRejected
     from app.editing.edits import EditError  # deferred: write door
     from app.editing.service import format_storyboard_text  # deferred: editing seam
     from app.editing.store import (  # deferred: write door
@@ -885,7 +880,6 @@ async def revise_video_seat(
     pending_question: Any = None,
 ) -> tuple[dict[str, Any] | None, Any]:
     """Revise an exact saved version through complete entities or one bounded action."""
-    from app.config import settings  # deferred: config leaf
 
     from app.agents.candidate_correction import CandidateRejected
     from app.editing.edits import EditError
@@ -1016,7 +1010,6 @@ async def show_video_presets_seat(
     on_candidates,
 ) -> ToolObservation:
     """Present real dynamic native Presets through the existing candidate channel."""
-    from app.config import settings
 
     from app.tools.video.presets import VideoPresetError, show_video_preset_candidates
 
@@ -1052,7 +1045,6 @@ async def select_video_preset_seat(
     on_candidates,
 ) -> ToolObservation:
     """Validate and repaint one original candidate; this is never an edit or Run."""
-    from app.config import settings
 
     from app.models.database import AsyncSessionLocal
     from app.tools.video.presets import (
@@ -1099,7 +1091,6 @@ async def search_sfx_seat(
     on_candidates,
 ) -> ToolObservation:
     """Emit real CC0 candidates; only the settled turn makes them importable."""
-    from app.config import settings
 
     if not sfx_search_requested(user_text):
         return ToolObservation(
@@ -1147,7 +1138,6 @@ async def import_sfx_seat(
     on_candidates,
 ) -> ToolObservation | TerminalRefusal:
     """Resolve a settled candidate, freeze its MP3 and repaint its selection."""
-    from app.config import settings
 
     import json
     from app.models.database import AsyncSessionLocal
@@ -1197,7 +1187,6 @@ async def show_music_candidates_seat(
     on_candidates,
 ) -> ToolObservation:
     """Emit playable local-library Music candidates; only a settled turn is selectable."""
-    from app.config import settings
 
     from app.models.database import AsyncSessionLocal
     from app.tools.video.music_candidates import MusicCandidateError, show_music_candidate_set
@@ -1241,7 +1230,6 @@ async def select_music_seat(
     on_candidates,
 ) -> ToolObservation | TerminalRefusal:
     """Resolve a settled Music candidate without downloading or writing a version."""
-    from app.config import settings
 
     from app.models.database import AsyncSessionLocal
     from app.tools.video.music_candidates import MusicCandidateError, select_music_candidate
@@ -1292,23 +1280,26 @@ async def prepare_narration_seat(
     try:
         mentions = mentions or ()
         if args.audio_asset_id is not None:
-            mentioned = {
-                str(getattr(mention, "id", ""))
-                for mention in mentions
-                if getattr(mention, "type", None) == "asset"
-            }
-            if str(args.audio_asset_id) not in mentioned:
-                return (
-                    "prepare_narration requires the user's explicit @asset reference for "
-                    "this AUDIO recording; no alignment was requested"
-                )
             async with AsyncSessionLocal() as db:
                 from app.models.tables import Asset
                 from app.tools.video.preparation import snapshot_audio_asset
 
                 asset = await db.get(Asset, args.audio_asset_id)
-                if asset is None:
+                if asset is None or asset.user_id != project.user_id:
                     return "the referenced AUDIO asset is not accessible"
+                generated = isinstance((asset.meta or {}).get("origin"), dict) and bool(
+                    asset.meta["origin"].get("video_narration_hash")
+                )
+                mentioned = {
+                    str(getattr(mention, "id", ""))
+                    for mention in mentions
+                    if getattr(mention, "type", None) == "asset"
+                }
+                if not generated and str(args.audio_asset_id) not in mentioned:
+                    return (
+                        "prepare_narration requires the user's explicit @asset reference for "
+                        "this AUDIO recording; no alignment was requested"
+                    )
                 snapshot = await snapshot_audio_asset(db, asset, owner_id=project.user_id)
                 await db.commit()
                 snapshot_id = snapshot.id
@@ -1496,6 +1487,10 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
             ).order_by(Message.seq.desc()).limit(1)
         )
         delivery_intent = (delivery.intent or {}) if delivery is not None else {}
+        if delivery is None and run.status.value == "completed":
+            from app.pipeline.trigger_events import fire_trigger
+
+            fire_trigger(project.id, "run_completed", str(run.id))
         return {
             "action": "already_started",
             **target,
@@ -1506,26 +1501,31 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
         }
 
     receipt = (project.pending_brief or {}).get("video_presentation") or {}
+    ref = {key: receipt.get(key) for key in ("composition_id", "composition_version_id", "content_digest")}
+    if all(ref.values()):
+        run = await db.scalar(
+            select(WorkflowRun).where(
+                WorkflowRun.project_id == project.id,
+                WorkflowRun.context["version_ref"]["composition_version_id"].as_string()
+                == ref["composition_version_id"],
+            ).order_by(WorkflowRun.created_at.desc()).limit(1)
+        )
+        if run is not None and (run.context or {}).get("version_ref") == ref:
+            return await already_started(run, {
+                "base_ref": ref,
+                "presented_message_id": receipt.get("presented_message_id"),
+            })
     if not receipt.get("production_invited"):
         if pending is not None:
             return None
         last_run = await db.scalar(
             select(WorkflowRun).where(
                 WorkflowRun.project_id == project.id,
-                WorkflowRun.context["video_presentation"]["production_invited"].as_boolean().is_(True),
+                WorkflowRun.context["version_ref"]["composition_version_id"].as_string().is_not(None),
             ).order_by(WorkflowRun.created_at.desc()).limit(1)
         )
         if last_run is not None:
-            latest = await db.scalar(select(Message).where(
-                Message.conversation_id == conversation_id, Message.role == "user",
-                Message.turn_state == "settled",
-            ).order_by(Message.seq.desc()).limit(1))
-            latest_confirmation = (latest.intent or {}).get("video_confirmation") if latest is not None else None
-            if latest is not None and (
-                str(latest.id) == last_run.context.get("video_authorized_by")
-                or (latest_confirmation or {}).get("base_ref") == last_run.context["version_ref"]
-            ):
-                return await already_started(last_run, {"base_ref": last_run.context["version_ref"]})
+            return await already_started(last_run, {"base_ref": last_run.context["version_ref"]})
         return None
     presented = await db.get(Message, UUID(receipt["presented_message_id"]))
     if presented is None or presented.conversation_id != conversation_id:

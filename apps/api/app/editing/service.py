@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.editing.edits import EditError, replace_text_ops
 from app.editing.revisions import (
     AddMediaOverlayAction as RevisionAddMediaOverlayAction,
+    AddNarrationAction as RevisionAddNarrationAction,
     expand_revision_action,
 )
 from app.editing.schemas import Clip, CompositionContent
@@ -153,6 +154,14 @@ async def revise_video(
         source_ids = {binding.snapshot_id for binding in base_content.sources}
         if isinstance(args.action, RevisionAddMediaOverlayAction):
             source_ids.add(args.action.source_id)
+        narration_alignment = None
+        if isinstance(args.action, RevisionAddNarrationAction):
+            from app.models.tables import NarrationAlignment
+
+            source_ids.add(args.action.source_id)
+            narration_alignment = await db.get(NarrationAlignment, args.action.alignment_id)
+            if narration_alignment is None or narration_alignment.owner_id != owner_id:
+                raise PermissionDenied("the narration alignment is not accessible to this user")
         source_facts = await snapshot_facts(db, source_ids)
         if any(fact.get("owner_id") != owner_id for fact in source_facts.values()):
             raise PermissionDenied("a referenced source snapshot belongs to another user")
@@ -161,6 +170,7 @@ async def revise_video(
             base_content,
             facts=source_facts,
             request_context=args._request_context,
+            narration_alignment=narration_alignment,
         )
         if not ops:
             raise VideoServiceError("the action does not change the saved version")

@@ -49,7 +49,7 @@ from app.agents.errors import AgentBudgetError, AgentOutputError, AgentStopError
 from app.providers.llm.trace import trace_argument_normalization
 from app.metering import bind_model_prompt, current_model_prompt
 from app.agents.arguments import normalize_numeric_arguments, resolve_error_path, numeric_string_changes
-from app.models.schemas import MediaInput, Storyboard
+from app.models.schemas import MediaInput
 
 logger = structlog.get_logger()
 
@@ -151,14 +151,6 @@ RepairCallback = Callable[[], Awaitable[None] | None]
 def trim_texts(texts: list[str]) -> list[str]:
     """Return non-empty texts trimmed to a safe length."""
     return [t[:MAX_CHARS_PER_TEXT] for t in texts if t and t.strip()]
-
-
-def find_slot(storyboard: Storyboard, slot: str) -> dict:
-    """Return the matching StoryboardSlot as a dict, or an empty fallback."""
-    for s in storyboard.slots:
-        if s.slot == slot:
-            return s.model_dump()
-    return {}
 
 
 def _user_message(user_prompt: str, media: list[MediaInput]) -> dict[str, Any]:

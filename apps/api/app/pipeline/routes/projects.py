@@ -1,11 +1,8 @@
 """Project router."""
 
-import io
-import zipfile
-from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import Integer, cast, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,19 +11,11 @@ from app.models.schemas import (
     AssetResponse,
     BulkDeleteRequest,
     ChatOutputEntry,
-    ExportRequest,
-    GenerateRequest,
-    GenerateResponse,
-    GraphEdgeResponse,
     GraphNodeResponse,
-    GraphReviseRequest,
-    GraphReviseResponse,
-    OutputResponse,
     ProjectCreate,
     ProjectGraphResponse,
     ProjectResponse,
     ProjectResultsResponse,
-    ProjectStatus,
     ProjectUpdate,
     RunResponse,
     WorkflowStatus,
@@ -37,10 +26,8 @@ from app.models.tables import (
     ConversationUsage,
     CompositionVersion,
     GraphEdge,
-    GraphIsland,
     GraphNode,
     Message,
-    Operation,
     Output,
     Publication,
     WorkflowStep,
@@ -49,40 +36,16 @@ from app.models.tables import (
     User,
     WorkflowRun,
 )
-from app.pipeline.conversation_bridge import (
-    discard_unanswered_plan,
-    seed_project_prompt,
-)
 from app.pipeline.lifecycle import project_lifecycle
-from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
-from app.pipeline.product_graph import (
-    EXPLORATION_NODE_TYPE,
-    display_rank_projection,
-    project_artifacts,
-)
-from app.pipeline.scope_classifier import (
-    CONTINUATION,
-    ChainFacts,
-    classify_chain_against_history,
-    load_historical_chains,
-)
-from app.pipeline.track_stack import build_track_stack
 from app.pipeline.outputs import (
     aggregate_step_cost,
     chat_delivery_output_ids,
-    compose_spec_prompt,
     is_chat_video_output,
-    list_visible_outputs,
-    model_facts_for,
     output_to_response,
     workflow_step_to_response,
     run_to_response,
-    visible_outputs_stmt,
 )
 from app.platform.billing import (
-    CreditsInsufficientError,
-    credits_at_ratio,
-    estimate_usd_range,
     release_run,
 )
 from app.platform.configs import get_config
@@ -149,7 +112,7 @@ async def list_projects(
             Output.render_spec.label("render_spec"),
         )
         .distinct(Output.project_id)
-        .where(Output.type == "clip")
+        .where(Output.type == "video")
         .where(Output.files.has_key("video"))
         .order_by(Output.project_id, Output.created_at.asc())
         .subquery()
@@ -227,55 +190,23 @@ async def get_project_results(
         .limit(1)
     )
     latest_run = latest_run_result.scalar_one_or_none()
-
-    # User-facing outputs only (internal node artifacts stay hidden). Outputs
-    # are replaced per type on each run, so the list is already "latest".
-    outputs = await list_visible_outputs(db, project_id)
-
-    nodes: list[WorkflowStep] = []
+    steps: list[WorkflowStep] = []
     if latest_run is not None:
-        nodes_result = await db.execute(
-            select(WorkflowStep)
-            .where(WorkflowStep.run_id == latest_run.id)
-            .order_by(WorkflowStep.seq)
+        steps = list(
+            (
+                await db.execute(
+                    select(WorkflowStep)
+                    .where(WorkflowStep.run_id == latest_run.id)
+                    .order_by(WorkflowStep.seq)
+                )
+            ).scalars().all()
         )
-        nodes = list(nodes_result.scalars().all())
-
     latest_run_resp = None
     if latest_run is not None:
         latest_run_resp = RunResponse.model_validate(latest_run)
         ratio = await get_config(db, "credits.per_cost_usd")
-        latest_run_resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
-        latest_run_resp.cost = aggregate_step_cost(nodes)
-
-    # Per-product spec prompts (ADR-051 F — hover prompt 框): the producing
-    # step's slot/params composed in the run's pinned ui_language, stamped
-    # only for outputs whose step is in this payload (carried rows stay None
-    # — the 框 falls back to its empty-revision form). Same stamp, the
-    # per-product model/provider facts (ADR-051 H — 详情面模型事实): the
-    # producing step's kind projected to its real model usage (a fact
-    # registry, never a selector).
-    if latest_run is not None:
-        ui_language = str((latest_run.context or {}).get("ui_language") or "en")
-        spec_by_step = {
-            str(n.id): compose_spec_prompt(n, ui_language) for n in nodes
-        }
-        kind_by_step = {str(n.id): n.kind for n in nodes}
-        for output in outputs:
-            if output.workflow_step_id is None:
-                continue
-            step_id = str(output.workflow_step_id)
-            prompt_text = spec_by_step.get(step_id)
-            if prompt_text:
-                output.spec_prompt = prompt_text
-            if step_id in kind_by_step:
-                output.model_facts = model_facts_for(kind_by_step[step_id], output)
-
-    # The deliverable card's track-stack face (ADR-113 §4): derived at read
-    # time from render_spec (clip products only); a transient stamp, never
-    # persisted — same posture as the dossier facts above.
-    for output in outputs:
-        output.track_stack = build_track_stack(output.render_spec)
+        latest_run_resp.steps = [workflow_step_to_response(step, ratio=ratio) for step in steps]
+        latest_run_resp.cost = aggregate_step_cost(steps)
 
     # Asset processing statuses power the overlay's pre-run placeholder (the
     # transcribing/parsing phase before the generation run's steps exist).
@@ -287,7 +218,6 @@ async def get_project_results(
     return {
         "project": project,
         "prompt": prompt,
-        "outputs": outputs,
         "latest_run": latest_run_resp,
         "assets": assets,
         "pending_brief": project.pending_brief,
@@ -297,16 +227,6 @@ async def get_project_results(
         "lifecycle": await _lifecycle_stamp(db, project),
     }
 
-
-# ---- 读面 legacy 映射 (词表 v3, ADR-076 批 C4) -------------------------------
-
-# The canvas-facing node vocabulary is the five media values (+ the two
-# transitional words for rows whose node species retires with 批 B4 / the
-# history sweep). DB rows never migrate (grow-only — a C2b+ re-stamp reuses
-# the old row without rewriting its type), so the mapping happens HERE, at
-# the one read frame. Key = spec.tool (the execution truth), never the bare
-# type — it covers reused legacy rows whose type is stale.
-_READ_FACE_MEDIA = frozenset({"text", "table", "image", "video", "audio"})
 
 # asset_type → 媒介值 (上传素材 = 媒介×manual, ADR-076 映射律): a slides
 # deck's consumption form is video (stills chain); a pasted transcript /
@@ -347,544 +267,77 @@ async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
     return stamp.to_payload()
 
 
-def _read_face(row_type: str, spec: dict, outputs: list) -> tuple[str, dict]:
-    """Map one graph row to the canvas's v3 face: (type, spec). Pure.
-
-    - 新行直传 (媒介五值 already carry their face + prototype from the stamp).
-    - asset → its asset_type's medium × manual (the asset dossier still
-      joins on the ORM type — the response carries it under `asset`).
-    - document (task_book / research_brief / role-less — transcript retired,
-      ADR-113) → text × manual (spec.role rides along as the internal birth
-      certificate).
-    - generator / processor / agent → by spec.tool: writers·research·revise
-      → text×generator (writer 卡缺 spec.text 时从最新 joined output 的
-      payload.content 合成 — the 全文卡 face); quotes/carousel →
-      image×generator; clips/translate/dub → video×editor; morph modifiers
-      → ``modifier`` 旧词 (批 B4 退役); materialize → ``materialize`` 过渡词
-      (历史清理收).
-    - 无 tool 回退 = text×manual (the full-text card is the safest reading).
-    """
-    if row_type in _READ_FACE_MEDIA:
-        return row_type, spec
-    if row_type == "asset":
-        medium = _ASSET_MEDIUM.get(str(spec.get("asset_type") or ""), "text")
-        return medium, {**spec, "prototype": "manual"}
-    if row_type == "document":
-        return "text", {**spec, "prototype": "manual"}
-    tool = str(spec.get("tool") or "")
-    if tool in ("write_post", "write_article", "research", "revise_script"):
-        face = {**spec, "prototype": "generator"}
-        if tool in ("write_post", "write_article") and not face.get("text") and outputs:
-            content = ((outputs[-1].payload or {}).get("content"))
-            if isinstance(content, str) and content:
-                face["text"] = content
-        return "text", face
-    if tool in ("write_quotes", "write_carousel"):
-        return "image", {**spec, "prototype": "generator"}
-    if tool in ("select_clips", "translate_clip", "dub_clip"):
-        return "video", {**spec, "prototype": "editor"}
-    if tool in ("reframe_clip", "add_music", "remove_filler"):
-        return "modifier", spec
-    if tool == "materialize_source":
-        return "materialize", spec
-    return "text", {**spec, "prototype": "manual"}
-
-
 @router.get("/{project_id}/graph", response_model=ProjectGraphResponse)
 async def get_project_graph(
     project_id: UUID,
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
 ) -> dict:
-    """The project graph's one read frame (ADR-057): nodes + edges + the
-    joined display rows (asset rows / visible product rows / per-node credit
-    estimates). The canvas renders this directly — zero projection, the
-    display model IS the domain model."""
+    """Read only source assets and ordinary manual Graph nodes."""
     project = await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
-
-    nodes = list(
+    rows = list(
         (
             await db.execute(
                 select(GraphNode)
                 .where(GraphNode.project_id == project_id)
-                .order_by(GraphNode.created_at)
+                .order_by(GraphNode.created_at.asc())
             )
-        )
-        .scalars()
-        .all()
+        ).scalars().all()
     )
-    # Workspace 合同 v4.2 C1 (2026-09-26 封板 — 图节点资格): exploration
-    # artifacts NEVER enter the Graph. Production stopped at the door (the
-    # family's home is exploration_rows now); legacy type="exploration"
-    # graph rows are read-filtered here — never migrated, never remapped
-    # (their canvas cards are deleted by the same contract; the B1-lite
-    # task_book read-filter below is the precedent).
-    nodes = [n for n in nodes if n.type != EXPLORATION_NODE_TYPE]
+    nodes = [
+        node for node in rows
+        if node.type == "asset" or (node.spec or {}).get("prototype") == "manual"
+    ]
+    node_ids = {node.id for node in nodes}
     edges = list(
         (
             await db.execute(
-                select(GraphEdge).where(GraphEdge.project_id == project_id)
+                select(GraphEdge)
+                .where(GraphEdge.project_id == project_id)
+                .order_by(GraphEdge.created_at.asc())
             )
-        )
-        .scalars()
-        .all()
+        ).scalars().all()
     )
-    # task_book + transcript 读面过滤（Workspace 合同 v4.2 C1-b / ADR-113）:
-    # both document roles and every edge touching them are filtered at READ
-    # time — the canvas shows the pure material flow (源 → 装配); the plan's
-    # ONLY seat is the dock pill (ADR-070), and the transcript's ONE seat is
-    # the asset row (its content layer, never a node). Production stopped at
-    # the stamps and legacy rows are hard-deleted by migration; this filter
-    # is the read-tolerance for any pre-migration / replica-lag straggler.
-    hidden_doc_ids = {
-        str(n.id)
-        for n in nodes
-        if n.type == "document"
-        and (n.spec or {}).get("role") in ("task_book", "transcript")
-    }
-    if hidden_doc_ids:
-        nodes = [n for n in nodes if str(n.id) not in hidden_doc_ids]
-        edges = [
-            e
-            for e in edges
-            if str(e.from_node) not in hidden_doc_ids
-            and str(e.to_node) not in hidden_doc_ids
-        ]
-    # ADR-097 §3: artifact 投影的源快照——B4-lite 之前 (隐藏 modifier 退出
-    # 默认投影后仍以 facet 摘要出现在交付物卡上; task_book / exploration
-    # 永不是 artifact 成员, 上面的过滤安全)。
-    artifact_source_nodes = list(nodes)
-    # B4-lite (2026-09-13 演示冻结期, ADR-072 批 B4 的读面先行): morph
-    # modifiers (reframe / add_music / remove_filler) rewrite their producer's
-    # SAME output rows in place — the old five-type stamp gave them their own
-    # node and back-wrote the identical output_ids, so the canvas played one
-    # clip set twice (「又来了一遍」走查). Their terminal shape is a LEVER on
-    # the assemble card (批 B4), never a node. Read-filter them with a safety
-    # gate: only when every product is also claimed by a surviving node, or
-    # the node has no products yet — a product must never vanish from the
-    # canvas. Stamp/runner/data untouched.
-    _MODIFIER_TOOLS = {"reframe_clip", "add_music", "remove_filler"}
-    surviving_claims: set[str] = set()
-    for n in nodes:
-        if (n.spec or {}).get("tool") not in _MODIFIER_TOOLS:
-            surviving_claims.update(str(o) for o in (n.spec or {}).get("output_ids") or [])
-    hidden_modifier_ids = {
-        str(n.id)
-        for n in nodes
-        if (n.spec or {}).get("tool") in _MODIFIER_TOOLS
-        and (
-            not (n.spec or {}).get("output_ids")
-            or {
-                str(o) for o in (n.spec or {}).get("output_ids") or []
-            }.issubset(surviving_claims)
-        )
-    }
-    if hidden_modifier_ids:
-        nodes = [n for n in nodes if str(n.id) not in hidden_modifier_ids]
-        edges = [
-            e
-            for e in edges
-            if str(e.from_node) not in hidden_modifier_ids
-            and str(e.to_node) not in hidden_modifier_ids
-        ]
-    # ADR-113: the read face projects the PERSISTED edge set directly — the
-    # transcript→consumer synthesis layer is retired with the transcript
-    # node (assets feed consumers' text legs as first-class stamped edges;
-    # the write-time settle eats the same persisted set, so birth frames and
-    # this projection share one graph).
-    if not nodes:
-        # 「lifecycle 键恒在」不变量 (Phase 3 Batch C 拍板 A): the zero-node
-        # frame carries the same stamp (an empty project's blocked vs
-        # unknown reads identically in today's UI).
-        return {
-            "nodes": [],
-            "edges": [],
-            "lifecycle": await _lifecycle_stamp(db, project),
-            "artifacts": [],
-        }
-
-    # ── ADR-097 §3 artifact 投影 + 第二层门 (批 C-2 消费开关) ─────────────
-    # 先于 rank: facet 退出后 Product DAG 收缩, rank 在收缩后的帧上计算
-    # (display x = rank × PITCH 是客户端的显示权威, 空列永不留洞)。
-    visible = await list_visible_outputs(db, project_id)
-    # The deliverable card's track-stack face (ADR-113 §4): derived at read
-    # time from render_spec — a transient stamp on the row, so every join
-    # below (node outputs / artifact members) carries it.
-    for output in visible:
-        output.track_stack = build_track_stack(output.render_spec)
-    outputs_by_id = {str(o.id): o for o in visible}
-
-    # The artifact projection's output facts — live rows are `visible`
-    # above; archived/historical rows referenced by artifact members join
-    # here (one IN query, archived versions keep their historical
-    # ownership — ADR-091 语义不动)。
-    member_output_ids = {
-        str(oid)
-        for n in artifact_source_nodes
-        for oid in ((n.spec or {}).get("output_ids") or [])
-    }
-    artifact_outputs_by_id: dict[str, Output] = dict(outputs_by_id)
-    missing_output_ids = [
-        UUID(str(oid)) for oid in member_output_ids if oid not in outputs_by_id
-    ]
-    if missing_output_ids:
-        artifact_outputs_by_id.update(
-            {
-                str(o.id): o
-                for o in (
-                    await db.execute(
-                        select(Output).where(Output.id.in_(missing_output_ids))
-                    )
-                )
-                .scalars()
-                .all()
-            }
-        )
-    artifact_blocks = project_artifacts(
-        artifact_source_nodes,
-        artifact_outputs_by_id,
-        visible_ids=outputs_by_id.keys(),
-    )
-
-    # 第二层门: keyed facet 退出默认投影。驱动源 = stamped artifact_role
-    # 字段 (两层门不合并——第一层 is_product_node / B4-lite 零改动)。安全
-    # 闸同 B4-lite 律: facet 的全部 live 产物已被其组的 deliverable 认领
-    # (或无产物) 才退出——产物永不从画布消失, 安全闸不过的 facet 照常
-    # 渲染为自己的卡。退出的外部边改锚到组的 deliverable (组收缩的读面
-    # 投影——零新边事实, 不改依赖), 组内边消失; ORM 行永不变异 (重锚
-    # 边以 dict 出生, A3-lite 合成行的先例)。
-    deliverable_of: dict[str, str] = {}  # facet node id → deliverable node id
-    for block in artifact_blocks:
-        d_id = block.get("deliverable_node_id")
-        if not d_id:
-            continue
-        for fid in block.get("facet_node_ids") or []:
-            deliverable_of[str(fid)] = str(d_id)
-    # rank 输入边集 (铁律② 镜像): 默认 = effective set; 有 facet 退出时
-    # 由下面的重锚环重建 (同重锚、无 triple 去重)。默认绑定必须在
-    # `if deliverable_of:` 之外——无 facet 组的项目 (如只有素材/草稿节点)
-    # 不进分支, 变量未绑定会在 display_rank_projection 处炸
-    # UnboundLocalError (2026-10-08 走查)。
-    rank_edges: list[Any] = edges
-    if deliverable_of:
-        source_by_id = {str(n.id): n for n in artifact_source_nodes}
-        deliverable_claims: dict[str, set[str]] = {}
-        for d_id in set(deliverable_of.values()):
-            d_node = source_by_id.get(d_id)
-            claims = (
-                {str(o) for o in ((d_node.spec or {}).get("output_ids") or [])}
-                if d_node is not None
-                else set()
-            )
-            deliverable_claims[d_id] = claims & set(outputs_by_id)
-        exiting = {
-            fid
-            for fid, d_id in deliverable_of.items()
-            if (
-                lambda f_node: f_node is None
-                or (
-                    {str(o) for o in ((f_node.spec or {}).get("output_ids") or [])}
-                    & set(outputs_by_id)
-                )
-                <= deliverable_claims.get(d_id, set())
-            )(source_by_id.get(fid))
-        }
-        if exiting:
-            nodes = [n for n in nodes if str(n.id) not in exiting]
-
-            reanchored: list[Any] = []
-            # 重锚投影的 triple 去重: lineage 端口标记边已随转写节点退役
-            # (ADR-113), 持久边集即全部输入 (读时合成层同批退役)。重锚出的
-            # 新行以 dict 出生 (A3-lite 合成行的先例——读时数据, 永不落库)。
-            rank_edges: list[Any] = []
-            seen_triples: set[tuple[str, str, str]] = set()
-            for e in edges:
-                src, dst = str(e.from_node), str(e.to_node)
-                etype = str(e.edge_type)
-                new_src = deliverable_of.get(src, src) if src in exiting else src
-                new_dst = deliverable_of.get(dst, dst) if dst in exiting else dst
-                if new_src == new_dst:
-                    continue  # 组内边消失进卡
-                if new_src == src and new_dst == dst:
-                    landed_edge = e  # untouched — the original row rides
-                else:
-                    landed_edge = {
-                        "id": uuid4(),
-                        "from_node": new_src,
-                        "from_port": str(e.from_port or f"out:{etype}"),
-                        "to_node": new_dst,
-                        "to_port": str(e.to_port or f"in:{etype}"),
-                        "edge_type": etype,
-                    }
-                rank_edges.append(landed_edge)
-                triple = (new_src, new_dst, etype)
-                if triple in seen_triples:
-                    continue
-                seen_triples.add(triple)
-                reanchored.append(landed_edge)
-            edges = reanchored
-
-    # ── Product Graph rank (I-PFA-02 / 合同 §7 C-1) ──────────────────────
-    # rank = the one spatial authority, computed HERE at the single point
-    # where both inputs are the final read frame: nodes carry STORAGE words
-    # (the predicate's design input layer — legacy materialize rows ride
-    # generator/processor/agent here, so the read-face flip of F1 never
-    # happens) and edges are the persisted set minus the read-filtered /
-    # facet-reanchored rows above (ADR-113: 读面与写时定居同吃持久边集)。
-    # C6 岛化 (v4.2): the island registry widens a band's rank slots by its
-    # frozen corridor — the read-time transform keeps every born frame's
-    # display x stable (append-only 保序律 in rank space). A LEGACY MIXED
-    # island (members spanning ranks — born under an older topology) is
-    # adjudicated per cohort; a single-member cohort's corridor is fully
-    # dead — its members ride dead_corridor and their spec.island stamp is
-    # withheld below (zero migration; the stored frame y stays, the client
-    # falls back to the plain column law).
-    island_rows = list(
-        (
-            await db.execute(
-                select(GraphIsland).where(GraphIsland.project_id == project_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    ranks, dead_corridor = display_rank_projection(nodes, rank_edges, island_rows)
-    # 岛内格镜像: islanded members carry their island's frozen reserved
-    # bottom so the client's air-compression never pulls a later band-mate
-    # into empty corridor cells (岛内的事; layout.ts projectSettledFrames
-    # 镜像同律). Corridor-dead members (ADR-098 §5) get NO stamp — the
-    # frozen-cell y and reserved_bottom never ship for them.
-    island_by_id = {str(i.id): i for i in island_rows}
-    from app.pipeline.graph_store import island_reserved_bottom
-
-    # ── Joined display rows ──────────────────────────────────────────────
-    asset_ids = [
-        UUID(str((n.spec or {}).get("asset_id")))
-        for n in nodes
-        if n.type == "asset" and (n.spec or {}).get("asset_id")
-    ]
-    assets_by_id = {}
-    if asset_ids:
-        assets_by_id = {
-            str(a.id): a
-            for a in (
-                await db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
-            )
-            .scalars()
-            .all()
-        }
-
-    # The outputs' dossier facts (spec_prompt / model_facts — OutputInspector
-    # and the lightbox read them, same stamp as /results): the producing
-    # step's slot/params composed in that step's run's pinned ui_language.
-    step_ids = [o.workflow_step_id for o in visible if o.workflow_step_id is not None]
-    if step_ids:
-        steps = list(
-            (
-                await db.execute(select(WorkflowStep).where(WorkflowStep.id.in_(step_ids)))
-            )
-            .scalars()
-            .all()
-        )
-        steps_by_id = {str(s.id): s for s in steps}
-        run_ids = list({s.run_id for s in steps})
-        runs = list(
-            (
-                await db.execute(select(WorkflowRun).where(WorkflowRun.id.in_(run_ids)))
-            )
-            .scalars()
-            .all()
-        )
-        ui_lang_by_run = {
-            str(r.id): str((r.context or {}).get("ui_language") or "en") for r in runs
-        }
-        for output in visible:
-            step = steps_by_id.get(str(output.workflow_step_id))
-            if step is None:
-                continue
-            prompt_text = compose_spec_prompt(
-                step, ui_lang_by_run.get(str(step.run_id), "en")
-            )
-            if prompt_text:
-                output.spec_prompt = prompt_text
-            output.model_facts = model_facts_for(step.kind, output)
-
-    ratio = await get_config(db, "credits.per_cost_usd")
-
-    resp_nodes: list[GraphNodeResponse] = []
+    asset_ids = [node.spec.get("asset_id") for node in nodes if node.type == "asset"]
+    assets = {
+        str(asset.id): asset
+        for asset in (
+            await db.execute(select(Asset).where(Asset.id.in_([UUID(str(item)) for item in asset_ids])))
+        ).scalars().all()
+    } if asset_ids else {}
+    response_nodes = []
     for node in nodes:
         spec = dict(node.spec or {})
-        if node.island_id is not None and str(node.id) not in dead_corridor:
-            island = island_by_id.get(str(node.island_id))
-            if island is not None:
-                # C6 岛内格镜像: the client renders the member at its frozen
-                # cell and floors the column's air-compression at the
-                # island's reserved bottom (layout.ts projectSettledFrames —
-                # 一条律两镜像).
-                spec["island"] = {
-                    "reserved_bottom": island_reserved_bottom(island),
-                }
-        estimate_credits: list[int] | None = None
-        if spec.get("estimate"):
-            usd_low, usd_high = estimate_usd_range(spec["estimate"])
-            estimate_credits = [
-                credits_at_ratio(usd_low, ratio),
-                credits_at_ratio(usd_high, ratio),
-            ]
-        asset_resp = None
+        asset_response = None
+        face_type = node.type
         if node.type == "asset":
-            asset = assets_by_id.get(str(spec.get("asset_id") or ""))
-            if asset is not None:
-                asset_resp = AssetResponse.model_validate(asset)
-                # The canvas's aspect truth (2026-09-13 — 素材节点同律):
-                # the source's real pixels ride to the asset card's sizing
-                # (probed at upload / processing into meta.width/height).
-                asset_meta = asset.meta if isinstance(asset.meta, dict) else {}
-                aw, ah = asset_meta.get("width"), asset_meta.get("height")
-                if isinstance(aw, int) and isinstance(ah, int) and aw > 0 and ah > 0:
-                    asset_resp.width = aw
-                    asset_resp.height = ah
-        node_outputs = sorted(
-            (
-                outputs_by_id[str(oid)]
-                for oid in (spec.get("output_ids") or [])
-                if str(oid) in outputs_by_id
-            ),
-            key=lambda o: o.created_at,
-        )
-        # 读面 legacy 映射 (批 C4): the canvas-facing type/spec — legacy
-        # rows map to the v3 vocabulary, new rows pass through. The ORM
-        # type stays the domain truth everywhere above (lite patches /
-        # asset dossier join).
-        face_type, face_spec = _read_face(node.type, spec, node_outputs)
-        resp_nodes.append(
-            GraphNodeResponse(
-                id=node.id,
-                type=face_type,
-                state=node.state,
-                spec=face_spec,
-                layout=node.layout or {},
-                estimate_credits=estimate_credits,
-                # None = the legacy compatibility state (合同 §7 C-1 约束❷):
-                # a B4-lite-gate survivor the predicate does not rank —
-                # tolerated here, named as a violation at the projection.
-                rank=ranks.get(str(node.id)),
-                asset=asset_resp,
-                outputs=[OutputResponse.model_validate(o) for o in node_outputs],
-                created_at=node.created_at,
-                updated_at=node.updated_at,
-            )
-        )
-
+            asset = assets.get(str(spec.get("asset_id")))
+            if asset is None:
+                continue
+            asset_response = AssetResponse.model_validate(asset)
+            meta = asset.meta or {}
+            if isinstance(meta.get("width"), int) and isinstance(meta.get("height"), int):
+                asset_response.width = meta["width"]
+                asset_response.height = meta["height"]
+            face_type = _ASSET_MEDIUM.get(str(asset.type), "text")
+            spec["prototype"] = "manual"
+        response_nodes.append(GraphNodeResponse(
+            id=node.id,
+            type=face_type,
+            state=node.state,
+            spec=spec,
+            layout=node.layout or {},
+            asset=asset_response,
+            created_at=node.created_at,
+            updated_at=node.updated_at,
+        ))
     return {
-        "nodes": resp_nodes,
-        "edges": [GraphEdgeResponse.model_validate(e) for e in edges],
-        # Same stamp, second transport (一票源两处运输 — mobile parity
-        # reads this frame).
+        "nodes": response_nodes,
+        "edges": [edge for edge in edges if edge.from_node in node_ids and edge.to_node in node_ids],
         "lifecycle": await _lifecycle_stamp(db, project),
-        # ADR-097 Phase 1: the artifact projection — membership reads only
-        # the stamped canonical keys (zero read-time inference); 批 C-2 起
-        # 画布消费本块 (facet 退出默认投影 + 单一 activity owner), unknown/
-        # legacy 节点永不在此 (默认投影直通)。
-        "artifacts": artifact_blocks,
     }
-
-
-@router.post(
-    "/{project_id}/graph/revise",
-    response_model=GraphReviseResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def revise_graph_node(
-    project_id: UUID,
-    request: GraphReviseRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> GraphReviseResponse:
-    """The card-face prompt direct edit's deterministic dispatch (ADR-058):
-    the revision IS a graph mutation, not a chat turn — ops are constructed
-    by CODE (``edit_prompt`` the named node with the user's verbatim program
-    + ``run`` the node and its downstream), land through the graph's ONLY
-    write door, and the run births through the ONLY birthplace. Zero intent
-    recognition (the node id is structurally exact), zero chat messages —
-    the node's own state cycle (stale → queued → running → done, the graph
-    frame's live read) is the whole feedback, so the run is stamped
-    ``origin: node_revise`` for every display surface to stay silent about.
-    """
-    project = await get_project_for_user(db, project_id, UUID(str(current_user.id)))
-    node = await db.get(GraphNode, request.node_id)
-    if node is None or UUID(str(node.project_id)) != project_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Node not found")
-
-    from app.pipeline.graph_revise import tasks_for_graph_nodes
-    from app.pipeline.graph_store import WiringRejected, apply_wiring_ops
-
-    try:
-        delta = await apply_wiring_ops(
-            db,
-            project_id,
-            [
-                {"op": "edit_prompt", "node": str(request.node_id), "prompt": request.prompt},
-                {"op": "run", "nodes": [str(request.node_id)]},
-            ],
-        )
-        run_nodes = list(
-            (
-                await db.execute(
-                    select(GraphNode).where(GraphNode.id.in_(delta.run_nodes))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        by_id = {str(n.id): n for n in run_nodes}
-        ordered = [by_id[str(nid)] for nid in delta.run_nodes if str(nid) in by_id]
-        tasks = tasks_for_graph_nodes(ordered)
-        if not tasks:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "The node's subgraph has nothing executable.",
-            )
-        run = await create_run(
-            db,
-            project,
-            TaskSpec(
-                tasks=tasks,
-                target_language=first_task_language(tasks) or project.language or "en",
-                # The edited program IS the instruction (the writers' steering
-                # line) — the same pin as the chat wiring path's.
-                instruction=request.prompt,
-                scope="full",
-            ),
-        )
-    except CreditsInsufficientError as exc:
-        # Same structured shortfall payload as /generate and the chat
-        # dispatch (BILLING §7) — the confirm card renders it in place.
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={
-                "code": "credits.insufficient",
-                "balance": exc.balance,
-                "required": exc.required,
-            },
-        ) from exc
-    except WiringRejected as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
-    except ValueError as exc:
-        # Birthplace rejects (active-run guard, requires gates) — 422 as-is.
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
-
-    run.context = {**(run.context or {}), "origin": "node_revise"}
-    project.status = ProjectStatus.PROCESSING
-    await db.commit()
-    await db.refresh(run)
-    return GraphReviseResponse(run_id=run.id, status=run.status)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -921,7 +374,6 @@ async def _delete_project_rows(db: DBDep, project: Project, user_id: UUID) -> No
     for asset in result.scalars().all():
         await delete_file(asset.file_url)
 
-    await db.execute(delete(Operation).where(Operation.project_id == project_id))
     await db.execute(delete(Publication).where(Publication.project_id == project_id))
     await db.execute(delete(Output).where(Output.project_id == project_id))
     # Credits (ADR-055): the ledger is append-only and outlives run rows, so
@@ -987,137 +439,6 @@ async def bulk_delete_projects(
     await db.commit()
     for pid in request.ids:
         await delete_project_files(pid, current_user.id)
-
-
-@router.post(
-    "/{project_id}/generate",
-    response_model=GenerateResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def generate_content(
-    project_id: UUID,
-    request: GenerateRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> GenerateResponse:
-    """Queue background generation for a project.
-
-    Ensures the project-scoped conversation exists so the original prompt is
-    persisted, then creates a PENDING WorkflowRun. The background worker claims
-    and runs it (see app.worker).
-    """
-    project = await get_project_for_user(
-        db, project_id, UUID(str(current_user.id))
-    )
-
-    # Full-scope runs from the composer must provide an explicit plan
-    # resolved by POST /chat (ADR-043 — the chain is the only grammar).
-    # Targeted scopes (hook/clip/derivative/render) carry no chain — they
-    # re-run one node family off target_id.
-    if request.tasks is None and request.scope == "full":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Plan must be confirmed via the chat plan path first.",
-        )
-    instruction = request.instruction or "Generate content from the uploaded assets."
-    resolved_language = (
-        request.target_language or first_task_language(request.tasks) or "en"
-    )
-
-    # Paid Authorization gate (ADR-087 §4 D2, Phase 4 B5 — SERVER-VERIFIABLE
-    # APPROVED RETRY): a tasks-bearing request is paid work, so it must be
-    # provably INSIDE the already-confirmed scope — exact retry of a
-    # historical confirmed chain, or one family's verbatim re-run of it
-    # (the 整类重做 shape). The proof is server-side chain equality against
-    # persisted run.context rows; the request's own fields are the retry
-    # REFERENCE, never the proof (Rule 9 — "client sent tasks" /
-    # "client says retry" authorize nothing). Unproven → the machine-
-    # readable blocker, never create_run (Rule 10): the chat dock is the
-    # only confirmation seat (D2-B/C).
-    if request.tasks is not None:
-        historical = await load_historical_chains(db, project_id)
-        verdict = classify_chain_against_history(
-            requested=ChainFacts(
-                tasks=tuple(t.model_dump() for t in request.tasks),
-                spec={
-                    "target_language": resolved_language,
-                    # Raw, not the materialized default — None reads as
-                    # "take the default" and strips in canonical form.
-                    "instruction": request.instruction,
-                    "tone_settings": (
-                        request.tone_settings.model_dump()
-                        if request.tone_settings
-                        else None
-                    ),
-                    "persona_id": request.persona_id,
-                    "scope": request.scope,
-                    "operation": request.operation,
-                    "target_id": request.target_id,
-                    "caption_mode": request.caption_mode,
-                    "source_asset_id": request.source_asset_id,
-                    "exemplar_asset_id": request.exemplar_asset_id,
-                },
-            ),
-            historical=historical,
-        )
-        if verdict.decision != CONTINUATION:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail={
-                    "code": "scope.unproven",
-                    "reasons": list(verdict.reasons),
-                },
-            )
-
-    # Persist the original prompt in the project-scoped conversation if it is
-    # not already there. This is a no-op when the conversation already has messages.
-    await seed_project_prompt(db, UUID(str(current_user.id)), project_id, instruction)
-
-    try:
-        # Entry constraints (clips-media gate, targeted-scope validity) reject
-        # at the birthplace — ValueError here is a client-facing 422.
-        task_spec = TaskSpec(
-            tasks=request.tasks,
-            target_language=resolved_language,
-            instruction=instruction,
-            tone_settings=(
-                request.tone_settings.model_dump() if request.tone_settings else None
-            ),
-            scope=request.scope,
-            operation=request.operation,
-            target_id=request.target_id,
-            persona_id=request.persona_id,
-            caption_mode=request.caption_mode,
-            source_asset_id=request.source_asset_id,
-            exemplar_asset_id=request.exemplar_asset_id,
-        )
-        run = await create_run(db, project, task_spec)
-    except CreditsInsufficientError as exc:
-        # User-level shortfall (ADR-055): the structured 422 the dock's grey
-        # row reads (BILLING §7) — strictly two vocabularies with provider
-        # 402s. BEFORE the ValueError catch (it subclasses ValueError).
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={
-                "code": "credits.insufficient",
-                "balance": exc.balance,
-                "required": exc.required,
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
-    project.status = ProjectStatus.PROCESSING
-    # The plan is confirmed now — drop the unconfirmed copy.
-    project.pending_brief = None
-    # /generate starts the run without a human answer — discard the open
-    # task_book question instead of archiving a fabricated answered question.
-    await discard_unanswered_plan(db, UUID(str(current_user.id)), project_id)
-    await db.commit()
-    await db.refresh(run)
-
-    return GenerateResponse(run_id=run.id, status=run.status)
 
 
 @router.get("/{project_id}/chat/outputs", response_model=list[ChatOutputEntry])
@@ -1211,116 +532,3 @@ async def get_project_run(
             detail="Run not found",
         )
     return await run_to_response(db, run)
-
-
-@router.get("/{project_id}/clips", response_model=list[OutputResponse])
-async def list_project_clips(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User | None = Depends(get_current_user),
-) -> list[Output]:
-    """List generated clip outputs for a project."""
-    await get_project_for_user(
-        db, project_id, current_user.id if current_user else None
-    )
-    return await list_visible_outputs(db, project_id, output_type="clip")
-
-
-@router.get("/{project_id}/derivatives", response_model=list[OutputResponse])
-async def list_project_derivatives(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User | None = Depends(get_current_user),
-) -> list[Output]:
-    """List generated derivative outputs (posts, quote cards, …) for a project."""
-    await get_project_for_user(
-        db, project_id, current_user.id if current_user else None
-    )
-    result = await db.execute(
-        visible_outputs_stmt()
-        .where(Output.project_id == project_id, Output.type != "clip")
-        .order_by(Output.created_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-@router.post("/{project_id}/export")
-async def export_project(
-    project_id: UUID,
-    request: ExportRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-) -> Response:
-    """Export all generated content for a project as a zip archive."""
-    project = await get_project_for_user(
-        db, project_id, current_user.id
-    )
-
-    outputs = await list_visible_outputs(db, project_id)
-    clips = [o for o in outputs if o.type == "clip"]
-    derivatives = [o for o in outputs if o.type != "clip"]
-
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Clips
-        if clips:
-            lines: list[str] = [f"# Clips for {project.title}\n"]
-            for idx, clip in enumerate(clips, start=1):
-                payload = clip.payload or {}
-                lines.append(f"\n## Clip {idx}: {payload.get('hook', '')}\n")
-                lines.append(f"- Duration: {payload.get('duration', 30)}s\n")
-                lines.append(f"- Mood: {payload.get('music_mood', 'calm')}\n")
-                lines.append(
-                    f"- Title options: {', '.join(payload.get('title_options') or [])}\n"
-                )
-            zf.writestr("clips.md", "".join(lines))
-
-        # Derivatives grouped by type
-        posts = [d for d in derivatives if d.type == "post"]
-        if posts:
-            lines = [f"# Social Posts for {project.title}\n"]
-            for d in posts:
-                content = d.payload or {}
-                lines.append(f"\n---\n\n{content.get('content', '')}\n")
-                hashtags = content.get("hashtags", [])
-                if hashtags:
-                    lines.append("\n" + " ".join(f"#{h.lstrip('#')}" for h in hashtags) + "\n")
-            zf.writestr("post.md", "".join(lines))
-
-        quotes = [d for d in derivatives if d.type == "quotes"]
-        if quotes:
-            lines = [f"# Quotes for {project.title}\n"]
-            for d in quotes:
-                for q in (d.payload or {}).get("quotes", []):
-                    lines.append(f"\n> \"{q.get('quote', '')}\"\n")
-                    lines.append(f"> — {q.get('attribution', '')}\n")
-            zf.writestr("quotes.md", "".join(lines))
-
-        articles = [d for d in derivatives if d.type == "article"]
-        if articles:
-            lines = [f"# Articles for {project.title}\n"]
-            for d in articles:
-                content = d.payload or {}
-                if content.get("title"):
-                    lines.append(f"\n## {content['title']}\n")
-                lines.append(f"\n{content.get('content', '')}\n")
-            zf.writestr("article.md", "".join(lines))
-
-        carousels = [d for d in derivatives if d.type == "carousel"]
-        if carousels:
-            lines = [f"# Carousels for {project.title}\n"]
-            for d in carousels:
-                for slide in (d.payload or {}).get("slides", []):
-                    if slide.get("title"):
-                        lines.append(f"\n## {slide['title']}\n")
-                    if slide.get("body"):
-                        lines.append(f"\n{slide['body']}\n")
-            zf.writestr("carousel.md", "".join(lines))
-
-    buffer.seek(0)
-    filename = f"{project.title.replace(' ', '_').lower() or 'export'}.zip"
-    return Response(
-        content=buffer.read(),
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )

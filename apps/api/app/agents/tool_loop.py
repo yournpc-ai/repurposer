@@ -58,7 +58,7 @@ import time
 from copy import deepcopy
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import Any
 
 import structlog
 from pydantic import BaseModel, ValidationError

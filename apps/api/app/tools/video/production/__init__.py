@@ -155,6 +155,25 @@ async def latest_video_approval(db, project):
     )
 
 
+async def existing_video_production(db, project, tasks):
+    """The Run already authorized by this exact pending production Dock."""
+    if len(tasks) != 1 or tasks[0].tool != "produce_video":
+        return None
+    if not isinstance(project.pending_brief, dict) or not project.pending_brief.get("intent"):
+        return None
+    pending = PendingPlan.model_validate(project.pending_brief)
+    receipt = pending.video_presentation or {}
+    ref = ProduceVideoParams.model_validate(tasks[0].params).version_ref.model_dump(mode="json")
+    if not receipt.get("presentation_complete") or any(receipt.get(key) != value for key, value in ref.items()):
+        return None
+    return await db.scalar(select(WorkflowRun).where(
+        WorkflowRun.project_id == project.id,
+        WorkflowRun.context["version_ref"]["composition_id"].as_string() == ref["composition_id"],
+        WorkflowRun.context["version_ref"]["composition_version_id"].as_string() == ref["composition_version_id"],
+        WorkflowRun.context["version_ref"]["content_digest"].as_string() == ref["content_digest"],
+    ).order_by(WorkflowRun.created_at.asc()).limit(1))
+
+
 async def pin_narration_preparation(project, tasks):
     """Pin the one original-only request after the ordinary plan/Start gate."""
     narration_tasks = [t for t in tasks or [] if t.tool == "prepare_narration"]

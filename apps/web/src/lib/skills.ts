@@ -32,7 +32,7 @@ export interface ChatSkillsResponse {
  * packs. They keep Home and Slash usable during a catalog-network outage;
  * the server still validates the exact version on POST /chat. */
 export const BUILTIN_SKILL_VERSIONS = {
-  "launch-film": "1.4.0",
+  "promo-video": "bdd94be16d60fa8f",
   "talking-head-video": "1.0.0",
   "text-animation": "1.0.0",
   "knowledge-explainer": "1.0.0",

@@ -341,52 +341,9 @@ DELETE /api/v1/projects/{project_id}/assets/{asset_id}
 
 ## 8. Generation Tasks
 
-### Trigger Generation
+### Start Production
 
-```http
-POST /api/v1/projects/{project_id}/generate
-```
-
-Request (a restricted retry example):
-
-```json
-{
-  "tasks": [
-    { "tool": "select_clips", "params": { "count": 5 } },
-    { "tool": "write_post", "params": { "language": "de" } }
-  ],
-  "target_language": "de",
-  "instruction": "聚焦实体机器人角度",
-  "tone_settings": null,
-  "scope": "full",
-  "target_id": null,
-  "operation": "regenerate",
-  "persona_id": null,
-  "caption_mode": null,
-  "source_asset_id": null,
-  "exemplar_asset_id": null
-}
-```
-
-**This is not the general first-generation door.** Initial task-book runs are born through the Chat plan/Start machine and `create_run`. `/generate` remains active for typed retries and targeted runs:
-
-- `tasks`: each `TaskItem` is `{ "tool": string, "params": object }`; `tool` names a current registry entry. The schema forbids extra keys — `{ "skill": ... }` is invalid. A `full`-scope request without `tasks` receives 422.
-- A tasks-bearing request is paid work and must match a historical confirmed chain exactly or as an ordered subsequence with equal work fields. The request only names the retry reference; persisted run history is the authorization evidence. An unproven/expansion request returns `422 { "detail": { "code": "scope.unproven", "reasons": [...] } }` before `create_run`.
-- Targeted scopes (`hook | clip | post | quotes | derivative | translation | render`) may omit `tasks` and use `target_id` plus `operation` (`regenerate | shorten | lengthen | translate | render`). Targeted validity is checked again at the run birthplace.
-- `target_language` is an optional fallback; otherwise the first task language is used, then `en`. `persona_id`, `caption_mode`, `source_asset_id` and `exemplar_asset_id` echo the historical scope being retried; they are not independent authorization proof.
-- Clips still require renderable media at the birthplace. Text-only projects cannot bypass the clips-media gate by calling this endpoint directly.
-- `create_run` wakes dormant assets required by the chain. Workers claim ready `workflow_steps`; clients do not need to poll every unrelated asset before using a valid retry surface.
-
-Response (202):
-
-```json
-{
-  "run_id": "uuid",
-  "status": "pending"
-}
-```
-
-There is no `message` field.
+Confirm the saved storyboard through Chat to start production. Use the Chat recovery action to retry uploading an already rendered video.
 
 ### Query Generation Runs
 

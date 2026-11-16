@@ -21,21 +21,14 @@ the route boundary answers 502 with the localized provider line (2026-08-14
 spend a paid run on it; an honest failure beats a wrong plan, and the
 user_key taxonomy makes the failure presentable).
 
-``chat_intent_agent`` — the chat loop's intent proposer (CHAT_ARCH §3): one
-user message + assembled context → one terminal call (propose_tasks /
-edit_output / revise_output / edit_graph / ask_user / answer — the terminal
-proposal states, mechanically — plus the iter-3 S2 exploration verbs: a post-run discovery
-goal runs the SAME candidates → selects → plans chain as the plan path and
-docks its decision package through this path's own seat, R6 parity). The
-LLM proposes; ``compile_graph`` / the operations registry /
-``apply_wiring_ops`` adjudicate — their rejections ARE the loop's
-feedback.
+``chat_intent_agent`` — the chat loop's intent proposer: production,
+Composition revision, clarification and ordinary answers. Rejected calls return
+as bounded feedback, never as an alternate product workflow.
 """
 
 from typing import Any
 
 from app.agents.tool_loop import ToolLoopAgent
-from app.chat.exploration_tools import exploration_chat_tools
 from app.chat.prompts import chat_intent_system, intent_router_system
 from app.chat.turn_tools import (
     CHAT_READ_TOOLS,
@@ -310,10 +303,8 @@ intent_router = ToolLoopAgent(
     system=intent_router_system(),
     temperature=0.2,
     assemble=_assemble_plan_turn,
-    # iter-2 ⑤ (R6): the exploration verbs ride the production projection —
-    # candidates/selects NON-terminal (the turn chains the discovery), only
-    # propose_plans is terminal (the dock = the paid-boundary stop, R15).
-    tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS, *exploration_chat_tools()],
+    # The current Composition authoring and production tools share one loop.
+    tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
     max_iterations=20,
 )
 
@@ -339,12 +330,7 @@ chat_intent_agent = ToolLoopAgent(
     system=chat_intent_system(),
     temperature=0.2,
     assemble=_assemble_chat_turn,
-    # iter-3 S2 (R6 parity): the exploration verbs ride the chat path too —
-    # candidates/selects NON-terminal (one turn carries the post-run
-    # discovery chain), propose_plans / revise_plan terminal (the dock = the
-    # paid-boundary stop, R15).
-    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS, *exploration_chat_tools()],
-    # max_iterations 12→20: discovery and direct video revision get bounded
-    # read/correction headroom; the independent no-progress stop still applies.
+    # Saved video edits use the same Composition and Run contracts as first creation.
+    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS],
     max_iterations=20,
 )

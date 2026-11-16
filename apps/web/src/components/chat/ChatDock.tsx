@@ -22,20 +22,13 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Eraser,
-  FileText,
   History,
-  Images,
-  Languages,
   Loader2,
   Mic2,
   Minus,
-  Music,
-  Newspaper,
   PanelRight,
   PictureInPicture2,
   Plus,
-  Quote,
   Undo2,
   Upload,
   Video,
@@ -204,88 +197,22 @@ import { useFileDrop } from "@/lib/useFileDrop"
 
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
  * dock time and projects what it will MAKE — the card's "you'll get"
- * section. `video` = the whole-source materialization (整条视频). */
+ * section. `video` = production of an exact saved CompositionVersion. */
 export type { DerivedRow, DecisionPlanRow } from "./timeline/types"
 
-/** Per-tool card anatomy (which controls a chain row gets). The label keys
- * reuse the results-tabs vocabulary for the five output tools; transforms
- * get their own words under generationOverlay.tools.*. (ADR-052 B3: the
- * per-row focus input retired — the card renders the brief instead;
- * params.focus stays a legal chat-set param, just never a blank UI box.) */
-const TOOL_META: Record<
-  string,
-  {
-    Icon: typeof Video
-    labelKey: string
-    /** param carrying the row's language ("language" | "target_language") */
-    langParam?: string
-    /** count stepper bounds + the default shown when the param is unset */
-    countLimits?: [number, number]
-    countDefault?: number
-    /** bilingual toggle (param "bilingual") */
-    bilingual?: boolean
-    /** caption-mode chain (intent.caption_mode) — the card shows the mode
-     * as a read-only fact row; edits ride the chat (prior_intent) */
-    captionMode?: boolean
-  }
-> = {
+const TOOL_META: Record<string, {
+  Icon: typeof Video
+  labelKey: string
+  langParam?: "language"
+}> = {
   produce_video: { Icon: Video, labelKey: "chat.videoStoryboard.video" },
-  select_clips: {
-    Icon: Video,
-    labelKey: "results.tabs.clips",
-    langParam: "language",
-    countLimits: [1, 10],
-    countDefault: 3,
-  },
-  write_post: {
-    Icon: FileText,
-    labelKey: "results.tabs.post",
-    langParam: "language",
-  },
-  write_quotes: {
-    Icon: Quote,
-    labelKey: "results.tabs.quotes",
-    langParam: "language",
-    countLimits: [1, 20],
-    countDefault: 3,
-    captionMode: true,
-  },
-  write_article: {
-    Icon: Newspaper,
-    labelKey: "results.tabs.article",
-    langParam: "language",
-  },
-  write_carousel: {
-    Icon: Images,
-    labelKey: "results.tabs.carousel",
-    langParam: "language",
-    countLimits: [2, 15],
-    countDefault: 6,
-  },
-  translate_clip: {
-    Icon: Languages,
-    labelKey: "generationOverlay.tools.translate_clip",
-    langParam: "target_language",
-    bilingual: true,
-  },
-  dub_clip: {
+  prepare_narration: {
     Icon: Mic2,
-    labelKey: "generationOverlay.tools.dub_clip",
-    langParam: "target_language",
-  },
-  remove_filler: {
-    Icon: Eraser,
-    labelKey: "generationOverlay.tools.remove_filler",
-  },
-  add_music: {
-    Icon: Music,
-    labelKey: "generationOverlay.tools.add_music",
+    labelKey: "chat.productionStages.speech_media",
+    langParam: "language",
   },
 }
 
-/** Legacy outputs-grammar slot type → its producing tool (read tolerance,
- * mirrors the server-side `_legacy_slots_to_tasks` — stored run contexts
- * and old clients' payloads upgrade on read, never on write). */
 /** The panel geometry's persistence key (float | docked) — 2026-09-06. */
 const PANEL_MODE_KEY = "repurposer-panel-mode"
 
@@ -758,10 +685,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       : {
           action: "draft",
           answer: null,
-          tasks: ["write_post", "write_quotes", "write_article"].map((tool) => ({
-            tool,
-            params: { language: "en" },
-          })),
+          tasks: [],
           specific_instruction: prompt,
         }
   )
@@ -2152,9 +2076,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
       }
       if (typeof task.params.count === "number") label += ` ×${task.params.count}`
-      if (task.params.bilingual === true) {
-        label += ` · ${t("generationOverlay.derive.bilingual")}`
-      }
       return label
     },
     [t]
@@ -3377,13 +3298,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               status: string
               context?: {
                 tasks?: unknown
-                outputs?: unknown
                 target_language?: string
-                dub_languages?: string[]
-                caption_languages?: string[]
-                caption_mode?: "bilingual" | "source_only" | "target_only" | null
                 aspect?: "9:16" | "1:1" | "16:9" | null
-                caption_bilingual?: boolean
                 instruction?: string | null
                 name?: string | null
               } | null
@@ -3394,19 +3310,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             if (run && (run.status === "pending" || run.status === "running" || run.status === "waiting_human")) {
               // Refresh after the run started: attach to it (intent rebuilt
               // from the run context for the confirmed-plan summary line).
-              // normalizeIntent prefers context.tasks (ADR-043) and upgrades
-              // legacy outputs/dub_languages rows via legacyOutputsToTasks.
+              // The current Run context carries the authorized task list.
               const runCtx = run.context ?? {}
               setIntent(
                 normalizeIntent({
                   tasks: runCtx.tasks,
-                  outputs: runCtx.outputs,
                   language: runCtx.target_language,
-                  dub_languages: runCtx.dub_languages,
-                  caption_languages: runCtx.caption_languages,
-                  caption_mode: runCtx.caption_mode,
                   aspect: runCtx.aspect,
-                  caption_bilingual: runCtx.caption_bilingual,
                   specific_instruction: runCtx.instruction,
                   // The run's LLM name (ADR-058) — the receipt title
                   // survives the refresh verbatim.
@@ -4965,7 +4875,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       <ChatOutputViewer
         outputId={viewerOutputId}
         entries={chatOutputEntries}
-        onNavigate={setViewerOutputId}
         onOpenChange={(open) => { if (!open) closeOutputViewer() }}
         onMention={mentionViewerOutput}
       />

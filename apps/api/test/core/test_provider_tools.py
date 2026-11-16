@@ -631,6 +631,7 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
     ).tools
     fresh_names = {tool.name for tool in fresh}
     assert "design_video" not in fresh_names
+    assert "get_understanding" in fresh_names
     assert "prepare_video_materials" in fresh_names
     assert "read_conversation_context" in fresh_names
     assert {"ask_user", "answer"} <= fresh_names
@@ -657,7 +658,8 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
     assert "design_video" not in saved_names
 
 
-def test_builtin_promo_active_draft_uses_single_scene_writes(installed_promo):
+@pytest.mark.asyncio
+async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_promo):
     from uuid import uuid4
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
     from app.agents.tool_loop import ContextSnapshot, tool_spec
@@ -741,7 +743,7 @@ def test_builtin_promo_active_draft_uses_single_scene_writes(installed_promo):
             "duration_ticks": 900000, "meta": {},
         },
     }
-    expanded = _expand_scene_authoring(merged["content"], args.scene, facts)
+    expanded = await _expand_scene_authoring(merged["content"], args.scene, facts)
     expanded = _music_bed_write(expanded, music_id, facts)
     expanded = _music_bed_write(expanded, str(music_id), facts)
     assert sum(binding["snapshot_id"] == str(music_id) for binding in expanded["sources"]) == 1
@@ -768,7 +770,8 @@ def test_builtin_promo_active_draft_uses_single_scene_writes(installed_promo):
     assert "Music: 1 saved Clip(s) in this version." in format_storyboard_text(read)
 
 
-def test_high_level_scene_verbatim_copy_fails_while_current_scene_is_retryable():
+@pytest.mark.asyncio
+async def test_high_level_scene_verbatim_copy_fails_while_current_scene_is_retryable():
     from app.agents.working_drafts import working_draft_diagnostic
     from app.editing.schemas import VersionSettings
     from app.tools.video.design import (
@@ -792,7 +795,7 @@ def test_high_level_scene_verbatim_copy_fails_while_current_scene_is_retryable()
     args = CompositionDesignVideoArgs(verbatim_copy=[
         "OxValue", "Intelligence, with accountability", "Close",
     ])
-    invalid = _expand_scene_authoring(content, CompositionSceneAuthoring(
+    invalid = await _expand_scene_authoring(content, CompositionSceneAuthoring(
         scene_id="first", headline="OxValue",
         supporting_text="INTELLIGENCE, WITH ACCOUNTABILITY",
     ), {})
@@ -806,18 +809,18 @@ def test_high_level_scene_verbatim_copy_fails_while_current_scene_is_retryable()
     assert diagnostic["errors"][0]["expected"] == args.verbatim_copy
     assert diagnostic["errors"][0]["actual"] == issue["actual"]
 
-    first = _expand_scene_authoring(content, CompositionSceneAuthoring(
+    first = await _expand_scene_authoring(content, CompositionSceneAuthoring(
         scene_id="first", headline="OxValue",
         supporting_text="Intelligence, with accountability",
     ), {})
     _validate_scene_verbatim_copy(args=args, composition=first)
-    second = _expand_scene_authoring(first, CompositionSceneAuthoring(
+    second = await _expand_scene_authoring(first, CompositionSceneAuthoring(
         scene_id="second", headline="Wrong close",
     ), {})
     with pytest.raises(CandidateDesignError) as rejected_last:
         _validate_scene_verbatim_copy(args=args, composition=second)
     assert rejected_last.value.issues[0]["actual"][-1] == "Wrong close"
-    valid = _expand_scene_authoring(first, CompositionSceneAuthoring(
+    valid = await _expand_scene_authoring(first, CompositionSceneAuthoring(
         scene_id="second", headline="Close",
     ), {})
     _validate_scene_verbatim_copy(args=args, composition=valid)
@@ -1773,6 +1776,7 @@ def test_explicit_design_constraints_share_wire_execution_and_draft_facts(instal
         "scene_count": 2, "target_seconds": 8.0,
     }
     assert explicit_design_constraints("a 4-second component-mode storyboard")["target_seconds"] == 4.0
+    assert explicit_design_constraints("Make one 9:16 video with a fixed cover crop")["aspect"] == "9:16"
 
 
 def test_complete_draft_repair_only_saves_the_existing_draft(installed_promo):

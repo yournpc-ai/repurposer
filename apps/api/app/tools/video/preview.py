@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.schemas import (
+    CaptionDerivation,
     CompositionContent,
     GeneratorObject,
     SpeechObject,
@@ -209,6 +210,7 @@ def compile_video_scrub(
         elif (
             isinstance(obj, TextObject)
             and obj.caption is not None
+            and isinstance(obj.caption, CaptionDerivation)
             and obj.caption.state == "derived"
             and obj.caption.alignment != "faster-whisper-script-v1"
         ):

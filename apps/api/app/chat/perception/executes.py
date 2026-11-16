@@ -18,28 +18,22 @@ Output budget: observations are model context, not user copy — each is
 capped (see the per-tool caps) so a read never floods the loop.
 """
 
-from typing import Any, get_args
 from uuid import UUID
 
 import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from app.models.schemas import (
     AssetStatus,
     AssetType,
-    ClipSpec,
-    CraftSkeleton,
     GetVideoVersionParams,
     MaterialUnderstanding,
-    MediaInput,
     PendingPlan,
 )
 from app.models.tables import (
     Asset,
-    ExplorationRow,
-    GraphEdge,
     GraphNode,
     NarrationAlignment,
     Output,
@@ -47,7 +41,7 @@ from app.models.tables import (
     WorkflowRun,
     WorkflowStep,
 )
-from app.tools.clips.transcript import (
+from app.editing.transcript import (
     build_anchored_transcript,
     group_cues,
     search_cues,
@@ -57,12 +51,6 @@ from app.tools.clips.transcript import (
 from app.tools.research.web import FETCH_TEXT_CAP, fetch_text, web_search
 from app.tools.world import page_reading_for_url, write_page_reading
 from app.pipeline.assets import asset_text_content
-from app.pipeline.exploration_store import (
-    KIND_CANDIDATE_SET,
-    KIND_CONTENT_PLAN,
-    KIND_SELECT,
-    output_fact,
-)
 
 
 # ---- params models (package-local, like tools/<pkg>/params.py) --------------
@@ -76,19 +64,8 @@ from app.pipeline.exploration_store import (
 
 
 
-class GetOutputSpecParams(BaseModel):
-    output_id: UUID = Field(
-        description=(
-            "The output's id from the context's Current outputs list or an "
-            "@-mention."
-        ),
-    )
-
-
 class GetNodeParams(BaseModel):
-    node_id: UUID = Field(
-        description="The graph node's id (from the context's Graph section)."
-    )
+    node_id: UUID
 
 
 class GetAssetParams(BaseModel):
@@ -127,19 +104,6 @@ class SearchMusicParams(BaseModel):
     query: str | None = Field(
         default=None,
         description="A mood or keyword to match against track mood/title (e.g. 'calm', 'upbeat'); null/empty = the full catalog.",
-    )
-
-
-class GetCraftSkeletonParams(BaseModel):
-    asset_id: UUID | None = Field(
-        default=None,
-        description="The reference video's asset id (from the context's Assets list or an @-mention); null = the conversation's pinned reference (the role question's / mention's exemplar).",
-    )
-
-
-class GetArtifactParams(BaseModel):
-    artifact_id: UUID = Field(
-        description="The exploration artifact's id (a candidate collection / a pick / a plan card — from the Graph section's exploration rows or a discovery-chain observation)."
     )
 
 
@@ -448,6 +412,11 @@ async def understanding_observation(db: AsyncSession, project: Project) -> tuple
             "paste it first.",
             False,
         )
+    if any(
+        asset.processing_status in (AssetStatus.PENDING, AssetStatus.PROCESSING)
+        for asset in assets
+    ) and not get_llm_client().capabilities.understands_video_audio:
+        await _stamp_processing_requested(project.id)
     row = await find_reusable_understanding(db, project, asset_digest(assets))
     if row is not None:
         rendered = _render_understanding(row, assets)
@@ -513,238 +482,6 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
     :func:`understanding_observation` for the landed flag."""
     text, _ = await understanding_observation(db, project)
     return text
-
-
-async def get_output_spec(db: AsyncSession, project: Project, params: GetOutputSpecParams) -> str:
-    """One output's current state — the read-before-write seat for relative
-    revisions (「字幕调小一点」「声音小一点不」: compose the op from the CURRENT
-    settings, never invent them).
-
-    Registry-compatible wrapper (text only); the turn dispatch seat reads
-    :func:`output_spec_observation` for the attached view images."""
-    text, _ = await output_spec_observation(db, project, params, with_images=False)
-    return text
-
-
-async def output_spec_observation(
-    db: AsyncSession,
-    project: Project,
-    params: GetOutputSpecParams,
-    *,
-    with_images: bool = True,
-) -> tuple[str, list["MediaInput"]]:
-    """The read's full result: (observation text, attached view images).
-
-    A film read reads back its storyboard VERSION facts (the edit model's
-    eyes, film 读取座) — either one output's version (``output_id`` named)
-    or the CURRENT version (``output_id`` omitted: the live draft when one
-    stands, else the latest delivered film — 待产稿可重读, so a later edit
-    turn never forms against a stale delivered read). The facts: the
-    version/digest identity, the per-scene facts (view reference + camera
-    text + narration), the timeline's PROVENANCE (executed spec / frozen
-    kept cut / planned draft / unreadable — planned values are never
-    labeled executed), the version's material-identity check against the
-    current pages (drift named, never passed off), and — while the edit
-    capability gate is on — the read-time ``base_ref``, the candidate view
-    catalog and the views' screenshots. The images are the MATERIAL's
-    captured page views, never frames of the rendered film."""
-    from app.agents.contexts import output_one_liner  # deferred: assembly layer
-
-
-    output = await db.get(Output, params.output_id)
-    if output is None or str(output.project_id) != str(project.id):
-        return (
-            f"No output with id {params.output_id} exists in this project — "
-            "pick an id from the context's Current outputs list or an "
-            "@-mention.",
-            [],
-        )
-    lines = [
-        f"Output {output.id} — type={output.type}, language={output.language}, "
-        f"status={output.status}"
-    ]
-    one_liner = output_one_liner(output)
-    if one_liner:
-        lines.append(f"- First line: {one_liner}")
-    spec = output.render_spec or {}
-    if spec:
-        # Clip outputs: the clip-spec's CURRENT settings, raw-dict read
-        # (read-tolerant across spec versions — a missing key just skips its
-        # line). The renderer's behavior contract stays in the spec; this is
-        # the agent's window onto it.
-        caption_on = spec.get("caption_enabled", True)
-        preset = spec.get("caption_style_preset")
-        if preset:
-            lines.append(
-                f"- Captions: {'on' if caption_on else 'off'}, style preset "
-                f"\"{preset}\""
-            )
-        music = spec.get("music") or {}
-        if music.get("enabled"):
-            lines.append(
-                f"- Music bed: mood \"{music.get('mood', '?')}\", gain "
-                f"{music.get('gain_db', '?')} dB"
-            )
-        else:
-            lines.append("- Music bed: none")
-        lines.append(
-            f"- Aspect: {spec.get('aspect', '?')}; segments: "
-            f"{len(spec.get('segments') or [])}"
-        )
-        dub = spec.get("dub")
-        if dub and dub.get("enabled"):
-            lines.append(f"- Dub: on, target language {dub.get('target_language', '?')}")
-    body = (output.payload or {}).get("body")
-    if isinstance(body, str) and body.strip():
-        lines.append(f"- Body (excerpt): {body.strip()[:600]}")
-    return "\n".join(lines), []
-_FILM_VIEW_IMAGE_MAX = 12
-_FILM_VIEW_THUMB_PX = 640
-_FILM_VIEW_DETAIL_PX = 1280
-
-
-def _page_view(page, shot_index: int) -> tuple[str | None, str] | None:
-    """The page's shot_index-th captured view as ``(storage key, heading)``;
-    None = no such view. A falsy key = the view exists but its screenshot
-    was never stored (the capture's visual half degraded). A shots-less
-    page (pre-B1 fold-only capture) exposes exactly its fold (shot 0 rides
-    ``screenshot_key`` — the fold-only law, never an invented section)."""
-    shots = getattr(page, "shots", None) or ()
-    if shots:
-        if not 0 <= shot_index < len(shots):
-            return None
-        shot = shots[shot_index]
-        return (shot.key, shot.heading or "(top)")
-    if shot_index == 0 and getattr(page, "screenshot_key", None):
-        return (page.screenshot_key, "(top)")
-    return None
-
-
-def _page_view_count(page) -> int:
-    """How many views the page exposes to the read (shots, or the fold-only
-    degenerate)."""
-    shots = getattr(page, "shots", None) or ()
-    if shots:
-        return len(shots)
-    return 1 if getattr(page, "screenshot_key", None) else 0
-
-
-
-
-
-
-
-
-
-
-# A node's program is LLM-written and short in practice — the cap is the
-# module's output-budget law (observations never flood the loop), NOT the
-# context's 140-char truncation: anything under the cap rides VERBATIM, an
-# over-cap program says so honestly (a silent truncation here would
-# re-introduce the blind-revision hole this read exists to close).
-_NODE_PROGRAM_LIMIT = 4000
-
-
-def _node_detail_lines(node, downstream: list[str]) -> list[str]:
-    """One node's full detail (the pure renderer — the DB seat below only
-    resolves and gathers). The program rides FULL, never truncated at the
-    context's 140 chars: this read is the edit_graph revision's factual
-    substrate (compose the NEW program from THIS one)."""
-    spec = node.spec or {}
-    lines = [f"Node {node.id} — type={node.type}, state={node.state}"]
-    label = spec.get("summary")
-    if label:
-        lines.append(f"- Label: {label}")
-    prompt = spec.get("prompt")
-    if prompt:
-        prompt = str(prompt)
-        if len(prompt) > _NODE_PROGRAM_LIMIT:
-            prompt = (
-                prompt[:_NODE_PROGRAM_LIMIT]
-                + f"… (truncated at {_NODE_PROGRAM_LIMIT} of {len(prompt)} chars)"
-            )
-        lines.append(f"- Program (full): {prompt}")
-    else:
-        lines.append("- Program: (none — this node's spec has no prompt)")
-    output_ids = spec.get("output_ids") or []
-    if output_ids:
-        lines.append(
-            f"- Products: {len(output_ids)} (ids: "
-            + ", ".join(str(oid) for oid in output_ids)
-            + ")"
-        )
-    else:
-        lines.append("- Products: none")
-    if downstream:
-        lines.append("- Downstream: " + ", ".join(downstream))
-    else:
-        lines.append("- Downstream: none")
-    return lines
-
-
-async def get_node(db: AsyncSession, project: Project, params: GetNodeParams) -> str:
-    """One graph node's FULL current program + state + products + downstream —
-    the edit_graph read-before-write seat (A-1, 2026-09-22): the context's
-    Graph section truncates long programs, and the revision rule ("compose
-    the NEW program from the CURRENT one, never invent") is unsatisfiable
-    from a truncation. Read the node here first; then compose."""
-    node = await db.get(GraphNode, params.node_id)
-    if node is None or str(node.project_id) != str(project.id):
-        return (
-            f"No node with id {params.node_id} exists in this project — "
-            "pick an id from the context's Graph section."
-        )
-    downstream = [
-        str(e.to_node)
-        for e in (
-            await db.execute(
-                select(GraphEdge).where(
-                    GraphEdge.project_id == project.id,
-                    GraphEdge.from_node == node.id,
-                )
-            )
-        )
-        .scalars()
-        .all()
-    ]
-    return "\n".join(_node_detail_lines(node, downstream))
-
-
-# The caption-style catalog's model-facing behavior notes. The ids MIRROR the
-# clip-spec Literal (which mirrors packages/clip/src/captions.ts — the behavior
-# source of truth); adding a style = catalog line + Literal + this dict (the
-# import-time assert below is the drift alarm, and the pure consistency suite
-# re-gates it).
-_CAPTION_STYLE_LINES: dict[str, str] = {
-    "clean-bottom": "one calm line at the bottom, no animation (the default)",
-    "karaoke-highlight": "one line at a time, the spoken word lights up",
-    "fade-in": "each line fades in gently",
-    "pop-in": "each line pops in with a slight overshoot",
-    "slide-up": "each line slides up into place",
-    "stacking": "recent lines stay on screen as a sliding stack",
-}
-
-_SPEC_PRESET_IDS = set(
-    get_args(ClipSpec.model_fields["caption_style_preset"].annotation)
-)
-assert set(_CAPTION_STYLE_LINES) == _SPEC_PRESET_IDS, (
-    "caption-style descriptions drifted from the clip-spec Literal: "
-    f"{set(_CAPTION_STYLE_LINES) ^ _SPEC_PRESET_IDS}"
-)
-
-
-async def list_caption_styles(db: AsyncSession, project: Project, params) -> str:
-    """The caption style presets with one-line behavior notes — the 「有什么
-    其他字幕样式吗？」journey's catalog read (the options the agent offers
-    ride ITS OWN speech; this is the factual substrate)."""
-    lines = ["Caption style presets (the full catalog):"]
-    for preset, note in _CAPTION_STYLE_LINES.items():
-        lines.append(f"- {preset}: {note}")
-    lines.append(
-        "Offer 2-4 as options with your own wording in the interface "
-        "language; the preset id rides the edit op / task param."
-    )
-    return "\n".join(lines)
 
 
 async def search_music(db: AsyncSession, project: Project, params: SearchMusicParams) -> str:
@@ -900,8 +637,6 @@ def _pending_plan_lines(plan) -> list[str]:
             )
     if intent is not None and intent.specific_instruction:
         lines.append(f"- Extra instruction: {intent.specific_instruction[:300]}")
-    if intent is not None and intent.caption_mode:
-        lines.append(f"- Caption mode: {intent.caption_mode}")
     # iter-3 S3 (A-1 观察合同 ≥ 行动合同): the decision package's READING
     # layer — revise_plan's plan_id is reachable ONLY here on the chat
     # path (the plan path sees the package block in its own context).
@@ -919,6 +654,15 @@ def _pending_plan_lines(plan) -> list[str]:
                 f"{p.get('title') or '(unnamed)'}: {outputs} [{p.get('state')}]"
             )
     return lines
+
+
+async def get_node(db: AsyncSession, project: Project, params: GetNodeParams) -> str:
+    row = await db.scalar(select(GraphNode).where(
+        GraphNode.id == params.node_id, GraphNode.project_id == project.id,
+    ))
+    if row is None:
+        return "No such asset or manual Graph node"
+    return json.dumps({"id": str(row.id), "type": row.type, "state": row.state, "spec": row.spec}, ensure_ascii=False)
 
 
 async def get_graph(db: AsyncSession, project: Project, params) -> str:
@@ -985,7 +729,7 @@ async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:
 #
 # The discovery chain's evidence substrate: search_transcript is the
 # DETERMINISTIC retrieval read (keyword retrieval over cue lines — the cue
-# law lives in app/tools/clips/transcript), get_segment reads one range's
+# transcript grouping lives in editing/transcript.py; get_segment reads one range's
 # verbatim speech (the evidence check's twin — the agent quotes from THIS
 # text, and the exploration door rejects anything else). Both degrade
 # honestly on assets without word-level timestamps (the understanding
@@ -1419,190 +1163,6 @@ async def _conversation_role_pins(
     return (str(source) if source else None, str(exemplar) if exemplar else None)
 
 
-async def get_craft_skeleton(
-    db: AsyncSession, project: Project, params: GetCraftSkeletonParams
-) -> str:
-    """The reference video's craft skeleton — what a remix BORROWS (ADR-078):
-    aspect / shot rhythm / caption best-fit / music mood = measured facts
-    (never guesses), plus the honest 做不到 list (gaps — the 带理由纠偏
-    substrate, JOURNEYS 旅程二 2b). The craft_decompiled trigger turn's first
-    read; the 「照这个案例做」family's factual substrate."""
-    from app.pipeline.decompile import (  # deferred: pipeline weight
-        find_reusable_skeleton,
-    )
-
-    asset_id = getattr(params, "asset_id", None)
-    if asset_id is None:
-        _, pinned = await _conversation_role_pins(db, project)
-        asset_id = pinned
-        if asset_id is None:
-            return (
-                "No reference video is pinned in this conversation — the "
-                "user pins one by @-mentioning a video as the case to "
-                "imitate, or by answering the role question."
-            )
-    asset = await db.get(Asset, UUID(str(asset_id)))
-    if asset is None or str(asset.project_id) != str(project.id):
-        return (
-            f"No asset with id {asset_id} exists in this project — pick an "
-            "id from the context's Assets list or an @-mention."
-        )
-    if asset.type != AssetType.VIDEO:
-        return (
-            f"Asset {asset.id} is not a video — only a video can be a style "
-            "reference."
-        )
-    row = await find_reusable_skeleton(db, project, asset)
-    if row is None:
-        status = str(asset.processing_status)
-        if status in ("failed",):
-            # A failed processing never produces a warm skeleton — the
-            # "still processing" copy below would stall the planner FOREVER
-            # on this asset (R1 B1 S16 实测: the agent waits for a skeleton
-            # that never lands and the remix journey dead-ends pre-plan).
-            return (
-                "The reference video's own processing FAILED, so no warm "
-                "skeleton is coming — but a remix is still possible: the "
-                "run's decompile step reads the bytes directly, and if the "
-                "case proves unreadable the cut honestly proceeds as a "
-                "regular one (exemplar params fall back to defaults). "
-                "Present the plan, saying this plainly."
-            )
-        if status != "completed":
-            return (
-                "The reference video is still processing — its craft "
-                "skeleton lands in a moment. Say so honestly rather than "
-                "guessing at its style."
-            )
-        return (
-            "No craft skeleton exists for this video yet — it materializes "
-            "when the decompile step runs (or its warm fires on the role "
-            "pin). Never invent its style."
-        )
-    try:
-        s = CraftSkeleton.model_validate(row.payload)
-    except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
-        return "A craft skeleton exists but its stored shape is stale — it will be regenerated on the next run."
-    name = asset.display_name or str(asset.id)
-    lines = [f'Craft skeleton of "{name}" (measured, zero guessing):']
-    lines.append(
-        f"- Aspect {s.aspect}, {s.duration_seconds:.0f}s, "
-        f"{s.rhythm.shot_count} shots "
-        f"({s.rhythm.cuts_per_minute:.0f} cuts/min — {s.rhythm.pace} pace)"
-    )
-    if s.captions.present:
-        cap = f'- Captions: preset "{s.captions.preset}"'
-        if s.captions.color:
-            cap += f", color {s.captions.color}"
-        if s.captions.position is not None:
-            cap += f", centered at y={s.captions.position.y:.2f}"
-        lines.append(cap)
-    else:
-        lines.append("- Captions: none detected in the case")
-    if s.music_mood:
-        lines.append(f'- Music mood: "{s.music_mood}"')
-    if s.hook_device:
-        lines.append(f"- Opening hook: {s.hook_device}")
-    if s.gaps:
-        lines.append("- What a remix CANNOT reproduce (say this honestly):")
-        for gap in s.gaps:
-            wording = (
-                "not possible with the current render contract"
-                if gap.severity == "unsupported"
-                else "not yet available"
-            )
-            detail = f" — {gap.detail}" if gap.detail else ""
-            lines.append(f"  - {gap.kind}: {wording}{detail}")
-    return "\n".join(lines)
-
-
-# ---- get_artifact (iter-3 S6, ADR-088 §7 read 洞销账 / N-58) ----------------------
-
-_ARTIFACT_MEMBERS_CAP = 12
-
-
-async def get_artifact(
-    db: AsyncSession, project: Project, params: GetArtifactParams
-) -> str:
-    """One exploration artifact's user-safe full fields: the candidate
-    collection's sections (verbatim), a pick's verdict/reason + the section
-    it POINTS at (R7 dereferenced at read time — the pointer never makes
-    the model chase a second read), a plan card's deliverables. Tenant-scoped
-    like every read; a miss answers honestly."""
-    node = await db.get(ExplorationRow, params.artifact_id)
-    if node is None or str(node.project_id) != str(project.id):
-        return (
-            f"No exploration artifact with id {params.artifact_id} exists in "
-            "this project — pick an id from a discovery-chain observation."
-        )
-    spec = node.spec or {}
-    kind = spec.get("exploration_kind")
-    if kind == KIND_CANDIDATE_SET:
-        members = spec.get("members") or []
-        lines = [
-            f"Candidate collection (id={node.id}, state={node.state}) — "
-            f"topic \"{spec.get('topic')}\", {len(members)} section(s):"
-        ]
-        for i, m in enumerate(members[: _ARTIFACT_MEMBERS_CAP]):
-            speaker = m.get("speaker") or "—"
-            lines.append(
-                f"  {i}) [{m.get('start')}–{m.get('end')}s] {speaker}: "
-                f"{m.get('excerpt') or ''}"
-            )
-        if len(members) > _ARTIFACT_MEMBERS_CAP:
-            lines.append(f"  … ({len(members) - _ARTIFACT_MEMBERS_CAP} more sections)")
-        return "\n".join(lines)
-    if kind == KIND_SELECT:
-        idx = spec.get("member_index")
-        lines = [
-            f"Pick (id={node.id}, state={node.state}): member {idx} of "
-            f"collection {spec.get('candidate_set_id')}",
-            f"- verdict: {spec.get('verdict')}",
-            f"- reason: {spec.get('reason')}",
-        ]
-        # R7 dereference: the pointed member's range + excerpt ride the read.
-        cset = await db.get(ExplorationRow, UUID(str(spec.get("candidate_set_id"))))
-        members = ((cset.spec or {}).get("members") or []) if cset is not None else []
-        if isinstance(idx, int) and 0 <= idx < len(members):
-            m = members[idx]
-            lines.append(
-                f"- the section: [{m.get('start')}–{m.get('end')}s] "
-                f"{m.get('excerpt') or ''}"
-            )
-        return "\n".join(lines)
-    if kind == KIND_CONTENT_PLAN:
-        outputs = spec.get("outputs") or []
-        lines = [
-            f"Plan (id={node.id}, state={node.state}): "
-            f"{spec.get('title') or '(unnamed)'} — from pick "
-            f"{spec.get('select_id')}, {len(outputs)} output(s):"
-        ]
-        for o in outputs:
-            line = f"  - {output_fact(o)}"
-            if o.get("brief"):
-                line += f" — {o['brief']}"
-            lines.append(line)
-        issues = spec.get("issues") or []
-        if issues:
-            lines.append("- open gaps: " + "; ".join(str(i) for i in issues))
-        return "\n".join(lines)
-    return (
-        f"Exploration artifact {node.id} (state={node.state}) — unrecognized "
-        f"kind {kind!r}."
-    )
-
-
-# ---- web reads (the research pair's chat projection) -------------------------
-#
-# The SAME zero-key web pair the research node drives (app/tools/research/
-# web.py), projected into the chat read family unchanged — one capability,
-# one implementation, two altitudes (chat read / DAG loop); no second web
-# tool with qualification clauses. Degrade-honest by construction: an empty
-# read is an honest "nothing came back" observation, never an exception.
-
-_WEB_SNIPPET_CAP = 300
-
-
 async def get_web_page(db: AsyncSession, project: Project, params: GetWebPageParams) -> str:
     """Read one web page's readable text. consult-first (world-seat 律):
     the project's stored reading (page_readings) answers when present —
@@ -1629,6 +1189,9 @@ async def get_web_page(db: AsyncSession, project: Project, params: GetWebPagePar
         )
     await write_page_reading(project.id, url, text)
     return f"Readable text of {url} (capped at {FETCH_TEXT_CAP} chars):\n\n{text}"
+
+
+_WEB_SNIPPET_CAP = 500
 
 
 async def search_web(db: AsyncSession, project: Project, params: SearchWebParams) -> str:

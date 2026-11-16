@@ -1,17 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiFetch } from "@/lib/api"
-import { fetchRecipeCards, type RecipePublic } from "@/lib/recipes"
 import type { ChatMention } from "@/lib/mentions"
 import { fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { consumeLandingCreate } from "@/lib/landingCreate"
 
 import { HomeComposer } from "@/components/home/HomeComposer"
-import { RecipeTabs } from "@/components/home/RecipeTabs"
-import { RecipeShelf } from "@/components/home/RecipeShelf"
-import { resolveRecipeFamilies } from "@/components/home/recipeFamilies"
 import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
@@ -41,7 +37,6 @@ const DOCK_WINDOW_PX = 140
 function Home() {
   const { t } = useTranslation()
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [cards, setCards] = useState<RecipePublic[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
   // through `editorRef`.
@@ -50,20 +45,6 @@ function Home() {
   const [skillOptions, setSkillOptions] = useState<SkillOption[]>([])
   const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null)
   const editorRef = useRef<MentionEditorHandle>(null)
-  // Demo sound is a HOME-GLOBAL singleton: every video keeps playing, but
-  // only the hovered/focused card may be audible; claiming sound mutes the
-  // previous owner without pausing it.
-  const [demoSoundOwner, setDemoSoundOwner] = useState<string | null>(null)
-  const claimDemoSound = useCallback(
-    (id: string) => setDemoSoundOwner(id),
-    [],
-  )
-  const releaseDemoSound = useCallback(
-    (id: string) =>
-      setDemoSoundOwner((owner) => (owner === id ? null : owner)),
-    [],
-  )
-
   // App-shell surface: the route root is exactly the viewport tall (h-svh) and
   // NEVER scrolls.
   // ONE scrollport holds everything (stage spacer / hero / composer slot /
@@ -175,18 +156,11 @@ function Home() {
   }, [measureRect])
 
   useEffect(() => {
-    // Each fetch degrades to empty independently — a recipes-endpoint hiccup
-    // must not take the composer's personas down with it (and with zero
-    // cards the shelf simply renders nothing — 无真内容不上架).
     Promise.all([
-      apiFetch("/api/v1/personas")
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
-      fetchRecipeCards().catch(() => []),
+      apiFetch("/api/v1/personas").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetchChatSkills().catch(() => ({ items: [] })),
-    ]).then(([s, rc, skills]) => {
-      setPersonas((s as Persona[]) || [])
-      setCards(rc)
+    ]).then(([personaRows, skills]) => {
+      setPersonas((personaRows as Persona[]) || [])
       setSkillOptions(skills.items)
     })
   }, [])
@@ -253,88 +227,6 @@ function Home() {
       skillOptionForReference(handoff.skill, skillOptions),
     )
   }, [handlePrefill, skillOptions])
-
-  // Two-level tab shelf (D5, prototype 屏①): families × subs × horizontal
-  // shelves, resolved data-driven — a family without real content never
-  // renders (上架纪律: 无真 demo 不上架). The selection is the route's; the
-  // per-family sub memory survives family hops (prototype parity), and an
-  // invalidated selection (cards refetch) falls back to the first seat.
-  const families = useMemo(
-    () => resolveRecipeFamilies(cards, skillOptions),
-    [cards, skillOptions],
-  )
-  const [activeFamilyId, setActiveFamilyId] = useState<string | null>(null)
-  const [subByFamily, setSubByFamily] = useState<Record<string, string>>({})
-  const activeFamily =
-    families.find((f) => f.id === activeFamilyId && !f.disabled) ??
-    families[0] ??
-    null
-  const activeSub =
-    activeFamily?.subs.find((s) => s.id === subByFamily[activeFamily.id]) ??
-    activeFamily?.subs[0] ??
-    null
-
-  // Sub tabs are ANCHORS, not filters (Pexo-parity): every sub of the active
-  // family renders its shelves stacked below, and tapping a sub scrolls its
-  // section under the pinned tabs bar. The underline follows scroll position
-  // via the spy below (subByFamily doubles as the spy's write target, so the
-  // per-family memory semantic is unchanged).
-  const tabsBarRef = useRef<HTMLDivElement>(null)
-  const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const handleSelectSub = useCallback((familyId: string, subId: string) => {
-    setSubByFamily((m) => ({ ...m, [familyId]: subId }))
-    const scroller = scrollRef.current
-    const section = subSectionRefs.current[subId]
-    const bar = tabsBarRef.current
-    if (!scroller || !section || !bar) return
-    // The section lands under whatever pins above it: the bar's height PLUS
-    // its sticky top (0 on md+, 3.5rem below md where the glass MobileHeader
-    // overlays the scrollport). The computed-style read keeps the breakpoint
-    // single-sourced in the bar's className.
-    const barTop = parseFloat(getComputedStyle(bar).top) || 0
-    const top =
-      section.getBoundingClientRect().top -
-      scroller.getBoundingClientRect().top +
-      scroller.scrollTop -
-      barTop -
-      bar.offsetHeight -
-      4
-    scroller.scrollTo({ top, behavior: "smooth" })
-  }, [])
-
-  // Scroll spy: the sub underline tracks the section riding under the pinned
-  // bar (bar bottom + slack). Only meaningful when the sub row renders at
-  // all (2+ subs — same gate as RecipeTabs). Stale ref entries from a
-  // previous family are never read: the spy only walks the active family's
-  // subs.
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el || !activeFamily || activeFamily.subs.length < 2) return
-    const subs = activeFamily.subs
-    const familyId = activeFamily.id
-    let raf = 0
-    const spy = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const barBottom = tabsBarRef.current?.getBoundingClientRect().bottom ?? 0
-        let current = subs[0]?.id
-        for (const sub of subs) {
-          const sec = subSectionRefs.current[sub.id]
-          if (sec && sec.getBoundingClientRect().top <= barBottom + 24)
-            current = sub.id
-        }
-        if (current)
-          setSubByFamily((m) =>
-            m[familyId] === current ? m : { ...m, [familyId]: current },
-          )
-      })
-    }
-    el.addEventListener("scroll", spy, { passive: true })
-    return () => {
-      el.removeEventListener("scroll", spy)
-      cancelAnimationFrame(raf)
-    }
-  }, [activeFamily])
 
   return (
     // App-shell surface: the root is exactly the viewport tall and NEVER
@@ -414,89 +306,7 @@ function Home() {
           </div>
         </div>
 
-        {/* Recipe shelf (D5, flora-parity-ui 批): the two-level tab track
-            (families × subs) rides in flow below the hero cluster and PINS
-            at the viewport top once scrolled to (Pexo parity) — a full-bleed
-            page-fill bar with its own bottom dissolve. Sub tabs are ANCHORS:
-            every sub of the active family renders its shelves stacked below
-            and the whole stack scrolls beneath the bar. Cards reuse
-            RecipeCard (schematic covers); MG families render real demo
-            videos as muted autoplay loops with hover sound/action veils.
-            Every card click prefills the composer — the ONLY destination
-            (禁则 8, 永不是模板编辑器).
-            mt-0.5 = a small structural gap between the composer and the
-            recipe section.
-            min-h = scroll RUNWAY, structural not a magic number: the dock
-            flip needs scrollTop > pin + slotH, i.e. the content below the
-            slot must exceed one viewport. min-h-[calc(100svh+96px)] on the
-            section guarantees that with ANY shelf count on ANY viewport
-            (scroll range = pin + slotH + section − 100svh ≥ pin + slotH +
-            96px) — short demo-period shelves can always scroll far enough
-            for the composer to exit and dock; long shelves never notice. */}
-        <section className="mt-0.5 min-h-[calc(100svh+96px)] pb-[max(96px,40vh)]">
-          {activeFamily && (
-            <>
-              {/* Sticky tabs bar: plain sticky top-0 — the top edge is free
-                  now (the composer docks at the BOTTOM), so no measured
-                  offset is needed. Below md it pins at top-14, flush under
-                  the glass MobileHeader that overlays the scrollport. In-flow
-                  face: page fill, no border, no shadow; the 16px mask fade
-                  dissolves whatever scrolls under. */}
-              <div
-                ref={tabsBarRef}
-                className="sticky top-0 z-20 bg-background px-4 pb-6 pt-6 [mask-image:linear-gradient(to_bottom,black_calc(100%-16px),transparent)] max-md:top-14 sm:px-6"
-              >
-                <div className="mx-auto w-full max-w-6xl">
-                  <RecipeTabs
-                    families={families}
-                    activeFamilyId={activeFamily.id}
-                    activeSubId={activeSub?.id ?? null}
-                    onSelectFamily={setActiveFamilyId}
-                    onSelectSub={handleSelectSub}
-                  />
-                </div>
-              </div>
-              <div className="mt-4 px-4 sm:px-6">
-                <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-10">
-                  {activeFamily.subs.map((sub, subIndex) => (
-                    <div
-                      key={sub.id}
-                      ref={(el) => {
-                        subSectionRefs.current[sub.id] = el
-                      }}
-                      className="flex w-full min-w-0 max-w-full flex-col gap-8"
-                    >
-                      {sub.shelves.map((shelf, shelfIndex) => (
-                        <RecipeShelf
-                          key={shelf.id}
-                          title={t(`recipes.shelf.subs.${sub.id}`)}
-                          items={shelf.items}
-                          onPrefill={handlePrefill}
-                          soundOwner={demoSoundOwner}
-                          onSoundStart={claimDemoSound}
-                          onSoundStop={releaseDemoSound}
-                          // Tour step 3 anchors the first demo card's
-                          // Use-prompt entry — the Ads family's first shelf
-                          // item, where the home page opens. The tour's
-                          // scrollIntoView block:"center" centers it in the
-                          // viewport between the pinned tabs and the bottom
-                          // dock; a missing demo asset → the step auto-skips.
-                          tourAnchorIndex={
-                            activeFamily.id === "product-promo" &&
-                            subIndex === 0 &&
-                            shelfIndex === 0
-                              ? 0
-                              : undefined
-                          }
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-        </section>
+        <div className="min-h-[45vh]" />
       </div>
     </div>
   )

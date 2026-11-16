@@ -17,6 +17,7 @@ from app.editing.animation import derive_text_parts
 from app.editing.edits import EditError
 from app.editing.schemas import (
     AudioObject,
+    CaptionDerivation,
     Clip,
     CompositionContent,
     Easing,
@@ -250,6 +251,7 @@ def resolve_temporal_target(
                 for clip in clips.values()
                 if isinstance(clip.object, TextObject)
                 and clip.object.caption is not None
+                and isinstance(clip.object.caption, CaptionDerivation)
                 and clip.object.caption.state == "derived"
                 and clip.object.caption.speech_object_id in speech_object_ids
             )
@@ -259,6 +261,7 @@ def resolve_temporal_target(
                 for clip in selected_clips
                 if isinstance(clip.object, TextObject)
                 and clip.object.caption is not None
+                and isinstance(clip.object.caption, CaptionDerivation)
                 and clip.object.caption.state == "derived"
             }
             additions.update(
@@ -591,7 +594,7 @@ def apply_temporal_edit(content: CompositionContent, edit: TemporalEdit) -> Comp
     for clip in final_clips.values():
         if not isinstance(clip.object, TextObject) or clip.object.caption is None:
             continue
-        if clip.object.caption.state != "derived":
+        if not isinstance(clip.object.caption, CaptionDerivation) or clip.object.caption.state != "derived":
             continue
         speech = next(
             (

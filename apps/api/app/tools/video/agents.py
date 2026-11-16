@@ -1,24 +1,16 @@
-"""The video design chain's LLM crew (ADR-145 phase B).
-
-Declarations only — the Agent funnel (app/agents/base.py) owns the call.
-Schemas and slot resolution live in app/editing/director.py (pure, gate
-6a); the orchestration that calls these lives in tools/video/design.py.
-
-- ``video_director``: the launch-film website promo — creative slots +
-  citations over the captured pages' manifest; the launch-film SKILL.md
-  craft pack is woven at assembly (``packs``), never loaded at runtime.
-- ``mg_director``: the no-skill motion-graphics design over user copy.
-"""
+"""Current video design agents and their bounded declarations."""
 
 from __future__ import annotations
 
 from app.agents.base import Agent, AssembleResult
 from app.agents.tool_loop import ChatTool
+import json
+
+from app.editing.source_selection import SourceSelectionAnswer, SourceSentence
 from app.editing.director import (
     AlignedNarrationDirection,
     ComponentVideoDirection,
     GeneratedImageDirection,
-    LaunchFilmDirection,
     MgDirection,
     MixedDirection,
     ProgramDirection,
@@ -59,47 +51,6 @@ SKILL_READ_TOOLS = [
     ),
 ]
 
-def _assemble_launch(
-    *,
-    lines_text: str,
-    capture_status_text: str,
-    views_text: str,
-    focus: str | None,
-    instruction: str | None,
-    language: str | None,
-    current: str | None,
-    page_images: list | None = None,
-) -> AssembleResult:
-    return (
-        {
-            "lines_text": lines_text,
-            "capture_status_text": capture_status_text,
-            "views_text": views_text,
-            "focus": focus,
-            "instruction": instruction,
-            "language": language,
-            "current": current,
-        },
-        list(page_images or []),
-    )
-
-
-video_director: Agent[LaunchFilmDirection] = Agent(
-    name="video_director",
-    prompt="video/website_director.j2",
-    schema=LaunchFilmDirection,
-    system=(
-        "You are a film director for evidence-led website launch films. You "
-        "answer ONLY the creative slots — the structure, timing, layout and "
-        "camera numbers are the system's. Output valid JSON, no commentary."
-    ),
-    temperature=0.5,
-    assemble=_assemble_launch,
-    packs=["launch-film"],
-    media_text_fallback=True,
-    stream=True,
-    timeout_s=300,
-)
 def _assemble_mg(
     *,
     text: str,
@@ -224,6 +175,24 @@ mixed_director: Agent[MixedDirection] = Agent(
     stream=True,
     timeout_s=300,
     read_tools=SKILL_READ_TOOLS,
+)
+
+
+def _assemble_source_selection(
+    query: str, sentences: tuple[SourceSentence, ...]
+) -> AssembleResult:
+    payload = [sentence.model_dump(mode="json") for sentence in sentences]
+    return {"query": query, "sentences_json": json.dumps(payload, ensure_ascii=False)}, []
+
+
+source_selector: Agent[SourceSelectionAnswer] = Agent(
+    name="source_selector",
+    prompt="video/source_selection.j2",
+    schema=SourceSelectionAnswer,
+    system="Return only the structured contiguous sentence selection.",
+    temperature=0.0,
+    assemble=_assemble_source_selection,
+    timeout_s=120,
 )
 
 
@@ -362,6 +331,6 @@ __all__ = [
     "mg_director",
     "mixed_director",
     "program_director",
-    "video_director",
+    "source_selector",
     "video_reviewer",
 ]

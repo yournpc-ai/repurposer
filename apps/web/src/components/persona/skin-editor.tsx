@@ -1,18 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Player } from "@remotion/player"
-import {
-  Clip as ClipComposition,
-  ASPECT_DIMENSIONS,
-  CAPTION_PRESETS,
-  COMPOSITION_FPS,
-  totalDurationSeconds,
-  type CaptionCue,
-  type CaptionStylePreset,
-  type ClipBrand,
-  type ClipSpec,
-  type IntroOutroCard,
-} from "@repurposer/clip"
+import { Video } from "@repurposer/video-remotion"
+import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec"
 import { Check, RotateCcw, Save, Upload, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -56,10 +46,6 @@ const FONTS = [
 
 // Quick-pick presets; both size and color also accept any free-form value.
 const CAPTION_COLORS = ["#ffffff", "#facc15", "#22c55e", "#ec4899", "#6366f1"]
-// Caption styles come from the catalog (@repurposer/clip captions.ts) — a
-// new registered preset appears here automatically.
-const CAPTION_STYLES = Object.keys(CAPTION_PRESETS) as CaptionStylePreset[]
-
 /** Normalized center point [0,1] (matches @repurposer/clip Point). */
 type Pt = { x: number; y: number }
 
@@ -70,7 +56,6 @@ export type SkinBlock = {
   captionSize: number
   captionColor: string
   captionPosition: Pt
-  captionStylePreset: CaptionStylePreset
   titleEnabled: boolean
   titleSize: number
   titlePosition: Pt
@@ -95,7 +80,6 @@ const DEFAULT_SKIN: SkinBlock = {
   captionSize: 68,
   captionColor: "#facc15",
   captionPosition: { x: 0.5, y: 0.84 },
-  captionStylePreset: "clean-bottom",
   titleEnabled: true,
   titleSize: 58,
   titlePosition: { x: 0.5, y: 0.12 },
@@ -134,93 +118,41 @@ const DEMO_CAPTION = "Your captions show up here"
 const DEMO_TITLE = "The hook line"
 
 // ---------------------------------------------------------------------------
-// Skin -> clip-spec (live preview uses the SAME <Clip> as the real render, so
-// the preview is pixel-identical to generated output; craft keys pin to the
-// task-book defaults — 9:16 / fill / captions on).
+// Skin -> ordinary native TextObject and AudioObject video-spec.
 // ---------------------------------------------------------------------------
 
-function introOutroCard(
-  enabled: boolean,
-  kind: IntroOutroKind,
-  text: string,
-  mediaUrl: string | null,
-  durationSeconds: number
-): IntroOutroCard | null {
-  if (!enabled) return null
-  if (kind === "text") {
-    return text.trim() ? { kind, text: text.trim(), duration_seconds: durationSeconds } : null
-  }
-  if (!mediaUrl) return null
-  // Preview-only: the <Player> renders in the browser, so relative storage-seam
-  // URLs need the API origin (mirrors the music.url handling below).
-  const url = mediaUrl.startsWith("/") ? API_URL + mediaUrl : mediaUrl
-  return { kind, media_url: url, duration_seconds: durationSeconds }
-}
-
-function skinToBrand(skin: SkinBlock): ClipBrand {
-  return {
-    caption_color: skin.captionColor || null,
-    caption_size: skin.captionSize || null,
-    caption_font: skin.captionFont || null,
-    intro: introOutroCard(
-      skin.introEnabled,
-      skin.introKind,
-      skin.introText,
-      skin.introMediaUrl,
-      skin.introDurationSeconds
-    ),
-    outro: introOutroCard(
-      skin.outroEnabled,
-      skin.outroKind,
-      skin.outroText,
-      skin.outroMediaUrl,
-      skin.outroDurationSeconds
-    ),
-    fill_mode: "fill",
-    caption_enabled: true,
-  }
-}
-
-function buildPreviewSpec(skin: SkinBlock): ClipSpec {
-  const words = DEMO_CAPTION.split(/\s+/).filter(Boolean)
-  const per = words.length ? Math.max(0.35, 3 / words.length) : 0.5
-  const caption_track: CaptionCue[] = words.map((w, i) => ({
-    start: i * per,
-    end: (i + 1) * per,
-    text: w,
-    lang: "en",
-  }))
-  const end = Math.max(1, words.length * per)
-  return {
-    source: { asset_id: "preview", kind: "stills", url: "", image_urls: [], fps: 30 },
-    aspect: "9:16",
-    segments: [{ id: "preview", start: 0, end, hidden: false, transition: "none" }],
-    crop: { x: 0.5, y: 0.5, scale: 1 },
-    caption_track,
-    caption_style_preset: skin.captionStylePreset,
-    caption_position: skin.captionPosition,
-    caption_enabled: true,
-    title: {
-      text: DEMO_TITLE,
-      enabled: skin.titleEnabled,
-      size: skin.titleSize,
-      position: skin.titlePosition,
+function buildPreviewSpec(skin: SkinBlock): VideoSpec {
+  const textObject = (id: string, text: string, size: number, position: Pt): VideoSpec["tracks"][number]["clips"][number]["object"] => ({
+    kind: "text", object_id: id, text,
+    layout: { x: 54, y: Math.max(0, position.y * 1920 - 90), width: 972, height: 180 },
+    style: {
+      font_size: size, color: skin.captionColor, background: null,
+      weight: 600, align: "center", line_height: 1.3, letter_spacing: 0,
+      stroke: null, shadow: null, font: { font_id: "noto-sans-sc", digest: "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c" },
     },
-    // Preview plays the selected music piece via its real stream URL so the
-    // skin preview matches the actual render (see memory/brand.py
-    // music_from_block).
-    music: skin.musicId
-      ? {
-          music_id: skin.musicId,
-          url: `${API_URL}/api/v1/music/${skin.musicId}/stream`,
-          enabled: skin.musicEnabled,
-          gain_db: skin.musicGainDb,
-        }
-      : { music_id: null, url: null, enabled: false, gain_db: skin.musicGainDb },
-    brand: skinToBrand(skin),
-    brand_ref: null,
-    layers: [],
-    target_language: "en",
+    transform: { x: 0, y: 0, scale: 1, rotation: 0, origin: "center" },
+    opacity: 1, segmentation_version: "scalar-grapheme-v1", layout_version: "explicit-line-inline-v1",
+    parts: [{ part_id: `${id}-line`, kind: "line", text, text_range: { start: 0, end: text.length }, layout_range: { start: 0, end: text.length } }],
+  })
+  const clips = [
+    { clip_id: "preview-caption", start_frame: 0, end_frame: 120, scene_id: "preview", source: null,
+      object: textObject("preview-caption", DEMO_CAPTION, skin.captionSize, skin.captionPosition), animations: [] },
+    ...(skin.titleEnabled ? [{ clip_id: "preview-title", start_frame: 0, end_frame: 120, scene_id: "preview", source: null,
+      object: textObject("preview-title", DEMO_TITLE, skin.titleSize, skin.titlePosition), animations: [] }] : []),
+  ]
+  const tracks: VideoSpec["tracks"] = [{ track_id: "preview-text", kind: "visual", role: "caption", order: 0, clips }]
+  if (skin.musicId) {
+    tracks.push({ track_id: "preview-music", kind: "audio", role: "music", order: 0, clips: [{
+      clip_id: "preview-music", start_frame: 0, end_frame: 120, scene_id: "preview",
+      source: { url: `${API_URL}/api/v1/music/${skin.musicId}/stream`, digest: "0".repeat(64), start_frame: 0, end_frame: 120 },
+      object: { kind: "audio", object_id: "preview-music", gain_db: skin.musicEnabled ? skin.musicGainDb : -60 }, animations: [],
+    }] })
+  }
+  return {
+    family: "video", format: 1, fps: { num: 30, den: 1 }, width: 1080, height: 1920,
+    background: "#111827", sample_rate: 48000, duration_frames: 120,
+    fonts: [{ font_id: "noto-sans-sc", font_set_digest: "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c", family: "Noto Sans SC", weight: 700, format: "opentype", url: `${API_URL}/api/v1/files/fonts/noto-sans-sc/c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0.otf`, digest: "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0" }], tracks,
+    provenance: { composition_id: "persona-preview", composition_version_id: `skin-${skin.captionSize}-${skin.captionColor}`, content_digest: "0".repeat(64) },
   }
 }
 
@@ -583,7 +515,7 @@ export function SkinEditor({
     }
   }
 
-  const previewSpec = useMemo(() => buildPreviewSpec(skin), [skin])
+  const previewSpec = useMemo(() => videoSpecSchema.parse(buildPreviewSpec(skin)), [skin])
   const previewRef = useRef<HTMLDivElement | null>(null)
 
   return (
@@ -611,27 +543,6 @@ export function SkinEditor({
                     {FONTS.map((f) => (
                       <SelectItem key={f.value} value={f.value}>
                         {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label={t("personaDetail.skin.caption.style")}>
-                <Select
-                  value={skin.captionStylePreset}
-                  onValueChange={(v) =>
-                    v && update("captionStylePreset", v as CaptionStylePreset)
-                  }
-                >
-                  <SelectTrigger className="h-9 w-full rounded-md text-sm">
-                    <SelectValue>
-                      {(value: CaptionStylePreset) => t(`captionPresets.${value}`)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAPTION_STYLES.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {t(`captionPresets.${p}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -821,7 +732,7 @@ export function SkinEditor({
         </CardContent>
       </Card>
 
-      {/* Preview — the REAL <Clip>, with draggable overlay markers */}
+      {/* Native video-spec preview; markers edit ordinary text layout. */}
       <div className="flex flex-col items-center gap-2 lg:pt-2">
         <span className="text-xs text-muted-foreground">
           {t("personaDetail.skin.preview.demo")}
@@ -864,21 +775,13 @@ export function SkinEditor({
         >
           {mounted ? (
             <Player
-              component={ClipComposition}
+              component={Video}
               inputProps={{ spec: previewSpec }}
-              durationInFrames={Math.max(
-                1,
-                Math.round(totalDurationSeconds(previewSpec) * COMPOSITION_FPS)
-              )}
-              fps={COMPOSITION_FPS}
-              compositionWidth={ASPECT_DIMENSIONS["9:16"].width}
-              compositionHeight={ASPECT_DIMENSIONS["9:16"].height}
-              style={{
-                height: "100%",
-                width: "100%",
-                borderRadius: 16,
-                overflow: "hidden",
-              }}
+              durationInFrames={previewSpec.duration_frames}
+              fps={previewSpec.fps.num / previewSpec.fps.den}
+              compositionWidth={previewSpec.width}
+              compositionHeight={previewSpec.height}
+              style={{ height: "100%", width: "100%", borderRadius: 16, overflow: "hidden" }}
               controls
               autoPlay
             />
@@ -908,7 +811,7 @@ export function SkinEditor({
                   label={t("personaDetail.skin.groups.title")}
                   containerRef={previewRef}
                   sizeValue={skin.titleSize}
-                  compositionHeight={ASPECT_DIMENSIONS["9:16"].height}
+                  compositionHeight={1920}
                   onChange={(p) => update("titlePosition", p)}
                   onSizeChange={(s) => update("titleSize", s)}
                 />
@@ -918,7 +821,7 @@ export function SkinEditor({
                 label={t("personaDetail.skin.groups.caption")}
                 containerRef={previewRef}
                 sizeValue={skin.captionSize}
-                compositionHeight={ASPECT_DIMENSIONS["9:16"].height}
+                compositionHeight={1920}
                 onChange={(p) => update("captionPosition", p)}
                 onSizeChange={(s) => update("captionSize", s)}
               />

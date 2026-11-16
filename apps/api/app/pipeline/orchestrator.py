@@ -39,35 +39,27 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, AssetStatus, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
 from app.metering import bind_workflow_step, merge_accrued_cost
-from app.pipeline.derivative_dispatch import derivative_output_types
+# Graph fill/back-write (ADR-057 K2) — top-level is cycle-free: graph_fill's
+# module-level chain (graph / graph_store / outputs / billing) never points
+# back here; its own import of THIS module stays function-level inside
+# stamp_draft_graph.
 from app.pipeline.errors import TransientNodeError, user_error_line, user_line
 from app.pipeline.run_review import output_is_delivered
-from app.pipeline.morph import (
-    check_transform_targets,
-)
 from app.pipeline.render_ownership import (
     reconcile_orphaned_renders,
     repair_render_barriers,
 )
 from app.pipeline.step_display import ui_lang_of
 from app.pipeline.graph import (
-    MEDIA,
     NODE_KINDS,
-    WEB_PAGE,
-    Requirement,
     fold_estimates,
     node_for,
-    node_for_output,
-    runtime_fanout_kinds,
 )
 # Graph fill/back-write (ADR-057 K2) — top-level is cycle-free: graph_fill's
 # module-level chain (graph / graph_store / outputs / billing) never points
 # back here; its own import of THIS module stays function-level inside
 # stamp_draft_graph.
-from app.pipeline.graph_fill import stamp_run_graph, sync_graph_node_for_step
-from app.pipeline.recipes import RECIPE_QUOTE_FACTS, RECIPE_REGISTRY, RecipeEntry
 from app.pipeline.step_context import _estimate_facts
-from app.pipeline.tracks import assert_single_writer_per_track, autofork_parallel_variants
 from app.pipeline.trigger_events import (
     TRIGGER_RUN_COMPLETED,
     TRIGGER_RUN_FAILED,
@@ -82,14 +74,11 @@ from app.platform.billing import (
     hold_run,
     release_run,
 )
-from app.tools import TOOL_REGISTRY, ToolEntry, strip_null_params, validate_task_list
+from app.tools import TOOL_REGISTRY, strip_null_params, validate_task_list
 
 logger = structlog.get_logger()
 
-# Targeted-regen scopes: the generic "derivative" plus every copy-writer
-# output type (node-derived — a new writer package is targetable here with
-# zero kernel edits, N-32).
-_TARGETED_DERIVATIVE_SCOPES = {"derivative"} | derivative_output_types()
+_TARGETED_DERIVATIVE_SCOPES = frozenset()
 
 
 class Suspend(Exception):
@@ -129,7 +118,7 @@ class QualityBounce(Exception):
 class TaskSpec(BaseModel):
     """The confirmed plan: normalized generation intent (计划).
 
-    Mirrors GenerateRequest/chat dispatch; stored verbatim on run.context.
+    Mirrors Chat dispatch; stored verbatim on run.context.
     The only request grammar is the tool chain (``tasks``, ADR-043) —
     outputs are the compiled graph's derived projection, never declared.
     Targeted scopes (hook/clip/derivative/render) carry no chain — they
@@ -152,13 +141,6 @@ class TaskSpec(BaseModel):
     # follow it, never the material's language. None on legacy rows → the
     # display layer falls back to project/source language.
     ui_language: str | None = None
-    # Caption mode for captioned-video runs (Phase 1, 2026-08-25, RECIPES
-    # §4.7): write_quotes / future caption-bearing recipes store the user's
-    # bilingual / source_only / target_only pick here so the pipeline (Phase
-    # 2 writer / Phase 3 Remotion) can lay out the right subtitle stack.
-    # None = the recipe doesn't need a caption mode, or the user hasn't
-    # been asked yet (the chat safety net's path).
-    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
     # The run's display name (ADR-058 — LLM 建图时命名): a compact noun
     # phrase written by the proposing agent at birth, stored verbatim on
     # run.context; the dock's receipt title and completion line read it.
@@ -203,478 +185,31 @@ class _NodeSpec:
         self.spec = spec or {}
 
 
-def compile_graph(
-    task: TaskSpec,
-    target_type: str | None = None,
-    *,
-    add_stills_align: bool = False,
-    materialize_profile: str | None = None,
-) -> list[_NodeSpec]:
-    """Lower a plan into a node topology (pure, code-determined).
-
-    Full scope: ``task.tasks`` (the tool chain, ADR-043) materializes via
-    ``_compile_task_list`` — generation tools share one deduped planning
-    prelude (preprocess → persona_bootstrap ∥ understand →
-    plan); clip-spec consumers without select_clips get the
-    compile-injected ``materialize_source`` (whole-source, no LLM picking).
-    Targeted:   hook/clip -> [script];
-                derivative -> [understand -> plan -> X_gen];
-                render -> [render].
-
-    ``add_stills_align`` (input profile, computed async at the birthplace):
-    the no-recording combination — transcript + photos, no video/audio — gets
-    an ``align_stills`` node between plan and the clips node, so the
-    stills branch renders with an estimated caption timeline (RECIPES §4.2).
-    """
-    if task.tasks is not None:
-        return _compile_task_list(
-            task,
-            add_stills_align=add_stills_align,
-            materialize_profile=materialize_profile,
-        )
-
-    scope = task.scope or "full"
-    if scope == "full":
-        raise ValueError("A full-scope run needs a task list (the confirmed chain).")
-
-    if scope in ("hook", "clip"):
-        return [
-            _NodeSpec(
-                "revise_script",
-                1,
-                spec={
-                    "scope": scope,
-                    "target_id": str(task.target_id) if task.target_id else None,
-                    "instruction": task.instruction,
-                    "operation": task.operation,
-                },
-            )
-        ]
-
-    if scope in _TARGETED_DERIVATIVE_SCOPES:
-        if not target_type:
-            raise ValueError(f"Cannot lower scope={scope} without a target type")
-        return [
-            _NodeSpec("understand", 1),
-            _NodeSpec("plan", 2, inputs=[0], spec={"target_type": target_type}),
-            _NodeSpec(
-                node_for_output(target_type).kind,
-                3,
-                inputs=[1],
-                spec={
-                    "target_id": str(task.target_id) if task.target_id else None,
-                    "target_language": task.target_language,
-                    "target_type": target_type,
-                },
-            ),
-            # 质检环 (期 3): the targeted regen gets the same gate.
-            _NodeSpec("verify", 4, inputs=[2], spec={"for": target_type}),
-        ]
-
-    if scope == "render":
-        return [
-            _NodeSpec(
-                "render",
-                1,
-                spec={"target_id": str(task.target_id) if task.target_id else None},
-            )
-        ]
-
-    raise ValueError(f"Targeted scope not implemented: {scope}")
-
-
-def _compile_task_list(
-    task: TaskSpec,
-    *,
-    add_stills_align: bool = False,
-    materialize_profile: str | None = None,
-) -> list[_NodeSpec]:
-    """Mode②: materialize an LLM-proposed task list into a standard graph.
-
-    Pure, code-determined (CHAT_ARCH §5): the registry adjudicates existence
-    and params; topology is derived here — generation tools that need
-    planning share one deduped prelude (preprocess → persona_bootstrap ∥
-    understand → plan); modifier tools (needs_plan_prelude=
-    False, e.g. remove_filler / add_music) hang off the clips node when one
-    exists, else off the injected materialize_source (whole-source
-    materialization, ADR-043), else get empty inputs (= act on the project's
-    existing clips). Modifiers are chained in proposal order so two of them
-    never edit the same render_spec concurrently. Defaults come from the
-    params schemas, never from the LLM.
-
-    ``add_stills_align``: same input-profile injection as mode① — an
-    ``align_stills`` node is inserted right before the clips node and wired
-    into its inputs (an LLM-proposed align_stills is folded into the
-    injection; the runner is idempotent either way).
-
-    ``materialize_profile``: the birthplace-computed whole-source profile
-    (``_materialize_profile``) — "media" / "stills" inject materialize_source
-    when modifiers exist without select_clips; "existing" leaves them acting
-    on the project's clips; None with modifiers and no select_clips rejects.
-    """
-    entries = validate_task_list(task.tasks or [])  # raises ToolRejected
-    if not entries:
-        # An empty chain compiles to nothing — reject here, never a vacuous
-        # run (the ``tasks is not None`` dispatch in compile_graph routes
-        # empty lists here deliberately).
-        raise ValueError("The task list is empty — nothing to run.")
-    nodes: list[_NodeSpec] = []
-
-    if any(NODE_KINDS[entry.name].needs_plan_prelude for entry in entries):
-        nodes.extend(
-            [
-                _NodeSpec("preprocess", 1),
-                _NodeSpec("persona_bootstrap", 2, inputs=[0]),
-                _NodeSpec("understand", 3, inputs=[0]),
-            ]
-        )
-        next_seq = 4
-        decompile_idx: int | None = None
-        if task.exemplar_asset_id:
-            # Decompiler (ADR-078): the pinned exemplar's craft skeleton —
-            # an internal-crew node, compile-injected (never a proposal-space
-            # tool), running parallel to understand off preprocess. The plan
-            # node's inputs carry it, so planning reads the skeleton as the
-            # exemplar param source (判词⑤ — code maps it, the LLM never
-            # writes a spec). Modifier-only chains (no prelude) skip the
-            # injection in v1: their exemplar honors would find no skeleton
-            # and fall to defaults anyway.
-            decompile_idx = len(nodes)
-            nodes.append(
-                _NodeSpec(
-                    "decompile",
-                    next_seq,
-                    inputs=[0],
-                    spec={"asset_id": str(task.exemplar_asset_id)},
-                )
-            )
-            next_seq += 1
-        # understand → plan is always direct (ADR-087 R9, 2026-09-20 D1):
-        # the review tier's direction interrupt is retired — every run is an
-        # autonomous continuation. The interrupt MACHINE itself (SuspendRun /
-        # resume / bail / expiry sweep / verify escalation) stays untouched.
-        plan_inputs = [1, 2]
-        if decompile_idx is not None:
-            plan_inputs.append(decompile_idx)
-        nodes.append(_NodeSpec("plan", next_seq, inputs=plan_inputs))
-    plan_idx = len(nodes) - 1 if nodes else None
-
-    seq = 10
-    skill_node_idx: dict[str, int] = {}
-    modifiers: list[tuple[TaskItem, ToolEntry]] = []
-    # Per-type ordinals for same-type multi tasks (an English and a German
-    # post = two write_post tasks): each generation node's spec carries its
-    # task's params as a synthesized slot + its ordinal among its own type —
-    # the slot is a compile-time projection of the chain, never a request-
-    # layer declaration (outputs-derive, ADR-043). Storyboard alignment and
-    # step labels downstream read it unchanged.
-    type_ordinals: dict[str, int] = {}
-    # research 编译期提升 (ADR-052 B4, align_stills 先例一般化): the bounded
-    # agent loop runs OFF the plan critical path — pulled from the chain here
-    # and injected right after the prelude with inputs=[], so the network-
-    # bound loop overlaps ASR / planning instead of queueing behind them
-    # (an empty inputs list claims immediately once asset processing drains,
-    # jobs.py readiness). Chain position is meaningless to the topology:
-    # consumers wire after it via their ``consumes_research`` declaration.
-    research_params: list[BaseModel | None] = []
-    for item, entry in zip(task.tasks or [], entries, strict=True):
-        if entry.name == "research":
-            research_params.append(
-                entry.params_model.model_validate(strip_null_params(item.params))
-                if entry.params_model
-                else None
-            )
-    research_indices: list[int] = []
-    for params in research_params:
-        spec = params.model_dump(mode="json", exclude_none=True) if params else {}
-        research_indices.append(len(nodes))
-        nodes.append(_NodeSpec("research", seq, inputs=[], spec=spec))
-        seq += 1
-    for item, entry in zip(task.tasks or [], entries, strict=True):
-        node_cls = NODE_KINDS[entry.name]
-        params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
-        if entry.name == "align_stills":
-            # Handled by the input-profile injection below — the LLM naming
-            # it explicitly changes nothing (idempotent runner).
-            continue
-        if entry.name == "research":
-            # Hoisted above (ADR-052 B4) — the LLM naming its position in
-            # the chain changes nothing about the execution topology.
-            continue
-        if entry.name == "prepare_narration":
-            # One original-only root: no Composition, plan prelude, clips
-            # modifier, verify, render or Output is involved in this scope.
-            if len(entries) != 1:
-                raise ValueError("Prepare narration runs as one narration-only task")
-            params_dict = params.model_dump(mode="json", exclude_none=True) if params else {}
-            nodes.append(_NodeSpec(entry.name, seq, inputs=[], spec=params_dict))
-            seq += 1
-            continue
-        if not node_cls.needs_plan_prelude and not node_cls.produces_outputs:
-            modifiers.append((item, entry))
-            continue
-        params_dict = params.model_dump(mode="json", exclude_none=True) if params else {}
-        if entry.name == "revise_script":
-            assert params is not None
-            spec = {
-                "scope": params.scope,
-                "target_id": params.target_output_id
-                or (str(task.target_id) if task.target_id else None),
-                "instruction": params.instruction or task.instruction,
-                "operation": "revise",
-            }
-        else:
-            slot_index = type_ordinals.get(node_cls.output_type, 0)
-            type_ordinals[node_cls.output_type] = slot_index + 1
-            slot = {
-                "type": node_cls.output_type,
-                **{
-                    k: v
-                    for k, v in params_dict.items()
-                    # iter-2 ②: source_span rides the slot like count/focus —
-                    # compiler-emitted, the writer narrows its material to it.
-                    if k in ("count", "focus", "language", "tone_override", "source_span")
-                },
-            }
-            spec = {
-                "target_id": str(task.target_id) if task.target_id else None,
-                "target_language": slot.get("language") or task.target_language,
-                "target_type": node_cls.output_type,
-                "slot": slot,
-                "slot_index": slot_index,
-            }
-            # Preset the sibling-distinguishing label (two write_post nodes,
-            # e.g. English/German, must read differently in the stepper
-            # before they run) — the runner rewrites it with the quantified
-            # line when done. The seat is the compiled node class itself
-            # (N-56: with compiler-only citizens co-claiming an output_type,
-            # node_for_output routing would name the wrong owner; identity
-            # for every existing tool — while the one-producer law held,
-            # the owner IS the compiled class).
-            label = node_cls.label(
-                IntentSlot.model_validate(slot), task.ui_language or "en"
-            )
-            if label:
-                spec["summary"] = label
-            if entry.name == "select_clips" and params_dict.get("aspect"):
-                spec["aspect"] = params_dict["aspect"]
-            if entry.name in ("cut_segments", "produce_video"):
-                # The span list IS the payload (N-56): the slot projection
-                # above takes none of these params by construction (its
-                # filter reads count/focus/language/tone_override), so the
-                # adjudicated params carry verbatim — segments / asset_id /
-                # aspect.
-                spec.update(params_dict)
-        inputs = [plan_idx] if plan_idx is not None else []
-        if entry.name == "cut_segments":
-            # Prelude-free birth (N-56): the exploration chat already did
-            # the understanding/planning — cut waits on nothing the plan
-            # node produces; empty inputs claim as soon as asset processing
-            # drains (jobs.py readiness, research-hoisting precedent). NOT
-            # declaration-generalized in this batch: revise_script's legacy
-            # [plan_idx] wiring stays untouched.
-            inputs = []
-        if entry.name == "select_clips" and add_stills_align:
-            align_inputs = [plan_idx] if plan_idx is not None else []
-            skill_node_idx["align_stills"] = len(nodes)
-            nodes.append(_NodeSpec("align_stills", seq, inputs=align_inputs))
-            seq += 1
-            inputs = [*inputs, skill_node_idx["align_stills"]]
-        if research_indices and getattr(node_cls, "consumes_research", False):
-            # 研究接线 (B4): the writer waits for the hoisted research loop —
-            # its asset texts pick up the stamped brief at run time.
-            inputs = [*inputs, *research_indices]
-        skill_node_idx[entry.name] = len(nodes)
-        nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
-        seq += 1
-
-    # Whole-source materialization (ADR-043): clip-spec consumers without a
-    # clips producer to hang off need an object to act on. "Producer present"
-    # reads the output_type DECLARATION, never a tool name (N-56:
-    # cut_segments births clips too — a modifier chain off it must NOT
-    # trigger a materialize_source injection). The birthplace
-    # profile decides: "media" / "stills" inject materialize_source (the
-    # stills profile first injects align_stills to estimate the caption
-    # timeline; both wire into the modifiers through their `after`
-    # declarations below); "existing" leaves the modifiers with empty inputs
-    # (= act on the project's clips); no profile = nothing to act on
-    # anywhere — reject at compile, not mid-run.
-    has_clips_producer = any(
-        NODE_KINDS[k].output_type == "clips" for k in skill_node_idx
-    )
-    if modifiers and not has_clips_producer:
-        if materialize_profile in ("media", "stills"):
-            # Reuse the plan prelude's preprocess when one exists.
-            pre_idx = 0 if nodes and nodes[0].kind == "preprocess" else None
-            if pre_idx is None:
-                pre_idx = len(nodes)
-                nodes.append(_NodeSpec("preprocess", seq))
-                seq += 1
-            mat_inputs = [pre_idx]
-            if materialize_profile == "stills":
-                skill_node_idx["align_stills"] = len(nodes)
-                nodes.append(_NodeSpec("align_stills", seq, inputs=[pre_idx]))
-                seq += 1
-                mat_inputs.append(skill_node_idx["align_stills"])
-            skill_node_idx["materialize_source"] = len(nodes)
-            nodes.append(_NodeSpec("materialize_source", seq, inputs=mat_inputs))
-            seq += 1
-        elif materialize_profile != "existing":
-            names = ", ".join(entry.name.replace("_", " ") for _, entry in modifiers)
-            raise ValueError(
-                f"Nothing for {names} to act on: the chain selects no clips, "
-                "the project has no existing clips, and no renderable source "
-                "(recording, or transcript + photos) was found."
-            )
-
-    # 变体并行律 (2026-09-10 用户拍板——语言变体是并行不是前后): modifiers
-    # run after the nodes named in their `after` constraints (when present in
-    # this graph) plus any caption MUTATOR upstream (remove_filler morphs the
-    # shared render_spec in place — a variant must see the cleaned captions,
-    # so the mutator stays an input). Variants NEVER chain off a sibling
-    # variant: the old "after the previous modifier — never in parallel"
-    # serialization made a language fan-out (translate EN/ZH/FR + dub ES) a
-    # serial chain where each translation consumed the PREVIOUS TRANSLATION's
-    # output instead of the source's. Variants fork new outputs and mutate
-    # nothing, so parallel is race-free; mutators register in
-    # _CAPTION_MUTATORS. No edges at all = act on existing clips.
-    _CAPTION_MUTATORS = {"remove_filler"}
-    prev_mutator_idx: int | None = None
-    for item, entry in modifiers:
-        node_cls = NODE_KINDS[entry.name]
-        params = entry.params_model.model_validate(strip_null_params(item.params)) if entry.params_model else None
-        inputs = [skill_node_idx[name] for name in node_cls.after if name in skill_node_idx]
-        if prev_mutator_idx is not None:
-            inputs.append(prev_mutator_idx)
-        if entry.name in _CAPTION_MUTATORS:
-            prev_mutator_idx = len(nodes)
-        spec = params.model_dump(mode="json") if params else {}
-        # Sibling-distinguishing tag for the language fan-out (two
-        # translate_clip tasks, e.g. DE+FR, must not both read "翻译字幕"
-        # while pending) — the same tag the runner's quantified done-line
-        # carries; the base name comes from label(), the one builder source.
-        lang = spec.get("target_language")
-        base = node_cls.label(None, task.ui_language or "en")
-        if isinstance(lang, str) and lang and base:
-            spec["summary"] = f"{base} · {lang.upper()}"
-        nodes.append(_NodeSpec(entry.name, seq, inputs=inputs, spec=spec))
-        seq += 1
-
-    # 多版本自动 fork (2026-09-13 演示实修): ≥2 translate/dub variants in
-    # one run = N INDEPENDENT versions — fork them all (recipe precedent,
-    # RECIPES §4.1 "all fork"; the chat path's LLM task list never sets it).
-    # Runs BEFORE the one-writer gate (forked steps are exempt there) and
-    # before the estimate loop below (fork/morph quote identically), and it
-    # rides the SAME compile the draft stamp uses — draft graph and run fill
-    # see identical specs, identical fill keys.
-    autofork_parallel_variants(nodes)
-
-    # 质检环 (期 3): one verify node trails every generation executor — the
-    # gate is the node's own declaration (needs_plan_prelude + produces_outputs:
-    # the writers and select_clips; revise_script / materialize_source /
-    # modifiers / render never get one, old-brief §2.3 topology kept). The
-    # snapshot copy keeps the loop off the appended verify nodes. A modifier
-    # chain downstream of the executor rides the verify's inputs too — the
-    # check always sees the FINAL spec (remove_filler rewrites captions), and
-    # a bounce resets those modifiers with the executor (orchestrator's
-    # QualityBounce branch) so they re-apply to the repaired round.
-    modifier_idxs = [
-        i for i, ns in enumerate(nodes)
-        if (lambda c: not c.needs_plan_prelude and not c.produces_outputs)(NODE_KINDS[ns.kind])
-    ]
-
-    def _reaches(from_idx: int, target_idx: int) -> bool:
-        seen: set[int] = set()
-        frontier = list(nodes[from_idx].inputs)
-        while frontier:
-            cur = frontier.pop()
-            if cur == target_idx:
-                return True
-            if cur in seen:
-                continue
-            seen.add(cur)
-            frontier.extend(nodes[cur].inputs)
-        return False
-
-    for idx, ns in enumerate(list(nodes)):
-        node_cls = NODE_KINDS[ns.kind]
-        if node_cls.needs_plan_prelude and node_cls.produces_outputs:
-            downstream_mods = [m for m in modifier_idxs if _reaches(m, idx)]
-            nodes.append(
-                _NodeSpec(
-                    "verify", seq, inputs=[idx, *downstream_mods],
-                    spec={"for": node_cls.output_type},
-                )
-            )
-            seq += 1
-
-    return nodes
+def compile_graph(task: TaskSpec) -> list[_NodeSpec]:
+    """Compile the one authorized action into the existing DAG kernel."""
+    entries = validate_task_list(task.tasks or [])
+    if len(entries) != 1:
+        raise ValueError("One saved Composition production takes exactly one task")
+    entry = entries[0]
+    params = entry.params_model.model_validate(strip_null_params(task.tasks[0].params))
+    values = params.model_dump(mode="json", exclude_none=True)
+    if entry.name == "produce_video":
+        values.update({
+            "target_id": str(task.target_id) if task.target_id else None,
+            "target_language": task.target_language,
+            "target_type": "video",
+            "slot": {"type": "video"},
+            "slot_index": 0,
+        })
+    return [_NodeSpec(entry.name, 10, inputs=[], spec=values)]
 
 
 async def derive_plan_preview(
     db: AsyncSession, project: Project, tasks: list[TaskItem]
 ) -> list[dict]:
-    """The plan card's derived preview (ADR-043): dry-run the task list
-    through compile_graph and project the user-facing rows — what this chain
-    will MAKE (outputs are a derived projection, never a request field).
-    Display vocabulary only: no run is created, nothing is written.
-
-    Row shape: {"type": "video"|"clips"|<writer output_type>, "variant":
-    "subs"|"dub"|None, "language"?, "count"?, "bilingual"?}. ``video`` is the
-    whole-source materialization row (整条视频); transform rows take their
-    base from the upstream they hang off (materialize → video, select_clips
-    or existing clips → clips). Raises ToolRejected / ValueError — the
-    caller decides the degradation."""
-    spec = TaskSpec(tasks=list(tasks))
-    profile = await _materialize_profile(db, project, spec)
-    nodes = _compile_task_list(spec, materialize_profile=profile)
-    materialize_idxs = {i for i, n in enumerate(nodes) if n.kind == "materialize_source"}
-    rows: list[dict] = []
-    base_row_idx: int | None = None  # the clip producer's row (video/clips)
-    for i, ns in enumerate(nodes):
-        if ns.kind == "materialize_source":
-            base_row_idx = len(rows)
-            rows.append({"type": "video"})
-            continue
-        if ns.kind in ("translate_clip", "dub_clip"):
-            # Fork = a new derived row (originals coexist); morph on a
-            # materialized source annotates the base row itself (the whole
-            # video BECOMES the subtitled/dubbed version); morph on existing
-            # clips previews as its own row (the clips get the treatment).
-            variant = "subs" if ns.kind == "translate_clip" else "dub"
-            fork = bool((ns.spec or {}).get("fork"))
-            hangs_on_materialize = any(j in materialize_idxs for j in ns.inputs)
-            if not fork and hangs_on_materialize and base_row_idx is not None:
-                rows[base_row_idx] = {
-                    **rows[base_row_idx],
-                    "variant": variant,
-                    "language": (ns.spec or {}).get("target_language"),
-                    "bilingual": bool((ns.spec or {}).get("bilingual")),
-                }
-            else:
-                rows.append(
-                    {
-                        "type": "video" if hangs_on_materialize else "clips",
-                        "variant": variant,
-                        "language": (ns.spec or {}).get("target_language"),
-                        "bilingual": bool((ns.spec or {}).get("bilingual")),
-                    }
-                )
-            continue
-        node_cls = NODE_KINDS.get(ns.kind)
-        if node_cls is None or not node_cls.produces_outputs or not node_cls.output_type:
-            continue
-        slot = (ns.spec or {}).get("slot") or {}
-        if ns.kind == "select_clips":
-            base_row_idx = len(rows)
-        rows.append(
-            {
-                "type": node_cls.output_type,
-                "language": slot.get("language"),
-                "count": slot.get("count"),
-            }
-        )
-    return rows
+    entries = validate_task_list(tasks)
+    return [{"type": "video" if entry.name == "produce_video" else "audio", "count": 1}
+            for entry in entries]
 
 
 async def derive_task_estimates(
@@ -697,15 +232,12 @@ async def derive_task_estimates(
     if not tasks:
         return None
     spec = TaskSpec(tasks=list(tasks))
-    profile = await _materialize_profile(db, project, spec)
     facts = await _estimate_facts(db, project)
     from app.tools.video.production import video_quote_facts
     facts.update(await video_quote_facts(db, project, tasks))
 
     async def prefix_credits(prefix: list[TaskItem]) -> list[int]:
-        node_specs = _compile_task_list(
-            TaskSpec(tasks=list(prefix)), materialize_profile=profile
-        )
+        node_specs = compile_graph(TaskSpec(tasks=list(prefix)))
         fold = fold_estimates(
             NODE_KINDS[ns.kind].estimate(
                 {
@@ -734,77 +266,6 @@ async def derive_task_estimates(
     if total == [0, 0]:
         return None
     return PlanEstimate(total=total, per_task=per_task)
-
-
-def compile_recipe_quote(entry: RecipeEntry) -> dict:
-    """配方卡估价贴的 fold (BILLING §7): the recipe's declared chain compiled
-    with the shared typical-source fact pack (RECIPE_QUOTE_FACTS — quantities,
-    never prices). The route prices the fold USD → credits against the LIVE
-    ratio, so a config edit moves every sticker (调参三面同动). Mirrors the
-    startup self-check's recipe compile (same stills/materialize derivation)
-    so the quote can never drift from the reconciled flow."""
-    input_types = {t for s in entry.input_slots for t in s.accepted_types}
-    add_stills = _recipe_adds_stills(input_types)
-    materialize = (
-        "media"
-        if {"video", "audio"} & input_types
-        else ("stills" if add_stills else None)
-    )
-    node_specs = compile_graph(
-        TaskSpec(tasks=entry.tasks),
-        add_stills_align=add_stills,
-        materialize_profile=materialize,
-    )
-    return fold_estimates(
-        NODE_KINDS[ns.kind].estimate(
-            {
-                **RECIPE_QUOTE_FACTS,
-                "spec": ns.spec,
-                "input_kinds": [node_specs[i].kind for i in ns.inputs],
-                # The sticker quotes the DECLARED typical source
-                # (RECIPE_QUOTE_FACTS): its clips exist by declaration, so a
-                # clip-driven modifier (translate / dub / reframe) chained on
-                # this run's own clips node stays quotable here — the live
-                # plan keeps its NULL (估价随运行) because there the clips
-                # are truly unborn at compile time.
-                "quote_scope": "recipe",
-            }
-        )
-        for ns in node_specs
-    )
-
-
-async def _check_birthplace_requires(
-    db: AsyncSession, project: Project, task: "TaskSpec"
-) -> None:
-    """Birthplace ∀-check (AGENT_ARCH §4.2: 校验 = ∀requires) — the chain's
-    tools carry their nodes' ``requires`` declarations (the clips gate is
-    SelectClips' own declaration, not a kernel special case).
-    Raises ValueError; request handlers translate to 422."""
-    needs: dict[str, tuple[Requirement, list[str]]] = {}
-    for entry in validate_task_list(task.tasks or []):  # raises ToolRejected
-        for req in NODE_KINDS[entry.name].requires:
-            owners = needs.setdefault(req.key, (req, []))[1]
-            owners.append(entry.name.replace("_", " "))
-    has_clips_slot = any(t.tool == "select_clips" for t in (task.tasks or []))
-    for key in sorted(needs):
-        req, owners = needs[key]
-        if await req.missing(db, project):
-            # The clips-media 422 keeps its own copy: it names the way out
-            # ("deselect clips") in plan terms, not tool terms.
-            if key == MEDIA.key and has_clips_slot:
-                raise ValueError(CLIPS_NEED_MEDIA)
-            raise ValueError(
-                f"Missing required input: {key} (needed by: {', '.join(owners)})"
-            )
-    # Same-language adjudication (2026-09-13): a translate/dub target that
-    # IS the faced source language is doomed by construction — reject at the
-    # birthplace with the fix named (the confirm card's 422), never mid-run
-    # after money moved. The chat path's draft adjudication runs the same
-    # check with the router's repair round.
-    await check_transform_targets(
-        db, project, task.tasks or [], zh=(task.ui_language or "").startswith("zh")
-    )
 
 
 # Birthplace rejection copy for the clips-media gate — fired by the ∀-check
@@ -869,195 +330,41 @@ def _resume_authority_decision(
     return "resumed" if authority_free else "blocked"
 
 
-async def _needs_stills_alignment(db: AsyncSession, project: Project, task: TaskSpec) -> bool:
-    """Input profile for the no-recording path (RECIPES §4.2).
-
-    True only for the exact combination: clips requested + NO video/audio
-    recording on the project + a transcript with text + photos/slides to back
-    the visual. Any recording present -> the existing media chain wins; no
-    images -> the clips-media gate already rejects. Computed once here and
-    passed into compile_graph, which stays pure.
-    """
-    clips_requested = any(t.tool == "select_clips" for t in (task.tasks or []))
-    if not clips_requested:
-        return False
-    recording = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type.in_([AssetType.VIDEO, AssetType.AUDIO]),
-            Asset.file_url.isnot(None),
-        )
-        .limit(1)
-    )
-    if recording.scalar_one_or_none() is not None:
-        return False
-    transcript = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type == AssetType.TRANSCRIPT,
-            Asset.extracted_text.isnot(None),
-        )
-        .limit(1)
-    )
-    if transcript.scalar_one_or_none() is None:
-        return False
-    images = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type.in_([AssetType.IMAGE, AssetType.SLIDES]),
-            Asset.file_url.isnot(None),
-        )
-        .limit(1)
-    )
-    return images.scalar_one_or_none() is not None
-
-
-async def _materialize_profile(db: AsyncSession, project: Project, task: TaskSpec) -> str | None:
-    """Input profile for whole-source materialization (ADR-043).
-
-    Only meaningful for a transform-only chain — clip-spec consumers present
-    (tools whose ``after`` names materialize_source, a node declaration, no
-    parallel map) and no select_clips: "existing" = the project already has
-    clips for the modifiers to act on (no injection); "media" = a
-    video/audio recording to materialize whole; "stills" = the no-recording
-    combination (align_stills estimates the timeline before materialize);
-    None = nothing to act on — the compile rejects. Any other chain shape
-    returns None (no injection applies). Computed once here and passed into
-    compile_graph, which stays pure.
-    """
-    tasks = task.tasks or []
-    consumes_clips = any(
-        t.tool in NODE_KINDS
-        and "materialize_source" in (NODE_KINDS[t.tool].after or ())
-        for t in tasks
-    )
-    # "Births its own clips" reads the output_type declaration, never a tool
-    # name (N-56: cut_segments claims "clips" alongside select_clips).
-    births_clips = any(
-        t.tool in NODE_KINDS and NODE_KINDS[t.tool].output_type == "clips"
-        for t in tasks
-    )
-    if not consumes_clips or births_clips:
-        return None
-    clips = await db.execute(
-        select(Output.id)
-        .where(Output.project_id == project.id, Output.type == "clip")
-        .limit(1)
-    )
-    if clips.scalar_one_or_none() is not None:
-        return "existing"
-    recording = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type.in_([AssetType.VIDEO, AssetType.AUDIO]),
-            Asset.file_url.isnot(None),
-        )
-        .limit(1)
-    )
-    if recording.scalar_one_or_none() is not None:
-        return "media"
-    transcript = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type == AssetType.TRANSCRIPT,
-            Asset.extracted_text.isnot(None),
-        )
-        .limit(1)
-    )
-    if transcript.scalar_one_or_none() is None:
-        return None
-    images = await db.execute(
-        select(Asset.id)
-        .where(
-            Asset.project_id == project.id,
-            Asset.type.in_([AssetType.IMAGE, AssetType.SLIDES]),
-            Asset.file_url.isnot(None),
-        )
-        .limit(1)
-    )
-    return "stills" if images.scalar_one_or_none() is not None else None
-
-
 async def create_run(
     db: AsyncSession,
     project: Project,
     task: TaskSpec,
+    *,
+    reuse_video_production: bool = False,
 ) -> WorkflowRun:
-    """Create a run and materialize its plan graph. THE ONLY WorkflowRun birthplace.
+    """The only Run birthplace: authorize, compile, quote and reserve once.
 
-    Every entry constraint rejects here, once — targeted-scope validity and
-    the birthplace ∀-check (the chain tools' requires, all node-declared) —
-    so the entry points (/generate, the task_book start answer, chat
-    dispatch) only assemble the TaskSpec. Raises ValueError; request handlers
-    translate to 422, chat dispatch degrades to an ask-back.
-
-    Flush-only — the caller commits at the request boundary, so the run, the
-    answer that started it, and the project state land in ONE transaction
-    (the run only becomes claimable by the worker on commit).
+    A repeated Start on the same presented production Dock reuses its original
+    Run. Explicit regeneration through another authoring turn remains distinct.
     """
-    # Pin the requesting browser's locale into the plan (stored verbatim
-    # on run.context below) — the worker process has no request context, so
-    # display strings read the pinned value off the run.
     if task.ui_language is None:
-        from app.ui_locale import current_ui_language  # deferred: import cycle
-
+        from app.ui_locale import current_ui_language
         task.ui_language = current_ui_language()
-    # Active-run guard, serialized by the project row lock: two concurrent
-    # births (double-clicked Start, /generate retry, chat dispatch) serialize
-    # here — the second sees the first's committed PENDING row and rejects.
-    # Without it, concurrent runs reap each other's clip rows (select_clips
-    # deletes by project_id) and cancel each other's renders. WAITING_HUMAN
-    # is not "executing": a parked run is the user's to abandon by starting
-    # fresh, so only PENDING/RUNNING block.
-    await db.execute(
-        select(Project).where(Project.id == project.id).with_for_update()
-    )
-    # 开工兜底盖章 (ADR-102 §6): processing is the run's production
-    # prerequisite — the user may never have asked about the material in
-    # chat, so the birthplace wakes every dormant asset (the chat path's
-    # only other stamp seat = the get_understanding read attempt).
+    await db.execute(select(Project).where(Project.id == project.id).with_for_update())
+    if reuse_video_production:
+        from app.tools.video.production import existing_video_production
+        existing = await existing_video_production(db, project, task.tasks or [])
+        if existing is not None:
+            return existing
     from app.models.tables import now_utc
-
-    await db.execute(
-        update(Asset)
-        .where(
-            Asset.project_id == project.id,
-            Asset.processing_status == AssetStatus.PENDING,
-            Asset.processing_requested_at.is_(None),
-        )
-        .values(processing_requested_at=now_utc())
-    )
+    await db.execute(update(Asset).where(
+        Asset.project_id == project.id,
+        Asset.processing_status == AssetStatus.PENDING,
+        Asset.processing_requested_at.is_(None),
+    ).values(processing_requested_at=now_utc()))
     if await has_active_run(db, project.id):
-        # ui_language is pinned above from the requesting browser's locale —
-        # the typed endpoints surface this as the 422 toast detail.
         raise RunAlreadyActiveError(
             "这个项目已有生成在进行中——等它结束再开始新的。"
-            if (task.ui_language or "").startswith("zh")
-            else RUN_ALREADY_ACTIVE
+            if (task.ui_language or "").startswith("zh") else RUN_ALREADY_ACTIVE
         )
     from app.tools.video.production import pin_narration_preparation, pin_video_production
-    video_context = await pin_video_production(
-        db, project, task.tasks, task.video_authorized_by
-    )
+    video_context = await pin_video_production(db, project, task.tasks, task.video_authorized_by)
     narration_context = await pin_narration_preparation(project, task.tasks)
-    target_type: str | None = None
-    if task.scope in _TARGETED_DERIVATIVE_SCOPES and task.target_id is not None:
-        target = await db.get(Output, task.target_id)
-        if target is None or target.project_id != project.id:
-            raise ValueError("Target output not found")
-        if node_for_output(target.type) is None or target.type == "clips":
-            raise ValueError(f"Target output type {target.type} is not regenerable")
-        target_type = target.type
-
-    # 资产角色 pins (ADR-078 判词④): a pinned asset must resolve HERE, at the
-    # birthplace — exist, belong to the project, carry bytes; the exemplar
-    # must be a VIDEO (the decompiler reverse-compiles video craft). An
-    # unresolved pin rejects (ValueError → 422), never a mid-run surprise.
     for pin, role_word, must_be_video in (
         (task.exemplar_asset_id, "exemplar", True),
         (task.source_asset_id, "source", False),
@@ -1071,13 +378,8 @@ async def create_run(
         if pinned is None or pinned.project_id != project.id or not pinned.file_url:
             raise ValueError(f"The pinned {role_word} asset is not available.")
         if must_be_video and pinned.type != AssetType.VIDEO:
-            raise ValueError("The exemplar must be a video (the decompiler reads video craft).")
-
-    # One ∀-check for every birth constraint (AGENT_ARCH §4.2) — the chain's
-    # tools' requires, all node-declared. Unconditional: targeted re-renders
-    # read the same source media, so no scope is exempt.
-    await _check_birthplace_requires(db, project, task)
-
+            raise ValueError("The exemplar must be a video")
+    validate_task_list(task.tasks or [])
     run = WorkflowRun(
         project_id=project.id,
         status=WorkflowStatus.PENDING,
@@ -1086,95 +388,42 @@ async def create_run(
     )
     db.add(run)
     await db.flush()
-
-    node_specs = compile_graph(
-        task,
-        target_type,
-        add_stills_align=await _needs_stills_alignment(db, project, task),
-        materialize_profile=await _materialize_profile(db, project, task),
-    )
-    # 一轨一写者 (ADR-044): within one run a clip-spec track takes at most one
-    # non-fork morph writer; a collision rejects HERE (ValueError → 422 at the
-    # entry points), never a runtime merge.
-    assert_single_writer_per_track(
-        ((ns.kind, ns.spec) for ns in node_specs),
-        lambda kind: bool(NODE_KINDS[kind].produces_outputs),
-    )
-    # 报价 = 图 fold 的存储侧 (P4, N-34): each compile-time node quotes
-    # itself from the shared facts; an unquotable node keeps NULL (未估价).
-    estimate_facts = await _estimate_facts(db, project)
+    node_specs = compile_graph(task)
+    facts = await _estimate_facts(db, project)
     from app.tools.video.production import video_quote_facts
-    estimate_facts.update(await video_quote_facts(db, project, task.tasks))
+    facts.update(await video_quote_facts(db, project, task.tasks))
     nodes: list[WorkflowStep] = []
     for ns in node_specs:
         spec = dict(ns.spec or {})
         if ns.kind == "produce_video":
-            # The paid-fit ceiling and canvas aspect are authorized with the
-            # Run, then pinned into its executable step; neither side may
-            # drift on resume.
-            spec["narration_policy"] = video_context.get("narration_policy")
+            spec["narration_policy"] = video_context["narration_policy"]
             spec["aspect"] = video_context["aspect"]
-        if ns.kind == "prepare_narration":
-            spec["narration_policy"] = narration_context["narration_preparation"][
-                "narration_policy"
-            ]
-        if "summary" not in spec:
-            # Builder-written task name (the task list's pending-row text —
-            # label() carries the static name, or the slot-tagged sibling
-            # word): every node presets its spec.summary here, never a
-            # frontend kind dictionary. The runner rewrites it with the
-            # quantified line when done.
-            label = NODE_KINDS[ns.kind].label(
-                IntentSlot.model_validate(spec["slot"])
-                if isinstance(spec.get("slot"), dict)
-                else None,
-                task.ui_language or "en",
-            )
-            if label:
-                spec["summary"] = label
+        else:
+            spec["narration_policy"] = narration_context["narration_preparation"]["narration_policy"]
+        label = NODE_KINDS[ns.kind].label(
+            IntentSlot.model_validate(spec["slot"]) if isinstance(spec.get("slot"), dict) else None,
+            task.ui_language or "en",
+        )
+        if label:
+            spec.setdefault("summary", label)
         node = WorkflowStep(
-            run_id=run.id,
-            kind=ns.kind,
-            status="pending",
-            seq=ns.seq,
-            spec=spec,
-            estimate=NODE_KINDS[ns.kind].estimate(
-                {
-                    **estimate_facts,
-                    "spec": ns.spec,
-                    "input_kinds": [node_specs[i].kind for i in ns.inputs],
-                }
-            ),
+            run_id=run.id, kind=ns.kind, status="pending", seq=ns.seq, spec=spec,
+            estimate=NODE_KINDS[ns.kind].estimate({
+                **facts, "spec": ns.spec,
+                "input_kinds": [node_specs[i].kind for i in ns.inputs],
+            }),
         )
         db.add(node)
         nodes.append(node)
-    await db.flush()  # assign ids
-    # Resolve input indices to node ids.
+    await db.flush()
     for node, ns in zip(nodes, node_specs, strict=True):
         node.inputs = [str(nodes[i].id) for i in ns.inputs]
     await db.flush()
-    # Graph fill (ADR-057 K2, 双写期): stamp the run's intent onto the
-    # persistent graph — the execution ledger (workflow_steps) is unchanged;
-    # the graph is the product face, filled through the wiring door. It
-    # raises on a bug: same transaction, so the run birth rolls back WITH
-    # the half-stamped graph — loud in dev, never a drifted graph (K3 直读
-    # 前这是唯一防线).
-    await stamp_run_graph(db, project, run, nodes)
-    # Credits (ADR-055): hold the high-end fold at the birthplace — same
-    # transaction as the run, so a shortfall (422 credits.insufficient) rolls
-    # the run back with it and the worker never sees either. NULL-estimate
-    # nodes contribute 0 to the fold and settle at capture (BILLING §3).
     _, usd_high = estimate_usd_range(fold_estimates([n.estimate for n in nodes]))
     required = await credits_for_cost(db, usd_high)
     await check_hold(db, user_id=project.user_id, required=required)
     await hold_run(db, user_id=project.user_id, run_id=run.id, amount=required)
-    logger.info(
-        "run_materialized",
-        run_id=str(run.id),
-        nodes=len(node_specs),
-        scope=task.scope,
-        credits_held=required,
-    )
+    logger.info("run_materialized", run_id=str(run.id), nodes=len(nodes), scope=task.scope, credits_held=required)
     return run
 
 
@@ -1270,7 +519,6 @@ async def execute_step(node_id: UUID) -> None:
                 await db.refresh(node)
                 # Graph back-write (ADR-057 K2): the family's first running
                 # step flips the owning graph node queued → running.
-                await sync_graph_node_for_step(db, node)
             else:
                 mine = node.claim_token
             run = await db.get(WorkflowRun, node.run_id)
@@ -1377,7 +625,6 @@ async def execute_step(node_id: UUID) -> None:
                 # the owning graph node's state re-aggregates off its internal
                 # step family (this step included), products back-write too.
                 # Same session, same commit; no-op for steps outside the graph.
-                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info("workflow_step_done", node_id=str(node_id), kind=node.kind)
         except Suspend as s:
@@ -1435,7 +682,6 @@ async def execute_step(node_id: UUID) -> None:
                     )
                     .execution_options(synchronize_session=False)
                 )
-                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info("workflow_step_waiting", node_id=str(node_id), kind=node.kind)
         except QualityBounce as q:
@@ -1528,8 +774,6 @@ async def execute_step(node_id: UUID) -> None:
                             s.finished_at = None
                             s.error = None
                             s.claim_token = None
-                            await sync_graph_node_for_step(db, s)
-                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 logger.info(
                     "quality_bounce",
@@ -1618,7 +862,6 @@ async def execute_step(node_id: UUID) -> None:
                     )
                     return
                 await db.refresh(node)
-                await sync_graph_node_for_step(db, node)
                 await db.commit()
                 await _cascade_skip(db, node)
                 await db.commit()
@@ -1676,7 +919,6 @@ async def _cascade_skip(
             child.claim_token = None
             # Graph back-write (ADR-057 K2): a cascade-skipped child flips its
             # owning graph node's aggregate with it (no-op outside the graph).
-            await sync_graph_node_for_step(db, child)
             frontier.append(child.id)
 
 
@@ -1736,7 +978,6 @@ async def resume_waiting_interrupt(
     node.claim_token = None
     if run.status == WorkflowStatus.WAITING_HUMAN:
         run.status = WorkflowStatus.RUNNING
-    await sync_graph_node_for_step(db, node)
     logger.info("interrupt_resumed", run_id=str(run.id), node_id=str(node.id))
     return "resumed"
 
@@ -1814,7 +1055,6 @@ async def bail_waiting_interrupt(
     node.spec = {**(node.spec or {}), "bailed": True, "summary": "Bailed by user"}
     node.status = "done"
     node.finished_at = datetime.now(UTC)
-    await sync_graph_node_for_step(db, node)
     await _cascade_skip(db, node, reason="user bailed")
     logger.info("interrupt_bailed", run_id=str(run.id), node_id=str(node.id))
     return node
@@ -1899,9 +1139,6 @@ async def cancel_run(
     run.progress = int(settled / len(nodes) * 100) if nodes else 100
     project.status = ProjectStatus.REVIEW if any_landed else ProjectStatus.DRAFT
     project.updated_at = now
-    for node in nodes:
-        if node.status == "cancelled":
-            await sync_graph_node_for_step(db, node)
     await release_run(db, user_id=project.user_id, run_id=run.id)
     await db.commit()
     logger.info("run_cancelled", run_id=str(run.id), project_id=str(project.id))
@@ -2244,149 +1481,11 @@ async def finalize_stuck_runs() -> None:
 # ---- startup self-check (AGENT_ARCH §10) ------------------------------------
 
 
-def _recipe_adds_stills(input_types: set[str]) -> bool:
-    """The recipe's input profile (its declared input_slots) answers what
-    ``_needs_stills_alignment`` answers from real assets at the birthplace:
-    no recording + a transcript + images → the compiled graph carries an
-    align_stills node."""
-    return (
-        "video" not in input_types
-        and "audio" not in input_types
-        and "transcript" in input_types
-        and bool({"images", "slides"} & input_types)
-    )
-
-
 def assert_runners_registered() -> None:
-    """Startup self-check, three parts (AGENT_ARCH §10):
-
-    1. registry ↔ node consistency: every non-seat tool entry has a node in
-       ``NODE_KINDS`` under the same name (N-35), and every tool-package
-       node has an entry (internal crew — ``app.pipeline.*`` — never enters
-       the proposal space by design). Output types are unique across the
-       LLM-visible proposal space (N-32, narrowed by N-56: compiler-only
-       citizens — ``ToolEntry.llm_visible=False`` — may co-claim a type;
-       ``node_for_output`` routes proposal paths to the visible owner).
-    2. node → agent references exist: every agent a node declares (its
-       ``agents`` tuple, plus Agent-typed class attributes like the writers'
-       ``writer``) is collected in the ``AGENTS`` roster.
-    3. recipe flow reconciliation (对账 = ⊆): every curated recipe flow key
-       names a kind the recipe's own preset compiles to (``compile_graph``
-       is pure — compiled and compared directly; runtime fan-out kinds —
-       render, D2 — count as present).
-    4. track registry (ADR-044): every ClipSpec top-level field is owned by
-       exactly one registered track (and op ``writes`` stay inside the
-       partition); a phantom track proves the consumers (bake seam /
-       addressing / compliance / pricing) fold with zero consumer changes.
-    """
-    for entry in TOOL_REGISTRY.values():
-        if not entry.seat and entry.name not in NODE_KINDS:
-            raise RuntimeError(
-                f"Tool '{entry.name}': no node registered under that name"
-            )
-    for node in NODE_KINDS.values():
-        if (
-            not type(node).__module__.startswith("app.pipeline.")
-            and not node.internal
-            and node.kind not in TOOL_REGISTRY
-        ):
-            raise RuntimeError(
-                f"Node '{node.kind}' ({type(node).__module__}): no TOOL_REGISTRY entry"
-            )
-    # N-32 narrowed (N-56): the one-producer-per-type law governs the
-    # LLM-facing proposal space (node_for_output's consumers are all
-    # proposal paths). Compiler-only citizens (ToolEntry.llm_visible=False)
-    # may co-claim a type with the visible owner — but two COMPILER-ONLY
-    # producers on one type still collide (nothing would route between them).
-    output_owners: dict[str, str] = {}
-    compiler_only_owners: dict[str, str] = {}
-    for node in NODE_KINDS.values():
-        if node.output_type is None:
-            continue
-        entry = TOOL_REGISTRY.get(node.kind)
-        space = (
-            output_owners
-            if entry is None or entry.llm_visible
-            else compiler_only_owners
-        )
-        owner = space.get(node.output_type)
-        if owner is not None:
-            raise RuntimeError(
-                f"Output type '{node.output_type}' claimed by both "
-                f"'{owner}' and '{node.kind}'"
-            )
-        space[node.output_type] = node.kind
-
-    # 词表 v3 (ADR-076): every non-internal tool-package node declares its
-    # stamp identity — node_type (媒介五值: 卡面解剖) + prototype (能力原型
-    # 三值: 程序区形态) — the declaration replaced the retired _graph_kind_of
-    # central mapping (注册表纪律: 禁平行映射表). Folding kinds declare the
-    # identity of the node they fold INTO.
-    for node in NODE_KINDS.values():
-        if type(node).__module__.startswith("app.pipeline.") or node.internal:
-            continue
-        if node.node_type not in ("text", "table", "image", "video", "audio"):
-            raise RuntimeError(
-                f"Node '{node.kind}': no canvas node_type declared "
-                "(node_type: text | table | image | video | audio)"
-            )
-        if node.prototype not in ("generator", "editor", "manual"):
-            raise RuntimeError(
-                f"Node '{node.kind}': no canvas prototype declared "
-                "(prototype: generator | editor | manual)"
-            )
-
-    from app.agents.base import AGENTS, Agent  # deferred: metering-free leaf
-
-    for node in NODE_KINDS.values():
-        refs = list(node.agents) + [
-            v for v in vars(type(node)).values() if isinstance(v, Agent)
-        ]
-        for agent in refs:
-            if AGENTS.get(agent.name) is not agent:
-                raise RuntimeError(
-                    f"Node '{node.kind}': agent '{agent.name}' not in the AGENTS roster"
-                )
-
-    # Declared skill packs resolve (N-42 双表自检): an agent's packs are woven
-    # at assembly time — an unknown name would otherwise KeyError mid-run.
-    from app.skills import SKILL_REGISTRY  # deferred: packs loader leaf
-
-    for agent in AGENTS.values():
-        for pack in agent.packs:
-            if pack not in SKILL_REGISTRY:
-                raise RuntimeError(
-                    f"Agent '{agent.name}': pack '{pack}' not in SKILL_REGISTRY"
-                )
-
-    for recipe_id, entry in RECIPE_REGISTRY.items():
-        if not entry.flow:
-            continue
-        input_types = {t for s in entry.input_slots for t in s.accepted_types}
-        add_stills = _recipe_adds_stills(input_types)
-        # The recipe's declared inputs answer what `_materialize_profile`
-        # answers from real assets at the birthplace: a recording → media;
-        # transcript + images → stills; anything else → no injection.
-        materialize = (
-            "media"
-            if {"video", "audio"} & input_types
-            else ("stills" if add_stills else None)
-        )
-        compiled = {
-            ns.kind
-            for ns in compile_graph(
-                TaskSpec(tasks=entry.tasks),
-                add_stills_align=add_stills,
-                materialize_profile=materialize,
-            )
-        } | runtime_fanout_kinds()
-        missing = [step.key for step in entry.flow if step.key not in compiled]
-        if missing:
-            raise RuntimeError(
-                f"Recipe '{recipe_id}': flow keys missing from the compiled graph: {missing}"
-            )
-
-    from app.pipeline.tracks import assert_phantom_track, assert_track_registry
-
-    assert_track_registry()
-    assert_phantom_track()
+    """Fail boot if either authorized task lost its concrete DAG executor."""
+    for name, entry in TOOL_REGISTRY.items():
+        if not entry.seat and name not in NODE_KINDS:
+            raise RuntimeError(f"Tool '{name}': no node registered under that name")
+    for kind in ("produce_video", "prepare_narration"):
+        if kind not in NODE_KINDS:
+            raise RuntimeError(f"Missing production executor: {kind}")

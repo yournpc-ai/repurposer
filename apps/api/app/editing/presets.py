@@ -501,7 +501,7 @@ def _resolved_caption_word(
 
 def _word_anchor(clip: Clip, narration: NarrationWordInput) -> NarrationAnchor:
     obj = clip.object
-    assert isinstance(obj, TextObject) and obj.caption is not None
+    assert isinstance(obj, TextObject) and isinstance(obj.caption, CaptionDerivation)
     return NarrationAnchor(
         alignment_id=narration.alignment.alignment_id,
         content_digest=narration.alignment.content_digest,
@@ -574,7 +574,7 @@ def _expand_caption_phrases(
         assert isinstance(speech_obj, SpeechObject)
         if any(
             isinstance(clip.object, TextObject)
-            and clip.object.caption is not None
+            and isinstance(clip.object.caption, CaptionDerivation)
             and clip.object.caption.speech_object_id == speech_obj.object_id
             for clip in track.clips
         ):

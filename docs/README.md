@@ -1,6 +1,6 @@
 # Repurposer Docs 索引
 
-> Status: Active navigation（2026-11-10）。
+> Status: Active navigation（2026-11-16）。
 >
 > 文档治理原则：**单一事实源**——每类信息只有一个家，其他文档只引用、不复述。
 > **两类职责**：现行规范回答“现在必须怎样工作”；PROGRESS 与局部 progress 回答“做到哪、下一步做什么”。不维护历史、归档或逐轮报告，清理规则以 CLAUDE.md 为准。
@@ -13,9 +13,9 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/skill-package-promo-video.md` §4 既有基线与当前批次 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1。A–C 实现证据只在需要核对时查 `tasks/video-project-implementation.md`，不从该证据文档取后续排期；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
-| 宣传视频核心 Skill / 渐进式内外置 Skill 包 | `VIDEO_PROJECT.md` §0、§4.3.2、§7、§8 → `tasks/skill-package-promo-video.md` 当前批次；按统一合同的六个实际批次与并行依赖施工，完整 Remotion 工程与视频欠账由此统筹；创作循环收敛细则只归 `tasks/composition-authoring-context-convergence.md` |
-| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §8.1.2 → `tasks/composition-authoring-context-convergence.md` 核对当前实现与 P1；下一批看 [顺序审片与 Skill 资源的代码修改方针](tasks/sequential-video-authoring.md#6-p2-代码修改方针)。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` §5 |
+| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/skill-package-promo-video.md` §4–5 实施与验收 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
+| 宣传视频核心 Skill / 渐进式内外置 Skill 包 | `VIDEO_PROJECT.md` §0、§4.3.2、§7、§8 → `tasks/skill-package-promo-video.md` 当前批次；在同一合同核对 Remotion 工程与发布门；创作循环收敛细则只归 `tasks/composition-authoring-context-convergence.md` |
+| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §8.1.2 → `tasks/composition-authoring-context-convergence.md` 核对工作草稿与条件工具；审片和包资源见 [顺序创作](tasks/sequential-video-authoring.md)。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` §5 |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | Chat TurnBlock 四阶段施工 | `CHAT_ARCHITECTURE.md` §8.10 → `tasks/chat-turn-block-implementation.md` 当前阶段 → `VIDEO_PROJECT.md` §12 目标目录；视频接缝再读 §10 与统一视频合同 P5 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
@@ -23,7 +23,7 @@
 | 模块 / 表 / 队列 / worker | `MODULE_ARCHITECTURE.md` §4 / §5 / §7 的对应小节；迁移再加 `DATABASE_MIGRATIONS.md` |
 | Agent / tools / graph / 报价 | `AGENT_ARCHITECTURE.md` §2 / §4 / §5 / §7 / §8 中对应小节 |
 | 意图路由 / plan path / brief | `DIALOG_WORKFLOW.md` §2、§4 + `CHAT_ARCHITECTURE.md` §3 |
-| 渲染 / clip-spec / film-spec / 编辑器 | `RENDERING.md` §3、§6、§8 中对应小节；Film 另读其总设计，编辑器交互再加 `VIDEO_EDITOR.md` |
+| 渲染 / video-spec / 编辑器 | `RENDERING.md` §3、§6、§8 中对应小节；作品结构读 VIDEO_PROJECT，编辑器交互再加 `VIDEO_EDITOR.md` |
 | 积分 / 钱包 / 授权 / 估价 | `BILLING.md` 对应章节 + 当前任务涉及的确认规则 |
 | 支付 / Stripe / 充值 / webhook | `PAYMENTS.md` 对应架构、凭据/部署、订单或 webhook 章节 + `tasks/stripe-credit-topup.md` 当前施工与验收 |
 | 新功能 / 用户体验 | `JOURNEYS.md` 的对应旅程与缺口，不通读其他旅程；目标架构只有被动到才读 `ARCHITECTURE_NORTH_STAR.md` 对应章节 |
@@ -64,7 +64,7 @@
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
-| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/skill-package-promo-video.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；能力与验收由 promo 母合同统筹，工作草稿、条件工具与预览反馈只归 `tasks/composition-authoring-context-convergence.md`；A–C 实现证据归 `tasks/video-project-implementation.md`。当前状态只见 PROGRESS §0 与统一合同 |
+| Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/skill-package-promo-video.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；能力与验收由 promo 母合同统筹，工作草稿、条件工具与预览反馈只归 `tasks/composition-authoring-context-convergence.md`。当前状态只见 PROGRESS §0 与统一合同 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
 | 支付 / 法币订单 / Stripe | `PAYMENTS.md` | 公司账号凭据、本地 CLI 与公网 Docker 拓扑、积分包白名单、payment_orders、Checkout/webhook、入账幂等与上线门只住这里；首批欠账归 `tasks/stripe-credit-topup.md` |
@@ -84,13 +84,13 @@
 | `UI_GUIDELINES.md` | **Studio 视觉/交互设计系统**：圆角与按钮 / 图标 / 浮层选型 / 卡面纵深 / 灰梯 / 浮层冰霜 / composer 视觉解剖 / 侧栏解剖 / 页面布局 / 画布形态 | 活跃 | 动 `_app` UI / 共享组件前 |
 | `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行概念词典 + 五态纪律 + 技术依赖 | 活跃 | 动执行内核、可靠性、agent 边界或 Media IR 方向时读对应章节；不是所有 coding 任务的通用全文前置 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程 + 实施范围 | 已拍板方向（ADR-042），未实施；启动条件与验收归 `PROGRESS.md` §1.1 | 动身份模块/渠道/选题/home 前 |
-| `tasks/composition-authoring-context-convergence.md` | **Composition 创作循环**：当前工作草稿、条件工具、分层校验与 P1 验收 | P1 开放，封闭 Promo 首稿作为对照 | 核对当前创作实现与遗留验收 |
-| `tasks/sequential-video-authoring.md` | **顺序审片与 Skill 资源**：Clip 与素材职责、通用装配、草稿累计审查、Chat 状态及代码修改顺序 | P2 施工规划，待实现和验证 | 改创作循环、状态投影或 Skill 装配时 |
-| `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145/146）；§0 为各阶段必读方针，当前实现/欠账归 PROGRESS 与 `tasks/skill-package-promo-video.md`，A–C 证据归 `tasks/video-project-implementation.md`，不以目标目录冒充实现 | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
+| `tasks/composition-authoring-context-convergence.md` | **Composition 创作循环**：当前工作草稿、条件工具、分层校验与 P1 验收 | 当前合同，代表旅程已验证 | 核对当前创作实现与遗留验收 |
+| `tasks/sequential-video-authoring.md` | **顺序审片与 Skill 资源**：Clip 与素材职责、通用装配、草稿累计审查、Chat 状态及验收 | 当前合同，代表旅程已验证 | 改创作循环、状态投影或 Skill 装配时 |
+| `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145/146）；§0 为各阶段必读方针，当前实现/欠账归 PROGRESS 与 `tasks/skill-package-promo-video.md`，不以目标目录冒充实现 | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
 | `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 工具包/花名册/NodeBase/估价 | 活跃 | 动 generation/agents/tools 前 |
 | `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档：双引擎 workflow / canonical 词汇 / brief + ask_user / 有界 loop 节点 | 现行规范（实现状态以 `PROGRESS.md` 为准） | 动 chat 意图层 / plan path / 多轮对话 / agent 概念前 |
-| `VIDEO_EDITOR.md` | 编辑器交互形态 + L2/L3 范围纪律 | 已实现（undo 可用 = operations 端点 + chat 撤销；编辑面分层=能力层+适配层，ADR-033） | 动编辑器前 |
-| `RENDERING.md` | **clip-spec / film-spec / video-spec 迁移期家族契约** + 渲染链架构（烘焙缝 / 渲染服务 / 共享包 / 函数地图）+ clip-spec 轨道模型（§8 = 现行契约，ADR-044） | 活跃 | 动渲染链、任一 spec family、轨道或渲染服务前 |
+| `VIDEO_EDITOR.md` | Chat 定向修订、版本指认、Scrub 与 Inspector | Chat 修订现行，精确编辑验收开放 | 动编辑器前 |
+| `RENDERING.md` | **video-spec 与交付链**：编译、预览、渲染、上传、探测、缓存重传与所有权 | 活跃 | 动 renderer、执行与交付前 |
 | `MUSIC_ARCHITECTURE.md` | 音乐库、人设音乐选择、自定义生成与启动 reconcile | 当前实现： persona 皮肤面板可自定义生成，Chat `add_music` 只选库；prompt 缓存、配额、上传与更多入口 deferred | 动音乐前 |
 | `BILLING.md` | 积分/钱包/计费架构母文档（ADR-055）：credit / wallet / credit_transactions + hold→capture→release + configs + live ratio + 负余额语义；支付与订阅边界分别指向 PAYMENTS / PROGRESS | 活跃 | 动积分 / 钱包 / configs / 扣费 / 估价展示前 |
 | `PAYMENTS.md` | 支付架构母文档：公司 Stripe 凭据与本地/公网拓扑、积分包、payment_orders、Checkout/webhook、purchase 幂等、前端购买座位与上线门 | 当前规范；首批已落码，联调欠账归 `tasks/stripe-credit-topup.md` | 动支付、充值、Stripe、webhook、退款或订阅前 |
@@ -105,7 +105,7 @@
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `LANDING.md` | 落地页当前结构、四产品 Gallery 与滚动形态、内测商业面、公开媒体边界及真实社交/法务配置 | 活跃 | 动落地页结构、Hero、Gallery、内测活动或公开入口前 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
-| `VERIFICATION.md` | 测试政策、fixture/配额、合同守卫映射与共享验收；新视频按 A/B 合同补覆盖，旧实现锁不作兼容目标 | 当前规范，未运行项明确保留 | 改测试、共享机制、验收或裁决退役测试前 |
+| `VERIFICATION.md` | 测试政策、fixture/配额、合同守卫映射与共享验收；新视频按统一合同补覆盖，旧实现锁不作兼容目标 | 当前规范，未运行项明确保留 | 改测试、共享机制、验收或裁决退役测试前 |
 | `DATABASE_MIGRATIONS.md` | Alembic 工作流 | 活跃 | 写迁移前 |
 | `PRODUCTION_DEBUGGING.md` | 生产事故只读取证手册：分层日志 / 容器环境 / 网页采集签名 / 数据库只读检查 / 部署后验收 | 活跃 | 线上排障、部署验收前 |
 | `research/` | 竞品卡片（7 家）+ Opus 深拆 + ElevenCreative 调研 + FLORA 首页/工作台走查 + Lovart 落地页走查 + MiniMax Design 走查 + Agent Skills 规范生态 + 渲染技术调研 + dsh 架构调研 + craft 解剖证据表 | 原始素材层 | 引用证据时 |

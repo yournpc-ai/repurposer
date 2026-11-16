@@ -581,7 +581,7 @@ async def test_nested_start_never_commits_before_stop_fence(database, monkeypatc
     uid = await owner(database)
     conversation_id, turn_id, project_id = await _open_turn(database, uid)
     intent = InferredIntent(
-        action="start", tasks=[TaskItem(tool="write_post")], name="Start"
+        action="start", tasks=[TaskItem(tool="prepare_narration", params={"text": "Start", "voice_id": "presenter_male", "language": "en"})], name="Start"
     )
     pending = PendingPlan(prompt="start", intent=intent)
     async with database() as db:
@@ -608,7 +608,7 @@ async def test_nested_start_never_commits_before_stop_fence(database, monkeypatc
 
     create_run_calls = 0
 
-    async def fake_create_run(db, project, _spec):
+    async def fake_create_run(db, project, _spec, **_kwargs):
         nonlocal create_run_calls
         create_run_calls += 1
         run = WorkflowRun(project_id=project.id, status=WorkflowStatus.PENDING, context={})
@@ -620,16 +620,12 @@ async def test_nested_start_never_commits_before_stop_fence(database, monkeypatc
     async def allow_lifecycle(*_args, **_kwargs):
         return SimpleNamespace()
 
-    async def no_draft_stamp(*_args, **_kwargs):
-        return None
-
     async def no_video_approval(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr("app.pipeline.orchestrator.create_run", fake_create_run)
     monkeypatch.setattr("app.pipeline.lifecycle.project_lifecycle", allow_lifecycle)
     monkeypatch.setattr("app.pipeline.lifecycle.evaluate_start_gate", lambda **_kwargs: None)
-    monkeypatch.setattr("app.pipeline.graph_fill.stamp_draft_graph", no_draft_stamp)
     monkeypatch.setattr("app.tools.video.production.latest_video_approval", no_video_approval)
 
     async with database() as main:
@@ -1402,3 +1398,99 @@ async def test_video_edit_read_returns_current_base_and_only_requested_clip(data
         }
         assert [clip["clip_id"] for clip in payload["clips"]] == ["clp_title"]
         assert "storyboard" not in payload
+
+
+async def test_completed_video_delivery_survives_its_unanswered_dock(database, monkeypatch):
+    from app.chat.trigger_turn import _run_review_snapshot, run_trigger_turn
+    from app.chat.video_turn_seats import short_video_confirmation
+    from app.models.schemas import InferredIntent, PendingPlan, WrapUpArgs
+    from app.pipeline import trigger_events
+
+    uid = await owner(database)
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    events = []
+    trigger_events.register_trigger_handler(lambda *args: events.append(args))
+
+    class Reviewer:
+        async def call_loop(self, execute, **_kwargs):
+            await execute("wrap_up", WrapUpArgs(), "The saved video is ready.")
+            return SimpleNamespace(exhausted=False, prose="The saved video is ready.", calls=[])
+
+    monkeypatch.setattr("app.chat.trigger_turn.delivery_agent", Reviewer())
+    async with database() as db:
+        project = Project(user_id=uid, title="fixed video", language="en")
+        db.add(project)
+        await db.flush()
+        conversation = Conversation(user_id=uid, project_id=project.id)
+        db.add(conversation)
+        await db.flush()
+        composition, version, ref = await pinned_video_version(db, project)
+        run = WorkflowRun(
+            project_id=project.id, status=WorkflowStatus.COMPLETED,
+            context={
+                "version_ref": ref,
+                "confirmed_scope": {"compiled_scope": [{"tool": "produce_video"}]},
+            },
+        )
+        db.add(run)
+        await db.flush()
+        output = pin_video_output(Output(
+            project_id=project.id, type="video", render_status=RenderStatus.COMPLETED,
+            files={"video": "fixed-video.mp4"},
+        ), composition, version, ref)
+        db.add(output)
+        await db.flush()
+        db.add(WorkflowStep(
+            run_id=run.id, kind="produce_video", status="done", output_refs=[str(output.id)],
+        ))
+        pending = PendingPlan(
+            prompt="OK",
+            intent=InferredIntent(tasks=[{"tool": "produce_video", "params": {"version_ref": ref}}]),
+            video_presentation={**ref, "presented_message_id": str(uuid4())},
+        )
+        project.pending_brief = pending.model_dump(mode="json")
+        db.add(Message(
+            conversation_id=conversation.id, role="assistant", content="Production plan",
+            intent=pending.intent.model_dump(mode="json"),
+            question={"kind": "task_book", "question": "", "options": []},
+        ))
+        await db.commit()
+        pid, rid, oid, cid = project.id, run.id, output.id, conversation.id
+
+    async with database() as db:
+        project = await db.get(Project, pid)
+        repeated = await short_video_confirmation(db, project, cid, "OK", None)
+        assert repeated["action"] == "already_started"
+        assert repeated["run_id"] == str(rid)
+        assert repeated["delivery_message_id"] is None
+    assert events == [(pid, "run_completed", str(rid))]
+
+    async with database() as db:
+        run = await db.get(WorkflowRun, rid)
+        facts, refs = await _run_review_snapshot(db, run)
+        assert facts[0] == "delivery=delivered"
+        assert not any(line.startswith("GAP") for line in facts)
+        assert refs == [str(oid)]
+
+    delivered = await run_trigger_turn(pid, "run_completed", str(rid))
+    assert delivered is not None
+    assert delivered.intent["output_refs"] == [str(oid)]
+    assert delivered.workflow_run_id == rid
+
+    async with database() as db:
+        project = await db.get(Project, pid)
+        repeated = await short_video_confirmation(db, project, cid, "OK", None)
+        assert repeated["delivery_message_id"] == str(delivered.id)
+        assert repeated["output_refs"] == [str(oid)]
+        assert len((await db.scalars(select(WorkflowRun).where(WorkflowRun.project_id == pid))).all()) == 1
+    assert len(events) == 1
+
+    from app.chat.prompts import assemble_video_round
+    assembly = assemble_video_round({
+        "mode": "conversation",
+        "video_confirmation": {"action": "already_started"},
+        "ui_language": "zh",
+        "tools": [],
+        "user_text": "OK",
+    })
+    assert assembly.system.startswith("Reply in zh.")

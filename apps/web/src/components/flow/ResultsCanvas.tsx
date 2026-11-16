@@ -1,54 +1,18 @@
 "use client"
 
-/** ResultsCanvas (ADR-041 D1; ADR-057 K3) — the project page's center: the
- * persistent graph read DIRECTLY (`GET /projects/{id}/graph` — node id =
- * graph node id, edge = graph edge, state = the row's state; zero
- * projection, the display model IS the domain model). The mapping below is
- * the render boundary only: field pass-through + i18n labels — no topology
- * derivation, no hidden-step resolution (the retired projection's whole
- * job). Navigation is open (pan/zoom, D7); editing gestures are
- * structurally absent in the substrate. Product nodes are cards: the
- * surface owns their actions — click focuses (焦点注入, D8) and summons the
- * OutputInspector (the FLORA-parity dossier under the zoom pill), the
- * factsbar carries info + download / delete, and node business (publish /
- * open / focus) lives in the bar's ⋯ menu. */
+/** Independent Canvas for source assets and ordinary manual Graph nodes.
+ * Composition authoring, Run progress and video delivery stay in Chat. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  Clapperboard,
-  Clock,
-  FileText,
-  Image as ImageIcon,
-  Languages,
-  RectangleHorizontal,
-  RectangleVertical,
-  Scissors,
-  Square,
-  Star,
-} from "lucide-react"
+import { Clapperboard, Clock, FileText, Image as ImageIcon } from "lucide-react"
 
-import { apiFetch, toAbsoluteUrl } from "@/lib/api"
-import { outputAspect } from "@/lib/outputAspect"
-import { cn, formatDuration } from "@/lib/utils"
-import type { GraphNode, Output, ProjectArtifact, ProjectGraph, WorkflowStep } from "@/lib/types"
-import {
-  MediaLightbox,
-  type MediaChip,
-  type MediaLightboxData,
-} from "@/components/results/MediaLightbox"
-import { OutputInspector } from "@/components/results/OutputInspector"
-
+import { toAbsoluteUrl } from "@/lib/api"
+import { cn } from "@/lib/utils"
+import type { GraphNode, ProjectGraph } from "@/lib/types"
+import { MediaLightbox, type MediaChip, type MediaLightboxData } from "@/components/results/MediaLightbox"
 import { FlowView } from "./FlowView"
-import { PRODUCT_TYPE_ICON } from "./FlowNodeCard"
-import type {
-  FlowAssetAction,
-  FlowAssetInfo,
-  FlowEdge,
-  FlowNode,
-  FlowOutputAction,
-  LineageHover,
-} from "./types"
+import type { FlowAssetAction, FlowAssetInfo, FlowEdge, FlowNode } from "./types"
 
 function getFlowMediaSlot(slotId: string) {
   const root = document.querySelector<HTMLElement>(`[data-flow-node-id="${CSS.escape(slotId)}"]`)
@@ -56,150 +20,39 @@ function getFlowMediaSlot(slotId: string) {
 }
 
 export interface ResultsCanvasProps {
-  /** The graph's one read frame (ADR-057). Null = not yet loaded — the
-   * canvas stays empty behind the page's gate. */
   graph: ProjectGraph | null
-  /** Terminal self-heal epoch (2026-09-13 用户拍板 — xyflow store desync,
-   * the「node 消失、刷新才回」走查): the page bumps this ~0.6s after a run
-   * lands terminal; the FlowView keyed on it remounts, so a store left
-   * desynced by the run-tail refetch race (nodes/edges frozen empty until a
-   * manual reload) re-syncs from settled props. Cost: one viewport re-fit
-   * at terminal — the moment the user is reading the receipt, not dragging
-   * the canvas. */
-  healEpoch?: number
-  /** The canvas is VISIBLE (the page's graph-world gate: first run OR a
-   * docked plan's draft graph, K5). The settle key (initial framing) joins
-   * this with baselineReady: frame only when the visible, settled content
-   * is present, never on a partial fetch frame (2026-09-06). */
   visible?: boolean
-  /** Birth-choreography baseline contract (ADR-036 补记 3): the surface
-   * flips `baselineReady` only when its initial fetches have settled (they
-   * resolve in any order) and the data belongs to `baselineKey`; the first
-   * ready frame under a key is the baseline and animates NOTHING (refresh /
-   * reconnect / cross-project navigation render instantly — 铁律), every
-   * later growth births. */
   baselineReady: boolean
   baselineKey: string
-  /** The dossier's producing-step lookup (latest run's steps — /results
-   * payload, execution-ledger facts only). */
-  steps?: WorkflowStep[]
-  /** A product node was clicked — the surface sets the dock focus and opens
-   * the detail modal (clips). */
-  onOutputClick?: (output: Output) => void
-  /** A product node's factsbar action (download / delete in the bar;
-   * publish / open / focus ride the ⋯ menu — all one channel). */
-  onOutputAction?: (output: Output, action: FlowOutputAction) => void
-  /** 选区引用 (2026-09-11 — 段落级指认): a passage was selected on a text
-   * product's card face and pinned — the surface inserts an @output chip
-   * carrying the quote into the dock. */
-  onQuoteOutput?: (output: Output, quote: string) => void
-  /** The card-face prompt direct edit's deterministic dispatch (ADR-058):
-   * the pricing confirmation's Start calls it with the node id + the user's
-   * verbatim program — the surface posts the graph revision (code-built
-   * edit_prompt + run) and refetches. NOT a chat turn: zero messages in
-   * the dock — the node's own state cycle is the feedback. Resolves true
-   * when the run started. */
-  onNodeRevise?: (nodeId: string, text: string) => Promise<boolean>
-  /** An asset node's factsbar action (download / delete / reprocess) — the
-   * surface owns them; absent = asset nodes render no bar. */
   onAssetAction?: (asset: FlowAssetInfo, action: FlowAssetAction) => void
-  /** The canvas-selected product id — its node carries the selected ring
-   * (canvas SELECTION, not a chat focus — ADR-058). */
-  selectedOutputId?: string | null
-  /** Pane-only click (node clicks excluded) — back to neutral: the surface
-   * collapses the dock's history and clears the selection. */
-  onPaneClick?: () => void
-  /** Extra classes for the top-right canvas chrome (2026-09-06): the zoom
-   * pill's Panel AND the OutputInspector share one corner and one
-   * docked-panel avoidance — the page offsets both clear of the open chat
-   * panel so nothing sits under the frost. */
-  controlsClassName?: string
-  /** 相机节拍 (Workspace 合同 v4.2 C5): the page-armed user beat — ONE
-   * ensure-in-view semantics (已在安全区不动 / 不在则最小 pan / zoom 永不
-   * 自动), consumed callback, and the one-shot centering request (v4.2
-   * 未覆盖 #3「把当前操作元素移到画布中心」). occludedRightPx = the docked
-   * panel's right-edge footprint (0 in float geometry / hidden / mobile).
-   * Pass-through to FlowView — background refetches never arm, so they
-   * never move the camera. */
-  cameraBeat?: { token: number } | null
-  onCameraBeatConsumed?: () => void
-  centerRequest?: { token: number; nodeIds: string[] } | null
-  onCenterRequestConsumed?: () => void
-  occludedRightPx?: number
   className?: string
 }
 
 export function ResultsCanvas({
   graph,
-  healEpoch = 0,
   visible = false,
   baselineReady,
   baselineKey,
-  steps,
-  onOutputClick,
-  onOutputAction,
-  onQuoteOutput,
-  onNodeRevise,
   onAssetAction,
-  selectedOutputId = null,
-  onPaneClick,
-  controlsClassName,
-  cameraBeat = null,
-  onCameraBeatConsumed,
-  centerRequest = null,
-  onCenterRequestConsumed,
-  occludedRightPx = 0,
   className,
 }: ResultsCanvasProps) {
   const { t } = useTranslation()
-
-  // ── Graph → the FlowView render contract (ADR-057 直读: field
-  // pass-through + i18n labels, zero topology derivation) ────────────────
   const { nodes, edges } = useMemo<{ nodes: FlowNode[]; edges: FlowEdge[] }>(() => {
-    const graphNodes = graph?.nodes ?? []
-    // ADR-097 Phase 1: the artifact projection's deliverable index — one
-    // deliverable one card. The deliverable card takes the artifact's face
-    // (work name when the LLM named it — ADR-058 二源律 ①; the aggregate
-    // activity — 单一 activity owner); facets live on it as a read-only
-    // summary, companions stay first-class cards, unknown/legacy rows pass
-    // through untouched.
-    const artifactByDeliverable = new Map<string, ProjectArtifact>()
-    for (const a of graph?.artifacts ?? []) {
-      if (a.deliverable_node_id) artifactByDeliverable.set(a.deliverable_node_id, a)
-    }
-    // The batch's highest clip score (score triage — what to post first):
-    // the winning product's badge accents, wherever the pager shows it.
-    // Triage needs a real choice (2026-10-09 用户拍板): a single scored
-    // clip is trivially the top pick — the badge speaks only when ≥2 scored
-    // clips share the canvas (mirror: projects.$id.index.tsx topClipScore).
-    const scoredClips = graphNodes.flatMap((n) =>
-      (n.outputs ?? [])
-        .filter((o) => o.type === "clip")
-        .map((o) => (typeof o.score?.value === "number" ? o.score.value : 0)),
-    )
-    const topClipScore =
-      scoredClips.filter((s) => s > 0).length >= 2 ? Math.max(0, ...scoredClips) : 0
-    const nodes: FlowNode[] = graphNodes.map((n: GraphNode, i: number) => {
-      const spec = n.spec ?? {}
-      const layout = n.layout ?? {}
+    const nodes = (graph?.nodes ?? []).map((node: GraphNode, index) => {
+      const spec = node.spec ?? {}
+      const layout = node.layout ?? {}
       const frame = {
         x: Number(layout.x ?? 0),
         y: Number(layout.y ?? 0),
         w: Number(layout.w ?? 280),
         h: Number(layout.h ?? 260),
       }
-      // 素材卡 (C4 读面后资产行已是媒介 type — the joined asset dossier is
-      // the birth certificate): the card derives from the dossier, the type
-      // passthrough keeps the medium's own frame/port semantics.
-      if (n.asset) {
-        const asset = n.asset
+      if (node.asset) {
+        const asset = node.asset
         const mediaUrl = toAbsoluteUrl(asset.stream_url ?? asset.file_url ?? null)
         return {
-          id: n.id,
-          kind: n.type,
-          // C6 岛内格镜像: the spec rides along — an asset node can be an
-          // island member (the multi-upload source shelf), and the
-          // projection reads spec.island's frozen-cell floor off it.
+          id: node.id,
+          kind: node.type,
           spec,
           label: t(`generationOverlay.assetTypes.${asset.type ?? spec.asset_type ?? ""}`, {
             defaultValue: String(asset.type ?? spec.asset_type ?? "asset"),
@@ -221,563 +74,101 @@ export function ResultsCanvas({
           thumbUrl: asset.type === "image" ? mediaUrl : null,
           videoUrl: asset.type === "video" ? mediaUrl : null,
           frame,
-          rank: n.rank ?? null,
-          order: i,
+          order: index,
         }
       }
-      // 词表 v3 (ADR-076, C5): the read face already mapped every row — the
-      // type passthrough re-derives the anatomy at the card dispatch; the
-      // label falls back through the role-derived document names (the doc
-      // stations never carry spec.summary — ADR-072) to the medium's own
-      // word (业务身份 = spec.summary 的座位, ADR-058 二源律).
-      const outputs = n.outputs ?? []
-      const artifact = artifactByDeliverable.get(n.id)
       return {
-        id: n.id,
-        kind: n.type,
-        label:
-          // ADR-097: the deliverable card speaks the WORK's name (the
-          // confirmed plan's LLM naming — 二源律 ①); everything else keeps
-          // the station label law.
-          artifact?.name ??
-          spec.summary ??
-          (spec.role === "research_brief"
-            ? t("results.canvas.researchBrief")
-            : spec.role === "translation"
-              ? t("results.canvas.translationDoc")
-              : spec.role === "dub_script"
-                ? t("results.canvas.dubScriptDoc")
-                : spec.role
-                  ? t("results.canvas.document")
-                  : t(`results.canvas.nodeType.${n.type}`, { defaultValue: n.type })),
-        // ADR-097 §4 单一 activity owner: the deliverable card carries the
-        // artifact's aggregate activity (failed > running > stale > queued
-        // > done) — the hidden stations never show a competing liveness.
-        status: artifact?.activity.state ?? n.state,
+        id: node.id,
+        kind: node.type,
+        label: spec.summary ?? t(`results.canvas.nodeType.${node.type}`, { defaultValue: node.type }),
+        detail: spec.title ?? undefined,
+        status: node.state,
         spec,
-        outputs,
-        estimateCredits: n.estimate_credits ?? null,
         frame,
-        rank: n.rank ?? null,
-        topClipScore,
-        order: i,
-        artifact,
+        order: index,
       }
     })
-    const edges: FlowEdge[] = (graph?.edges ?? []).map((e) => ({
-      from: e.from_node,
-      to: e.to_node,
-      edgeType: e.edge_type,
-      // ADR-097 §5: the bloodline edge's only machine mark rides the port —
-      // the direction invariant exempts it (display-only, zero rank
-      // authority).
-      lineage: e.from_port === "out:lineage" || undefined,
+    const edges = (graph?.edges ?? []).map((edge) => ({
+      from: edge.from_node,
+      to: edge.to_node,
+      edgeType: edge.edge_type,
+      lineage: edge.from_port === "out:lineage" || undefined,
     }))
     return { nodes, edges }
   }, [graph, t])
 
-  // ── Birth choreography (ADR-036 补记 3, growth-driven since ADR-051) ────
-  // The reveal is every graph GROWTH witnessed after the baseline: nodes
-  // absent from the last committed frame birth in, staggered by compile
-  // order. The BASELINE is the first frame with `baselineReady` under
-  // `baselineKey` — the surface gates it on its initial fetches settling
-  // (they resolve in any order; an early partial frame must not become the
-  // baseline, or the rest of the graph "births" on a plain refresh — 铁律).
-  // Cards latch their own born class (FlowNodeCard), so a fast follow-up
-  // frame dropping these ids never cuts a keyframe mid-flight.
   const seenIdsRef = useRef<Set<string> | null>(null)
   const baselinedKeyRef = useRef<string | null>(null)
-  // 愈合重挂载视口保全 (2026-09-29 — 完工画面零跳动): FlowView mirrors the
-  // live viewport here and a heal-remounted (`key={healEpoch}`) world is
-  // born AT it — the terminal self-heal no longer reads as the canvas
-  // jumping through a default zoom. A project switch (new baselineKey)
-  // resets it: the next project's canvas frames fresh.
   const viewportPreserveRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
-  const prevViewportKeyRef = useRef(baselineKey)
-  if (prevViewportKeyRef.current !== baselineKey) {
-    prevViewportKeyRef.current = baselineKey
+  const previousViewportKey = useRef(baselineKey)
+  if (previousViewportKey.current !== baselineKey) {
+    previousViewportKey.current = baselineKey
     viewportPreserveRef.current = null
   }
   const bornIds = useMemo(() => {
-    if (!baselineReady) return undefined
-    if (baselinedKeyRef.current !== baselineKey) return undefined
+    if (!baselineReady || baselinedKeyRef.current !== baselineKey) return undefined
     const seen = seenIdsRef.current ?? new Set<string>()
-    const fresh = nodes.filter((n) => !seen.has(n.id))
-    return fresh.length > 0 ? new Set(fresh.map((n) => n.id)) : undefined
+    const fresh = nodes.filter((node) => !seen.has(node.id))
+    return fresh.length > 0 ? new Set(fresh.map((node) => node.id)) : undefined
   }, [nodes, baselineReady, baselineKey])
   useEffect(() => {
     if (!baselineReady) return
     baselinedKeyRef.current = baselineKey
-    seenIdsRef.current = new Set(nodes.map((n) => n.id))
+    seenIdsRef.current = new Set(nodes.map((node) => node.id))
   }, [nodes, baselineReady, baselineKey])
 
-  const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
-  const outputById = useMemo(() => {
-    const map = new Map<string, Output>()
-    for (const n of nodes) for (const o of n.outputs ?? []) map.set(o.id, o)
-    return map
-  }, [nodes])
-  /** output id → its node's id (focus → the selected ring's node). */
-  const nodeIdByOutputId = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const n of nodes) for (const o of n.outputs ?? []) map.set(o.id, n.id)
-    return map
-  }, [nodes])
-
-  // The pager's displayed product per node (the card reports its display;
-  // a node click selects what the user is LOOKING at, not a stale first).
-  const displayedRef = useRef(new Map<string, string>())
-  const handleDisplayChange = useCallback((nodeId: string, outputId: string) => {
-    displayedRef.current.set(nodeId, outputId)
-  }, [])
-
-  // ── Output inspector (2026-09-06, FLORA node-detail parity) ─────────────
-  // A product click summons its dossier, anchored under the zoom pill
-  // (right-aligned — the ADR-056 canvas-chrome slot); only the centered
-  // player modal retired from the click beat (2026-09-13 二轮拍板).
-  // View state owned here by the canvas: selecting another product
-  // swaps in place, pane click / Esc / the row vanishing (delete / refresh)
-  // closes.
-  const [inspectedId, setInspectedId] = useState<string | null>(null)
-  const inspectedOutput = inspectedId ? (outputById.get(inspectedId) ?? null) : null
-  useEffect(() => {
-    if (inspectedId && !inspectedOutput) setInspectedId(null)
-  }, [inspectedId, inspectedOutput])
-
-  // ── Media lightbox (2026-08-15) ──────────────────────────────────────
-  // The expand affordance / asset media click: one frosted dialog — left
-  // the scrollable info column (timestamp, full prompt, derived-attribute
-  // chips), right the media. Product chips are product facts only (never a
-  // model name in the chips row).
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
   const [lightbox, setLightbox] = useState<MediaLightboxData | null>(null)
-
-  // ── cross-highlight (ADR-113 §6 — 唯一跨卡通道) ────────────────────────
-  // A deliverable card's video-lane block hover names the SOURCE interval
-  // it came from; the matching asset card's transcript strip / cue rows
-  // light amber. The hover state lives here (the surface), cards only
-  // report/read it — never an edge, never a generalized channel.
-  const [lineageHover, setLineageHover] = useState<LineageHover | null>(null)
-
-  // Handlers are useCallback-stable (2026-08-19 二轮 R5): FlowView's
-  // rfNodes/rfEdges memo keys on them — inline closures rebuilt the whole
-  // graph on every unrelated re-render (SSE ticks, polling, focus changes).
-  const handleExpandMedia = useCallback((nodeId: string, outputId?: string) => {
+  const handleExpandMedia = useCallback((nodeId: string) => {
     const node = nodeById.get(nodeId)
-    if (!node) return
-    const downloadName = (url: string, base: string) => {
-      const ext = url.split("?")[0].split(".").pop() ?? ""
-      return `${base || "media"}.${ext.length > 0 && ext.length <= 4 ? ext : "mp4"}`
-    }
-
-    // The pager's flipped display: the lightbox follows the SHOWN product,
-    // not the node's first row. Unreported fallback = the card's own mount
-    // default — the NEWEST row.
-    const output =
-      (outputId ? outputById.get(outputId) : undefined) ??
-      (node.outputs?.length
-        ? outputById.get(displayedRef.current.get(nodeId) ?? "") ??
-          node.outputs[node.outputs.length - 1]
-        : undefined)
-    if (output) {
-      const url = toAbsoluteUrl(output.files.video ?? output.files.image ?? null)
-      if (!url) return
-      const chips: MediaChip[] = [
-        {
-          Icon: PRODUCT_TYPE_ICON[output.type] ?? Clapperboard,
-          label: node.label,
-        },
-      ]
-      if (output.language) {
-        chips.push({ Icon: Languages, label: t(`languages.${output.language}`, { defaultValue: output.language }) })
-      }
-      const aspect = (output.render_spec as { aspect?: string } | null)?.aspect
-      // "original" (whole-source, 2026-08-17) is not a fixed tier — the real
-      // pixels are unknown until the media loads, so no shape chip.
-      if (aspect === "1:1" || aspect === "16:9" || aspect === "9:16") {
-        chips.push({
-          Icon:
-            aspect === "1:1"
-              ? Square
-              : aspect === "16:9"
-                ? RectangleHorizontal
-                : RectangleVertical,
-          label: aspect,
-        })
-      }
-      const duration = output.payload.duration
-      if (output.type === "clip" && duration) {
-        chips.push({ Icon: Clock, label: `${duration}s` })
-      }
-      const start = output.source_ref?.start_seconds
-      const end = output.source_ref?.end_seconds
-      if (start != null && end != null) {
-        chips.push({
-          Icon: Scissors,
-          label: `${formatDuration(start)}–${formatDuration(end)}`,
-        })
-      }
-      if (typeof output.score?.value === "number") {
-        chips.push({
-          Icon: Star,
-          label: `${output.score.value}`,
-          title: output.score.reason ?? undefined,
-        })
-      }
-      const title =
-        output.publishing.title || (output.payload.hook as string | undefined) || node.label
-      setLightbox({
-        id: output.id,
-        slotId: node.id,
-        kind: output.files.video ? "video" : "image",
-        url,
-        aspect: outputAspect(output),
-        // Poster derives from the SHOWN output.
-        poster: output.files.video
-          ? toAbsoluteUrl(output.files.image ?? output.publishing.cover_image_url ?? null)
-          : null,
-        title,
-        createdAt: output.created_at,
-        prompt: node.spec?.prompt ?? output.spec_prompt ?? null,
-        chips,
-        // 模型事实 (ADR-051 H): the shown member's own server-stamped facts —
-        // display-only on this detail surface (禁令2 禁选择器).
-        modelFacts: output.model_facts ?? null,
-        downloadName: downloadName(url, title),
-      })
-      return
-    }
-
-    const asset = node.asset
-    if (asset) {
-      const url = node.videoUrl ?? node.thumbUrl ?? null
-      if (!url) return
-      const chips: MediaChip[] = []
-      if (node.detail) {
-        chips.push({
-          Icon:
-            asset.type === "video"
-              ? Clapperboard
-              : asset.type === "image"
-                ? ImageIcon
-                : FileText,
-          label: node.detail,
-        })
-      }
-      if (asset.duration_seconds) {
-        chips.push({ Icon: Clock, label: `${asset.duration_seconds}s` })
-      }
-      setLightbox({
-        id: asset.id,
-        slotId: node.id,
-        kind: node.videoUrl ? "video" : "image",
-        url,
-        aspect: asset.width && asset.height ? asset.width / asset.height : null,
-        // The caption carries the type name now — the filename (detail) is
-        // the lightbox's title.
-        title: node.detail ?? node.label,
-        createdAt: null,
-        chips,
-        downloadName: node.detail ?? node.label,
+    const asset = node?.asset
+    if (!node || !asset) return
+    const url = node.videoUrl ?? node.thumbUrl ?? null
+    if (!url) return
+    const chips: MediaChip[] = []
+    if (node.detail) {
+      chips.push({
+        Icon: asset.type === "video" ? Clapperboard : asset.type === "image" ? ImageIcon : FileText,
+        label: node.detail,
       })
     }
-  }, [nodeById, outputById, t])
-
-  const handleSelect = useCallback(
-    (id: string) => {
-      const node = nodeById.get(id)
-      if (!node) return
-      if (node.asset) {
-        // Source media nodes have no dock business — a click IS the
-        // expand gesture (the lightbox; non-media assets no-op inside).
-        handleExpandMedia(id)
-        return
-      }
-      // A graph card: click = dock focus (D8) + the dossier swap-in, on the
-      // product the pager is SHOWING (fallback = the card's mount default —
-      // the node's NEWEST row). The
-      // dossier opens for video products too (2026-09-13 二轮拍板——右侧
-      // 档案保留；退役的只有居中播放器 modal)。Document-family nodes
-      // without products (transcript / doc stations) are read on the card —
-      // the length guard below no-ops them.
-      const outputs = node.outputs ?? []
-      if (outputs.length === 0) return
-      const output =
-        outputById.get(displayedRef.current.get(id) ?? "") ??
-        outputs[outputs.length - 1]
-      setInspectedId(output.id)
-      onOutputClick?.(output)
-    },
-    [nodeById, outputById, onOutputClick, handleExpandMedia],
-  )
-
-  const handleOutputAction = useCallback(
-    (id: string, action: FlowOutputAction) => {
-      const output = outputById.get(id)
-      if (output) onOutputAction?.(output, action)
-    },
-    [outputById, onOutputAction],
-  )
-
-  // 选区引用: id → the real Output (the surface composes the chip's label).
-  const handleQuoteOutput = useCallback(
-    (id: string, quote: string) => {
-      const output = outputById.get(id)
-      if (output) onQuoteOutput?.(output, quote)
-    },
-    [outputById, onQuoteOutput],
-  )
-
-  // ── Prompt direct edit → the pricing confirmation (ADR-057 K4; ADR-058
-  // deterministic dispatch) ───────────────────────────────────────────────
-  // The card-face program region reports a new program; NOTHING touches
-  // the graph here — the confirm card anchors at the edited node (world
-  // space, riding pan/zoom like the prototype's scene C), names the
-  // affected subgraph (本节点 ∪ 图边下游) as chips, prices it by folding
-  // each node's own quote, and soft-compares the balance. The confirmed
-  // Start calls the surface's onNodeRevise: CODE-built edit_prompt + run
-  // (the node id is structurally exact — zero intent recognition), NOT a
-  // chat turn. While the edit is pending (confirm open / awaiting the
-  // stamp), the node's card face keeps showing the user's verbatim program
-  // (pendingProgram — 乐观回显, never a revert flash).
-  const [promptEdit, setPromptEdit] = useState<{ nodeId: string; text: string } | null>(null)
-  // 动作住节点内 (判词①): the pricing confirm docks inside the node's
-  // program region now — this flag is its open/closed truth (promptEdit
-  // itself outlives it: after a successful confirm the staged text stays as
-  // the card face's optimistic program until the stamp arrives).
-  const [promptConfirmOpen, setPromptConfirmOpen] = useState(false)
-  const handlePromptEdit = useCallback((nodeId: string, text: string) => {
-    setPromptEdit({ nodeId, text })
-    setPromptConfirmOpen(true)
-  }, [])
-  const clearPromptEdit = useCallback(() => {
-    setPromptEdit(null)
-    setPromptConfirmOpen(false)
-  }, [])
-
-  // ── Draft-confirm card — RETIRED (Phase 3 Batch A, 2026-09-19 判词 1) ──
-  // The canvas is NOT a Confirmation Seat (ADR-070 唯一座位律): Confirm /
-  // Start live on the dock pill alone; the canvas reads and reviews, and a
-  // draft task_book node is just the plan's face. No stamp-gated
-  // replacement here — a gated second seat would still be two seats.
-
-  // The balance soft-compare for the prompt-edit pricing card (K4, on
-  // open): lazy + silent (CreditsPill's 防双报 discipline) — a fetch
-  // failure just keeps the line blank.
-  const [balanceNow, setBalanceNow] = useState<number | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await apiFetch("/api/v1/wallet", { toast: false })
-        if (!res.ok) return
-        const wallet = (await res.json()) as { balance: number }
-        if (!cancelled) setBalanceNow(wallet.balance)
-      } catch {
-        /* silent */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // Re-arms per edit (a re-priced chain may have moved the balance with
-    // a prior run).
-  }, [promptEdit !== null])
-
-  const editedNode = promptEdit ? (nodeById.get(promptEdit.nodeId) ?? null) : null
-  // A refresh / delete vanishing the anchor node closes the card.
-  useEffect(() => {
-    if (promptEdit && !editedNode) clearPromptEdit()
-  }, [promptEdit, editedNode, clearPromptEdit])
-  // The stamp's arrival clears the pending program: after a successful
-  // dispatch the graph refetch brings the node stamped with the SAME
-  // verbatim text (edit_prompt 钢印), and the card face's pending display
-  // hands over to the domain truth seamlessly.
-  useEffect(() => {
-    if (!promptEdit || !editedNode) return
-    if ((editedNode.spec?.prompt ?? "").trim() === promptEdit.text.trim()) {
-      clearPromptEdit()
-    }
-  }, [promptEdit, editedNode, clearPromptEdit])
-
-  const promptEditBlast = useMemo(() => {
-    if (!promptEdit) return null
-    // Downstream walk over the graph's own edges (the projection walk's
-    // replacement — 修订波及面 = 图边遍历, never a scope guess).
-    const adjacency = new Map<string, string[]>()
-    for (const e of graph?.edges ?? []) {
-      const list = adjacency.get(e.from_node) ?? []
-      list.push(e.to_node)
-      adjacency.set(e.from_node, list)
-    }
-    const seen = new Set<string>([promptEdit.nodeId])
-    const queue = [promptEdit.nodeId]
-    while (queue.length > 0) {
-      const current = queue.shift() as string
-      for (const next of adjacency.get(current) ?? []) {
-        if (!seen.has(next)) {
-          seen.add(next)
-          queue.push(next)
-        }
-      }
-    }
-    // Only the runnable nodes carry a price (词表 v3, ADR-076: prototype
-    // generator/editor — the read face stamps it onto every row) —
-    // asset/document/manual nodes never re-run (and in our topology are
-    // never downstream of a generator).
-    const affected = [...seen].flatMap((id) => {
-      const n = nodeById.get(id)
-      return n &&
-        (n.spec?.prototype === "generator" || n.spec?.prototype === "editor")
-        ? [n]
-        : []
+    if (asset.duration_seconds) chips.push({ Icon: Clock, label: `${asset.duration_seconds}s` })
+    setLightbox({
+      id: asset.id,
+      slotId: node.id,
+      kind: node.videoUrl ? "video" : "image",
+      url,
+      aspect: asset.width && asset.height ? asset.width / asset.height : null,
+      title: node.detail ?? node.label,
+      createdAt: asset.created_at ?? null,
+      chips,
+      downloadName: node.detail ?? node.label,
     })
-    const low = affected.reduce((sum, n) => sum + (n.estimateCredits?.[0] ?? 0), 0)
-    const high = affected.reduce(
-      (sum, n) => sum + (n.estimateCredits?.[1] ?? n.estimateCredits?.[0] ?? 0),
-      0,
-    )
-    // 估价诚实面: unquoted nodes in the blast (same law as the draft fold).
-    const unquoted = affected.filter((n) => n.estimateCredits == null).length
-    return { affected, low, high, unquoted }
-  }, [promptEdit, graph, nodeById])
-
-  // Esc closes (the edit textarea has already unmounted by the time the
-  // card is open, so no gesture collision).
-  useEffect(() => {
-    if (!promptEdit) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") clearPromptEdit()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [promptEdit, clearPromptEdit])
-
-  const handlePromptEditConfirm = useCallback(async () => {
-    if (!promptEdit) return
-    const ok = (await onNodeRevise?.(promptEdit.nodeId, promptEdit.text)) ?? false
-    // Success keeps promptEdit alive — it IS the card face's optimistic
-    // program until the stamp arrives (the clear-on-stamp effect above) —
-    // but the confirm block itself closes: the gesture is spent.
-    // Failure (credits shortfall / active run / a reject — the surface
-    // toasted) reverts the display to the domain truth: nothing landed.
-    if (ok) setPromptConfirmOpen(false)
-    else clearPromptEdit()
-  }, [promptEdit, onNodeRevise, clearPromptEdit])
-
-  // 动作住节点内 (2026-09-10 判词①): the prompt edit's pricing
-  // confirmation docks INSIDE the node's program region — the surface only
-  // computes the payload; the card renders it in place (the ViewportPortal
-  // floating card retired — one less anchor-math pair, and the gesture
-  // lives where the eye is).
-  const promptConfirmPayload =
-    promptEdit && promptConfirmOpen && editedNode && promptEditBlast
-      ? {
-          nodeId: promptEdit.nodeId,
-          blastLabels: promptEditBlast.affected.map((n) => n.label),
-          blastSingle: promptEditBlast.affected.length === 1,
-          low: promptEditBlast.low,
-          high: promptEditBlast.high,
-          unquoted: promptEditBlast.unquoted,
-          balance: balanceNow,
-          onConfirm: handlePromptEditConfirm,
-          onCancel: clearPromptEdit,
-        }
-      : null
-
-  // Pane click = back to neutral: the dossier closes with the focus (D4/D8),
-  // and a pending pricing confirmation dismisses with it.
-  const handlePaneClick = useCallback(() => {
-    setInspectedId(null)
-    clearPromptEdit()
-    onPaneClick?.()
-  }, [clearPromptEdit, onPaneClick])
-
-  // The dossier's asset facts (出生证明 lineage) come from the graph's own
-  // asset nodes — one source, zero second fetch.
-  const inspectorAssets = useMemo(
-    () =>
-      nodes.flatMap((n) =>
-        n.asset
-          ? [
-              {
-                id: n.asset.id,
-                type: n.asset.type,
-                title: n.asset.title,
-                file_url: n.asset.file_url,
-                stream_url: n.asset.stream_url,
-                duration_seconds: n.asset.duration_seconds,
-              },
-            ]
-          : [],
-      ),
-    [nodes],
-  )
+  }, [nodeById])
+  const handleSelect = useCallback((nodeId: string) => {
+    if (nodeById.get(nodeId)?.asset) handleExpandMedia(nodeId)
+  }, [handleExpandMedia, nodeById])
 
   return (
     <div className={cn("relative", className)}>
-      {/* key = the terminal self-heal epoch: a bump remounts the xyflow
-          world (fresh store, re-synced from settled props) — the frozen
-          empty layer the run-tail refetch race can leave never survives
-          the run (2026-09-13 用户拍板). viewportPreserveRef carries the
-          live viewport across the remount, so the heal is INVISIBLE —
-          完工后画面纹丝不动 (2026-09-29 用户拍板). */}
       <FlowView
-        key={healEpoch}
         nodes={nodes}
         edges={edges}
         navigation="explore"
         controls
-        controlsClassName={controlsClassName}
         settleKey={baselineReady && visible ? baselineKey : null}
         bornIds={bornIds}
         dots
         className="h-full"
-        selectedId={selectedOutputId ? (nodeIdByOutputId.get(selectedOutputId) ?? null) : null}
-        onPaneClick={handlePaneClick}
         onExpandMedia={handleExpandMedia}
         onSelect={handleSelect}
-        onOutputAction={handleOutputAction}
-        onQuoteOutput={handleQuoteOutput}
         onAssetAction={onAssetAction}
-        onDisplayChange={handleDisplayChange}
-        onPromptEdit={handlePromptEdit}
-        pendingProgram={promptEdit}
-        promptConfirm={promptConfirmPayload}
-        onLineageHover={setLineageHover}
-        lineageHover={lineageHover}
-        cameraBeat={cameraBeat}
-        onCameraBeatConsumed={onCameraBeatConsumed}
-        centerRequest={centerRequest}
-        onCenterRequestConsumed={onCenterRequestConsumed}
-        occludedRightPx={occludedRightPx}
         viewportPreserveRef={viewportPreserveRef}
       />
-      {/* The dossier rides the zoom pill's corner: right-aligned with it,
-          stacked below (pill = header-cleared 64/68px + h-9 → 100/104px, +8px
-          air → 108/112px), and sharing its docked-panel avoidance so both
-          clear the open frost. */}
-      {inspectedOutput && (
-        <OutputInspector
-          output={inspectedOutput}
-          step={
-            (steps ?? []).find((s) => s.id === inspectedOutput.workflow_step_id) ??
-            null
-          }
-          assets={inspectorAssets}
-          onClose={() => setInspectedId(null)}
-          onAction={(output, action) => onOutputAction?.(output, action)}
-          className={cn(
-            "absolute top-[108px] right-3 z-30 md:top-[112px] md:right-4",
-            controlsClassName,
-          )}
-        />
-      )}
       <MediaLightbox
         data={lightbox}
         getSlot={getFlowMediaSlot}
-        onOpenChange={(open) => {
-          if (!open) setLightbox(null)
-        }}
+        onOpenChange={(open) => { if (!open) setLightbox(null) }}
       />
     </div>
   )

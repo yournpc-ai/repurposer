@@ -7,10 +7,9 @@ import json
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Generic, Literal, TypeVar
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import (
-    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -777,45 +776,10 @@ class AnswerProposal(BaseModel):
     text: str
 
 
-class WiringProposal(BaseModel):
-    """Intent agent output, state E (ADR-057 K4): edit the persistent graph,
-    then the deterministic scope classifier adjudicates the resulting paid
-    execution scope (ADR-087 §4, D4) — an approved-scope continuation
-    (e.g. ``edit_prompt(node)`` + ``run({node} ∪ downstream)`` on filled
-    nodes) re-fills autonomously; a scope expansion / unproven op rolls the
-    door's mutation back and docks a plan for explicit confirmation instead.
-    ``ops`` speaks the graph_store wiring registry's vocabulary (add_node /
-    connect / edit_prompt / delete_node / run); adjudication is
-    ``apply_wiring_ops``'s (op shape / references / ports / cycles), never
-    the schema boundary's — ops stay loose dicts here so the registry's own
-    errors feed the repair round verbatim."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _tolerate_null_name(cls, data: Any) -> Any:
-        """读容忍 — same null seat as TaskListProposal.name."""
-        if isinstance(data, dict) and data.get("name") is None:
-            data = dict(data)
-            data.pop("name", None)
-        return data
-
-    type: Literal["wiring"] = "wiring"
-    ops: list[dict] = Field(default_factory=list)
-    summary: str
-    # LLM 建图时命名 (ADR-058): same seat as TaskListProposal.name — the
-    # revision run's compact deliverable name, "" = unnamed.
-    name: str = ""
-    # Kept when EditGraphArgs is translated into this internal proposal so
-    # the expansion dock reads the current message's production fact instead
-    # of an out-of-scope variable. None remains the safe awaiting-production
-    # default for code-assembled revision proposals.
-    production_intent: bool | None = None
 
 
 IntentProposal = Annotated[
-    TaskListProposal | QuestionProposal | AnswerProposal | WiringProposal,
+    TaskListProposal | QuestionProposal | AnswerProposal,
     Field(discriminator="type"),
 ]
 """The five-state discriminated union the chat intent agent returns (§3, N-18 + N-21; state E = ADR-057 wiring ops)."""
@@ -888,7 +852,7 @@ def is_null_token(value: Any) -> bool:
     True only for the bare token, exact-match — real content (a focus text
     mentioning null) never equals it. One predicate shared by the proposal
     boundary (TaskItem's param scrub) and the display boundary
-    (OutputResponse.language / compose_spec_prompt normalization)."""
+    (OutputResponse.language normalization)."""
     return isinstance(value, str) and value.strip().lower() == "null"
 
 
@@ -989,21 +953,17 @@ class PresentPlanArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
             tolerate_null_keys(
-                data, "tasks", "specific_instruction", "caption_mode", "tasks_explicit", "name", "material_text", "material_urls", "pending_disposition", "production_intent"
+                data, "tasks", "specific_instruction", "tasks_explicit", "name", "material_text", "material_urls", "pending_disposition", "production_intent"
             )
         )
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
-        description="The proposed tool chain — one task per piece of work, in execution order (an English and a German post = two write_post tasks; whole-video bilingual subtitles = one translate_clip task).",
+        description="The authorized production chain: produce_video or prepare_narration.",
     )
     specific_instruction: str | None = Field(
         default=None,
         description="Free-form instruction distilled from the prompt.",
-    )
-    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
-        default=None,
-        description="Caption mode for captioned-video runs (write_quotes / caption-bearing recipes). Set it only when the user's own words already name the mode; when omitted, the system derives the default and the plan card shows it as a visible fact the user can change with one sentence.",
     )
     tasks_explicit: bool = Field(
         default=False,
@@ -1478,8 +1438,17 @@ class NarrationSentenceSemanticsArgs(BaseModel):
     weight: Literal["main", "sub"]
     entities: list[str] = Field(default=[], max_length=12)
     needs: list[Literal["native_text", "diagram", "real_media", "data", "generator"]] = Field(
-        default=[], max_length=5
+        default=[], max_length=5,
+        description="JSON array of media/capability strings, e.g. ['native_text'].",
     )
+
+    @field_validator("needs", mode="before")
+    @classmethod
+    def _needs_list(cls, value):
+        from app.editing.schemas import _list_wire
+
+        return _list_wire(value)
+
     emphasis_word_ids: list[str] = Field(default=[], max_length=24)
 
 
@@ -1699,48 +1668,97 @@ class ProposeTasksArgs(BaseModel):
     )
 
 
+class ManualNodeSpec(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    prototype: Literal["manual"]
+    text: str | None = None
+    title: str | None = None
+    prompt: str | None = None
+
+
+class AddManualNodeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["add_node"]
+    id: UUID | None = None
+    type: Literal["text", "table", "image", "video", "audio"]
+    spec: ManualNodeSpec
+    after: list[UUID] = Field(
+        default_factory=list,
+        description="Parent node ids for this node's incoming edges. Include every required connection in this same edit_graph call.",
+    )
+    layout: dict[str, Any] | None = None
+
+
+class ManualEdgeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_node: UUID
+    to_node: UUID
+    edge_type: Literal["video", "audio", "text"] | None = None
+    from_port: str | None = None
+    to_port: str | None = None
+
+
+class ConnectManualNodeArgs(ManualEdgeArgs):
+    op: Literal["connect"]
+
+
+class DisconnectManualNodeArgs(ManualEdgeArgs):
+    op: Literal["disconnect"]
+
+
+class EditManualNodeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["edit_prompt"]
+    node: UUID
+    prompt: str
+
+
+class DeleteManualNodeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["delete_node"]
+    node: UUID
+
+
+ManualGraphOp = Annotated[
+    AddManualNodeArgs | ConnectManualNodeArgs | DisconnectManualNodeArgs | EditManualNodeArgs | DeleteManualNodeArgs,
+    Field(discriminator="op"),
+]
+
+
 class EditGraphArgs(BaseModel):
-    """``edit_graph`` params, chat path (WiringProposal minus summary):
-    revise the persistent graph — a revision inside the already-confirmed
-    work re-fills the affected subgraph directly; one that adds new paid
-    work docks for the user's confirmation instead, it does not run. ``ops``
-    stays loose dicts — adjudication is ``apply_wiring_ops``'s (op shape /
-    references / ports / cycles), whose own errors feed back as the
-    rejection echo."""
+    """CRUD for ordinary manual Graph nodes and their typed connections."""
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
+        if isinstance(data, dict) and any(
+            isinstance(op, dict) and op.get("op") == "run" for op in data.get("ops") or []
+        ):
+            raise ValueError("manual Graph CRUD never starts a Run")
         return tolerate_null_keys(data, "ops", "name", "pending_disposition", "production_intent")
 
-    ops: list[dict] = Field(
+    ops: list[ManualGraphOp] = Field(
         default_factory=list,
-        description="Wiring ops in the registry vocabulary: add_node / connect / edit_prompt / delete_node / run.",
+        description="add_node takes type and spec.prototype='manual'; connections take from_node/to_node.",
     )
-    name: str = Field(
-        default="",
-        description="A compact noun phrase (2-6 words, interface language) naming the revision run's deliverable.",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
-    )
-    production_intent: bool | None = Field(
-        default=None,
-        description=(
-            "Does the user's message ask for this work to be MADE now? "
-            "True only for an explicit production request or delegation "
-            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
-            "pure modification, a review-only ask ('先给我看方案'), or a "
-            "discussion. The user's auto/ask settings only waive approval "
-            "beats — they never turn a message without a production "
-            "request into one: a plan docked without it waits for the "
-            "user's word (the card keeps its start button). Never omit "
-            "this judgment."
-        ),
-    )
+
+    @field_validator("ops")
+    @classmethod
+    def _manual_graph_only(cls, ops: list[ManualGraphOp]) -> list[dict]:
+        if any(op.op == "run" for op in ops):
+            raise ValueError("manual Graph CRUD never starts a Run")
+        return [op.model_dump(mode="json", exclude_none=True, exclude_unset=True) for op in ops]
+
+    name: str = ""
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+    production_intent: bool | None = None
 
 
 class ChatAskArgs(BaseModel):
@@ -1812,154 +1830,6 @@ class RetryUploadArgs(BaseModel):
         default="none",
         description="Pending-question settlement for this turn: 'answer' = the message ENGAGES it (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
     )
-
-
-class ReviseOutputTarget(BaseModel):
-    """``revise_output``'s pointing (iter-3 S3, E4): the user's OWN pointing
-    words ride verbatim — ``plan_ref`` relays the ordinal / plan_id
-    ("2", "plan 2", the id from get_pending_plan); ``output_id`` is the
-    @output pin's definite id. One or the other; both empty = the target is
-    unclear (ask, never guess)."""
-
-    model_config = ConfigDict(extra="forbid", coerce_numbers_to_str=True)
-    # coerce_numbers_to_str absorbs the provider's numeric-string dialect:
-    # the ordinal can arrive as a bare NUMBER ('plan 2' → plan_ref: 2), and
-    # strict-string rejection does not help the model recover — the pointing
-    # words are the user's, so the schema absorbs the dialect (顺形律).
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "plan_ref", "output_id")
-
-    plan_ref: str | None = Field(
-        default=None,
-        description=(
-            "The user's pointing words for the plan, verbatim — an ordinal "
-            "('2', 'plan 2') or a plan_id. Relay, never resolve it yourself."
-        ),
-    )
-    output_id: UUID | None = Field(
-        default=None,
-        description="The pinned output's id (an @output mention) — the definite reference.",
-    )
-
-
-class ReviseOutputArgs(BaseModel):
-    """``revise_output`` params, chat path (iter-3 S3, ADR-089 §6 修订二分律):
-    the CRAFT-level revision verb — the how inside the paid envelope
-    ('plan 2 的字幕太长了', 'make the hook sharper'), never the what
-    (a plan's deliverables change = revise_plan). The system routes the
-    pointing to the confirmed scope's node set (R20), rewrites the affected
-    programs with the instruction, and the scope classifier decides: inside
-    the confirmed scope it reruns directly; new paid work re-docks as a
-    mini decision package."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "target", "instruction", "pending_disposition")
-
-    target: ReviseOutputTarget = Field(
-        default_factory=ReviseOutputTarget,
-        description="What the revision points at — plan_ref XOR output_id.",
-    )
-    instruction: str = Field(
-        default="",
-        description="The user's change ask, restated in one compact line (what changes about the work).",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
-    )
-
-
-class EditOutputParams(BaseModel):
-    """``edit_output``'s product-semantics params (ADR-090, E2): one kind
-    consumes exactly one key — the code pairs them (多给/缺给 = 域拒绝).
-    NO timestamps, no ids, no op internals: the quote is the user's words,
-    the seconds a plain count, the style a preset enum name."""
-
-    model_config = ConfigDict(extra="forbid", coerce_numbers_to_str=True)
-
-    quote: str | None = Field(
-        default=None,
-        description="remove_range: the words to cut, quoted verbatim from the user or the captions.",
-    )
-    seconds: float | None = Field(
-        default=None,
-        description="set_trim: how many seconds to take OFF the clip's end (a positive count).",
-    )
-    style: str | None = Field(
-        default=None,
-        description="set_caption_style: a preset name from list_caption_styles (enum only, never free-form).",
-    )
-    title: str | None = Field(
-        default=None,
-        description="set_title: the new title text, verbatim.",
-    )
-
-
-# The precise edit's param→verb decode table (ADR-090 E2; edit_ops.KIND_PARAMS
-# is the same law's forward direction — a pure test pins the bijection).
-_EDIT_KIND_BY_PARAM = {
-    "quote": "remove_range",
-    "seconds": "set_trim",
-    "style": "set_caption_style",
-    "title": "set_title",
-}
-
-
-def edit_kind_for_params(params: "EditOutputParams") -> str | None:
-    """The verb decode (ADR-090 E2, 顺形律 — probe H 实测 2026-09-24; Final
-    Hardening B1: the ONLY kind source). Exactly one filled param determines
-    the kind; zero or 2+ filled carries no verb → None → the pairing law's
-    domain refusal rides the loop (never a guess). There is no ``kind``
-    field: the verb is expressed purely through WHICH param is filled, so
-    schema and production dispatch can never disagree."""
-    filled = [
-        k
-        for k, v in params.model_dump(mode="python").items()
-        if v is not None and str(v).strip() != ""
-    ]
-    if len(filled) == 1:
-        return _EDIT_KIND_BY_PARAM.get(filled[0])
-    return None
-
-
-class EditOutputArgs(BaseModel):
-    """``edit_output`` params, chat path (ADR-090 §1/§4): the PRECISE edit
-    verb — a mechanically executable change to an already-produced clip
-    ('delete this line' / '3 seconds shorter' / 'captions to karaoke' /
-    'retitle to X'). The verb is carried by WHICH one param is filled
-    (``edit_kind_for_params`` — the schema deliberately has no ``kind``
-    field; the loop strips stray naming keys anyway); the system resolves
-    the quote to seconds, journals the op, and re-renders. An open-ended
-    craft ask goes to revise_output; when the change is not mechanically
-    specifiable, ask — never guess."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "target", "params", "pending_disposition")
-
-    target: ReviseOutputTarget = Field(
-        default_factory=ReviseOutputTarget,
-        description="What the edit points at — the @output pin (output_id) XOR the plan ordinal (plan_ref relayed verbatim).",
-    )
-    params: EditOutputParams = Field(default_factory=EditOutputParams)
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
-    )
-
-
-# ---- 触发回合 (T3, ADR-077 判词③) — the proactive turn's terminal --------
-# (SuggestionItem lives beside the answer args above — two seats, one shape.)
 
 
 class WrapUpArgs(BaseModel):
@@ -2172,7 +2042,7 @@ class PersonaContext(BaseModel):
     The identity module (ADR-037/038): one flat object carrying the style six,
     content strategy, identity card, voice (audio) block and brand (skin)
     block. Rendered into prompts at the agent layer via the j2 templates'
-    ``context.persona``; the brand block bakes into the clip-spec.
+    ``context.persona``; the brand block bakes into the video-spec.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -2253,29 +2123,6 @@ class ToneSettings(BaseModel):
     audience: Literal["academic", "industry", "general", "investor"] = "industry"
 
 
-class SourceSpan(BaseModel):
-    """A timeline span of one source asset (iter-2 ②, N-57): the writer's
-    material narrows to this range instead of the whole talk.
-
-    Compiler-set on plan-sourced chains (the exploration world resolved the
-    Select's evidence range at the door); ``asset_id`` pins the asset
-    deterministically (the compile knows the candidate set's asset), None
-    = resolve to the project's timeline-carrying asset.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    start: float
-    end: float
-    asset_id: str | None = None
-
-    @model_validator(mode="after")
-    def _ordered(self) -> "SourceSpan":
-        if not self.start < self.end:
-            raise ValueError(f"source_span start ({self.start}) must be < end ({self.end})")
-        return self
-
-
 class IntentSlot(BaseModel):
     """任务槽: one line of the plan — one requested output (request layer).
 
@@ -2301,7 +2148,6 @@ class IntentSlot(BaseModel):
     focus: str | None = None
     language: str | None = None
     tone_override: str | None = None
-    source_span: SourceSpan | None = None
     explicit: bool = False
 
     @model_validator(mode="before")
@@ -2328,62 +2174,6 @@ class IntentSlot(BaseModel):
         if self.type not in known_output_types():
             raise ValueError(f"Unknown output type: {self.type}")
         return self
-
-
-_SLOT_TO_TOOL = {
-    # Legacy outputs-grammar slot type → its producing tool (ADR-043 read
-    # tolerance for stored pending_brief rows — never written).
-    "clips": "select_clips",
-    "post": "write_post",
-    "quotes": "write_quotes",
-    "carousel": "write_carousel",
-    "article": "write_article",
-}
-
-
-def _legacy_slots_to_tasks(data: dict) -> list[dict]:
-    """outputs-grammar plan → task list (ADR-043): each slot becomes its
-    producing tool's task (slot fields sink to params — params models ignore
-    stray keys at adjudication); the retired plan-level modifiers fan out
-    into per-language transform tasks; a plan-level aspect rides the clips
-    task. Read tolerance only — new writes are born as task lists."""
-    tasks: list[dict] = []
-    aspect = data.get("aspect")
-    for slot in data.get("outputs") or []:
-        if isinstance(slot, str):
-            slot = {"type": slot}
-        if not isinstance(slot, dict):
-            continue
-        tool = _SLOT_TO_TOOL.get(slot.get("type"))
-        if tool is None:
-            continue
-        params = {
-            k: slot[k]
-            for k in ("count", "focus", "language", "tone_override")
-            if slot.get(k) is not None
-        }
-        if tool == "select_clips" and aspect:
-            params["aspect"] = aspect
-        tasks.append({"tool": tool, "params": params})
-    for lang in data.get("dub_languages") or []:
-        # fork: the slots-era compile produced dub/translate as fork nodes
-        # (derived rows, source untouched) — the upgrade keeps that shape.
-        tasks.append(
-            {"tool": "dub_clip", "params": {"target_language": lang, "fork": True}}
-        )
-    bilingual = bool(data.get("caption_bilingual"))
-    for lang in data.get("caption_languages") or []:
-        tasks.append(
-            {
-                "tool": "translate_clip",
-                "params": {
-                    "target_language": lang,
-                    "bilingual": bilingual,
-                    "fork": True,
-                },
-            }
-        )
-    return tasks
 
 
 # ---------------------------------------------------------------------------
@@ -2536,82 +2326,19 @@ class InferredIntent(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _tolerate_legacy_shape(cls, data: Any) -> Any:
-        """Upgrade stored legacy plans on read (never written): the pre-slot
-        flat shape → slots, the slots/modifiers grammar → a task list; the
-        retired keys (outputs / tone / the four plan-level modifiers) are
-        stripped. Read tolerance for stored ``pending_brief`` rows only."""
+    def _read_optional_fields(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
         data = dict(data)
-        # An explicit ``tasks: null`` (the LLM's habit on start/answer
-        # calls) reads as "no opinion" — dropping the key lets the field
-        # default apply instead of failing validation.
-        if data.get("tasks") is None:
-            data.pop("tasks", None)
-        # Same null tolerance for ``name`` (ADR-058 — the LLM writes null on
-        # start/ask/answer calls; 打字机律牙①: a rejection costs the
-        # funnel's repair round, which never streams).
-        if data.get("name") is None:
-            data.pop("name", None)
-        # Same null tolerance for ``tasks_explicit`` (2026-09-09 实测: ask
-        # calls habitually write null here — three repair rounds observed
-        # in one day, each costing ~15s and diverging the stream from the
-        # envelope; an ask has no tasks to be explicit about, so the False
-        # default is the honest read).
-        if data.get("tasks_explicit") is None:
-            data.pop("tasks_explicit", None)
-        # 2026-08-05 restructure leftover: legacy stored plans carry
-        # plan-level ``language`` / ``language_explicit`` — strip on read.
-        for retired in ("language", "language_explicit"):
-            data.pop(retired, None)
-        outputs = data.get("outputs")
-        if isinstance(outputs, list) and any(isinstance(o, str) for o in outputs):
-            # Pre-slot flat shape → slot dicts (the retired flat counts ride).
-            flat_counts = {
-                "clips": data.get("clip_count"),
-                "quotes": data.get("quotes_count"),
-                "carousel": data.get("carousel_count"),
-            }
-            data["outputs"] = [
-                {"type": o, "count": flat_counts.get(o)} if isinstance(o, str) else o
-                for o in outputs
-            ]
-        if "tasks" not in data and isinstance(data.get("outputs"), list):
-            tasks = _legacy_slots_to_tasks(data)
-            if tasks:
-                data["tasks"] = tasks
-                data["tasks_explicit"] = bool(data.get("outputs_explicit"))
-        for retired in (
-            "outputs",
-            "tone",
-            "dub_languages",
-            "caption_languages",
-            "caption_bilingual",
-            "aspect",
-            "outputs_explicit",
-            "clip_count",
-            "quotes_count",
-            "carousel_count",
-            "clip_count_explicit",
-        ):
-            data.pop(retired, None)
-        # 校验分层律 (2026-09-11, ADR-064): the brief is ADVISORY
-        # bookkeeping — after its own shape normalization it still fails to
-        # parse, drop the field and let the turn live (the critical payload
-        # — action / tasks / answer / ask / name, the things that drive a
-        # paid run — stays strict above). Losing one brief update is
-        # harmless: the next turn re-proposes, and the raw messages are
-        # still there. The drop is logged, never silent.
+        for key in ("tasks", "name", "tasks_explicit"):
+            if data.get(key) is None:
+                data.pop(key, None)
         brief = data.get("brief")
         if brief is not None:
             try:
                 Brief.model_validate(brief)
             except Exception:
-                logger.warning(
-                    "brief_dropped",
-                    brief=json.dumps(brief, default=str)[:500],
-                )
+                logger.warning("brief_dropped", brief=json.dumps(brief, default=str)[:500])
                 data["brief"] = None
         return data
 
@@ -2654,20 +2381,15 @@ class InferredIntent(BaseModel):
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description=(
-            "The proposed tool chain — one task per piece of work, in "
-            "execution order (e.g. an English and a German post = two "
-            "write_post tasks; whole-video bilingual subtitles = one "
-            "translate_clip task). Empty for start/answer/ask calls."
+            "The authorized production chain: produce_video or "
+            "prepare_narration, in execution order. Empty for "
+            "start/answer/ask calls."
         ),
     )
     specific_instruction: str | None = Field(
         default=None,
         description="Free-form instruction distilled from the prompt. Null for 'answer'/'start'/'ask'.",
     )
-    # No consumers anywhere (verified 2026-09-11, ADR-071) — kept on the
-    # schema for read tolerance (the model may still emit it); the prompts
-    # no longer ask for it. Delete on the next schema-breaking batch.
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     tasks_explicit: bool = Field(
         default=False,
         description=(
@@ -2675,22 +2397,7 @@ class InferredIntent(BaseModel):
             "False when the chain is the default proposal."
         ),
     )
-    # Caption mode for runs that produce captioned video (Phase 1, 2026-08-25):
-    # quote-cards' write_quotes task asks the user via chat which caption mode
-    # they want — bilingual is the canonical default (matches the recipe's
-    # example prompt), source_only / target_only honour a single-language pick.
-    # None = chat should dock the question; a value = the answer has been
-    # recorded and lands in run.context.caption_mode at the run birthplace.
-    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
-        default=None,
-        description=(
-            "Caption mode for captioned-video runs (write_quotes / future "
-            "caption-bearing recipes). None = chat should ask the user. "
-            "Bilingual = original + target language side-by-side; "
-            "source_only = original language only; target_only = the run's "
-            "target language only."
-        ),
-    )
+    # Advisory brief slots preserve user-stated and inferred source facts.
     # brief (ADR-052 B2): the router's full-update proposal — emit only the
     # slots you have a view on this turn, each with
     # its source (user-stated ONLY when the user's own words literally state
@@ -2792,7 +2499,6 @@ class QuestionPayload(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief slot this
     # question fills — the answer backfills it user-stated and the plan path
-    # resumes (the dock handshake, same pattern as the caption_mode_ prefix).
     # None on every question that is not a brief ask (caption mode, direction
     # interrupts, post-run shape C). ADR-078 判词④ adds ``asset_role``: the
     # 角色消歧 dock ask — its options are code-built (id = asset id) and its
@@ -3066,566 +2772,12 @@ class ClipRevision(BaseModel):
     score_reason: str | None = None
 
 
-class Segment(BaseModel):
-    """A high-potential segment extracted from project source assets."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(description="Stable identifier for this segment")
-    source_text: str = Field(description="Original text of the segment")
-    start_marker: str = Field(description="Approximate start location in source")
-    end_marker: str = Field(description="Approximate end location in source")
-    start_seconds: float | None = Field(
-        default=None,
-        description="Exact start time in seconds (preferred over text markers)",
-    )
-    end_seconds: float | None = Field(
-        default=None,
-        description="Exact end time in seconds (preferred over text markers)",
-    )
-    summary: str = ""
-    hook: str = ""
-    recommendation_score: int = Field(default=50, ge=1, le=100)
-    golden_quote: str = ""
-    # Span-carrier bound: highlights stay ≤120s by the ClipPlan contract (the
-    # LLM-facing schema); Segment also carries materialize_source's full-span
-    # [0, source duration) segment (ADR-043), so the ceiling here is 4h.
-    duration_seconds: int = Field(default=30, ge=5, le=14400)
-
-
-class ClipPlan(BaseModel):
-    """A complete clip plan produced by the clip agent.
-
-    Combines segment selection and script writing into one structure so that a
-    single multimodal call can produce everything needed for ``Clip`` creation
-    and ``render_spec`` building. ``to_segment`` keeps the existing segment
-    path unchanged.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(description="Stable identifier for this clip plan")
-    source_text: str = Field(description="Original segment text from the talk")
-    start_marker: str = Field(description="Approximate start location in source")
-    end_marker: str = Field(description="Approximate end location in source")
-    start_seconds: float | None = Field(
-        default=None,
-        description="Exact start time in seconds (preferred over text markers)",
-    )
-    end_seconds: float | None = Field(
-        default=None,
-        description="Exact end time in seconds (preferred over text markers)",
-    )
-    summary: str = ""
-    hook: str = ""
-    title: str = ""
-    golden_quote: str = ""
-    recommendation_score: int = Field(default=50, ge=1, le=100)
-    # One-sentence justification of the score, shown to the user verbatim
-    # (STRATEGY §2.1: a visible reason is what makes the score falsifiable).
-    score_reason: str = ""
-    duration_seconds: int = Field(default=30, ge=5, le=120)
-    music_mood: str = "calm"
-    # Music selection (see docs/MUSIC_ARCHITECTURE.md §8.3): the Clip Agent picks
-    # one piece per clip. ``music_id`` is the Music row's UUID (string) — or, as a
-    # robust fallback, a mood key (calm/uplifting/corporate) the orchestrator
-    # resolves server-side. ``music_enabled``/``music_gain_db`` are per-clip
-    # overrides; when ``music_id`` is unset the persona skin default is used.
-    music_id: str | None = None
-    music_enabled: bool = True
-    music_gain_db: float = -18.0
-    visual_notes: str = ""
-    title_options: list[str] = Field(default_factory=list)
-    description: str = ""
-    hashtags: list[str] = Field(default_factory=list)
-    topic: str = ""
-    # When false, the renderer skips burned-in captions (e.g., source video
-    # already has hard-coded subtitles). ASR is still performed so the transcript
-    # and SRT export remain available. ``None`` means the agent did not decide,
-    # so the persona skin default applies.
-    caption_enabled: bool | None = None
-
-    def to_segment(self) -> Segment:
-        return Segment(
-            id=self.id,
-            source_text=self.source_text,
-            start_marker=self.start_marker,
-            end_marker=self.end_marker,
-            start_seconds=self.start_seconds,
-            end_seconds=self.end_seconds,
-            summary=self.summary,
-            hook=self.hook,
-            recommendation_score=self.recommendation_score,
-            golden_quote=self.golden_quote,
-            duration_seconds=self.duration_seconds,
-        )
-
-
-class ClipPlans(BaseModel):
-    """Clip agent output: analysis + a list of ready-to-render clip plans."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    overall_summary: str = ""
-    core_arguments: list[str] = Field(default_factory=list)
-    themes: list[str] = Field(default_factory=list)
-    target_audience: str = ""
-    clips: list[ClipPlan] = Field(default_factory=list)
-
-
-class ContentAnalysis(BaseModel):
-    """Analysis result for project source assets."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    overall_summary: str = ""
-    core_arguments: list[str] = Field(default_factory=list)
-    themes: list[str] = Field(default_factory=list)
-    target_audience: str = ""
-    segments: list[Segment] = Field(default_factory=list)
-
-
-class Post(BaseModel):
-    """Generated social post."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    content: str
-    hashtags: list[str] = Field(default_factory=list)
-
-
-class Quote(BaseModel):
-    """Generated quote card (Phase 2, 2026-08-25, RECIPES §4.6.2).
-
-    The writer LLM NEVER sets timestamps — the runner snaps them off
-    ``understanding.quotable_lines[id]`` (Phase 2 line 7: pick by id, snap
-    by code). ``quote_alt`` is filled either by the LLM (when it knows the
-    target language) or by the runner via the translator agent
-    (RECIPES §4.6.2 — alt = LLM-judged translation of the source quote,
-    not the writer's free composition).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    quote: str
-    attribution: str
-    # LLM picks by ordinal into understanding.quotable_lines; None when the
-    # chain had no material (vague prompt → writer drafts from persona style
-    # alone, the runner leaves timestamps null and Phase 3's image source
-    # fallback carries the card without source video).
-    quotable_line_id: int | None = None
-    # Code-set timestamps snapped off the picked quotable line — the renderer
-    # (Phase 3) reads these to slice the source video and pick the cover frame.
-    source_start: float | None = None
-    source_end: float | None = None
-    # Midpoint of [source_start, source_end] rounded to 0.1s (the
-    # frame-grabber's quantize step). Null when the line has no timecode.
-    frame_at: float | None = None
-    # Source-language quote (verbatim from the material when
-    # quotable_line_id is set; otherwise the writer's persona-style draft).
-    # Phase 3 reads this as the main caption line.
-    quote_source: str | None = None
-    # The opposite-language translation; populated when caption_mode is
-    # "bilingual". Source/target are decided by ``caption_mode`` on the run
-    # (REVIEWED FOR PHASE 2: NEVER auto-inferred from output language).
-    quote_alt: str | None = None
-
-
-class Quotes(BaseModel):
-    """Quote-card chain response (RECIPES §4.6.2 chain variant, 2026-08-25).
-
-    Phase 2 / 3 default: ``quotes`` was a single-element list — "1 quote = 1
-    video card". The chain variant replaces that with a CORE-IDEAL-CHAIN:
-    the writer picks a core idea, then judges how many sentences are
-    needed to fully express it (N = 3..7, dynamic — depends on the topic's
-    complexity), and selects N verbatim ``quotable_line_id``s in sequence.
-    The materializer renders all N as a vertical stack of caption strips
-    on a 9:16 canvas, with an optional speaker frame on top
-    (``needs_speaker_frame``).
-
-    The schema tolerates ``quotes=[]`` for the no-material path (writer
-    drafts from persona style alone). ``core_idea`` is always filled when
-    the writer had material to anchor on; ``needs_speaker_frame`` defaults
-    to False (text-only stack, image #34 style — the safer default; the
-    writer opts in to a speaker face when the topic reads as visual
-    anchor worthy, image #35 style).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    # 2026-08-25 chain variant: the writer's verdict on the talk's central
-    # idea. Lands on the Quotes output payload and rides to the renderer via
-    # _materialize_quote_card_outputs (currently display-only — the chain
-    # strips show the sentences themselves, the idea is upstream reasoning).
-    core_idea: str | None = None
-    # Optional speaker frame at the top of the cascade (image #35 Charlie
-    # Munger style); off = pure caption strips (image #34 style). Writer
-    # judges — no LLM-only path can derive this from text alone, the
-    # persona/topic feel carries it.
-    needs_speaker_frame: bool = False
-    quotes: list[Quote] = Field(default_factory=list)
-
-
-class QuoteFrame(BaseModel):
-    """Frame-card image payload (quote-cards §2.2, 2026-08-28).
-
-    A quote_frame is an IMAGE product (PNG on ``files.image``), never a
-    render job — the frame card (one chain entry: curated frame + single
-    caption block) and the chain composite (N strips, forms A/B) share
-    the type; ``source_ref.quote_chain`` distinguishes the composite and
-    ``source_ref.parents`` names its frame-card parents. ``aspect`` feeds
-    OutputResponse._derive_aspect for canvas node sizing.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    quote: str = ""
-    attribution: str = ""
-    aspect: str | None = None
-
-
-class CarouselSlide(BaseModel):
-    """One slide of a social carousel (a swipeable narrative)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str  # short heading
-    body: str = ""  # 1-3 short lines; may be empty on a pure-title cover/CTA
-
-
-class CarouselResponse(BaseModel):
-    """A carousel = ordered slides (cover/hook -> points -> CTA)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    slides: list[CarouselSlide] = Field(default_factory=list)
-
-
-class Article(BaseModel):
-    """Generated article / blog post."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str
-    content: str
-
-
-class DerivativeType(StrEnum):
-    """Derivative content types."""
-
-    POST = "post"
-    QUOTES = "quotes"
-    CAROUSEL = "carousel"
-    ARTICLE = "article"
-
-
-DerivativeContent = Post | Quotes | CarouselResponse | Article
-
-
-def validate_derivative_content(
-    derivative_type: DerivativeType,
-    content: dict,
-) -> dict:
-    """Validate and normalize derivative content against its type schema.
-
-    Returns a plain dict so it can be stored in the JSON column, but raises
-    ``ValueError`` if the shape does not match the declared type.
-    """
-    mapping: dict[DerivativeType, type[BaseModel]] = {
-        DerivativeType.POST: Post,
-        DerivativeType.QUOTES: Quotes,
-        DerivativeType.CAROUSEL: CarouselResponse,
-        DerivativeType.ARTICLE: Article,
-    }
-    model = mapping.get(derivative_type)
-    if model is None:
-        return content
-    return model.model_validate(content).model_dump(mode="json")
-
-
 class RenderStatus(StrEnum):
-    """Vertical-clip render job statuses (NULL on a Clip = render not requested)."""
-
     PENDING = "pending"
     RENDERING = "rendering"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
-
-# ---------------------------------------------------------------------------
-# clip-spec: the renderer-agnostic contract for the vertical-clip editor.
-# See docs/VIDEO_EDITOR.md §4. Describes WHAT to render, never HOW — contains no
-# Remotion/React/FFmpeg concepts, so the renderer behind it stays swappable.
-# ---------------------------------------------------------------------------
-
-
-class ImageShot(BaseModel):
-    """One planned shot of a stills clip (期 2 剪辑师契约段, ADR-016 兼容扩展).
-
-    Renderer-agnostic WHAT: which image holds, for how long, with what
-    motion. When ``ClipSource.image_shots`` is non-empty it replaces the
-    renderer's even-split fallback — an absent/empty list renders exactly
-    like a pre-期 2 spec (backward compatible).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    image_url: str  # storage-seam URL (same seam as image_urls)
-    dwell_s: float = Field(gt=0)
-    motion: Literal["none", "zoom_in", "zoom_out", "pan_left", "pan_right"] = "none"
-    # Ken Burns endpoint scale (craft band 1.05–1.20; pan reuses it as the
-    # travel magnitude). 1.0 with a motion kind is meaningless but legal.
-    motion_rate: float = Field(default=1.0, ge=1.0, le=1.5)
-
-
-class ClipSource(BaseModel):
-    """Source backing a clip: an on-camera video, or a "stills" audiogram."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    asset_id: UUID
-    kind: Literal["video", "stills"] = "video"
-    # browser-playable URL via storage.stream_url() (storage seam).
-    # video: the video file. stills: the optional speech audio ("" when none).
-    url: str = ""
-    # stills only: ordered backing images (0 -> solid bg, 1 -> full-frame,
-    # N -> even hard-cut slideshow across the duration).
-    image_urls: list[str] = Field(default_factory=list)
-    # stills only, 期 2: the editor's planned shots. Empty = the legacy even
-    # split over ``image_urls`` (both stay in the spec — shots reference the
-    # same URLs; the empty-fallback keeps old specs rendering identically).
-    image_shots: list[ImageShot] = Field(default_factory=list)
-    fps: int = 30
-    duration: float | None = None  # source length (seconds) — trim slider bound
-
-
-class ClipSegment(BaseModel):
-    """A kept span of a source. ``hidden=True`` is a non-destructive delete.
-
-    Widened (2026-08-17, ADR-044 操作集闭包): every segment carries a stable
-    ``id`` — the anchor-addressable entity identity — minted at birth and on
-    split (old persisted specs gain ids on the first validating read; the op
-    that persists them backfills the row). ``asset_id`` / ``url`` stay None
-    for the homogeneous default (the spec's own ``source``); a hetero
-    main-track splice (切 op) carries its donor's asset id + storage-seam
-    ``url`` resolved at write. ``provenance`` marks a generated segment
-    (None = real).
-
-    ``transition`` is the ENTRY-edge dissolve into this segment (枚举可、画廊
-    不可, ADR-016 L3 修订): ``none`` hard cut, ``fade`` through black,
-    ``dip`` white flash. Cap: at most 3 non-none transitions per clip —
-    enforced where the op is registered, not here.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
-    asset_id: UUID | None = None
-    url: str | None = None
-    start: float = Field(ge=0)
-    end: float = Field(ge=0)
-    hidden: bool = False
-    provenance: Literal["real", "generated"] | None = None
-    transition: Literal["none", "fade", "dip"] = "none"
-
-
-class ClipAnchor(BaseModel):
-    """Where a layer pins — the storage truth (存法 C: 锚是真相, ADR-044).
-
-    Three forms (绝对时间永不入库 — lane positions are a compile artifact):
-    - ``segment``: 段锚 — ``segment_id`` + ``offset_seconds`` into that
-      segment's kept span (source-clock offset).
-    - ``edge``: 边锚 — ``head``/``tail`` of the kept-video portion +
-      ``offset_seconds`` (tail resolves to video_end − offset). The brand
-      intro/outro blocks are edge-anchored by construction.
-    - ``ratio``: 比例锚 — ``ratio`` ∈ [0,1] of the kept-video duration.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["segment", "edge", "ratio"]
-    segment_id: str | None = None
-    edge: Literal["head", "tail"] | None = None
-    ratio: float | None = Field(default=None, ge=0, le=1)
-    offset_seconds: float = 0.0
-
-    @model_validator(mode="after")
-    def _coherent(self) -> "ClipAnchor":
-        if self.kind == "segment" and not self.segment_id:
-            raise ValueError("segment anchor requires segment_id")
-        if self.kind == "edge" and self.edge is None:
-            raise ValueError("edge anchor requires edge")
-        if self.kind == "ratio" and self.ratio is None:
-            raise ValueError("ratio anchor requires ratio")
-        return self
-
-
-class ClipRect(BaseModel):
-    """Normalized rectangle of the composition (CSS ∩ libass expressible)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    x: float = Field(ge=0, le=1)
-    y: float = Field(ge=0, le=1)
-    w: float = Field(gt=0, le=1)
-    h: float = Field(gt=0, le=1)
-
-
-class LayerMedia(BaseModel):
-    """A layer's content: one branch by media type (video/image/text)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["video", "image", "text"]
-    url: str | None = None  # video/image: storage-seam URL
-    text: str | None = None  # text: the callout content
-
-
-class ClipLayer(BaseModel):
-    """An overlay item on the layer track (ADR-044; "overlay" 词禁用于视频层,
-    NAMING §2).
-
-    Position = ``anchor`` (storage truth) + ``duration_seconds``; the output
-    timeline window is projected at the bake seam, never persisted.
-    ``provenance`` is REQUIRED — every layer item declares its ADR-026 class
-    at write. ``source_ref`` carries the entity reference the LLM proposed
-    from (never an absolute timecode).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
-    kind: Literal["broll", "text_callout", "pip", "motion_graphic"]
-    anchor: ClipAnchor
-    duration_seconds: float = Field(gt=0)
-    rect: ClipRect
-    z: int = 0
-    source_ref: dict | None = None
-    media: LayerMedia | None = None
-    provenance: Literal["real", "generated"]
-
-
-class ClipCrop(BaseModel):
-    """9:16/1:1 reframe as a normalized center + scale (applied via transform)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    x: float = Field(default=0.5, ge=0.0, le=1.0)
-    y: float = Field(default=0.5, ge=0.0, le=1.0)
-    scale: float = Field(default=1.0, gt=0.0)
-
-
-class CropKeyframe(BaseModel):
-    """One framing decision on the SOURCE timeline (ADR-045 D5): from source
-    second ``t``, hold this normalized center + scale. The crop data track is
-    a sparse list of these — a keyframe is a decision ("switch to A here"),
-    never per-frame data. Anti-dizzy parameters (dwell / deadzone / slew) are
-    write-side constraints of the tool, never serialized; the renderer eases
-    into each keyframe over a fixed ~8-frame smoothstep (a render constant).
-    """
-
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-
-    t: float = Field(ge=0.0)
-    x: float = Field(ge=0.0, le=1.0)
-    y: float = Field(ge=0.0, le=1.0)
-    scale: float = Field(gt=0.0)
-
-
-class CaptionCue(BaseModel):
-    """One caption cue (word/line) from ASR word-level timestamps; text editable."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    start: float = Field(ge=0)
-    end: float = Field(ge=0)
-    text: str
-    lang: str = "en"
-    # 期 2 强调隔离: the editor marked this word as emphasized — its line
-    # takes the pop-in entrance regardless of the preset's default entrance.
-    emphasis: bool = False
-
-
-class Point(BaseModel):
-    """Normalized center point in [0,1] (CSS translate / libass \\pos)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    x: float = Field(ge=0.0, le=1.0)
-    y: float = Field(ge=0.0, le=1.0)
-
-
-class ClipTitle(BaseModel):
-    """Optional title/hook card overlay."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = ""
-    enabled: bool = False
-    size: int | None = None  # composition px; None -> renderer default
-    position: Point | None = None  # normalized center; None -> default (top)
-
-
-class ClipMusic(BaseModel):
-    """Optional background music."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    # The Music row's UUID (string). Accepts a legacy ``track_id`` key on input so
-    # existing render_spec JSON (pre-rename) still deserializes, but the init
-    # param and serialized field are both ``music_id`` (see docs/MUSIC_ARCHITECTURE.md).
-    music_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("music_id", "track_id")
-    )
-    url: str | None = None  # resolved track URL (storage seam); None = no track
-    enabled: bool = False
-    gain_db: float = -18.0
-
-
-class GenerationContext(BaseModel):
-    """Shared context passed to every content generation agent.
-
-    Assembled once per generation run from the resolved persona (style +
-    brand skin), tone settings, project metadata, and user instruction.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    persona: PersonaContext | None = None
-    event_name: str | None = None
-    tone_settings: ToneSettings | None = None
-    target_language: str = "en"
-    instruction: str | None = None
-    # The persona skin block's default music piece (Music.id as string); the
-    # Clip Agent uses this as the default unless a clip's content suggests
-    # otherwise.
-    brand_music_id: str | None = None
-    # 2026-08-25 Phase 2: caption mode for caption-bearing runs
-    # (write_quotes when the chain produces a captioned video card).
-    # Three values: "bilingual" (source + target), "source_only", or
-    # "target_only". None = no caption-mode decision yet (legacy / no
-    # caption work). Threaded from run.context.caption_mode by the
-    # derivative dispatch.
-    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = None
-    # 2026-08-28 P2 (quote-cards §2.3): the run's resolved language pair.
-    # ``source_language`` = the ASR-detected language of the source
-    # material (asset.meta["language"], project.language fallback);
-    # ``quote_alt_language`` = the derived SECOND caption language for
-    # bilingual mode (derive_quote_alt_language — user-named target →
-    # project/UI locale → run target, first that ≠ source; None when no
-    # distinct alt exists, in which case bilingual is meaningless and the
-    # gate stamps source_only). Threaded by DerivativeWriterNode.run so
-    # the quotes enrich step never re-derives.
-    source_language: str | None = None
-    quote_alt_language: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Understand/Plan two-step (RunPlan Phase 2): the retired single-pass ContentPlan is
-# replaced by a material-scoped understanding (reusable via asset hash) and a
-# request-scoped storyboard (re-planned every run). docs/tasks/director-two-step.md
-# ---------------------------------------------------------------------------
 
 
 class KeyArgument(BaseModel):
@@ -3645,18 +2797,19 @@ class KeyArgument(BaseModel):
     # timestamps, so an honest text marker instead of fake seconds.
     position: str = ""
 
+class QuotableLine(BaseModel):
+    """A verbatim quotable line with a code-checked self-containment flag."""
 
-# ---------------------------------------------------------------------------
-# Beat map (产物质量线期 1, docs/tasks/output-quality-line.md §2.2): the
-# understanding's SEMANTIC halves. The acoustic/visual halves live on
-# asset.meta["prosody"] / asset.meta["visual_anchors"] — separate fields by
-# design (预合并 = 自信地错且不可溯源; the channels' disagreement is the
-# editor's arbitration signal). ``start``/``end``/``asset_id`` are NEVER LLM
-# output: the LLM writes verbatim text anchors (and may copy coarse cue
-# seconds into ``approx_start``); code snaps them onto the ASR word axis
-# (word-level timestamps are the deterministic foundation, never overwritten).
-# ---------------------------------------------------------------------------
+    model_config = ConfigDict(extra="forbid")
 
+    text: str  # verbatim from the material
+    approx_start: float | None = None
+    asset_id: str = ""
+    start: float | None = None
+    end: float | None = None
+    # Code-set, never the LLM's: False when the line opens with a dangling
+    # pronoun / connective (it, this, but, 这/但/而且…) or trails off mid-thought.
+    self_contained: bool = True
 
 class TopicBoundary(BaseModel):
     """One topic segment of the talk (semantic segmentation)."""
@@ -3674,7 +2827,6 @@ class TopicBoundary(BaseModel):
     start: float | None = None
     end: float | None = None
 
-
 class ClimaxSpan(BaseModel):
     """A semantic climax span — the semantic half of the climax channel."""
 
@@ -3686,7 +2838,6 @@ class ClimaxSpan(BaseModel):
     asset_id: str = ""
     start: float | None = None
     end: float | None = None
-
 
 class EmphasisWord(BaseModel):
     """A word the LLM judges semantically emphasized (semantic half).
@@ -3703,22 +2854,6 @@ class EmphasisWord(BaseModel):
     asset_id: str = ""
     start: float | None = None
 
-
-class QuotableLine(BaseModel):
-    """A verbatim quotable line with a code-checked self-containment flag."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str  # verbatim from the material
-    approx_start: float | None = None
-    asset_id: str = ""
-    start: float | None = None
-    end: float | None = None
-    # Code-set, never the LLM's: False when the line opens with a dangling
-    # pronoun / connective (it, this, but, 这/但/而且…) or trails off mid-thought.
-    self_contained: bool = True
-
-
 class NarrativeRoleHint(BaseModel):
     """The global-arc role of a span (setup/payoff/example/transition)."""
 
@@ -3731,7 +2866,6 @@ class NarrativeRoleHint(BaseModel):
     asset_id: str = ""
     start: float | None = None
     end: float | None = None
-
 
 class VisualAnchor(BaseModel):
     """The LLM's semantic half of a visual anchor for one image asset.
@@ -3750,6 +2884,13 @@ class VisualAnchor(BaseModel):
     # Ids of key_arguments this image visually backs.
     argument_ids: list[str] = Field(default_factory=list)
 
+class Point(BaseModel):
+    """Normalized center point in [0,1] (CSS translate / libass \\pos)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
 
 class MaterialUnderstanding(BaseModel):
     """素材理解: understand step — what the material says (material-scoped).
@@ -3778,284 +2919,11 @@ class MaterialUnderstanding(BaseModel):
     visual_anchors: list[VisualAnchor] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Research brief (ADR-052 B4, DIALOG_WORKFLOW §2.6): the bounded loop node's
-# artifact — web grounding gathered by the researcher agent's search/fetch
-# iterations, stamped into the research step's spec and appended to
-# consuming writers' asset texts. Machine channel only (step spec): it never
-# enters the dialog engine's brief — same word, different object.
-# ---------------------------------------------------------------------------
-
-
-class ResearchSource(BaseModel):
-    """One web source the brief actually used."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = ""
-    url: str = ""
-
-
-class ResearchBrief(BaseModel):
-    """The research loop's closing artifact.
-
-    ``caveat`` carries the honest-degradation note (iteration-cap synthesis,
-    search trail ran dry, research unavailable) — a caveated brief is a
-    COMPLETE step, never a failed one: research is best-effort enrichment,
-    the run continues either way.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str = ""
-    key_facts: list[str] = Field(default_factory=list)
-    sources: list[ResearchSource] = Field(default_factory=list)
-    caveat: str | None = None
-
-
-class ResearchVerdict(BaseModel):
-    """The researcher agent's per-iteration verdict (bounded loop, ADR-052
-    B4): pick the ONE next action — run a new search, open one result URL,
-    or close with the final brief. The agent chooses actions; the node's
-    code owns the tool set and the iteration count (禁开放自治)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["search", "fetch", "brief"]
-    query: str | None = None  # search
-    url: str | None = None  # fetch
-    brief: ResearchBrief | None = None  # brief
-
-
-# ---------------------------------------------------------------------------
-# Beat plan (产物质量线期 2, docs/tasks/output-quality-line.md §2.3): the
-# stills editor's per-shot timeline decisions — the timeline-creation layer
-# between storyboard (WHAT) and clip-spec (怎么渲). Same 铁律 as the beat
-# map: the LLM writes verbatim markers (+ optional coarse seconds); code
-# snaps them onto the word axis and chains the ends (zero-gap sequence,
-# cuts always on word boundaries — dwell IS the word-span duration, so
-# captions, cuts, and dwells can never drift apart).
-# ---------------------------------------------------------------------------
-
-
-class StillBeat(BaseModel):
-    """One shot decision of a stills beat plan (节拍方案的一拍)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    # The backing visual, exactly as listed in the prompt ("image 2" → the
-    # second backing visual); code resolves it to asset_id + image_url.
-    image_ref: str
-    asset_id: str = ""  # "" for slide pages (no asset) or unresolved
-    image_url: str = ""
-    # The beat's narration anchor: the verbatim opening words of its span.
-    # Ends are code-chained by TILING (each beat ends exactly at the next
-    # beat's first word — shots play back-to-back on the render timeline, so
-    # dwells, cuts, and captions share the one word clock); the last beat
-    # ends at the clip span's end.
-    marker: str = ""
-    approx_start: float | None = None
-    start: float | None = None
-    end: float | None = None
-    motion: Literal["none", "zoom_in", "zoom_out", "pan_left", "pan_right"] = "none"
-    # Ken Burns endpoint scale within the craft band (1.05–1.20); the
-    # compiler clamps into the band.
-    motion_rate: float = 1.0
-    # 强调隔离: hold (the dwell itself lengthens — no extra mechanics),
-    # punch_in (compiles to zoom_in ≥1.15), caption_pop (the span's caption
-    # cues get emphasis=true → pop-in entrance).
-    emphasis: Literal["none", "hold", "punch_in", "caption_pop"] = "none"
-    # 结构呼吸: a deliberate reset shot (wider/slower/quieter).
-    reset: bool = False
-    note: str = ""  # one-line why (judge-facing evidence)
-
-
-class BeatPlan(BaseModel):
-    """节拍方案: the stills editor's output — one clip's shot timeline."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    arc: str = ""  # the one-line global arc (two-stage: from the outline pass)
-    beats: list[StillBeat] = Field(default_factory=list)
-
-
-class BeatSection(BaseModel):
-    """大纲段的一节 (>15 拍两段式): role + assigned visuals + span anchor."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    role: Literal["hook", "build", "reset", "payoff"]
-    image_refs: list[str] = Field(default_factory=list)
-    marker: str = ""  # verbatim opening words of the section
-    approx_start: float | None = None
-    note: str = ""
-    start: float | None = None  # code-resolved / chained
-    end: float | None = None
-
-
-class BeatOutline(BaseModel):
-    """大纲段产出: global arc + resource assignment before per-beat work."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    arc: str = ""
-    sections: list[BeatSection] = Field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Verify judge (产物质量线期 3, §2.7 judge rubric 纪律): the LLM half of the
-# verify loop — subjective items only (金句上下文可读性). Evidence-citation-
-# first (context_read BEFORE the verdict field), no abstract scores, temp 0
-# (declared on the agent), provenance-blind (the prompt never sees ids/round).
-# Verdicts ride the ledger as cls="judge" — advisory until the human
-# calibration set lands (judge 漂移无地面真值不可检测).
-# ---------------------------------------------------------------------------
-
-
-class QuoteJudgment(BaseModel):
-    """One quote's context-readability judgment (evidence before verdict)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    quote: str = ""  # echoed verbatim — the evidence anchor
-    context_read: str = ""  # what the source excerpt around it establishes
-    standalone: bool = True  # reads in context AND stands alone on a card
-    issue: str = ""  # when not standalone: what's missing / awkward
-
-
-class QuoteReadability(BaseModel):
-    """The judge's verdict over one quotes output."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    judgments: list[QuoteJudgment] = Field(default_factory=list)
-
-
-class StoryboardSlot(BaseModel):
-    """槽位: one output's WHAT (angle/arguments/language/format). HOW is the executor's."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    slot: str = Field(description="clips | post | quotes | carousel | article")
-    focus: str = ""
-    # Ids referencing the understanding's key arguments; unknown ids are
-    # dropped by code before coverage is computed.
-    argument_ids: list[str] = Field(default_factory=list)
-    quote_candidates: list[str] = Field(default_factory=list)
-    cta: str | None = None
-    tone_override: str | None = None
-    count: int | None = None
-
-
-class CoverageReport(BaseModel):
-    """覆盖报告: argument → slot accountability. Code-derived, never LLM output."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    assignments: dict[str, list[str]] = Field(default_factory=dict)
-    unused_arguments: list[str] = Field(default_factory=list)
-    collisions: list[str] = Field(default_factory=list)
-
-
-class Storyboard(BaseModel):
-    """分镜表: plan step — request-scoped assignments (re-planned every run).
-
-    The LLM proposes only ``slots``; ``coverage`` is computed by the runner
-    from valid argument_ids before persisting.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    slots: list[StoryboardSlot] = Field(default_factory=list)
-    coverage: CoverageReport = Field(default_factory=CoverageReport)
-
-
-# ---------------------------------------------------------------------------
-# RunPlan vocabulary (ADR-028/030): workflow_steps + unified outputs.
-# Node kinds and output types have their living sources in NODE_KINDS /
-# the outputs registry (N-35/N-32) — no parallel Literals here.
-# ---------------------------------------------------------------------------
-
-# "waiting" is a seat for HITL/suspend-resume (variant_pick gate, chat-loop-v1
-# Task 4): a step parks in waiting with spec.suspend_payload until resumed.
-StepStatus = Literal["pending", "running", "done", "failed", "skipped", "waiting"]
-
-OutputProvenance = Literal["real", "generated"]
-
-
-class ClipPayload(BaseModel):
-    """Payload for ``outputs[type=clip]`` — the clip's creative fields.
-
-    Timeline semantics live in ``source_ref``, the render pipeline in
-    ``render_spec``/``render_status``, publishing metadata in ``publishing``
-    (ADR-030 payload rules 2/3).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    hook: str = ""
-    title_options: list[str] = Field(default_factory=list)
-    music_mood: str = "calm"
-    duration: int = 30
-    # The display-class stamp for "original"-aspect chains (2026-09-13
-    # 用户拍板 — 产物卡跟源比例): at clip birth the source's real pixels name
-    # the display class ("9:16" / "1:1" / "16:9"), so the canvas card shapes
-    # itself to the material instead of the 16:9 default strip (黑边). The
-    # RENDER contract is untouched — render_spec.aspect stays "original";
-    # this feeds only OutputResponse._derive_aspect (same write-point
-    # pattern as image products). None when dims are unknown or the chain
-    # carries an explicit aspect (render_spec declares then).
-    aspect: str | None = None
-class SubtitleCue(BaseModel):
-    """One subtitle, in seconds relative to its scene (independent of audio)."""
-
-    model_config = ConfigDict(extra="forbid")
-    at: float = Field(ge=0, allow_inf_nan=False)
-    end: float = Field(gt=0, allow_inf_nan=False)
-    text: str = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def ordered(self) -> SubtitleCue:
-        if self.end <= self.at or not self.text.strip():
-            raise ValueError("subtitle needs nonblank text and end > at")
-        return self
-
-
-class SubtitleStyle(BaseModel):
-    """Shared subtitle style; geometry is relative to the canvas."""
-
-    model_config = ConfigDict(extra="forbid")
-    color: str = Field(default="#FFFFFF", pattern=r"^#[0-9a-fA-F]{6}$")
-    background: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
-    font_size: float = Field(default=34, ge=12, le=120, allow_inf_nan=False,
-                             description="Font size on the 1920-wide design canvas.")
-    font_weight: Literal[400, 500, 600, 700, 800] = 600
-    bottom: float = Field(default=0.04, ge=0, le=0.8, allow_inf_nan=False)
-    width: float = Field(default=0.8, gt=0, le=1, allow_inf_nan=False)
-    enter: Literal["none", "fade", "rise"] = "fade"
-    exit: Literal["none", "fade"] = "fade"
-    fade_seconds: float = Field(default=0.2, gt=0, le=2, allow_inf_nan=False)
-
-
-class SubtitleTrack(BaseModel):
-    """An independent subtitle track; ordered, nonoverlapping cues."""
-
-    model_config = ConfigDict(extra="forbid")
-    cues: list[SubtitleCue] = Field(min_length=1)
-    style: SubtitleStyle = Field(default_factory=SubtitleStyle)
-
-    @model_validator(mode="after")
-    def nonoverlapping(self) -> SubtitleTrack:
-        if any(b.at < a.end for a, b in zip(self.cues, self.cues[1:])):
-            raise ValueError("subtitle cues must be ordered and nonoverlapping")
-        return self
 class VideoSpecEnvelope(BaseModel):
-    """video-spec read envelope (ADR-145) — the third spec family's read side.
+    """Thin read envelope for the sole online video-spec render contract.
 
-    The read envelope stays thin: the contract lives in
-    ``packages/video-spec`` (zod) and the API never re-validates content;
-    the envelope exists so a video output's render_spec round-trips
-    ``OutputResponse`` serialization without impersonating ClipSpec.
+    The schema remains owned by ``packages/video-spec``; this boundary does
+    not revalidate or reinterpret the content.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -4069,8 +2937,7 @@ class VideoPayload(BaseModel):
     Timeline semantics ride the pinned CompositionVersion (the output's
     ``composition_id`` / ``composition_version_id`` columns);
     ``composition_digest`` completes the §2.2 three-fact pin. The render
-    pipeline rides ``render_spec``/``render_status`` exactly like clips and
-    films (ADR-030 rules 2/3).
+    pipeline uses the shared ``render_spec``/``render_status`` execution facts.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -4109,260 +2976,9 @@ def validate_output_payload(output_type: str, payload: dict) -> dict:
     return model.model_validate(payload).model_dump(mode="json")
 
 
-class ClipDub(BaseModel):
-    """Cloned-voice dubbed speech; when enabled, replaces the source's audio."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    url: str | None = None  # resolved dub audio URL (storage seam)
-    enabled: bool = False
-    gain_db: float = 0.0
-
-
-class IntroOutroCard(BaseModel):
-    """Intro/outro brand card: text, image, or a short video."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["text", "image", "video"] = "image"
-    text: str | None = None  # kind == "text"
-    media_url: str | None = None  # kind == "image" | "video" (storage-seam URL)
-    # How long the card displays; None -> renderer default (2s).
-    duration_seconds: float | None = Field(default=None, gt=0)
-
-
-class ClipBrand(BaseModel):
-    """Resolved brand values baked into the spec at generation time.
-
-    Renderer-agnostic data (no DB ref): the API resolves the persona's
-    ``brand`` skin block into these fields so the render service / preview
-    never need DB access. ``None`` = renderer falls back to its default look.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    caption_color: str | None = None  # hex; overrides the default white caption
-    caption_size: int | None = None  # px; overrides the default caption size
-    caption_font: str | None = None  # font key: lilita/inter/playfair/source-serif
-    intro: IntroOutroCard | None = None  # opening card (None = no intro)
-    outro: IntroOutroCard | None = None  # closing card (None = no outro)
-    fill_mode: Literal["fill", "fit"] = "fill"  # video objectFit: cover / contain
-    # Default from the persona skin block; Clip plan can override per clip.
-    caption_enabled: bool = True
-
-
-class ClipSpec(BaseModel):
-    """Renderer-agnostic clip render contract (see docs/VIDEO_EDITOR.md §4)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source: ClipSource
-    # "original" (2026-08-17, 整条材料化跟源画幅): no fixed tier — the
-    # renderer resolves the SOURCE's own dimensions at render time
-    # (calculateMetadata). Only materialize_source writes it; excerpt clips
-    # always carry a fixed tier.
-    aspect: Literal["9:16", "1:1", "16:9", "original"] = "9:16"
-    segments: list[ClipSegment] = Field(default_factory=list)
-    crop: ClipCrop = Field(default_factory=ClipCrop)
-    # Crop data track (ADR-045): sparse framing decisions on the source
-    # timeline, sampled per frame by the renderer's sampleCrop. Empty/absent
-    # = the static `crop` above (degenerate form, 语义不变).
-    crop_track: list[CropKeyframe] | None = None
-    caption_track: list[CaptionCue] = Field(default_factory=list)
-    # 双语对照轨 (translation_track, 2026-08-14 双语字幕): the translated half
-    # of a bilingual caption pair — UNIT-level cues (one per ~10 words, no
-    # karaoke word timing), paired with caption_track's word-level ORIGINAL
-    # lines by time overlap. Empty = single-language captions. Only
-    # translate_clip with spec.bilingual writes it (fork/morph alike).
-    translation_track: list[CaptionCue] = Field(default_factory=list)
-    # Preset enum, NOT free styling — keeps preview=render parity and the
-    # future hand-rolled-FFmpeg swap cheap (CSS ∩ libass subset). The preset
-    # ids MIRROR the caption catalog in packages/clip/src/captions.ts, which
-    # is the single source of truth for style BEHAVIOR; Python only validates
-    # membership. Adding a style = one catalog line + this list.
-    caption_style_preset: Literal[
-        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up", "stacking"
-    ] = "clean-bottom"
-    caption_position: Point | None = None  # normalized center; None -> default (bottom)
-    caption_enabled: bool = True  # when false, caption_track is not burned into video
-    title: ClipTitle = Field(default_factory=ClipTitle)
-    music: ClipMusic = Field(default_factory=ClipMusic)
-    dub: ClipDub | None = None  # cloned-voice dub; replaces source audio when enabled
-    # Layer track (ADR-044): anchor-pinned overlay items (broll / text_callout /
-    # pip / motion_graphic). Empty = no layers. No tool writes them yet —
-    # insert_broll lands on the 08-19+ line.
-    layers: list[ClipLayer] = Field(default_factory=list)
-    brand: ClipBrand | None = None  # resolved brand values (None = default look)
-    brand_ref: UUID | None = None
-    target_language: str = "en"
-
-    @model_validator(mode="after")
-    def _unique_item_ids(self) -> "ClipSpec":
-        """Anchor addressing is by item id — duplicates would silently
-        misresolve (first-match). Enforced at the contract so every write
-        path (ops applies round-trip through model_validate) inherits it."""
-        seg_ids = [s.id for s in self.segments]
-        if len(set(seg_ids)) != len(seg_ids):
-            raise ValueError("segments: duplicate ids — anchor addressing requires uniqueness")
-        layer_ids = [layer.id for layer in self.layers]
-        if len(set(layer_ids)) != len(layer_ids):
-            raise ValueError("layers: duplicate ids — anchor addressing requires uniqueness")
-        return self
-
-    @model_validator(mode="after")
-    def _crop_track_ordered(self) -> "ClipSpec":
-        """Crop keyframes ride strictly ascending source seconds — the
-        sampler's hold-then-ease semantics need an unambiguous 'latest
-        decision' per instant."""
-        track = self.crop_track or []
-        ts = [k.t for k in track]
-        if any(b <= a for a, b in zip(ts, ts[1:])):
-            raise ValueError("crop_track: keyframe t must be strictly ascending")
-        return self
-
-
-# ---------------------------------------------------------------------------
-# Craft skeleton (ADR-078): the decompiler's product — video → clip-spec
-# skeleton. An internal output row (INTERNAL_OUTPUT_TYPES member), asset-level
-# + content-addressed + reusable (the understand row's reuse discipline). The
-# fields layer by determinism: shots / rhythm / aspect / caption scan are
-# deterministic detections (zero LLM — craft_scan.py imports no provider); the
-# music mood / hook device / capability gaps are the LLM's judgment
-# (CraftJudgment, the decompile agent's output schema); content slots stay
-# EMPTY — the shot list is structure to fill, it carries timing never content.
-# ---------------------------------------------------------------------------
-
-
-class CraftShot(BaseModel):
-    """One detected shot of the exemplar (a scene-cut span, source clock)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    start: float = Field(ge=0)
-    end: float = Field(ge=0)
-
-
-class CraftRhythm(BaseModel):
-    """Cut rhythm, measured off the shot list (deterministic)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    shot_count: int = Field(ge=0)
-    cuts_per_minute: float = Field(ge=0)
-    median_shot_seconds: float = Field(ge=0)
-    # Coarse pace class off the median shot length (<2s fast / ≤4s steady /
-    # else slow) — skeleton-internal vocabulary, never a clip-spec field.
-    pace: Literal["fast", "steady", "slow"]
-
-
-class CraftCaptionScan(BaseModel):
-    """Burned-in caption findings — visual nearest-neighbor BEST-FIT over the
-    contract enums (零 LLM): the preset id lives only inside the
-    ClipSpec.caption_style_preset catalog, the color snaps to the craft_scan
-    palette. ``present=False`` ⇒ every other field stays None (the remix
-    keeps the skin's caption defaults)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    present: bool
-    # Mirrors ClipSpec.caption_style_preset's Literal (the drift gate: the
-    # pure suite asserts the two sets stay equal).
-    preset: Literal[
-        "clean-bottom", "karaoke-highlight", "fade-in", "pop-in", "slide-up", "stacking"
-    ] | None = None
-    color: str | None = None  # hex, palette-snapped (never a raw sample)
-    position: Point | None = None  # normalized center of the detected band
-
-
-class CraftGap(BaseModel):
-    """One observed device the remix cannot reproduce — 契约即能力边界
-    (ADR-078 判词②): the honest「做不到 / 还不能」清单 entry, the 带理由纠偏
-    substrate (JOURNEYS 旅程二 2b). ``unsupported`` = no seat in the contract
-    (L3 line — never promised); ``not_yet`` = a contract seat whose writer
-    skill hasn't landed (the layers track's family — a 需求池 candidate)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal[
-        "motion_graphics",
-        "multi_track",
-        "transition_effects",
-        "speed_ramp",
-        "broll_overlay",
-        "text_layers",
-        "other",
-    ]
-    severity: Literal["unsupported", "not_yet"]
-    detail: str | None = None
-
-
-class CraftJudgment(BaseModel):
-    """The decompile agent's output — ONLY the judgment fields (mood / hook
-    device / gaps). 骨架确定性字段零 LLM 介入 is structural here: this schema
-    has no aspect/shots/rhythm/caption seat, so the LLM cannot write them
-    (the pure suite asserts the disjointness)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    # Judged from the keyframes (+ transcript when the case has speech) —
-    # clamped by code to the assembled catalog's moods, never a free string
-    # reaching a spec.
-    music_mood: str | None = Field(
-        default=None,
-        description="The backing music's mood — pick from the provided catalog moods; null when the case carries no music bed.",
-    )
-    hook_device: str | None = Field(
-        default=None,
-        description="The opening hook device as a short noun phrase (e.g. 'cold-open question', 'title card', 'silent montage'); null when the opening is plain.",
-    )
-    gaps: list[CraftGap] = Field(
-        default_factory=list,
-        description="Effects/devices you OBSERVE that the listed contract cannot express (motion graphics, multi-track compositing, transition effects, speed ramps, b-roll overlays, animated text layers). Only what you actually see.",
-    )
-
-
-class CraftSkeleton(BaseModel):
-    """The clip-spec-shaped craft skeleton (ADR-078 判词①) — one exemplar
-    video's craft, reverse-compiled.
-
-    内容槽位留空 by construction: ``shots`` is the structure to FILL (timing,
-    never content — no text/url/title seats exist). Remix = 内容槽替换
-    (判词③): the user's material fills the slots downstream; the style
-    fields (captions / music mood / rhythm / aspect) ride as
-    exemplar-derived params, code-mapped (LLM 永不写 spec, 判词⑤).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    version: int = 1
-    # Deterministic layer (craft_scan, zero LLM):
-    aspect: Literal["9:16", "1:1", "16:9"]
-    duration_seconds: float = Field(ge=0)
-    shots: list[CraftShot] = Field(default_factory=list)
-    rhythm: CraftRhythm
-    captions: CraftCaptionScan
-    # LLM layer (the decompile agent's judgment; None when the call degraded):
-    music_mood: str | None = None
-    hook_device: str | None = None
-    gaps: list[CraftGap] = Field(default_factory=list)
-
-
-# ADR-030 rule 1: payload is the default home and a schema registry guards the
-# door. Write = model_dump(); read = parse back into the typed model (same
-# pattern as render_spec/ClipSpec). The registry sits BELOW the craft classes
-# (2026-09-16 boot fix): every value must be defined by this line — T5 ①'s
-# forward reference to CraftSkeleton made the whole module unimportable.
 OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
-    "clip": ClipPayload,
     "video": VideoPayload,
-    "post": Post,
-    "quotes": Quotes,
-    "quote_frame": QuoteFrame,
-    "carousel": CarouselResponse,
-    "article": Article,
     "material_understanding": MaterialUnderstanding,
-    "storyboard": Storyboard,
-    "craft_skeleton": CraftSkeleton,
 }
 
 
@@ -4426,81 +3042,8 @@ class StepResponse(BaseModel):
     production_stages: list[ProductionStage] = Field(default_factory=list)
 
 
-class ModelFact(BaseModel):
-    """One model/provider fact about a product (ADR-051 H). ``modality`` is
-    the UI's grouping key (copy / voice / captions / music — localized via
-    the composer models panel's keys); ``model`` is the display name, DATA
-    (a proper noun — locale-invariant)."""
-
-    modality: str
-    model: str
-
-
-class TrackStackVideoBlock(BaseModel):
-    """One kept segment of a clip product on the OUTPUT timeline, plus its
-    SOURCE range and the source asset's id (the cross-highlight's data —
-    ADR-113 §6; None when the spec carries no asset identity). ``src_label``
-    / ``out_label`` are the preformatted ``m:ss–m:ss`` source/output ranges
-    (the client never formats time)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    out_start: float
-    out_end: float
-    src_start: float
-    src_end: float
-    asset_id: str | None = None
-    src_label: str = ""
-    out_label: str = ""
-
-
-class TrackStackTextBlock(BaseModel):
-    """One caption sentence on the OUTPUT timeline (ADR-113 §4) — text +
-    preformatted ``m:ss–m:ss`` label (the client never formats time)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    out_start: float
-    out_end: float
-    text: str
-    label: str
-
-
-class TrackStackRulerTick(BaseModel):
-    """One scale tick on the NLE axis's ruler (ADR-115): ``label`` is
-    preformatted (the origin reads bare "0"; the client never formats time).
-    Every rendered tick is labeled — a major cramped by the named end leaves
-    the scale, never rides unlabeled."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    t: float
-    label: str
-
-
-class TrackStackResponse(BaseModel):
-    """The deliverable card's track-stack inspection face (ADR-113 §4;
-    ADR-115 NLE 轴): video lane (kept segments concatenated on the output
-    clock) + text lane (caption sentences per segment, cut = hard break) +
-    the ruler scale + modifier presence. Read-only — never an orchestration
-    surface (L3). Derived at read time from ``render_spec``; None on
-    non-clip products."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    video_lane: list[TrackStackVideoBlock]
-    text_lane: list[TrackStackTextBlock]
-    ruler: list[TrackStackRulerTick] = []
-    modifiers: dict[str, bool]
-
-
 class OutputResponse(BaseModel):
-    """Unified product row (ADR-030): clips and derivatives became types.
-
-    ``payload`` is validated against ``OUTPUT_PAYLOAD_SCHEMAS`` at the API
-    boundary; ``files``/``publishing`` URLs are resolved through the storage
-    seam exactly like the retired ClipResponse did.
-    """
+    """An owned video media, execution and Composition-lineage record."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -4522,7 +3065,7 @@ class OutputResponse(BaseModel):
     payload: dict
     files: dict = Field(default_factory=dict)
     source_ref: dict | None = None
-    render_spec: ClipSpec | VideoSpecEnvelope | None = None
+    render_spec: VideoSpecEnvelope | None = None
     render_status: RenderStatus | None = None
     render_error: str | None = None
     # Composition lineage (ADR-145): set on video-family outputs only.
@@ -4531,37 +3074,14 @@ class OutputResponse(BaseModel):
     # The immutable content version's real sequence number, not an Output
     # count. Multiple deliveries may honestly show the same number.
     composition_version_number: int | None = None
-    score: dict | None = None
     # 质检裁决 (期 3): verify 节点的 {status, checks, attempt, checked_at};
     # None = 未质检（旧行 / 无 verify 的图）。
     quality: dict | None = None
     publishing: dict = Field(default_factory=dict)
-    # Display-layer aspect (产物展示统一 P1, 2026-08-27): server-side single
-    # derivation — ``render_spec.aspect`` (clip family) → payload-declared
-    # ``aspect`` (image products) → None; the ``"original"`` sentinel
-    # normalizes to None (the frame follows the source, unknown here).
+    # Display aspect from the video-spec, then its explicit payload declaration.
     aspect: str | None = None
-    # Chain-integrity hash of render_spec (ADR-032) — the client's base_hash
-    # for operation batches. None when there is no render_spec.
+    # Integrity hash of the immutable render input.
     spec_hash: str | None = None
-    # Per-product spec prompt (ADR-051 F — hover prompt 框): the producing
-    # step's slot/params composed into a prompt-style line in the run's
-    # pinned ui_language. Stamped ONLY by the /results endpoint (the sole
-    # place outputs and their producing steps meet); None elsewhere and for
-    # carried rows whose step isn't in the payload.
-    spec_prompt: str | None = None
-    # Per-product model/provider facts (ADR-051 H — 详情面模型事实): the
-    # producing step's kind projected to its real model usage (one provider
-    # per modality today — a fact registry, never a selector / SKU shelf,
-    # 禁令2). Stamped ONLY by /results alongside spec_prompt; None elsewhere
-    # and for carried rows. Display-only — the node caption NEVER carries a
-    # model name (prohibition #12); the lightbox info column is the surface.
-    model_facts: list[ModelFact] | None = None
-    # The track-stack inspection face (ADR-113 §4 — video lane + text lane
-    # on the output timeline): derived at read time from render_spec by the
-    # /graph + /results seats (transient stamp, never persisted); None for
-    # non-clip products and everywhere else.
-    track_stack: TrackStackResponse | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -4588,7 +3108,7 @@ class OutputResponse(BaseModel):
         """Resolve stored object keys in files/publishing to public URLs."""
         from app.providers.storage import resolve_stored_url
 
-        for key in ("video", "srt", "image"):
+        for key in ("video", "image"):
             if self.files.get(key):
                 self.files[key] = resolve_stored_url(self.files[key])
         if self.publishing.get("cover_image_url"):
@@ -4600,15 +3120,13 @@ class OutputResponse(BaseModel):
     @model_validator(mode="after")
     def _derive_aspect(self) -> OutputResponse:
         """Single server-side aspect derivation (产物展示统一 P1): the
-        clip family declares via ``render_spec.aspect``; image products
-        declare ``payload["aspect"]`` at the write point; ``"original"``
+        video-spec declares ``render_spec.aspect``; an explicit
+        ``payload["aspect"]`` is the fallback; ``"original"``
         and empty values normalize to None (unknown frame — surfaces
         fall back to their default tier or the shared probe)."""
         declared = self.payload.get("aspect") if isinstance(self.payload, dict) else None
         candidates = (
-            # film specs carry no aspect (the family is landscape-fixed) —
-            # getattr, never attribute access: the envelope has no such field.
-            getattr(self.render_spec, "aspect", None)
+                    getattr(self.render_spec, "aspect", None)
             if self.render_spec is not None
             else None,
             declared,
@@ -4638,43 +3156,6 @@ class OutputPosterResponse(BaseModel):
     poster_url: str
 
 
-class CaptionTranslation(BaseModel):
-    """LLM caption-translation result: translated lines, parallel to the input."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    lines: list[str] = Field(default_factory=list)
-
-
-class SpeakerFormGate(BaseModel):
-    """M3 form-gate verdict for a video asset's frame grid (ADR-045 D4).
-
-    ``scene`` classifies the setup (a two-person face-to-face ``interview``,
-    a one-speaker ``presentation``/stage talk, or ``other``); low
-    ``confidence`` sends the gate to its one confirmation grid (2 calls cap).
-    The people count is NOT the LLM's job (ADR-106 聚合判定: local per-frame
-    majority) — the grid verdict carries only the scene semantics the
-    aggregate can't see.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    scene: Literal["interview", "presentation", "other"]
-    confidence: Literal["high", "low"] = "high"
-
-
-class SpeakerArbitration(BaseModel):
-    """M3 arbitration verdict for one ambiguous interview turn (ADR-045 D3):
-    a short mid-turn video clip (audio included) → which side is speaking
-    (screen ``left`` / ``right``), or ``unclear`` (caller falls back to the
-    energy argmax).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    speaker: Literal["left", "right", "unclear"]
-
-
 class ExtractedPersonaMemory(BaseModel):
     """LLM persona-extraction result; maps directly to Persona DB columns.
 
@@ -4696,48 +3177,8 @@ class ExtractedPersonaMemory(BaseModel):
     cta: str | None = None
 
 
-class TranslateCaptionsRequest(BaseModel):
-    """Re-translate a clip's caption track into ``target_language``."""
-
-    target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
 
 
-class DubRequest(BaseModel):
-    """Voice-clone dub a clip into ``target_language`` (the persona's own voice)."""
-
-    target_language: str = Field(description="Target language code, e.g. en/fr/de/es/it")
-
-
-class GenerateResponse(BaseModel):
-    """Result of ``POST /projects/{id}/generate`` (202 Accepted) — typed so
-    the contract can evolve under schema protection (B3: was a bare dict)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    run_id: UUID
-    status: WorkflowStatus
-
-
-class GraphReviseRequest(BaseModel):
-    """The card-face prompt direct edit (ADR-058 — deterministic graph action,
-    not a chat turn): rewrite ONE node's program with the user's verbatim
-    words and re-fill it with its downstream. Ops are constructed by code —
-    zero intent recognition (the node id is structurally exact), zero chat
-    messages (the node's own state cycle is the whole feedback)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    node_id: UUID
-    prompt: str = Field(min_length=1)
-
-
-class GraphReviseResponse(BaseModel):
-    """Result of ``POST /projects/{id}/graph/revise`` (202 Accepted)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    run_id: UUID
-    status: WorkflowStatus
 
 
 class AssetTranscriptCue(BaseModel):
@@ -4788,77 +3229,6 @@ class AssetTranscriptPutRequest(BaseModel):
     text: str | None = None
 
 
-class GenerateRequest(BaseModel):
-    """Generate content request."""
-
-    # The confirmed task chain (ADR-043 — the plan path's only grammar).
-    # Required for full-scope requests (422 otherwise — the plan is
-    # built and confirmed via the chat plan path); None only on targeted
-    # scopes (hook/clip/derivative/render re-run one node family off
-    # target_id).
-    tasks: list[TaskItem] | None = None
-    tone_settings: ToneSettings | None = None
-    target_language: str | None = Field(
-        default=None,
-        description=(
-            "Spec-level language fallback, e.g. en/zh/fr/de/es/it. Language "
-            "is a per-task param now — None derives from the first task that "
-            "carries one (fallback en)."
-        ),
-    )
-    instruction: str | None = Field(
-        default=None,
-        description="User steering prompt: what to focus on / produce.",
-    )
-    scope: Literal[
-        "full", "hook", "clip", "post", "quotes", "derivative", "translation", "render"
-    ] = Field(
-        default="full",
-        description="Scope of the generation: full project or targeted revision.",
-    )
-    target_id: UUID | None = Field(
-        default=None,
-        description="Clip or derivative ID when scope is not 'full'.",
-    )
-    operation: Literal[
-        "regenerate", "shorten", "lengthen", "translate", "render"
-    ] = Field(
-        default="regenerate",
-        description="Operation to apply when scope is targeted.",
-    )
-    # Retry-reference echo (ADR-087 §4 D2, Phase 4 B5): the client names
-    # WHICH historical confirmed scope it means — these ride into the
-    # TaskSpec verbatim so an exact retry's run.context equals the
-    # original's. They are NEVER authorization proof (Rule 9): the
-    # server-side gate proves chain equality against persisted run.context
-    # rows; a client-invented combination simply matches nothing → 422
-    # scope.unproven.
-    persona_id: str | None = Field(
-        default=None,
-        description="The run-pinned persona of the chain being retried (echo of run.context).",
-    )
-    caption_mode: Literal["bilingual", "source_only", "target_only"] | None = Field(
-        default=None,
-        description="The caption mode of the chain being retried (echo of run.context).",
-    )
-    source_asset_id: str | None = Field(
-        default=None,
-        description="The source-role asset pin of the chain being retried (echo of run.context).",
-    )
-    exemplar_asset_id: str | None = Field(
-        default=None,
-        description="The exemplar-role asset pin of the chain being retried (echo of run.context).",
-    )
-
-
-class ExportRequest(BaseModel):
-    """Export project content request."""
-
-    formats: list[Literal["text", "images"]] = Field(
-        default_factory=lambda: ["text"]
-    )
-
-
 class FeedbackScope(StrEnum):
     """Feedback scope."""
 
@@ -4880,12 +3250,6 @@ class FeedbackReason(StrEnum):
     OTHER = "other"
 
 
-class FeedbackRequest(BaseModel):
-    """Feedback request."""
-
-    scope: FeedbackScope
-    reason: FeedbackReason
-    detail: str | None = None
 
 
 class RunResponse(BaseModel):
@@ -4923,40 +3287,16 @@ class ProjectAssetStatus(BaseModel):
 
 
 class GraphNodeResponse(BaseModel):
-    """One node of the project's persistent graph (ADR-057 — the graph IS
-    the product object; the canvas reads this frame directly, zero
-    projection).
-
-    ``spec`` is the node's program (prompt / params / estimate / role /
-    fill_key — the node type's own shape, never interpreted at the API
-    boundary); ``layout`` is the settled canvas frame (画布定居取景,
-    append-only). ``estimate_credits`` folds the node's quotation to
-    credits at read time (same serialization-layer rule as StepResponse).
-    ``asset`` / ``outputs`` are the joined display rows: the asset node
-    carries its asset row; a producer node carries its product rows
-    (``spec.output_ids`` resolved, visibility-filtered, created_at
-    ascending — the card's pager order)."""
+    """One source-asset or ordinary manual Canvas node."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    # The family word (词表 v3, ADR-076 / C5b): medium five values +
-    # server-internal birth words, mapped through _read_face for legacy rows.
-    # Distinct from ``step.kind`` (the tool name, N-35).
-    type: str
-    state: str
+    type: Literal["text", "table", "image", "video", "audio"]
+    state: Literal["draft", "done"]
     spec: dict = Field(default_factory=dict)
     layout: dict = Field(default_factory=dict)
-    estimate_credits: list[int] | None = None
-    # Read-time Product Graph projection (I-PFA-02 / 合同 §7 C-1 约束❶):
-    # the node's topological depth over the read-frame Product DAG, computed
-    # by product_graph.product_ranks at read time. NOT persisted node state,
-    # NOT an independent graph authority — never store it, never let it
-    # outrank the DAG itself. None = the legacy compatibility state (a
-    # B4-lite-gate survivor the predicate does not rank).
-    rank: int | None = None
     asset: AssetResponse | None = None
-    outputs: list[OutputResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -4968,9 +3308,9 @@ class GraphEdgeResponse(BaseModel):
 
     id: UUID
     from_node: UUID
-    from_port: str
+    from_port: str | None = None
     to_node: UUID
-    to_port: str
+    to_port: str | None = None
     edge_type: str
 
 
@@ -4994,46 +3334,6 @@ class LifecycleStamp(BaseModel):
     charge: dict = Field(default_factory=dict)
 
 
-class ProjectArtifactFacet(BaseModel):
-    """One facet's summary on the deliverable card (ADR-097 §3 — the facet
-    exits the default projection; its program/state stay inspectable here).
-    ``surface="hidden_modifier"`` marks the lever surfaces (LEVER_TOOLS 兼容
-    共存, 两层门不合并)."""
-
-    node_id: UUID
-    tool: str | None = None
-    label: str | None = None
-    state: str
-    surface: str | None = None
-
-
-class ProjectArtifactActivity(BaseModel):
-    """The artifact's single activity owner (ADR-097 §4 — one aggregated
-    activity state per artifact; member-level location only on failure)."""
-
-    state: str
-    failed_node_ids: list[UUID] = Field(default_factory=list)
-
-
-class ProjectArtifact(BaseModel):
-    """One product artifact's read-face block (ADR-097 Phase 1 — additive
-    projection off the stamped canonical four fields; membership is a
-    compile-time fact, never read-time inference). ``current_output_id`` =
-    the live version's唯一归属 (one live output lands on at most one card);
-    archived versions keep their historical ownership (ADR-091)."""
-
-    artifact_key: str
-    work_key: str
-    name: str | None = None
-    deliverable_node_id: UUID | None = None
-    facet_node_ids: list[UUID] = Field(default_factory=list)
-    facets: list[ProjectArtifactFacet] = Field(default_factory=list)
-    companion_node_ids: list[UUID] = Field(default_factory=list)
-    current_output_id: UUID | None = None
-    archived_output_ids: list[UUID] = Field(default_factory=list)
-    activity: ProjectArtifactActivity
-
-
 class ProjectGraphResponse(BaseModel):
     """The project graph's one read frame — nodes + edges + joined display
     rows, everything the canvas renders, in one fetch."""
@@ -5041,10 +3341,6 @@ class ProjectGraphResponse(BaseModel):
     nodes: list[GraphNodeResponse] = Field(default_factory=list)
     edges: list[GraphEdgeResponse] = Field(default_factory=list)
     lifecycle: LifecycleStamp | None = None
-    # ADR-097 Phase 1 (additive): the artifact projection — one deliverable
-    # one card, facets summarized, companions first-class. Unknown/legacy
-    # nodes never appear here (passthrough on the default projection).
-    artifacts: list[ProjectArtifact] = Field(default_factory=list)
 
 
 class ProjectResultsResponse(BaseModel):
@@ -5054,7 +3350,6 @@ class ProjectResultsResponse(BaseModel):
 
     project: ProjectResponse
     prompt: str | None = None
-    outputs: list[OutputResponse] = Field(default_factory=list)
     latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_brief: PendingPlan | None = None

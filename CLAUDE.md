@@ -20,13 +20,13 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project / Film/MG**：目标层级 = Project/Chat → Composition → CompositionVersion，同 Chat 多影片、全局 @ 引用；内容唯一写口 = `apply_composition_edits`；固定 Skill、外部 Skill、自由设计和 Generator 共用同一创作循环与多轨作品，能力迭代只扩展现有本体/Generator/tools，不另起作品根或生产链。新架构施工先读 `docs/VIDEO_PROJECT.md` §0，再读命中章节（目录/新旧代码处置唯一合同 = §12），再读 `docs/tasks/skill-package-promo-video.md` §4 既有基线与当前批次；A–C 实现证据只在需要核对时查 `docs/tasks/video-project-implementation.md`；创作循环/上下文收敛先读 VIDEO_PROJECT §8.1.2 与 `docs/tasks/composition-authoring-context-convergence.md`，其实施细则只在该切片合同维护，不沿旧多 Director 阶段规则继续扩展。后续排期只认统一合同。现状查 RENDERING 与实际代码，有效视听/创作要求归 VIDEO_PROJECT §15。
+- **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。实施与验收读 `docs/tasks/skill-package-promo-video.md` §4–5，工作草稿与条件工具读 `docs/tasks/composition-authoring-context-convergence.md`。当前优先级见 PROGRESS §0。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
 - **Chat 意图 / 多轮 / brief**：`docs/DIALOG_WORKFLOW.md` §2、§4 + CHAT_ARCHITECTURE §3；不读旧交互迁移报告代替现行法。
 - **Agent / tools / graph**：`docs/AGENT_ARCHITECTURE.md` §2（四层地图）、§4（Graph）、§5（Harness）、§7（工具包）；报价另读 §8。
-- **Rendering / spec families**：`docs/RENDERING.md` §1、§3、§6、§8；新视频内容与版本契约读 VIDEO_PROJECT，编辑器交互另读 `docs/VIDEO_EDITOR.md`。clip-spec 与 film-spec 是平级家族，renderer 概念不得泄漏进任一 spec。
+- **Rendering**：`docs/RENDERING.md` 管 video-spec、渲染、上传、围栏与交付。作品结构见 VIDEO_PROJECT，编辑器交互见 VIDEO_EDITOR。
 - **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
 - **Payments / Stripe / 充值**：长期架构、凭据/部署、订单字段与 webhook 规则读 `docs/PAYMENTS.md`；首批一次性积分充值施工与验收读 `docs/tasks/stripe-credit-topup.md`。
 - **定位 / 人设 / 渠道 / 选题 / home**：`docs/POSITIONING.md`（已拍板未实施）与当前任务合同；代码层落地前仍只使用 `persona`。
@@ -91,7 +91,7 @@ Correct:
 - **展示文案二源律（ADR-058）**：用户可见命名类文案只有两个合法来源——① LLM 建图时命名（proposal 的 `name` 字段，null/空读容忍）；② 世界自证（产物徽标 / 节点状态 / 真实数字）。**冻参模板永禁**。**手改撤名**：计划卡任何手改即清空 `name`，回退读当前参数的诚实标签。
 - **echo 防编造律（ADR-060）**：回声只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**——a post is just a post until the user names where it lives；渠道合法来源 = 用户点名或渠道授权，永不是默认值。
 - **起始句 = LLM 言语（ADR-093）**：start_run 回合先说话再调用，开工句由模型说出并落库为普通 assistant 行；chrome/模板替说全形态永禁。
-- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 与 Start 钮都化为普通用户消息走 sendChat，下一轮 LLM 到 start_run（同一机器，按钮不直启 run）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON。**作品首个分镜版本一律先完整呈现并等待用户发话——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息。下一轮 LLM 调 `start_run` 才放行；后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，新版本闭环目标 = `docs/VIDEO_PROJECT.md` §2/§8/§15，施工与实际验证状态 = `docs/tasks/video-project-implementation.md`；当前旧链事实查代码与 RENDERING。
+- **口头确认律（ADR-092，ask 档法律）**：ask 档下方案 dock 后恒等确认——echo 收尾恒为一句朴素的方案判断问句（一词可答），口头 yes 与 Start 钮都化为普通用户消息走 sendChat，下一轮 LLM 到 start_run（同一机器，按钮不直启 run）；收尾永不带「成片出来后再调」式交付后修订预告。**auto 档（默认）无确认拍**——方案呈现即开工，同回合 propose→start_run 是标准道（ADR-117）；但 auto 只免批准拍、**永不创造制作意图**（ADR-139）：dock 生于无制作请求的消息（纯修改/「先给我看方案」/讨论）任何档都等用户发话，`production_intent` 出生事实随六个 dock 工具入参，缺断言=安全侧挂起（Start 钮常驻）；开工确认**复述当前累计方案**（明说要求/已落实改动/建议未选项/未清项——未选项永不称「已确认」，旧版 yes 永不静默授权新稿）；守卫线（`billing.always_confirm_above` / NULL 不可报价族）任何档恒带价问一次。**film 分镜拍（ADR-129/ADR-134/ADR-144）**：分镜设计 = `design_storyboard` 呈现，分镜不是开工也不是方案 dock；fresh compose 首稿/开放重稿默认 review hold ON。**作品首个分镜版本一律先完整呈现并等待用户发话——开场「直接做」、`review_hold=false` 与 auto 都不能同回合开工，`film_presented_message_id` 未持久化时任何 Start 均由 `start.review_hold` 硬拦**。auto 无其他确认债时不显示首稿 approval dock，用户看过后的制作话走普通 sendChat；ask 可显示首稿 dock，Start 钮同样只发送用户消息。下一轮 LLM 调 `start_run` 才放行；后续版本不继承这个首稿专用确认拍，其余生产授权全走通用设置，新版本闭环目标 = `docs/VIDEO_PROJECT.md` §2/§8/§15，施工与实际验证状态 = `docs/tasks/skill-package-promo-video.md`；当前旧链事实查代码与 RENDERING。
 - **Chat / Run 工作段一行两态**：chat 的 now line / Thinking 与工作记录折叠行、run 的制作 / 整理结果 / Worked 同由 `components/chat/ActivityStream.tsx:WorkSegmentRow` 承载；首条 active 从宿主行原位入段，前段打字不得吞掉当前活动；工具完成不收段，首个非空白正文经打字机实际释放或真实终态才原位收成工作记录，busy 时禁「工作了 X 秒 + 另一条 Thinking」。chat live Thinking / 里程碑恒无 chevron 且不可展开，只有收成工作记录后才开放；run 保留可展开的活步骤树，按 RUNNING → REVIEWING → SETTLED 以同一 runId key 原位过渡，terminal 不等于收段，匹配当前 run 的 delivery 首字实际释放才收 Worked，chip 在真实可交付 output 就位后仍等匹配 delivery 首字实际释放或 Worked 收段才挂载，terminal 本身不提前暴露。cancelled 尝试从可见投影退役，不留 ✗ / 删除线，真实 failed 保留一条安静告警；chat 与 run-delivery 各持工作段时钟，互不相加。
 - **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。视频 Skill 也不混入 @ registry：经专用 Skill picker 形成 Skill chip，随统一 Skill 引用走唯一 `POST /chat`；内置与外部 SkillVersion 同链。**Chip 三律**：可见（inline，无 ×）/ 发送消费 / 文本删除净化（Backspace / Delete / 选区删除，无状态跨发送残留）。方针全文 = `docs/MENTIONS.md`。
 - **修订按所属领域走唯一写口**：业务执行图修订骑 `POST /chat` 的 `edit_graph`（wiring 提案）→ `apply_wiring_ops`；视频内容修订经 `revise_video` → `apply_composition_edits` 生成不可变版本，不把每个 Object/Clip 的内容改动当成图拓扑变更。旧图卡面 prompt 直改仍走 `POST /projects/{id}/graph/revise`，**dock 零消息**，卡面乐观回显永不回闪。受控视觉程序创作与执行图编排的边界见 VIDEO_PROJECT §0/§8.1.1。
@@ -168,7 +168,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Persona Skin Block (brand)
 
-**ADR-038**：皮肤 = 人设 `brand` JSONB 块（caption 字号/字体/颜色/位置 + style-preset + 标题 + intro/outro + 音乐 `musicId`/`musicMood`/`musicEnabled`）；无独立 brand template 模块，`/brand-template` 307 → `/personas`。**`brand: null` = 系统默认皮肤**。编辑 = 人设页第三 tab「皮肤」（左设置 + 右 Remotion `<Player>` 实时预览，与产物像素级一致，`components/persona/skin-editor.tsx`）；存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体 = `POST /personas/{id}/media(/upload-url)`（随人设删）。**`logo` 键无渲染消费路径，不入 UI**。**Craft/format 字段非人设列**：`aspect` / `fillMode` / `captionEnabled` / filler removal / 音乐默认 = 配方注册表 + 计划默认；写作风格不在人设表列，住 风格六件 + `guidelines`。烘焙路径见 `MODULE_ARCHITECTURE.md §7` / `brand.py`（`brand_ref` = persona id，clip-spec 契约不变）。**`brand_template_id` 不出现在任何请求载荷**——composer 单身份控件，`persona_id` 经首条 chat 消息送达并在 `create_run` 钉入 `run.context.persona_id`。
+**ADR-038**：皮肤 = 人设 `brand` JSONB 块（caption 字号/字体/颜色/位置 + style-preset + 标题 + intro/outro + 音乐 `musicId`/`musicMood`/`musicEnabled`）；无独立 brand template 模块，`/brand-template` 307 → `/personas`。**`brand: null` = 系统默认皮肤**。编辑 = 人设页第三 tab「皮肤」（左设置 + 右 Remotion `<Player>` 实时预览，与产物像素级一致，`components/persona/skin-editor.tsx`）；存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体 = `POST /personas/{id}/media(/upload-url)`（随人设删）。**`logo` 键无渲染消费路径，不入 UI**。**Craft/format 字段非人设列**：`aspect` / `fillMode` / `captionEnabled` / filler removal / 音乐默认 = 配方注册表 + 计划默认；写作风格不在人设表列，住 风格六件 + `guidelines`。烘焙路径见 `MODULE_ARCHITECTURE.md §7` / `brand.py`（`brand_ref` = persona id）。**`brand_template_id` 不出现在任何请求载荷**——composer 单身份控件，`persona_id` 经首条 chat 消息送达并在 `create_run` 钉入 `run.context.persona_id`。
 
 ## Persona Voice Block (voice)
 
@@ -176,9 +176,9 @@ t("home.allProjects", { count: projects.length })
 
 ## Video Editor & Rendering
 
-**clip-spec 与 film-spec 是平级 spec families**（ADR-016 / ADR-119），**renderer = 可替换黑盒**（首推 Remotion）。详见 `docs/RENDERING.md`（§1 家族与渲染链 / §3 clip-spec 字段契约 / §6 渲染层 / §7 替换路径 / §8 现行轨道契约）与 `docs/VIDEO_EDITOR.md`（编辑器形态 + L2/L3 范围纪律）。**泄漏禁令**：Remotion / React 概念永不入任何 spec；video-spec 只消费固定媒体。唯一来源例外是受控 GeneratorObject——`component-v1` 可在 CompositionVersion 保存 Agent 编写的不可变 TSX，经声明 runner 上游烘焙，不获得任意 import/npm/网络/文件/DB 权限；原始外部 Skill 脚本仍永不执行。固定/自由创作最终都是同一 CompositionVersion，重要文字、字幕、音频保留原生可精修身份，不把整片烘焙后谎称可编辑。
+`video-spec` 是渲染服务入口。受控 Generator 程序与资源固定在 CompositionVersion，经独立隔离 runner 产出固定媒体；React 和 Remotion 概念留在画笔或 runner 内。原生文字、字幕和音频保留可编辑身份。详见 `docs/RENDERING.md` 与 `docs/VIDEO_PROJECT.md`。
 
-**clip 编辑器 L3 铁律（每项否决不变）**：禁多轨自由时间线 / 自由层合成 / 转场画廊与自由转场编辑 / stock B-roll 库 / 通用自动人脸或物体追踪 / 客户端引擎——专业需求明确导出剪映 / Premiere；ADR-044 的受控锚/层与进场边枚举不等于自由 NLE，Film composite 的受控元素组合由 ADR-140 单独规定。字幕样式仅枚举，不开放自由版式；styles 限定 CSS + libass 都能表达的子集（保 FFmpeg 替身成本）。硬前提：**多语言 ASR 词级时间戳 + 对象存储流式 / 寻址**（ADR-024）。
+**视频编辑器 L3 铁律（每项否决不变）**：禁多轨自由时间线 / 自由层合成 / 转场画廊与自由转场编辑 / stock B-roll 库 / 通用自动人脸或物体追踪 / 客户端引擎——专业需求明确导出剪映 / Premiere。字幕样式按现行原生文字对象合同。硬前提：**多语言 ASR 词级时间戳 + 对象存储流式 / 寻址**（ADR-024）。
 
 ## Error Handling & Toasts
 

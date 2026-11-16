@@ -9,9 +9,7 @@ import { apiFetch, toAbsoluteUrl } from "@/lib/api"
 import { anchorCardOf, anchorLabel, isChatVideoOutput } from "@/lib/anchorCards"
 import { useOutputPoster } from "@/lib/outputPoster"
 import { outputAspect } from "@/lib/outputAspect"
-import { outputViewerItems } from "@/lib/outputViewer"
 import type { ChatOutputEntry, Output } from "@/lib/types"
-import { OutputPosterImage } from "./OutputDeliveryCard"
 
 function getOutputSlot(slotId: string) {
   return document.querySelector<HTMLElement>(`[data-output-id="${CSS.escape(slotId)}"]`)
@@ -20,13 +18,11 @@ function getOutputSlot(slotId: string) {
 export function ChatOutputViewer({
   outputId,
   entries,
-  onNavigate,
   onOpenChange,
   onMention,
 }: {
   outputId: string | null
   entries: ChatOutputEntry[] | null
-  onNavigate: (outputId: string) => void
   onOpenChange: (open: boolean) => void
   onMention: (output: Output, region?: MediaRegionSelection) => void
 }) {
@@ -60,41 +56,8 @@ export function ChatOutputViewer({
 
   const candidateOutput = selectedEntry ? selectedEntry.output : fallback
   const selectedOutput = candidateOutput && isChatVideoOutput(candidateOutput) ? candidateOutput : null
-  const items = outputId ? outputViewerItems(entries, outputId, selectedOutput) : []
-  const index = Math.max(0, items.findIndex((entry) => entry.output_id === outputId))
   const poster = useOutputPoster(selectedOutput)
   const unavailable = failed || selectedEntry?.output === null || Boolean(candidateOutput && !selectedOutput)
-
-  const itemData = (entry: ChatOutputEntry): MediaLightboxData => {
-    const output = entry.output
-    if (!output) {
-      return { id: entry.output_id, kind: "text", title: t("chat.outputViewer.unavailable") }
-    }
-    const card = anchorCardOf(output)
-    const title = anchorLabel(card, t(`chat.anchorCards.types.${output.type}`, { defaultValue: output.type }), null)
-    return {
-      id: output.id,
-      slotId: output.id,
-      kind: "video",
-      url: toAbsoluteUrl(output.files.video) ?? undefined,
-      poster: toAbsoluteUrl(output.publishing.cover_image_url ?? output.files.image) ?? undefined,
-      aspect: outputAspect(output),
-      title,
-      thumbnail: <OutputPosterImage output={output} />,
-    }
-  }
-  const galleryItems = items.map(itemData)
-  const gallery = outputId && galleryItems.length > 0 ? {
-    items: galleryItems,
-    activeId: outputId,
-    onSelect: onNavigate,
-  } : undefined
-  const navigation = outputId && items.length > 0 ? {
-    index,
-    total: items.length,
-    onPrevious: () => { if (index > 0) onNavigate(items[index - 1].output_id) },
-    onNext: () => { if (index < items.length - 1) onNavigate(items[index + 1].output_id) },
-  } : undefined
 
   let data: MediaLightboxData | null = null
   if (outputId && selectedOutput) {
@@ -134,8 +97,6 @@ export function ChatOutputViewer({
     <MediaLightbox
       data={data}
       onOpenChange={onOpenChange}
-      navigation={navigation}
-      gallery={gallery}
       getSlot={getOutputSlot}
       actions={selectedOutput ? (
         <>

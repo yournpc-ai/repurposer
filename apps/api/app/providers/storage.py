@@ -406,7 +406,7 @@ async def download_to_temp(key: str | None) -> Path | None:
 # ASR / speaker_map / prosody), run-time readers (reframe / extraction),
 # and the render service's staging (its stage.ts points at the SAME dir —
 # the render payload's ``source_key`` envelope field carries the key across
-# the process boundary; the envelope is api↔render, not clip-spec). A cache
+# the process boundary; the envelope is api↔render, not video-spec). A cache
 # hit costs zero network; a miss downloads once via the proxy-aware download
 # client and every later reader rides along. Entries are never caller-reaped
 # — the LRU cap owns eviction. Multi-host deployments get one cache per host

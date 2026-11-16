@@ -1104,3 +1104,169 @@ body {
     color-mix(in oklab, var(--media-scrim) 65%, transparent) 65%,
     transparent 100%);
 }
+
+.landing-skills {
+  scroll-margin-top: 4rem;
+}
+
+.landing-skills-stage {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(0.5rem, 1svh, 1rem) 1.15% 0;
+  border-radius: 0 0 1.25rem 1.25rem;
+  background: #f1f0ed;
+  color: #11110c;
+}
+
+.dark .landing-skills-stage {
+  background: var(--landing-header-background);
+  color: var(--foreground);
+}
+
+.landing-skills-heading h2 {
+  font-size: clamp(2rem, min(3.8vw, 7.5svh), 5rem);
+}
+
+.landing-skills-gallery {
+  position: relative;
+  flex: 1;
+  min-height: 18rem;
+  margin-top: clamp(2.25rem, 9svh, 9rem);
+}
+
+.landing-skills-frames {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.17fr 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: 3.35%;
+  align-items: start;
+  opacity: 0;
+  transition: opacity 360ms ease;
+}
+
+.landing-skills-frames[data-active="true"] { opacity: 1; }
+
+.landing-skills-frames img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 92%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.landing-skills-frames img:nth-child(2),
+.landing-skills-frames img:nth-child(3) { align-self: end; }
+
+.landing-skills-frames img:nth-child(3) {
+  grid-column: 4;
+  margin-bottom: 1.8svh;
+}
+
+.landing-skills-controls {
+  --skill-step: clamp(2.875rem, 7svh, 5.25rem);
+  position: absolute;
+  top: 53%;
+  left: 50%;
+  width: 19.55%;
+  transform: translateX(-50%);
+}
+
+.landing-skill-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--muted-foreground);
+  font-size: clamp(0.875rem, 1.45vw, 1.875rem);
+  letter-spacing: -0.045em;
+  text-align: center;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.landing-skill-button[data-offset="-1"] { top: calc(-1 * var(--skill-step)); }
+.landing-skill-button[data-offset="1"] { top: var(--skill-step); }
+.landing-skill-button[data-offset="2"] { top: calc(2 * var(--skill-step)); }
+
+.landing-skill-button:hover,
+.landing-skill-button:focus-visible { color: inherit; }
+
+.landing-skill-button[aria-current="true"] {
+  min-height: calc(var(--skill-step) * 1.04);
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.4rem 0.45rem 0.4rem 8%;
+  background: var(--card);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 5%);
+  color: inherit;
+  text-align: left;
+}
+
+.landing-skill-arrow {
+  display: grid;
+  width: clamp(1.75rem, 2.45vw, 3.25rem);
+  flex: none;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.landing-skill-arrow svg { width: 56%; }
+
+@media (min-height: 36rem) and (prefers-reduced-motion: no-preference) {
+  .landing-skills { min-height: calc(220svh - 64px); }
+
+  .landing-skills-stage {
+    position: sticky;
+    top: 64px;
+    height: calc(100svh - 64px);
+  }
+}
+
+@media (min-width: 768px) {
+  @media (max-height: 575px), (prefers-reduced-motion: reduce) {
+    .landing-skills-gallery { min-height: clamp(19rem, 34vw, 42rem); }
+  }
+}
+
+@media (max-width: 767px) {
+  .landing-skills-stage { padding-inline: 0.75rem; }
+
+  .landing-skills-gallery {
+    min-height: 22.5rem;
+    margin-top: 1.25rem;
+  }
+
+  .landing-skills-frames {
+    inset-block: auto clamp(0rem, 50% - 11.5rem, 6rem);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto;
+    gap: 0.4rem;
+    padding-bottom: 1rem;
+  }
+
+  .landing-skills-frames img { max-height: min(24svh, 8.5rem); }
+  .landing-skills-frames img:nth-child(3) { grid-column: auto; }
+
+  .landing-skills-controls {
+    --skill-step: 2.75rem;
+    top: clamp(4.75rem, 26%, 14rem);
+    width: min(80%, 18rem);
+  }
+
+  .landing-skill-button { font-size: 1.125rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-skills-frames { transition: none; }
+}

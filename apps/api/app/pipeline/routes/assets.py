@@ -155,7 +155,7 @@ async def _insert_project_asset(
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
     # flush-only, commits with the asset below. 认领即出生 (ADR-102): a
     # dormant upload carries no processing claim until someone asks.
-    from app.pipeline.graph_fill import (  # deferred: import cycle
+    from app.pipeline.graph_store import (  # deferred: import cycle
         stamp_asset_node,
     )
 
@@ -264,7 +264,7 @@ async def upload_asset(
     # 上传即落图 (ADR-057 K2): the asset node is born with its asset row.
     # 认领即出生 (ADR-102): a dormant upload carries no processing claim
     # until someone asks.
-    from app.pipeline.graph_fill import (  # deferred: import cycle
+    from app.pipeline.graph_store import (  # deferred: import cycle
         stamp_asset_node,
     )
 
@@ -318,7 +318,7 @@ def _transcript_response(asset: Asset) -> AssetTranscriptResponse:
     ``meta.words`` through the ONE grouping law (``display_cues``) — cues
     never persist."""
     from app.pipeline.assets import asset_text_content
-    from app.tools.clips.transcript import display_cues
+    from app.editing.transcript import display_cues
 
     words = (asset.meta or {}).get("words") if isinstance(asset.meta, dict) else None
     rows, truncated = display_cues(words)
@@ -441,7 +441,7 @@ async def delete_asset(
     await delete_file(asset.file_url)
     # The graph twin goes through the same wiring door (ADR-057 K2) — edges
     # cascade structurally; absent node (pre-K2 asset) skips.
-    from app.pipeline.graph_fill import remove_asset_node  # deferred: import cycle
+    from app.pipeline.graph_store import remove_asset_node  # deferred: import cycle
 
     await remove_asset_node(db, project_id, asset_id)
     await db.delete(asset)

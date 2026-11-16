@@ -19,8 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import MAX_CHARS_PER_TEXT
-from app.agents.contexts import generation_context
-from app.agents.registry import plan, understand, persona
+from app.agents.registry import understand, persona
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     EMOTIONAL_TONES,
@@ -28,13 +27,10 @@ from app.models.schemas import (
     QuestionPayload,
     AssetStatus,
     AssetType,
-    IntentSlot,
     MaterialUnderstanding,
     RenderStatus,
-    Storyboard,
 )
 from app.models.tables import (
-    Message,
     Output,
     Persona,
     Project,
@@ -51,21 +47,16 @@ from app.pipeline.conversation_bridge import (
     dock_interrupt_question,
     finalize_bailed_runs,
 )
-from app.pipeline.derivative_dispatch import derivative_output_types
-from app.pipeline.edges import (
-    _align_storyboard_slots,
-    _compute_coverage,
-    _interrupt_direction,
-    _load_understanding,
-)
+# Graph fill/back-write (ADR-057 K2) — top-level is cycle-free: graph_fill's
+# module-level chain (graph / graph_store / outputs / billing) never points
+# back here; its own import of THIS module stays function-level inside
+# stamp_draft_graph.
 from app.pipeline.graph import (
     NODE_KINDS,
     NodeBase,
     estimate_agent,
     estimate_free,
     estimate_mechanical,
-    known_output_types,
-    slot_default_counts,
     token_bounds,
 )
 from app.pipeline.step_context import (
@@ -78,7 +69,6 @@ from app.pipeline.step_context import (
 from app.pipeline.step_display import set_spec_field, set_summary
 from app.platform.project_context import (
     collect_asset_texts,
-    resolve_persona,
 )
 
 logger = structlog.get_logger()
@@ -613,6 +603,25 @@ class Understand(NodeBase):
         return [row.id]
 
 
+async def _load_understanding(db, node):
+    frontier = [str(item) for item in (node.inputs or [])]
+    visited = set()
+    while frontier:
+        upstream = await db.get(WorkflowStep, UUID(frontier.pop()))
+        if upstream is None or str(upstream.id) in visited:
+            continue
+        visited.add(str(upstream.id))
+        if upstream.kind == "understand":
+            if upstream.output_refs:
+                row = await db.get(Output, UUID(str(upstream.output_refs[0])))
+                if row is not None and row.type == "material_understanding":
+                    return MaterialUnderstanding.model_validate(row.payload)
+            break
+        if upstream.kind == "interrupt":
+            frontier.extend(str(item) for item in (upstream.inputs or []))
+    raise ValueError("No material understanding is available for this material")
+
+
 class Interrupt(NodeBase):
     kind = "interrupt"
     task_name = "Pick a direction"
@@ -753,163 +762,6 @@ class Interrupt(NodeBase):
                 ],
             }
         )
-
-
-class Plan(NodeBase):
-    kind = "plan"
-    task_name = "Plan content"
-    task_name_zh = "规划内容"
-    agents = (plan,)
-
-    def estimate(self, ctx: dict) -> dict | None:
-        """One call: prompt = the upstream understanding (≤ 2500 completion
-        tokens) + plan + persona/tone context; completion = the
-        storyboard (per-slot fields, bounded by the slot schema)."""
-        return estimate_agent([800, 4500], [300, 2500])
-
-    async def run(
-        self, db: AsyncSession, run: WorkflowRun, node: WorkflowStep, project: Project
-    ) -> list[UUID]:
-        """Plan node: request-scoped storyboard, re-planned every run.
-
-        Reads ONLY the upstream understanding (self-sufficiency contract) plus the
-        plan and persona/tone context; coverage accountability is computed by
-        code and persisted with the storyboard. The plan is passed slot by
-        slot (per-slot count/focus/language); explicit slot fields are enforced
-        by code after the LLM returns.
-
-        2026-09-05 widening (supersedes the 2026-08-25 copy-writer lift fifth
-        gate): when the chain declares no material ``requires`` and
-        understand wrote a stub understanding, the storyboard LLM has
-        nothing to plan from either — same skip rule, paired stub
-        Storyboard (empty slots, empty coverage). Executors handle the
-        empty storyboard: ``find_slot`` returns ``{}`` and the prompt's
-        ``{{ slot.focus or default }}`` fallback fires."""
-        ctx = run.context or {}
-        understanding = await _load_understanding(db, node)
-
-        if (
-            not _chain_needs_material(run)
-            and (understanding.core_thesis == "")
-            and not understanding.key_arguments
-            and not understanding.quotable_lines
-        ):
-            assets = await list_assets(db, project.id)
-            row = Output(
-                project_id=project.id,
-                workflow_step_id=node.id,
-                type="storyboard",
-                language=ctx.get("target_language", "en"),
-                provenance="generated",
-                payload=Storyboard().model_dump(mode="json"),
-            )
-            db.add(row)
-            await db.flush()
-            await set_spec_field(node.id, "noop", True)
-            await set_summary(
-                node.id,
-                "无素材输入，跳过分镜规划" if _display_zh(run, project, assets)
-                else "No source material — storyboard skipped",
-            )
-            logger.info(
-                "plan_copy_writer_stub",
-                project_id=str(project.id),
-            )
-            return [row.id]
-
-        # The storyboard's intent slots come from THIS RUN'S COMPILED GRAPH
-        # (ADR-043 item 6): each generation sibling carries its task's params
-        # as spec.slot — the graph the user confirmed IS the dispatch input,
-        # so panel-edited chains and multi-version chains plan exactly as
-        # compiled. Per-type order = seq order = the compile's slot_index
-        # assignment (executors pick their slot by that same ordinal).
-        siblings = (
-            await db.execute(
-                select(WorkflowStep)
-                .where(WorkflowStep.run_id == run.id)
-                .order_by(WorkflowStep.seq)
-            )
-        ).scalars().all()
-        parsed = [
-            IntentSlot.model_validate(s.spec["slot"])
-            for s in siblings
-            if (s.spec or {}).get("slot")
-        ]
-        intent_slots = [s for s in parsed if s.type in known_output_types()]
-        # Targeted derivative runs: the storyboard plans only for the target type.
-        target_type = node.spec.get("target_type")
-        if target_type in derivative_output_types():
-            intent_slots = [IntentSlot(type=target_type)]
-        if not intent_slots:
-            intent_slots = [IntentSlot(type="clips")]
-        # count_default rides per slot (registry-derived — the template never
-        # hardcodes a number; the retired inline mirror drifted once already).
-        count_defaults = slot_default_counts()
-        task_book = {
-            "slots": [
-                {**s.model_dump(mode="json"), "count_default": count_defaults.get(s.type)}
-                for s in intent_slots
-            ],
-            "target_language": ctx.get("target_language", "en"),
-        }
-        # Direction interrupt (期 4): the user's pick steers the prompt — option
-        # → priority argument, freeform → guidance text, default → absent (the
-        # current behavior). Explicit slot focus still wins (code-enforced below).
-        direction = await _interrupt_direction(db, node)
-        if direction:
-            task_book["direction"] = direction
-
-        # Exemplar skeleton (ADR-078 判词⑤): when a decompile sibling fed this
-        # plan, the exemplar's measured craft rides the assemble as read-only
-        # facts (planning honesty — the gaps list steers slots away from
-        # unshippable promises). The params themselves are code-mapped at the
-        # consumers; the LLM never writes a spec.
-        from app.pipeline.decompile import (  # deferred: decompile imports THIS module
-            load_skeleton_for_run,
-        )
-
-        skeleton = await load_skeleton_for_run(db, run, project)
-
-        persona_row = await resolve_persona(db, project)
-        gen_ctx = generation_context(run, project, persona_row)
-
-        storyboard = await plan.call(
-            understanding=understanding,
-            context=gen_ctx,
-            task_book=task_book,
-            # Registry-derived (N-32): per-type count defaults ride the prompt
-            # as data, never restated by hand in the template.
-            count_defaults_text=", ".join(
-                f"{t} → {d}" for t, d in slot_default_counts().items()
-            ),
-            craft_skeleton=(
-                skeleton.model_dump(mode="json") if skeleton is not None else None
-            ),
-        )
-        storyboard.slots = _align_storyboard_slots(storyboard.slots, intent_slots)
-        storyboard.coverage = _compute_coverage(storyboard, understanding)
-
-        row = Output(
-            project_id=project.id,
-            workflow_step_id=node.id,
-            type="storyboard",
-            language=ctx.get("target_language", "en"),
-            provenance="generated",
-            payload=storyboard.model_dump(mode="json"),
-        )
-        db.add(row)
-        await db.flush()
-        assets = await list_assets(db, project.id)
-        zh = _display_zh(run, project, assets)
-        await set_summary(
-            node.id,
-            f"规划了 {len(storyboard.slots)} 个槽位 · "
-            f"{len(storyboard.coverage.unused_arguments)} 个论点未使用"
-            if zh
-            else f"Planned {len(storyboard.slots)} slots · "
-            f"{len(storyboard.coverage.unused_arguments)} arguments unused",
-        )
-        return [row.id]
 
 
 class RenderRequest(NodeBase):

@@ -275,7 +275,7 @@ def build_source_blocks(assets: list) -> list[dict[str, Any]]:
     ADR-113)."""
     # Deferred: the tools door (app.tools.__init__) imports node_runners,
     # which imports this module — a top-level edge would cycle.
-    from app.tools.clips.transcript import build_anchored_transcript
+    from app.editing.transcript import build_anchored_transcript
 
     blocks: list[dict[str, Any]] = []
     for asset in assets:

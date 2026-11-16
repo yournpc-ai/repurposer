@@ -71,11 +71,7 @@ def authority(monkeypatch):
 
     fake_has_active_run.verdict = False
 
-    async def fake_sync(db, node):
-        calls["synced"].append(node.id)
-
     monkeypatch.setattr(orchestrator, "has_active_run", fake_has_active_run)
-    monkeypatch.setattr(orchestrator, "sync_graph_node_for_step", fake_sync)
     calls["set_verdict"] = lambda v: setattr(fake_has_active_run, "verdict", v)
     return calls
 
@@ -163,7 +159,7 @@ async def test_seat_authority_free_resumes(authority):
     assert node.started_at is None
     assert node.claim_token is None
     assert run.status == WorkflowStatus.RUNNING
-    assert authority["synced"] == [node.id]
+    assert authority["synced"] == []
 
 
 @pytest.mark.asyncio

@@ -635,8 +635,12 @@ def working_draft_review_facts(
         "confirmation_blocked": confirmation_blocked,
         "unconfirmed_evidence_id": unconfirmed["evidence_id"] if unconfirmed else None,
         "open_issues": open_issues,
-        "save_ready": bool(
-            state.get("started") and timeline and not missing and not unjudged and not open_issues and not unconfirmed
+        "save_ready": bool(scenes) and all(
+            any(clip.get("scene_id") == scene.get("scene_id") for clip in clips)
+            for scene in scenes
+        ) and (
+            not state.get("started")
+            or not missing and not unjudged and not open_issues and not unconfirmed
         ),
         "pending_question": pending_question,
     }

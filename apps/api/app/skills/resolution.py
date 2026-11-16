@@ -15,7 +15,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.editing.templates import load_template
 from app.models.schemas import (
     BuiltInSkillReference,
     ExternalSkillReference,
@@ -29,7 +28,6 @@ from app.skills.store import get_skill_version
 # Only packs with a real design_video consumer are selectable video Skills.
 # The broader instruction-pack registry also contains writers and other crafts.
 _BUILTIN_VIDEO_CAPABILITIES = {
-    "launch-film": ("website_capture", "launch_film_template", "mixed_real_media"),
     "promo-video": (
         "website_capture",
         "mixed_real_media",
@@ -45,7 +43,6 @@ _BUILTIN_VIDEO_CAPABILITIES = {
 # Display names live in the web locales; these aliases are the deterministic
 # natural-language binding face for the same exact built-in references.
 _BUILTIN_SKILL_ALIASES = {
-    "launch-film": ("Website launch film", "网站发布视频", "Product promo video", "产品宣传视频制作"),
     "promo-video": ("Promotional video", "宣传视频制作"),
     "talking-head-video": ("Talking-head motion video", "口播动效视频制作"),
     "text-animation": ("Text animation video", "文字动画视频制作"),
@@ -84,10 +81,6 @@ def get_builtin_skill_option(skill_id: str, *, version: str | None = None) -> Sk
     version = version if active_version else str(pack.metadata.get("version") or "")
     if not version:
         raise SkillResolutionError("Skill has no declared design capability")
-    if skill_id == "launch-film":
-        template = load_template(skill_id)
-        if template.template_id != skill_id:
-            raise SkillResolutionError("Skill has no declared design capability")
     return SkillOption(
         reference=BuiltInSkillReference(kind="builtin", skill_id=skill_id, version=version),
         skill_id=skill_id,

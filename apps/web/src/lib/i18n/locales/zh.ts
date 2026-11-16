@@ -175,18 +175,18 @@ const zh: Resources = {
     "play": "播放演示",
     "pause": "暂停演示",
     "replies": {
-      "product-promo": "视频做好了，先展示产品怎么用，再补充核心特点。\n想缩短开头、改字幕或换画面，直接说出位置就行。",
-      "talking-head": "保留了原声，字幕和重点标题也已加入。\n字幕不准、想删停顿或换标题样式，指出时间和内容就行。",
+      "product-promo": "开头是滴管使用特写，下面加了简洁的产品标题。\n想换标题或调节奏，接着说就行。",
+      "talking-head": "栏目标签放在顶部，本期标题从人物下方滑入。\n想调整标题出现的时间，接着说就行。",
       "text-animation": "文案没有改，已按语义安排文字节拍和重点动效。\n指定某一句，就能继续换动画、调速度或改配色。",
-      "knowledge-explainer": "旁白和画面已经配合好了，可以完整看一遍。\n哪里还不清楚，可以换例子、改旁白或放慢节奏。"
+      "knowledge-explainer": "月球实拍旁放了简短解释，说明我们从地球上看到了什么。\n想多讲一点或调整排版，接着说就行。"
     },
-    "disclosure": "交互示意 · 公开样片",
+    "disclosure": "素材剪辑示例",
     "disclosureShort": "交互示意",
     "requests": {
-      "product-promo": "给我的产品做个短视频，重点展示它怎么用。",
-      "talking-head": "给这段口播加上字幕和重点标题，保留我的原声。",
-      "text-animation": "把这段话做成文字动画，文案不要改。",
-      "knowledge-explainer": "我想用视频讲清楚这个概念，配上旁白和画面。"
+      "product-promo": "给这款精华做个短宣传片，开头先展示滴管怎么用。",
+      "talking-head": "给这段播客片段加上栏目标签和入场标题。",
+      "text-animation": "在霓虹背景上做一段「Light in motion」的文字动画，文案不要改。",
+      "knowledge-explainer": "用月球实拍和简短的屏幕文字，讲清楚月相为什么会变化。"
     },
     "steps": {
       "product-promo": {
@@ -199,22 +199,22 @@ const zh: Resources = {
           "done": "已安排产品分镜。"
         },
         "produce": {
-          "active": "正在制作画面与字幕…",
-          "done": "已制作画面与字幕。"
+          "active": "正在加入产品标题…",
+          "done": "已加入产品标题。"
         }
       },
       "talking-head": {
         "understand": {
-          "active": "正在识别口播内容…",
-          "done": "已识别口播内容。"
+          "active": "正在查看口播画面…",
+          "done": "已查看口播画面。"
         },
         "storyboard": {
-          "active": "正在标记重点与停顿…",
-          "done": "已标记重点与停顿。"
+          "active": "正在安排标题出现的时机…",
+          "done": "已安排标题出现的时机。"
         },
         "produce": {
-          "active": "正在生成字幕与标题…",
-          "done": "已生成字幕与标题。"
+          "active": "正在加入标签与标题…",
+          "done": "已加入标签与标题。"
         }
       },
       "text-animation": {
@@ -237,8 +237,8 @@ const zh: Resources = {
           "done": "已梳理讲解结构。"
         },
         "storyboard": {
-          "active": "正在设计旁白与图示…",
-          "done": "已设计旁白与图示。"
+          "active": "正在匹配月球画面和解说文字…",
+          "done": "已匹配月球画面和解说文字。"
         },
         "produce": {
           "active": "正在合成讲解视频…",
@@ -248,95 +248,54 @@ const zh: Resources = {
     }
   },
   "story": {
-    "suggestion": "那就把产品演示放到开头，原来的介绍缩短一些，后面的内容先保留。这样改可以吗？",
-    "confirmation": "可以，就这样改。",
-    "opening": "可以。我先把产品最值得看懂的一点提炼出来，再按「问题 → 使用演示 → 总结」安排分镜。",
-    "storyboardSummary": "分镜已经整理好：先用问题抓住注意，再展示核心操作，最后收束到产品价值。接下来按这个顺序制作。",
-    "workSteps": {
-      "understand": {
-        "active": "正在梳理视频目标…",
-        "done": "已梳理视频目标。"
-      },
-      "storyboard": {
-        "active": "正在设计视频分镜…",
-        "done": "已设计视频分镜。"
-      },
-      "produce": {
-        "active": "正在制作画面与字幕…",
-        "done": "已制作画面与字幕。"
-      }
-    },
-    "revisionOpening": "好，只调整开头和原来的介绍，后面的镜头先保留。",
-    "revisionLocation": "开头和介绍段已经定位好了，只替换这两部分，后面的镜头不动。",
-    "revisionSummary": "开头已经换成产品演示，介绍也压缩好了。现在检查新旧镜头的衔接。",
-    "revisionSteps": {
-      "locate": {
-        "active": "正在定位开头与介绍段…",
-        "done": "已定位开头与介绍段。"
-      },
-      "revise": {
-        "active": "正在重排开头镜头…",
-        "done": "已重排开头镜头。"
-      },
-      "check": {
-        "active": "正在合成并检查新版本…",
-        "done": "已合成并检查新版本。"
-      }
-    },
-    "redelivery": "这一版做好了，你再看看。",
-    "redeliveryTitle": "新的一版，继续看",
     "demoLabel": "对话制作视频演示",
-    "refineTitle": "想改哪里，直接说",
-    "deliveryTitle": "视频做好了，接着聊",
-    "delivery": "视频做好了，你看看。",
-    "followup": "接着说说你的想法…",
-    "eyebrow": "想表达什么，就从这里聊起。",
     "idea": {
-      "title": "说说你想做的视频",
-      "description": "不用写专业需求，也不用研究提示词。告诉我们你想做什么。"
+      "title": "说说你想做的视频"
     },
-    "watch": {
-      "title": "看看你的想法，做成视频是什么样。",
-      "description": "聊清楚方向，看看分镜，再看制作出来的视频。"
-    },
-    "revise": {
-      "title": "哪里不合适，接着说。",
-      "description": "还是在同一个对话里提出修改，不用另外学一套剪辑软件。"
-    },
-    "request": "我想做个视频，让大家看懂我的产品有什么用。你能帮我想想怎么做吗？",
+    "deliveryTitle": "从分镜到成片",
+    "refineTitle": "想改哪里，直接说",
+    "request": "帮我做个短视频，让大家看懂这个产品怎么用。",
     "attachments": {
       "label": "示例附件",
       "image": "product-image.png",
       "document": "product-brief.pdf"
     },
-    "feedback": "开头有点长，先展示产品怎么用。",
-    "posterAlt": "公开产品宣传样片画面",
-    "sampleNote": "公开样片 · 分镜与制作过程为交互示意。",
-    "revisionNote": "修改要求示意；此处尚未展示经过验证的修改前后结果。",
-    "scroll": "继续滚动",
-    "skip": "直接看视频案例"
+    "storyboardSummary": "先说清用户遇到的问题，再演示一次产品操作，最后交代它能帮用户做什么。",
+    "rendering": "正在制作视频…",
+    "delivery": "第一版做好了，你看看。",
+    "posterAlt": "第一版成片的预览画面",
+    "feedback": "把产品怎么用放到开头。",
+    "revisionOpening": "可以。我会把操作演示移到开头，原来的介绍缩成一句。",
+    "followup": "接着说说你的想法…",
+    "scroll": "继续滚动"
+  },
+  "skills": {
+    "label": "技能",
+    "titleFirst": "一键技能，",
+    "titleSecond": "胜任每一项视频创作",
+    "create": "使用「{{name}}」开始创作",
   },
   "faqSection": {
     "title": "你可能还想知道",
     "experience": {
-      "question": "不会剪辑，也能用吗？",
-      "answer": "可以。在对话里说想做什么、哪里需要调整即可，不用安装软件或插件。"
+      "question": "第一次做视频，怎么开始？",
+      "answer": "在对话里说清楚想做什么、给谁看。比如「帮我做一支 30 秒的新品介绍」。Rookie Cut 会和你梳理内容和画面，你可以先看分镜，再开始制作。"
     },
     "material": {
-      "question": "还没有准备素材，可以开始吗？",
-      "answer": "可以先聊想法。如果制作需要网站、文稿、图片或录像，助手会告诉你还需要补充什么。"
+      "question": "手头只有一个想法，可以开始吗？",
+      "answer": "可以先聊你想表达什么，Rookie Cut 会告诉你还缺哪些素材。有现成的文稿、图片或视频，可以直接发到对话里。做产品介绍时，也可以贴上网站链接。"
     },
     "revision": {
-      "question": "视频做出来以后，还能改吗？",
-      "answer": "可以继续在对话里提出修改。具体可调整的内容取决于视频；涉及重新生成或制作的修改会消耗相应积分。"
+      "question": "成片里只有一处不满意，可以单独改吗？",
+      "answer": "可以在原来的对话里指出具体时间或画面，再说你想怎么改。比如「把第 5 秒的标题换短一点」或「把产品特写放到开头」。"
     },
     "pricing": {
-      "question": "怎么收费？",
-      "answer": "新账号赠送 1,000 积分，注册无需绑卡。对话本身不收费，视频生成与制作消耗积分，制作前显示预估消耗。内测期间无需订阅，需要时再充值；项目与已购积分在内测结束后保留。"
+      "question": "什么时候会消耗积分？",
+      "answer": "聊想法、讨论修改都免费。生成视频或需要重新制作的修改会消耗积分，制作前可以查看费用预估。内测期间按需充值，无需订阅。"
     },
     "download": {
-      "question": "可以预览和下载吗？",
-      "answer": "制作完成后，可以预览并下载交付的视频。目前产品仍在内测，制作稳定性仍在完善。"
+      "question": "做好后，怎么下载成片？",
+      "answer": "在对话里打开交付的视频，先预览，再点击下载，保存为 MP4。"
     }
   },
   "footerItems": {
@@ -622,11 +581,7 @@ const zh: Resources = {
   skills: {
     external: "外部 Skill",
     builtin: {
-      "launch-film": {
-        name: "网站发布视频",
-        shortName: "发布视频",
-        description: "把已采集的网站内容制作成固定叙事结构的发布视频。",
-      },
+      // 仅保留当前可调用的内部视频 Skill。
       "promo-video": {
         name: "宣传视频制作",
         shortName: "宣传视频",
@@ -735,9 +690,11 @@ const zh: Resources = {
   projectMenu: {
     open: "项目菜单",
     backToProjects: "返回项目列表",
-    // 生成前左上角形态（2026-09-02 形态机）：首个 run 落地前菜单只是一个
-    // 返回 pill；完全体 ProjectMenu 随画布一起到来。
     backShort: "项目",
+  },
+  projectHeader: {
+    chat: "对话",
+    canvas: "画布",
   },
   personas: {
     title: "人设",
@@ -1006,14 +963,6 @@ const zh: Resources = {
   results: {
     title: "结果",
     prompt: "原始提示",
-    tabs: {
-      clips: "视频片段",
-      post: "社交长文",
-      quotes: "金句卡",
-      quoteFrame: "帧卡",
-      carousel: "轮播图",
-      article: "长文章",
-    },
     dock: {
       focus: "当前焦点：{{name}}",
       // hidden 态（2026-09-02 形态机）：用户手势把整个 dock 收成右下角
@@ -1544,12 +1493,6 @@ const zh: Resources = {
       restore_version: "恢复版本",
     },
     choicePlaceholder: "其他想法…",
-    derivativeTypes: {
-      post: "社交帖子",
-      quotes: "金句卡",
-      article: "文章",
-      carousel: "轮播图",
-    },
     legacyStepSummaries: {
       uploaded: "已上传",
     },
@@ -1562,6 +1505,8 @@ const zh: Resources = {
       output_preparation: "创建待交付产物",
       output_resume: "复用已准备产物",
       render_queue: "提交渲染队列",
+      produce_video: "正在制作你的视频…",
+      prepare_narration: "正在准备配音…",
       render: "渲染",
       upload: "上传",
       delivery: "交付检查",
@@ -1573,23 +1518,11 @@ const zh: Resources = {
       understand: "正在看懂你的素材…",
       interrupt: "等你选定方向…",
       plan: "正在规划内容结构…",
-      select_clips: "正在生成你的短片…",
-      revise_script: "正在撰写脚本…",
       render: "正在渲染视频…",
       stills: "正在抽取关键帧…",
       video: "正在处理视频…",
-      remove_filler: "正在去除口头禅…",
       add_music: "正在为你的片段配乐…",
-      dub_clip: "正在为你的声音配音…",
-      translate_clip: "正在翻译你的切片…",
-      write_post: "正在撰写社交帖子…",
-      write_quotes: "正在制作金句卡…",
-      write_carousel: "正在制作轮播图…",
-      write_article: "正在撰写文章…",
-      synth_talk_video: "正在生成视频…",
-      align_stills: "正在为你的文字稿对齐节奏…",
       verify: "质检中…",
-      materialize_source: "正在准备整条视频…",
     },
     qa: {
       q: "问",
@@ -1612,14 +1545,7 @@ const zh: Resources = {
     anchorCards: {
       view: "查看{{name}}",
       types: {
-        clip: "短片",
-        film: "影片",
         video: "视频",
-        post: "社交帖子",
-        quotes: "金句卡",
-        quote_frame: "金句卡",
-        carousel: "轮播图",
-        article: "文章",
       },
       words: "约 {{count}} 字",
     },
@@ -1628,12 +1554,6 @@ const zh: Resources = {
     },
     outputViewer: {
       title: "已交付产物",
-      previous: "上一个产物",
-      next: "下一个产物",
-      position: "{{current}} / {{total}}",
-      previousSlide: "上一页",
-      nextSlide: "下一页",
-      slidePosition: "第 {{current}} / {{total}} 页",
       selectRegion: "局部选择",
       referenceAsset: "引用此素材",
       regionHint: "拖动框选当前画面",
@@ -1642,47 +1562,26 @@ const zh: Resources = {
       reselectRegion: "重新框选",
       referenceRegion: "引用选区",
       details: "产物详情",
-      allOutputs: "全部已交付产物",
       zoomIn: "放大",
       zoomOut: "缩小",
       unavailable: "产物不可用",
       unavailableDetail: "这个确切的历史交付已不可用，没有替换成更新的版本。",
     },
-    openInEditor: "在编辑器中打开",
     uploadFile: "上传源文件",
     uploading: "上传中...",
     composerPlaceholder: "描述你想生成的内容...",
     composerFollowUpPlaceholder: "输入后续指令，例如“把 hook 改短”或“添加德语版本”...",
     emptyStateSubtitle: "上传演讲、会议或访谈的视频或文字——我们记住你的内容与风格，你点名什么，就做什么。",
     noResultsYet: "结果将在这里显示...",
-    quickActions: {
-      regenerateHooks: "重新生成 hook",
-      addLanguage: "添加{{language}}版本",
-      renderAllClips: "渲染全部片段",
-      exportAll: "导出全部",
-      makeShorter: "缩短",
-      makeLonger: "加长",
-    },
     resultActions: {
       edit: "编辑",
-      copy: "复制",
       regenerate: "重新生成",
-      render: "渲染视频",
       export: "导出",
     },
     recentChats: "最近对话",
     noRecentChats: "暂无对话",
   },
   generationOverlay: {
-    tools: {
-      translate_clip: "字幕版",
-      dub_clip: "配音版",
-      remove_filler: "去口头禅",
-      add_music: "背景音乐",
-    },
-    derive: {
-      bilingual: "双语",
-    },
     planVersion: "计划 v{{n}}",
     versionRestore: "恢复此版本",
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",

@@ -643,7 +643,8 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
         })
 
 
-def test_generic_scene_video_window_preserves_each_timebase_and_fails_closed():
+@pytest.mark.asyncio
+async def test_generic_scene_video_window_preserves_each_timebase_and_fails_closed():
     from app.tools.video.design import (
         CandidateDesignError,
         CompositionSceneAuthoring,
@@ -674,7 +675,7 @@ def test_generic_scene_video_window_preserves_each_timebase_and_fails_closed():
         "source_start_seconds": 1,
         "source_end_seconds": 5,
     })
-    expanded = _expand_scene_authoring(deepcopy(content), scene, facts)
+    expanded = await _expand_scene_authoring(deepcopy(content), scene, facts)
     clip = expanded["timeline"]["tracks"][0]["clips"][0]
     assert clip["range"] == {"start": 0, "end": 180000}
     assert clip["source"]["source_range"] == {"start": 90000, "end": 450000}
@@ -682,7 +683,7 @@ def test_generic_scene_video_window_preserves_each_timebase_and_fails_closed():
 
     original = deepcopy(content)
     with pytest.raises(CandidateDesignError) as raised:
-        _expand_scene_authoring(
+        await _expand_scene_authoring(
             deepcopy(content),
             CompositionSceneAuthoring.model_validate({
                 "scene_id": "proof",
@@ -744,3 +745,10 @@ def test_complete_unreviewed_high_level_draft_projects_save_only():
     )
     schema = tools[0].wire_view(tools[0].description, tools[0].params_model.model_json_schema())[1]
     assert set(schema["properties"]) == {"draft_ref", "save", "scrub", "pending_disposition"}
+
+    from app.agents.working_drafts import working_draft_review_facts
+    from app.tools.video.design import CandidateDesignError, _set_current_scene_timing
+
+    assert working_draft_review_facts(arguments)["save_ready"] is True
+    with pytest.raises(CandidateDesignError, match="save=true"):
+        _set_current_scene_timing(arguments["content"], "lead", 90000)

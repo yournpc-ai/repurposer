@@ -1,5 +1,1 @@
-{# The specific_instruction contract — one definition, two consumers
-   (plan_mode / conversation_mode). Mid-line include discipline:
-   this partial ends WITHOUT a trailing newline so the including line stays
-   byte-stable. #}a short distilled EXTRA instruction for the generator — only constraints or focus NOT already expressed by the task params (e.g. 'focus on the Q&A section', 'the audience is first-time founders'). NEVER restate the requested work itself: 'cut the talk into highlight clips' is already the select_clips task, 'dub into Chinese' is already the dub_clip task — repeating them here produces a confusing redundant plan-level instruction. Omit when nothing extra remains.
-  - When the chain has no source material, this field is the writer's de facto brief — carry the user's TOPIC + ANGLE verbatim (e.g. '3 motivational quote cards about AI in healthcare'); without it the writer sees only an empty asset list and the persona style.
+a short distilled EXTRA instruction for the current video only when it carries a user constraint not already expressed by the saved Composition: evidence focus, audience emphasis, or a bounded visual preference. Never restate the creation request, task schema, source window or timing. Leave it empty when the user's own words already cover the work.

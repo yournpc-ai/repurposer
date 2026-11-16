@@ -1,6 +1,6 @@
 # PROGRESS — 进展、排期与需求池
 
-> Status: 活跃快照。§0 为当前优先级与开放事项；需求池持续维护。状态就地更新，删除失效快照，不保存周期归档。
+> Status: 活跃快照（2026-11-16）。§0 为当前优先级与开放事项；需求池持续维护。状态就地更新，删除失效快照，不保存周期归档。
 > 本文是**排期 / 优先级 / 需求池的唯一事实源**（未排期需求见 §2）；其他文档只引用当前优先级或需求池条目，不复述排期。
 
 ## 0. 当前里程碑与施工序列
@@ -10,31 +10,23 @@
 ### 0.1 里程碑状态
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Video Project 新架构**：按 ADR-145/146 建设 Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec；A–C 已形成各自限定实现与真实证据，完整 B/C 未封板。当前优先打通工作草稿、条件工具与局部 Scrub 反馈；全部剩余施工、发布门与验收统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进，旧 Film 只作当前实现与对照，不再按旧 PLANNED 形态扩展。
+- **当前主线 — Chat-only Video Project**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
 - **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项
-
-P2 已按 [当前接线顺序与代码验收](tasks/sequential-video-authoring.md#64-当前接线顺序与代码验收) 统一两个 Chat runner 的目标、提示、工具、证据与条件发言。工作草稿、默认分镜、按需局部预览及显式顺序审片继续保留；Shotcraft 多文件与固定图像、Talkcraft 无图像数据动画卡在当前共用链均通过绑定、分镜保存及按需局部预览，零 Run/Output。当前 `sequential_oxvalue_draft_review` 已在项目 `fc7c1a05-37f8-48af-a406-79448af5b499` 通过：顺序首稿 14 次 Chat 调用、186,586 输入 tokens，标题编辑 2 次、4,645 tokens，两轮零 Run/Output。完整 core 当前为 397 passed / 1 个既有 SFX 文案失败。
-
-内置 Promo 与旧 provenance 已完成同一通用创作与编辑切换：四秒真实视频、普通修订、overlay 询问→回答→保存→删除、第三轮 SSE／非流式续接均独立通过，最终 provider 请求和数据库事实均不经过旧协议。`editing/promo.py`、两个旧 Jinja、专用参数/展开器、包名分派和 `video_shotcraft.py` 已删除，历史版本与 provenance 保留。装配失败零版本写入且原草稿可恢复。逐轮真实 ID、工具声明和 tokens 见 [动态 Skill 切换与删除](tasks/sequential-video-authoring.md#631-动态-skill-切换与删除)。
-
-`promo_short_confirmation_delivery` 的当前项目 `bf405d24-ca25-416e-9929-c9c4fe3a815a` 已从空项目和原始 URL 话术完成唯一版本、OK 同版本制作、原 Chat 自动交付、浏览器后重复 Yes 幂等、1185 帧完整解码及非静音音乐验证；新旧 Output 均完成刷新前后连续播放到 `ended`。成功首稿 Chat 累计 413,954、已知合计 415,671、峰值 51,959 tokens，相对历史成功基线分别下降 56.57%、56.46%、31.12%。旧 Turn `faebb418-0e83-40e3-9468-c9a6f67f13ab` 已通过现有失败入口收口，MiniMax M3 最小真实探活恢复。P1 历史独立放行保持关闭；技术放行不代替最终用户主观视听，完整 P6+P7 不关闭。
-
-本地 `/promo-video` 已切到内部安装的 Shotcraft `bdd94be16d60fa8f`。通用宿主读取上游方法、124 张镜头卡、150 个变体和 54 张本地预览，五首 BGM 与平台共享库现有文件逐字节相符。切换后 `promo_short_confirmation_delivery` 完整通过，分镜、同版本 Run、自动交付和重复确认幂等均已验证。首稿 695,534 Chat 输入 tokens，高于旧 Promo 包的 413,954。当前成片为无声，分镜无音乐 Clip。浏览器硬刷新前后均连续播至 32.32 秒结束；独立 Cat Walk 分镜保留一条共用曲库音乐 Clip，零制作。
 
 “当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Video Project / 创作主链收敛（优先于后续验收扩张）** | 工作草稿、条件工具、真实 Chat 首稿/局部修订与消息修复保留。首稿统一 `scene_plan / scene`，保存版统一五个高层 revision action，模型不提交 raw Op 或手抄 base_ref；旧 Promo 参数、模板、展开、包名/provenance 分派已删除且不可回落。当前真实 URL 项目已完成同版本 Run/Output/digest、唯一交付、重复确认幂等、完整解码、实际音轨和新旧 Output 刷新前后连续播放，成功首稿减量已由真实 provider 请求证实。注册旅程的 Pydantic 序列化错误已最小修复并在同一项目续验，未另造 Run；真实主链已在同一项目续验。参数修复观察不再额外指挥用户话术，重复确认已携带真实 Run/Output/交付事实并经原项目复验；完整 core 为 397 passed / 1 failed，唯一失败仍为既有 SFX 文案断言。内置 Skill 随应用部署、内部注册和使用，不开放用户自助安装；外部 SkillVersion 仅作内部登记、测试与历史 provenance。默认 Storyboard、按需局部 Scrub、OK/Yes 同版本制作授权保留。浏览器 Scrub Apply/取消/409、最终用户视听、普通项目与旧 Clip 回归、完整 P6+P7、runner 环境、Remotion 许可、部署与公开发布仍开放。逐轮 ID、用量与脚本边界见 [动态 Skill 切换与删除](tasks/sequential-video-authoring.md#631-动态-skill-切换与删除)。 |
+| **当前** | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。手动 Graph 经正常 Chat 验证基础 CRUD。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
 | **当前** | **Landing 对话式视频叙事与内测商业面** | 暖白底三层 Hero（Rookie Cut 品牌与新主标题）、四类 Tab 自动演示/独立背景、340svh 固定滚动叙事、静态 Gallery（当前不挂载）、正文 FAQ、简洁 CTA 与参考三列 Footer 已落码。演示使用公开候选样片与交互投影，未验证为真实 Chat 回放或修改后成片；真实类别样片与多轮交付仍按 P6+P7 验收。既有 TypeScript 与 landingCreate 定向检查通过；最新 Header/Hero 视觉调整尚未复跑静态检查或浏览器验收，桌面首屏/Tab/FAQ/Footer、其余尺寸、双主题、reduced-motion、媒体播放与登录预填完整旅程均待复验。Footer 未配置项目仅保留文字座位，发布前需真实链接或移除；公开 1,000 开户赠额前核对数据库配置；支付与公开授权门未关闭 | [当前合同](LANDING.md) |
 | **当前** | **Chat TurnBlock 与可见 Stop 收口** | 回复容器结构已落码：TurnBlock 分离用户与 AssistantResponse，回复内部持有正文/Worked/组件槽位；RunBlock 组合明确关联且连续的开场、工作面与逐消息交付，独立 QA/跨回合消息不重排。ChatConversation 已移除相邻工作块间距补偿；RunCard 统一 attached/detached 入口，交接不重挂载工作组件、不重复订阅。Chat/stream 22 files / 269 tests 通过；Web tsc 最新被范围外 MentionChip 两项 unused 阻断，全量 Web 425 passed / 2 failed（首页旧文案、媒体选区浮点断言）；媒体选区已继续接入选区外 mask、实时尺寸、「引用选区」chip、消息正文/结构化 region、普通 Chat 与 Video Project 上下文及 prompt 语义；region 只寄存在 chip，删除 chip 同步清除正文摘要和全部结构化选区草稿。上述 Web 读数早于本轮接入，需重跑；真实呈现由用户验收。独立上传 tool、消息自有 output_refs、Stop frontier、授权与费用边界不变。剩余多段回复、Run 收段视口、中途 QA/多次交付、上传/Stop、慢历史/刷新及全形态用户验收；全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
 | 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证；staging GC 已移出 worker 认领等待并改为 8 路有界用户前缀 listing，定向纯测试已补但未运行。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
-| 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) / [六段走查](tasks/agent-working-loop-iter-3.md) |
-| 开放 | Agent Working Loop 持续闭环 | 代码层已落，六段 live 验收、Candidate Surface live/replay、CJK 长素材检索与探索存储真实 DB 迁移仍待完成；验收后才可按覆盖映射、当前矩阵、无回归证据与生产引用清点执行 `edit_graph` 退役小提交 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
+| 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) |
+| 开放 | Agent Working Loop 持续闭环 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
 | 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟；chat `retry_upload` 已改为当前回合的独立上传工具与状态行，走 /upload 并保留原 Run/失败步骤；缓存 miss 不重渲染。定向 API 121 项、历史回放 44 项及 Web/render tsc 通过，新上传 UI 真实浏览器旅程尚未复验；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
 | 开放 | Agent 交互与画布确认迁移 | DeferredFrames 现行规则已归 CHAT；仍需真实 rejected-turn 浏览器证据：零客户端散文/预览、零服务端 commit/dock 残片，并保留有序原始事件。ADR-111 仍欠等待态节点面原型与 live 走查；相机 fit 缩放夹、capture 前估价面和刷新重建面须在同一份新合同中定清；跨轮防复读需可复现证据后再升级 | CHAT §8；现行决策 ADR-099/111 |
 | 开放 | 消息回放与素材检视 | seq/首回合事务、interim_prose 五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
@@ -50,7 +42,6 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 | B4b | hold GC：资格谓词与 claim 谓词语义镜像 | PLANNED | B4a | [合同](tasks/r1-1-batch-4b-hold-gc.md) |
 | B5a | Stripe 一次性积分充值：公司 test 账号、CLI/公网 webhook、固定/自定义金额 Checkout、支付订单、purchase 台账与 Settings 购买面 | ACTIVE | 固定档位本地真实付款主链已验证且仅一条 purchase 台账；自定义金额真实联调、剩余资金/权限验收、测试套件、公网 API origin/反代和 Dashboard endpoint 待完成；live 配置另行 | [支付架构](PAYMENTS.md) / [施工合同](tasks/stripe-credit-topup.md) |
 | B5 | 订阅/权益/计费中心/agent_calls、渠道联调与已发布产物删除边界 | PLANNED | R1 + B2 + B5a | [合同](tasks/r1-1-batch-5-commercial-distribution.md) |
-| C1 | skeleton cache identity；不阻塞其他 milestone | PLANNED | 无 | [合同](tasks/r1-1-batch-c1-cache-identity.md) |
 
 ### 0.4 新会话执行规则与启动 Checklist
 
@@ -75,7 +66,7 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 [ ] 完成后更新当前快照、剩余风险与下一步；不追加会话编年史
 ```
 
-**Non-negotiable constraints**：LLM 面不直接写 DB；拓扑由代码裁决；tool schema 是 action 边界；`apply_wiring_ops` 是唯一图写口；`_mutate` 双层 dedupe 不得破坏；clip-spec / film-spec 只按 `spec.family` 分派且不得混入 renderer 概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；`craft_scan` 零 LLM；终态写携带执行身份；project `{PENDING,RUNNING}` 至多一个 owner。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
+**Non-negotiable constraints**：LLM 面不直接写 DB；拓扑由代码裁决；tool schema 是 action 边界；`apply_wiring_ops` 是唯一图写口；`_mutate` 双层 dedupe 不得破坏；video-spec 是唯一在线渲染协议且不得混入 renderer 私有概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；`craft_scan` 零 LLM；终态写携带执行身份；project `{PENDING,RUNNING}` 至多一个 owner。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
 
 ## 1. 后续能力、延期事项与上线条件
 
@@ -116,10 +107,11 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 
 | 需求 | 优先级 | 依赖 | 来源 / 备注 |
 |---|---|---|---|
-| 首发推荐分：维度明细 | P1 | 首发推荐分已持久化；与 `tasks/output-quality-verify.md` 的覆盖范围对账 | 结果网格展示评分维度与理由；规格来源 = DECISION_MATRIX §B、STRATEGY §2.1 |
+| 首发推荐分：维度明细 | P1（待重定范围） | 在现行视频流程中确认产品入口后启动 | 完整度、开头、代表性、表达各 1–100，理由指出真实驱动项，禁止预测播放量或补造旧版轴值。同一版本的总分、四轴和理由一起更新，旧行仅显示已有总分；双主题、en/zh 与真实旅程验收。规格来源 = DECISION_MATRIX §B、STRATEGY §2.1 |
+| 媒体展示一致性 | 未排期 | 项目缩略图已下发 `thumbnail_aspect`，核对前端实际消费；复用现行媒体组件 | 视频/图片处理时保存尺寸并透出，旧素材使用共享探测；9:16 产物与竖屏项目缩略图按真实画幅完整展示。Chat、composer 和上传 chip 共享媒体类型/图标，Home 卡片保持仅预填 prompt；覆盖双主题及旧数据。 |
 | persona 校准打分 | P1 | 内部源 = 用户选用行为 + operations 编辑痕迹；外部发布回流不在当前周期 | 定位根落地后校准对象为定位的人设分区；规格来源 = DECISION_MATRIX §G、STRATEGY §2.1/§2.2 |
 | LLM 滚动摘要（超长会话历史） | P2 | 先用 `apps/api/scripts/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
-| 结构化节拍图 + clip-spec motion 枚举 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
+| 结构化节拍图 + video-spec 原生动画覆盖 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
 | 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §E |
 | LLM provider 抽象 | P1 | ADR-025 边界；第二 provider 的触发可为代码/视觉能力、成本或 EU 驻留，按实际消费者接入 | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
 | 字幕翻译 + 校对视图（side-by-side） | P1 | 多语言输出能力 | 对照校对交互来源 = DECISION_MATRIX §G |
@@ -160,7 +152,6 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | 个人创作 Skill | P2 | Video Project 阶段 C，依赖已声明内容能力 | 保存/调用/导入创作方法，可包含已支持的 Generator 来源和参数；外部脚本不自动执行，受控视觉程序按 VIDEO_PROJECT §8.1.1 生产，业务引擎与权限仍由系统掌握 |
 | 对话剪辑工具族（cut / stitch / reorder） | P2 | 两站机制；复核 L3 边界 | 以 video×editor + chat 修订提供对话剪辑；只扩 agent 工具，不建设多轨 NLE，专业需求仍导出剪映/Premiere |
 | 能力画廊 generate/edit 分组徽标 | P2 | 节点 prototype 属性 | 从注册表与媒体入边派生 generator/editor 展示分组；不把该轴变成节点 type |
-| quotes/carousel 两站拆分 | P2 | 两站机制 | 拆为文案稿 table×manual + 图装配站；改文案不重新购买图渲染，billing 应显示 renderer capture 为 0 |
 | 样式覆写 UI | P2 | `style_overrides` JSONB 地基 | 支持皮肤六件之外的 run 级覆写；卡面控制形态与数据层同批设计 |
 | 分镜表表格档节点 | P2 | 表格档节点与编辑映射 op 设计 | 持久化槽位与覆盖理由；删行 = 弃选、改时间窗 = 重切、改论点 = 重选，均为确定性 op；保留用户原话 |
 | 画布存在证据走查 | P2 | 运营端上线后的真实用户池 | 邀 3–5 名目标用户完成多产物、隔天修订、来源核对；观察是否借画布理解产物关系，证据不足则收敛纯 chat；审美偏好不触发结构翻案 |
@@ -169,7 +160,6 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | Turn budget = iteration cap + wall-clock deadline | P1 | 现有 turn_state 与准入门 | `max_iterations` 还需墙钟 deadline，避免多轮 quiet read 拉长 abort/超时与 trigger 竞速窗；到期采用诚实降级，不借机引入新的 AgentBudget 架构 |
 | turn 级事件可观测性落库 | P2 | agent 调用台账 | 将拒绝轨迹、异常类与耗时剖面落 DB，使回合中途死亡可诊断；不是另存一份 stdout 日志文件 |
 | 画布可读性（同族链分组 + 长边路由 + 居中） | P1 | Product Flow Alignment Batch C | 剩余 = 项目页 groups、asset→asm 跨列长边路由、settled 路径居中；不得为排线创造语义节点，验收用 5 秒三问；若合同已完整吸收则关闭本行 |
-| 零探索退化形态 | P1 | ADR-089 §8 迁移弧与 edit_graph 退役证明 | 范围清晰的请求直接生成单 Content Plan，不经探索链；随后退役 `propose_tasks` 与 `select_clips` 的 LLM 可见性，不改变付费授权边界 |
 | 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态明确后评估 | 可设常驻额度信封并在设定时披露费用语义；不恢复 review 档，不创造制作意图，也不绕过 `always_confirm_above` / NULL 不可报价守卫 |
 | 选项唯一座位（消息流零选项，ADR-100） | P1 | 现行规则 = CHAT_ARCHITECTURE §8.5/§8.8；验收 = 验证登记 §4.1，排期窗口待指认 | 固定选项全部归 dock，trigger 建议 dock 机器保留；收窄 ADR-099 的 suggestions/answer 面，probe I 改测新目标，路由安全零容忍与 substrate 排查方法随合同迁移 |
 | Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | `journey_id` 身份前提（ADR-088 §10） | 多旅程候选、精选、方案与产物累积后提供呈现层分组/折叠/归档；不得为组织创造语义节点 |
@@ -188,7 +178,7 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 | 结构级 remix 产品承诺 | P2 | 先评审参数级 remix 的真实用户证据 | 决定是否承诺骨架时序结构复用；未拍板前只保证当前确定性参数消费，不把 CraftSkeleton 内部结构当上屏方案 |
 | `select_clips` 整族删除范围复核 | P1 | 产品语义评审 + 当前图/产物生命周期 | run authority 只阻止并发误毁，不等于删除范围合理；核对重跑会删除哪些既有产物、发布与操作历史，未拍板前保持现有限制 |
 | 多活跃 run 产品终局 | P2 | 删除范围与跨 run 修订语义先明确 | 当前仍为 project `{PENDING,RUNNING}` 至多一个 owner；是否放宽是独立产品决策，不得由技术重构静默改变 |
-| understanding 复用身份 | P2 | C1 skeleton cache identity 的评审结论 | 评估 `_find_reusable_understanding` 是否需要同类 hash/version/并发治理；不与 C1 搭车隐式扩 scope |
+| 素材理解复用身份 | P2 | 启动前先确认现役 producer 和重复处理成本 | 若需持久复用，以 owner、素材哈希、处理版本和判断 prompt 身份判定命中；同一有效输入并发复用须有唯一赢家且不重复收费，身份变化应 miss。旧素材读容忍，迁移需有回退或前滚路径。 |
 | 纯 pytest 基线复核 | P1 | 纯函数套件全绿承诺 | 上次未销号范围 = decompile / graph_wiring / import_direction / wire_tiers；旧数量与归因不作当前事实，需在当前 HEAD 重新运行并按真实结果归位 |
 | trigger beat ③ 引号例句（prompt 卫生） | P2 | `event_mode.j2` beat ③ | 引号例句可能被照抄，需改成风格/原则约束；不新增禁词补丁 |
 | 能力菜单欠卖（dub_clip / remove_filler） | P2 | `_MENU_PHRASES` | dub_clip 应说明声纹克隆，remove_filler 应覆盖 repeated takes；措辞先从完整 procedure 核对真实能力 |

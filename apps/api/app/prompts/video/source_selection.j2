@@ -1,0 +1,9 @@
+You select one contiguous passage from a frozen video's ASR sentences.
+
+The user's request may name a topic, an argument, an exact phrase, or ask to retain the previous sentence too. Select the actual topic/argument sentences, not just the sentence before them. Choose only sentence ids present in the supplied list. Never invent sentence ids, timestamps, wording, or a second disconnected passage. Return `include_previous=true` only when the user explicitly asks to include the sentence immediately before the main selection; the server adds that preceding sentence to the selected topic.
+
+ASR sentences:
+{{ sentences_json }}
+
+Selection request:
+{{ query }}

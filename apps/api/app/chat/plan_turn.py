@@ -57,26 +57,10 @@ from app.agents.tool_loop import (
 from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
 from app.chat.deferred_frames import DeferredFrames
-from app.chat.exploration_compile import (
-    compile_plan_rows_package,
-    compile_plans_package,
-    recompile_journey_package,
-)
-from app.chat.exploration_tools import (
-    EXPLORATION_TOOLS,
-    ProposeCandidatesArgs,
-    ProposePlansArgs,
-    ProposeSelectsArgs,
-    RevisePlanArgs,
-    ReviseSelectsArgs,
-    candidates_observation,
-    selects_observation,
-)
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
 from app.chat.turn_tools import video_rejection_stop
-from app.tools.project_context import project_context_reader
 from app.chat.service import (
     _active_run_line,
     _ask_content,
@@ -87,7 +71,6 @@ from app.chat.service import (
     _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
-    _derive_chat_caption_mode,
     _design_no_progress_text,
     _dock_question,
     _draft_from_persona_echo,
@@ -117,6 +100,7 @@ from app.models.schemas import (
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
+    EditGraphArgs,
     GetNarrationAlignmentArgs,
     InferredIntent,
     ImportSfxArgs,
@@ -142,7 +126,7 @@ from app.models.schemas import (
     StartRunArgs,
     resolve_recommended_id,
 )
-from app.models.tables import Asset, ExplorationRow, Message, Persona, Project, User
+from app.models.tables import Asset, Message, Persona, Project, User
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import (
     asset_text_content,
@@ -150,23 +134,6 @@ from app.pipeline.assets import (
     create_web_page_assets_committed_from_urls,
     prime_web_page_captures_from_text,
 )
-from app.pipeline.exploration_store import (
-    PHASE_DOCKED,
-    PHASE_PRE_DOCK,
-    ExplorationRejected,
-    propose_candidates,
-    propose_selects,
-    journey_summary_line,
-    read_journey_evidence,
-    read_journey_plan_rows,
-    read_journey_plans,
-    read_journey_summaries,
-    revise_plan,
-    revise_selects,
-    select_revision_phase,
-    supersede_plan,
-)
-from app.pipeline.scope_compile import decision_package_plans
 from app.platform.project_context import resolve_default_persona
 from app.platform.user_settings import read_confirmation_prefs
 from app.tools import ToolRejected, validate_task_list
@@ -620,23 +587,6 @@ class PlanTurn:
                 source = None  # one asset never holds both roles
         return {"source_asset_id": source, "exemplar_asset_id": exemplar}
 
-    def _fire_mention_warm(self) -> None:
-        """A mention-pinned exemplar warms its skeleton as the pin PERSISTS
-        (the role question's answer has _stamp_role_pins; the mention has no
-        settle branch of its own, and an already-processed asset's
-        processing-completion seat has passed). Called after each PendingPlan
-        write — the pin only earns its warm by landing. The warm re-guards
-        everything itself (VIDEO / COMPLETED / reuse hit → early return)."""
-        if self.mention_exemplar_id is None:
-            return
-        from app.pipeline.decompile import (  # deferred: pipeline edge
-            fire_warm_craft_skeleton,
-        )
-
-        fire_warm_craft_skeleton(
-            UUID(str(self.project.id)), UUID(self.mention_exemplar_id)
-        )
-
     # ---- the envelope absorb (once per turn, idempotent) -------------------
 
     async def _absorb(
@@ -825,8 +775,20 @@ class PlanTurn:
         return result
 
     async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        if name in EXPLORATION_TOOLS:
-            return await self._explore(name, params, prose)
+        if name == "edit_graph":
+            from app.pipeline.graph_store import edit_manual_graph
+            assert isinstance(params, EditGraphArgs)
+            error = await edit_manual_graph(self.db, self.project, params.ops)
+            if error is not None:
+                return error
+            content = prose.strip() or (
+                "已更新手动画布。" if _prefers_zh(self.text) else "Manual Canvas updated."
+            )
+            assistant_message = await _create_message(
+                self.db, self.conversation_id, "assistant", content
+            )
+            self.outcome = (assistant_message, None, self.settled_pending, [])
+            return None
         if name == "present_plan":
             assert isinstance(params, PresentPlanArgs)
             return await self._present_plan(params, prose)
@@ -1107,22 +1069,10 @@ class PlanTurn:
         # translate/dub target that IS the faced source language is doomed by
         # construction — the feedback names the fix ("中英双语 on an en source
         # → target zh") before the user ever confirms.
-        from app.pipeline.morph import check_transform_targets
-        from app.ui_locale import current_ui_language
-
         try:
             validate_task_list(params.tasks)
         except (ToolRejected, ValueError) as e:
             return f"{e} (available: {getattr(e, 'suggestions', [])})"
-        try:
-            await check_transform_targets(
-                db,
-                project,
-                params.tasks,
-                zh=(current_ui_language() or "").startswith("zh"),
-            )
-        except (ToolRejected, ValueError) as e:
-            return str(e)
 
         # 出书门槛 (ADR-052 B2 D2-C2 — the gate reads only the merged brief +
         # the adjudicated chain):
@@ -1190,14 +1140,12 @@ class PlanTurn:
         # The intent object the storage shapes are built from (the accepted
         # call's params + the turn's echo — the same fields the action
         # union carried).
-        caption_mode = params.caption_mode
         echo = self.echo_override if self.echo_override is not None else prose
         reasons = await _compute_plan_reasons(db, project, InferredIntent(
             action="draft",
             tasks=params.tasks,
             specific_instruction=params.specific_instruction,
             tasks_explicit=params.tasks_explicit,
-            caption_mode=caption_mode,
             brief=params.brief,
             name=params.name,
         ))
@@ -1261,13 +1209,6 @@ class PlanTurn:
         # set rides the shared funnel — the user's own words (literal
         # bilingual keyword) > the previous dock's value > source_only when a
         # distinct second language makes the choice real. The stamped value
-        # rides the intent end-to-end (dock → pending_brief → Start) as a
-        # stated default — the user revises it with one sentence, never a
-        # blocking question.
-        if caption_mode is None:
-            caption_mode = await _derive_chat_caption_mode(
-                db, project, params.tasks, self.text
-            )
         # Inherit the previous dock's NAME on an identical-chain re-dock
         # (2026-09-09 取证): a bare confirmation the router misjudged as a
         # draft re-proposes the SAME chain unnamed — the inherited name IS the
@@ -1290,7 +1231,6 @@ class PlanTurn:
             answer=echo,
             specific_instruction=params.specific_instruction,
             tasks_explicit=params.tasks_explicit,
-            caption_mode=caption_mode,
             brief=params.brief,
             material_text=params.material_text,
             name=name,
@@ -1313,7 +1253,6 @@ class PlanTurn:
             **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
-        self._fire_mention_warm()
         bailed_run_ids = await sync_plan_question(
             db, self.user_id, project, intent, birth_prompt, reasons=reasons,
             derived=derived,
@@ -1350,6 +1289,7 @@ class PlanTurn:
         if self.on_activity is not None:
             await self.on_activity(key, count)
 
+
     async def _emit_candidates(self, payload: dict) -> None:
         """Candidate Surface 信道 (Workspace 合同 v4.2 C8-c, 2026-09-26):
         the candidate card's payload rides its OWN SSE frame
@@ -1362,556 +1302,6 @@ class PlanTurn:
         if self.on_candidates is not None:
             await self.on_candidates(payload)
 
-    @staticmethod
-    def _candidate_set_payload(node: ExplorationRow) -> dict:
-        """The ``set`` event: the persisted spec IS the authority (an
-        idempotent replay re-emits the stored members, never the request's)."""
-        spec = node.spec or {}
-        members = []
-        for m in spec.get("members") or []:
-            if not isinstance(m, dict):
-                continue
-            members.append(
-                {
-                    "start": m.get("start"),
-                    "end": m.get("end"),
-                    "excerpt": str(m.get("excerpt") or ""),
-                    "speaker": m.get("speaker") or None,
-                }
-            )
-        return {
-            "kind": "set",
-            "candidate_set_id": str(node.id),
-            "topic": str(spec.get("topic") or ""),
-            "asset_id": str(spec.get("asset_id") or ""),
-            "members": members,
-        }
-
-    async def _selection_payloads(self, rows: list[ExplorationRow]) -> list[dict]:
-        """The ``selection`` event(s) after a selects door success: per
-        touched candidate set, the set's FULL current selection (sorted
-        ordinals-as-addresses, 0-based member indexes) — the client REPLACES,
-        never unions, so a revise re-point drops the old pick by
-        construction."""
-        by_journey: dict[UUID, set[str]] = {}
-        for n in rows:
-            spec = n.spec or {}
-            set_id = spec.get("candidate_set_id")
-            if set_id:
-                by_journey.setdefault(UUID(str(n.journey_id)), set()).add(
-                    str(set_id)
-                )
-        events = []
-        for journey_id, set_ids in by_journey.items():
-            selects, _candidate_sets = await read_journey_evidence(
-                self.db, UUID(str(self.project.id)), journey_id
-            )
-            for set_id in sorted(set_ids):
-                picked: set[int] = set()
-                for s in selects:
-                    sspec = s.spec or {}
-                    if str(sspec.get("candidate_set_id")) != set_id:
-                        continue
-                    idx = sspec.get("member_index")
-                    if isinstance(idx, int):
-                        picked.add(idx)
-                events.append(
-                    {
-                        "kind": "selection",
-                        "candidate_set_id": set_id,
-                        "selected": sorted(picked),
-                    }
-                )
-        return events
-
-    async def _explore(
-        self, name: str, params, prose: str
-    ) -> str | None | ToolObservation:
-        """The discovery chain's dispatch (R2 免费探索区连续工作 — one turn
-        carries search → candidates → selects → plans): candidates/selects
-        ride back as observations (NON-terminal, the loop iterates; the
-        observation builders are the harness seat's ONE wording);
-        propose_plans is TERMINAL — landing the plans compiles and docks
-        the decision package, which IS the paid-boundary stop (R15)."""
-        if name == "propose_candidates":
-            assert isinstance(params, ProposeCandidatesArgs)
-            try:
-                node = await propose_candidates(
-                    self.db,
-                    self.project,
-                    asset_id=params.asset_id,
-                    topic=params.topic,
-                    members=params.members,
-                    goal_text=params.goal or None,
-                    journey_id=params.journey_id,
-                )
-            except ExplorationRejected as e:
-                return f"The door rejected the proposal: {e}"
-            await self._emit_milestone(
-                "chat.explore.candidatesReady", len(params.members)
-            )
-            await self._emit_candidates(self._candidate_set_payload(node))
-            return ToolObservation(
-                text=candidates_observation(
-                    node, topic=params.topic, member_count=len(params.members)
-                )
-            )
-        if name == "propose_selects":
-            assert isinstance(params, ProposeSelectsArgs)
-            try:
-                born = await propose_selects(
-                    self.db,
-                    self.project,
-                    candidate_set_id=params.candidate_set_id,
-                    selects=[s.model_dump() for s in params.selects],
-                )
-            except ExplorationRejected as e:
-                return f"The door rejected the proposal: {e}"
-            await self._emit_milestone("chat.explore.selectsReady", len(born))
-            for event in await self._selection_payloads(born):
-                await self._emit_candidates(event)
-            return ToolObservation(text=await self._selects_text(born))
-        if name == "propose_plans":
-            assert isinstance(params, ProposePlansArgs)
-            return await self._propose_plans(params, prose)
-        if name == "revise_selects":
-            assert isinstance(params, ReviseSelectsArgs)
-            return await self._revise_selects(params, prose)
-        if name == "revise_plan":
-            assert isinstance(params, RevisePlanArgs)
-            return await self._revise_plan(params, prose)
-        return f"unknown exploration tool {name!r}"  # unreachable — gated above
-
-    async def _propose_plans(self, params: ProposePlansArgs, prose: str) -> str | None:
-        """plans → the decision package docks (ADR-089 §4 R16, iter-2 ③).
-
-        双门 (R14): the pre-flight compile + the door birth live in
-        ``exploration_compile.compile_plans_package`` (iter-3 S2 — ONE
-        compile law shared with the chat path): an uncompilable package
-        rejects back into the loop with zero writes (an uncompilable plan
-        never reaches the canvas or the dock), then the door births the
-        rows (its validation re-runs as the authority). The dock below
-        carries the three faces: the plans reading layer + the compiled
-        task evidence + the credits quote (费用语义五面)."""
-        db, project = self.db, self.project
-        stored = self._current_pending()
-        merged_brief = await self._absorb(None, None)
-
-        persona_id = UUID(str(self.persona.id)) if self.persona is not None else None
-        package = await compile_plans_package(
-            db, project, params.plans, persona_id=persona_id
-        )
-        if isinstance(package, str):
-            return package
-        born = package.plans
-        compiled = package.tasks
-        await self._emit_milestone("chat.explore.plansReady", len(born))
-
-        # Caption form for quote cards: named on a quotes output → stamped
-        # onto the intent (the same field the caption question's answer
-        # stamps); unnamed = the runtime default, never invented.
-        caption_mode = next(
-            (
-                o.caption_mode
-                for p in params.plans
-                for o in p.outputs
-                if o.kind == "quotes" and o.caption_mode
-            ),
-            None,
-        )
-        task_estimate = await _safe_task_estimate(db, project, compiled)
-        # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the package
-        # dock's echo carries the code-composed estimate whisper too — the
-        # disclosure duty (BILLING §2.1) holds on every dock seat, and the
-        # tailed echo rides intent.answer so the re-dock replay stays
-        # single-tailed. The held clause (ADR-117 §4) keys on the stamped
-        # reason — the auto regime's guardrail/unquotable trip only.
-
-        need = await resolve_confirmation_need(
-            db, self.user_id, task_estimate,
-            production_intent=params.production_intent,  # ADR-139
-            # 7276ef13 ③: a change refused THIS turn holds the auto start.
-            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
-            # persisted state (world truth — a rebuilt turn never loses it),
-            # never a turn-local flag.
-        )
-        # The birth prompt freezes at the first dock (stored.prompt wins on
-        # every later write) — the same preserve law as present_plan.
-        birth_prompt = stored.prompt if stored and stored.prompt else self.text
-        # 分镜先行 + dock 只读当前版本 (present_plan 的同座同律): a
-        # film-carrying package docks only against the CURRENT presented
-        # version. The shared resolver restores its canonical params first,
-        # then validates fingerprint/version/digests/token; this seat never
-        # drafts and never re-embeds the design beat's markdown.
-
-        prose = prose + _estimate_tail(self.text, task_estimate, reason=need.reason)
-        intent = InferredIntent(
-            action="draft",
-            tasks=compiled,
-            answer=prose,
-            caption_mode=caption_mode,
-            name=params.name or None,
-        )
-        reasons = await _compute_plan_reasons(db, project, intent)
-        from app.pipeline.orchestrator import derive_plan_preview
-
-        try:
-            derived = await derive_plan_preview(db, project, compiled)
-        except (ToolRejected, ValueError):
-            derived = []
-
-        # The late-turn guard (same zombie-dock law as present_plan): a
-        # concurrent Start committed while this turn was in flight — docking
-        # now would raise a plan over an active run.
-        active_line = await _active_run_line(db, project, self.text)
-        if active_line is not None:
-            assistant_message = await _create_message(
-                db,
-                self.conversation_id,
-                "assistant",
-                active_line,
-            )
-            self.outcome = (assistant_message, None, self.settled_pending, [])
-            return None
-
-        # 决策包阅读层 (R16): the Content Plans ride BOTH the pending-brief
-        # row (the restore path reads it) and the dock payload (the live
-        # envelope) — one stamp, two seats. The R20 router substrate
-        # (plan_task_map, re-keyed onto the born rows) rides with them.
-        package_plans = decision_package_plans(born)
-        from app.editing.service import video_carry_state  # deferred: editing seam
-        project.pending_brief = PendingPlan(
-            prompt=birth_prompt,
-            intent=intent,
-            brief=merged_brief,
-            reasons=reasons,
-            persona_id=persona_id,
-            derived=derived,
-            plans=package_plans,
-            plan_task_map=package.plan_task_map,
-            **video_carry_state(stored),
-            **self._role_pins(),
-        ).model_dump(mode="json")
-        self._fire_mention_warm()
-        bailed_run_ids = await sync_plan_question(
-            db,
-            self.user_id,
-            project,
-            intent,
-            birth_prompt,
-            reasons=reasons,
-            derived=derived,
-            brief=merged_brief,
-            echo=prose,
-            estimate=task_estimate,
-            plans=package_plans,
-            need=need,
-        )
-        question = await latest_pending_question(db, self.conversation_id)
-        assert question is not None  # sync_plan_question just docked it
-        self.outcome = (question, None, self.settled_pending, bailed_run_ids)
-        # ADR-117 §2 auto 开工道 (the same seat as _present_plan): a package
-        # dock that owes no confirm beat starts the work on presentation.
-        auto = await _auto_start_docked_plan(
-            db,
-            user_id=self.user_id,
-            conversation_id=self.conversation_id,
-            project=project,
-            turn_id=self.turn_id,
-            defer_start_commit=True,
-        )
-        if auto is not None:
-            answered_q, auto_run_id = auto
-            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
-        return None
-
-    async def _revise_plan(self, params: RevisePlanArgs, prose: str) -> str | None:
-        """revise_plan → the door revises the row in place → the WHOLE
-        journey re-compiles → the decision package re-docks (iter-2 ⑦,
-        contract §4.8). 恒重确认 (R15 最保守读法): every plan-level revision
-        re-docks for confirmation — zero autonomy. The revised row lands
-        even when the recompile then rejects (draft with issues re-stamped
-        = the canvas's honest surface); the rejection rides back as the
-        loop echo and the LLM repairs the PLAN, never the chain. The dock
-        tail lives in ``_redock_journey_package`` (iter-3 S4 — ONE seat,
-        shared with revise_selects)."""
-        db, project = self.db, self.project
-        try:
-            revised = await revise_plan(
-                db,
-                project,
-                plan_id=params.plan_id,
-                title=params.title or None,
-                outputs=[o.model_dump() for o in params.outputs],
-            )
-        except ExplorationRejected as e:
-            return f"The door rejected the revision: {e}"
-
-        # Recompile the journey's WHOLE package (a revise targets one plan;
-        # the decision package re-docks with every plan of the journey) —
-        # the shared recompile seat (iter-3 S2).
-        package = await recompile_journey_package(
-            db, project, UUID(str(revised.journey_id))
-        )
-        if isinstance(package, str):
-            return package
-        steering = await self._redock_journey_package(
-                package, prose, production_intent=params.production_intent
-            )
-        return steering
-
-    async def _redock_journey_package(
-        self, package, prose: str, production_intent: bool | None = None
-    ) -> str | None:
-        """The decision package's re-dock tail (决策包可编辑律 — the SAME
-        confirmation seat, never a new confirmation ritual: sync_plan_question
-        supersedes the still-open task_book row in place). ONE seat for every
-        package-level revision (iter-3 S4): revise_plan's whole-journey
-        recompile and revise_selects' docked re-quote / post-run mini package
-        all land here. The package's name survives from the stored intent
-        (the LLM named the work; code never renames the package — a plan's
-        own title is the revision's renaming seat); caption_mode re-derives
-        from the current rows, inheriting the stored answer when unnamed
-        (同一律 — read as a DICT off the spec JSONB: the iter-2 attribute
-        access on it was a latent crash for quotes+caption_mode rows).
-        Returns None when docked; a STRING is the film guardrail's steering
-        observation (present_plan 的同座同律 — the board was never presented
-        in this exact form, nothing docked)."""
-        db, project = self.db, self.project
-        stored = self._current_pending()
-        merged_brief = await self._absorb(None, None)
-        plans = package.plans
-        compiled = package.tasks
-        await self._emit_milestone("chat.explore.plansReady", len(plans))
-
-        stored_intent = stored.intent if stored else None
-        caption_mode = next(
-            (
-                o.get("caption_mode")
-                for row in plans
-                for o in (row.spec or {}).get("outputs") or []
-                if o.get("kind") == "quotes" and o.get("caption_mode")
-            ),
-            None,
-        ) or (stored_intent.caption_mode if stored_intent else None)
-        task_estimate = await _safe_task_estimate(db, project, compiled)
-        # 估价尾行 (ADR-111 §2 — present_plan dock 的同座同律): the revision
-        # re-dock's echo carries the code-composed estimate whisper too;
-        # the held clause (ADR-117 §4) keys on the stamped reason — the
-        # auto regime's guardrail/unquotable trip only.
-
-        need = await resolve_confirmation_need(
-            db, self.user_id, task_estimate,
-            production_intent=production_intent,  # ADR-139
-            # 7276ef13 ③: a change refused THIS turn holds the auto start.
-            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
-            # persisted state (world truth — a rebuilt turn never loses it),
-            # never a turn-local flag.
-        )
-        birth_prompt = stored.prompt if stored and stored.prompt else self.text
-        # 分镜节拍守卫 + dock 只读当前版本 (present_plan 的同座同律 — the
-        # revision re-dock rides the SAME seat): the shared resolver first
-        # restores the presented version's canonical params, then validates
-        # fingerprint/version/digests/token. No fresh_instruction ever rides
-        # here — a dock NEVER redrafts.
-
-        prose = (
-            prose
-            # 展示一座 (ADR-129): the storyboard markdown's presentation seat
-            # is the design beat's own message — a re-dock echo NEVER
-            # re-embeds it.
-            + _estimate_tail(self.text, task_estimate, reason=need.reason)
-        )
-        intent = InferredIntent(
-            action="draft",
-            tasks=compiled,
-            answer=prose,
-            caption_mode=caption_mode,
-            name=(stored_intent.name if stored_intent else None),
-        )
-        reasons = await _compute_plan_reasons(db, project, intent)
-        from app.pipeline.orchestrator import derive_plan_preview
-
-        try:
-            derived = await derive_plan_preview(db, project, compiled)
-        except (ToolRejected, ValueError):
-            derived = []
-
-        # The late-turn guard (same zombie-dock law as present_plan).
-        active_line = await _active_run_line(db, project, self.text)
-        if active_line is not None:
-            assistant_message = await _create_message(
-                db,
-                self.conversation_id,
-                "assistant",
-                active_line,
-            )
-            self.outcome = (assistant_message, None, self.settled_pending, [])
-            return None
-
-        persona_id = (
-            self.request.persona_id
-            or (stored.persona_id if stored else None)
-            or (UUID(str(self.persona.id)) if self.persona is not None else None)
-        )
-        package_plans = decision_package_plans(plans)
-        from app.editing.service import video_carry_state  # deferred: editing seam
-        project.pending_brief = PendingPlan(
-            prompt=birth_prompt,
-            intent=intent,
-            brief=merged_brief,
-            reasons=reasons,
-            persona_id=persona_id,
-            derived=derived,
-            plans=package_plans,
-            plan_task_map=package.plan_task_map,
-            **video_carry_state(stored),
-            **self._role_pins(),
-        ).model_dump(mode="json")
-        self._fire_mention_warm()
-        # The old dock's supersede rides the EXISTING mechanism (contract
-        # §4.8): sync_plan_question retires the still-open task_book row.
-        bailed_run_ids = await sync_plan_question(
-            db,
-            self.user_id,
-            project,
-            intent,
-            birth_prompt,
-            reasons=reasons,
-            derived=derived,
-            brief=merged_brief,
-            echo=prose,
-            estimate=task_estimate,
-            plans=package_plans,
-            need=need,
-        )
-        question = await latest_pending_question(db, self.conversation_id)
-        assert question is not None  # sync_plan_question just docked it
-        self.outcome = (question, None, self.settled_pending, bailed_run_ids)
-        # ADR-117 §2 auto 开工道 (the same seat as _present_plan): a
-        # revision's re-dock owes no confirm beat in auto modes either —
-        # the revised plan starts on presentation (guardrail unchanged).
-        auto = await _auto_start_docked_plan(
-            db,
-            user_id=self.user_id,
-            conversation_id=self.conversation_id,
-            project=project,
-            turn_id=self.turn_id,
-            defer_start_commit=True,
-        )
-        if auto is not None:
-            answered_q, auto_run_id = auto
-            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
-        return None
-
-    async def _revise_selects(self, params: ReviseSelectsArgs, prose: str) -> str | None:
-        """revise_selects → the door re-points the pick → the three money
-        states (iter-3 S4, N-58 / 决策包可编辑律):
-
-        - PRE-DOCK (no plan rides the pick yet): the door revision alone,
-          zero ceremony — the prose IS the one-line acknowledgment, nothing
-          docks (the plans follow at THEIR birth: the compile dereferences
-          the live select).
-        - DOCKED (live riding plans): the whole-journey recompile re-docks
-          through the SAME confirmation seat (``_redock_journey_package``).
-        - POST-RUN (settled riding plans): the riding compiled plans
-          supersede (E3 继任 — the spec carries over verbatim: the swap
-          changes the SOURCE, never the deliverables), the live riding rows
-          compile as the MINI package (只含变化) and re-dock for
-          re-confirmation.
-        """
-        db, project = self.db, self.project
-        try:
-            revised = await revise_selects(
-                db, project, selects=[s.model_dump() for s in params.selects]
-            )
-        except ExplorationRejected as e:
-            return f"The door rejected the revision: {e}"
-        # C8-c: the re-pointed pick repaints the candidate surface's
-        # selection highlight in EVERY phase (pre-dock included — the card
-        # is the selection state's one seat).
-        for event in await self._selection_payloads(revised):
-            await self._emit_candidates(event)
-        journey_id = UUID(str(revised[0].journey_id))
-        revised_ids = {str(n.id) for n in revised}
-        riding = [
-            p
-            for p in await read_journey_plan_rows(db, project.id, journey_id)
-            if (p.spec or {}).get("select_id") in revised_ids
-        ]
-        phase = select_revision_phase([p.state for p in riding])
-        if phase == PHASE_PRE_DOCK:
-            # 零仪式 + 一句确认叙事: the prose IS the acknowledgment; empty
-            # prose falls to the code-composed fact line (打字机律牙② — the
-            # beat never lands empty).
-            content = prose.strip() or self._select_swap_note(revised)
-            assistant_message = await _create_message(
-                db,
-                self.conversation_id,
-                "assistant",
-                content,
-            )
-            self.outcome = (assistant_message, None, self.settled_pending, [])
-            return None
-        if phase == PHASE_DOCKED:
-            package = await recompile_journey_package(db, project, journey_id)
-        else:
-            try:
-                for p in riding:
-                    if p.state == "compiled":
-                        await supersede_plan(db, project, plan_id=p.id)
-            except ExplorationRejected as e:
-                return f"The door rejected the revision: {e}"
-            live_riding = [
-                p
-                for p in await read_journey_plans(db, project.id, journey_id)
-                if (p.spec or {}).get("select_id") in revised_ids
-            ]
-            if not live_riding:
-                return (
-                    "the pick swapped, but no live plan rides it — nothing "
-                    "to re-confirm. Tell the user the swap is on the canvas."
-                )
-            package = await compile_plan_rows_package(
-                db, project, journey_id, live_riding
-            )
-        if isinstance(package, str):
-            return package
-        return await self._redock_journey_package(
-                package, prose, production_intent=params.production_intent
-            )
-
-    def _select_swap_note(self, revised) -> str:
-        """The pre-dock swap's empty-prose floor (code-composed fact line,
-        the reminder-tail precedent — 世界自证, never the LLM's voice): the
-        new picks' own verdicts, bounded."""
-        labels = [
-            str((n.spec or {}).get("verdict") or "").strip() for n in revised
-        ]
-        labels = [label for label in labels if label]
-        shown = ", ".join(labels[:3]) + (" …" if len(labels) > 3 else "")
-        if _prefers_zh(self.text):
-            return f"已换成新选段：{shown}。"
-        return f"Swapped the pick: {shown}."
-
-    async def _selects_text(self, born) -> str:
-        """The selects observation + the exemplar tail (iter-3 S6, E5 —
-        Memory 窄切 ③): the project's LAST other journey rides as one fact
-        line so 「照上次的样子」 grounds on a real reference. Reference only
-        — exemplar facts are NEVER silently applied as defaults."""
-        text = selects_observation(born)
-        exemplars = await read_journey_summaries(
-            self.db,
-            self.project.id,
-            cap=1,
-            exclude_journey_id=UUID(str(born[0].journey_id)),
-        )
-        if exemplars:
-            text += (
-                "\nLast time (reference only — reuse only if the user asks): "
-                + journey_summary_line(exemplars[0])
-            )
-        return text
 
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """ask → the ONE question docks through the ask_user machinery.
@@ -2015,7 +1405,6 @@ class PlanTurn:
             **video_carry_state(stored),
             **self._role_pins(),
         ).model_dump(mode="json")
-        self._fire_mention_warm()
         # ask 三分解剖 (2026-09-08): the row's content carries the framing
         # prose (解剖 ① — it streams as the turn's echo and replays in the
         # flow); the bare question rides the payload (解剖 ② — dock title,
@@ -2057,6 +1446,7 @@ class PlanTurn:
         )
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
+
 
     async def _start_run(self, params: StartRunArgs, prose: str) -> str | None:
         """start → the docked plan is answered kind=start (G-1 path: the
@@ -2301,7 +1691,6 @@ class PlanTurn:
                 **video_carry_state(stored),
                 **self._role_pins(),
             ).model_dump(mode="json")
-            self._fire_mention_warm()
             topic_ask = _topic_gate_question(self.text)
             topic_intent = InferredIntent(
                 action="ask",
@@ -2447,6 +1836,7 @@ async def run_plan_turn(
             "skill": turn.skill,
             "user_text": request.message,
             "video_confirmation": confirmation,
+            "ui_language": getattr(conversation, "ui_language", None) or getattr(project, "language", None) or "en",
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,
             "target_hint": mention_target or turn._video_target_ambiguity,
@@ -2491,6 +1881,7 @@ async def run_plan_turn(
         # original turn instead of being re-parented.
         outcome[0].turn_id = turn_id
     return outcome
+
 
 
 __all__ = ["run_plan_turn", "PlanTurn", "PlanTurnOutcome"]

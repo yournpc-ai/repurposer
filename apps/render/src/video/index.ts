@@ -1,6 +1,5 @@
 // Video family render driver for video-spec.
-// Reuses the shared staging cache (../stage) and the clip path's loudnorm
-// post-pass (../render), bundles its own entry (./remotion/entry.tsx).
+// Reuses the shared staging cache and audio post-pass, with its own video-spec entry.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +8,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import type { VideoSpec } from "@repurposer/video-spec";
 
-import { normalizeLoudness } from "../render";
+import { normalizeLoudness } from "../audio";
 import { stageRemoteSource } from "../stage";
 import { assertVideoSupported } from "./capabilities";
 
@@ -85,7 +84,7 @@ export async function renderVideo(
   });
 
   // Loudness is an enhancement, not correctness — never fail a finished
-  // render over the post-pass (the clip path's law).
+  // render over the post-pass (the shared audio policy).
   try {
     await normalizeLoudness(videoPath);
   } catch (err) {

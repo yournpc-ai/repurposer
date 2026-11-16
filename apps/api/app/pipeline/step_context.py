@@ -19,10 +19,9 @@ from app.models.schemas import (
     AssetType,
     MediaInput,
 )
-from app.models.tables import Asset, Output, Persona, Project
+from app.models.tables import Asset, Persona, Project
 from app.providers.storage import download_to_temp, file_to_data_url
 from app.pipeline.assets import asset_text_content
-from app.pipeline.clip_spec import total_output_seconds
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. These limits are
@@ -264,36 +263,8 @@ async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
     # (worst case — a cached sample.meta.voice_id would make the actual 0).
     voice_id = ((persona.voice or {}).get("voice_id")) if persona else None
 
-    clip_rows = list(
-        (
-            await db.execute(
-                select(Output).where(
-                    Output.project_id == project.id,
-                    Output.type == "clip",
-                    Output.render_spec.isnot(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
     clips: list[dict] = []
     output_seconds: dict[str, float] = {}
-    for row in clip_rows:
-        # Registry-driven duration mirror (ADR-044): the rendered output's
-        # true seconds — kept segments + card blocks — not the payload's
-        # planned duration. Payload stays the fallback for a spec-less row.
-        if row.render_spec:
-            seconds = total_output_seconds(row.render_spec)
-        else:
-            seconds = float((row.payload or {}).get("duration") or 30)
-        caption_chars = sum(
-            len(str(cue.get("text") or ""))
-            for cue in ((row.render_spec or {}).get("caption_track") or [])
-        )
-        clips.append({"seconds": seconds, "caption_chars": caption_chars})
-        output_seconds[str(row.id)] = seconds
-
     return {
         "text_chars": sum(len(t) for t in texts),
         "text_count": len(texts),

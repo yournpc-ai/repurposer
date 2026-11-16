@@ -30,7 +30,7 @@ export type OutPortType = GraphEdgeType | "image"
  * rows arrive as their medium value with the joined `asset` dossier as
  * the birth certificate (C4 read face). Recipe surface: its own three
  * words — "asset" (a recipe's manual asset node) | "step" | "output". */
-export type FlowNodeKind = GraphNodeType | "asset" | "output" | "step"
+export type FlowNodeKind = GraphNodeType | "asset"
 
 /** Graph canvas node state (the graph row's state vocabulary — the product
  * machine's words). The recipe surface leaves status unset — its cards have
@@ -42,13 +42,6 @@ export type FlowNodeStatus = GraphNodeState
  * dependency 依赖边 = process order (step→step). Visually distinct.
  * Recipe surface only — the graph canvas's edges carry `edgeType`. */
 export type FlowEdgeSemantic = "lineage" | "dependency"
-
-/** Product-node actions (ADR-041 D5) — the old card-face actions moved onto
- * the canvas toolbar. Bar: download / publish / delete; the ⋯ menu (node
- * business): open / focus (2026-08-17 走查拍板, Lovart 解剖). No preview —
- * the video plays inline and the big player is the hover expand. Graph
- * operations (run / rewire) are permanently banned from it. */
-export type FlowOutputAction = "open" | "copy" | "download" | "publish" | "delete" | "focus"
 
 /** Asset-node actions (results canvas, 2026-08-17): the source file's own
  * business — download / delete / reprocess. ("open" never travels this
@@ -73,6 +66,7 @@ export interface FlowAssetInfo {
    * them (graphNodeSize, 素材节点同律 2026-09-13). */
   width?: number | null
   height?: number | null
+  created_at?: string
 }
 
 export interface FlowNode {
@@ -108,28 +102,11 @@ export interface FlowNode {
     params?: Record<string, unknown> | null
     role?: string | null
     text?: string | null
-    /** 岛内格镜像 (v4.2 C6): island members carry the island's frozen
-     * reserved bottom — the projection renders the frozen cell verbatim and
-     * floors the column's air-compression there (layout.ts ↔ graph_store). */
-    island?: { reserved_bottom?: number }
     /** 能力原型 (ADR-076 词表 v3): generator / editor / manual — the
      * program region's form; absent on pre-v3 rows. */
-    prototype?: "generator" | "editor" | "manual"
+    prototype?: "manual"
     [key: string]: unknown
   }
-  /** The node's product region: its joined visible product rows (created_at
-   * asc — the card's pager flips the display AND the action target among
-   * them, ADR-051 F2 mechanics generalized from fork-family to slot
-   * siblings). Empty/undefined = the region shows the state-appropriate
-   * body (draft estimate / running wipe / quiet done). */
-  outputs?: import("@/lib/types").Output[]
-  /** ADR-097 Phase 1 (deliverable cards only): the artifact block this node
-   * fronts — one deliverable one card. The card reads the facet summary
-   * (hidden stations, read-only) and the single activity owner off it; the
-   * caption's label and the card's status derive from it at the surface's
-   * mapping layer. Absent on facets / companions / unknown-legacy rows
-   * (default projection passthrough). */
-  artifact?: import("@/lib/types").ProjectArtifact
   /** The node's quotation in credits (server-folded at read time) — the
    * draft card's 「运行后生成 · 约 N 积分」. Null = unquoted. */
   estimateCredits?: [number, number] | null
@@ -139,17 +116,6 @@ export interface FlowNode {
    * frame's x is NOT the display x authority (I-PFA-02) — it narrows to y
    * seat / w·h reservation / stability anchor. */
   frame?: { x: number; y: number; w: number; h: number }
-  /** Read-time Product Graph projection (I-PFA-02, 合同 §7 C-1): the node's
-   * topological depth, stamped server-side (product_ranks over the read
-   * frame) and passed through untouched — the settled canvas's ONLY rank
-   * source; the client never recomputes depth. Null = legacy compatibility
-   * state (a B4-lite-gate survivor): compatibility display, never legal
-   * topology — its product edges are projection violations. Undefined on
-   * the recipe surface (no Product Graph there). */
-  rank?: number | null
-  /** The batch's highest clip score (score triage — what to post first):
-   * the card accents the winning product's badge. */
-  topClipScore?: number
   /** Size override (pure-math layout stays measurement-free): the results
    * canvas's product cards are bigger than the shared per-kind defaults. */
   size?: { width: number; height: number }
@@ -216,14 +182,6 @@ export interface FlowViewProps {
   edges: FlowEdge[]
   selectedId?: string | null
   onSelect?: (id: string) => void
-  /** Product-node toolbar dispatch (results canvas, ADR-041 D5) — the
-   * surface owns the actions; the card only reports them. */
-  onOutputAction?: (outputId: string, action: FlowOutputAction) => void
-  /** 选区引用 (2026-09-11 — 段落级指认): the user selected a passage on a
-   * text product's card face and pinned it — the surface inserts an @output
-   * chip carrying the quote into the dock. Absent = the quote pill never
-   * renders (recipe manual surface). */
-  onQuoteOutput?: (outputId: string, quote: string) => void
   /** Asset-node toolbar dispatch (results canvas, 2026-08-17) — the surface
    * owns download / delete / reprocess; the card only reports them. When
    * absent the asset node renders NO toolbar (recipe manual surface). */
@@ -232,43 +190,10 @@ export interface FlowViewProps {
    * click — the surface opens the media lightbox for the node. `outputId`
    * names the displayed member when the version pager flipped the card
    * (ADR-051 F2 — the lightbox follows the shown variant, not the row). */
-  onExpandMedia?: (nodeId: string, outputId?: string) => void
-  /** The node's pager flipped its displayed product (mount + flip) — the
-   * surface tracks it so a node click selects what the user is LOOKING at
-   * (the lightbox / dossier / focus follow the shown member). */
-  onDisplayChange?: (nodeId: string, outputId: string) => void
-  /** Card-face prompt direct edit (ADR-057 K4; ADR-058 deterministic): the
-   * card reports the new program; the surface opens the pricing
-   * confirmation (锚定受影响子图 + 估价随行) — nothing touches the graph
-   * until the confirm's CODE-built edit_prompt + run lands. */
-  onPromptEdit?: (nodeId: string, text: string) => void
-  /** The edit's optimistic echo (ADR-058 乐观回显): while the confirm is
-   * open or the stamp is in flight, the edited node's card face shows the
-   * user's verbatim program instead of the domain's last-stamped one —
-   * never a revert flash. Null = no pending edit. */
-  pendingProgram?: { nodeId: string; text: string } | null
-  /** 动作住节点内 (2026-09-10 判词①): the prompt edit's pricing
-   * confirmation docks INSIDE the edited node's program region (the
-   * retired floating overlay) — the surface computes the blast (锚定子图)
-   * and the price, the region renders them under the staged program. */
-  promptConfirm?: {
-    nodeId: string
-    blastLabels: string[]
-    blastSingle: boolean
-    low: number
-    high: number
-    unquoted: number
-    balance: number | null
-    onConfirm: () => void
-    onCancel: () => void
-  } | null
+  onExpandMedia?: (nodeId: string) => void
   /** Pane-only click (node clicks never fire this) — the results canvas's
    * "back to neutral" gesture: collapse the history, clear the focus. */
   onPaneClick?: () => void
-  /** cross-highlight report channel (ADR-113 §6): a deliverable card's
-   * video-lane block hover reports its source interval (null on leave).
-   * Absent = the hover never leaves the card (recipe surface). */
-  onLineageHover?: (hover: LineageHover | null) => void
   /** cross-highlight read channel (ADR-113 §6): the live hover — asset
    * cards whose id matches light their overlapping source interval. */
   lineageHover?: LineageHover | null

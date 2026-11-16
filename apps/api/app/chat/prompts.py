@@ -9,7 +9,7 @@ from pydantic import create_model, field_validator
 
 from app.agents.base import jinja_env
 from app.agents.tool_loop import RoundAssembly
-from app.tools import capability_menu_lines, tool_catalog_lines
+from app.tools import tool_catalog_lines
 
 ChatMode = Literal["plan", "conversation", "event", "delivery"]
 
@@ -94,7 +94,7 @@ def _compact_title_round(facts: dict, resolution: dict, tools: list) -> RoundAss
         return None
     from app.ui_locale import current_ui_language
 
-    language = current_ui_language() or "the user's language"
+    language = current_ui_language() or facts.get("ui_language") or "the user's language"
     if saved:
         rule = (
             "In your message text, confirm the actual saved title change in one short sentence. "
@@ -132,17 +132,15 @@ def chat_system(
     scene_authoring: bool = False,
 ) -> str:
     from app.config import settings
-    from app.pipeline.graph_store import wiring_catalog_lines
 
     tool_names = {tool.name for tool in available_tools or []}
-    excluded = {"revise_script"} if mode == "plan" else set()
     return jinja_env.get_template("chat/system.j2").render(
         mode=mode,
         tool_names=tool_names,
-        tool_lines=tool_catalog_lines(exclude=excluded),
-        menu_lines=capability_menu_lines(),
-        include_menu=True,
-        wiring_lines=wiring_catalog_lines(),
+        tool_lines=tool_catalog_lines(),
+        menu_lines="",
+        include_menu=False,
+        wiring_lines="",
         chat_loop=mode == "conversation",
         component_bake_enabled=settings.component_bake_enabled,
         video_stage=video_stage,
@@ -172,7 +170,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "stale": "Tell the user the storyboard has changed and the current version needs to be presented before production.",
             "already_started": "Tell the user that production has already been requested for this storyboard, using the supplied run_status and delivery facts. If run_status is completed, tell them the existing result is ready and point to its video card; if it is pending or running, tell them it is underway. Otherwise state the exact status without guessing.",
         }
-        language = current_ui_language() or "the user's language"
+        language = current_ui_language() or facts.get("ui_language") or "the user's language"
         available = [tool for tool in facts["tools"] if tool.name in {action_tool, "answer"}]
         if action == "produce":
             from app.agents.tool_loop import prune_wire_parameters
@@ -201,7 +199,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     if facts.get("draft_finalized"):
         from app.ui_locale import current_ui_language
 
-        language = current_ui_language() or "the user's language"
+        language = current_ui_language() or facts.get("ui_language") or "the user's language"
         presentation = jinja_env.get_template("chat/_video_presentation.j2").render()
         return RoundAssembly(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],

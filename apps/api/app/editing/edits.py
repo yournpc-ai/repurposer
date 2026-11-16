@@ -50,6 +50,7 @@ from app.editing.schemas import (
     Object,
     Scene,
     SourceBinding,
+    SourceCaptionDerivation,
     SpeechObject,
     TextObject,
     TimeRange,
@@ -523,8 +524,11 @@ def _find_clip(content: CompositionContent, clip_id: str) -> Clip:
 
 def replace_text_ops(clip: Clip, text: str) -> list[Op]:
     """Replace one native Text Clip while preserving its animation targets."""
-    if not isinstance(clip.object, TextObject) or clip.object.caption is not None:
-        raise EditError("set_text supports only independent native Text Clips")
+    if not isinstance(clip.object, TextObject) or (
+        clip.object.caption is not None
+        and not isinstance(clip.object.caption, SourceCaptionDerivation)
+    ):
+        raise EditError("set_text supports native Text Clips and upload-ASR captions")
     if clip.object.text == text:
         return []
     from app.editing.animation import derive_text_parts

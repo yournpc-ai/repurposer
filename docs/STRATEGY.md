@@ -88,7 +88,7 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 |---|---|---|
 | L0 跑通 | 单趟 plan → executors → 渲染 | ✅ |
 | L1 覆盖控制 | 论点→资产有账可查、去重、格式分配（fortnight 分镜表） | ✅ understand/plan 两步走（分镜表 + 覆盖报告，N-17） |
-| L2 质量控制 | 分数落库+门槛+理由；persona 保真可验；术语表；节奏/运镜枚举 | 首发推荐分与部分保真检查已有实现；评分维度明细及展示仍是当前欠账，其他能力按 `tasks/output-quality-verify.md` 与 PROGRESS 逐项核对，不把“首批”当完整质量线 |
+| L2 质量控制 | 分数落库+门槛+理由；persona 保真可验；术语表；节奏/运镜枚举 | 首发推荐分的四轴、理由与现行产品入口归 PROGRESS §2 |
 | L3 寻址控制 | 步骤级重跑、chat 可寻址、run plan 可检视 | `workflow_steps`、`@output` / `@workflow_step`、graph/revise 与只读 Product Graph 已有实现；自然语言目标解算和完整旅程仍以当前验证合同为准 |
 | L4 交付控制 | 分发（直发 = 核心，P1）；定时 / 回流（边缘，P2） | 🚧 直发代码完成，待平台凭据联调（DISTRIBUTION.md） |
 
@@ -151,7 +151,7 @@ Opus 做不出这个，不是技术难，是它的 1600 万网红用户没有"�
 
 | 战略主题 | 当前事实源 |
 |---|---|
-| 品味、质量控制与真实证据 | `tasks/output-quality-verify.md`、`RECIPES.md` §4/§8、`JOURNEYS.md` |
+| 品味、质量控制与真实证据 | PROGRESS §2、`RECIPES.md` §4/§8、`JOURNEYS.md` |
 | 身份复利与定位根 | `POSITIONING.md` + `PROGRESS.md` §1.1；当前代码仍只使用 persona |
 | 信任、计费与合规 | `BILLING.md`、`PROGRESS.md` §0.3 / §1.3、ADR-026/055/079 |
 | 控制深度与 Product Graph | `ARCHITECTURE_NORTH_STAR.md`、`CHAT_ARCHITECTURE.md` §5/§9、`VERIFICATION.md` |

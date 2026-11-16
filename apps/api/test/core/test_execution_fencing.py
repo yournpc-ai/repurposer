@@ -177,7 +177,7 @@ class _World:
             self.finalized.append(run_id)
 
         monkeypatch.setattr(orchestrator, "capture_step", _capture)
-        monkeypatch.setattr(orchestrator, "sync_graph_node_for_step", _sync)
+        # No Run-to-Canvas projection remains; only execution side effects count.
         monkeypatch.setattr(orchestrator, "_cascade_skip", _cascade)
         monkeypatch.setattr(orchestrator, "repair_render_barriers", _repair)
         monkeypatch.setattr(orchestrator, "maybe_finalize_run", _finalize)
@@ -308,11 +308,11 @@ async def test_authority_held_success_tail_captures_and_commits(monkeypatch) -> 
     world = _World(monkeypatch, fake, rowcount=1)
     await execute_step(_NODE_ID)
     executor_session = world.factory.sessions[1]
-    # Guarded write landed → refresh, capture, sync, one commit — the
-    # capture is reachable ONLY with authority held.
+    # Guarded write landed → refresh, capture, one commit — the
+    # capture is reachable ONLY with authority held; no Canvas sync exists.
     assert executor_session.rollbacks == 0
     assert executor_session.commits == 1
     assert len(executor_session.refreshed) == 1
     assert len(world.captured) == 1
-    assert len(world.synced) == 1
+    assert world.synced == []
     assert world.finalized == [_RUN_ID]

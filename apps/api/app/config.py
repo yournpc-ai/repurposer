@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     # one Chrome crash from stalling the queue while bounding memory).
     # render_timeout_seconds fences one render-service POST: the film baseline is
     # ≈46s for a 26s film (local spike, ~1.75× realtime), but the SAME fence
-    # covers the clip family, where longer sources legitimately render for
+    # covers video production, where longer sources legitimately render for
     # minutes. 1800s includes the shared 12-minute upload retry budget.
     render_concurrency: int = 2
     render_timeout_seconds: int = 1800
@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     # Video render service (Remotion, apps/render — black box: spec -> MP4+SRT)
     render_url: str = "http://localhost:3001/render"
     # Public base of this API, used to absolutize source URLs the render service
-    # fetches (clip-spec stores relative stream URLs via the storage seam).
+    # fetches (video-spec stores relative stream URLs via the storage seam).
     api_public_url: str = "http://localhost:8000"
     # Public base of the web app — OAuth callbacks redirect the browser back here.
     web_public_url: str = "http://localhost:3000"

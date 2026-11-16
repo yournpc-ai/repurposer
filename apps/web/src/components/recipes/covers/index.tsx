@@ -5,9 +5,6 @@ import { MultilingualSubsCover } from "./MultilingualSubsCover"
 import { VoiceDubCover } from "./VoiceDubCover"
 import { ReframeCover } from "./ReframeCover"
 import { ImageVideoCover } from "./ImageVideoCover"
-import { SocialPostCover } from "./SocialPostCover"
-import { QuoteCardsCover } from "./QuoteCardsCover"
-import { CarouselCover } from "./CarouselCover"
 
 /** Cover registry — recipe id → process-schematic component (ADR-048).
  *
@@ -25,7 +22,4 @@ export const recipeCovers: Record<string, () => React.JSX.Element> = {
   "voice-dub": () => <VoiceDubCover />,
   reframe: () => <ReframeCover />,
   "image-video": () => <ImageVideoCover />,
-  "social-post": () => <SocialPostCover />,
-  "quote-cards": () => <QuoteCardsCover />,
-  carousel: () => <CarouselCover />,
 }

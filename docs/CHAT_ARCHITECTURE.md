@@ -359,7 +359,7 @@ Candidate Surface 的客户端传输是 `assistant.candidates` SSE 帧族，turn
 
 ### Video Project 的 Chat 接入
 
-视频新链的正文、版本卡、工具活动/Run 工作段、成片卡职责与真实制作阶段回放见 [VIDEO_PROJECT §10](VIDEO_PROJECT.md#10-chat-组件canvas-与-scrub)，实施与旅程验收归 [施工合同](tasks/video-project-implementation.md#22-施工范围)。当前 Chat 交付读面由持久化 transcript/run-step refs 投影 exact Outputs（含归档）；消息行保留独立封面入口，ChatDock 以受控 `output_id` 承载共享成片查看器。分镜审阅默认不挂 Player；只有消息引用持久化声明了局部 Scrub target，或用户主动打开 Scrub 时，才经同一 CompositionPreview 读取该目标的确切版本局部 spec。独立 Object 预览不证明场景布局、遮挡或衔接，制作前完整视频 spec 永不进入浏览器。预览不创建 Run/Output，也不新增合集卡或 DOM gallery 数据源。动作只消费当前 exact Output；消息顺序、SSE、工作段和交付收口仍沿用本文件规则。B-UI 代表旅程已通过，用户已确认重新展示的视频有声音；完整音乐接缝/音画同步听感另行验收，具体事实归施工合同 §2.5.2；不代替完整 B 或发布门。
+视频新链的正文、版本卡、工具活动/Run 工作段、成片卡职责与真实制作阶段回放见 [VIDEO_PROJECT §10](VIDEO_PROJECT.md#10-chat-组件canvas-与-scrub)，实施与旅程验收归 [施工合同](tasks/skill-package-promo-video.md)。当前 Chat 交付读面由持久化 transcript/run-step refs 投影 exact Outputs（含归档）；消息行保留独立封面入口，ChatDock 以受控 `output_id` 承载共享成片查看器。分镜审阅默认不挂 Player；只有消息引用持久化声明了局部 Scrub target，或用户主动打开 Scrub 时，才经同一 CompositionPreview 读取该目标的确切版本局部 spec。独立 Object 预览不证明场景布局、遮挡或衔接，制作前完整视频 spec 永不进入浏览器。预览不创建 Run/Output，也不新增合集卡或 DOM gallery 数据源。动作只消费当前 exact Output；消息顺序、SSE、工作段和交付收口仍沿用本文件规则。B-UI 代表旅程已通过，用户已确认重新展示的视频有声音；完整音乐接缝/音画同步听感另行验收，具体事实归施工合同 §2.5.2；不代替完整 B 或发布门。
 
 ## 9. 修订边界（ADR-057：wiring 统一 + edit ops 节点内部存活）
 
@@ -385,9 +385,9 @@ edit ops（ADR-032 D5 + 现行规范 `VIDEO_EDITOR.md`）：产物级 op = `remo
 当前 tool registry、mentions、chat-born Candidate Surface、精确 edit ops、SSE/Activity、报价与授权机器同属现行系统，不再按 v1/v2/v3 分期判断行为。后续工作只登记仍有实施或验收欠账的部分：
 
 - `synthesize_talk_video` 是 R5 的不可派发 seat；完整目标、媒体/声音前提和验收归 `docs/tasks/synthetic-talk-video.md`，不得把 seat 当成已交付能力。
-- Agent Tools 长程序修订、Candidate Surface live/replay、CJK 长素材检索与探索存储真实 DB 迁移的验收归 `docs/tasks/agent-working-loop-iter-3.md`。
+- Agent Tools、现行候选 live/replay、CJK 长素材检索与退役迁移的验收归 `docs/tasks/agent-working-loop-iter-3.md`。
 - `edit_graph` 只有在现行工具覆盖、生产引用与存量读/迁移结论齐备后才可退役；`propose_tasks`、`select_clips` 等当前工具不得被目标架构文字提前删除。
-- 精确编辑的自然 pin/model 分歧、归档/恢复与真实 run 验收归 `docs/VIDEO_EDITOR.md` §11 和 `docs/VERIFICATION.md`。
+- 精确编辑的目标指认、过期版本及真实制作验收归 `docs/VIDEO_EDITOR.md` §3 和 `docs/VERIFICATION.md`。
 - 优先级、发布阻塞和其他开放项以 `docs/PROGRESS.md` §0 为准；本文不维护第二份排期或施工日志。
 
 ## 12. Prohibited Behaviors

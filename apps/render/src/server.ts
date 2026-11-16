@@ -1,8 +1,6 @@
-import type { ClipSpec } from "@repurposer/clip";
-import { videoSpecSchema } from "@repurposer/video-spec";
+import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec";
 import express from "express";
 
-import { renderClip } from "./render";
 import { CACHE_DIR } from "./stage";
 import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts";
 import type { Artifacts } from "./artifacts";
@@ -139,111 +137,38 @@ app.post("/preview", async (req, res) => {
   }
 });
 
-/**
- * Black-box render endpoint: spec in -> rendered artifacts out.
- * Body: { spec, out_subdir?, basename?, outputs: { video: { key, put_url, content_type? }, srt: { key, put_url, content_type? } } }.
- *
- * The envelope is shared by clip-spec and video-spec. Dispatch reads only
- * `spec.family` ("video" -> video path; absent -> clip path), never node
- * type/name or any out-of-spec field. Every
- * lifecycle event (first render / preview / retry / revision / recovery)
- * arrives as this same POST, so this single fork covers the whole lifecycle.
- *
- * The render service renders to a temp dir, PUTs the rendered files to the
- * supplied presigned URLs, and returns the object keys.
- */
-// Upload has its own route and cannot fall through to a render on cache miss.
+// The only render contract is video-spec. Upload-only recovery never renders on cache miss.
 app.post(["/render", "/upload"], async (req, res) => {
   if (req.path === "/upload") req.body.upload_only = true;
-  const { spec, outputs, source_key, render_id, upload_only } = req.body as {
+  const { spec, outputs, render_id, upload_only } = req.body as {
     render_id?: string;
     upload_only?: boolean;
-    spec?: ClipSpec;
-    basename?: string;
-    outputs?: {
-      video?: { key: string; put_url: string; content_type?: string };
-      srt?: { key: string; put_url: string; content_type?: string };
-    };
-    // Optional object-store key of spec.source.url (envelope field, never
-    // clip-spec) — indexes the shared source cache (see stage.ts).
-    source_key?: string;
+    spec?: VideoSpec;
+    outputs?: { video?: { key: string; put_url: string; content_type?: string } };
   };
-
-  // --- video family fork --------------------------------------------------
-  if ((spec as unknown as { family?: unknown } | undefined)?.family === "video") {
-    const parsed = videoSpecSchema.safeParse(spec);
-    if (!parsed.success) {
-      const issues = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-        .join("; ");
-      res.status(400).json({ error: `invalid video spec: ${issues}` });
-      return;
-    }
-
-    // A video renders to video alone (subtitles burn into the picture).
-    if (!outputs?.video?.put_url) {
-      res.status(400).json({ error: "outputs.video.put_url is required" });
-      return;
-    }
-
-    if (parsed.data.duration_frames > VIDEO_MAX_FRAMES) {
-      res
-        .status(400)
-        .json({ error: `video spec ${parsed.data.duration_frames} frames exceeds cap ${VIDEO_MAX_FRAMES}` });
-      return;
-    }
-
-    try {
-      const { videoPath } = await artifactsForRequest(
-        { id: render_id ?? outputs.video.key, spec: parsed.data },
-        upload_only === true,
-        (outDir) => renderVideo(parsed.data, outDir, "video"),
-      );
-
-      await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
-
-      res.json({ ok: true, video: outputs.video.key });
-    } catch (err) {
-      console.error("video_render_failed", { render_id, error: err });
-      const failure = failureBody(err);
-      res.status(failure.status).json(failure.body);
-    }
+  const parsed = videoSpecSchema.safeParse(spec);
+  if (!parsed.success || parsed.data.family !== "video") {
+    res.status(400).json({ error: "a valid video-spec is required" });
     return;
   }
-
-  // --- clip family (existing path, unchanged) -----------------------------
-  const src = spec?.source;
-  const renderable =
-    src && (src.kind === "stills" ? (src.image_urls?.length ?? 0) > 0 || !!src.url : !!src.url);
-  if (!renderable) {
-    res.status(400).json({ error: "spec.source needs a url (video/audio) or image_urls (stills)" });
+  if (!outputs?.video?.put_url) {
+    res.status(400).json({ error: "outputs.video.put_url is required" });
     return;
   }
-
-  if (!outputs?.video?.put_url || !outputs?.srt?.put_url) {
-    res.status(400).json({ error: "outputs.video.put_url and outputs.srt.put_url are required" });
+  if (parsed.data.duration_frames > VIDEO_MAX_FRAMES) {
+    res.status(400).json({ error: `video spec ${parsed.data.duration_frames} frames exceeds cap ${VIDEO_MAX_FRAMES}` });
     return;
   }
-
   try {
-    const { videoPath, srtPath } = await artifactsForRequest(
-      { id: render_id ?? outputs.video.key, spec, source_key },
+    const { videoPath } = await artifactsForRequest(
+      { id: render_id ?? outputs.video.key, spec: parsed.data },
       upload_only === true,
-      (outDir) => renderClip(spec, outDir, "video", source_key),
+      (outDir) => renderVideo(parsed.data, outDir, "video"),
     );
-
     await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
-    if (srtPath && outputs.srt?.put_url) {
-      await uploadFile(outputs.srt.put_url, srtPath, outputs.srt.content_type);
-    }
-
-    res.json({
-      ok: true,
-      video: outputs.video.key,
-      ...(srtPath && outputs.srt ? { srt: outputs.srt.key } : {}),
-    });
+    res.json({ ok: true, video: outputs.video.key });
   } catch (err) {
-    console.error("render_failed", { render_id, error: err });
+    console.error("video_render_failed", { render_id, error: err });
     const failure = failureBody(err);
     res.status(failure.status).json(failure.body);
   }

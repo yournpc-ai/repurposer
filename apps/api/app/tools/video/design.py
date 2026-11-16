@@ -35,6 +35,7 @@ from app.editing.schemas import (
     SCHEMA_VERSION,
     TimeRange,
     Track,
+    Transform,
     VersionSettings,
     VideoObject,
     WebObject,
@@ -50,7 +51,8 @@ from app.editing.store import (
     snapshot_facts,
 )
 from app.editing.storyboard import storyboard_payload
-from app.editing.templates import MusicBed, ViewFact, instantiate_music_bed
+from app.editing.audio import MusicBed, instantiate_music_bed
+from app.editing.web_shots import ViewFact
 from app.editing.timing import (
     SOURCE_TIMEBASE,
     frames_to_ticks,
@@ -173,11 +175,43 @@ class CompositionSceneAuthoring(BaseModel):
     )
     source_start_seconds: float | None = Field(
         default=None, ge=0, allow_inf_nan=False,
-        description="Optional start of the frozen video's source window; omit to start at zero.",
+        description="Explicit source-second start; omit it for a semantic source_query or to start at zero.",
     )
     source_end_seconds: float | None = Field(
         default=None, gt=0, allow_inf_nan=False,
-        description="Optional end of the frozen video's source window; its duration sets this Scene's duration at 1x.",
+        description="Explicit source-second end; omit it for a semantic source_query. Its duration sets this Scene's duration at 1x.",
+    )
+    source_query: str | None = Field(
+        default=None, min_length=1, max_length=2000,
+        description="Full semantic passage goal, including the topic and whether to keep the previous sentence; never merely quote the preceding sentence. The server resolves real ASR sentence ids into a validated source window; never pair this with explicit source seconds.",
+    )
+    captions_asr: bool = Field(
+        default=False,
+        description="Derive native TextObjects inside THIS source Scene on an ordinary caption track. Never create a caption-only Scene or a separate caption source.",
+    )
+    narration_snapshot_id: UUID | None = Field(
+        default=None,
+        description="Frozen audio SourceSnapshot prepared by prepare_narration; place it as an ordinary dialogue AudioObject with its aligned native captions.",
+    )
+    narration_alignment_id: UUID | None = Field(
+        default=None,
+        description="READY NarrationAlignment for narration_snapshot_id; supplies the actual narration sentence timings and provenance.",
+    )
+    source_gain_db: float | None = Field(
+        default=None, ge=-60, le=12,
+        description="Optional original-audio gain for this VideoObject; the source picture and original audio stay synchronized.",
+    )
+    source_muted: bool = Field(
+        default=False,
+        description="Mute the original audio without changing the source picture or creating a separate audio timeline.",
+    )
+    source_fit: Literal["cover", "contain"] = Field(
+        default="contain",
+        description="Fixed framing inside the full-canvas layout; use cover for a filled vertical crop, contain to preserve the whole image.",
+    )
+    source_transform: Transform | None = Field(
+        default=None,
+        description="Optional fixed transform for the source inside its layout; no frame tracking or crop_track.",
     )
     headline: str | None = Field(
         default=None, min_length=1, max_length=9000,
@@ -223,6 +257,14 @@ class CompositionSceneAuthoring(BaseModel):
             and self.source_end_seconds <= (self.source_start_seconds or 0)
         ):
             raise ValueError("source_end_seconds must be after source_start_seconds")
+        if self.source_query is not None and (
+            self.source_start_seconds is not None or self.source_end_seconds is not None
+        ):
+            raise ValueError("source_query and explicit source seconds are mutually exclusive")
+        if (self.source_query is not None or self.captions_asr) and self.snapshot_id is None:
+            raise ValueError("ASR selection and captions require a frozen video snapshot")
+        if (self.narration_snapshot_id is None) != (self.narration_alignment_id is None):
+            raise ValueError("narration_snapshot_id and narration_alignment_id must arrive together")
         return self
 
 
@@ -449,6 +491,11 @@ def _constraint_text_values(text: str) -> dict[str, Any]:
         r"(16\s*:\s*9|9\s*:\s*16|1\s*:\s*1)(?!\d)",
         text, re.IGNORECASE,
     )
+    if aspect is None:
+        aspect = re.search(
+            r"(?<![\d:])(16\s*:\s*9|9\s*:\s*16|1\s*:\s*1)(?![\d:])",
+            text, re.IGNORECASE,
+        )
     if aspect and _affirmative_constraint(text, aspect.start()):
         values["aspect"] = re.sub(r"\s", "", aspect.group(1))
     scene_patterns = (
@@ -598,6 +645,28 @@ async def _await_captures_settled(
                 f"{_CAPTURE_SETTLE_WAIT_S:.0f}s — the design refused to "
                 "draft from a half-captured world; try again in a moment"
             )
+        await asyncio.sleep(_CAPTURE_SETTLE_POLL_S)
+
+
+async def _await_media_settled(db: AsyncSession, owner_id: UUID, asset_ids: set[UUID]) -> None:
+    deadline = time.monotonic() + _CAPTURE_SETTLE_WAIT_S
+    await asyncio.sleep(_CAPTURE_SETTLE_POLL_S)
+    while True:
+        rows = list(
+            (
+                await db.execute(
+                    select(Asset)
+                    .where(Asset.id.in_(asset_ids), Asset.user_id == owner_id)
+                    .execution_options(populate_existing=True)
+                )
+            ).scalars().all()
+        )
+        if any(asset.processing_status == AssetStatus.FAILED for asset in rows):
+            raise DesignError("a selected source asset failed during media processing")
+        if rows and all(asset.processing_status == AssetStatus.COMPLETED for asset in rows):
+            return
+        if time.monotonic() >= deadline:
+            raise CaptureSettleTimeout("selected media processing did not settle in time")
         await asyncio.sleep(_CAPTURE_SETTLE_POLL_S)
 
 
@@ -1525,11 +1594,20 @@ def _set_current_scene_timing(
     }
     current = next((scene for scene in scenes if scene["scene_id"] not in covered), None)
     if current is None or current["scene_id"] != scene_id:
+        complete = current is None
+        message = (
+            "every planned Scene is filled; submit only the current draft_ref with save=true"
+            if complete else
+            "scene writes must follow scene_plan order and target the current unfilled Scene"
+        )
         raise CandidateDesignError(
-            "scene writes must follow scene_plan order and target the current unfilled Scene",
+            message,
             errors=[{
-                "loc": ["scene", "scene_id"], "type": "scene_order", "msg": "write the current unfilled Scene",
-                "expected": current["scene_id"] if current else None, "actual": scene_id,
+                "loc": ["save" if complete else "scene", "scene_id"],
+                "type": "scene_order",
+                "msg": message,
+                "expected": current["scene_id"] if current else None,
+                "actual": scene_id,
             }],
             working_content=content,
         )
@@ -1544,11 +1622,52 @@ def _set_current_scene_timing(
         }
 
 
-def _expand_scene_authoring(
+async def _resolve_scene_source(
+    scene: CompositionSceneAuthoring,
+    facts: dict[UUID, dict[str, Any]],
+) -> tuple[CompositionSceneAuthoring, tuple]:
+    if scene.snapshot_id is None:
+        return scene, ()
+    fact = facts.get(scene.snapshot_id)
+    if fact is None:
+        return scene, ()
+    words = (fact.get("meta") or {}).get("words") or []
+    duration_ticks = int(fact.get("duration_ticks") or 0)
+    if scene.source_query is not None:
+        from app.editing.source_selection import resolve_source_query
+        from app.tools.video.agents import source_selector
+
+        window = await resolve_source_query(
+            scene.source_query,
+            words,
+            duration_ticks=duration_ticks,
+            selector=source_selector.call,
+        )
+        return scene.model_copy(update={
+            "source_start_seconds": window.start,
+            "source_end_seconds": window.end,
+        }), window.sentences
+    if not scene.captions_asr:
+        return scene, ()
+    from app.editing.source_selection import source_sentences
+
+    start = scene.source_start_seconds or 0.0
+    end = scene.source_end_seconds
+    if end is None:
+        end = duration_ticks / 90000
+    sentences = source_sentences(words, duration_ticks=duration_ticks)
+    return scene, tuple(
+        sentence for sentence in sentences if sentence.end > start and sentence.start < end
+    )
+
+
+async def _expand_scene_authoring(
     content: dict[str, Any],
     scene: CompositionSceneAuthoring,
     facts: dict[UUID, dict[str, Any]],
+    owner_id: UUID | None = None,
 ) -> dict[str, Any]:
+    scene, caption_sentences = await _resolve_scene_source(scene, facts)
     settings = VersionSettings.model_validate(content["settings"])
     _set_current_scene_timing(content, scene.scene_id, _scene_reading_ticks(scene, settings))
     candidate = CompositionContent.model_validate(content)
@@ -1666,7 +1785,15 @@ def _expand_scene_authoring(
         media_object = (
             WebObject(kind="web", object_id=object_id, view_id=source.view_id, layout=layout, fit="cover")
             if kind == "web"
-            else VideoObject(kind="video", object_id=object_id, layout=layout, fit="contain")
+            else VideoObject(
+                kind="video",
+                object_id=object_id,
+                layout=layout,
+                fit=scene.source_fit,
+                transform=scene.source_transform or Transform(),
+                gain_db=scene.source_gain_db if scene.source_gain_db is not None else 0.0,
+                muted=scene.source_muted,
+            )
             if kind == "video"
             else ImageObject(kind="image", object_id=object_id, layout=layout, fit="contain")
         )
@@ -1732,6 +1859,39 @@ def _expand_scene_authoring(
             if not isinstance(op, BindSource) or op.snapshot_id not in bound
         ]
         candidate = apply_ops(candidate, ops, digests)
+        if scene.captions_asr:
+            from app.editing.source_captions import source_caption_ops
+
+            if source_range is None:
+                raise ValueError("ASR captions require a video source window")
+            candidate = apply_ops(candidate, source_caption_ops(
+                candidate,
+                scene_id=scene.scene_id,
+                snapshot_id=snapshot_id,
+                snapshot_digest=fact["digest"],
+                source_range=source_range,
+                sentences=caption_sentences,
+            ), digests)
+        if scene.narration_snapshot_id is not None:
+            from app.editing.narration_audio import narration_audio_ops
+            from app.models.tables import NarrationAlignment
+
+            narration_fact = facts.get(scene.narration_snapshot_id)
+            if narration_fact is None or narration_fact.get("kind") != "audio" or not narration_fact.get("storage_key"):
+                raise ValueError("narration_snapshot_id is not a prepared audio source")
+            async with AsyncSessionLocal() as db:
+                alignment = await db.get(NarrationAlignment, scene.narration_alignment_id)
+            if alignment is None:
+                raise ValueError("narration alignment does not exist")
+            if owner_id is not None and alignment.owner_id != owner_id:
+                raise PermissionError("narration alignment belongs to another user")
+            candidate = apply_ops(candidate, narration_audio_ops(
+                candidate,
+                scene_id=scene.scene_id,
+                snapshot_id=scene.narration_snapshot_id,
+                snapshot_digest=narration_fact["digest"],
+                alignment=alignment,
+            ), digests)
     except (PresetError, ValueError) as exc:
         reject(str(exc), ["scene", "text_preset"] if scene.headline or scene.items else ["scene"])
     return candidate.model_dump(mode="json")
@@ -1866,6 +2026,8 @@ async def _design_composition_locked(
         source_ids = set(args.source_ids or [])
         if args.music_snapshot_id is not None:
             source_ids.add(args.music_snapshot_id)
+        if args.scene is not None and args.scene.narration_snapshot_id is not None:
+            source_ids.add(args.scene.narration_snapshot_id)
         facts = await snapshot_facts(db, source_ids)
         if any(
             snapshot_id not in facts or facts[snapshot_id].get("owner_id") != owner_id
@@ -1909,7 +2071,7 @@ async def _design_composition_locked(
                 facts = await snapshot_facts(db, set(facts) | parent_ids)
             if any(facts[snapshot_id].get("owner_id") != owner_id for snapshot_id in facts):
                 raise DesignError("a referenced source snapshot is not accessible to this user")
-            content = _expand_scene_authoring(content, args.scene, facts)
+            content = await _expand_scene_authoring(content, args.scene, facts, owner_id=owner_id)
             _validate_scene_verbatim_copy(args=args, composition=content)
         if high_level_draft and not args.save and args.music_snapshot_id is not None:
             content = _music_bed_write(content, args.music_snapshot_id, facts)
@@ -2032,6 +2194,28 @@ async def prepare_video_materials(
         supported = {AssetType.WEB_PAGE, AssetType.IMAGE, AssetType.VIDEO, AssetType.AUDIO}
         if any(asset.type not in supported for asset in referenced_assets):
             raise DesignError("video authoring accepts captured webpages, images, videos and audio")
+        pending = [
+            asset for asset in referenced_assets
+            if asset.type != AssetType.WEB_PAGE
+            and asset.processing_status in (AssetStatus.PENDING, AssetStatus.PROCESSING)
+        ]
+        if pending:
+            from sqlalchemy import update
+            from app.models.tables import now_utc
+
+            async with AsyncSessionLocal() as session:
+                await session.execute(update(Asset).where(
+                    Asset.id.in_([asset.id for asset in pending]),
+                    Asset.user_id == owner_id,
+                    Asset.processing_status == AssetStatus.PENDING,
+                    Asset.processing_requested_at.is_(None),
+                ).values(processing_requested_at=now_utc()))
+                await session.commit()
+            await _await_media_settled(db, owner_id, {asset.id for asset in pending})
+            referenced_assets = list((await db.scalars(select(Asset).where(
+                Asset.id.in_(args.material_asset_ids), Asset.user_id == owner_id,
+            ))).all())
+            referenced_assets.sort(key=lambda item: args.material_asset_ids.index(item.id))
         if any(
             asset.type != AssetType.WEB_PAGE and asset.processing_status != AssetStatus.COMPLETED
             for asset in referenced_assets

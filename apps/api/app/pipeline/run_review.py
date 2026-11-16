@@ -1,50 +1,11 @@
-"""run_review — the closing audit's deterministic core (iter-3 S5, ADR-088
-§8 R21 / N-58).
-
-分词注记 (N-58): ``verify`` lives INSIDE the execution graph (the per-node
-quality gate); ``run_review`` lives at the chat edge's trigger turn (the
-closing review's fact substrate). This module is a PURE function seat — zero
-LLM, zero DB: the caller (``app/chat/trigger_turn.py``) owns the IO and hands
-in plain data (the run's Confirmed Scope Snapshot, the landed outputs), and
-gets back the 兑现事实清单 (delivery-fact list):
-
-- promised vs landed output families (type / language presence, clip counts);
-- per-landed-clip facts: duration vs the cut range, caption-track existence,
-  dub existence, the verify flag (``outputs.quality`` — passed /
-  needs_human / never-verified), the render outcome (``outputs.render_status``
-  — a render-FAILED row never counts toward the delivery tallies and fires
-  the ``render_failed:<type>`` gap), and the delivery pair (COMPLETED +
-  ``files.video`` present — a payload-complete but file-missing clip never
-  counts toward the tallies either, ADR-096 §4). Films additionally carry
-  the narration pace adjustment when one fired (ADR-136 — bounded, zero-sum
-  scene-second rebalancing, always disclosed, never hidden).
-
-Spend is NEVER a closing-beat fact (2026-09-24 用户拍板 — Claude/Codex
-parity: a finished task does not report what it cost; the wallet owns the
-ledger, the speech owns the work). No charge lines, no over-quote gaps.
-
-The review's prose law (one outcome branch, facts only, zero subjective
-quality words) lives in ``delivery_mode.j2``; this module only guarantees
-the facts the prose may narrate are REAL. No autonomous repair anywhere
-(P2 挂账 — the audit advises, never acts).
-"""
+"""Build deterministic delivery facts from the confirmed video version and landed Outputs."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-# The compiled tool → product-family mapping (the promise side). Transform
-# tasks (translate_clip / dub_clip) promise TRACKS on the clips, never new
-# outputs — they map to None here and surface in the track facts instead.
-_WRITER_TOOL_TO_TYPE = {
-    "write_post": "post",
-    "write_article": "article",
-    "write_quotes": "quotes",
-    "write_carousel": "carousel",
-    "produce_video": "video",
-}
-_RENDER_CONTRACTED = frozenset({"clip", "film", "video"})
+_RENDER_CONTRACTED = frozenset({"video"})
 
 
 @dataclass(frozen=True)
@@ -54,26 +15,11 @@ class LandedFact:
     output_type: str
     video_version_matches: bool | None = None
     language: str | None = None
-    duration_s: int | None = None  # clips: the planned clip length
-    cut_range_s: tuple[float, float] | None = None  # clips: the source span
-    has_captions: bool | None = None  # clips only (None = not a clip)
-    has_translation: bool | None = None  # clips only: the translated caption half
-    dubbed: bool | None = None  # clips only: the cloned-voice dub track
-    quality: str | None = None  # passed | needs_human | None (never verified)
-    render: str | None = None  # pending | rendering | completed | failed | None (no render contract)
-    has_file: bool | None = None  # clips only: files.video present (None = not a clip)
-    # Films/videos: the landed bed's presence, read off the baked render_spec
-    # (the executed record's own entry). Three states, never two: True = a
-    # valid spec carries the film music block or a video music-track clip;
-    # False = a valid spec carries neither; None = the record is missing or
-    # too thin to judge (unknown — never read as off/none), or another family.
+    duration_s: int | None = None
+    quality: str | None = None
+    render: str | None = None
+    has_file: bool | None = None
     music_bed: bool | None = None
-    # films: the deterministic confirmed-version-vs-landed-spec comparison
-    # (ADR-139 sibling law — d08af2af: the closing beat once claimed a drift
-    # that the landed spec disproved; the facts block now carries the check).
-    # Tuple of machine-key lines; None = not a film. The comparison reads the
-    # CONFIRMED version stamped on the run's own context (never the current
-    # live draft) and the landed row's baked render_spec — data, never pixels.
 
 
 @dataclass(frozen=True)
@@ -84,26 +30,15 @@ class RunReview:
     then stays empty by DESIGN (never reconstructed)."""
 
     has_snapshot: bool
-    promised_types: tuple[str, ...] = ()  # e.g. ("clip", "clip", "post:fr")
-    promised_clip_count: int = 0
-    promised_caption_languages: tuple[str, ...] = ()
-    promised_dub: bool = False
+    promised_types: tuple[str, ...] = ()
     landed: tuple[LandedFact, ...] = ()
     gaps: tuple[str, ...] = ()
     needs_human: tuple[str, ...] = ()  # landed output types flagged by verify
-def landed_fact(output: Any, *, video_confirmed: dict[str, Any] | None = None) -> LandedFact:
-    """Extract one landed output's facts from its row (reads only — pure).
-    Clip track facts read the BAKED render_spec (the sole render contract,
-    ADR-016): the caption/translation tracks' presence and the dub block.
 
-    ``video_confirmed`` compares the Run's authorized version with the exact
-    Composition identity baked into the landed video-spec."""
+
+def landed_fact(output: Any, *, video_confirmed: dict[str, Any] | None = None) -> LandedFact:
+    """Read landed facts and compare video provenance with the confirmed version."""
     spec = getattr(output, "render_spec", None) or {}
-    # 配乐三态 (与读取工具 executes.py 同律): 只有可读的有效 spec 才能判断
-    # 音乐配置。Film 以 scenes 为结构锚并读 music 块；Video 以 family=video
-    # 和 tracks 为结构锚，只有真实 music-role audio Clip 才算床在场。
-    # 缺失/空记录/半写记录一律 unknown，永不转成 none/off。配置了音乐
-    # 不等于试听确认有声。
     output_type = getattr(output, "type", None)
     video_spec_substantive = (
         isinstance(spec, dict)
@@ -120,18 +55,10 @@ def landed_fact(output: Any, *, video_confirmed: dict[str, Any] | None = None) -
             for track in spec["tracks"]
         )
     payload = getattr(output, "payload", None) or {}
-    source_ref = getattr(output, "source_ref", None) or {}
     files = getattr(output, "files", None) or {}
     quality = getattr(output, "quality", None) or {}
     render_status = getattr(output, "render_status", None)
-    is_clip = getattr(output, "type", None) == "clip"
     is_render_contracted = getattr(output, "type", None) in _RENDER_CONTRACTED
-    cut_range = None
-    if is_clip:
-        start = source_ref.get("start_seconds")
-        end = source_ref.get("end_seconds")
-        if isinstance(start, (int, float)) and isinstance(end, (int, float)):
-            cut_range = (float(start), float(end))
     video_matches = None
     if getattr(output, "type", None) == "video":
         pinned = {
@@ -154,59 +81,12 @@ def landed_fact(output: Any, *, video_confirmed: dict[str, Any] | None = None) -
             if is_render_contracted and isinstance(payload.get("duration"), (int, float))
             else None
         ),
-        cut_range_s=cut_range,
-        has_captions=(
-            bool(spec.get("caption_enabled", True) and spec.get("caption_track"))
-            if is_clip
-            else None
-        ),
-        has_translation=bool(spec.get("translation_track")) if is_clip else None,
-        dubbed=bool(spec.get("dub")) if is_clip else None,
         quality=(quality.get("status") if isinstance(quality, dict) else None),
         # Enum → its value, without importing the models layer (pure seat).
         render=getattr(render_status, "value", render_status),
         has_file=bool(files.get("video")) if is_render_contracted else None,
         music_bed=video_music_bed if output_type == "video" else None,
     )
-
-
-def _promised_from_scope(compiled_scope: list[dict[str, Any]]) -> dict[str, Any]:
-    """The promise half, derived from the snapshot's compiled scope (the
-    exact task chain the user confirmed): writer families (+ language),
-    the clip count, caption language versions, dubbing and saved-version video."""
-    types: list[str] = []
-    clip_count = 0
-    caption_languages: list[str] = []
-    dub = False
-    for task in compiled_scope:
-        tool = str(task.get("tool") or "")
-        params = task.get("params") or {}
-        if tool in _WRITER_TOOL_TO_TYPE:
-            language = params.get("language")
-            types.append(
-                f"{_WRITER_TOOL_TO_TYPE[tool]}:{language}" if language else _WRITER_TOOL_TO_TYPE[tool]
-            )
-        elif tool == "cut_segments":
-            segments = params.get("segments")
-            clip_count += len(segments) if isinstance(segments, list) else 1
-            types.extend(["clip"] * (len(segments) if isinstance(segments, list) else 1))
-        elif tool == "select_clips":  # legacy scope rows (read-tolerated)
-            count = params.get("count")
-            n = int(count) if isinstance(count, (int, float)) else 1
-            clip_count += n
-            types.extend(["clip"] * n)
-        elif tool == "translate_clip":
-            language = params.get("target_language")
-            if language:
-                caption_languages.append(str(language))
-        elif tool == "dub_clip":
-            dub = True
-    return {
-        "types": types,
-        "clip_count": clip_count,
-        "caption_languages": caption_languages,
-        "dub": dub,
-    }
 
 
 def _is_delivered(fact: LandedFact) -> bool:
@@ -237,14 +117,11 @@ def compute_run_review(
     data proves missing, never an inference."""
     snapshot = confirmed_scope if isinstance(confirmed_scope, dict) else None
     compiled = (snapshot or {}).get("compiled_scope") or []
-    promised = (
-        _promised_from_scope([t for t in compiled if isinstance(t, dict)])
-        if compiled
-        else {"types": [], "clip_count": 0, "caption_languages": [], "dub": False}
-    )
+    promised = ("video",) if any(
+        isinstance(task, dict) and task.get("tool") == "produce_video"
+        for task in compiled
+    ) else ()
     delivered = [f for f in landed if _is_delivered(f)]
-    landed_clips = [f for f in delivered if f.output_type == "clip"]
-    landed_writers = [f for f in delivered if f.output_type != "clip"]
 
     gaps: list[str] = []
     # The render failure itself is a proven fact independent of any promise —
@@ -261,37 +138,15 @@ def compute_run_review(
         }
     ):
         gaps.append(f"output_not_ready:{not_ready_type}")
-    if snapshot is not None and compiled:
-        # Family presence: a promised writer family with zero landed rows.
-        for entry in promised["types"]:
-            if entry == "clip":
-                continue
-            ptype, _, plang = entry.partition(":")
-            hit = any(
-                f.output_type == ptype and (not plang or f.language == plang)
-                for f in landed_writers
-            )
-            if not hit:
-                gaps.append(f"missing_output:{entry}")
-        # Clip count shortfall (a partially-failed fan-out reads here).
-        if len(landed_clips) < promised["clip_count"]:
-            gaps.append(f"clip_shortfall:{len(landed_clips)}/{promised['clip_count']}")
-        # Track promises against the landed clips' baked specs.
-        for language in promised["caption_languages"]:
-            if not any(f.has_translation for f in landed_clips):
-                gaps.append(f"missing_caption_version:{language}")
-        if promised["dub"] and not any(f.dubbed for f in landed_clips):
-            gaps.append("missing_dub")
+    if promised and not any(f.output_type == "video" for f in delivered):
+        gaps.append("missing_output:video")
     needs_human = sorted(
         {f.output_type for f in delivered if f.quality == "needs_human"}
     )
 
     return RunReview(
         has_snapshot=snapshot is not None,
-        promised_types=tuple(promised["types"]),
-        promised_clip_count=promised["clip_count"],
-        promised_caption_languages=tuple(promised["caption_languages"]),
-        promised_dub=promised["dub"],
+        promised_types=promised,
         landed=tuple(landed),
         gaps=tuple(gaps),
         needs_human=tuple(needs_human),
@@ -309,9 +164,6 @@ _AVAILABILITY_GAP_PREFIXES = (
     "render_failed:",
     "output_not_ready:",
     "missing_output:",
-    "clip_shortfall:",
-    "missing_caption_version:",
-    "missing_dub",
 )
 
 
@@ -354,10 +206,6 @@ def review_fact_lines(review: RunReview) -> list[str]:
         promised = list(review.promised_types[: _MAX_PROMISED_LINES])
         extra = len(review.promised_types) - len(promised)
         line = "promised: " + ", ".join(promised) + (f" (+{extra} more)" if extra > 0 else "")
-        if review.promised_caption_languages:
-            line += "; caption versions: " + ", ".join(review.promised_caption_languages)
-        if review.promised_dub:
-            line += "; dub promised"
         lines.append(line)
     for f in delivered[: _MAX_LANDED_LINES]:
         parts = [f"landed {f.output_type}"]
@@ -365,19 +213,7 @@ def review_fact_lines(review: RunReview) -> list[str]:
             parts.append(f"lang={f.language}")
         if f.duration_s is not None:
             parts.append(f"duration={f.duration_s}s")
-        if f.cut_range_s is not None:
-            parts.append(f"cut={f.cut_range_s[0]:.1f}–{f.cut_range_s[1]:.1f}s")
-        if f.has_captions is not None:
-            parts.append("captions=yes" if f.has_captions else "captions=NO")
-        if f.has_translation:
-            parts.append("translated=yes")
-        if f.dubbed:
-            parts.append("dubbed=yes")
         if f.output_type == "video":
-            # Three states from each family's own baked spec: Film carries a
-            # music block; Video carries actual music-role audio clips. The
-            # closing beat never guesses from an omitted fact, and never
-            # equates a configured bed with an auditory check.
             parts.append(
                 "music=bed"
                 if f.music_bed

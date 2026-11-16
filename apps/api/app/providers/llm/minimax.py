@@ -6,7 +6,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import httpx
 import structlog
@@ -23,13 +23,11 @@ from app.providers.llm.base import (
     LLMError,
     LLMSchemaError,
     ProviderCapabilities,
-    ToolCall,
     ToolGeneration,
 )
 from app.providers.llm.openai_chat import (
-    _AccCall,
+    _parse_tool_arguments as _parse_tool_arguments,
     _ToolCallAccumulator,
-    _parse_tool_arguments,
     _payload_chars,
     _pooled_client,
     _raise_for_status,

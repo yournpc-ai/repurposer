@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { CreationShowcase } from "@/components/landing/CreationShowcase"
 import { CreationStory } from "@/components/landing/CreationStory"
+import { LandingSkills } from "@/components/landing/LandingSkills"
 import { LandingFaq } from "@/components/landing/LandingFaq"
 import { EarlyAccess } from "@/components/landing/EarlyAccess"
 import { Footer } from "@/components/landing/Footer"
@@ -83,6 +84,7 @@ function LandingPage() {
           <LandingHero />
           <CreationShowcase />
           <CreationStory />
+          <LandingSkills />
           <LandingFaq />
           <EarlyAccess />
         </main>

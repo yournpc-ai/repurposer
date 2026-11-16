@@ -1,274 +1,68 @@
-/** C-1 acceptance suite (合同 §7 C-1; I-PFA-02/03) — the settled canvas's
- * Product Graph rank projection. Pure: no DOM, no server — fixtures feed
- * `projectSettledFrames` the rank the server would stamp.
- *
- * 不可妥协验收句的测试形态：settled 路径的 x 永远 = rank × PITCH（524 =
- * product_graph.PITCH ↔ graph_store._PITCH ↔ layout.ts PITCH 的三镜像值），
- * stored frame.x 永不被读；frame 与拓扑脱节（L1 的 late-born 中间节点）时
- * 投影照样严格 L→R。 */
-
 import { describe, expect, it } from "vitest"
 
-import { declaredHandles, projectSettledFrames } from "./layout"
+import { declaredHandles, layoutFlow } from "./layout"
 import type { FlowEdge, FlowNode } from "./types"
 
-// The three-mirror pitch value (product_graph.PITCH ↔ graph_store._PITCH ↔
-// layout.ts PITCH) — hardcoded here so a silent constant drift turns red.
-const PITCH = 524
-// A video-kind draft card's deterministic render height (PRODUCT_LABEL_PX 26
-// + DRAFT_BODY_PX 120 + PRODUCT_TOOLBAR_PX 44 — the fixture's prototype-less
-// node carries no program region, so the 88 reservation is dropped).
-const DRAFT_H = 190
-const GAP_CROSS = 16
-
-function node(
-  id: string,
-  rank: number | null,
-  frame: { x: number; y: number; w?: number; h?: number },
-  order = 0,
-): FlowNode {
+function node(id: string, overrides: Partial<FlowNode> = {}): FlowNode {
   return {
     id,
-    kind: "video",
+    kind: "text",
     label: id,
-    rank,
-    frame: { w: 400, h: 560, ...frame },
-    order,
+    frame: { x: 0, y: 0, w: 340, h: 280 },
+    order: 0,
+    ...overrides,
   }
 }
 
-function edge(from: string, to: string, edgeType?: FlowEdge["edgeType"]): FlowEdge {
+function edge(from: string, to: string, edgeType: FlowEdge["edgeType"] = "text"): FlowEdge {
   return { from, to, edgeType }
 }
 
-describe("projectSettledFrames — C-1 rank projection", () => {
-  it("x = rank × PITCH; the column key is rank, never the stored frame.x", () => {
-    // All three nodes carry the SAME wrong stored x (0) — under the old law
-    // they'd collapse into one column; under C-1 rank separates them.
-    const nodes = [
-      node("a", 0, { x: 0, y: 0 }),
-      node("b", 1, { x: 0, y: 0 }),
-      node("c", 2, { x: 0, y: 0 }),
-    ]
-    const { positions, violations } = projectSettledFrames(nodes, [])
-    expect(positions.get("a")!.x).toBe(0)
-    expect(positions.get("b")!.x).toBe(PITCH)
-    expect(positions.get("c")!.x).toBe(2 * PITCH)
-    expect(violations).toEqual([])
+describe("asset and manual Graph layout", () => {
+  it("layers nodes from their real connections, not legacy product ranks", () => {
+    const a = node("a", { frame: { x: 900, y: 0, w: 340, h: 280 } })
+    const b = node("b", { frame: { x: 100, y: 0, w: 340, h: 280 } })
+    const c = node("c", { frame: { x: 0, y: 0, w: 340, h: 280 } })
+    const layout = layoutFlow([c, b, a], [edge("a", "b"), edge("b", "c")])
+    expect(layout.positions.get("a")!.x).toBeLessThan(layout.positions.get("b")!.x)
+    expect(layout.positions.get("b")!.x).toBeLessThan(layout.positions.get("c")!.x)
   })
 
-  it("L1 regression (旗舰用例): a late-born intermediate node whose stored frames completely contradict the topology still projects strictly L→R", () => {
-    // The historical bug shape: frames stamped at birth (928 / 464 / 100 —
-    // pitch drift + late birth) while the true ranks are 0 / 1 / 2.
-    const nodes = [
-      node("a", 0, { x: 928, y: 0 }),
-      node("b", 1, { x: 464, y: 0 }),
-      node("c", 2, { x: 100, y: 0 }),
-    ]
-    const edges = [edge("a", "b", "video"), edge("b", "c", "text")]
-    const { positions, violations } = projectSettledFrames(nodes, edges)
-    expect(positions.get("a")!.x).toBeLessThan(positions.get("b")!.x)
-    expect(positions.get("b")!.x).toBeLessThan(positions.get("c")!.x)
-    expect(positions.get("c")!.x).toBe(2 * PITCH) // not 100 — frame.x lost authority
-    expect(violations).toEqual([])
-  })
-
-  it("direction invariant: a rank-reversed edge is a named violation (防假绿负例)", () => {
-    const nodes = [node("a", 1, { x: 0, y: 0 }), node("b", 0, { x: 0, y: 0 })]
-    const { violations } = projectSettledFrames(nodes, [edge("a", "b", "video")])
-    expect(violations).toHaveLength(1)
-    expect(violations[0]).toContain("rank violation")
-    expect(violations[0]).toContain("a")
-    expect(violations[0]).toContain("b")
-  })
-
-  it("ctx edges are not product edges: they never enter the invariant", () => {
-    const nodes = [node("a", 0, { x: 0, y: 0 }), node("b", 0, { x: 0, y: 100 })]
-    const { violations } = projectSettledFrames(nodes, [edge("a", "b", "ctx")])
-    expect(violations).toEqual([])
-  })
-
-  it("rank-null = compatibility display, never legal topology (约束❷)", () => {
-    // The B4-gate-survivor orphan: drawn at its stored frame.x, but its
-    // product edge is a named violation — the fallback never acquits it.
-    const nodes = [node("a", 0, { x: 0, y: 0 }), node("orphan", null, { x: 2000, y: 0 })]
-    const { positions, violations } = projectSettledFrames(nodes, [edge("a", "orphan", "video")])
-    expect(positions.get("orphan")!.x).toBe(2000) // compatibility seat
-    expect(violations).toHaveLength(1)
-    expect(violations[0]).toContain("rank-null endpoint")
-    expect(violations[0]).toContain("orphan")
-  })
-
-  it("y compression is preserved (ADR-082): followers pull up to the predecessor's render bottom, never past the server seat", () => {
-    // Pull-up: the follower reserved far below (draft 560 reservation air)
-    // compacts to the predecessor's current render bottom + gap.
-    const pullUp = projectSettledFrames(
-      [node("top", 2, { x: 0, y: 0 }), node("follower", 2, { x: 0, y: 1000 })],
-      [],
+  it("keeps independent nodes and joins in stable order", () => {
+    const layout = layoutFlow(
+      [node("joined", { order: 2 }), node("second", { order: 1 }), node("first", { order: 0 })],
+      [edge("first", "joined"), edge("second", "joined")],
     )
-    expect(pullUp.positions.get("top")!.y).toBe(0)
-    expect(pullUp.positions.get("follower")!.y).toBe(DRAFT_H + GAP_CROSS)
-    // min() safety: a server seat ABOVE the compressed bottom is kept —
-    // compaction never pushes a node past its seat downward-pull-free.
-    const seated = projectSettledFrames(
-      [node("top", 2, { x: 0, y: 0 }), node("floor", 2, { x: 0, y: 100 })],
-      [],
-    )
-    expect(seated.positions.get("floor")!.y).toBe(100)
+    expect(layout.positions.get("first")!.x).toBe(layout.positions.get("second")!.x)
+    expect(layout.positions.get("first")!.y).toBeLessThan(layout.positions.get("second")!.y)
+    expect(layout.positions.get("joined")!.x).toBeGreaterThan(layout.positions.get("first")!.x)
   })
 
-  it("错帧双杀: corrupted stored frames never change the execution topology", () => {
-    // Canvas projection and execution consume the same rank contract; neither
-    // side may re-derive topology from stored visual positions.
-    const nodes = [
-      node("a", 0, { x: 928, y: 0 }),
-      node("b", 1, { x: 100, y: 0 }),
-      node("c", 2, { x: 464, y: 0 }),
-    ]
-    const edges = [edge("a", "b", "video"), edge("b", "c", "video")]
-    const { positions, violations } = projectSettledFrames(nodes, edges)
-    expect(positions.get("a")!.x).toBe(0)
-    expect(positions.get("b")!.x).toBe(PITCH)
-    expect(positions.get("c")!.x).toBe(2 * PITCH)
-    expect(violations).toEqual([])
-  })
-
-  it("revealOrder = rank-major then frame y; insertion order never matters", () => {
-    const nodes = [
-      node("c", 2, { x: 0, y: 0 }),
-      node("a", 0, { x: 0, y: 50 }),
-      node("b1", 1, { x: 0, y: 200 }),
-      node("b0", 1, { x: 0, y: 100 }),
-    ]
-    const expected = ["a", "b0", "b1", "c"]
-    const shuffled = [nodes[2], nodes[0], nodes[3], nodes[1]]
-    for (const input of [nodes, shuffled]) {
-      const { revealOrder } = projectSettledFrames(input, [])
-      const order = [...revealOrder.entries()].sort(([, i], [, j]) => i - j).map(([id]) => id)
-      expect(order).toEqual(expected)
-    }
+  it("declares manual input ports without product pager or Clip lanes", () => {
+    const handles = declaredHandles(node("manual"), { width: 340, height: 280 }, {
+      in: ["video", "text"], out: ["text"],
+    })!
+    expect(handles.find((h) => h.id === "in:video")!.y).toBe(236)
+    expect(handles.find((h) => h.id === "in:text")!.y).toBe(202)
+    expect(handles.find((h) => h.id === "out:text")!.y).toBe(40)
   })
 })
 
-describe("projectSettledFrames — rank-derived read normalization", () => {
-  /** Mixed rank cohorts with no surviving island stamp use the plain column
-   * law; neither node may reserve a ghost corridor. The client mechanism is
-   * rank × PITCH, with spec.island present only for a real surviving island. */
-  it("dead corridor: no stamp → plain column law, zero reserved_bottom ghost", () => {
-    const nodes = [
-      node("asset", 0, { x: 0, y: 0 }),
-      // Stored frame y stays (append-only, zero migration) — the former
-      // island cell seats ride as plain serverY seats.
-      node("transcript", 1, { x: 524, y: -88 }),
-      node("quotes", 2, { x: 524, y: 488 }),
-      // A later band-1 mate: without the dead corridor's floor it compresses
-      // to the transcript's render bottom — NOT to the ghost reserved bottom
-      // (the accident island's reservation would have floored it at 2216).
-      node("follower", 1, { x: 524, y: 3000 }),
-    ]
-    const edges = [
-      edge("asset", "transcript", "text"),
-      edge("transcript", "quotes", "text"), // the A3-lite synthesized leg
-      edge("asset", "quotes", "text"),
-    ]
-    const { positions, revealOrder, violations } = projectSettledFrames(nodes, edges)
-    // 双镜像同数 (G): ranks 0/1/2 → x = 0/524/1048 — the server's numbers.
-    expect(positions.get("asset")!.x).toBe(0)
-    expect(positions.get("transcript")!.x).toBe(PITCH)
-    expect(positions.get("quotes")!.x).toBe(2 * PITCH)
-    expect(positions.get("transcript")!.y).toBe(-88) // plain law, first in column
-    expect(positions.get("quotes")!.y).toBe(488) // stored seat rides, never moved
-    // reserved_bottom 幽灵死: the follower pulls up to the transcript's real
-    // bottom (DRAFT_H 278 + gap), never to a corridor floor.
-    expect(positions.get("follower")!.y).toBe(-88 + DRAFT_H + GAP_CROSS)
-    // B→C 方向不变量成立 (E); revealOrder 恒 from 先于 to (F).
-    expect(violations).toEqual([])
-    const order = [...revealOrder.entries()].sort(([, i], [, j]) => i - j).map(([id]) => id)
-    expect(order).toEqual(["asset", "transcript", "follower", "quotes"])
-  })
-
-  /** 活廊道对照组（mirror of the server writers fixture
-   * test_display_ranks_writers_share_one_island_band /
-   * test_legacy_mixed_island_writers_cohort_keeps_corridor）: a ≥2 cohort's
-   * corridor LIVES — members render at frozen cell y verbatim and the
-   * reserved bottom floors the column's compression. Server numbers: island
-   * born at band 2, origin_y -176, row_h 576, cap 4 → cells -176/400/976,
-   * reserved_bottom 2112. */
-  it("alive corridor: frozen cells verbatim + reserved_bottom floors a plain band-mate", () => {
-    const stamp = { island: { reserved_bottom: 2112 } }
-    const nodes = [
-      node("asset", 0, { x: 0, y: 0 }),
-      node("transcript", 1, { x: 524, y: -88 }),
-      { ...node("w1", 2, { x: 1048, y: -176 }), spec: stamp },
-      { ...node("w2", 2, { x: 1048, y: 400 }), spec: stamp },
-      { ...node("w3", 2, { x: 1048, y: 976 }), spec: stamp },
-      node("plain", 2, { x: 1048, y: 3000 }),
-    ]
-    const { positions, violations } = projectSettledFrames(nodes, [])
-    expect(positions.get("w1")!.y).toBe(-176)
-    expect(positions.get("w2")!.y).toBe(400)
-    expect(positions.get("w3")!.y).toBe(976)
-    for (const w of ["w1", "w2", "w3"]) expect(positions.get(w)!.x).toBe(2 * PITCH)
-    // The corridor's empty rows are never invaded: the plain band-mate's
-    // compression floors at reserved_bottom + gap (2112 + 16), never higher.
-    expect(positions.get("plain")!.y).toBe(2112 + GAP_CROSS)
-    expect(violations).toEqual([])
-  })
-})
-
-describe("declaredHandles — 文字流锚座 (2026-10-11 拍板: 出锚产区律 + 锚点律第二座)", () => {
-  /** A tracked clip card (select_clips anatomy) — the NLE axis's owner. */
-  const tracked = (overrides: Partial<FlowNode> = {}): FlowNode => ({
-    ...node("clip", 1, { x: 524, y: 0 }),
-    spec: { tool: "select_clips" },
-    ...overrides,
-  })
-  /** A media asset node (the ring card: stage + transcript section). */
-  const mediaAsset = (type: string): FlowNode => ({
-    ...node("asset", 0, { x: 0, y: 0 }),
+describe("asset transcript port", () => {
+  const mediaAsset = (type: string): FlowNode => node("asset", {
     asset: { id: "a1", type, title: null, file_url: null },
   })
-  const H = { width: 400, height: 700 }
+  const size = { width: 400, height: 700 }
 
-  it("tracked card: video AND text in-ports park at their own lane's Y-center", () => {
-    const handles = declaredHandles(tracked(), H, { in: ["video", "text"], out: [] })!
-    // video base = 44 toolbar + 4 pad + 34 text lane + 8 gap + 17 half-video − 14
-    //            = 93 → y = 700 − 93 − 28
-    expect(handles.find((h) => h.id === "in:video")!.y).toBe(579)
-    // text base = 44 + 4 + 17 − 14 = 51 → y = 700 − 51 − 28 (one lane-row
-    // — 42px — below the video seat).
-    expect(handles.find((h) => h.id === "in:text")!.y).toBe(621)
-  })
-
-  it("a live modifier lane raises BOTH lane seats by one modifier row (42)", () => {
-    const withMusic = tracked({
-      outputs: [{ track_stack: { modifiers: { music: true } } }] as unknown as FlowNode["outputs"],
-    })
-    const handles = declaredHandles(withMusic, H, { in: ["video", "text"], out: [] })!
-    expect(handles.find((h) => h.id === "in:video")!.y).toBe(579 - 42)
-    expect(handles.find((h) => h.id === "in:text")!.y).toBe(621 - 42)
-  })
-
-  it("media asset: the T out-port parks at the transcript section's top-right and never consumes a top-stack slot", () => {
-    const handles = declaredHandles(mediaAsset("video"), H, { in: [], out: ["video", "text"] })!
-    // The media flow keeps the card's top-right stack (y = 40).
-    const video = handles.find((h) => h.id === "out:video")!
-    expect(video.y).toBe(40)
-    // 出锚产区律: bottom-anchored constant = 44 factsbar + 197 section − 6
-    // into the header − 28 circle = 207 → y = 700 − 207 − 28.
-    const text = handles.find((h) => h.id === "out:text")!
-    expect(text.y).toBe(700 - 207 - 28)
-    expect(text.x).toBe(video.x)
-    // Reversed declaration order proves the region seat never eats a stack
-    // slot: the media port still lands on the FIRST stack seat (y = 40).
-    const reversed = declaredHandles(mediaAsset("video"), H, { in: [], out: ["text", "video"] })!
-    expect(reversed.find((h) => h.id === "out:video")!.y).toBe(40)
-    expect(reversed.find((h) => h.id === "out:text")!.y).toBe(700 - 207 - 28)
-  })
-
-  it("non-media asset (image): no transcript section, no region seat — text keeps the top stack", () => {
-    const handles = declaredHandles(mediaAsset("image"), H, { in: [], out: ["video", "text"] })!
+  it("places text at the transcript and preserves the media top port", () => {
+    const handles = declaredHandles(mediaAsset("video"), size, { in: [], out: ["text", "video"] })!
     expect(handles.find((h) => h.id === "out:video")!.y).toBe(40)
-    expect(handles.find((h) => h.id === "out:text")!.y).toBe(40 + 34)
+    expect(handles.find((h) => h.id === "out:text")!.y).toBe(700 - 207 - 28)
+  })
+
+  it("uses the ordinary top stack for an image asset", () => {
+    const handles = declaredHandles(mediaAsset("image"), size, { in: [], out: ["video", "text"] })!
+    expect(handles.find((h) => h.id === "out:video")!.y).toBe(40)
+    expect(handles.find((h) => h.id === "out:text")!.y).toBe(74)
   })
 })

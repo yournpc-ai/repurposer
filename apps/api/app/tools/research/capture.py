@@ -639,7 +639,7 @@ class _PolicyProxy:
 #
 # The one-shot Chrome CLI (`--screenshot`) could not scroll, wait, or close
 # pop-ups — canvas/JS-rendered heroes (linear.app 实证) captured as black
-# rectangles. The session below ports the launch-film skill's four verified
+# rectangles. The session below retains the four verified
 # JS blocks near-verbatim (capture.mjs: settle / preload / consent / anchors
 # / elements): close pop-ups → scroll-preload (lazy-load triggers) → fold +
 # per-section viewport screenshots, each with its element inventory (the ui

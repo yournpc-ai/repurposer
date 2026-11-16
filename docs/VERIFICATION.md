@@ -2,7 +2,7 @@
 
 > Status: 当前规范（2026-11-10）。本文是测试运行纪律、核心合同↔测试映射与跨模块验收的唯一母文档；排期仍归 PROGRESS。测试/文档退役不是产品验收通过，绿色历史标记不等于当前 HEAD 或真实旅程已通过。
 >
-> 新视频只按 VIDEO_PROJECT 与 video-project-implementation 施工。旧 Film 固定骨架、pending 信封、legacy 指纹和旧 schema 的专属实现与测试已删除；共享权限、授权、计费、执行身份、Clip 和消息回放守卫继续有效。新 Composition/时间/spec/旅程覆盖按 A/B 出口补齐，未建覆盖明确记缺口，不用删测试制造“生产已就绪”。
+> 视频验收见 [统一视频合同](tasks/skill-package-promo-video.md)。覆盖 Composition 版本、时间与 video-spec，以及共享权限、授权、计费、执行身份与消息回放。保留开放项及其验收条件。
 
 ## 1. 测试运行政策
 

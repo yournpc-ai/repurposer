@@ -27,16 +27,6 @@ before ever landing; the tool IS the read).
 
 from typing import Any
 
-from app.models.schemas import (
-    GenerationContext,
-    ToneSettings,
-)
-from app.models.tables import (
-    Persona,
-    Project,
-    WorkflowRun,
-)
-from app.platform.project_context import persona_context_from_row
 from app.skills import SKILL_REGISTRY
 
 
@@ -49,26 +39,6 @@ def pack_instructions(packs: list[str]) -> str:
     loaders, later batch) keep their markdown sections separated; a single
     pack renders byte-identical to its bare body."""
     return "\n".join(SKILL_REGISTRY[name].body for name in packs)
-
-
-def generation_context(
-    run: WorkflowRun,
-    project: Project,
-    persona: Persona | None,
-    *,
-    brand_music_id: str | None = None,
-) -> GenerationContext:
-    """Assemble the GenerationContext from the run's plan (context)."""
-    ctx = run.context or {}
-    tone_raw = ctx.get("tone_settings")
-    return GenerationContext(
-        persona=persona_context_from_row(persona),
-        event_name=project.event_name,
-        tone_settings=ToneSettings.model_validate(tone_raw) if tone_raw else None,
-        target_language=ctx.get("target_language", "en"),
-        instruction=ctx.get("instruction"),
-        brand_music_id=brand_music_id,
-    )
 
 
 def output_one_liner(output: Any) -> str:

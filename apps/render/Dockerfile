@@ -1,8 +1,6 @@
-# Remotion render service (clip-spec -> MP4 + SRT). Node + pnpm workspace.
+# Remotion render service (video-spec -> MP4). Node + pnpm workspace.
 #
-# Build context is the REPO ROOT (not apps/render): this package imports the
-# workspace package @repurposer/clip, so the build needs pnpm-workspace.yaml,
-# the lockfile, and packages/clip — none of which live under apps/render.
+# Build context is the REPO ROOT so the native video workspace packages resolve.
 FROM node:22-bookworm-slim
 
 # @remotion/renderer ships its own Chromium binary but launches it through
@@ -28,22 +26,20 @@ WORKDIR /repo
 # Every workspace member's manifest must be present for pnpm to resolve the
 # graph, even though --filter only installs the render branch.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/clip/package.json packages/clip/package.json
 COPY packages/video-spec/package.json packages/video-spec/package.json
+COPY packages/video-remotion/package.json packages/video-remotion/package.json
 COPY apps/render/package.json apps/render/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter @repurposer/render... --frozen-lockfile
 
 # Source for the render branch only.
-COPY packages/clip packages/clip
 COPY packages/video-spec packages/video-spec
+COPY packages/video-remotion packages/video-remotion
 COPY apps/render apps/render
 
-# Vendored CJK font (the D12 precedent — same SIL OFL Noto Sans SC the
-# api's quote-card baker vendors at apps/api/assets/fonts/): registered with
-# fontconfig so headless Chromium's per-character fallback has CJK glyphs AT
-# ALL. Without it the slim image's fonts are Latin-only (fonts-liberation)
-# and every Chinese title/caption bakes as tofu (口口口).
+# Vendored CJK font: registered with fontconfig so headless Chromium's
+# per-character fallback has CJK glyphs. Without it the slim image's fonts are
+# Latin-only (fonts-liberation) and Chinese titles/captions bake as tofu.
 COPY apps/api/assets/fonts /usr/share/fonts/opentype/noto-sc
 RUN fc-cache -f
 

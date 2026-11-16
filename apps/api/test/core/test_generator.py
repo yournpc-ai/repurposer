@@ -23,7 +23,7 @@ from app.editing.schemas import (
     RemotionProjectSource,
     RemotionResource,
 )
-from app.editing.templates import instantiate_aligned_narration
+from app.editing.aligned_narration import instantiate_aligned_narration
 from app.editing.validators import validate_content
 from app.editing.video_spec import compile_video_spec
 from app.tools.video import programs

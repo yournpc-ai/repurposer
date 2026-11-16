@@ -318,33 +318,6 @@ class WorkflowStep(Base):
     )
 
 
-class Journey(Base):
-    """One User Goal's working loop (ADR-088 §10, R24).
-
-    The attribution anchor every exploration artifact points back to via
-    ``graph_nodes.journey_id`` — an attribution property, NEVER a graph
-    edge (the edge vocabulary stays media-flow pure). One goal = one
-    journey: the discovery chain (candidates → selects → plans) of one
-    user ask shares the row. No status column: the journey is not a state
-    machine — artifact states live on the artifacts themselves
-    (draft → ready → …, ADR-088 §3). Owner = Pipeline (same as the graph
-    kernel).
-    """
-
-    __tablename__ = "journeys"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    goal_text = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
 class GraphNode(Base):
     """One node of the project's persistent canvas graph (ADR-057).
 
@@ -383,63 +356,12 @@ class GraphNode(Base):
     # R24 journey attribution (ADR-088 §10): exploration artifacts carry the
     # owning journey's id; execution-family nodes stay NULL. An attribution
     # property, never a graph edge.
-    journey_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("journeys.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     # Layout island membership (Workspace 合同 v4.2 C6, 2026-09-26 封板):
     # the sibling group's island row + the member's sequence within it
     # (column = seq // island.cols-per-column capacity, row = seq % cap).
     # NULL = no island — singleton births and pre-C6 rows keep the depth
     # column's plain stacking law. The island's bounding block is frozen at
     # the group's birth; membership is stamped once, never re-seated.
-    island_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("graph_islands.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    island_seq = Column(Integer, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
-class ExplorationRow(Base):
-    """One exploration artifact (Candidate Set / Select / Content Plan —
-    ADR-088 §3, NAMING N-55).
-
-    Workspace 合同 v4.2 C1 (2026-09-26 封板 — 图节点资格): the exploration
-    family NEVER enters the Graph, so it lives in its own table, re-homed
-    out of ``graph_nodes`` (legacy ``type="exploration"`` graph rows stay
-    read-filtered, never migrated). Columns mirror the facts the door
-    (``pipeline/exploration_store``) and the compiler read — no ``type``
-    (the family IS the table; ``spec.exploration_kind`` distinguishes the
-    three kinds), no ``layout`` (no canvas seat). ``journey_id`` keeps the
-    R24 attribution; project cascade comes from the project FK. Owner =
-    Pipeline (same as the graph kernel).
-    """
-
-    __tablename__ = "exploration_rows"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    # R24 journey attribution (ADR-088 §10): an attribution property, never
-    # a graph edge — same SET NULL posture as the legacy graph column.
-    journey_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("journeys.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    state = Column(String(20), nullable=False, default="ready")
-    spec = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
@@ -483,60 +405,6 @@ class GraphEdge(Base):
         Index("ix_graph_edges_from", "from_node"),
         Index("ix_graph_edges_to", "to_node"),
     )
-
-
-class GraphIsland(Base):
-    """One sibling group's layout island (Workspace 合同 v4.2 C6, 2026-09-26
-    封板 — Group Layout Island 组内自治、零 UI).
-
-    The island is a DATA STRUCTURE + a placement law, never UI: no frame,
-    label, or chrome ever renders for it. Each sibling group (same media-
-    flow parent set, same topological depth) gets one row at the group's
-    birth, freezing its bounding block:
-
-    - ``depth`` — the band (ungated topological generation at birth);
-    - ``parent_ids`` — the group's identity: sorted media-flow parent ids
-      (ctx reference edges never define siblinghood — the island is a
-      Product Graph concept, same boundary as RANK_EDGE_TYPES);
-    - ``origin_x`` / ``origin_y`` — the frozen origin;
-    - ``row_h`` — the row pitch (the birth family's max frame height +
-      cross gap — sibling families share one frame class by construction);
-    - ``cols`` — the RESERVED columns (the growth corridor: born count's
-      columns + one, capped; history-clamped to 1 when a deeper band was
-      already placed — the corridor never invades born territory);
-    - ``cap`` — rows per column (C); capacity = cols × cap.
-
-    Members fill top-down, wrapping to the next reserved column at C — an
-    in-island affair; the band outside never yields. The right edge
-    (origin_x + cols × PITCH) never moves after birth, so later depth
-    bands / sibling groups are structurally impossible to overlap. True
-    over-capacity (seq ≥ cols × cap) extends the LAST reserved column
-    downward (the contact-sheet seat — 留座不实现, 2026-09-26 用户拍板):
-    vertical growth never crosses the frozen right edge. The row is frozen
-    — no ``updated_at``: membership churn lives on ``graph_nodes``
-    (``island_id`` / ``island_seq``); an orphaned island (its members
-    deleted) is re-joined by a later same-identity group, its sequence
-    derived from LIVE members so a re-stamp re-lands on the same cells.
-    Owner = Pipeline (the graph kernel, same as graph_nodes/graph_edges).
-    """
-
-    __tablename__ = "graph_islands"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    depth = Column(Integer, nullable=False)
-    parent_ids = Column(JSONB, nullable=False, default=list)
-    origin_x = Column(Integer, nullable=False)
-    origin_y = Column(Integer, nullable=False)
-    row_h = Column(Integer, nullable=False)
-    cols = Column(Integer, nullable=False)
-    cap = Column(Integer, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
 class SourceSnapshot(Base):
@@ -822,46 +690,6 @@ class Output(Base):
         if self.render_spec is None:
             return None
         return canonical_json_hash(self.render_spec)
-
-
-class Operation(Base):
-    """One product-level edit applied to an output (ADR-032).
-
-    Append-only journal shared by the editor GUI / chat / (future) MCP
-    frontends. ``op`` + ``params`` carry the semantic signal (calibration
-    feedback reads these); ``spec_after`` is the full render_spec snapshot
-    after applying — the mechanical guarantee behind undo/redo/version-jump
-    (inverse ops are rejected: LLM ops have no computable inverse). The
-    baseline row (``op="snapshot", seq=0``) is created lazily on first apply,
-    giving the invariant "before of op N = spec_after of op N-1".
-    ``undone_at`` is the only mutable field (N-04 nullable timestamp).
-    """
-
-    __tablename__ = "operations"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    output_id = Column(UUID(as_uuid=True), ForeignKey("outputs.id"), nullable=False, index=True)
-    # DEFERRED (D9, ADR-050): morph runners journal ops mid-run inside a long
-    # Session 2; keep the project row free of KEY-SHARE locks until COMMIT so
-    # project updaters (maybe_finalize's status flip) never stall on it.
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", deferrable=True, initially="DEFERRED"),
-        nullable=False,
-        index=True,
-    )
-    seq = Column(Integer, nullable=False)  # per-output monotonic; baseline = 0
-    op = Column(String(50), nullable=False)  # registry-guarded (N-03)
-    params = Column(JSONB, nullable=False, default=dict)
-    spec_after = Column(JSONB, nullable=False)
-    spec_hash = Column(String(64), nullable=False)  # sha256 of canonical spec_after JSON
-    source = Column(String(20), nullable=False)  # editor | chat | mcp | system (registry)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
-    undone_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-
-    __table_args__ = (UniqueConstraint("output_id", "seq", name="uq_operations_output_seq"),)
 
 
 class Conversation(Base):
@@ -1185,7 +1013,7 @@ class Publication(Base):
     Single FK to ``outputs`` (ADR-030). ``payload`` is a frozen snapshot taken
     at creation — post-disconnect history stays readable and later output
     edits never sync into it. ``due_at`` is the worker's sole claim predicate
-    (backoff rewrites it). ``ai_disclosure`` is derived by the clip-spec
+    (backoff rewrites it). ``ai_disclosure`` is derived by the publication
     classifier (ADR-026), never user-ticked. State moves only via
     ``services.distribution._transition``; the institutional audit table
     (``publication_events``) is deferred to P2.

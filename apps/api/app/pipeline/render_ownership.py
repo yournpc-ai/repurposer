@@ -47,17 +47,12 @@ logger = structlog.get_logger()
 # Modifier kinds that rewrite a clip's render_spec IN PLACE (their fork
 # variants derive new rows and never appear in another row's writer set).
 INPLACE_MORPH_KINDS = (
-    "translate_clip",
-    "dub_clip",
-    "remove_filler",
-    "add_music",
-    "reframe_clip",
 )
 
 # Clip-birthing kinds (the assembly stations). A morph with one of these in
 # its inputs targets THAT producer's output_refs; a morph without any falls
 # back to the project's pre-existing clips (the existing profile).
-CLIPS_PRODUCER_KINDS = ("select_clips", "materialize_source", "cut_segments")
+CLIPS_PRODUCER_KINDS = ()
 
 # Step statuses whose writers must be pruned out of a render barrier by the
 # repair seat: a failed writer's spec writes rolled back, and a cascade-

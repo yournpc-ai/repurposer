@@ -159,7 +159,7 @@ ADR-052 判词「实现层零 agent、全 workflow」维持；ADR-077 收编的�
 
 ### 8.2 Race proof 的架构意义
 
-竞态根因：**写操作不携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 在无围栏时会让 step 最后写者赢、钱包重复 capture，run finalize 的行锁也不能证明 step/ledger 的执行身份。`POST_T5_DELTA_AUDIT.md` 只保留**围栏落地前**的这类竞态证据，用于解释机制动机；它不是当前 P0 仍存在或当前守卫已通过的证明。当前验收必须重跑 ADR-079 的竞态步骤并保留本轮结果。
+竞态根因：**写操作不携带「这次执行是谁」**。`A claim → A 停滞 → reap → B claim → B 完成 → A 醒来 → A 终态写` 在无围栏时会让 step 最后写者赢、钱包重复 capture，run finalize 的行锁也不能证明 step/ledger 的执行身份。当前验收须重跑 ADR-079 的竞态步骤并保留本轮结果。
 
 ### 8.3 根原则（TARGET，一切执行层工作的判据）
 
@@ -209,7 +209,7 @@ Decompiler 当前谨慎定位仍为 observable facts + deterministic structure +
 
 > **当前批次、优先级与发布顺序的唯一事实源 = `docs/PROGRESS.md` §0**。本节只保留技术依赖，不复述 R1/R1.1 的完成史或另建排期。
 
-- 支付、订阅、权益、渠道联调、hold GC 与 cache identity 同属当前挂起的 Commercial / Distribution 范围；重启条件与依赖归 `PROGRESS.md` §0.3 及对应任务合同。任何真实收费扩张都必须保留 ADR-079 的 fenced-zero-side-effects 与 ADR-055 的账本约束。
+- 支付、订阅、权益、渠道联调和 hold GC 同属当前挂起的 Commercial / Distribution 范围；重启条件与依赖归 `PROGRESS.md` §0.3 及对应任务合同。任何真实收费扩张都必须保留 ADR-079 的 fenced-zero-side-effects 与 ADR-055 的账本约束。
 - ExecutionAttempt 只在独立批次先裁定形态。启动证据 = fenced 频率、台账查询模式、商业对账需求与事故取证需求；它消费围栏，不改写围栏语义，也不得与 claim token 互名。
 - 能力契约显式化是触发制：首例能力误挂或新能力族批量入场后再评审，不预先建立统一 Policy 大层。
 - AgentBudget 是 TARGET 契约，墙钟/token/side-effect 数值未拍板；启动依据为跑飞事故、台账长尾或第二 provider 的真实需求。当前迭代上限不能冒充墙钟预算。
@@ -229,14 +229,13 @@ Decompiler 当前谨慎定位仍为 observable facts + deterministic structure +
 | 工程地图（Model/Harness/Graph/Loop） | `AGENT_ARCHITECTURE.md` |
 | 对话→生产概念架构 | `DIALOG_WORKFLOW.md` |
 | chat 机器规格 / SSE / 打字机律 | `CHAT_ARCHITECTURE.md` |
-| 渲染契约（当前 clip/film-spec 与轨道） | `RENDERING.md` |
-| **视频作品目标架构 / CompositionVersion / Skill / video-spec** | `VIDEO_PROJECT.md` + `tasks/video-project-implementation.md`（ADR-145，未实施） |
+| 渲染契约（video-spec 与交付链） | `RENDERING.md` |
+| **视频作品目标架构 / CompositionVersion / Skill / video-spec** | `VIDEO_PROJECT.md` + `tasks/skill-package-promo-video.md`（ADR-145；实施与待验收见施工合同） |
 | 计费语义 | `BILLING.md` |
 | 决策集 | `DECISIONS.md` |
 | 用户旅程 | `JOURNEYS.md` |
 | 命名 | `NAMING.md` |
 | **执行围栏合同与当前守卫** | `DECISIONS.md` ADR-079 + 当前执行代码 + `apps/api/test/core/test_execution_fencing.py` |
-| **围栏前竞态证据（仅机制动机）** | `POST_T5_DELTA_AUDIT.md`（仓库根；不证明当前状态） |
 | 排期 / 需求池 | `PROGRESS.md` |
 
 ## 13. 与现行 ADR 的关系

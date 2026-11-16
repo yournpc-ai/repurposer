@@ -188,18 +188,18 @@ const en = {
     "play": "Play demonstration",
     "pause": "Pause demonstration",
     "replies": {
-      "product-promo": "The video opens with the product in use, then covers its key features.\nAsk for a shorter opening, different captions, or a change to any scene.",
-      "talking-head": "Your original voice is kept, with captions and key titles added.\nPoint out the time and wording to fix captions, remove a pause, or restyle a title.",
+      "product-promo": "The edit opens on the dropper and adds a simple product title.\nYou can ask to change the title or adjust the pace.",
+      "talking-head": "The series label sits at the top, and the episode title slides in below the speaker.\nYou can change when the title appears.",
       "text-animation": "Your wording is unchanged, with text beats and emphasis timed to the copy.\nPick any line to change its animation, pacing, or colors.",
-      "knowledge-explainer": "The narration and visuals are ready to watch together.\nIf something is unclear, ask for another example, different narration, or a slower pace."
+      "knowledge-explainer": "The Moon footage sits beside a short explanation of what we see from Earth.\nYou can ask for a longer explanation or change the layout."
     },
-    "disclosure": "Interaction illustration · Public sample videos",
+    "disclosure": "Sample edit · Stock footage",
     "disclosureShort": "Interaction illustration",
     "requests": {
-      "product-promo": "Make a short video introducing my product. Show how it works.",
-      "talking-head": "Add captions and a few clear titles to my recording. Keep my voice.",
-      "text-animation": "Turn this text into an animated video. Keep the wording.",
-      "knowledge-explainer": "Help me explain this idea in a video, with narration and visuals."
+      "product-promo": "Make a short promo for this serum. Open with the dropper in use.",
+      "talking-head": "Give this podcast clip a series label and an animated title.",
+      "text-animation": "Animate “Light in motion” over a neon background. Keep the wording.",
+      "knowledge-explainer": "Explain why the Moon changes shape, using a Moon shot and a short on-screen explanation."
     },
     "steps": {
       "product-promo": {
@@ -212,22 +212,22 @@ const en = {
           "done": "Planned the product scenes."
         },
         "produce": {
-          "active": "Creating visuals and captions…",
-          "done": "Created the visuals and captions."
+          "active": "Adding the product title…",
+          "done": "Added the product title."
         }
       },
       "talking-head": {
         "understand": {
-          "active": "Reading the recording…",
-          "done": "Transcribed the recording."
+          "active": "Reviewing the footage…",
+          "done": "Reviewed the footage."
         },
         "storyboard": {
-          "active": "Marking key moments and pauses…",
-          "done": "Marked key moments and pauses."
+          "active": "Timing the title…",
+          "done": "Timed the title."
         },
         "produce": {
-          "active": "Creating captions and titles…",
-          "done": "Created captions and titles."
+          "active": "Adding the label and title…",
+          "done": "Added the label and title."
         }
       },
       "text-animation": {
@@ -250,8 +250,8 @@ const en = {
           "done": "Structured the explanation."
         },
         "storyboard": {
-          "active": "Designing narration and visuals…",
-          "done": "Designed the narration and visuals."
+          "active": "Pairing the explanation with Moon footage…",
+          "done": "Paired the explanation with Moon footage."
         },
         "produce": {
           "active": "Assembling the explainer video…",
@@ -261,95 +261,54 @@ const en = {
     }
   },
   "story": {
-    "suggestion": "Let’s open with the product in use, shorten the introduction, and keep the rest. Does that work for you?",
-    "confirmation": "Yes, go ahead.",
-    "opening": "Yes. I’ll identify the most useful thing to show, then shape the story around a problem, a product demonstration, and a clear takeaway.",
-    "storyboardSummary": "The storyboard is ready: open with the problem, show the core workflow, then connect it back to the product’s value. I’ll build the scenes in that order.",
-    "workSteps": {
-      "understand": {
-        "active": "Clarifying the video’s goal…",
-        "done": "Clarified the video’s goal."
-      },
-      "storyboard": {
-        "active": "Designing the storyboard…",
-        "done": "Designed the storyboard."
-      },
-      "produce": {
-        "active": "Creating visuals and captions…",
-        "done": "Created the visuals and captions."
-      }
-    },
-    "revisionOpening": "Got it. I’ll change only the opening and the original introduction, keeping the later scenes intact.",
-    "revisionLocation": "The opening and introduction are located. Only those two parts change; the later scenes stay as they are.",
-    "revisionSummary": "The opening now shows the product in use, and the introduction is shorter. I’m checking the transition into the existing scenes.",
-    "revisionSteps": {
-      "locate": {
-        "active": "Locating the opening and introduction…",
-        "done": "Located the opening and introduction."
-      },
-      "revise": {
-        "active": "Reordering the opening scenes…",
-        "done": "Reordered the opening scenes."
-      },
-      "check": {
-        "active": "Assembling and checking the new version…",
-        "done": "Assembled and checked the new version."
-      }
-    },
-    "redelivery": "Here is another version. Take a look.",
-    "redeliveryTitle": "Another version. Keep the conversation going.",
-    "demoLabel": "Conversation demonstration",
-    "refineTitle": "Tell us what to change.",
-    "deliveryTitle": "Your video. In the conversation.",
-    "delivery": "Here is the video. Take a look.",
-    "followup": "What would you like to change?",
-    "eyebrow": "You know what you want to say. Start there.",
+    "demoLabel": "Conversational video creation demo",
     "idea": {
-      "title": "Tell us about your video.",
-      "description": "You do not need a production brief or a special prompt. Tell us what you have in mind."
+      "title": "Tell us about your video."
     },
-    "watch": {
-      "title": "See how it comes together.",
-      "description": "Discuss the direction, review the storyboard, then watch the video."
-    },
-    "revise": {
-      "title": "Something not quite right? Say so.",
-      "description": "Ask for changes in the same conversation. No editing software to learn."
-    },
-    "request": "I want a video that shows people what my product does. Can you help me work out the idea?",
+    "deliveryTitle": "From storyboard to video.",
+    "refineTitle": "Ask for a change in the same chat.",
+    "request": "Can you make a short video that shows what my product does?",
     "attachments": {
       "label": "Example attachments",
       "image": "product-image.png",
       "document": "product-brief.pdf"
     },
-    "feedback": "The opening is too long. Start by showing the product in use.",
-    "posterAlt": "Frame from the public product video sample",
-    "sampleNote": "Public sample · Storyboard and production interactions are illustrated.",
-    "revisionNote": "Example revision request. This preview does not show a verified before-and-after result.",
-    "scroll": "Keep scrolling",
-    "skip": "See video examples"
+    "storyboardSummary": "Let’s open with the problem, show the product in use, then end with what it helps people do.",
+    "rendering": "Making the video…",
+    "delivery": "Here’s the first cut.",
+    "posterAlt": "Preview of the first cut",
+    "feedback": "Show the product in use right at the start.",
+    "revisionOpening": "I’ll move the demo to the opening and shorten the original intro to one line.",
+    "followup": "What would you like to change?",
+    "scroll": "Keep scrolling"
+  },
+  "skills": {
+    "label": "Skills",
+    "titleFirst": "One-click skills,",
+    "titleSecond": "ready for your next video",
+    "create": "Create with {{name}}",
   },
   "faqSection": {
     "title": "A few things you might be wondering.",
     "experience": {
-      "question": "Do I need to know how to edit?",
-      "answer": "No. Use the conversation to explain what you want to make and request changes. There is no software or plugin to install."
+      "question": "How do I make my first video?",
+      "answer": "Tell Rookie Cut what you want to make and who it’s for. Try “Help me make a 30-second video introducing my new product.” You can review the storyboard before production starts."
     },
     "material": {
-      "question": "What if I do not have material ready?",
-      "answer": "You can start by discussing an idea. If the video needs a website, text, images or footage, the assistant will ask for what is needed."
+      "question": "Can I start with just an idea?",
+      "answer": "Yes. Describe your idea and Rookie Cut will ask for any material it needs. If you already have a script, images, or footage, add them to the chat. For a product video, you can also share a website link."
     },
     "revision": {
-      "question": "Can I change the video afterwards?",
-      "answer": "Yes. Explain what you want to adjust in chat. Available changes depend on the video; requests that require new production can use credits."
+      "question": "Can I change just one part of the video?",
+      "answer": "Point to the moment or scene in the same chat and say what you want changed. For example, “Shorten the title at 0:05” or “Move the product close-up to the opening.”"
     },
     "pricing": {
-      "question": "How much does it cost?",
-      "answer": "New accounts get 1,000 credits, with no card needed to sign up. Conversation itself is free. Video generation and production use credits, with estimates shown before production. During beta, add credits when needed without a subscription. Projects and purchased credits stay after beta."
+      "question": "When do I use credits?",
+      "answer": "Discussing ideas and edits is free. Making a video or producing a revised version uses credits, and you can check the estimate before production. During beta, you can top up as needed without a subscription."
     },
     "download": {
-      "question": "Can I preview and download the video?",
-      "answer": "You can preview and download the delivered video when production is complete. The product is in beta, and production reliability is still being improved."
+      "question": "How do I download my finished video?",
+      "answer": "Open the delivered video in the chat to preview it, then click download to save it as an MP4."
     }
   },
   "footerItems": {
@@ -647,11 +606,7 @@ const en = {
   skills: {
     external: "External Skill",
     builtin: {
-      "launch-film": {
-        name: "Website launch film",
-        shortName: "Launch film",
-        description: "Turn a captured website into a guided launch film with a fixed narrative.",
-      },
+// Skills are internal video creation methods, not user-installed products.
       "promo-video": {
         name: "Promotional video",
         shortName: "Promotional video",
@@ -761,10 +716,11 @@ const en = {
   projectMenu: {
     open: "Project menu",
     backToProjects: "Back to projects",
-    // The pre-generation top-left form (2026-09-02 形态机): before the first
-    // run the menu is just a back pill; the full ProjectMenu arrives with the
-    // canvas.
     backShort: "Projects",
+  },
+  projectHeader: {
+    chat: "Chat",
+    canvas: "Canvas",
   },
   personas: {
     title: "Personas",
@@ -1034,14 +990,6 @@ const en = {
   results: {
     title: "Results",
     prompt: "Original prompt",
-    tabs: {
-      clips: "Clips",
-      post: "Post",
-      quotes: "Quotes",
-      quoteFrame: "Quote frame",
-      carousel: "Carousel",
-      article: "Article",
-    },
     dock: {
       focus: "Working on: {{name}}",
       // The hidden state (2026-09-02 形态机): the user's gesture folds the
@@ -1633,12 +1581,6 @@ const en = {
       restore_version: "Restore version",
     },
     choicePlaceholder: "Something else…",
-    derivativeTypes: {
-      post: "Social post",
-      quotes: "Quote card",
-      article: "Article",
-      carousel: "Carousel",
-    },
     legacyStepSummaries: {
       uploaded: "Uploaded",
     },
@@ -1651,6 +1593,8 @@ const en = {
       output_preparation: "Create output",
       output_resume: "Prepared output reuse",
       render_queue: "Submit to render queue",
+      produce_video: "Producing your video…",
+      prepare_narration: "Preparing narration…",
       render: "Render",
       upload: "Upload",
       delivery: "Delivery check",
@@ -1662,23 +1606,11 @@ const en = {
       understand: "Understanding your material…",
       interrupt: "Waiting for your direction…",
       plan: "Planning the content…",
-      select_clips: "Generating your clips…",
-      revise_script: "Writing the script…",
       render: "Rendering your video…",
       stills: "Extracting key frames…",
       video: "Processing your video…",
-      remove_filler: "Removing filler words…",
       add_music: "Scoring your clips…",
-      dub_clip: "Dubbing your voice…",
-      translate_clip: "Translating your clip…",
-      write_post: "Writing your social post…",
-      write_quotes: "Creating your quote cards…",
-      write_carousel: "Building your carousel…",
-      write_article: "Writing your article…",
-      synth_talk_video: "Generating your video…",
-      align_stills: "Timing your transcript…",
       verify: "Checking quality…",
-      materialize_source: "Preparing your full video…",
     },
     qa: {
       q: "Q",
@@ -1702,14 +1634,7 @@ const en = {
     anchorCards: {
       view: "View {{name}}",
       types: {
-        clip: "Clip",
-        film: "Film",
         video: "Video",
-        post: "Social post",
-        quotes: "Quote card",
-        quote_frame: "Quote card",
-        carousel: "Carousel",
-        article: "Article",
       },
       words: "~{{count}} words",
     },
@@ -1718,12 +1643,6 @@ const en = {
     },
     outputViewer: {
       title: "Delivered output",
-      previous: "Previous output",
-      next: "Next output",
-      position: "{{current}} / {{total}}",
-      previousSlide: "Previous slide",
-      nextSlide: "Next slide",
-      slidePosition: "Slide {{current}} / {{total}}",
       selectRegion: "Select region",
       referenceAsset: "Reference this asset",
       regionHint: "Drag to select a region of this frame",
@@ -1732,47 +1651,26 @@ const en = {
       reselectRegion: "Reselect",
       referenceRegion: "Reference region",
       details: "Output details",
-      allOutputs: "All delivered outputs",
       zoomIn: "Zoom in",
       zoomOut: "Zoom out",
       unavailable: "Output unavailable",
       unavailableDetail: "This exact delivered Output is no longer available. No newer version has been substituted.",
     },
-    openInEditor: "Open in editor",
     uploadFile: "Upload file",
     uploading: "Uploading...",
     composerPlaceholder: "Describe what you want to generate...",
     composerFollowUpPlaceholder: "Ask a follow-up, e.g. 'make the hook shorter' or 'add German version'...",
     emptyStateSubtitle: "Upload the video or text from a talk, meeting or interview — we remember your content and style, and make whatever you ask for.",
     noResultsYet: "Results will appear here...",
-    quickActions: {
-      regenerateHooks: "Regenerate hooks",
-      addLanguage: "Add {{language}} version",
-      renderAllClips: "Render all clips",
-      exportAll: "Export all",
-      makeShorter: "Make shorter",
-      makeLonger: "Make longer",
-    },
     resultActions: {
       edit: "Edit",
-      copy: "Copy",
       regenerate: "Regenerate",
-      render: "Render video",
       export: "Export",
     },
     recentChats: "Recent conversations",
     noRecentChats: "No conversations yet",
   },
   generationOverlay: {
-    tools: {
-      translate_clip: "Captioned version",
-      dub_clip: "Voice-over version",
-      remove_filler: "Remove filler words",
-      add_music: "Background music",
-    },
-    derive: {
-      bilingual: "bilingual",
-    },
     planVersion: "Plan v{{n}}",
     versionRestore: "Restore this version",
     versionRestored: "Plan v{{n}} restored — it's the current plan now.",

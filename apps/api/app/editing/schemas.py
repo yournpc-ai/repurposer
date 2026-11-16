@@ -232,6 +232,26 @@ class CaptionDerivation(BaseModel):
         return self
 
 
+class SourceCaptionDerivation(BaseModel):
+    """Native caption text and timing from frozen ASR or narration alignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID
+    snapshot_digest: str = Field(min_length=64, max_length=64)
+    sentence_id: str = _ID
+    source_range: TimeRange
+    source_text_digest: str = Field(min_length=64, max_length=64)
+    alignment: Literal[
+        "faster-whisper-source-v1",
+        "faster-whisper-script-v1",
+        "minimax-t2a-v2-sentence-v1",
+    ] = "faster-whisper-source-v1"
+    state: Literal["derived", "independent"] = "derived"
+    narration_alignment_id: UUID | None = None
+    narration_content_digest: str | None = Field(default=None, min_length=64, max_length=64)
+
+
 def speech_text_digest(text: str) -> str:
     """Exact reviewed-text identity (whitespace is content, not normalized away)."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -249,7 +269,7 @@ class TextObject(BaseModel):
     opacity: float = _OPACITY
     segmentation_version: str = SEGMENTATION_VERSION
     layout_version: str = LAYOUT_VERSION
-    caption: CaptionDerivation | None = None
+    caption: CaptionDerivation | SourceCaptionDerivation | None = None
 
 
 class ImageObject(BaseModel):

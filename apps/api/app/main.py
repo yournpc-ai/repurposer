@@ -26,14 +26,12 @@ from app.pipeline.routes import (
     outputs,
     persona_assets,
     projects,
-    recipes,
     runs,
     staging,
 )
 from app.platform.configs import reconcile_configs
 from app.platform.payment_routes import router as payment_router
 from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
-from app.operations.routes import router as operations_router
 from app.ui_locale import capture_ui_language
 
 # Composition-root seam wiring (ADR-087 §6): the Agent Interface subscribes
@@ -270,10 +268,8 @@ app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 # chat turn) wearing an /outputs URL — the chat layer owns its transport
 # (Phase 5 dependency direction); the URL is unchanged.
 app.include_router(outputs_regenerate_router, prefix="/api/v1/outputs", tags=["outputs"])
-app.include_router(operations_router, prefix="/api/v1/outputs", tags=["operations"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
-app.include_router(recipes, prefix="/api/v1/recipes", tags=["recipes"])
 # Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
 # resource, not the module — DISTRIBUTION.md §1.1)
 app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])

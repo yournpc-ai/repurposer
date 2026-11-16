@@ -1,9 +1,9 @@
 "use client"
 
-/** MediaLightbox — the shared exact-Output viewer. The host owns selection;
+/** Shared exact-media viewer. The host owns the single persisted reference;
  * this surface supplies the full-screen stage, gestures and return flight. */
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { motion, useMotionValue } from "motion/react"
 
@@ -23,25 +23,12 @@ export type { MediaChip, MediaLightboxData } from "./mediaLightboxTypes"
 export function MediaLightbox({
   data,
   onOpenChange,
-  navigation,
-  gallery,
   actions,
   getSlot,
   regionSelection,
 }: {
   data: MediaLightboxData | null
   onOpenChange: (open: boolean) => void
-  navigation?: {
-    index: number
-    total: number
-    onPrevious: () => void
-    onNext: () => void
-  }
-  gallery?: {
-    items: MediaLightboxData[]
-    activeId: string
-    onSelect: (outputId: string) => void
-  }
   actions?: ReactNode
   getSlot?: (slotId: string) => HTMLElement | null
   regionSelection?: MediaRegionSelectionControl
@@ -55,22 +42,9 @@ export function MediaLightbox({
     if (dataId) finalFocusRef.current = null
   }, [dataId])
   useEffect(() => {
-    // Mention / revise intentionally bypasses the return flight and focuses
-    // the composer. Reset the shared backdrop for the next opening.
     if (!data) veil.jump(0)
   }, [data, veil])
 
-  const items = useMemo(() => {
-    const source = gallery?.items.length ? gallery.items : data ? [data] : []
-    if (!data) return source
-    return source.map((item) => item.id && item.id === data.id
-      ? { ...item, ...data, thumbnail: data.thumbnail ?? item.thumbnail }
-      : item)
-  }, [data, gallery?.items])
-
-  const activeId = gallery?.activeId ?? data?.id
-  const start = items.findIndex((item) => item.id === activeId)
-  const resolvedStart = start >= 0 ? start : navigation?.index ?? 0
   const closeAndRestoreFocus = () => {
     finalFocusRef.current = data?.slotId ? getSlot?.(data.slotId) ?? null : null
     onOpenChange(false)
@@ -93,15 +67,15 @@ export function MediaLightbox({
         <DialogHeader className="sr-only">
           <DialogTitle>{data?.title}</DialogTitle>
         </DialogHeader>
-        {data && items.length > 0 ? (
+        {data ? (
           <MediaLightboxStage
-            items={items}
-            activeId={activeId}
-            start={resolvedStart}
+            items={[data]}
+            activeId={data.id}
+            start={0}
             actions={actions}
             getSlot={getSlot}
             regionSelection={regionSelection}
-            onNavigate={(id) => gallery?.onSelect(id)}
+            onNavigate={() => {}}
             onClosed={closeAndRestoreFocus}
             requestCloseRef={requestCloseRef}
             veil={veil}

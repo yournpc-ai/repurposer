@@ -36,9 +36,9 @@ describe("skill slash trigger", () => {
 describe("skill option filtering", () => {
   const options: SkillOption[] = [
     {
-      reference: { kind: "builtin", skill_id: "launch-film", version: "1" },
-      skill_id: "launch-film",
-      name: "Launch film",
+      reference: { kind: "builtin", skill_id: "promo-video", version: "1" },
+      skill_id: "promo-video",
+      name: "Promo video",
       description: "A website introduction",
       capabilities: ["storyboard"],
     },
@@ -60,13 +60,12 @@ describe("skill option filtering", () => {
   it("searches localized task names and keeps exact no-network references", () => {
     const builtins = localBuiltinSkillOptions()
     expect(builtins.map((option) => option.reference)).toEqual([
-      { kind: "builtin", skill_id: "launch-film", version: "1.4.0" },
+      { kind: "builtin", skill_id: "promo-video", version: "bdd94be16d60fa8f" },
       { kind: "builtin", skill_id: "talking-head-video", version: "1.0.0" },
       { kind: "builtin", skill_id: "text-animation", version: "1.0.0" },
       { kind: "builtin", skill_id: "knowledge-explainer", version: "1.0.0" },
     ])
     const names: Record<string, string> = {
-      "skills.builtin.launch-film.name": "网站发布视频",
       "skills.builtin.promo-video.name": "产品推广视频制作",
       "skills.builtin.talking-head-video.name": "口播动效视频制作",
       "skills.builtin.text-animation.name": "文字动画视频制作",

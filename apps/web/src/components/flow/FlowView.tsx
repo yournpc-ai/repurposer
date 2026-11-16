@@ -30,7 +30,7 @@ import "@xyflow/react/dist/style.css"
 import "./flow.css"
 
 import { FlowEdge, type FlowEdgeType } from "./FlowEdge"
-import { FlowNodeCard, nodeRenderActive, type FlowCardNode } from "./FlowNodeCard"
+import { FlowNodeCard, type FlowCardNode } from "./FlowNodeCard"
 import { cameraPanDelta, clusterGesture } from "./camera"
 import { BIRTH_STAGGER_MS, declaredHandles, flowNodeSize, layoutFlow } from "./layout"
 import type { FlowGroup, FlowNode, FlowViewProps, GraphEdgeType, OutPortType } from "./types"
@@ -56,9 +56,7 @@ function productionPort(n: FlowNode): OutPortType {
     if (t === "image" || t === "slides") return "image"
     return "text"
   }
-  // modifier / materialize (transitional read-face words): the frame class
-  // names the product medium (clip family = media, text family = prose).
-  return n.spec?.frame_class === "text" ? "text" : "video"
+  return "text"
 }
 
 /** 出锚产区律 (2026-10-11 拍板): the out anchor parks at ITS production
@@ -292,11 +290,6 @@ function panLockedCenter(
   void rf.setCenter(cx, cy, { zoom, duration })
 }
 
-/** An edge endpoint's busy beat: running status OR render-in-flight. */
-function nodeBusy(n: FlowNode | undefined): boolean {
-  return !!n && (n.status === "running" || nodeRenderActive(n))
-}
-
 function CameraBeats({
   nodes,
   beat,
@@ -334,7 +327,6 @@ function CameraBeats({
 }) {
   const rf = useReactFlow()
   const prevIdsRef = useRef<ReadonlySet<string> | null>(null)
-  const prevOutsRef = useRef<ReadonlyMap<string, number> | null>(null)
   const armedTokenRef = useRef<number | null>(null)
 
   /** The cluster's RENDERED frames (projection seat above) — ids with no
@@ -421,21 +413,12 @@ function CameraBeats({
     const ids = new Set(nodes.map((n) => n.id))
     const prev = prevIdsRef.current
     prevIdsRef.current = ids
-    const outCounts = new Map(nodes.map((n) => [n.id, n.outputs?.length ?? 0]))
-    const prevOuts = prevOutsRef.current
-    prevOutsRef.current = outCounts
     // The baseline frame is never a beat (refresh / reconnect / the heal
     // remount render instantly — 铁律).
     if (prev === null) return
     if (!beat || armedTokenRef.current !== beat.token) return
     const newborns = nodes.filter((n) => !prev.has(n.id))
-    // 产出落地跟随 (2026-09-24 user ruling): a node whose product count
-    // GREW is a landing the camera follows too — outputs fill EXISTING
-    // nodes, so the id-diff alone never saw the run's harvest arrive.
-    const filled = nodes.filter(
-      (n) => (n.outputs?.length ?? 0) > (prevOuts?.get(n.id) ?? 0),
-    )
-    const targets = [...newborns, ...filled]
+    const targets = newborns
     if (targets.length === 0) return // a racing no-delta fetch — arm survives
     const el = wrapperRef.current
     if (!el || !el.clientWidth || !el.clientHeight) return onConsumed?.()
@@ -686,17 +669,10 @@ export function FlowView({
   edges,
   selectedId = null,
   onSelect,
-  onOutputAction,
-  onQuoteOutput,
   onAssetAction,
   onExpandMedia,
-  onDisplayChange,
-  onPromptEdit,
-  pendingProgram = null,
-  promptConfirm = null,
-  onPaneClick,
-  onLineageHover,
   lineageHover = null,
+  onPaneClick,
   navigation = "fit",
   controls = false,
   controlsClassName,
@@ -804,31 +780,9 @@ export function FlowView({
         bornIndex: bornRanks.get(n.id),
         selected: n.id === selectedId,
         ports: portsByNode.get(n.id),
-        onOutputAction,
-        onQuoteOutput,
         onAssetAction,
         onExpandMedia,
-        onDisplayChange,
-        onPromptEdit,
-        onLineageHover,
         lineageHover,
-        pendingProgram:
-          pendingProgram && pendingProgram.nodeId === n.id
-            ? pendingProgram.text
-            : null,
-        promptConfirm:
-          promptConfirm && promptConfirm.nodeId === n.id
-            ? {
-                blastLabels: promptConfirm.blastLabels,
-                blastSingle: promptConfirm.blastSingle,
-                low: promptConfirm.low,
-                high: promptConfirm.high,
-                unquoted: promptConfirm.unquoted,
-                balance: promptConfirm.balance,
-                onConfirm: promptConfirm.onConfirm,
-                onCancel: promptConfirm.onCancel,
-              }
-            : null,
       },
       draggable: false,
       connectable: false,
@@ -859,20 +813,14 @@ export function FlowView({
           semantic: e.semantic,
           edgeType: e.edgeType,
           drawDelay: bornAt >= 0 ? bornAt * BIRTH_STAGGER_MS + 240 : null,
-          // Live work = a running node OR a render-in-flight clip output
-          // (2026-09-24 统一: the render beat rides the same packet — the
-          // producing step flips the node done while the render runs
-          // async, and the 转写-era status-only wiring went silent there).
-          active:
-            nodeBusy(nodes.find((n) => n.id === e.to)) ||
-            nodeBusy(nodes.find((n) => n.id === e.from)),
+          active: false,
         },
         selectable: false,
         focusable: false,
       }
     })
     return { rfNodes, rfEdges, layout, sizes, bornRanks }
-  }, [nodes, edges, selectedId, bornIds, onOutputAction, onQuoteOutput, onAssetAction, onExpandMedia, onDisplayChange, onPromptEdit, pendingProgram, promptConfirm, onLineageHover, lineageHover])
+  }, [nodes, edges, selectedId, bornIds, onAssetAction, onExpandMedia, lineageHover])
 
   if (!mounted) {
     return <div className={cn("w-full", className)} aria-hidden />

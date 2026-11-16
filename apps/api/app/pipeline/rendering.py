@@ -38,17 +38,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import ProjectStatus, RenderStatus, WorkflowStatus
+from app.models.schemas import RenderStatus, WorkflowStatus
 from app.models.tables import Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.errors import user_line
 from app.pipeline.render_probe import (
     PROBE_OUTPUT_MISSING,
     ProbeViolation,
     probe_expectation_for,
-    probe_rendered_sidecar,
     probe_rendered_video,
 )
-from app.pipeline.tracks import resolve_spec_urls
 from app.providers.storage import (
     delete,
     download_to_temp,
@@ -103,7 +101,7 @@ def _absolutize(spec: dict[str, Any]) -> dict[str, Any]:
     # Registry fold (ADR-044): the slots to resolve are each track's declared
     # url_fields — a newly registered track's URLs absolutize with zero changes
     # here.
-    return resolve_spec_urls(spec, _resolve_url)
+    raise ValueError("Only a video-spec can be rendered")
 
 
 async def _stamp_render_failure(output_id: UUID, failure: dict[str, Any]) -> None:
@@ -130,9 +128,7 @@ async def _stamp_render_failure(output_id: UUID, failure: dict[str, Any]) -> Non
         )
 
 
-async def _probe_artifacts(
-    spec: dict[str, Any], video_key: str, srt_key: str | None
-) -> list[ProbeViolation]:
+async def _probe_artifacts(spec: dict[str, Any], video_key: str) -> list[ProbeViolation]:
     """放行闸③ (MG D4 / 禁止事项 10 — 禁无文件校验的成功态): download the fresh
     artifacts and probe them BEFORE the row may settle COMPLETED. ONE seat for
     both spec families; the check items dispatch on ``spec.family``
@@ -146,7 +142,6 @@ async def _probe_artifacts(
     """
     expect = probe_expectation_for(spec)
     video_path: Path | None = None
-    srt_path: Path | None = None
     try:
         try:
             video_path = await download_to_temp(video_key)
@@ -160,38 +155,9 @@ async def _probe_artifacts(
                 )
             ]
         violations = await asyncio.to_thread(probe_rendered_video, video_path, expect)
-        # Caption sidecar (clip family only — the film family renders video
-        # alone): the non-empty bar mirrors the renderer, which writes the
-        # srt from spec.caption_track alone (empty track → zero-byte VALID
-        # srt); a non-empty track with a missing/empty sidecar is the broken
-        # delivery this gate exists to catch.
-        cues = bool(spec.get("caption_track"))
-        if srt_key is None:
-            if cues and not violations:
-                violations.append(
-                    ProbeViolation(
-                        PROBE_OUTPUT_MISSING,
-                        "caption track is non-empty but the render returned no srt",
-                    )
-                )
-        elif not violations:
-            try:
-                srt_path = await download_to_temp(srt_key)
-            except Exception as e:  # noqa: BLE001
-                return [
-                    ProbeViolation(
-                        PROBE_OUTPUT_MISSING,
-                        f"srt object unreadable from storage: {type(e).__name__}: {e}",
-                    )
-                ]
-            violations.extend(
-                await asyncio.to_thread(
-                    probe_rendered_sidecar, srt_path, allow_empty=not cues
-                )
-            )
         return violations
     finally:
-        for p in (video_path, srt_path):
+        for p in (video_path,):
             if p is not None:
                 p.unlink(missing_ok=True)
 
@@ -391,7 +357,7 @@ async def resolve_upload_retry(
             output is None
             or output.project_id != project.id
             or output.archived_at is not None
-            or output.type not in ("clip", "video")
+            or output.type != "video"
             or output.render_spec is None
             or output.render_status != RenderStatus.FAILED
             or run.status != WorkflowStatus.FAILED
@@ -544,24 +510,8 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         # Snapshot everything the render + terminal write need as plain data —
         # the ORM objects die with this session.
         spec = _absolutize(copy.deepcopy(output.render_spec))
-        # Video subtitles burn into the picture; there is no sidecar.
-        no_sidecar = spec.get("family") == "video"
         files = dict(output.files or {})
         project_id = output.project_id
-        # 素材源缓存桥 (2026-10-07): the render service stages sources into the
-        # SAME shared cache the api side reads (stage.ts ↔ storage
-        # download_to_cache, one sha1 law) — carry the object key on the
-        # ENVELOPE (api↔render, never clip-spec) so staging hits the bytes the
-        # processing chain already downloaded instead of re-pulling the source.
-        source_key: str | None = None
-        source_asset_id = (spec.get("source") or {}).get("asset_id")
-        if source_asset_id:
-            from app.models.tables import Asset  # deferred: rendering stays a leaf
-
-            source_asset = await db.get(Asset, UUID(str(source_asset_id)))
-            if source_asset is not None and source_asset.file_url:
-                source_key = str(source_asset.file_url)
-
         request_step = (
             await db.execute(
                 select(WorkflowStep)
@@ -584,48 +534,24 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         if upload_only_recovery else {"stage": "render", "codes": ["RENDER_FAILED"]}
     )
     old_video_key = files.get("video")
-    old_srt_key = files.get("srt")
     try:
         render_ts = int(time.time())
         video_key = await get_output_path(
             project_id, user_id, f"{output_id}-{render_ts}.mp4"
         )
-        # Video renders without an SRT sidecar.
-        srt_key = (
-            None
-            if no_sidecar
-            else await get_output_path(project_id, user_id, f"{output_id}-{render_ts}.srt")
-        )
         video_put_url = await presign_upload(
             video_key, content_type="video/mp4", ttl=max(3600, settings.render_timeout_seconds + 600)
-        )
-        srt_put_url = (
-            None
-            if srt_key is None
-            else await presign_upload(srt_key, content_type="text/srt", ttl=max(3600, settings.render_timeout_seconds + 600))
         )
         payload = {
             "spec": spec,
             "render_id": str(output_id),
             **({"upload_only": True} if upload_only else {}),
-            **({"source_key": source_key} if source_key else {}),
             "outputs": {
                 "video": {
                     "key": video_key,
                     "put_url": video_put_url,
                     "content_type": "video/mp4",
                 },
-                **(
-                    {
-                        "srt": {
-                            "key": srt_key,
-                            "put_url": srt_put_url,
-                            "content_type": "text/srt",
-                        }
-                    }
-                    if srt_key is not None
-                    else {}
-                ),
             },
         }
         # trust_env=False: httpx otherwise adopts the macOS SYSTEM proxy
@@ -662,7 +588,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         # object stays in storage as the forensic record (its key rides the
         # failure detail and the structlog event).
         violations = await _probe_artifacts(
-            spec, data["video"], data.get("srt") if srt_key is not None else None
+            spec, data["video"]
         )
         if violations:
             codes = sorted({v.code for v in violations})
@@ -703,7 +629,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
                 logger.warning(
                     "render_fenced", output_id=str(output_id), tail="probe"
                 )
-                for orphan_key in (k for k in (video_key, srt_key) if k):
+                for orphan_key in (k for k in (video_key,) if k):
                     try:
                         await delete(orphan_key)
                     except Exception as e:  # noqa: BLE001
@@ -738,7 +664,6 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
                     files={
                         **files,
                         "video": data["video"],
-                        **({"srt": data["srt"]} if data.get("srt") else {}),
                     },
                     render_status=RenderStatus.COMPLETED,
                     render_error=None,
@@ -750,7 +675,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
             await db.commit()
         if claimed.rowcount == 0:
             logger.info("render_superseded", output_id=str(output_id))
-            for orphan_key in (k for k in (video_key, srt_key) if k):
+            for orphan_key in (k for k in (video_key,) if k):
                 try:
                     await delete(orphan_key)
                 except Exception as e:  # noqa: BLE001
@@ -772,7 +697,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         # Best-effort cleanup of the previous render's objects. Only bare
         # keys are deletable; legacy /api/v1 paths and absolute URLs are
         # skipped (deleting them would be a no-op anyway).
-        for old_key in (old_video_key, old_srt_key):
+        for old_key in (old_video_key,):
             if old_key and not old_key.startswith(("http://", "https://", "/")):
                 try:
                     await delete(old_key)

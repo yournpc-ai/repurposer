@@ -22,7 +22,6 @@ The parameter semantics live in the params models' Field descriptions; the
 asking strategy / naming / disclosure rules stay in the system templates.
 """
 
-import json
 import re
 from copy import deepcopy
 from dataclasses import replace
@@ -34,7 +33,6 @@ from app.models.schemas import (
     ChatAskArgs,
     AnnotateNarrationArgs,
     EditGraphArgs,
-    EditOutputArgs,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
@@ -44,7 +42,6 @@ from app.models.schemas import (
     ProposeTasksArgs,
     RetryUploadArgs,
     ReviewVideoArgs,
-    ReviseOutputArgs,
     ReviseVideoActionArgs,
     ReviseVideoArgs,
     SearchSfxArgs,
@@ -323,7 +320,10 @@ _PREPARE_NARRATION_TOOL = ChatTool(
         "already-fixed VideoNarration original. If none exists, present exactly one "
         "prepare_narration task through the ordinary plan/Start authorization path; "
         "this Chat tool never calls a synthesis provider directly. The worker produces "
-        "complete sentence/word alignment; PENDING or PROCESSING is not yet aligned."
+        "complete sentence/word alignment; PENDING or PROCESSING is not yet aligned. "
+        "To reuse a newly synthesized narration, pass its exact text, voice_id and language "
+        "without audio_asset_id; the frozen original is reused without a new Run. Only an "
+        "existing user recording needs an explicit @asset reference and final script."
     ),
     params_model=PrepareNarrationArgs,
 )
@@ -640,7 +640,8 @@ def video_round_tools(
         "resolve_target": {"ask_user", "answer", "get_video_version", "read_conversation_context"},
         "draft_build": {
             "ask_user", "answer", "read_conversation_context",
-            "get_web_page", "get_asset", "list_project_media",
+            "get_understanding", "get_web_page", "get_asset", "list_project_media",
+            "get_graph", "get_node", "edit_graph",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
             "prepare_video_materials", "capture_web", "design_video", "review_working_draft",
             "search_music", "show_music_candidates", "select_music",
@@ -910,6 +911,17 @@ PLAN_TOOLS = [
         params_model=PlanAskArgs,
     ),
     ChatTool(
+        name="edit_graph",
+        description=(
+            "CRUD for the user's explicitly opened manual Canvas. One terminal call must contain "
+            "ALL related operations: create nodes and connect them in the SAME call "
+            "(add_node.after for new nodes, or a connect op). Edit content, disconnect "
+            "and delete as requested. Never adds task/product projections, starts a Run "
+            "or opens the Canvas."
+        ),
+        params_model=EditGraphArgs,
+    ),
+    ChatTool(
         name="start_run",
         description=(
             "Start the confirmed plan's run. Only when the user confirms "
@@ -934,13 +946,7 @@ PLAN_TOOLS = [
     ),
 ]
 
-# The chat path (post-run projects) — the terminal proposal states:
-# task_list → propose_tasks, wiring → edit_graph, craft → revise_output,
-# precise edit → edit_output, ask → ask_user, answer → answer.
-# (Final Hardening B1, 2026-09-24: the raw-ops verb ``apply_edit_ops`` is
-# RETIRED — the Agent's only edit entry is edit_output's controlled enum;
-# raw clip-spec ops never enter the LLM vocabulary. The REST operations
-# door stays for the editor surface.)
+# Chat terminal actions: production, manual Graph CRUD, recovery and answers.
 CHAT_TOOLS = [
     ChatTool(
         name="propose_tasks",
@@ -950,15 +956,15 @@ CHAT_TOOLS = [
     ChatTool(
         name="edit_graph",
         description=(
-            "Revise the project's persistent graph (add_node / connect / "
-            "edit_prompt / delete_node / run). A revision inside "
-            "the already-confirmed work re-fills the affected subgraph "
-            "directly; one that adds new paid work docks first — the "
-            "context's confirmation settings key whether it then runs on "
-            "presentation or waits for the user's confirmation."
+            "CRUD for the user's explicitly opened manual Canvas. One terminal call must contain "
+            "ALL related operations: create nodes and connect them in the SAME call "
+            "(add_node.after for new nodes, or a connect op). Edit content, disconnect "
+            "and delete as requested. Never adds task/product projections, starts a Run "
+            "or opens the Canvas."
         ),
         params_model=EditGraphArgs,
     ),
+    # Production and recovery use the current Composition and Run contracts.
     ChatTool(
         name="retry_upload",
         terminal=False,
@@ -969,39 +975,7 @@ CHAT_TOOLS = [
         ),
         params_model=RetryUploadArgs,
     ),
-    # iter-3 S3 (N-58, ADR-089 §6): the craft-level revision verb — product
-    # semantics (a plan / an output + the user's words), NEVER wiring ops.
-    ChatTool(
-        name="revise_output",
-        description=(
-            "Revise an already-produced work's CRAFT (the how: 'plan 2 的字幕"
-            "太长了', 'make the hook sharper') — targeted by the user's "
-            "pointing (plan_ref relayed verbatim, or the @output pin). The "
-            "system routes the target, rewrites the affected programs, and "
-            "reruns inside the confirmed scope; new paid work re-docks as a "
-            "mini decision package. A plan's DELIVERABLES change (what it "
-            "makes) is revise_plan, never this."
-        ),
-        params_model=ReviseOutputArgs,
-    ),
-    # 精确编辑迭代 S3 (N-59, ADR-090): the PRECISE edit verb — mechanically
-    # executable changes only, the controlled enum; raw ops never surface.
-    ChatTool(
-        name="edit_output",
-        description=(
-            "Edit an already-produced clip PRECISELY — a mechanically "
-            "executable change: 'delete this line' (remove_range, params.quote "
-            "= the words verbatim) / 'N seconds shorter' (set_trim, "
-            "params.seconds) / 'captions to karaoke' (set_caption_style, "
-            "params.style = a preset from list_caption_styles) / 'retitle to X' "
-            "(set_title, params.title). Target by the @output pin (output_id) "
-            "or the plan ordinal (plan_ref verbatim). The system resolves the "
-            "quote to seconds, applies, and re-renders. An open-ended craft "
-            "ask ('make it tighter') goes to revise_output; a change you "
-            "cannot name mechanically goes to ask_user — never guess."
-        ),
-        params_model=EditOutputArgs,
-    ),
+    # Saved videos are revised only through the current Composition write door.
     ChatTool(
         name="ask_user",
         description=(
@@ -1031,49 +1005,17 @@ CHAT_TOOLS = [
 ]
 PLAN_READ_TOOLS = [
     *perception_chat_tools(
-        "get_understanding",
-        "get_asset",
-        "get_craft_skeleton",
-        "search_music",
-        "get_output_spec",
-        "list_caption_styles",
-        # 证据 reads (迭代一): material reads by family — a discovery goal's
-        # first turn is plan-path (fresh project), so the transcript evidence
-        # substrate rides here too (2026-09-22).
-        "search_transcript",
-        "get_segment",
-        "get_artifact",
-        # get_graph (ADR-111 §7): the plan-ready reveal shows the canvas BEFORE
-        # any run — the plan path's model must be able to read what it shows.
-        "get_graph",
-        # The web pair: a link can arrive on the very first turn (「这个网站你
-        # 看看？」/「帮我做支网站介绍短片」) — reading it is altitude-free.
-        "get_web_page",
-        "search_web",
+        "get_understanding", "get_asset", "search_music", "search_transcript",
+        "get_segment", "get_graph", "get_node", "get_web_page", "search_web", "list_project_media",
     ),
-    *perception_chat_tools("list_project_media"),
     *_video_project_tools(),
 ]
 CHAT_READ_TOOLS = [
     *perception_chat_tools(
-        "get_output_spec",
-        "get_node",
-        "get_understanding",
-        "list_caption_styles",
-        "search_music",
-        "get_run_status",
-        "list_runs",
-        "get_pending_plan",
-        "get_asset",
-        "get_craft_skeleton",
-        "search_transcript",
-        "get_segment",
-        "get_artifact",
-        "get_graph",
-        "get_web_page",
-        "search_web",
+        "get_understanding", "get_run_status", "list_runs", "get_pending_plan",
+        "get_asset", "search_music", "search_transcript", "get_segment", "get_graph",
+        "get_web_page", "search_web", "list_project_media",
     ),
-    *perception_chat_tools("list_project_media"),
     *_video_project_tools(),
 ]
 

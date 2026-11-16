@@ -93,10 +93,7 @@ from app.pipeline.trigger_events import (
     TRIGGER_WHITELIST,
     run_id_from_trigger_ref,
 )
-from app.platform.conversation_context import (
-    is_pending_plan,
-    latest_pending_question,
-)
+from app.platform.conversation_context import latest_pending_question
 
 logger = structlog.get_logger(__name__)
 
@@ -111,7 +108,9 @@ TRIGGER_DUMP_TYPE = "trigger_review"
 
 # Turn admission (交互完整性批 B, 2026-09-17; ADR-080 单一叙事者律升格 —
 # conversation-level turn ownership): a proactive turn NEVER overtakes an
-# in-flight user turn, and NEVER talks over a docked plan. The 2026-09-16
+# in-flight user turn, and a craft suggestion never replaces a docked plan.
+# Terminal run deliveries still land beside an unanswered plan: they report
+# an already-committed world fact and own the exact Output reference. The 2026-09-16
 # incident: the understanding warm fired 36s into the user's first plan
 # turn, the trigger's own session read an empty conversation (the user row
 # wasn't durable yet), and the review spoke blind — three off-request
@@ -664,13 +663,13 @@ async def run_trigger_turn(
                     "trigger_turn_deduped", trigger=trigger, ref=ref
                 )
                 return None
-            # A pending user decision owns the microphone. Run delivery still
-            # lands; craft suggestions never supersede that original question.
+            # Terminal run facts must reach the Chat even when an earlier Start
+            # left a confirmation Dock behind. The Run and its Output are already
+            # committed; suppressing this message loses the only video card.
             pending_question = await latest_pending_question(db, conversation_id)
-            if pending_question is not None and (
-                is_pending_plan(pending_question)
-                or trigger not in {TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED}
-            ):
+            if pending_question is not None and trigger not in {
+                TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED
+            }:
                 logger.info(
                     "trigger_turn_silenced_pending_question",
                     trigger=trigger,
@@ -824,12 +823,12 @@ async def run_trigger_turn(
             else:
                 return None
             # Recheck at landing because a user question may have docked while
-            # the proactive model call was running. Craft never replaces it.
+            # the proactive model call was running. Craft never replaces it;
+            # terminal run facts and their fixed product references still land.
             landing_question = await latest_pending_question(db, conversation_id)
-            if landing_question is not None and (
-                is_pending_plan(landing_question)
-                or trigger not in {TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED}
-            ):
+            if landing_question is not None and trigger not in {
+                TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED
+            }:
                 logger.info(
                     "trigger_turn_silenced_pending_question_at_landing",
                     trigger=trigger,

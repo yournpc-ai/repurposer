@@ -1,103 +1,32 @@
-"""Unified outputs read surface (ADR-030).
+"""Owned video reads and shared delivery semantics.
 
-``visible_outputs_stmt`` is THE filter every user-facing read path must use —
-results, library, export, and future MCP/gallery surfaces. Internal node
-artifacts (``INTERNAL_OUTPUT_TYPES``, e.g. the plan prelude's material_understanding
-/ storyboard) are node bookkeeping, never user products, and must not leak
-into any listing.
+Output rows remain internal media, execution and recovery facts. Chat delivery
+messages own their exact video references; these helpers never create a gallery.
 """
 
-from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from pydantic import ValidationError
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
-from pydantic import ValidationError
 
-from app.models.schemas import (
-    INTERNAL_OUTPUT_TYPES,
-    OutputResponse,
-    ProductionStage,
-    StepResponse,
-    RunResponse,
-    is_null_token,
-)
-from app.models.tables import CompositionVersion, Operation, Output, Publication, WorkflowStep, WorkflowRun
-from app.pipeline.graph import fold_estimates, node_for
+from app.models.schemas import OutputResponse, ProductionStage, RunResponse, StepResponse
+from app.models.tables import CompositionVersion, Output, Publication, WorkflowRun, WorkflowStep
+from app.pipeline.graph import fold_estimates
 from app.platform.billing import cost_usd, credits_at_ratio, estimate_usd_range
 from app.platform.configs import get_config
 
 
 def visible_outputs_stmt() -> Select:
-    """Base SELECT over user-facing outputs only (internal types excluded,
-    archived versions excluded — ADR-091: archived rows stay queryable
-    through the version chain, never in the default user face)."""
     return select(Output).where(
-        Output.type.notin_(INTERNAL_OUTPUT_TYPES),
+        Output.type == "video",
         Output.archived_at.is_(None),
     )
 
 
-# ---- 归档不变量 (ADR-091, N-59) -----------------------------------------------
-#
-# Wipe points never DELETE delivered products — they archive. The two pure
-# helpers below carry the partition/pairing law so the DB-side callers stay
-# mechanical and the law stays pure-testable.
-
-
-def partition_by_run(
-    rows: list[tuple[UUID, UUID, UUID | None]],
-    run_step_ids: set[UUID],
-) -> tuple[list[UUID], list[UUID]]:
-    """Split doomed rows into (physical, archive) by delivery status.
-
-    ``rows`` = (id, work_id, workflow_step_id) triples. A row produced by a
-    step of the CURRENT run is mid-production (a verify-bounce round — never
-    delivered, ADR-091 §3: no history rights, physical delete). Anything
-    else (an earlier run's delivered row, or a legacy NULL-step row) earns
-    the archive. Returns (physical_ids, archive_ids)."""
-    physical: list[UUID] = []
-    archive: list[UUID] = []
-    for row_id, _work_id, step_id in rows:
-        (physical if step_id in run_step_ids else archive).append(row_id)
-    return physical, archive
-
-
-def pair_work_inheritance(
-    archived: list[tuple[UUID, UUID]],
-    new_count: int,
-) -> list[UUID | None]:
-    """Positional work_id inheritance for a wipe's successors (ADR-091 §2):
-    the i-th newborn continues the i-th archived row's work (oldest first);
-    extra newborns start fresh works (None = the column default fires).
-    ``archived`` = (id, work_id) triples already ordered by created_at."""
-    chain = [work_id for _id, work_id in archived]
-    return [
-        chain[i] if i < len(chain) else None
-        for i in range(new_count)
-    ]
-
-
-async def archive_outputs(db: AsyncSession, ids: list[UUID]) -> None:
-    """The wipe door's archive half: stamp archived_at (the row, its files,
-    its operations journal and its publications all survive — ADR-091 §2).
-    Pending render mirrors of the doomed rows are skipped by the caller's
-    own cancel dance (unchanged); the claim query excludes archived rows."""
-    if not ids:
-        return
-    await db.execute(
-        update(Output)
-        .where(Output.id.in_(ids))
-        .values(archived_at=datetime.now(UTC))
-    )
-
-
 def chat_delivery_output_ids(messages: list) -> list[UUID]:
-    """Flatten only the exact refs persisted on each delivery message.
-
-    Run steps and neighbouring messages never manufacture Chat ownership.
-    """
+    """Flatten only the exact refs persisted on each delivery message."""
     ordered: list[UUID] = []
     seen: set[UUID] = set()
     for message in messages:
@@ -107,9 +36,6 @@ def chat_delivery_output_ids(messages: list) -> list[UUID]:
             and intent.get("type") == "trigger_review"
             and intent.get("trigger") in {"run_completed", "run_failed"}
         )
-        # Foreground upload results belong to their closing assistant message
-        # (including a follow-up question), never to the failed production Run.
-        # The server stamps these refs; no Run or tool-name guess grants ownership.
         upload_answer = intent.get("type") != "trigger_review"
         if (
             getattr(message, "role", "assistant") != "assistant"
@@ -144,18 +70,16 @@ def delivered_output_refs(steps: list, outputs: list) -> list[str]:
 
 
 def is_delivered_output(output: Output) -> bool:
-    """Domain delivery semantics shared by review, billing and Chat."""
-    if output.type in INTERNAL_OUTPUT_TYPES:
-        return False
-    if output.type not in {"clip", "film", "video"}:
-        return True
     render_status = getattr(output.render_status, "value", output.render_status)
-    return render_status == "completed" and bool((output.files or {}).get("video"))
+    return (
+        output.type == "video"
+        and render_status == "completed"
+        and bool((output.files or {}).get("video"))
+    )
 
 
 def is_chat_video_output(output: Output) -> bool:
-    """Chat's display gate: only delivered video Outputs enter its surfaces."""
-    return output.type in {"clip", "film", "video"} and is_delivered_output(output)
+    return is_delivered_output(output)
 
 
 def output_to_response(
@@ -175,59 +99,16 @@ async def composition_version_number(db: AsyncSession, output: Output) -> int | 
     return version.version if version is not None else None
 
 
-# output type → archived work_ids, oldest first (a sweep's inheritance chain)
-WorkChain = dict[str, list[UUID]]
-
-
-def next_work_id(chain: WorkChain, type_: str) -> dict[str, UUID]:
-    """Pop the positional work anchor for a newborn (ADR-091 §2 positional
-    inheritance); an empty chain = fresh work (the column default mints).
-    Returns a kwargs dict so a birth can ``**next_work_id(...)`` — never
-    pass ``work_id=None`` explicitly (NULL violates NOT NULL)."""
-    ids = chain.get(type_)
-    return {"work_id": ids.pop(0)} if ids else {}
-
-
-class VersionSwitchRejected(Exception):
-    """The 换态 door's domain refusal (target already active / cross-work)."""
-
-
-def plan_version_switch(target, siblings: list) -> list:
-    """Pure law of restore_version 换态 (ADR-091 §2): ``target`` must be an
-    ARCHIVED row of its work; returns the same-work sibling rows to demote
-    (active, not the target — at most one active per work after the swap).
-    Rows are duck-typed (id / work_id / archived_at) so the law stays pure-
-    testable; the DB door stamps the timestamps."""
-    if target.archived_at is None:
-        raise VersionSwitchRejected("output is already its work's active version")
-    return [
-        s for s in siblings
-        if s.work_id == target.work_id and s.archived_at is None and s.id != target.id
-    ]
-
-
-async def list_visible_outputs(
-    db: AsyncSession,
-    project_id: UUID,
-    *,
-    output_type: str | None = None,
-) -> list[Output]:
-    """List a project's user-facing outputs, newest first."""
-    stmt = visible_outputs_stmt().where(Output.project_id == project_id)
-    if output_type is not None:
-        stmt = stmt.where(Output.type == output_type)
-    result = await db.execute(stmt.order_by(Output.created_at.desc()))
+async def list_visible_outputs(db: AsyncSession, project_id: UUID) -> list[Output]:
+    result = await db.execute(
+        visible_outputs_stmt()
+        .where(Output.project_id == project_id)
+        .order_by(Output.created_at.desc())
+    )
     return list(result.scalars().all())
 
 
 def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse:
-    """Serialize a node; ``stage`` is the display hint from spec (results.stepper.* keys).
-
-    ``ratio`` (credits.per_cost_usd) is read ONCE per response by the caller
-    and injected — the credits fields are the serialization-layer derivation
-    (BILLING §7: USD stays in estimate/cost, credits are folded at read time
-    and never persisted), so one config edit moves every surface at once.
-    """
     estimate_credits: list[int] | None = None
     if node.estimate:
         usd_low, usd_high = estimate_usd_range(node.estimate)
@@ -242,7 +123,6 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
             try:
                 production_stages.append(ProductionStage.model_validate(raw))
             except (ValidationError, TypeError):
-                # A malformed/legacy entry cannot take down the whole Run read.
                 continue
     return StepResponse(
         id=node.id,
@@ -258,118 +138,14 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         output_refs=[UUID(str(ref)) for ref in (node.output_refs or [])],
         inputs=[UUID(str(upstream)) for upstream in (node.inputs or [])],
         estimate_credits=estimate_credits,
-        cost_credits=(
-            credits_at_ratio(cost_usd(node.cost), ratio) if node.cost else None
-        ),
+        cost_credits=credits_at_ratio(cost_usd(node.cost), ratio) if node.cost else None,
         started_at=node.started_at,
         finished_at=node.finished_at,
         production_stages=production_stages,
     )
 
 
-def compose_spec_prompt(step: WorkflowStep, ui_language: str) -> str | None:
-    """The product's own spec as a prompt-style line (ADR-051 F — hover
-    prompt 框): the producing step's slot/params composed in the run's
-    pinned ui_language. The 框 prefills with it (the product's "make this"
-    instruction); the user edits it into any revision ask. Language tags
-    are uppercase ISO (slot_tag's house style). None for steps whose
-    product has no meaningful spec to edit (materialize_source — the whole
-    video is the source itself)."""
-    spec = step.spec or {}
-    zh = ui_language.startswith("zh")
-    slot = spec.get("slot") or {}
-    # Junk guard for legacy specs: the null-as-string plan token ("null")
-    # reads as absent — new proposals never carry it (TaskItem's boundary
-    # scrub), this keeps pre-scrub specs honest.
-    raw_lang = spec.get("target_language") or slot.get("language") or ""
-    lang = "" if is_null_token(raw_lang) else str(raw_lang).strip().upper()
-
-    if step.kind == "select_clips":
-        count = int(slot.get("count") or 1)
-        parts = [
-            f"切 {count} 条短片" if zh else f"Cut {count} clips",
-        ]
-        if spec.get("aspect"):
-            parts.append(f"画幅 {spec['aspect']}" if zh else f"in {spec['aspect']}")
-        if slot.get("focus"):
-            parts.append(
-                f"主题：{slot['focus']}" if zh else f"focus: {slot['focus']}"
-            )
-        if lang:
-            parts.append(f"屏幕文字 {lang}" if zh else f"titles in {lang}")
-        return ("，" if zh else ", ").join(parts)
-
-    if step.kind in ("translate_clip", "dub_clip"):
-        if step.kind == "translate_clip":
-            base = f"字幕翻译成 {lang}" if zh else f"Translate captions to {lang}"
-            if spec.get("bilingual"):
-                base += "（双语）" if zh else " (bilingual)"
-            return base
-        return f"配音成 {lang}" if zh else f"Dub into {lang}"
-
-
-    node_cls = node_for(step.kind)
-    if node_cls is None or not node_cls.produces_outputs or not node_cls.output_type:
-        return None
-    word = (
-        (node_cls.slot_label_zh if zh and node_cls.slot_label_zh else None)
-        or node_cls.slot_label
-        or node_cls.output_type
-    )
-    base = f"写{word}" if zh else f"Write {word.lower()}"
-    parts = [base]
-    if lang:
-        parts.append(f"用 {lang}" if zh else f"in {lang}")
-    if slot.get("count") and node_cls.output_type in ("quotes", "carousel"):
-        parts.append(f"{slot['count']} 条" if zh else f"{slot['count']} items")
-    if slot.get("focus"):
-        parts.append(f"主题：{slot['focus']}" if zh else f"focus: {slot['focus']}")
-    if slot.get("tone_override"):
-        parts.append(
-            f"语气：{slot['tone_override']}"
-            if zh
-            else f"tone: {slot['tone_override']}"
-        )
-    return ("，" if zh else ", ").join(parts)
-
-
-# Step kinds whose products are LLM-written (the "copy" modality).
-_LLM_PRODUCT_KINDS = (
-    "select_clips",
-    "translate_clip",
-    "write_post",
-    "write_article",
-    "write_quotes",
-    "write_carousel",
-)
-
-
-def model_facts_for(step_kind: str | None, output: Output) -> list[dict[str, str]]:
-    """Per-product model/provider facts (ADR-051 H — 详情面模型事实): the
-    producing step's kind projected to its REAL model usage — one provider
-    per modality today, so a static registry, never a guess and never a
-    selector / SKU shelf (禁令2). Every clip's captions derive from ASR
-    (self-hosted Whisper), so the captions fact is clip-intrinsic; a music
-    fact appears only when the clip's payload pins a matched mood (the
-    music bed was actually burned). Display names are DATA (proper nouns,
-    locale-invariant — the same strings the composer models panel shows);
-    the modality key localizes in the UI. Facts display ONLY on the detail
-    surface (the lightbox info column) — the node caption never carries a
-    model name (prohibition #12)."""
-    facts: list[dict[str, str]] = []
-    if output.type == "clip":
-        facts.append({"modality": "captions", "model": "Whisper"})
-        if (output.payload or {}).get("music_mood"):
-            facts.append({"modality": "music", "model": "MiniMax music-2.6"})
-    if step_kind in _LLM_PRODUCT_KINDS:
-        facts.append({"modality": "copy", "model": "MiniMax M3"})
-    elif step_kind == "dub_clip":
-        facts.append({"modality": "voice", "model": "MiniMax speech-2.6-hd"})
-    return facts
-
-
 def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:
-    """Run-level cost = sum over node cost ledgers (ADR-025)."""
     totals = {"prompt_tokens": 0, "completion_tokens": 0, "fixed_cost": 0.0}
     seen = False
     for node in nodes:
@@ -383,9 +159,6 @@ def aggregate_step_cost(nodes: list[WorkflowStep]) -> dict | None:
 
 
 def aggregate_step_estimate(nodes: list[WorkflowStep]) -> dict | None:
-    """Run-level quotation = fold over node estimates (P4, N-34 — the read
-    side of 报价=图 fold; the write side is create_run's per-node estimate).
-    None when every node is unquoted (NULL estimates)."""
     quoted = [node.estimate for node in nodes if node.estimate]
     if not quoted:
         return None
@@ -393,27 +166,6 @@ def aggregate_step_estimate(nodes: list[WorkflowStep]) -> dict | None:
 
 
 def step_estimate_deviation(node: WorkflowStep) -> dict | None:
-    """actual (cost ledger) vs estimate (quotation), per token field — the
-    calibration regression's read shape (AGENT_ARCH §8):
-
-        {prompt_tokens:     {actual, low, high, delta},
-         completion_tokens: {actual, low, high, delta},
-         units?:            {<unit>: {expected, actual, delta}}}
-
-    delta = actual − clamp(actual, low, high): 0 = in range, positive = the
-    quote undershot, negative = it overshot. None when either side is
-    missing (a node without an estimate or without metered usage yet). The
-    SQL twin for the fleet-wide regression:
-
-        SELECT kind,
-               count(*) FILTER (WHERE (cost->>'prompt_tokens')::int
-                  BETWEEN (estimate->'prompt_tokens'->>0)::int
-                      AND (estimate->'prompt_tokens'->>1)::int) AS prompt_in_range,
-               count(*) AS n
-        FROM workflow_steps
-        WHERE estimate IS NOT NULL AND cost IS NOT NULL
-        GROUP BY kind;
-    """
     if not node.estimate or not node.cost:
         return None
 
@@ -431,8 +183,6 @@ def step_estimate_deviation(node: WorkflowStep) -> dict | None:
         "prompt_tokens": field("prompt_tokens"),
         "completion_tokens": field("completion_tokens"),
     }
-    # Mechanical units (media metering, record_media_usage): estimate carries
-    # exact quantities, cost carries actuals — delta is signed drift.
     est_units = node.estimate.get("units") or {}
     act_units = node.cost.get("units") or {}
     if est_units or act_units:
@@ -453,7 +203,6 @@ async def run_to_response(
     *,
     with_steps: bool = True,
 ) -> RunResponse:
-    """Serialize a run with its workflow steps and aggregated cost."""
     resp = RunResponse.model_validate(run)
     if with_steps:
         result = await db.execute(
@@ -469,18 +218,8 @@ async def run_to_response(
 async def delete_outputs_fk_safe(
     db: AsyncSession, doomed: list[UUID] | Select[tuple[UUID]]
 ) -> None:
-    """FK-safe bulk delete of outputs — operations → publications → outputs
-    (Gate #2 Commit 2, 2026-09-16; the ``projects.py`` delete flow's order,
-    previously its private discipline): ``operations.output_id`` is a NO
-    ACTION FK and ``publications.output_id`` a RESTRICT FK, so any path that
-    deletes an output row carrying either dependent dies at the FK — an
-    edited clip (journaled ops) 500s on delete, and ``select_clips``' wipe
-    fails the whole run. ``doomed`` = an id list or a SELECT of
-    ``outputs.id`` (both plug into ``in_()``); an empty list is a no-op.
-    Deletion scope is the caller's decision — this helper changes ORDER only.
-    """
+    """Delete dependent Publication rows before their restricted Output rows."""
     if isinstance(doomed, list) and not doomed:
         return
-    await db.execute(delete(Operation).where(Operation.output_id.in_(doomed)))
     await db.execute(delete(Publication).where(Publication.output_id.in_(doomed)))
     await db.execute(delete(Output).where(Output.id.in_(doomed)))

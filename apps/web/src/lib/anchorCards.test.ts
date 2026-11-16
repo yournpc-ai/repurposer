@@ -20,7 +20,7 @@ function output(partial: Partial<Output>): Output {
     id: "o1",
     project_id: "p1",
     workflow_step_id: null,
-    type: "clip",
+    type: "video",
     language: null,
     status: "done",
     provenance: "generated",
@@ -30,7 +30,6 @@ function output(partial: Partial<Output>): Output {
     render_spec: null,
     render_status: null,
     render_error: null,
-    score: null,
     quality: null,
     publishing: {},
     created_at: "2026-10-13T00:00:00Z",
@@ -56,11 +55,11 @@ function step(output_refs: string[]): WorkflowStep {
 describe("delivery-message Output refs", () => {
   it("resolves only the message's own deliverable products in ref order", () => {
     const rows = [
-      output({ id: "a", type: "film", render_status: "completed", files: { video: "/a.mp4" } }),
-      output({ id: "b", type: "film", render_status: "completed", files: { video: "/b.mp4" } }),
-      output({ id: "pending", type: "film", render_status: "rendering" }),
-      output({ id: "post", type: "post", payload: { content: "正文" } }),
-      output({ id: "quote", type: "quotes", files: { image: "/q.png" } }),
+      output({ id: "a", type: "video", render_status: "completed", files: { video: "/a.mp4" } }),
+      output({ id: "b", type: "video", render_status: "completed", files: { video: "/b.mp4" } }),
+      output({ id: "pending", type: "video", render_status: "rendering" }),
+      output({ id: "post", type: "audio", payload: {} }),
+      output({ id: "quote", type: "audio", files: { image: "/q.png" } }),
     ]
     expect(deliveredOutputsForRefs(["b", "pending", "post", "quote", "a", "b"], rows).map((row) => row.id)).toEqual(["b", "a"])
     expect(deliveredOutputsForRefs([], rows)).toEqual([])
@@ -72,7 +71,7 @@ describe("zero-delivery video fallback", () => {
     output({ id: "ready", type: "video", render_status: "completed", files: { video: "/ready.mp4" } }),
     output({ id: "pending", type: "video", render_status: "rendering" }),
     output({ id: "empty", type: "video", render_status: "completed", files: {} }),
-    output({ id: "post", type: "post", payload: { content: "正文" } }),
+    output({ id: "post", type: "audio", payload: {} }),
   ]
   const steps = [step(["ready", "pending", "empty", "post", "ready"])]
 
@@ -123,30 +122,30 @@ describe("zero-delivery video fallback", () => {
 })
 
 describe("isDeliveredOutput — 产物卡准入", () => {
-  it("render 完成且文件存在才交付 film/clip", () => {
+  it("render 完成且文件存在才交付 video", () => {
     expect(
       isDeliveredOutput(
-        output({ type: "film", render_status: "completed", files: { video: "/v.mp4" } }),
+        output({ type: "video", render_status: "completed", files: { video: "/v.mp4" } }),
       ),
     ).toBe(true)
     for (const render_status of [null, "pending", "rendering", "failed"]) {
-      expect(isDeliveredOutput(output({ type: "clip", render_status }))).toBe(false)
+      expect(isDeliveredOutput(output({ type: "video", render_status }))).toBe(false)
     }
     expect(
-      isDeliveredOutput(output({ type: "clip", render_status: "completed", files: {} })),
+      isDeliveredOutput(output({ type: "video", render_status: "completed", files: {} })),
     ).toBe(false)
   })
 })
 
 describe("anchorCardOf — 单卡事实(世界自证)", () => {
-  it("名来源梯: publishing.title > payload.title > payload.hook", () => {
+  it("名来源梯: publishing.title > payload.name", () => {
     expect(
       anchorCardOf(output({ publishing: { title: " 发布短片 v1 " } })).name,
     ).toBe("发布短片 v1")
     expect(
-      anchorCardOf(output({ payload: { title: "T", hook: "H" } })).name,
+      anchorCardOf(output({ payload: { name: "T" } })).name,
     ).toBe("T")
-    expect(anchorCardOf(output({ payload: { hook: "H" } })).name).toBe("H")
+    expect(anchorCardOf(output({ payload: { name: "H" } })).name).toBe("H")
   })
 
   it("名缺 = null(零模板回填 —— 回退是渲染层的事)", () => {
@@ -154,25 +153,22 @@ describe("anchorCardOf — 单卡事实(世界自证)", () => {
     expect(anchorCardOf(output({})).name).toBeNull()
   })
 
-  it("clip 时长只认 payload.duration 数字;非 clip 不带时长", () => {
+  it("时长只认保存版 payload 数字;非视频不带时长", () => {
     expect(
-      anchorCardOf(output({ type: "clip", payload: { duration: 26 } }))
+      anchorCardOf(output({ type: "video", payload: { duration: 26 } }))
         .durationSec,
     ).toBe(26)
     expect(
-      anchorCardOf(output({ type: "post", payload: { duration: 26 } }))
+      anchorCardOf(output({ type: "audio", payload: { duration: 26 } }))
         .durationSec,
     ).toBeNull()
   })
 
-  it("text 族正文 = outputFullText 的一份拷贝;媒体族不带正文", () => {
-    const text = anchorCardOf(
-      output({ type: "article", payload: { title: "题", content: "文" } }),
-    )
-    expect(text.kind).toBe("text")
-    expect(text.text).toBe("题\n\n文")
+  it("交付卡只呈现视频媒体", () => {
     const video = anchorCardOf(output({ files: { video: "/v.mp4" } }))
-    expect(video.text).toBeNull()
+    expect(video.kind).toBe("video")
+    expect(video.videoUrl).toBe("/v.mp4")
+    expect(isDeliveredOutput(output({ type: "audio", payload: {} }))).toBe(false)
   })
 })
 

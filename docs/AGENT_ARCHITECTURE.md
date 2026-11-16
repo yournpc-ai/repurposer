@@ -231,7 +231,7 @@ tools/dub/           配音工具
 
 `verify` 是当前注册可执行的内部节点：编译时挂在相应生成执行器之后，确定性检查矩阵负责文件、保真、锚点、响度、数量与计划意图等校验；声明式 judge 只承担其注册的辅助检查，失败不得伪装成质检通过。QualityBounce 有界打回上游，支持 best-not-last 快照恢复与 needs_human 升级；在 Product Graph 中折叠进执行器家族，不成为用户可提议工具或独立产品节点。
 
-首发推荐分的四轴明细与版本一致展示归 `tasks/output-quality-verify.md`。视频内容级 reviewer 已纳入 Video Project B 支撑增量，目标规则归 VIDEO_PROJECT §8.5，精确时间点预览归 §11.3 与统一施工合同 P10；具体代码归属只在该文 §12 登记。模型审片能力归 tools/video 与既有 Agent harness，verify 负责既有检查/裁决，run_review 保持纯事实聚合；三者不互相替代。全片跨产物矛盾检查与更多 modifier 质检不随此增量自动完成，实施状态归 PROGRESS 与统一视频施工合同。
+首发推荐分规格归 PROGRESS §2。视频内容级 reviewer 的规则归 VIDEO_PROJECT §8.5，精确时间点预览归 §11.3 与统一施工合同 P10；具体代码归属只在该文 §12 登记。模型审片能力归 tools/video 与既有 Agent harness，verify 负责既有检查/裁决，run_review 保持纯事实聚合；三者不互相替代。全片跨产物矛盾检查与更多 modifier 质检不随此增量自动完成，实施状态归 PROGRESS 与统一视频施工合同。
 
 ## 10. 验收器
 

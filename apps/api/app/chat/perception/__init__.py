@@ -36,11 +36,8 @@ from pydantic import BaseModel
 from app.agents.tool_loop import ChatTool, ToolObservation
 from app.chat.perception import executes
 from app.chat.perception.executes import (
-    GetArtifactParams,
     GetAssetParams,
-    GetCraftSkeletonParams,
     GetNodeParams,
-    GetOutputSpecParams,
     GetSegmentParams,
     GetWebPageParams,
     ListProjectMediaParams,
@@ -84,13 +81,6 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
     entry.name: entry
     for entry in [
         PerceptionTool(
-            name="get_output_spec",
-            description=_OUTPUT_SPEC_DESCRIPTION,
-            params_model=GetOutputSpecParams,
-            execute=executes.get_output_spec,
-            activity_key="chat.inspecting.outputSpec",
-        ),
-        PerceptionTool(
             name="get_node",
             description=(
                 "Read one graph node's FULL current program, state, "
@@ -116,16 +106,6 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=None,
             execute=executes.get_understanding,
             activity_key="chat.inspecting.understanding",
-        ),
-        PerceptionTool(
-            name="list_caption_styles",
-            description=(
-                "List the caption style presets with behavior notes — before "
-                "offering subtitle style choices."
-            ),
-            params_model=None,
-            execute=executes.list_caption_styles,
-            activity_key="chat.inspecting.captionStyles",
         ),
         PerceptionTool(
             name="search_music",
@@ -237,32 +217,6 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=ListProjectMediaParams,
             execute=executes.list_project_media,
             activity_key="chat.inspecting.projectMedia",
-        ),
-        PerceptionTool(
-            name="get_craft_skeleton",
-            description=(
-                "Read the pinned reference video's craft skeleton (aspect, "
-                "shot rhythm, caption style best-fit, music mood, and the "
-                "honest list of what a remix cannot reproduce) — ALWAYS the "
-                "first read when a reference case is pinned or its decompile "
-                "just finished; never guess at the case's style."
-            ),
-            params_model=GetCraftSkeletonParams,
-            execute=executes.get_craft_skeleton,
-            activity_key="chat.inspecting.craftSkeleton",
-        ),
-        PerceptionTool(
-            name="get_artifact",
-            description=(
-                "Read one exploration artifact's full fields (a candidate "
-                "collection's sections, a pick's verdict + the section it "
-                "points at, a plan card's deliverables) — before revising a "
-                "pick (revise_selects) or answering what a landed pick/plan "
-                "carries."
-            ),
-            params_model=GetArtifactParams,
-            execute=executes.get_artifact,
-            activity_key="chat.inspecting.artifact",
         ),
         PerceptionTool(
             name="get_web_page",

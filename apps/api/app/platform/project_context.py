@@ -15,7 +15,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.schemas import Segment, PersonaContext
+from app.models.schemas import PersonaContext
 from app.models.tables import Asset, Output, Persona, Project, WorkflowRun
 
 
@@ -165,32 +165,3 @@ async def resolve_run_persona(
         if persona is not None:
             return persona
     return await resolve_default_persona(db, UUID(str(project.user_id)))
-
-
-async def resolve_clip_for_revision(
-    db: AsyncSession,
-    clip_id: UUID,
-    project_id: UUID,
-) -> tuple[Output, Segment]:
-    """Load and validate a clip output for revision.
-
-    Returns the output and its source segment. Raises ``ValueError`` if the
-    output is missing, belongs to another project, is not a clip, or has no
-    source segment.
-
-    Callers in routers should convert the ``ValueError`` to an HTTPException.
-    """
-    output = await db.get(Output, clip_id)
-    if output is None or output.project_id != project_id or output.type != "clip":
-        raise ValueError("Clip not found")
-
-    segment_data = (output.source_ref or {}).get("segment")
-    if not segment_data:
-        raise ValueError("Clip has no source segment to revise from")
-
-    try:
-        source_segment = Segment.model_validate(segment_data)
-    except Exception as e:
-        raise ValueError(f"Invalid clip data: {e}") from e
-
-    return output, source_segment
