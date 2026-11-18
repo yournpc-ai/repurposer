@@ -124,7 +124,7 @@ class SkillPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["strict", "adaptive"] = "adaptive"
-    scene_count: int | None = Field(default=None, ge=1, le=6)
+    scene_count: int | None = Field(default=None, ge=1)
     duration_seconds: float | None = Field(default=None, gt=0, le=118)
     generator_runtime: Literal["draw-2d", "image-generation", "remotion-project"] | None = None
     adaptation_bounds: list[str] = Field(default=[], max_length=16)

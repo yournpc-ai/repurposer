@@ -131,11 +131,8 @@ export function RunTaskList({
       details={stepDetails}
       elapsedMs={elapsedMs}
       settledLabel={failed
-        ? t("chat.runFailed")
-        : elapsedMs == null
-          ? title || t("chat.activityFold.actionCount", { count: steps.length })
-          : undefined}
-      failed={failed}
+        ? t("chat.activityFold.workedWithoutTime")
+        : title || t("chat.activityFold.actionCount", { count: steps.length })}
     />
   )
 }

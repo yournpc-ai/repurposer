@@ -40,7 +40,7 @@ export type {
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
 export type { ActivityFramePayload } from "@/components/chat/timeline/types"
-import type { ActivityFramePayload } from "@/components/chat/timeline/types"
+import type { ActivityFramePayload, BriefAnswerItem } from "@/components/chat/timeline/types"
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityRowFramePayload,
@@ -145,9 +145,11 @@ export interface StreamChatOptions {
 
 /** Answer endpoint payload (the answer doubles as resume). */
 export interface AnswerTurnBody {
-  kind: "option" | "freeform" | "bail" | "start"
+  kind: "option" | "freeform" | "bail" | "start" | "group"
   option_id?: string
   text?: string
+  group_digest?: string
+  answers?: BriefAnswerItem[]
   intent?: unknown
 }
 

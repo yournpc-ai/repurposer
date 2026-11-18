@@ -50,11 +50,12 @@
 
 ### 2.4 Brief
 
-`projects.pending_brief` 中的 brief 保存对话工作状态的咨询性部分：
+`projects.pending_brief` 中的 brief 保存对话工作状态的咨询性部分。`PendingPlan.creative_state` 是同一对象内的创作状态载荷：`brief` 与 `brand_profile` 语义独立，另有 `source_refs[]` 和 `content_digest`；它不新建作品根或主表，也不把 `Conversation.context` 变成权威业务状态。
 
-- `topic` / `audience` / `tone` / `material_state` 与来源化 `constraints[]`；任务链、derived、授权事实按当前 `PendingPlan` schema 保存。
-- 槽位来源为 `user-stated` / `inferred` / `default`；代码合并优先级为 user-stated > inferred > default，用户重申优先。
-- `asked` 与 material state 由代码依据真实世界维护，不能由模型反向覆盖。
+- 通用槽位为 `topic` / `audience` / `tone` / `material_state` 与来源化 `constraints[]`；官网宣传片另含 `purpose` / `target_seconds` / `narrative_mode` / `narration_language` / `subtitle_languages` / `aspect`，以及可选的 voice、必含/避免项和成功标准。`narration_language` 每个 Scene 只接受一种 spoken language，不接受双语或字幕组合；`subtitle_languages` 才是语言数组。任务链、derived、授权事实按当前 `PendingPlan` schema 保存。
+- 槽位来源为 `user-stated` / `inferred` / `default`；代码合并优先级为 user-stated > inferred > default，用户重申优先。新增字段均可空并读容忍，不触发历史数据修复轮。
+- `asked` 与 material state 由代码依据真实世界维护，按槽位记录，不能由模型反向覆盖。
+- `BrandProfile` 是本项目、特定 SourceSnapshot 派生的品牌理解，不是 `persona.brand`，也不回写原始网页证据；Brief 更新不得覆盖它。
 - brief 是主压缩件，recent messages 保留必要语境；不能把累积 prompt 当作唯一事实源。
 - brief 关键执行载荷仍严格校验；咨询性字段不可辨认时读容忍，不因记录损坏杀死整个回合。
 
@@ -99,10 +100,11 @@
 
 `ask_user` 是一等终态工具：
 
-- 每轮最多一个决定质量的问题；选项一词可答，freeform 始终可用。
-- 每个问题带机器可读 `default_path`；它只骑参数，散文和 dock 不宣告默认路径。
-- 选项问进入 dock；文字问是普通消息。输入、铅笔自由输入、跳过、提醒和恢复行为归 `CHAT_ARCHITECTURE.md`。
-- 只问用户能回答且会改变计划的事，如目的、听众、主题；技术参数由配方与默认值吸收。
+- 每轮最多一次澄清交互；一次交互可集中询问多个必要字段。旧单问继续有效，问题组使用 `items[]` 和服务端签发的 `group_digest`，仍只有一行 pending question。
+- 选项一词可答，freeform 按各字段声明可用。代码先去重已知槽位，再校验 slot 白名单、required、option 归属和 freeform；整组 `answers[]` 一次原子结算，默认值不得冒充 user-stated。
+- 每个问题或问题项带机器可读 `default_path`；它只骑参数，散文和 dock 不宣告默认路径。组内选择只留本地，最终提交或整组跳过才调用 answer API；跨设备不同步未提交选择。跳过时保留已答项为 `user-stated`，仅为未答项应用任务级 `default`，不得把默认值冒充用户回答。
+- 选项问进入 dock；文字问是普通消息。问题组在同一 Dock 内分页，每页恰好 1 个字段，末页一次提交，不按页创建 pending 行或 Run。输入、铅笔自由输入、跳过、提醒和恢复行为归 `CHAT_ARCHITECTURE.md`。
+- 只问用户能回答且会改变计划的事；完整输入不得重复问已有字段。官网宣传片须先读真实正文和必要 PNG、形成 BrandProfile，再判断缺失字段，证据未就绪不得先问创作风格。
 - 素材未读完不得预写方案；无法完成时给理由与可行替代，不静默拒绝。
 
 ### 4.2 计划门槛
@@ -112,14 +114,14 @@
 - 无根时先问主题；问过仍无根或用户跳过后，可走代码明确标记的 `draft_from_persona` 路径。模型推断不等于用户已给主题。
 - 需要 media 的任务在没有素材/贴文且桌上无计划时，必须请求素材，不得 dock 不可执行计划。
 - 纯文本生成请求与“用户贴入自己的内容”由 LLM 语境判断，禁长度启发式；内容可提升为 transcript 资产。
-- 计划呈现不等于制作授权。`production_intent` 是 dock 工具的出生事实，缺失时安全侧挂起。
+- 计划呈现不等于制作授权。`production_intent` 是 dock 工具的出生事实，执行时必须明确为 true 或 false；缺断言拒绝回环，旧数据缺省仍安全侧挂起。
 
 ### 4.3 授权与 Start
 
 - `auto` 只免普通批准拍，不创造制作意图；无制作请求、纯修改或“先看方案”任何档都等待用户发话。
 - `ask` 档在 dock 后等待朴素方案判断问句的一词回答；口头 yes 与 Start 钮走同一机器。
 - Start 必须针对当前已呈现计划与 confirmed scope；确认复述累计方案、未选项和未清项，旧 yes 不授权新稿。
-- `billing.always_confirm_above` 与 NULL 不可报价族任何档都要带价确认。
+- `billing.always_confirm_above` 触发时任何档都要带价确认；NULL 不可报价族只在 execution=ask 或 credits=ask 时请求，auto/auto 不另设确认。
 - 付费执行只从 `create_run` 出生；出生地再次校验素材、报价、scope、活跃 run 与执行身份。
 - Film 首稿必须先完整呈现分镜并等待用户看后明确生产；auto、开场“直接做”和 `review_hold=false` 都不能绕过。后续版本按 Film 当前版本合同处理。
 
@@ -163,5 +165,5 @@
 
 ## 8. 当前参数与实现选择
 
-- **开放参数**：槽位提问顺序与几轮后出计划仍需真实对话数据校准；调整不得破坏每轮一问、可跳过和计划门槛。
+- **开放参数**：槽位提问顺序与几轮后出计划仍需真实对话数据校准；调整不得破坏每轮至多一次澄清交互、可跳过和计划门槛。
 - **当前实现选择**：router 两相位保留双实例。只有联合 schema 不扩大非法动作空间、assemble 纯度与 prompt 隔离有等价保证时，才重新评估合并。

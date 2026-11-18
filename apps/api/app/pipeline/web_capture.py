@@ -87,6 +87,9 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
     discovered_from = (asset.meta or {}).get("discovered_from")
     if discovered_from:
         meta["discovered_from"] = discovered_from
+    turn_id = (asset.meta or {}).get("turn_id")
+    if turn_id:
+        meta["turn_id"] = turn_id
 
     if outcome.screenshot is not None and plan is None:
         if asset.project_id is None:

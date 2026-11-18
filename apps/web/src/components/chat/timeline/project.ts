@@ -29,6 +29,7 @@ export function buildConversationUnits(
 ): ConversationUnit[] {
   const units: ConversationUnit[] = []
   for (const m of messages) {
+    if (m.activityDisplayHeld) continue
     const a = m.activity
     if (a === undefined) {
       units.push({ kind: "message", message: m })
@@ -236,8 +237,8 @@ export function conversationBlockUnits(block: ConversationBlock): ConversationUn
 
 /** Seal the CURRENT turn's last open work segment at a real display /
  * terminal timestamp. `currentRowKeys` contains HOST MESSAGE ids observed
- * on this turn's row.append/update channel — never per-turn activity_ids,
- * so an old segment with the same "a1" can neither be sealed nor reopened.
+ * on this turn's row.append/update channel, so an old segment can neither
+ * be sealed nor reopened by a later turn.
  * The clock lives on the first host row, survives fold remounts and later
  * frame merges, and is write-once. History has no such client fact and keeps
  * its honest activity-span fallback. `defaultWorkStartedAtMs` is the actual

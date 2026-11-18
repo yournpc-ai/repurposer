@@ -16,11 +16,11 @@ from app.agents.candidate_correction import (
     CandidateScope,
     apply_correction,
 )
-from app.editing.revisions import RevisionTargetAmbiguityError, expand_revision_action
+from app.editing.revisions import RevisionTargetAmbiguityError, expand_revision_op
 from app.editing.schemas import CompositionContent
 from app.editing.service import revise_video
 from app.editing.store import StaleBase, apply_composition_edits, content_of
-from app.models.schemas import ReviseVideoActionArgs
+from app.models.schemas import ReviseVideoOpsArgs
 from app.models.tables import Composition, CompositionVersion, Project, SourceSnapshot, User
 from app.skills.package_session import SkillPackageSession
 from app.skills.resolution import get_builtin_skill_option
@@ -135,14 +135,14 @@ def revision_content():
 
 
 def revision_args(version, action):
-    return ReviseVideoActionArgs.model_validate(
+    return ReviseVideoOpsArgs.model_validate(
         {
             "base_ref": {
                 "composition_id": str(version.composition_id),
                 "composition_version_id": str(version.id),
                 "content_digest": version.content_digest,
             },
-            "action": action,
+            "ops": [action],
         }
     )
 
@@ -187,7 +187,7 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
         "user_text": "Edit the saved promo",
     }).tools
     continued = next(tool for tool in projected if tool.name == "revise_video")
-    assert continued.params_model is ReviseVideoActionArgs
+    assert continued.params_model is ReviseVideoOpsArgs
     _, continued_schema = continued.wire_view(
         continued.description, continued.params_model.model_json_schema(),
     )
@@ -200,7 +200,7 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
     from app.chat.video_turn_seats import bind_video_revision_base
 
     bound = bind_video_revision_base(
-        ReviseVideoActionArgs(action={"action": "remove_clip", "clip_id": "title"}),
+        ReviseVideoOpsArgs(ops=[{"op": "remove_clip", "clip_id": "title"}]),
         target["base_ref"],
     )
     assert bound.base_ref.composition_id == composition_id
@@ -212,8 +212,8 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
             "composition_version_id": str(uuid4()),
             "content_digest": "d" * 64,
         },
-        "action": {
-            "action": "add_media_overlay",
+        "ops": [{
+            "op": "add_media_overlay",
             "source_id": str(VIDEO_ID),
             "scene_id": "proof",
             "start_seconds": 4.0,
@@ -222,10 +222,10 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
             "width_ratio": 0.28,
             "margin_px": 48,
             "motion": "fade_in",
-        },
+        }],
     }
     with pytest.raises(ValidationError) as raised:
-        ReviseVideoActionArgs.model_validate(raw)
+        ReviseVideoOpsArgs.model_validate(raw)
     import json
 
     errors = json.loads(raised.value.json(include_input=False, include_url=False))
@@ -233,7 +233,7 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
         tool_name="revise_video",
         arguments=raw,
         errors=errors,
-        schema=ReviseVideoActionArgs.model_json_schema(),
+        schema=ReviseVideoOpsArgs.model_json_schema(),
         scope=CandidateScope(owner_id=str(uuid4()), conversation_id=str(uuid4())),
         base_keys=frozenset({f"snapshot:{VIDEO_ID}:{VIDEO_DIGEST}"}),
         call_id="call_overlay",
@@ -243,7 +243,7 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
     assert diagnostic["candidate_id"] == record.candidate_id
     assert diagnostic["candidate_digest"] == record.candidate_digest
     assert diagnostic["errors"][0]["original_value"] == "lower-right"
-    assert record.arguments["action"]["position"] == "lower-right"
+    assert record.arguments["ops"][0]["position"] == "lower-right"
     request = CandidateCorrectionArgs.model_validate(
         {
             "candidate_id": record.candidate_id,
@@ -253,9 +253,9 @@ def test_generic_design_and_high_level_revision_wires_stay_closed():
         }
     ).root
     merged = apply_correction(record, request)
-    corrected = ReviseVideoActionArgs.model_validate(merged.arguments)
-    assert corrected.action.position == "bottom_right"
-    assert corrected.action.source_id == VIDEO_ID
+    corrected = ReviseVideoOpsArgs.model_validate(merged.arguments)
+    assert corrected.ops[0].position == "bottom_right"
+    assert corrected.ops[0].source_id == VIDEO_ID
     assert record.base_keys == frozenset({f"snapshot:{VIDEO_ID}:{VIDEO_DIGEST}"})
 
 
@@ -274,18 +274,18 @@ def test_ambiguous_target_returns_candidates_without_ops():
     content.timeline.tracks.append(duplicate_track)
     args = revision_args(
         SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64),
-        {"action": "set_text", "clip_id": clip.clip_id, "text": "Changed"},
+        {"op": "set_text", "clip_id": clip.clip_id, "text": "Changed"},
     )
     with pytest.raises(RevisionTargetAmbiguityError) as raised:
-        expand_revision_action(args.action, content, facts=snapshot_facts(owner))
+        expand_revision_op(args.ops[0], content, facts=snapshot_facts(owner))
     assert len(raised.value.candidates) == 2
 
     omitted = revision_args(
         SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64),
-        {"action": "set_text", "text": "Changed"},
+        {"op": "set_text", "text": "Changed"},
     )
     with pytest.raises(RevisionTargetAmbiguityError) as missing:
-        expand_revision_action(omitted.action, content, facts=snapshot_facts(owner))
+        expand_revision_op(omitted.ops[0], content, facts=snapshot_facts(owner))
     assert missing.value.candidates
     assert all("text" in candidate for candidate in missing.value.candidates)
 
@@ -470,7 +470,7 @@ async def test_overlay_saves_change_set_and_stale_base_never_overwrites(database
             args=revision_args(
                 base,
                 {
-                    "action": "add_media_overlay",
+                    "op": "add_media_overlay",
                     "source_id": str(VIDEO_ID),
                     "scene_id": "proof",
                     "start_seconds": start,
@@ -519,7 +519,7 @@ async def test_overlay_saves_change_set_and_stale_base_never_overwrites(database
                 args=revision_args(
                     base,
                     {
-                        "action": "set_text",
+                        "op": "set_text",
                         "clip_id": "clp_open_name",
                         "text": "Must not overwrite",
                     },
@@ -538,7 +538,7 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
     version = SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64)
 
     whole = revision_args(version, {
-        "action": "add_media_overlay",
+        "op": "add_media_overlay",
         "source_id": str(VIDEO_ID),
         "scene_id": "proof",
         "scope": "whole_scene",
@@ -549,14 +549,14 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
     })
     from app.editing.edits import AddClip
 
-    ops = expand_revision_action(whole.action, content, facts=snapshot_facts(owner))
+    ops = expand_revision_op(whole.ops[0], content, facts=snapshot_facts(owner))
     overlay = next(op.clip for op in ops if isinstance(op, AddClip))
     assert overlay.range == scene.range
     assert overlay.source.source_range.duration == scene.range.duration
 
     start = scene.range.start / 90000 + 0.25
     timed = revision_args(version, {
-        "action": "add_media_overlay",
+        "op": "add_media_overlay",
         "source_id": str(VIDEO_ID),
         "scene_id": "proof",
         "start_seconds": start,
@@ -566,14 +566,14 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
         "margin_px": 48,
         "motion": "none",
     })
-    ops = expand_revision_action(timed.action, content, facts=snapshot_facts(owner))
+    ops = expand_revision_op(timed.ops[0], content, facts=snapshot_facts(owner))
     overlay = next(op.clip for op in ops if isinstance(op, AddClip))
     assert overlay.range.start == scene.range.start + 22500
     assert overlay.range.end == overlay.range.start + 180000
 
     for action in (
         {
-            "action": "add_media_overlay",
+            "op": "add_media_overlay",
             "source_id": str(VIDEO_ID),
             "scope": "whole_scene",
             "position": "bottom_right",
@@ -582,7 +582,7 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
             "motion": "none",
         },
         {
-            "action": "add_media_overlay",
+            "op": "add_media_overlay",
             "source_id": str(VIDEO_ID),
             "scene_id": "proof",
             "position": "bottom_right",
@@ -592,18 +592,18 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
         },
     ):
         with pytest.raises(RevisionTargetAmbiguityError) as raised:
-            expand_revision_action(revision_args(version, action).action, content, facts=snapshot_facts(owner))
+            expand_revision_op(revision_args(version, action).ops[0], content, facts=snapshot_facts(owner))
         assert len(raised.value.candidates) == len(content.scenes)
 
     with pytest.raises(RevisionTargetAmbiguityError):
-        expand_revision_action(
-            whole.action,
+        expand_revision_op(
+            whole.ops[0],
             content,
             facts=snapshot_facts(owner),
             request_context={"user_text": "把本人视频放到右下角，不制作。"},
         )
     wrong_scene = revision_args(version, {
-        "action": "add_media_overlay",
+        "op": "add_media_overlay",
         "source_id": str(VIDEO_ID),
         "scene_id": "open",
         "scope": "whole_scene",
@@ -613,31 +613,31 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
         "motion": "none",
     })
     with pytest.raises(RevisionTargetAmbiguityError):
-        expand_revision_action(
-            wrong_scene.action,
+        expand_revision_op(
+            wrong_scene.ops[0],
             content,
             facts=snapshot_facts(owner),
             request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
         )
-    confirmed = expand_revision_action(
-        whole.action,
+    confirmed = expand_revision_op(
+        whole.ops[0],
         content,
         facts=snapshot_facts(owner),
         request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
     )
     assert next(op.clip for op in confirmed if isinstance(op, AddClip)).range == scene.range
     inferred = revision_args(version, {
-        "action": "add_media_overlay", "source_id": str(VIDEO_ID),
+        "op": "add_media_overlay", "source_id": str(VIDEO_ID),
         "position": "bottom_right", "width_ratio": 0.28, "margin_px": 48, "motion": "none",
     })
-    bound = expand_revision_action(
-        inferred.action, content, facts=snapshot_facts(owner),
+    bound = expand_revision_op(
+        inferred.ops[0], content, facts=snapshot_facts(owner),
         request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
     )
     assert next(op.clip for op in bound if isinstance(op, AddClip)).range == scene.range
     with pytest.raises(ValidationError):
         revision_args(version, {
-            "action": "add_media_overlay", "source_id": str(VIDEO_ID), "scene_id": "proof",
+            "op": "add_media_overlay", "source_id": str(VIDEO_ID), "scene_id": "proof",
             "scope": "whole_scene", "start_seconds": 4, "position": "bottom_right",
             "width_ratio": 0.28, "margin_px": 48, "motion": "none",
         })
@@ -752,3 +752,242 @@ def test_complete_unreviewed_high_level_draft_projects_save_only():
     assert working_draft_review_facts(arguments)["save_ready"] is True
     with pytest.raises(CandidateDesignError, match="save=true"):
         _set_current_scene_timing(arguments["content"], "lead", 90000)
+
+
+def test_add_audio_effect_expands_to_a_trimmed_audio_clip():
+    from app.editing.edits import apply_ops
+    from app.editing.validators import validate_content
+
+    audio_id = uuid4()
+    content = revision_content()
+    version = SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64)
+    args = revision_args(version, {
+        "op": "add_audio_effect",
+        "source_id": str(audio_id),
+        "scene_id": "proof",
+        "start_seconds": 4.5,
+        "duration_seconds": 0.2,
+        "gain_db": -6,
+    })
+    facts = {
+        **snapshot_facts(version.composition_id),
+        audio_id: {
+            "kind": "audio", "digest": "e" * 64, "storage_key": "sources/click.mp3",
+            "duration_ticks": 90000, "meta": {},
+        },
+    }
+    updated = apply_ops(
+        content,
+        expand_revision_op(args.ops[0], content, facts=facts),
+        {audio_id: "e" * 64},
+    )
+    validate_content(updated, facts)
+    track = next(track for track in updated.timeline.tracks if track.track_id == "trk_audio_effect")
+    assert track.kind == "audio" and track.role == "effect"
+    assert len(track.clips) == 1
+    clip = track.clips[0]
+    assert clip.object.kind == "audio" and clip.object.gain_db == -6
+    assert clip.scene_id == "proof"
+    assert clip.range.start == 405000 and clip.range.end == 423000
+    assert clip.source.snapshot_id == audio_id
+    assert clip.source.source_range.start == 0
+    assert clip.source.source_range.end == 18000
+
+
+@pytest.mark.asyncio
+async def test_add_audio_effect_loads_new_source_and_saves_version(database, installed_promo):
+    owner = await _user(database)
+    project = await _project(database, owner)
+    await _sources(database, owner)
+    audio_id = uuid4()
+    async with database() as db:
+        db.add(SourceSnapshot(
+            id=audio_id,
+            owner_id=owner,
+            kind="audio",
+            storage_key="sources/click.mp3",
+            digest="e" * 64,
+            duration_ticks=90000,
+            meta={},
+        ))
+        composition, base, _ = await apply_composition_edits(
+            db,
+            owner_id=owner,
+            origin_project_id=project,
+            content=revision_content(),
+            name="Audio effect base",
+        )
+        await db.commit()
+    async with database() as db:
+        read = await revise_video(
+            db,
+            owner_id=owner,
+            args=revision_args(base, {
+                "op": "add_audio_effect",
+                "source_id": str(audio_id),
+                "scene_id": "proof",
+                "start_seconds": 4.5,
+                "duration_seconds": 0.2,
+            }),
+            request_id="audio-effect-v2",
+        )
+    assert read["version"] == 2
+    async with database() as db:
+        version = await db.get(CompositionVersion, read["composition_version_id"])
+        updated = content_of(version)
+    track = next(track for track in updated.timeline.tracks if track.track_id == "trk_audio_effect")
+    assert track.kind == "audio" and track.role == "effect"
+    assert len(track.clips) == 1
+    assert track.clips[0].source.snapshot_id == audio_id
+
+
+def test_set_narration_changes_only_pending_speech_text():
+    from app.editing.edits import apply_ops
+    from app.editing.schemas import Clip, SpeechObject, Track
+    from app.editing.validators import validate_content
+
+    content = revision_content()
+    scene = next(scene for scene in content.scenes if scene.scene_id == "proof")
+    content.timeline.tracks.append(Track(
+        track_id="trk_dialogue",
+        kind="audio",
+        role="dialogue",
+        order=0,
+        clips=[Clip(
+            clip_id="clp_speech_proof",
+            scene_id="proof",
+            range=scene.range,
+            source=None,
+            object=SpeechObject(
+                kind="speech",
+                object_id="obj_speech_proof",
+                text="A much longer narration that needs to be shortened",
+                voice_id="presenter_male",
+                language="en",
+            ),
+            animations=[],
+        )],
+    ))
+    scene.speech_clip_ids.append("clp_speech_proof")
+    args = revision_args(
+        SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64),
+        {"op": "set_narration", "clip_id": "clp_speech_proof", "text": "Shorter narration"},
+    )
+    updated = apply_ops(
+        content,
+        expand_revision_op(args.ops[0], content, facts=snapshot_facts(uuid4())),
+        {},
+    )
+    validate_content(updated, snapshot_facts(uuid4()))
+    speech = next(
+        clip for track in updated.timeline.tracks for clip in track.clips if clip.clip_id == "clp_speech_proof"
+    )
+    assert speech.object.text == "Shorter narration"
+    assert speech.object.voice_id == "presenter_male" and speech.object.language == "en"
+    assert speech.range == scene.range and speech.scene_id == "proof"
+
+
+@pytest.mark.asyncio
+async def test_direct_op_batch_saves_one_version_for_one_user_intent(database, installed_promo):
+    owner = await _user(database)
+    project = await _project(database, owner)
+    async with database() as db:
+        composition, base, _ = await apply_composition_edits(
+            db,
+            owner_id=owner,
+            origin_project_id=project,
+            content=revision_content(),
+            name="Direct Op batch",
+        )
+    args = ReviseVideoOpsArgs.model_validate({
+        "base_ref": {
+            "composition_id": str(composition.id),
+            "composition_version_id": str(base.id),
+            "content_digest": base.content_digest,
+        },
+        "ops": [
+            {"op": "set_text", "clip_id": "clp_open_name", "text": "Direct opening"},
+            {"op": "set_text", "clip_id": "clp_proof_name", "text": "Direct proof"},
+        ],
+    })
+    async with database() as db:
+        read = await revise_video(db, owner_id=owner, args=args, request_id="direct-op-batch")
+        assert read["version"] == 2
+        assert len(read["change_set"]["clips"]["updated"]) == 2
+        assert await db.scalar(select(func.count()).select_from(CompositionVersion)) == 2
+        current = await db.get(Composition, composition.id)
+        assert current.current_version_id == UUID(read["composition_version_id"])
+        content = content_of(await db.get(CompositionVersion, current.current_version_id))
+        texts = {
+            clip.object.text
+            for track in content.timeline.tracks
+            for clip in track.clips
+            if clip.clip_id in {"clp_open_name", "clp_proof_name"}
+        }
+        assert texts == {"Direct opening", "Direct proof"}
+
+
+def test_direct_op_wire_uses_current_target_and_selected_region():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.prompts import assemble_video_round
+    from app.chat.turn_tools import PLAN_TOOLS, _REVISE_VIDEO_TOOL
+
+    composition_id, version_id = uuid4(), uuid4()
+    region = {
+        "coordinateSpace": "source_pixels",
+        "mediaTimeMs": 2500,
+        "sourceSize": {"width": 1920, "height": 1080},
+        "sourceRect": {"x": 100, "y": 100, "width": 400, "height": 120},
+        "normalizedRect": {"x": 100 / 1920, "y": 100 / 1080, "width": 400 / 1920, "height": 120 / 1080},
+        "viewportRect": {"x": 100.0, "y": 100.0, "width": 400.0, "height": 120.0},
+    }
+    target = {
+        "kind": "composition",
+        "composition_id": str(composition_id),
+        "version_id": str(version_id),
+        "content_digest": "d" * 64,
+        "base_ref": {
+            "composition_id": str(composition_id),
+            "composition_version_id": str(version_id),
+            "content_digest": "d" * 64,
+        },
+        "settings": {"width": 1920, "height": 1080, "timebase": 90000},
+        "clip_targets": [
+            {
+                "clip_id": "clp_title", "object_id": "obj_title", "object_kind": "text",
+                "scene_id": "proof", "range": {"start": 0, "end": 270000},
+                "layout": {"x": 100, "y": 100, "width": 500, "height": 120},
+                "has_motion": True,
+            },
+            {
+                "clip_id": "clp_later", "object_id": "obj_later", "object_kind": "text",
+                "scene_id": "close", "range": {"start": 360000, "end": 450000},
+                "layout": {"x": 100, "y": 100, "width": 500, "height": 120},
+            },
+        ],
+    }
+    assembly = assemble_video_round({
+        "tools": [_REVISE_VIDEO_TOOL, *PLAN_TOOLS],
+        "drafts": (),
+        "snapshot": ContextSnapshot(
+            "saved",
+            frozenset({"composition:version:digest"}),
+            resources=(("composition:version:digest", target),),
+        ),
+        "mode": "plan",
+        "user_text": "Change this selected title",
+        "target_hint": {"composition_id": str(composition_id), "selected_region": region},
+    })
+    tool = next(tool for tool in assembly.tools if tool.name == "revise_video")
+    _, schema = tool.wire_view(tool.description, tool.params_model.model_json_schema())
+    op_mapping = schema["properties"]["ops"]["items"]["discriminator"]["mapping"]
+    assert "set_text" in op_mapping
+    assert "set_narration" not in op_mapping
+    assert "remove_clip" not in op_mapping
+    assert "Keyframe" not in schema.get("$defs", {})
+    assert '"selected_region"' in assembly.context
+    assert '"mediaTimeMs": 2500' in assembly.context
+    assert '"region_target_candidates"' in assembly.context
+    assert '"clip_id": "clp_title"' in assembly.context
+    assert '"clip_id": "clp_later"' not in assembly.context
+    assert '"motion_at_selection": "not_evaluated"' in assembly.context

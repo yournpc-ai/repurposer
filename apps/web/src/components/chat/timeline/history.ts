@@ -17,6 +17,7 @@ import type {
   ActivityReceipt,
   ActivityRowFrame,
   AudioCandidateReceipt,
+  BriefAnswerItem,
   CandidateMemberPayload,
   CandidateSurface,
   ComponentClipReceipt,
@@ -57,6 +58,22 @@ export function answeredQuestionText(
   // this resolver entirely (history replay the echo only), so no
   // "start" branch lives here anymore. QA blocks serve genuine Q&A only.
   return { text: answer.text || answer.option_id || "", muted: false }
+}
+
+export function groupAnswerDisplayItems(
+  question: QuestionMessage,
+  answers: BriefAnswerItem[],
+): { question: string; answer: string }[] {
+  return (question.question?.items ?? []).map((item) => {
+    const answer = answers.find((candidate) => candidate.slot === item.slot)
+    const selected = answer?.kind === "option"
+      ? (item.options ?? []).find((option) => option.id === answer.option_id)
+      : undefined
+    return {
+      question: item.question,
+      answer: selected?.label || answer?.text || answer?.option_id || "",
+    }
+  })
 }
 
 /** The explicit deterministic-option association persisted on the real user row. */
@@ -381,6 +398,7 @@ export function parseActivityReceipt(value: unknown): ActivityReceipt | undefine
  * bubble). */
 export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
+  if (data.type === "material_beat") return legacyActivityRowFrame(data)
   if (data.type !== "activity") return undefined
   const d = (data.frame ?? {}) as Record<string, unknown>
   const KINDS = new Set(["read", "draft", "run", "repair"])
@@ -401,7 +419,10 @@ export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined 
     key: typeof d.key === "string" ? d.key : null,
     at: typeof d.at === "string" ? d.at : undefined,
     count: typeof d.count === "number" ? d.count : undefined,
+    total: typeof d.total === "number" ? d.total : undefined,
+    name: typeof d.name === "string" ? d.name : undefined,
     duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
+    assetType: typeof d.asset_type === "string" ? d.asset_type : undefined,
     receipt: parseActivityReceipt(d.receipt),
   }
 }
@@ -418,24 +439,7 @@ export function isNonRenderIntent(intent: unknown): boolean {
   return typeof data.type === "string" && NON_RENDER_INTENT_TYPES.has(data.type)
 }
 
-/** A persisted material beat replayed as an activity row (2026-09-24
- * 素材节拍入库): wire-frame shape plus the beat's own interpolation fields
- * (the file's `name`, the batch progress `total` for the "N/M" label). */
-type MaterialBeatRow = ActivityRowFrame
-
-/** The material-beat dump on a message row's intent column ({type:
- * "material_beat", beat, status, name?, count?, total?, ref?, duration_ms?,
- * at?})
- * — the pipeline's settled reading/understanding rows (app/chat/service's
- * record_material_beat). Beats are BORN SETTLED (the live active row stays
- * the dock's synthesized now-line); the replay renders the past-tense key.
- * `duration_ms` carries the user-perceived reading span (upload→processed)
- * so the settled row whispers "· 41s" like every other settled row; `at`
- * carries the beat's real start when the span predates the
- * landing (the retired storyboard draft beat), feeding the fold's clock.
- * Same read tolerance as triggerSuggestions — anything off-shape parses to
- * undefined (a plain assistant row), never a crash. */
-export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
+function legacyActivityRowFrame(intent: unknown): ActivityRowFrame | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
   if (data.type !== "material_beat") return undefined
   const status = data.status === "failed" ? ("failed" as const) : ("completed" as const)
@@ -462,10 +466,10 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
       status,
       key:
         status === "failed"
-          ? materialBeatKey("chat.material.readingFailed", assetType)
+          ? activityAssetKey("chat.material.readingFailed", assetType)
           : total != null && total > 1
-            ? materialBeatKey("chat.material.readingDoneProgress", assetType)
-            : materialBeatKey("chat.material.readingDone", assetType),
+            ? activityAssetKey("chat.material.readingDoneProgress", assetType)
+            : activityAssetKey("chat.material.readingDone", assetType),
       count,
       total,
       name,
@@ -502,13 +506,9 @@ export function materialBeat(intent: unknown): MaterialBeatRow | undefined {
   return undefined
 }
 
-/** 动词分叉 (2026-09-27 批「动词」): the material beat's verb follows the
- * asset type — video/audio get the typed key suffix, everything else the
- * base key. Both synthesis points fork alike (the live now-line reads the
- * asset's type; this replay reads the persisted beat's intent.asset_type);
- * the typed keys exist in every locale (zh.ts/en.ts are type-checked pairs),
- * so no missing-key fallback is needed. */
-export function materialBeatKey(base: string, assetType?: string | null): string {
+/** The material activity's verb follows the asset type. The same key
+ * suffix applies to live and normalized legacy frames. */
+export function activityAssetKey(base: string, assetType?: string | null): string {
   return assetType === "video" || assetType === "audio"
     ? `${base}_${assetType}`
     : base
@@ -520,7 +520,7 @@ export type CandidatesLogEvent =
   | { kind: "selection"; candidateSetId: string; selected: number[] }
 
 /** A persisted turn's candidate-surface events (intent.type ===
- * "candidates_log" — the activity_log precedent's twin, v4.2 C8-c): the
+ * "candidates_log" — the activity-row precedent's twin, v4.2 C8-c): the
  * SSE ``assistant.candidates`` payloads the turn emitted, in order. The
  * replay folds them: a ``set`` event births the card row, a ``selection``
  * event repaints the anchoring card's highlight. Read tolerance: the shell
@@ -667,6 +667,9 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
 export function questionEcho(m: QuestionMessage): string | null {
   const content = (m.content ?? "").trim()
   const bare = (m.question?.question ?? "").trim()
+  if (bare && content.endsWith(`\n\n${bare}`)) {
+    return content.slice(0, -(bare.length + 2)).trim() || null
+  }
   return content && content !== bare ? content : null
 }
 
@@ -733,6 +736,10 @@ export function mapHistoryRows(
 ): OverlayMessage[] {
   const history: OverlayMessage[] = []
   const legacyAnsweredQuestionIds = legacyOptionAnswerAssociations(rows)
+  const hasAggregateMaterialPreparation = rows.some((message) => {
+    const key = activityRowFrame(message.intent)?.key
+    return key === "chat.activity.videoMaterialsDone" || key === "chat.activity.viewWebPageDone"
+  })
   // C8-c fold: candidate set id → the OverlayMessage anchoring its card, so
   // a LATER turn's selection event repaints the earlier card's highlight
   // (the surface is one seat; rows never move).
@@ -766,7 +773,7 @@ export function mapHistoryRows(
         assets: messageAssetsFromAttachments(m.attachments ?? []),
       })
     } else if (m.question) {
-      const hasOptions = (m.question.options?.length ?? 0) > 0
+      const hasOptions = (m.question.options?.length ?? 0) > 0 || (m.question.items?.length ?? 0) > 0
       if (m.answer) {
         if (m.question.kind === "task_book") {
           // echo 实体化 (2026-09-04, A3): the row's content IS the
@@ -827,6 +834,9 @@ export function mapHistoryRows(
               muted: display.muted,
               questionId: m.id,
               answerKind: m.answer.kind,
+              items: (m.answer.answers?.length ?? 0) > 0
+                ? groupAnswerDisplayItems(m, m.answer.answers ?? [])
+                : undefined,
             },
           })
         } else {
@@ -912,25 +922,13 @@ export function mapHistoryRows(
         })
         continue
       }
-      // 素材节拍回放 (2026-09-24): a persisted beat row replays as a
-      // settled activity unit IN ITS ARRAY POSITION, never a bubble.
-      const beat = materialBeat(m.intent)
-      if (beat !== undefined) {
-        pushRow({
-          id: m.id,
-          role: "assistant",
-          content: "",
-          at: m.created_at,
-          independentKind: "material",
-          activity: { ...beat, at: beat.at ?? m.created_at },
-        })
+      if (
+        hasAggregateMaterialPreparation &&
+        intentType === "material_beat" &&
+        (m.intent as { beat?: string } | undefined)?.beat === "reading"
+      ) {
         continue
       }
-      // An unknown (or empty) beat row skips — never an empty bubble.
-      if (intentType === "material_beat" && !(m.content ?? "").trim()) continue
-      // activity 数组行回放 (ADR-108 — 每帧一行): one persisted frame per
-      // row, rendered at its array position (persisted order IS render
-      // order — the walk never re-sorts).
       const frame = activityRowFrame(m.intent)
       if (frame !== undefined) {
         pushRow({
@@ -938,14 +936,12 @@ export function mapHistoryRows(
           role: "assistant",
           content: "",
           at: m.created_at,
-          activity: frame,
+          activity: { ...frame, at: frame.at ?? m.created_at },
         })
         continue
       }
-      // A malformed activity row (frame off-shape) skips — never an empty
-      // bubble.
-      if (intentType === "activity") {
-        continue
+      if (intentType === "activity" || intentType === "material_beat") {
+        if (!(m.content ?? "").trim()) continue
       }
       // Candidate Surface 回放 (v4.2 C8-c): the turn's candidates_log events
       // fold — a set event births its card row (idempotent re-emits REPLACE

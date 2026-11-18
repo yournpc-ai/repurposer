@@ -307,7 +307,7 @@ def confirmation_need(
         needs_confirm = execution=="ask"
                      or (credits=="ask" and quote_high > 0)
                      or quote_high > always_confirm_above
-                     or unquotable
+                     or (unquotable and (execution=="ask" or credits=="ask"))
                      or unmet_condition
                      or copy_drift
                      or production_intent is not True
@@ -346,7 +346,7 @@ def confirmation_need(
     edits are not automatically exempt: an unproven wording change holds,
     while an unrelated patch carries any existing hold forward.
     """
-    if unquotable:
+    if unquotable and (execution == "ask" or credits == "ask"):
         return ConfirmationNeed(True, "unquotable", quote_high, True)
     if quote_high is not None and quote_high > always_confirm_above:
         return ConfirmationNeed(True, "above_guardrail", quote_high)

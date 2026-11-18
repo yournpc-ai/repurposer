@@ -557,6 +557,7 @@ class CompositionVersion(Base):
     base_version_id = Column(UUID(as_uuid=True), nullable=True)
     schema_version = Column(Integer, nullable=False, default=1)
     settings = Column(JSONB, nullable=False, default=dict)
+    creative_state = Column(JSONB, nullable=True)
     sources = Column(JSONB, nullable=False, default=list)
     scenes = Column(JSONB, nullable=False, default=list)
     timeline = Column(JSONB, nullable=False, default=dict)
@@ -716,10 +717,8 @@ class Conversation(Base):
     # Server-owned tool history, not a second work model or client input.
     context = Column(JSONB, nullable=False, default=lambda: {"schema_version": 1, "items": []},
                      server_default='{"schema_version":1,"items":[]}')
-    # The conversation's interface-language owner (ADR-080 单一叙事者律):
-    # stamped from the request's Accept-Language on every user chat turn —
-    # the ONE speech-language fact every assistant writer (plan / chat /
-    # trigger) inherits, so two writers never pick divergent languages.
+    # Stamped from Accept-Language for worker-born speech and deterministic
+    # chrome; plan/chat infer speech from user messages and history instead.
     ui_language = Column(String(10), nullable=True)
     # 环境能力位 owner (ADR-118 §6 — ui_language 同律座): the client's raw
     # can-host-canvas read, stamped from the chat request every user turn
@@ -800,10 +799,9 @@ class Message(Base):
     # stamp time — directed validation, zero version counters). NEVER a
     # question (blocking = the question payload); lifecycle = the row's.
     suggestions = Column(JSONB, nullable=False, default=list, server_default="[]")
-    # Structured presentation blocks (ADR-145 phase B): server-generated
-    # references a chat component resolves to its DTO (e.g.
-    # {kind:"video_storyboard", composition_version_id, …}) — never model
-    # prose, never a spec dump. Read-tolerant default [] on legacy rows.
+    # Server-generated structured additions: domain component references and
+    # system notices, dispatched by kind. Never model prose or a spec dump.
+    # Read-tolerant default [] on legacy rows.
     blocks = Column(JSONB, nullable=False, default=list, server_default="[]")
     # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
     # its structured ref {source_turn, suggestion_id} — the visible content
@@ -847,8 +845,10 @@ class Music(Base):
 
     Binding:
     - Platform/default pieces: ``generated_by_user_id = NULL``, ``is_public = True``.
-    - User-generated pieces (MiniMax): ``generated_by_user_id = <user_id>``,
+    - Legacy user-generated pieces (MiniMax): ``generated_by_user_id = <user_id>``,
       ``is_public = True`` (enter the shared library).
+    - Programmatic scores prepared for a user's work: ``generated_by_user_id = <user_id>``,
+      ``is_public = False``.
     - Future user uploads (Phase 3): ``generated_by_user_id = <user_id>``,
       ``is_public = False`` until reviewed.
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
+import { RunTaskList } from "./RunTaskList"
 import { WorkSegmentRow } from "./ActivityStream"
 
 const { anchor } = vi.hoisted(() => ({ anchor: vi.fn() }))
@@ -32,4 +33,25 @@ it("keeps live chat work noninteractive and allows keyboard access to Run detail
   expect(header.getAttribute("aria-expanded")).toBe("true")
   fireEvent.keyDown(header, { key: "Enter" })
   expect(header.getAttribute("aria-expanded")).toBe("false")
+})
+
+
+it.each([
+  ["2026-11-18T12:00:03Z", "chat.activityFold.worked"],
+  [null, "chat.activityFold.workedWithoutTime"],
+])("keeps a failed run neutral and shows its error on disclosure (%s)", (finished, label) => {
+  const start = "2026-11-18T12:00:00Z"
+  render(<RunTaskList
+    steps={[{ id: "image", kind: "prepare_visual_assets", seq: 0, status: "failed",
+      error: "Image preparation failed", cost: null, started_at: start, finished_at: finished }]}
+    runStartedAt={start} workEndedAtMs={null} title="Run failed" terminal failed
+    reviewPending={false} narrativeFallback="" hasUploads={false}
+  />)
+  const header = screen.getByRole("button")
+  expect(header.textContent).toBe(label)
+  expect(header.querySelector(".text-destructive")).toBeNull()
+  expect(screen.queryByText(/Image preparation failed/)).toBeNull()
+  fireEvent.click(header)
+  expect(screen.getByText(/Image preparation failed/).classList.contains("text-destructive")).toBe(true)
+  expect(header.textContent).toBe(label)
 })

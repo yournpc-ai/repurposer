@@ -11,7 +11,7 @@ from app.chat.service import (
     discard_unanswered_plan,
     dock_interrupt_question,
     finalize_bailed_runs,
-    record_material_beat,
+    record_asset_activity,
     seed_project_prompt,
 )
 from app.chat.trigger_turn import fire_trigger
@@ -31,6 +31,6 @@ def wire_pipeline_seams() -> None:
             finalize_bailed_runs=finalize_bailed_runs,
             seed_project_prompt=seed_project_prompt,
             discard_unanswered_plan=discard_unanswered_plan,
-            record_material_beat=record_material_beat,
+            record_asset_activity=record_asset_activity,
         )
     )

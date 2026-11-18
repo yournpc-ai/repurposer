@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -22,8 +23,8 @@ from pydantic import (
 import structlog
 
 from app.editing.edits import ClipEntityWrite
-from app.editing.revisions import RevisionAction
-from app.editing.schemas import Scene, Track, Transition
+from app.editing.revisions import RevisionOp
+from app.editing.schemas import CompositionContent, Scene, Track, Transition
 
 logger = structlog.get_logger(__name__)
 
@@ -451,7 +452,9 @@ class Option(BaseModel):
             data.pop("description", None)
         return data
 
-    id: str
+    id: str = Field(
+        description="Option id within this question. Fixed choices use the active wire's numeric syntax; server-owned entity targets retain their stable ids."
+    )
     label: str
     # 一问拍一体化 (2026-09-27, Claude-Card parity): the option's one-line
     # reason rides the card under the label — bare labels forced the
@@ -476,6 +479,56 @@ def resolve_recommended_id(
     return None
 
 
+BriefQuestionSlot = Literal[
+    "topic", "audience", "tone", "purpose", "target_seconds", "narrative_mode",
+    "narration_language", "subtitle_languages", "aspect", "voice_requirements",
+    "must_include", "avoid", "success_criteria",
+]
+
+
+class BriefQuestionItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        if isinstance(data, dict) and isinstance(data.get("options"), list):
+            data = {
+                **data,
+                "options": [
+                    {"id": str(index), "label": option}
+                    if isinstance(option, str) else option
+                    for index, option in enumerate(data["options"], start=1)
+                ],
+            }
+        return tolerate_null_keys(data, "options", "recommended_id", "default_path")
+
+    slot: BriefQuestionSlot
+    question: str
+    options: list[Option] = Field(default_factory=list)
+    recommended_id: str | None = None
+    allow_freeform: bool = True
+    required: bool = True
+    default_path: str = ""
+
+
+class BriefAnswerItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot: BriefQuestionSlot
+    kind: Literal["option", "freeform"]
+    option_id: str | None = None
+    text: str | None = None
+
+    @model_validator(mode="after")
+    def _value_matches_kind(self) -> "BriefAnswerItem":
+        if self.kind == "option" and not self.option_id:
+            raise ValueError("an option answer needs option_id")
+        if self.kind == "freeform" and not (self.text or "").strip():
+            raise ValueError("a freeform answer needs non-empty text")
+        return self
+
+
 class AnswerPayload(BaseModel):
     """The typed ``answer`` payload on a message.
 
@@ -486,9 +539,11 @@ class AnswerPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["option", "freeform", "bail", "start"]
+    kind: Literal["option", "freeform", "bail", "start", "group"]
     option_id: str | None = None
     text: str | None = None
+    group_digest: str | None = None
+    answers: list[BriefAnswerItem] = Field(default_factory=list)
     answered_at: datetime
 
 
@@ -510,6 +565,14 @@ class FreeformAnswerRequest(BaseModel):
     text: str
 
 
+class GroupAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["group"]
+    group_digest: str = Field(min_length=64, max_length=64)
+    answers: list[BriefAnswerItem] = Field(min_length=1, max_length=13)
+
+
 class StartAnswerRequest(BaseModel):
     """Confirm the docked plan and start the run (task_book questions).
 
@@ -529,11 +592,17 @@ class StartAnswerRequest(BaseModel):
 
 
 class BailAnswerRequest(BaseModel):
-    """Bail — a graceful exit (back to draft / stop the parked run), never an error."""
+    """Bail — a graceful exit (back to draft / stop the parked run), never an error.
+
+    A clarification group may include its already-selected answers; remaining
+    fields follow the server-owned task defaults. Legacy bails omit both.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["bail"]
+    group_digest: str | None = Field(default=None, min_length=64, max_length=64)
+    answers: list[BriefAnswerItem] = Field(default_factory=list, max_length=13)
 
 
 # Request body for ``POST /chat/messages/{id}/answer`` — discriminated on
@@ -541,6 +610,7 @@ class BailAnswerRequest(BaseModel):
 AnswerRequest = Annotated[
     OptionAnswerRequest
     | FreeformAnswerRequest
+    | GroupAnswerRequest
     | StartAnswerRequest
     | BailAnswerRequest,
     Field(discriminator="kind"),
@@ -628,9 +698,8 @@ class ChatMessageResponse(BaseModel):
     # assistant row offered, provenance included — the OptionDock renders
     # them under the prose; a pick rides back as suggestion_ref.
     suggestions: list[SuggestionRecord] = Field(default_factory=list)
-    # Structured presentation blocks (ADR-145 phase B): server-stamped
-    # component references (video_storyboard cards); absent/[] on legacy
-    # rows (读容忍).
+    # Server-stamped structured additions: domain component references and
+    # system notices. Assistant prose stays in content; absent/[] on legacy rows.
     blocks: list[dict] = Field(default_factory=list)
     # 点选引用 (ADR-099 §4): a user row that IS a suggestion pick carries
     # its structured ref — the visible content stays the picked label.
@@ -723,7 +792,7 @@ class QuestionProposal(BaseModel):
 
     type: Literal["ask"] = "ask"
     # 框架散文 (2026-09-08, ask 三分解剖 ①): the agent's speech around the
-    # question — 认领 the request + why this ONE question decides quality.
+    # question — 认领 the request + why this clarification decides quality.
     # The default path is NEVER woven in (ADR-103: what happens without an
     # answer rides the parameter alone — machine-readable, never spoken).
     # Streams as the turn's echo; the question field stays the bare
@@ -754,7 +823,7 @@ class QuestionProposal(BaseModel):
     # the speech. ``default_path`` is 提问策略 ③'s schema tooth: the skip
     # path, consumed by the dock's × and the interjection reminder tail —
     # machine-readable only, the prose never carries it.
-    slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
+    slot: BriefQuestionSlot | Literal["asset_role"] | None = None
     default_path: str = ""
 
 
@@ -886,7 +955,7 @@ def _drop_bad_brief(data: Any) -> Any:
 
 
 class PlanAskArgs(BaseModel):
-    """``ask_user`` params, plan path — the ask_user machinery's one-question
+    """``ask_user`` params, plan path — the ask_user machinery's clarification-interaction
     shape (QuestionProposal minus the prose, which is the content channel
     now).
     ``slot`` names the brief slot the question fills (plan-path only
@@ -900,15 +969,20 @@ class PlanAskArgs(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(
-            tolerate_null_keys(data, "options", "default_path", "slot", "material_text", "material_urls", "recommended_id", "pending_disposition")
+            tolerate_null_keys(data, "options", "items", "default_path", "slot", "material_text", "material_urls", "recommended_id", "pending_disposition")
         )
 
     question: str = Field(
-        description="The ONE question, in the interface language — the bare question, no framing, no default-path tail (those live in your spoken message)."
+        description="The bare question or clarification-group title, in the interface language — no framing, no default-path tail (those live in your spoken message)."
     )
     options: list[Option] = Field(
         default_factory=list,
         description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only when no sensible options exist (a freeform ask). Freeform input always stays available alongside.",
+    )
+    items: list[BriefQuestionItem] = Field(
+        default_factory=list,
+        max_length=13,
+        description="Optional single clarification group. Include only missing Brief slots, each once; the server de-duplicates known values and issues group_digest.",
     )
     allow_freeform: bool = True
     recommended_id: str | None = Field(
@@ -919,7 +993,7 @@ class PlanAskArgs(BaseModel):
         default="",
         description="One short clause: what you will do if the user skips. The skip must be safe.",
     )
-    slot: Literal["topic", "audience", "tone", "asset_role"] | None = Field(
+    slot: BriefQuestionSlot | Literal["asset_role"] | None = Field(
         default=None,
         description="The brief slot this question fills (the pre-run router's seat). 'asset_role' is NOT a brief slot: the 资产角色 disambiguation (ADR-078 判词④) — ask it when ≥2 videos are attached and which is the user's own material vs the reference exemplar is undecidable from the message. Its options are code-built from the videos at the dock seat (never write option ids yourself); the answer settles the source/exemplar pins by code.",
     )
@@ -959,7 +1033,7 @@ class PresentPlanArgs(BaseModel):
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
-        description="The authorized production chain: produce_video or prepare_narration.",
+        description="The authorized chain: produce_video, prepare_narration, prepare_visual_assets or prepare_music.",
     )
     specific_instruction: str | None = Field(
         default=None,
@@ -1087,6 +1161,22 @@ class VideoPresetChoice(BaseModel):
 
 
 
+class AnalyzeBrandArgs(BaseModel):
+    """Prepare a sourced BrandProfile; evidence and PNG inputs are server-read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return _drop_bad_brief(tolerate_null_keys(data, "brief"))
+
+    brief: Brief | None = Field(
+        default=None,
+        description="Current literal Brief slots. Use user-stated only for values explicitly present in the user's own words; omit unknown slots.",
+    )
+
+
 class PrepareVideoMaterialTarget(BaseModel):
     """One already-projected source whose exact facts/media are now needed."""
 
@@ -1194,8 +1284,8 @@ class ReviewVideoArgs(BaseModel):
         return self
 
 
-class ReviseVideoActionArgs(BaseModel):
-    """One bounded creative action; Chat binds the resolved work's current base."""
+class ReviseVideoOpsArgs(BaseModel):
+    """One atomic batch of direct Ops; Chat binds the current work's base."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1208,7 +1298,7 @@ class ReviseVideoActionArgs(BaseModel):
         default=None,
         description="Server-bound from the resolved current work; omit from Chat calls.",
     )
-    action: RevisionAction
+    ops: list[RevisionOp] = Field(min_length=1, max_length=32)
     scrub: VideoScrubTarget | None = Field(
         default=None,
         description="Optionally inspect one affected Scene/Clip window or isolated Object after saving. Omit for static-only edits; never target the complete video.",
@@ -1392,23 +1482,44 @@ class PrepareNarrationArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(min_length=1, max_length=9000)
+    text: str | None = Field(default=None, min_length=1, max_length=9000)
     audio_asset_id: UUID | None = Field(
         default=None,
         description="The exact AUDIO asset the user explicitly @referenced for this recording.",
     )
     voice_id: str | None = Field(default=None, min_length=1, max_length=255)
     language: str | None = Field(default=None, min_length=2, max_length=16)
+    draft_ref: VideoDraftRef | None = Field(
+        default=None,
+        description="Current working draft; pair with scene_id to resolve its exact pending narration in code.",
+    )
+    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
     pending_disposition: Literal["answer", "skip", "none"] = "none"
+    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "audio_asset_id", "voice_id", "language", "pending_disposition")
+        return tolerate_null_keys(
+            data, "text", "audio_asset_id", "voice_id", "language",
+            "draft_ref", "scene_id", "pending_disposition",
+        )
 
     @model_validator(mode="after")
     def _source(self) -> "PrepareNarrationArgs":
-        if not self.text.strip():
+        scene_form = self.draft_ref is not None or self.scene_id is not None
+        if scene_form:
+            if self.draft_ref is None or self.scene_id is None:
+                raise ValueError("scene narration needs both draft_ref and scene_id")
+            if any((
+                self.text is not None,
+                self.audio_asset_id is not None,
+                self.voice_id is not None,
+                self.language is not None,
+            )):
+                raise ValueError("scene narration resolves text, voice and language from its draft")
+            return self
+        if self.text is None or not self.text.strip():
             raise ValueError("the final narration script must not be blank")
         if self.audio_asset_id is not None:
             if self.voice_id is not None:
@@ -1416,6 +1527,9 @@ class PrepareNarrationArgs(BaseModel):
         elif self.voice_id is None or self.language is None:
             raise ValueError("TTS preparation needs voice_id and language, or name an AUDIO asset")
         return self
+
+    def bind_working_draft(self, value: dict[str, Any]) -> None:
+        self._working_draft = deepcopy(value)
 
 
 class GetNarrationAlignmentArgs(BaseModel):
@@ -1762,7 +1876,7 @@ class EditGraphArgs(BaseModel):
 
 
 class ChatAskArgs(BaseModel):
-    """``ask_user`` params, chat path — the same one-question shape as the
+    """``ask_user`` params, chat path — the same clarification-interaction shape as the
     plan path minus the brief slot (post-run questions never backfill a
     brief)."""
 
@@ -1771,14 +1885,19 @@ class ChatAskArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "options", "default_path", "recommended_id", "pending_disposition")
+        return tolerate_null_keys(data, "options", "items", "default_path", "recommended_id", "pending_disposition")
 
     question: str = Field(
-        description="The ONE question, in the interface language — the bare question, no framing, no default-path tail."
+        description="The bare question or clarification-group title, in the interface language — no framing, no default-path tail."
     )
     options: list[Option] = Field(
         default_factory=list,
         description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only for a freeform ask.",
+    )
+    items: list[BriefQuestionItem] = Field(
+        default_factory=list,
+        max_length=13,
+        description="Optional single clarification group containing only missing Brief slots.",
     )
     allow_freeform: bool = True
     recommended_id: str | None = Field(
@@ -2213,26 +2332,11 @@ MaterialState = Literal["none", "pasted", "attached"]
 
 
 class Brief(BaseModel):
-    """The brief: five slots + code-owned bookkeeping.
+    """Structured dialog needs with code-owned merge and provenance.
 
-    topic / audience / tone / constraints are the askable slots — the ask
-    strategy (一轮一问决定槽) targets the one whose answer most decides
-    quality. ``material_state`` is code-stamped at write time (assets with
-    files → attached; pasted text material → pasted; else none) — the router
-    READS it in the brief block for the root judgment, never proposes it.
-
-    顺形律 (2026-09-11，ADR-064): ``constraints`` = 来源化条目的**数组**
-    (``list[BriefSlot[str]]``)，不是对象包数组——实测（M3 十七次复跑 +
-    tool-calling spike 六次）模型的第一直觉写法恒为对象数组，「对象包数组」
-    形状曾造成 schema 两连败杀死整回合。schema 顺着模型的自然写法设计；
-    读容忍只兜底存量/跑偏形状，不承担正典形状的分歧。
-
-    ADR-071 ⑤ signpost (2026-09-11): the model-facing brief spec (which
-    slots exist, emit-only-what-you-have-a-view-on, source precedence
-    user-stated > inferred > default) lives in
-    ``app/prompts/chat/plan_mode.j2``'s brief rule — the schema
-    never reaches the model (json_object response format, parse-side only).
-    Edit the template first, then sync this mirror.
+    Each slot carries its value and source: user-stated > inferred > default.
+    ``constraints`` is an array of sourced entries. ``material_state`` and
+    ``asked`` are maintained from world facts and question history by code.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -2251,6 +2355,16 @@ class Brief(BaseModel):
         """
         if not isinstance(data, dict):
             return data
+        optional_slots = (
+            "purpose", "target_seconds", "narrative_mode", "narration_language",
+            "subtitle_languages", "aspect", "voice_requirements", "must_include",
+            "avoid", "success_criteria",
+        )
+        if any(data.get(key) is None for key in optional_slots):
+            data = {
+                key: value for key, value in data.items()
+                if key not in optional_slots or value is not None
+            }
         raw = data.get("constraints")
         if raw is None:
             if "constraints" in data:
@@ -2296,6 +2410,16 @@ class Brief(BaseModel):
     topic: BriefSlot[str] = Field(default_factory=BriefSlot)
     audience: BriefSlot[str] = Field(default_factory=BriefSlot)
     tone: BriefSlot[str] = Field(default_factory=BriefSlot)
+    purpose: BriefSlot[str] = Field(default_factory=BriefSlot)
+    target_seconds: BriefSlot[int] = Field(default_factory=BriefSlot)
+    narrative_mode: BriefSlot[str] = Field(default_factory=BriefSlot)
+    narration_language: BriefSlot[str] = Field(default_factory=BriefSlot)
+    subtitle_languages: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
+    aspect: BriefSlot[str] = Field(default_factory=BriefSlot)
+    voice_requirements: BriefSlot[str] = Field(default_factory=BriefSlot)
+    must_include: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
+    avoid: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
+    success_criteria: BriefSlot[list[str]] = Field(default_factory=BriefSlot)
     constraints: list[BriefSlot[str]] = Field(default_factory=list)
     material_state: BriefSlot[MaterialState] = Field(default_factory=BriefSlot)
     # Code-owned roll of the slots already asked once this plan phase (一轮
@@ -2306,20 +2430,119 @@ class Brief(BaseModel):
     asked: list[str] = Field(default_factory=list)
 
 
+class BrandSourceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: str
+    digest: str
+    view_ids: list[str] = Field(default_factory=list)
+    line_ids: list[str] = Field(default_factory=list)
+
+
+class BrandClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    line_ids: list[str] = Field(default_factory=list)
+    kind: Literal["fact", "inferred"] = "fact"
+
+
+class BrandTagline(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    line_ids: list[str] = Field(default_factory=list)
+
+
+class BrandColor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+    role: str = ""
+    source: Literal["css", "dom", "visual", "user"] = "visual"
+    confidence: Literal["confirmed", "inferred"] = "inferred"
+    source_refs: list[str] = Field(default_factory=list)
+
+
+class BrandTypography(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate: str
+    weight: str = ""
+    source: Literal["css", "dom", "visual", "user"] = "visual"
+    confidence: Literal["confirmed", "inferred"] = "inferred"
+    source_refs: list[str] = Field(default_factory=list)
+
+
+class BrandAsset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["logo", "wordmark", "icon", "other"]
+    ref: str = ""
+    source_refs: list[str] = Field(default_factory=list)
+
+
+class BrandCreativeDirection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = ""
+    media_preferences: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    provenance: Literal["inferred"] = "inferred"
+
+
+class BrandProfile(BaseModel):
+    """Derived brand understanding for one project's immutable web evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    source_refs: list[BrandSourceRef] = Field(default_factory=list)
+    extractor_version: str
+    positioning: str = ""
+    claims: list[BrandClaim] = Field(default_factory=list)
+    taglines: list[BrandTagline] = Field(default_factory=list)
+    colors: list[BrandColor] = Field(default_factory=list)
+    typography: list[BrandTypography] = Field(default_factory=list)
+    brand_assets: list[BrandAsset] = Field(default_factory=list)
+    creative_direction: BrandCreativeDirection = Field(
+        default_factory=BrandCreativeDirection
+    )
+    unknowns: list[str] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)
+    content_digest: str
+
+
+class CreativeState(BaseModel):
+    """The single authoring-state payload shared by plans and saved versions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    brief: Brief = Field(default_factory=Brief)
+    brand_profile: BrandProfile | None = None
+    source_refs: list[BrandSourceRef] = Field(default_factory=list)
+    content_digest: str | None = None
+
+
+def creative_state_digest(state: CreativeState) -> str:
+    payload = state.model_dump(mode="json", exclude={"content_digest"})
+    return canonical_json_hash(payload)
+
+
+def seal_creative_state(state: CreativeState) -> CreativeState:
+    return state.model_copy(update={"content_digest": creative_state_digest(state)})
+
+
+CompositionContent.model_rebuild(_types_namespace={"CreativeState": CreativeState})
+
+
 class InferredIntent(BaseModel):
-    """The intent router's payload: four actions + the proposed tool chain.
+    """Intent payload: draft, clarify, answer or confirm, plus production tasks.
 
-    ADR-043 (outputs → derive): the request layer carries NO output
-    declarations — ``tasks`` is the only grammar (a registry tool + its
-    params, the same shape the chat loop's task_list proposals use). Outputs
-    are a derived projection of the compiled graph, never a request field.
-
-    ADR-052 B2 (action set): ``draft`` drafts/refines the plan (it never
-    generates — the retired ``generate`` name lied); ``ask`` asks ONE
-    question through the dock's ask_user machinery (the shared
-    QuestionProposal shape, 案 A 双实例); ``answer`` is a purely
-    informational reply;
-    ``start`` confirms the docked plan.
+    ``tasks`` is the production grammar; outputs are derived from the graph.
+    ``ask`` carries one clarification interaction, potentially grouped by the
+    active tool contract. ``answer`` is informational; ``start`` confirms.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -2356,9 +2579,8 @@ class InferredIntent(BaseModel):
     ask: QuestionProposal | None = Field(
         default=None,
         description=(
-            "The ONE question when action is 'ask' — the shared question "
-            "shape (3 one-word options — 2 only for a genuinely binary "
-            "choice — + freeform). Null for every other action."
+            "The clarification interaction when action is 'ask', including "
+            "the active contract's grouped form. Null for every other action."
         ),
     )
     answer: str | None = Field(
@@ -2381,8 +2603,8 @@ class InferredIntent(BaseModel):
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description=(
-            "The authorized production chain: produce_video or "
-            "prepare_narration, in execution order. Empty for "
+            "The authorized chain: produce_video, prepare_narration or "
+            "prepare_visual_assets, in execution order. Empty for "
             "start/answer/ask calls."
         ),
     )
@@ -2507,8 +2729,10 @@ class QuestionPayload(BaseModel):
     # 提问策略 ③: what happens when the user skips — the framing prose
     # (``content``) carries it visibly; the field keeps it machine-readable
     # for the dock's × and the interjection reminder tail.
-    slot: Literal["topic", "audience", "tone", "asset_role"] | None = None
+    slot: BriefQuestionSlot | Literal["asset_role"] | None = None
     default_path: str = ""
+    items: list[BriefQuestionItem] = Field(default_factory=list)
+    group_digest: str | None = None
     # 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
     # dock time, so the plan card renders the agent's OWN understanding
     # (valued slots with provenance) instead of blank form fields. Frozen
@@ -2528,6 +2752,37 @@ class QuestionPayload(BaseModel):
     # compiled tasks (evidence layer) + estimate_credits (费用语义五面).
     # Empty on every non-exploration dock (读容忍: 旧行无此键).
     plans: list[dict] = Field(default_factory=list)
+
+
+def question_group_digest(items: list[BriefQuestionItem], brief: Brief) -> str:
+    # Code-owned bookkeeping is not part of the question's answer identity.
+    return canonical_json_hash({
+        "schema_version": 1,
+        "items": [item.model_dump(mode="json", exclude_none=True) for item in items],
+        "brief_baseline": brief.model_dump(
+            mode="json", exclude={"asked", "material_state"}
+        ),
+    })
+
+
+def missing_brief_question_items(
+    items: list[BriefQuestionItem], brief: Brief
+) -> list[BriefQuestionItem]:
+    slots = [item.slot for item in items]
+    if len(slots) != len(set(slots)):
+        raise ValueError("a clarification group cannot contain duplicate slots")
+    missing: list[BriefQuestionItem] = []
+    for item in items:
+        if getattr(brief, item.slot).value:
+            continue
+        if item.required and not item.options and not item.allow_freeform:
+            raise ValueError(f"required slot {item.slot} needs options or freeform")
+        missing.append(item.model_copy(update={
+            "recommended_id": resolve_recommended_id(item.recommended_id, item.options)
+        }))
+    return missing
+
+
 class PendingPlan(BaseModel):
     """Unconfirmed plan persisted on ``projects.pending_brief``.
 
@@ -2535,7 +2790,7 @@ class PendingPlan(BaseModel):
     answer-action turn never overwrites the stored plan), cleared once the
     run starts. Lets a user who left the plan-confirmation chat resume it
     exactly, from any device. Ask-action turns write a brief-only row
-    (``intent=None``): the merged brief persists while the ONE question is
+    (``intent=None``): the merged brief persists while the clarification is
     docked, and the answer's backfill lands on it.
     """
 
@@ -2560,6 +2815,7 @@ class PendingPlan(BaseModel):
     # provenance, merged by code every plan turn (merge_brief). The task
     # chain and derived preview above stay the plan's own rows (原样).
     brief: Brief = Field(default_factory=Brief)
+    creative_state: CreativeState | None = None
     reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
     # 资产角色 pins (ADR-078 判词④): which attached video is the user's OWN

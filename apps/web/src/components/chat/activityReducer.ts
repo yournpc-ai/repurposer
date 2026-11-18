@@ -29,6 +29,8 @@ export function upsertActivityFrame(
 ): ActivityFramePayload[] {
   const i = prev.findIndex((a) => a.activity_id === frame.activity_id)
   if (i === -1) return [...prev, frame]
+  const previous = prev[i]
+  if (frame.seq <= previous.seq || (previous.status !== "active" && frame.status === "active")) return prev
   const next = [...prev]
   next[i] = frame
   return next

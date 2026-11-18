@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  Image,
   Loader2,
   Mic2,
   Minus,
@@ -58,6 +59,7 @@ import {
   releaseSettledCandidateRows,
   type ActivityRowFramePayload,
   type CandidateEventPayload,
+  type QuestionPreviewPayload,
   type RowAppendPayload,
 } from "@/lib/chatStreamFrames"
 import { buildConversationUnits, closeWorkSegment } from "./timeline/project"
@@ -119,16 +121,17 @@ import {
   answeredQuestionText,
   answeredQuestionIdFromIntent,
   isNonRenderIntent,
-  materialBeat,
-  materialBeatKey,
+  activityAssetKey,
   triggerDeliveryRef,
   triggerOutputRefs,
   triggerSuggestions,
   questionEcho,
   bareQuestion,
+  groupAnswerDisplayItems,
   type HistoryRow,
 } from "./timeline/history"
 import type {
+  BriefAnswerItem,
   DerivedRow,
   DecisionPlanRow,
   OverlayMessage,
@@ -167,6 +170,7 @@ import {
   stampMessagePresentation,
 } from "./liveMessageReconcile"
 import { matchOptionByText } from "./optionMatch"
+import { loadQuestionGroupDrafts, saveQuestionGroupDrafts } from "./questionGroupDrafts"
 import {
   resetActivities,
   sweepActivities,
@@ -210,6 +214,10 @@ const TOOL_META: Record<string, {
     Icon: Mic2,
     labelKey: "chat.productionStages.speech_media",
     langParam: "language",
+  },
+  prepare_visual_assets: {
+    Icon: Image,
+    labelKey: "chat.productionStages.visual_assets",
   },
 }
 
@@ -390,13 +398,15 @@ function StagedAttachmentChip({
   )
 }
 
-/** 形态律 (ADR-053 R1): a TEXT question (options-empty) never docks — it
- * lives in the flow as a plain assistant message, so a refresh / revival
- * fetch keeps nothing for the pill. Task plans and options questions dock
- * as before (the Start press answers the docked task_book row by id). */
-function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
+/** 形态律 (ADR-053 R1): a TEXT question (options/items-empty) never docks —
+ * it lives in the flow as a plain assistant message, so a refresh / revival
+ * fetch keeps nothing for the pill. Task plans and questions with options or
+ * grouped items dock as before. */
+export function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
   return q &&
-    (q.question?.kind !== "question" || (q.question?.options?.length ?? 0) > 0)
+    (q.question?.kind !== "question" ||
+      (q.question?.options?.length ?? 0) > 0 ||
+      (q.question?.items?.length ?? 0) > 0)
     ? q
     : null
 }
@@ -716,6 +726,36 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the confirm beat; plain questions from the chat loop afterwards); the
   // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
+  const [questionGroupDrafts, setQuestionGroupDrafts] = useState<Record<string, BriefAnswerItem[]>>({})
+  const groupDraftsHydrationRef = useRef({ projectId: "", skipSave: true })
+  const groupDraftKey = (question: QuestionMessage) =>
+    `${question.id}:${question.question?.group_digest ?? ""}`
+  useEffect(() => {
+    groupDraftsHydrationRef.current = { projectId, skipSave: true }
+    setQuestionGroupDrafts(loadQuestionGroupDrafts(projectId))
+  }, [projectId])
+  useEffect(() => {
+    const hydration = groupDraftsHydrationRef.current
+    if (hydration.projectId !== projectId) return
+    if (hydration.skipSave) {
+      hydration.skipSave = false
+      return
+    }
+    saveQuestionGroupDrafts(projectId, questionGroupDrafts)
+  }, [projectId, questionGroupDrafts])
+  useEffect(() => {
+    const digest = pendingQuestion?.question?.group_digest
+    if (!pendingQuestion || !digest || !(pendingQuestion.question?.items?.length)) return
+    const targetKey = groupDraftKey(pendingQuestion)
+    setQuestionGroupDrafts((previous) => {
+      if (previous[targetKey]) return previous
+      const sourceKey = Object.keys(previous).find((key) => key.endsWith(`:${digest}`) && key !== targetKey)
+      if (!sourceKey) return previous
+      const next = { ...previous, [targetKey]: previous[sourceKey] }
+      delete next[sourceKey]
+      return next
+    })
+  }, [pendingQuestion?.id, pendingQuestion?.question?.group_digest])
   // Read projection of pending_brief.video_presentation. It can only unlock
   // the exact server-authorized delayed-start ACK; it never creates intent.
   const [presentationRecovery, setPresentationRecovery] =
@@ -743,10 +783,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // persisted array rows (assistant.row.append/update → `messages`,
   // ADR-108), and draft/run spans are live-only by law (落定即退役).
   const [activities, setActivities] = useState<ActivityFramePayload[]>([])
-  /** CURRENT-turn activity HOST ROW ids (not per-turn activity_ids). This
-   * set is replaced at each turn birth, so old segments cannot reopen or be
-   * sealed by a later turn that reuses the same "a1". Each turn keeps its
-   * own Set object for async terminal cleanup. */
+  /** CURRENT-turn activity HOST ROW ids. This set is replaced at each turn
+   * birth, so old segments cannot reopen or be sealed by a later turn. Each
+   * turn keeps its own Set object for async terminal cleanup. */
   const currentActivityRowKeysRef = useRef<Set<string>>(new Set())
   /** Server structure ids whose actual open renderer committed for each Turn.
    * Written synchronously by layout effects, read synchronously by Stop. */
@@ -791,6 +830,30 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
+  const interimActivityGatesRef = useRef<Set<string>>(new Set())
+  const [interimActivityGateCount, setInterimActivityGateCount] = useState(0)
+  const releaseHeldActivityRows = useCallback(() => {
+    setMessages((prev) => prev.map((message) =>
+      message.activityDisplayHeld
+        ? { ...message, activityDisplayHeld: undefined }
+        : message
+    ))
+  }, [])
+  const beginInterimActivityGate = useCallback((rowId: string) => {
+    interimActivityGatesRef.current.add(rowId)
+    setInterimActivityGateCount(interimActivityGatesRef.current.size)
+  }, [])
+  const settleInterimActivityGate = useCallback((rowId: string) => {
+    interimActivityGatesRef.current.delete(rowId)
+    const remaining = interimActivityGatesRef.current.size
+    setInterimActivityGateCount(remaining)
+    if (remaining === 0) releaseHeldActivityRows()
+  }, [releaseHeldActivityRows])
+  const resetInterimActivityGates = useCallback(() => {
+    interimActivityGatesRef.current.clear()
+    setInterimActivityGateCount(0)
+    releaseHeldActivityRows()
+  }, [releaseHeldActivityRows])
   /** Highest persisted transcript position observed from ANY server channel,
    * including non-render rows. Polling compares against the value from before
    * its response: a row merely unknown to this client is not automatically
@@ -868,6 +931,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           seq: row.seq ?? undefined,
           at: row.created_at ?? undefined,
           activity: frame,
+          activityDisplayHeld: interimActivityGatesRef.current.size > 0 || undefined,
         },
       ]
     })
@@ -1076,6 +1140,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const stashedAnswerRef = useRef<{
     optionId?: string
     freeformText?: string
+    groupAnswers?: BriefAnswerItem[]
+    groupDigest?: string
     optimisticId: string
   } | null>(null)
   const onCompleteRef = useRef(onComplete)
@@ -1449,18 +1515,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // aggregate logs never enter the flow.
         if (isNonRenderIntent(row.intent)) continue
         const fresh = isFreshPolledRow(row.seq, observedBefore)
-        // 素材节拍 + activity 数组行 (ADR-108): polling is a LIVE-TAIL
-        // channel, not an archive backfill. A row old enough to precede the
-        // client's observed tail belongs to history replay; discovering it
-        // only during run review must not inject a homeless work row now.
-        // Run review has its own run-step surface and admits NO activity
-        // rows; the processing watch keeps fresh material beats.
-        const material = includeActivityRows ? materialBeat(row.intent) : undefined
-        const ordinary =
-          includeActivityRows && material === undefined
-            ? activityRowFrame(row.intent)
-            : undefined
-        const beat = material ?? ordinary
+        const beat = includeActivityRows ? activityRowFrame(row.intent) : undefined
         if (beat !== undefined) {
           if (!fresh) continue
           if (messagesRef.current.some((m) => m.id === row.id)) continue
@@ -1470,7 +1525,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             createdAt: row.created_at,
             turnId: row.turn_id,
             beat,
-            material: material !== undefined,
           })
           if (recovered.registerHost) currentActivityRowKeysRef.current.add(row.id)
           setMessages((prev) =>
@@ -1605,7 +1659,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               !isNonRenderIntent(r.intent) &&
               (r.intent as { type?: string } | undefined)?.type !==
                 "interim_prose" &&
-              materialBeat(r.intent) === undefined &&
               activityRowFrame(r.intent) === undefined &&
               !reconciledIdsRef.current.has(r.id) &&
               !messagesRef.current.some((m) => m.id === r.id),
@@ -2308,12 +2361,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     message: QuestionMessage,
     answer: string,
     muted: boolean,
+    items?: { question: string; answer: string }[],
   ): NonNullable<OverlayMessage["qa"]> => ({
     question: bareQuestion(message),
     answer,
     muted,
     questionId: message.id,
-    answerKind: message.answer?.kind,
+    answerKind: message.answer?.kind ?? (items ? "group" : undefined),
+    items,
   })
 
   const buildAnsweredQuestionRow = (
@@ -2325,7 +2380,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (isPlan) return null
     if (
       message.question?.kind === "question" &&
-      (message.question?.options?.length ?? 0) === 0
+      (message.question?.options?.length ?? 0) === 0 &&
+      (message.question?.items?.length ?? 0) === 0
     ) {
       return null
     }
@@ -2337,7 +2393,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       at: message.created_at,
       turnId: message.turn_id ?? undefined,
       independentKind: "qa",
-      qa: buildQaBlock(message, display.text, display.muted),
+      qa: buildQaBlock(
+        message,
+        display.text,
+        display.muted,
+        (message.answer.answers?.length ?? 0) > 0
+          ? groupAnswerDisplayItems(message, message.answer.answers ?? [])
+          : undefined,
+      ),
     }
   }
   const pushAnsweredQuestion = (message: QuestionMessage) => {
@@ -2380,7 +2443,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
       if (
         message.question.kind === "question" &&
-        (message.question.options?.length ?? 0) === 0
+        (message.question.options?.length ?? 0) === 0 &&
+        (message.question.items?.length ?? 0) === 0
       ) {
         // 形态律 (ADR-053 R1): a text question never docks — render it as a
         // plain assistant message and leave the input live. echoCarried:
@@ -2484,10 +2548,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * visual change) or CONSUME the stash at the fire site. */
   const discardPreviewArtifacts = () => {
     const stashed = stashedAnswerRef.current
+    const rejectedDigest = stashed?.groupDigest ?? (pendingQuestion?.preview ? pendingQuestion.question?.group_digest : null)
     if (stashed) {
       stashedAnswerRef.current = null
       setAnswering(false)
       setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
+    }
+    if (rejectedDigest) {
+      setQuestionGroupDrafts((previous) => Object.fromEntries(
+        Object.entries(previous).filter(([key]) => !key.endsWith(`:${rejectedDigest}`))
+      ))
     }
     setPendingQuestion((prev) => (prev?.preview ? null : prev))
   }
@@ -2505,14 +2575,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * behind (a preview pill has no ×). */
   const dockQuestionPreview = (
     id: string,
-    payload: {
-      question?: string | null
-      options?: { id: string; label: string; description?: string }[]
-      recommended_id?: string | null
-    },
+    payload: QuestionPreviewPayload,
   ) => {
     if (!payload.question) return
-    if ((payload.options ?? []).length === 0) return
+    if ((payload.options ?? []).length === 0 && (payload.items ?? []).length === 0) return
     setPendingQuestion({
       id,
       content: "",
@@ -2520,6 +2586,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         kind: "question",
         question: payload.question,
         options: payload.options ?? [],
+        items: payload.items ?? [],
+        group_digest: payload.group_digest ?? null,
+        allow_freeform: payload.allow_freeform ?? true,
+        slot: payload.slot ?? null,
+        default_path: payload.default_path ?? "",
         recommended_id: payload.recommended_id ?? null,
       },
       answer: null,
@@ -2606,6 +2677,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }, STREAM_WATCHDOG_TICK_MS)
     setProseActive(false)
     setThinkingPhase(null)
+    resetInterimActivityGates()
     setActivities(resetActivities()) // the new turn's own now-line stream starts empty
     currentActivityRowKeysRef.current = new Set()
     const workRowKeys = currentActivityRowKeysRef.current
@@ -2653,6 +2725,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       },
       onVisible: (rowId, atMs) => {
         if (ownsTurn()) noteSpeechVisible(rowId, atMs, workRowKeys)
+      },
+      onInterimStart: (rowId) => {
+        if (ownsTurn()) beginInterimActivityGate(rowId)
+      },
+      onInterimSettled: (rowId) => {
+        if (ownsTurn()) settleInterimActivityGate(rowId)
       },
       turnId: () => adoptTurnId(),
     })
@@ -3326,15 +3404,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               landOnStartedRun(run.id)
             } else {
               // Refresh while confirming: rebuild the dock + panel plan.
-              // 归档单一源 (echo 双份事故): a pending question needs NO
-              // rebuild — its echo replays from the archive (mapHistoryRows'
-              // question branch) and its pill revives via the mount pending
-              // fetch, so handleAssistantMessage would push the SAME echo a
-              // second time. Only the task_book (zero archive rendering —
-              // dock + panel plan state) still rides the handler.
+              // The archive already replays the dock's echo. Restore only
+              // its pending question and plan state; marking that echo as
+              // carried prevents a duplicate assistant row on refresh.
               const q = dockWorthyQuestion(await fetchPendingQuestion())
               if (q && q.question?.kind === "task_book") {
-                await handleAssistantMessage(q)
+                await handleAssistantMessage(q, { echoCarried: true })
               }
             }
             return
@@ -3410,7 +3485,56 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       stashedAnswerRef.current = null
       setAnswering(false)
       setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
+      if (stashed.groupDigest) {
+        setQuestionGroupDrafts((previous) => Object.fromEntries(
+          Object.entries(previous).filter(([key]) => !key.endsWith(`:${stashed.groupDigest}`)),
+        ))
+      }
     }
+  }
+
+  const handleGroupSubmit = async (
+    answers: BriefAnswerItem[],
+    questionOverride?: QuestionMessage,
+  ) => {
+    const question = questionOverride ?? pendingQuestion
+    const digest = question?.question?.group_digest
+    if (!question || !digest || !(question.question?.items?.length)) return
+    const displayItems = groupAnswerDisplayItems(question, answers)
+    const displayText = displayItems.map((item) => item.answer).filter(Boolean).join(" · ")
+    if (question.preview && !questionOverride) {
+      const optimisticId = crypto.randomUUID()
+      stashedAnswerRef.current = { groupAnswers: answers, groupDigest: digest, optimisticId }
+      setAnswering(true)
+      setPendingQuestion(null)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: optimisticId,
+          role: "assistant",
+          content: "",
+          turnId: question.turn_id ?? adoptCurrentTurnId(),
+          independentKind: "qa",
+          qa: buildQaBlock(question, displayText, false, displayItems),
+          at: new Date().toISOString(),
+          clientVisibleAtMs: Date.now(),
+        },
+      ])
+      recallDock()
+      scrollerSendRef.current?.()
+      return
+    }
+    if (!questionOverride && answering) return
+    if (questionOverride && stashedAnswerRef.current?.groupDigest !== digest) {
+      retireStashedAnswer()
+      return
+    }
+    await settleAnswerTurn(
+      question,
+      { kind: "group", group_digest: digest, answers },
+      displayText,
+      displayItems,
+    )
   }
 
   /** Docked question answered by an option click — the answer endpoint
@@ -3490,8 +3614,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * optimistic block and the archive never flip). */
   const settleAnswerTurn = async (
     question: QuestionMessage,
-    body: { kind: "option"; option_id: string } | { kind: "freeform"; text: string },
+    body:
+      | { kind: "option"; option_id: string }
+      | { kind: "freeform"; text: string }
+      | { kind: "group"; group_digest: string; answers: BriefAnswerItem[] },
     displayText: string,
+    displayItems?: { question: string; answer: string }[],
   ) => {
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
@@ -3519,6 +3647,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
+    resetInterimActivityGates()
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
     currentActivityRowKeysRef.current = new Set()
     const workRowKeys = currentActivityRowKeysRef.current
@@ -3535,7 +3664,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               content: "",
               turnId: question.turn_id ?? undefined,
               independentKind: "qa",
-              qa: buildQaBlock(question, displayText, false),
+              qa: buildQaBlock(question, displayText, false, displayItems),
               at: new Date().toISOString(),
               clientVisibleAtMs: Date.now(),
             },
@@ -3559,6 +3688,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       },
       onVisible: (rowId, atMs) => {
         if (ownsTurn()) noteSpeechVisible(rowId, atMs, workRowKeys)
+      },
+      onInterimStart: (rowId) => {
+        if (ownsTurn()) beginInterimActivityGate(rowId)
+      },
+      onInterimSettled: (rowId) => {
+        if (ownsTurn()) settleInterimActivityGate(rowId)
       },
       turnId: () => adoptTurnId(),
     })
@@ -3626,6 +3761,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       })
       if (!ownsTurn()) return
       terminalAtMs = Date.now()
+      if (body.kind === "group") {
+        setQuestionGroupDrafts((previous) => Object.fromEntries(
+          Object.entries(previous).filter(([key]) => !key.endsWith(`:${body.group_digest}`)),
+        ))
+      }
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
       // ITS OWN INDEX and the streaming preview settles static under the
@@ -3718,6 +3858,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         const stashed = stashedAnswerRef.current as {
           optionId?: string
           freeformText?: string
+          groupAnswers?: BriefAnswerItem[]
+          groupDigest?: string
           optimisticId: string
         } | null
         if (stashed) {
@@ -3815,12 +3957,21 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (!pendingQuestion || answering) return
     setAnswering(true)
     const wasPlan = pendingQuestion.question?.kind === "task_book"
+    const groupDigest = pendingQuestion.question?.group_digest ?? null
+    const isGroup = (pendingQuestion.question?.items?.length ?? 0) > 0 && groupDigest !== null
+    const body = isGroup
+      ? {
+          kind: "bail" as const,
+          group_digest: groupDigest,
+          answers: questionGroupDrafts[groupDraftKey(pendingQuestion)] ?? [],
+        }
+      : { kind: "bail" as const }
     try {
       const res = await apiFetch(
         `/api/v1/chat/messages/${pendingQuestion.id}/answer`,
         // toast:false — a settled-question 409 is a quiet local settle
         // (the option path's same grace), not the global error toast.
-        { method: "POST", body: { kind: "bail" }, toast: false },
+        { method: "POST", body, toast: false },
       )
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as {
@@ -3844,6 +3995,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       const data = (await res.json()) as { answered_question: QuestionMessage }
       const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
+      if (groupDigest) {
+        setQuestionGroupDrafts((previous) => Object.fromEntries(
+          Object.entries(previous).filter(([key]) => !key.endsWith(`:${groupDigest}`)),
+        ))
+      }
       // A task_book bail tears the draft graph down server-side — the page
       // morphs back to the chat world (K5 条款: bail 拆图).
       if (wasPlan) void onDraftGraphChangeRef.current?.()
@@ -3926,10 +4082,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * follow_up branch for Q2..N) — option click or freeform text, one
    * register. */
   const fireStashedAnswer = async (
-    stashed: { optionId?: string; freeformText?: string; optimisticId: string },
+    stashed: {
+      optionId?: string
+      freeformText?: string
+      groupAnswers?: BriefAnswerItem[]
+      groupDigest?: string
+      optimisticId: string
+    },
     row: QuestionMessage,
   ) => {
-    if (stashed.optionId !== undefined) {
+    if (stashed.groupAnswers !== undefined) {
+      await handleGroupSubmit(stashed.groupAnswers, row)
+    } else if (stashed.optionId !== undefined) {
       await handleOptionAnswer(stashed.optionId, row)
     } else if (stashed.freeformText !== undefined) {
       await handleFreeformAnswer(stashed.freeformText, row)
@@ -4107,7 +4271,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     !dockSettled &&
     pendingQuestion.question?.kind === "question" &&
     !pendingQuestion.answer &&
-    (pendingQuestion.question?.options?.length ?? 0) > 0
+    ((pendingQuestion.question?.options?.length ?? 0) > 0 || (pendingQuestion.question?.items?.length ?? 0) > 0)
       ? pendingQuestion
       : null
 
@@ -4275,7 +4439,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         return think("chat.material.understandingAsset", lone.title ?? undefined)
       }
       return think(
-        materialBeatKey("chat.material.reading", lone.type),
+        activityAssetKey("chat.material.reading", lone.type),
         lone.title ?? undefined,
       )
     }
@@ -4283,8 +4447,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   })()
 
   /** The last open fold born on THIS turn owns the live segment in the
-   * timeline. Host-row identity (never activity_id) prevents a historical
-   * a1 from reopening. A contiguous failure has already settled its own fold;
+   * timeline. Host-row identity prevents a historical segment from reopening.
+   * A contiguous failure has already settled its own fold;
    * only a later open fold can own the live seat. The single owner and the
    * bottom seat are mutually exclusive. conversation/runStream read this
    * SAME owner key. */
@@ -4301,7 +4465,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }
   const bottomNowRow =
-    liveWorkFoldKey == null && !visibleProseTyping ? nowRow : null
+    liveWorkFoldKey == null && !visibleProseTyping && interimActivityGateCount === 0
+      ? nowRow
+      : null
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -4407,6 +4573,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         plain
         question={bareQuestion(pillQuestion)}
         options={pillQuestion.question?.options ?? []}
+        items={pillQuestion.question?.items ?? []}
+        groupDigest={pillQuestion.question?.group_digest ?? null}
+        groupAnswers={questionGroupDrafts[groupDraftKey(pillQuestion)] ?? []}
+        onGroupAnswersChange={(answers) => {
+          const key = groupDraftKey(pillQuestion)
+          setQuestionGroupDrafts((previous) => ({ ...previous, [key]: answers }))
+        }}
+        onGroupSubmit={handleGroupSubmit}
         recommendedId={pillQuestion.question?.recommended_id ?? null}
         onAnswer={handleOptionAnswer}
         answering={answering}
@@ -4493,6 +4667,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               : t("generationOverlay.chatPlaceholderAssets")
           }
           mentionContext={mentionContext}
+          mentionChipClassName="bg-card"
           selectedSkill={selectedSkill}
           onSkillChange={handleSkillChange}
           onChange={handleEditorChange}

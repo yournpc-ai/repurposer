@@ -11,9 +11,8 @@ on chat's behalf. Shared resource content is assembled separately by
 conversation, workflow and pending-question framing.
 """
 
+from datetime import datetime
 from typing import Any
-
-import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,22 +28,71 @@ from app.models.tables import (
     WorkflowRun,
 )
 from app.pipeline.outputs import list_visible_outputs
-from app.platform.configs import get_config
 from app.platform.conversation_context import is_pending_plan
+
+
+def conversation_messages(rows: list[Message]) -> list[dict]:
+    """Project the durable chat into native roles, including dock submissions."""
+    linked = {
+        str((row.intent or {}).get("answered_question_id"))
+        for row in rows if row.role == "user"
+    }
+    dialogue = []
+    pending_answers = []
+
+    def emit_due(before):
+        while pending_answers and (before is None or pending_answers[0][0] <= before):
+            _, reply = pending_answers.pop(0)
+            dialogue.append({"role": "user", "content": reply})
+
+    for row in rows:
+        if row.created_at:
+            emit_due(row.created_at)
+        if row.role not in {"assistant", "user"}:
+            continue
+        question = row.question or {}
+        lines = [row.content] if row.content else []
+        attached = [a["name"] for a in row.attachments or [] if a.get("name")]
+        if attached:
+            lines.append("[attached: " + ", ".join(attached) + "]")
+        title = question.get("question")
+        if title and title != row.content:
+            lines.append(title)
+        items = question.get("items") or []
+        for item in items or [question]:
+            if items and item.get("question"):
+                lines.append(item["question"])
+            for option in item.get("options") or []:
+                label = option.get("label")
+                if label:
+                    lines.append(label + (" — " + option["description"] if option.get("description") else ""))
+        if lines:
+            dialogue.append({"role": row.role, "content": "\n".join(lines)})
+
+        answer = row.answer or {}
+        if not answer or str(row.id) in linked or answer.get("text") == "superseded":
+            continue
+        fields = {item.get("slot"): item for item in items}
+        replies = []
+        for pick in answer.get("answers") or []:
+            item = fields.get(pick.get("slot"), {})
+            value = pick.get("text") or next(
+                (opt["label"] for opt in item.get("options", []) if opt["id"] == pick.get("option_id")),
+                pick.get("option_id", ""),
+            )
+            replies.append(f"{item.get('question') or pick['slot']} {value}")
+        reply = "\n".join(replies) or answer.get("text") or answer.get("option_id") or answer["kind"]
+        if answer.get("answered_at"):
+            pending_answers.append((datetime.fromisoformat(answer["answered_at"]), reply))
+            pending_answers.sort(key=lambda entry: entry[0])
+        else:
+            dialogue.append({"role": "user", "content": reply})
+    emit_due(None)
+    return dialogue
+
 
 _GRAPH_CONTEXT_LIMIT = 16
 _PAST_JOURNEYS_CAP = 3
-
-
-# ---- 滑动窗口装配 (ADR-117 D4): 统一预算谓词 -------------------------------
-#
-# The message history is the ONLY context component that folds — world
-# state (project summary / graph snapshot / asset metadata / the pending
-# line) never rides this window and survives by construction. The fold
-# keeps a STABLE SUFFIX (the newest rows), the only prefix-cache-lawful
-# window shape.
-
-_MESSAGE_OVERHEAD_TOKENS = 4  # role / structure framing per row, estimated
 
 
 def _estimate_text_tokens(text: str) -> int:
@@ -64,51 +112,9 @@ def _estimate_text_tokens(text: str) -> int:
     return wide + (len(text) - wide) // 4
 
 
-def estimate_message_tokens(message: Message) -> int:
-    """One history row's estimated prompt cost — the body's script-aware
-    estimate plus the question/answer payloads' JSON mass when present.
-    An ESTIMATOR, not an exact count: the budget is an ops-tunable
-    guardrail and overestimating folds earlier, which is the safe side."""
-    total = _MESSAGE_OVERHEAD_TOKENS + _estimate_text_tokens(message.content or "")
-    for payload in (message.question, message.answer):
-        if payload:
-            total += _estimate_text_tokens(
-                json.dumps(payload, ensure_ascii=False)
-            )
-    return max(1, total)
-
-
-def bounded_history(history: list[Message], budget_tokens: int) -> list[Message]:
-    """Keep the most recent rows whose cumulative estimated cost fits the
-    budget (ADR-117 D4 — 保留近端窗口). The newest row always survives
-    (a turn's own prompt never folds away), even when it alone busts the
-    budget; a non-positive budget degenerates to the newest row."""
-    kept: list[Message] = []
-    spent = 0
-    for message in reversed(history):
-        cost = estimate_message_tokens(message)
-        if kept and spent + cost > budget_tokens:
-            break
-        kept.append(message)
-        spent += cost
-    kept.reverse()
-    return kept
-
-
-async def recent_history_within_budget(
-    db: AsyncSession, history: list[Message]
-) -> list[Message]:
-    """The config-backed seat of the budget predicate — the scattered
-    ``history[-n:]`` slices converge here (ops-tunable via
-    ``chat.context_budget_tokens``, no deploy)."""
-    budget = await get_config(db, "chat.context_budget_tokens")
-    return bounded_history(history, budget)
-
-
 async def build_context(
     db: AsyncSession,
     project: Project,
-    recent: list[Message],
     mentions: list[ChatMention],
     pending: Message | None,
     canvas_available: bool | None = None,
@@ -237,38 +243,6 @@ async def build_context(
     )
     if env:
         lines.insert(1, env)
-
-    if recent:
-        lines.append("Recent rounds:")
-        for m in recent:
-            attached = [
-                a.get("name") for a in (m.attachments or []) if a.get("name")
-            ]
-            if not m.content and not attached:
-                continue
-            line = f"- {m.role}: {m.content or ''}"
-            if attached:
-                # An attachment-only user turn (files staged in the input
-                # group, sent with no text) must still be visible to the
-                # agent — the files themselves appear in the Assets block.
-                line += f" [attached: {', '.join(attached)}]"
-            qreasons = (m.question or {}).get("reasons") or []
-            if qreasons:
-                # Plan needs-check keys are data for the agent (its
-                # vocabulary) — they live on the payload, never in prose.
-                line += f" (needs check: {', '.join(qreasons)})"
-            if m.question and m.answer:
-                # Answered questions collapse into the flow — the answer is
-                # the user's decision and must be visible to the agent (a
-                # bare "a" only makes sense next to the question it picked).
-                answer = m.answer or {}
-                reply = (
-                    answer.get("text")
-                    or answer.get("option_id")
-                    or answer.get("kind")
-                )
-                line += f" (the user answered: {reply})"
-            lines.append(line)
 
     if pending is not None and include_pending:
         # A still-open question (e.g. pick-only, no freeform): the agent must

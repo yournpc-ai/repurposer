@@ -2717,24 +2717,24 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-146: 视频创作工作草稿与条件工具——生成增量、保存原子
 
-**Status**: Decided（2026-11-10 用户拍板；目标法 = `docs/VIDEO_PROJECT.md` §2.2/§8.1.2，实施与验收 = `docs/tasks/composition-authoring-context-convergence.md`；当前代码尚未完成该改造）
+**Status**: Decided（2026-11-17 修订直接 Op 协议；目标法 = `docs/VIDEO_PROJECT.md` §2.2/§8.1.2，实施与剩余验收 = 当前视频合同；真实通用成功率仍未测量）
 
 **Decision**:
 
 1. **Composition 本体与不可变版本不变，整片生成不再等于一次保存调用**。首稿与开放重稿通过多次 `design_video` 写入同一个服务端工作草稿；每次只携带设置、来源或完整 Scene/Track/Clip/Transition，最终 `save=true` 对组装结果完整校验，并仍只经 `apply_composition_edits` 原子保存一个 CompositionVersion。工作草稿复用 ConversationContext，不新增 Draft/AuthoringSession 表或作品根。
-2. **局部错误不再触发整片重交**。首稿 schema 错误、语义错误与保存版局部修订都保留有效工作并只修目标范围；`fresh_design` 与只读 `rejected_candidate_ref` 退出。完整实体写入不是构造 Op 程序；字段 patch、执行顺序、error-id 修正矩阵和模型编写构造程序继续禁止。服务端确定性模板实例化与受控 Generator 编程不属于被禁止的模型 Op 协议。
+2. **局部修订直接提交 Op，不再经过同义 action union**。`revise_video` 接受当前 base_ref 与一批直接 Op；服务端绑定当前作品、目标和 Output 选区，在同一 base 上展开并原子保存一个版本。首稿与整体替换仍可使用完整实体；局部修改不得被要求重写无关结构。直接 Op 是受 schema 约束的修改，不是模型自由编写执行程序；自由视觉代码仍只归受控 Generator。
 3. **工具按真实状态逐轮投影**。ToolLoop 在现有每轮上下文刷新和草稿恢复后，只向模型提供当前必要的读取、草稿写入、版本修订、预览或制作工具；执行端独立校验权限与状态。不新增持久化阶段机、多 Director 链或第二意图面。
 4. **局部预览边界由 ADR-147 修订**。预览不是 Output，不自动启动 Run；用户明确制作后才由 produce_video 固定版本、生成/烘焙、渲染、检查与交付。
 5. **校验分层而非取消**。每次写入校验本实体与可独立判断的权限/来源/局部约束，最终保存校验完整 Composition 与跨实体/渲染约束；权限、不可变来源、并发/幂等、计费、授权、隔离和固定执行不延后。语义等价的空值/序列化方言由代码规范化，不要求模型为此重写整片。
-6. **一法一座，不把恢复协议复制到四个座位**。参数约束只由实际 args/EntityWrites wire schema 表达；草稿合并结果只返回 ref/digest/errors 等世界事实；ToolLoop 只投影和执行工具；prompt 只讲逐步创作、保持未改范围、真实预览与明确制作。禁止在工具描述、观察文本、loop 尾部和 prompt 中分别复述同一修复法律。
+6. **一法一座，不把恢复协议复制到四个座位**。参数约束只由实际 args/Op wire schema 表达；草稿合并结果只返回 ref/digest/errors 等世界事实；ToolLoop 只投影当前目标兼容的工具和 Op；prompt 只讲逐步创作、保持未改范围、真实预览与明确制作。禁止在工具描述、观察文本、loop 尾部和 prompt 中分别复述同一修复法律。
 
-**Consequences**: ADR-145 的 Composition / CompositionVersion / 唯一写口 / 钉版制作继续成立，其“普通 Chat 一次提交完整 Composition”不再是首稿唯一接口；ADR-127 的固定 Skill“模型填创作槽、代码保证结构”继续成立，自由创作则使用同一工作草稿与完整实体。此次不恢复强制多 Director、Direction 中间作品层或模型构造 Op，也不改变首稿审阅、制作意图和守卫线。新链真实首稿、局部修复、预览、刷新/Stop 与制作旅程通过前，不得将本决策描述为已落地或生产就绪。
+**Consequences**: ADR-145 的 Composition / CompositionVersion / 唯一写口 / 钉版制作继续成立，其“普通 Chat 一次提交完整 Composition”不再是首稿唯一接口；ADR-127 的固定 Skill“模型填创作槽、代码保证结构”继续成立。局部修订统一为直接 Op 批，action 翻译层退出；自由视觉代码仍只归受控 Generator。此次不恢复强制多 Director、Direction 中间作品层，也不改变首稿审阅、制作意图和守卫线。直接 Op 的确定性/真实小样本证据不等于通用成功率或生产就绪；完整真实旅程、刷新/Stop、视觉和费用验收继续开放。
 
 **Related**: ADR-145（作品本体与保存边界）/ ADR-127（固定 Skill 创作槽）/ ADR-129（版本化呈现）/ ADR-137（base_ref 与结构化修订）/ ADR-139（制作意图）/ ADR-144（首稿审阅）/ ADR-147（局部 Scrub 预览边界）
 
 ## ADR-147: 制作前只做局部 Scrub——完整成片永不预览
 
-**Status**: Decided（2026-11-11 用户拍板；目标法 = `docs/VIDEO_PROJECT.md` §0.1/§8.1.2/§10/§11.3，实施与验收 = `docs/tasks/composition-authoring-context-convergence.md`）
+**Status**: Decided（2026-11-11 用户拍板；目标法 = `docs/VIDEO_PROJECT.md` §0.1/§8.1.2/§10/§11.3，实施与剩余验收 = 当前视频合同）
 
 **Decision**:
 

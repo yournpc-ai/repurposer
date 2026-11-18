@@ -1,7 +1,7 @@
 # Database Migration Guide
 
 > Status: Active
-> Last updated: 2026-07-20
+> Last updated: 2026-11-17
 
 The Repurposer backend uses [SQLAlchemy 2.0](https://www.sqlalchemy.org/) as the ORM and [Alembic](https://alembic.sqlalchemy.org/) as the database migration tool.
 
@@ -93,6 +93,10 @@ However, explicit migration is recommended in the following scenarios:
 3. **Manually review autogenerate output**: Open the generated script and verify that it accurately expresses your intent.
 4. **Model imports**: `migrations/env.py` already imports `app.models.tables`, ensuring autogenerate can detect all models.
 5. **Sync vs async drivers**: The main application uses `postgresql+asyncpg`, while Alembic uses `postgresql+psycopg2`. `env.py` automatically converts the URL.
+
+## Optional CreativeState on Composition Versions
+
+`migrations/versions/h8e5a2c4d7f1_creative_state.py` adds nullable `composition_versions.creative_state` JSONB. It stores the optional Brief/BrandProfile/source_refs/content_digest payload for newly saved versions; historical rows remain NULL and require no backfill or model repair. Apply with `uv run alembic upgrade head` in the target environment after verifying the current revision `g7d4a1c9e2f6`. The migration file's presence does not mean an upgrade has run; verify with `uv run alembic current` before live acceptance.
 
 ## Common Issues
 

@@ -12,7 +12,7 @@ No paid IO: snapshots are local rows; nothing here renders.
 from __future__ import annotations
 
 import asyncio
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -462,6 +462,82 @@ async def test_high_level_constraints_survive_scene_continuation_and_save(databa
             content = content_of(versions[0])
             assert (content.settings.width, content.settings.height) == dimensions
             assert content.settings.background == background
+
+
+async def test_focus_repair_loads_music_facts_independently(database, monkeypatch):
+    from app.agents.working_drafts import WorkingDraftUpdated
+    from app.tools.video import design as design_module
+
+    monkeypatch.setattr(design_module, "AsyncSessionLocal", database)
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    await _snapshots(database, uid)
+    web_id = uuid4()
+    web_digest = "w" * 64
+    view_digest = "v" * 64
+    async with database() as db:
+        db.add(SourceSnapshot(
+            id=web_id,
+            owner_id=uid,
+            kind="web",
+            storage_key="sources/web.json",
+            digest=web_digest,
+            duration_ticks=None,
+            meta={"views": [{
+                "view_id": "view-0", "storage_key": "sources/view.png", "digest": view_digest,
+                "width": 1440, "height": 900,
+                "elements": [{"id": "hero", "kind": "heading", "x": 0.5, "y": 0.4, "w": 0.4, "h": 0.2}],
+            }]},
+        ))
+        await db.commit()
+
+    planned = await design_module.design_video(
+        owner_id=uid,
+        project_id=pid,
+        args=design_module.CompositionDesignVideoArgs.model_validate({
+            "scene_plan": [{"scene_id": "lead", "intent": "Show the product"}],
+            "source_ids": [str(web_id), str(AUDIO_SNAPSHOT)],
+            "music_snapshot_id": str(AUDIO_SNAPSHOT),
+        }),
+        request_id=None,
+    )
+    scene = design_module.CompositionDesignVideoArgs.model_validate({
+        "draft_ref": {"draft_id": "direct-draft", "draft_digest": "d" * 64},
+        "scene": {
+            "scene_id": "lead", "snapshot_id": str(web_id), "view_id": "view-0",
+            "source_motion": "hold", "headline": "Product",
+        },
+    })
+    scene.bind_working_draft(planned.arguments)
+    written = await design_module.design_video(
+        owner_id=uid,
+        project_id=pid,
+        args=scene,
+        request_id=None,
+    )
+    for args in (
+        planned,
+        written,
+    ):
+        assert isinstance(args, WorkingDraftUpdated)
+
+    focus = design_module.CompositionDesignVideoArgs.model_validate({
+        "draft_ref": {"draft_id": "direct-draft", "draft_digest": "d" * 64},
+        "focus_clip_id": "clp_lead_source",
+        "focus_element_id": "hero",
+    })
+    focus.bind_working_draft(written.arguments)
+    repaired = await design_module.design_video(
+        owner_id=uid, project_id=pid, args=focus, request_id=None,
+        request_context={"user_text": "修正当前取景"},
+    )
+    assert isinstance(repaired, WorkingDraftUpdated)
+    tracks = repaired.arguments["content"]["timeline"]["tracks"]
+    assert sum(track["track_id"] == "trk_music" for track in tracks) == 1
+    source = next(
+        clip for track in tracks for clip in track["clips"] if clip["clip_id"] == "clp_lead_source"
+    )
+    assert source["animations"]
 
 
 async def test_copy_reference_errors_identify_all_mismatches_and_native_candidates(database):
@@ -935,3 +1011,128 @@ async def test_nonexistent_snapshot_bind_rejected(database):
                 ops=[*ops, bind],
             )
 
+
+
+async def test_creative_state_is_versioned_and_inherited_without_output_duplication(database):
+    from app.editing.store import content_of
+    from app.models.schemas import (
+        BrandProfile,
+        BrandSourceRef,
+        Brief,
+        BriefSlot,
+        BriefSlotSource,
+        CreativeState,
+        seal_creative_state,
+    )
+
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    await _snapshots(database, uid)
+    comp, original, _ = await _create(database, uid, pid)
+    state = seal_creative_state(CreativeState(
+        brief=Brief(
+            purpose=BriefSlot(value="website", source=BriefSlotSource.USER_STATED),
+            target_seconds=BriefSlot(value=60, source=BriefSlotSource.USER_STATED),
+        ),
+        brand_profile=BrandProfile(
+            extractor_version="brand-test-v1",
+            source_refs=[BrandSourceRef(snapshot_id=str(IMG_SNAPSHOT), digest=IMG_DIGEST)],
+            content_digest="d" * 64,
+        ),
+    ))
+    async with database() as db:
+        content = content_of(original).model_copy(update={"creative_state": state})
+        _, versioned, _ = await apply_composition_edits(
+            db,
+            owner_id=uid,
+            composition_id=comp.id,
+            base_version_id=original.id,
+            base_digest=original.content_digest,
+            content=content,
+        )
+        assert versioned.creative_state["brief"]["purpose"]["value"] == "website"
+        assert versioned.creative_state["brand_profile"]["extractor_version"] == "brand-test-v1"
+        assert versioned.creative_state["content_digest"] == state.content_digest
+        _, revised, _ = await apply_composition_edits(
+            db,
+            owner_id=uid,
+            composition_id=comp.id,
+            base_version_id=versioned.id,
+            base_digest=versioned.content_digest,
+            ops=[set_intent("only the scene changes")],
+        )
+        assert revised.creative_state == versioned.creative_state
+        assert revised.content_digest != versioned.content_digest
+        original_row = await db.get(CompositionVersion, original.id)
+        assert original_row.creative_state is None
+        read = content_of(revised)
+        assert read.creative_state is not None
+        assert read.creative_state.brief.target_seconds.value == 60
+        assert read.creative_state.brand_profile.source_refs[0].digest == IMG_DIGEST
+
+
+async def test_design_video_injects_pending_creative_state_into_first_saved_version(database, monkeypatch):
+    from app.agents.working_drafts import WorkingDraftUpdated
+    from app.editing.store import content_of
+    from app.models.schemas import Brief, BriefSlot, BriefSlotSource, CreativeState, PendingPlan, seal_creative_state
+    from app.tools.video import design as design_module
+
+    monkeypatch.setattr(design_module, "AsyncSessionLocal", database)
+    uid = await _user(database)
+    pid = await _project(database, uid)
+    brief = Brief(
+        purpose=BriefSlot(value="website", source=BriefSlotSource.USER_STATED),
+        target_seconds=BriefSlot(value=60, source=BriefSlotSource.USER_STATED),
+        aspect=BriefSlot(value="16:9", source=BriefSlotSource.USER_STATED),
+    )
+    pending = PendingPlan(
+        brief=brief,
+        creative_state=seal_creative_state(CreativeState(brief=brief)),
+    )
+    context = {"brief": pending.model_dump(mode="json"), "user_text": "保存官网宣传片草稿"}
+    planned = await design_module.design_video(
+        owner_id=uid,
+        project_id=pid,
+        args=design_module.CompositionDesignVideoArgs.model_validate({
+            "scene_plan": [{"scene_id": "lead", "intent": "Introduce the brand"}],
+        }),
+        request_id=None,
+        request_context=context,
+    )
+    assert isinstance(planned, WorkingDraftUpdated)
+    scene = design_module.CompositionDesignVideoArgs.model_validate({
+        "draft_ref": {"draft_id": "direct-draft", "draft_digest": "d" * 64},
+        "scene": {"scene_id": "lead", "headline": "Evidence for everyone"},
+    })
+    scene.bind_working_draft(planned.arguments)
+    written = await design_module.design_video(
+        owner_id=uid,
+        project_id=pid,
+        args=scene,
+        request_id=None,
+        request_context=context,
+    )
+    save = design_module.CompositionDesignVideoArgs.model_validate({
+        "save": True,
+        "draft_ref": {"draft_id": "direct-draft", "draft_digest": "d" * 64},
+    })
+    save.bind_working_draft(written.arguments)
+    saved = await design_module.design_video(
+        owner_id=uid,
+        project_id=pid,
+        args=save,
+        request_id=f"creative-state-{uuid4()}",
+        request_context=context,
+    )
+    assert saved["creative_state"]["brief"]["purpose"]["value"] == "website"
+    assert saved["creative_state"]["brief"]["target_seconds"]["value"] == 60
+    async with database() as db:
+        versions = list((await db.scalars(
+            select(CompositionVersion).join(Composition, CompositionVersion.composition_id == Composition.id)
+            .where(Composition.origin_project_id == pid)
+        )).all())
+        assert len(versions) == 1
+        content = content_of(versions[0])
+        assert content.creative_state is not None
+        assert content.creative_state.brief.aspect.value == "16:9"
+        assert (content.settings.width, content.settings.height) == (1920, 1080)

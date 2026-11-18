@@ -1,4 +1,4 @@
-"""Saved-version facts and authorization at the shared Run birthplace.
+"""Version/draft facts and authorization at the shared Run birthplace.
 
 This is orchestration, not another content writer or confirmation machine.
 """
@@ -11,8 +11,13 @@ from app.config import settings
 from app.editing.service import video_version_read
 from app.editing.store import content_of, get_video_version
 from app.models.schemas import PendingPlan, WorkflowStatus
-from app.models.tables import Composition, Conversation, Message, WorkflowRun
-from app.tools.video.params import PrepareNarrationParams, ProduceVideoParams
+from app.models.tables import Composition, Conversation, Message, SourceSnapshot, WorkflowRun
+from app.tools.video.params import (
+    PrepareMusicParams,
+    PrepareNarrationParams,
+    PrepareVisualAssetsParams,
+    ProduceVideoParams,
+)
 
 
 def assert_saved_producers_available(clips: list[dict]) -> None:
@@ -83,6 +88,7 @@ async def video_quote_facts(db, project, tasks):
     images = {}
     tts_characters = {}
     narration_tts_characters = {}
+    visual_images = 0
     from app.editing.schemas import GeneratorObject
     from app.tools.video.generated_images import has_fixed_generated_image
     from app.tools.video.narration import (
@@ -92,6 +98,21 @@ async def video_quote_facts(db, project, tasks):
     )
 
     for task in tasks or []:
+        if task.tool == "prepare_visual_assets":
+            from app.tools.video.visual_assets import MiniMaxImageSource, has_fixed_visual_source
+
+            params = PrepareVisualAssetsParams.model_validate(task.params)
+            for spec in await resolve_visual_asset_selection(db, project, params):
+                if params.review_existing:
+                    continue
+                if not isinstance(spec.source, MiniMaxImageSource):
+                    continue
+                fixed = await has_fixed_visual_source(
+                    owner_id=project.user_id, project_id=project.id, spec=spec
+                )
+                if not fixed:
+                    visual_images += 1
+            continue
         if task.tool == "prepare_narration":
             params = PrepareNarrationParams.model_validate(task.params)
             key = narration_original_request_key(
@@ -137,6 +158,7 @@ async def video_quote_facts(db, project, tasks):
         "video_images": images,
         "video_tts_characters": tts_characters,
         "narration_tts_characters": narration_tts_characters,
+        "visual_images": visual_images,
     }
 
 
@@ -185,6 +207,17 @@ async def pin_narration_preparation(project, tasks):
     if len(narration_tasks) != 1 or len(tasks or []) != 1:
         raise ValueError("Prepare narration runs as one narration-only task")
     params = PrepareNarrationParams.model_validate(narration_tasks[0].params)
+    if (params.draft_ref is None) != (params.scene_id is None):
+        raise ValueError("Scene narration needs exactly one draft_ref and scene_id")
+    if params.draft_ref is not None:
+        from app.models.database import AsyncSessionLocal
+        from app.tools.video.narration_draft import recover_current_draft, scene_narration_request
+
+        async with AsyncSessionLocal() as db:
+            draft = await recover_current_draft(db, project, params.draft_ref)
+        expected = scene_narration_request(draft, params.scene_id or "")
+        if any(getattr(params, key) != value for key, value in expected.items()):
+            raise ValueError("The narration request no longer matches its authorized Scene script")
     characters = await narration_original_quote_characters(
         text=params.text,
         voice_id=params.voice_id,
@@ -307,3 +340,115 @@ async def pin_video_production(db, project, tasks, approved_by):
             "aspect": aspect,
             "video_authorized_by": str(approval.id),
             "video_presentation": receipt}
+
+
+async def resolve_visual_asset_selection(db, project, params: PrepareVisualAssetsParams):
+    """Resolve the same current draft at planning, quotation and authorization."""
+    reference = params.draft_ref.model_dump(mode="json")
+    from app.chat.conversation_context import context_items
+
+    conversations = list((await db.scalars(select(Conversation).where(
+        Conversation.project_id == project.id,
+        Conversation.user_id == project.user_id,
+    ).execution_options(populate_existing=True))).all())
+    draft = None
+    for conversation in conversations:
+        for item in reversed(context_items(conversation.context)):
+            candidate = item.get("candidate") or {}
+            if candidate.get("candidate_id") != reference["draft_id"]:
+                continue
+            if (
+                candidate.get("active", True) is False
+                or candidate.get("target_tool") != "design_video"
+                or candidate.get("candidate_digest") != reference["draft_digest"]
+            ):
+                raise ValueError("The visual asset draft_ref is stale or inactive")
+            draft = item.get("executed_arguments") or item.get("arguments")
+            break
+        if draft is not None:
+            break
+    if not isinstance(draft, dict):
+        raise ValueError("The visual asset working draft is not recoverable")
+    return params.resolve(draft)
+
+
+async def pin_visual_asset_preparation(db, project, tasks):
+    """Authenticate the current draft and pin only this bounded image batch."""
+    visual_tasks = [task for task in tasks or [] if task.tool == "prepare_visual_assets"]
+    if not visual_tasks:
+        return {}
+    if len(visual_tasks) != 1 or len(tasks or []) != 1:
+        raise ValueError("Prepare visual assets runs as one image-only task")
+    from app.tools.video.visual_assets import (
+        ExistingImageSource, cached_visual_asset, preflight_scene_svgs,
+    )
+
+    params = PrepareVisualAssetsParams.model_validate(visual_tasks[0].params)
+    specs = await resolve_visual_asset_selection(db, project, params)
+    preflight_scene_svgs(specs)
+    for spec in specs:
+        if params.review_existing and await cached_visual_asset(
+            owner_id=project.user_id, project_id=project.id, spec=spec
+        ) is None:
+            raise ValueError(f"Scene {spec.scene_id} has no fixed PNG to review")
+        if isinstance(spec.source, ExistingImageSource):
+            snapshot = await db.get(SourceSnapshot, spec.source.snapshot_id)
+            if (
+                snapshot is None or snapshot.owner_id != project.user_id
+                or snapshot.kind != "image" or snapshot.digest != spec.source.snapshot_digest
+            ):
+                raise ValueError("An existing visual source is inaccessible or stale")
+    runs = list((await db.scalars(select(WorkflowRun).where(
+        WorkflowRun.project_id == project.id
+    ))).all())
+    attempts: dict[str, int] = {}
+    for run in runs:
+        preparation = (run.context or {}).get("visual_asset_preparation") or {}
+        previous_request = preparation.get("request") or {}
+        if previous_request.get("review_existing"):
+            continue
+        previous = preparation.get("scene_assets") or previous_request.get("scene_assets") or []
+        previous_attempts = preparation.get("content_attempts") or {}
+        for item in previous:
+            if isinstance(item, dict) and item.get("scene_id"):
+                scene_id = str(item["scene_id"])
+                attempts[scene_id] = max(
+                    attempts.get(scene_id, 0), int(previous_attempts.get(scene_id) or 1)
+                )
+    content_attempts = {
+        spec.scene_id: attempts.get(spec.scene_id, 0) + 1 for spec in specs
+    }
+    pending = PendingPlan.model_validate(project.pending_brief or {})
+    return {
+        "visual_asset_preparation": {
+            "request": params.model_dump(mode="json", exclude_none=True),
+            "scene_assets": [spec.model_dump(mode="json") for spec in specs],
+            "content_attempts": content_attempts,
+            "creative_state": (
+                pending.creative_state.model_dump(mode="json")
+                if pending.creative_state is not None else None
+            ),
+        }
+    }
+
+
+async def pin_music_preparation(db, project, tasks):
+    """Pin the current draft's resolved ScoreSpec after the ordinary Start gate."""
+    music_tasks = [task for task in tasks or [] if task.tool == "prepare_music"]
+    if not music_tasks:
+        return {}
+    if len(music_tasks) != 1 or len(tasks or []) != 1:
+        raise ValueError("Prepare music runs as one score-only task")
+    from app.tools.video.music_preparation import score_for_current_draft
+    from app.tools.video.narration_draft import recover_current_draft
+
+    params = PrepareMusicParams.model_validate(music_tasks[0].params)
+    draft = await recover_current_draft(db, project, params.draft_ref)
+    score = score_for_current_draft(draft, params.score)
+    return {
+        "music_preparation": {
+            "request": params.model_dump(mode="json"),
+            "score_spec": score.model_dump(mode="json"),
+            "score_digest": score.score_digest,
+        }
+    }

@@ -1,4 +1,4 @@
-"""Bounded high-level revisions expanded into ordinary edit operations."""
+"""Direct revision Ops expanded into the ordinary editing algebra."""
 
 from __future__ import annotations
 
@@ -14,15 +14,18 @@ from app.editing.edits import (
     BindSource,
     Op,
     RemoveClip,
+    UpdateClip,
     TextAnimationTargetLost,
     replace_text_ops,
 )
 from app.editing.schemas import (
+    AudioObject,
     CompositionContent,
     EditTarget,
     ImageObject,
     LayoutBox,
     SourceCaptionDerivation,
+    SpeechObject,
     TextObject,
     TimeRange,
     VideoObject,
@@ -49,10 +52,10 @@ class RevisionTargetAmbiguityError(RevisionInputError):
         self.candidates = candidates
 
 
-class SetTextAction(BaseModel):
+class SetTextOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["set_text"]
+    op: Literal["set_text"]
     clip_id: str | None = Field(
         default=None,
         min_length=1,
@@ -65,18 +68,18 @@ class SetTextAction(BaseModel):
     text: str = Field(min_length=1, max_length=9000)
 
 
-class ApplyPresetAction(BaseModel):
+class ApplyPresetOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["apply_preset"]
+    op: Literal["apply_preset"]
     clip_id: str = Field(min_length=1, max_length=64)
     preset_id: str = Field(min_length=1, max_length=64)
 
 
-class AddMediaOverlayAction(BaseModel):
+class AddMediaOverlayOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["add_media_overlay"]
+    op: Literal["add_media_overlay"]
     source_id: UUID
     scene_id: str | None = Field(default=None, min_length=1, max_length=64)
     scope: Literal["window", "whole_scene"] = Field(
@@ -92,7 +95,7 @@ class AddMediaOverlayAction(BaseModel):
     motion: Literal["none", "fade_in"]
 
     @model_validator(mode="after")
-    def _window(self) -> AddMediaOverlayAction:
+    def _window(self) -> AddMediaOverlayOp:
         if self.scope == "whole_scene" and any(
             value is not None
             for value in (self.start_seconds, self.end_seconds, self.duration_seconds)
@@ -107,10 +110,10 @@ class AddMediaOverlayAction(BaseModel):
         return self
 
 
-class AddNarrationAction(BaseModel):
+class AddNarrationOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["add_narration"]
+    op: Literal["add_narration"]
     source_id: UUID = Field(description="Frozen audio SourceSnapshot from prepare_narration")
     alignment_id: UUID = Field(description="READY NarrationAlignment for this exact audio")
     scene_id: str | None = Field(
@@ -119,20 +122,62 @@ class AddNarrationAction(BaseModel):
     )
 
 
-class RemoveClipAction(BaseModel):
+class AddAudioEffectOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["remove_clip"]
+    op: Literal["add_audio_effect"]
+    source_id: UUID = Field(description="Prepared audio SourceSnapshot, such as an imported CC0 effect")
+    scene_id: str | None = Field(
+        default=None,
+        description="Scene receiving the effect; omit only when one Scene exists",
+    )
+    start_seconds: float = Field(
+        ge=0,
+        allow_inf_nan=False,
+        description="Absolute output start second inside the target Scene",
+    )
+    source_start_seconds: float = Field(
+        default=0,
+        ge=0,
+        allow_inf_nan=False,
+        description="Optional trim start inside the source audio",
+    )
+    duration_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        allow_inf_nan=False,
+        description="Optional source/output duration at 1x; omit to use the remaining source audio",
+    )
+    gain_db: float = Field(default=0.0, ge=-60, le=12)
+
+
+class SetNarrationOp(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["set_narration"]
+    clip_id: str | None = Field(
+        default=None,
+        description="Exact pending Speech Clip id; omit only when one pending Speech Clip exists",
+    )
+    text: str = Field(min_length=1, max_length=9000)
+
+
+class RemoveClipOp(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["remove_clip"]
     clip_id: str = Field(min_length=1, max_length=64)
 
 
-RevisionAction = Annotated[
-    SetTextAction
-    | ApplyPresetAction
-    | AddMediaOverlayAction
-    | AddNarrationAction
-    | RemoveClipAction,
-    Field(discriminator="action"),
+RevisionOp = Annotated[
+    SetTextOp
+    | ApplyPresetOp
+    | AddMediaOverlayOp
+    | AddNarrationOp
+    | AddAudioEffectOp
+    | SetNarrationOp
+    | RemoveClipOp,
+    Field(discriminator="op"),
 ]
 
 
@@ -206,7 +251,7 @@ def _one_clip(content: CompositionContent, clip_id: str | None) -> tuple[Any, An
     return matches[0]
 
 
-def set_text_ops(content: CompositionContent, action: SetTextAction) -> list[Op]:
+def set_text_ops(content: CompositionContent, action: SetTextOp) -> list[Op]:
     _, clip = _one_clip(content, action.clip_id)
     if not isinstance(clip.object, TextObject) or (
         clip.object.caption is not None
@@ -237,6 +282,53 @@ def set_text_ops(content: CompositionContent, action: SetTextAction) -> list[Op]
 
 
 
+def set_narration_ops(content: CompositionContent, action: SetNarrationOp) -> list[Op]:
+    matches = (
+        _clip_locations(content, action.clip_id)
+        if action.clip_id is not None
+        else [
+            (track, clip)
+            for track in content.timeline.tracks
+            for clip in track.clips
+            if isinstance(clip.object, SpeechObject) and clip.object.alignment is None
+        ]
+    )
+    if len(matches) != 1:
+        candidates = [
+            {
+                "clip_id": clip.clip_id,
+                "scene_id": clip.scene_id,
+                "track_id": track.track_id,
+                "text": clip.object.text if isinstance(clip.object, SpeechObject) else None,
+            }
+            for track, clip in matches
+        ]
+        if len(matches) > 1:
+            raise RevisionTargetAmbiguityError(
+                "narration clip target is not specified",
+                candidates=candidates,
+            )
+        raise RevisionInputError(
+            f"narration clip {action.clip_id!r} does not exist in the base version",
+            loc=["action", "clip_id"],
+            kind="target_not_found",
+        )
+    _, clip = matches[0]
+    if not isinstance(clip.object, SpeechObject) or clip.object.alignment is not None:
+        raise RevisionInputError(
+            "set_narration supports pending Speech Clips only; source-aligned narration is immutable",
+            loc=["action", "clip_id"],
+            kind="unsupported_target",
+        )
+    if clip.object.text == action.text:
+        return []
+    return [UpdateClip(
+        op="update_clip",
+        clip_id=clip.clip_id,
+        object=clip.object.model_copy(update={"text": action.text}),
+    )]
+
+
 def _confirmed_overlay_scenes(content: CompositionContent, user_text: str) -> list[Any]:
     text = user_text.lower()
     ordinals = [
@@ -263,9 +355,9 @@ def _confirmed_overlay_scenes(content: CompositionContent, user_text: str) -> li
 
 def _bind_overlay_request(
     content: CompositionContent,
-    action: AddMediaOverlayAction,
+    action: AddMediaOverlayOp,
     request_context: dict[str, Any] | None,
-) -> AddMediaOverlayAction:
+) -> AddMediaOverlayOp:
     if request_context is None:
         return action
     text = str(request_context.get("user_text") or "")
@@ -284,7 +376,7 @@ def _bind_overlay_request(
 
 def _assert_overlay_scope_confirmed(
     content: CompositionContent,
-    action: AddMediaOverlayAction,
+    action: AddMediaOverlayOp,
     scene: Any,
     candidates: list[dict[str, Any]],
     request_context: dict[str, Any] | None,
@@ -314,7 +406,7 @@ def _assert_overlay_scope_confirmed(
 
 def _add_overlay(
     content: CompositionContent,
-    action: AddMediaOverlayAction,
+    action: AddMediaOverlayOp,
     fact: dict[str, Any] | None,
     request_context: dict[str, Any] | None = None,
 ) -> list[Op]:
@@ -458,9 +550,116 @@ def _add_overlay(
     return ops
 
 
+def _add_audio_effect(
+    content: CompositionContent,
+    action: AddAudioEffectOp,
+    fact: dict[str, Any] | None,
+) -> list[Op]:
+    if (
+        fact is None
+        or fact.get("kind") != "audio"
+        or not fact.get("storage_key")
+        or not fact.get("duration_ticks")
+    ):
+        raise RevisionInputError(
+            "audio effect source is not a prepared audio snapshot with real duration",
+            loc=["action", "source_id"],
+            kind="source_not_ready",
+        )
+    scene = next((item for item in content.scenes if item.scene_id == action.scene_id), None)
+    if scene is None and action.scene_id is None and len(content.scenes) == 1:
+        scene = content.scenes[0]
+    if scene is None:
+        candidates = [{"scene_id": item.scene_id} for item in content.scenes]
+        if action.scene_id is None:
+            raise RevisionTargetAmbiguityError(
+                "audio effect Scene is not uniquely specified", candidates=candidates,
+            )
+        raise RevisionInputError(
+            "audio effect scene does not exist in the base version",
+            loc=["action", "scene_id"],
+            kind="target_not_found",
+        )
+    source_start = seconds_to_ticks(action.source_start_seconds, content.settings.timebase)
+    available = fact["duration_ticks"] - source_start
+    duration = (
+        seconds_to_ticks(action.duration_seconds, content.settings.timebase)
+        if action.duration_seconds is not None
+        else available
+    )
+    if duration <= 0 or duration > available:
+        raise RevisionInputError(
+            "audio effect window exceeds the source audio's real duration",
+            loc=["action", "duration_seconds"],
+            kind="source_too_short",
+        )
+    start = seconds_to_ticks(action.start_seconds, content.settings.timebase)
+    end = start + duration
+    if start < scene.range.start or end > scene.range.end:
+        raise RevisionInputError(
+            "audio effect time window must stay inside its target Scene",
+            loc=["action", "start_seconds"],
+            kind="time_out_of_bounds",
+        )
+    track_id = "trk_audio_effect"
+    existing_track = next(
+        (track for track in content.timeline.tracks if track.track_id == track_id), None
+    )
+    digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
+    clip_id = f"clp_audio_effect_{digest}"
+    if _clip_locations(content, clip_id):
+        raise RevisionInputError(
+            "this exact audio effect already exists in the base version",
+            kind="duplicate_audio_effect",
+        )
+    ops: list[Op] = []
+    if action.source_id not in {binding.snapshot_id for binding in content.sources}:
+        ops.append(BindSource(op="bind_source", snapshot_id=action.source_id))
+    if existing_track is None:
+        ops.append(AddTrack(
+            op="add_track",
+            track={
+                "track_id": track_id,
+                "kind": "audio",
+                "role": "effect",
+                "order": max(
+                    (track.order for track in content.timeline.tracks if track.kind == "audio"),
+                    default=-1,
+                ) + 1,
+                "clips": [],
+            },
+        ))
+    ops.append(AddClip(
+        op="add_clip",
+        track_id=track_id,
+        clip={
+            "clip_id": clip_id,
+            "range": {"start": start, "end": end},
+            "scene_id": scene.scene_id,
+            "source": {
+                "snapshot_id": str(action.source_id),
+                "snapshot_digest": fact["digest"],
+                "source_range": {
+                    "start": source_start,
+                    "end": source_start + output_ticks_to_source_ticks(
+                        duration, content.settings.timebase,
+                    ),
+                },
+            },
+            "object": AudioObject(
+                kind="audio",
+                object_id=f"obj_audio_effect_{digest}",
+                gain_db=action.gain_db,
+            ).model_dump(mode="json"),
+            "animations": [],
+        },
+    ))
+    return ops
+
+
 def _add_narration(
     content: CompositionContent,
-    action: AddNarrationAction,
+    action: AddNarrationOp,
     fact: dict[str, Any] | None,
     alignment: Any,
 ) -> list[Op]:
@@ -499,7 +698,7 @@ def _add_narration(
 
 
 def _overlay_layout(
-    content: CompositionContent, action: AddMediaOverlayAction, fact: dict[str, Any]
+    content: CompositionContent, action: AddMediaOverlayOp, fact: dict[str, Any]
 ) -> LayoutBox:
     media = fact.get("meta") or {}
     dimensions = media.get("media") or media
@@ -532,13 +731,13 @@ def _overlay_layout(
     return LayoutBox(x=x, y=y, width=box_width, height=box_height)
 
 
-def _stable_overlay_ids(action: AddMediaOverlayAction) -> tuple[str, str, str]:
+def _stable_overlay_ids(action: AddMediaOverlayOp) -> tuple[str, str, str]:
     digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
     return f"trk_overlay_{digest}", f"clp_overlay_{digest}", f"obj_overlay_{digest}"
 
 
-def expand_revision_action(
-    action: RevisionAction,
+def expand_revision_op(
+    operation: RevisionOp,
     content: CompositionContent,
     *,
     facts: dict[UUID, dict[str, Any]],
@@ -547,36 +746,43 @@ def expand_revision_action(
 ) -> list[Op]:
     from app.editing.presets import expand_preset_at_target
 
-    if isinstance(action, SetTextAction):
-        return set_text_ops(content, action)
-    if isinstance(action, ApplyPresetAction):
-        _one_clip(content, action.clip_id)
+    if isinstance(operation, SetTextOp):
+        return set_text_ops(content, operation)
+    if isinstance(operation, SetNarrationOp):
+        return set_narration_ops(content, operation)
+    if isinstance(operation, ApplyPresetOp):
+        _one_clip(content, operation.clip_id)
         return expand_preset_at_target(
-            action.preset_id, content, EditTarget(kind="clip", id=action.clip_id)
+            operation.preset_id, content, EditTarget(kind="clip", id=operation.clip_id)
         )
-    if isinstance(action, AddMediaOverlayAction):
-        return _add_overlay(content, action, facts.get(action.source_id), request_context)
-    if isinstance(action, AddNarrationAction):
-        return _add_narration(content, action, facts.get(action.source_id), narration_alignment)
-    _one_clip(content, action.clip_id)
+    if isinstance(operation, AddMediaOverlayOp):
+        return _add_overlay(content, operation, facts.get(operation.source_id), request_context)
+    if isinstance(operation, AddNarrationOp):
+        return _add_narration(content, operation, facts.get(operation.source_id), narration_alignment)
+    if isinstance(operation, AddAudioEffectOp):
+        return _add_audio_effect(content, operation, facts.get(operation.source_id))
+    _one_clip(content, operation.clip_id)
     if sum(len(track.clips) for track in content.timeline.tracks) == 1:
         raise RevisionInputError(
             "remove_clip cannot remove the version's only Clip",
-            loc=["action", "clip_id"],
-            kind="unsupported_action",
+            loc=["ops", "clip_id"],
+            kind="unsupported_op",
         )
-    return [RemoveClip(op="remove_clip", clip_id=action.clip_id)]
+    return [RemoveClip(op="remove_clip", clip_id=operation.clip_id)]
 
 
 __all__ = [
-    "AddMediaOverlayAction",
-    "AddNarrationAction",
-    "ApplyPresetAction",
-    "RemoveClipAction",
-    "RevisionAction",
+    "AddAudioEffectOp",
+    "AddMediaOverlayOp",
+    "AddNarrationOp",
+    "ApplyPresetOp",
+    "RemoveClipOp",
+    "RevisionOp",
     "RevisionInputError",
     "RevisionTargetAmbiguityError",
-    "SetTextAction",
-    "expand_revision_action",
+    "SetNarrationOp",
+    "SetTextOp",
+    "expand_revision_op",
+    "set_narration_ops",
     "set_text_ops",
 ]

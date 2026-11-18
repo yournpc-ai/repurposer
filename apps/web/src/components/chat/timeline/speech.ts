@@ -54,6 +54,10 @@ export interface SpeechSegmentsDeps {
    * deltas, keepalives and buffered-but-unseen text never fire it. The chat
    * work segment seals here; character ownership remains pinned at push. */
   onVisible?: (rowId: string, atMs: number) => void
+  /** Activity display barrier: interim prose owns the timeline until its own
+   * typewriter playback settles. Stop invokes the same release through halt. */
+  onInterimStart?: (rowId: string) => void
+  onInterimSettled?: (rowId: string) => void
   /** Current optimistic/server turn identity, resolved at each row birth. */
   turnId?: () => string | undefined
   /** Test seam: the real seat is createTypewriter; a synchronous fake
@@ -230,6 +234,11 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
     typewriter.push(text)
   }
 
+  const openInterimRows = new Set<string>()
+  const settleInterim = (rowId: string) => {
+    if (openInterimRows.delete(rowId)) deps.onInterimSettled?.(rowId)
+  }
+
   const onInterimProse = (
     text: string,
     at: string | undefined,
@@ -239,6 +248,8 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
   ) => {
     if (!text.trim()) return
     const interimRowId = `${baseId}#ip${++interimProseCount}`
+    openInterimRows.add(interimRowId)
+    deps.onInterimStart?.(interimRowId)
     if (receivedAny) {
       // Path A — settle IN PLACE, synchronously: the row rekeys NOW (its
       // array position and birthKey never move), its unreleased chars are
@@ -272,7 +283,8 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
       releaseQueue.push({
         rowId: interimRowId,
         remaining: 0,
-        onDone: () =>
+        onDone: () => {
+          settleInterim(interimRowId)
           apply((prev) =>
             prev.map((m) =>
               m.id === interimRowId
@@ -284,7 +296,8 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
                   }
                 : m,
             ),
-          ),
+          )
+        },
       })
       previewText = ""
       streamedAny = false
@@ -306,15 +319,16 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
           ),
         ),
     })
-    pushChunk(interimRowId, text, () =>
+    pushChunk(interimRowId, text, () => {
+      settleInterim(interimRowId)
       apply((prev) =>
         prev.map((m) =>
           m.id === interimRowId
             ? { ...m, streaming: false, proseDrainedAtMs: Date.now() }
             : m,
         ),
-      ),
-    )
+      )
+    })
     nudgeMarkers()
   }
 
@@ -340,6 +354,7 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
     },
     drain: () => typewriter.drain(),
     halt: () => {
+      for (const rowId of [...openInterimRows]) settleInterim(rowId)
       releaseQueue.length = 0
       typewriter.discard()
     },

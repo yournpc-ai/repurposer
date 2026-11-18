@@ -183,27 +183,44 @@ export interface CandidateMemberPayload {
   height?: number | null
 }
 
-/** The typed answer payload mirrored from the API (messages.answer). */
-export interface QuestionAnswer {
-  kind: "option" | "freeform" | "bail" | "start"
+export interface BriefQuestionItem {
+  slot: string
+  question: string
+  options?: { id: string; label: string; description?: string }[]
+  recommended_id?: string | null
+  allow_freeform?: boolean
+  required?: boolean
+  default_path?: string
+}
+
+export interface BriefAnswerItem {
+  slot: string
+  kind: "option" | "freeform"
   option_id?: string | null
   text?: string | null
+}
+
+/** The typed answer payload mirrored from the API (messages.answer). */
+export interface QuestionAnswer {
+  kind: "option" | "freeform" | "bail" | "start" | "group"
+  option_id?: string | null
+  text?: string | null
+  group_digest?: string | null
+  answers?: BriefAnswerItem[]
   answered_at?: string
 }
 
-/** One persisted activity row's render frame (ADR-108 数组行): the
- * transcript array's activity entries — per-frame rows written at
- * open/settle (intent.type === "activity") and the born-settled material
- * beats (intent.type === "material_beat") share this shape. Array position
- * IS the order, so the live-channel `seq` bookkeeping is optional here;
- * `name`/`total` ride the beats' interpolation fields. */
+/** One persisted activity row's render frame (ADR-108 数组行). Current
+ * activity rows and normalized legacy rows share this single shape. Array
+ * position IS the order, so live-channel `seq` bookkeeping is optional;
+ * `name`/`total` ride the activity's interpolation fields. */
 export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
   seq?: number
   name?: string
   total?: number
-  /** The material beat's asset type (回放层解析字段, never on the SSE wire
-   * whitelist): the settled surface's category fork needs it for web_page
-   * beats — their row key falls to the base form (the verb fork predates
+  /** The material activity's asset type: the settled surface's category
+   * fork needs it for web_page activities — their row key uses the base
+   * form (the verb fork predates
    * the web_page type). */
   assetType?: string
 }
@@ -236,6 +253,28 @@ export interface VideoStoryboardBlock {
   presentation_complete?: boolean
 }
 
+export interface SystemNoticeBlock {
+  kind: "system_notice"
+  text: string
+}
+
+export interface AudioPlaybackBlock {
+  kind: "audio_playback"
+  project_id: string
+  items: {
+    role: "narration" | "music"
+    snapshot_id: string
+    digest: string
+    scene_id?: string | null
+    title: string
+    duration_seconds: number
+    peaks: number[]
+    analysis_digest: string
+  }[]
+}
+
+export type MessageBlock = VideoStoryboardBlock | SystemNoticeBlock | AudioPlaybackBlock
+
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
   id: string
@@ -258,8 +297,8 @@ export interface OverlayMessage {
    * user row still owns the Turn; only its duplicate visible bubble is suppressed. */
   answeredQuestionId?: string
   /** Facts that keep their own block type even when they carry a turn
-   * association (QA/candidate), or have no user-turn owner (trigger/material). */
-  independentKind?: "qa" | "candidate" | "trigger" | "material"
+   * association (QA/candidate), or have no user-turn owner (trigger). */
+  independentKind?: "qa" | "candidate" | "trigger"
   runId?: string | null
   /** A trigger delivery row owns its Run's single historical card seat. */
   runDelivery?: boolean
@@ -316,6 +355,7 @@ export interface OverlayMessage {
     detail?: string
     questionId?: string
     answerKind?: QuestionAnswer["kind"]
+    items?: { question: string; answer: string; muted?: boolean }[]
   }
   /** The canvas product this turn was pointed at (ADR-041 D8, WRITE-RETIRED
    * ADR-058 — pointing is an @mention chip now): old server rows still carry
@@ -337,12 +377,14 @@ export interface OverlayMessage {
    * instead and this stays undefined/empty. Set only after the row's prose
    * has drained (散文永远在先、提问随后). */
   suggestions?: SuggestionPill[]
-  /** 素材节拍 + activity 数组行回放 (ADR-108): a persisted activity entry
-   * replays as a SETTLED (or honestly open) activity row IN ITS ARRAY
-   * POSITION — never a bubble, never re-sorted. Two intent shapes share the
-   * field: {type:"material_beat", …} (the pipeline's reading/understanding
-   * beats) and {type:"activity", frame} (the turn's per-frame rows). */
+  /** Activity 数组行回放 (ADR-108): a persisted activity entry replays as
+   * a SETTLED (or honestly open) activity row IN ITS ARRAY POSITION — never
+   * a bubble, never re-sorted. Legacy material_beat rows are normalized into
+   * this same frame before reaching the shared timeline projection. */
   activity?: ActivityRowFrame
+  /** Live-only display barrier: persist and update this row normally, but keep
+   * it out of the visible projection until the preceding interim prose drains. */
+  activityDisplayHeld?: boolean
   /** Candidate Surface (Workspace 合同 v4.2 C8-c): the replayed (or live)
    * candidate card — the set's members + the CURRENT selection highlight
    * (folded from every selection event up to this point). The card renders
@@ -350,10 +392,9 @@ export interface OverlayMessage {
    * it in place (chat 决策永不成节点 — the card is the selection state's
    * one seat). */
   candidates?: CandidateSurface
-  /** Structured presentation blocks (Video Project phase B): the
-   * storyboard card's resolve references, stamped on the presenting row
-   * server-side. Absent/empty on every legacy row (读容忍). */
-  blocks?: VideoStoryboardBlock[]
+  /** Server-stamped system notices and domain component references.
+   * Absent/empty on every legacy row (读容忍). */
+  blocks?: MessageBlock[]
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -419,6 +460,11 @@ export interface QuestionPayload {
    * falls back to `content`. */
   question?: string
   options?: { id: string; label: string; description?: string }[]
+  allow_freeform?: boolean
+  slot?: string | null
+  default_path?: string
+  items?: BriefQuestionItem[]
+  group_digest?: string | null
   /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
    * recommends — the dock renders its muted suffix. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
@@ -456,11 +502,9 @@ export interface QuestionPayload {
   /** 决策包阅读层 (iter-2 ③): task_book only — the Content Plans behind
    * the compiled chain; empty on the router-drafted docks (读容忍). */
   plans?: DecisionPlanRow[]
-  /** 分镜 echo (dock echo 形态): task_book only — the row's content is the
-   * film dock's echo (prose + the code-rendered storyboard markdown + the
-   * estimate tail), which replays as a normal flow message even while the
-   * dock is still pending (the dock itself revives via the pending
-   * fetch). Absent on every other dock shape. */
+  /** 分镜 echo (dock echo 形态): task_book only — assistant prose stays in
+   * content; the estimate rides a system_notice block and replays with the
+   * echo while the dock revives via the pending fetch. */
 }
 
 /** A question-carrying chat message (the ask_user machinery): the dock's pending
@@ -484,9 +528,8 @@ export interface QuestionMessage {
   /** 建议谱系交互块 (ADR-099 §4): the row's persisted non-blocking
    * suggestion records (empty on every older row — 读容忍). */
   suggestions?: unknown
-  /** Structured presentation blocks (Video Project phase B): the
-   * storyboard card's resolve references on the presenting row. */
-  blocks?: VideoStoryboardBlock[]
+  /** Server-stamped system notices and domain component references. */
+  blocks?: MessageBlock[]
   /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
    * but the turn's tail — and with it the row's server-side birth — is
    * still generating, so this id does NOT exist server-side yet. A click
@@ -531,9 +574,8 @@ export interface ProjectAsset {
  * that segment; the first visible prose fragment or the turn's real terminal
  * state does.
  *
- * rowKey law (行身份): an activity frame's `activity_id` is PER-TURN scoped
- * (two turns both have an "a1"), so it can never key the cross-turn list —
- * the React identity is the HOST MESSAGE ROW's stable id (`birthKey ?? id`,
+ * rowKey law (行身份): the React identity is the HOST MESSAGE ROW's stable
+ * id (`birthKey ?? id`, not an activity counter or a render-time alias —
  * the OverlayMessage render-key law), stamped here at projection time. A
  * settle merges into the same host row, so the identity survives updates; a
  * fold keys by its FIRST MEMBER's rowKey (the segment's head never changes
@@ -576,9 +618,23 @@ export type ComponentSlot =
       block: VideoStoryboardBlock
     }
   | {
+      kind: "systemNotice"
+      key: string
+      block: SystemNoticeBlock
+      priorDrained: boolean
+      history?: boolean
+    }
+  | {
       kind: "output"
       key: string
       outputs: Output[]
+      priorDrained: boolean
+      history?: boolean
+    }
+  | {
+      kind: "audioPlayback"
+      key: string
+      block: AudioPlaybackBlock
       priorDrained: boolean
       history?: boolean
     }

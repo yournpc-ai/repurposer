@@ -47,37 +47,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from app.tools.video.design import CompositionDesignVideoArgs
 
+from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.tool_loop import (
     TerminalRefusal,
     ToolObservation,
+)
+from app.agents.tool_loop import (
     ToolRejected as LoopToolRejected,  # alias: app.tools.ToolRejected (the
     # chain-adjudication exception, imported below) shadows the loop event's
     # name in this module — the retract seat must match the LOOP's class
 )
-from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
-from app.chat.turn_tools import video_rejection_stop
 from app.chat.service import (
     _active_run_line,
     _ask_content,
     _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
-    _loop_incomplete_text,
-    _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
     _design_no_progress_text,
     _dock_question,
     _draft_from_persona_echo,
+    _interim_prose_callback,
+    _loop_incomplete_text,
     _needs_media,
     _prefers_zh,
-    _estimate_tail,
-    _reminder_tail,
+    _reminder_block,
     _safe_task_estimate,
     _sfx_import_failure_text,
     _topic_gate_question,
@@ -91,30 +91,32 @@ from app.chat.service import (
     resolve_suggestion_note,
     sync_plan_question,
 )
+from app.chat.turn_tools import video_rejection_stop
 from app.models.schemas import (
-    AnswerPayload,
     AnnotateNarrationArgs,
+    AnswerPayload,
     AssetStatus,
     AssetType,
     Brief,
     BriefSlot,
     BriefSlotSource,
     ChatRequest,
+    CreativeState,
     EditGraphArgs,
     GetNarrationAlignmentArgs,
-    InferredIntent,
     ImportSfxArgs,
+    InferredIntent,
     MaterialUnderstanding,
     PendingPlan,
     PlanAnswerArgs,
     PlanAskArgs,
-    PresentPlanArgs,
     PrepareNarrationArgs,
+    PresentPlanArgs,
     QuestionPayload,
     QuestionProposal,
     ReviewVideoArgs,
-    ReviseVideoActionArgs,
     ReviseVideoArgs,
+    ReviseVideoOpsArgs,
     ReviseVideoTextArgs,
     SearchSfxArgs,
     SelectMusicArgs,
@@ -124,6 +126,8 @@ from app.models.schemas import (
     SkillReference,
     StartAnswerRequest,
     StartRunArgs,
+    missing_brief_question_items,
+    question_group_digest,
     resolve_recommended_id,
 )
 from app.models.tables import Asset, Message, Persona, Project, User
@@ -170,6 +174,12 @@ class PlanTurn:
         self.db = db
         self.user_id = user_id
         self.turn_id = turn_id
+        self.media_journey: dict | None = None
+        self.media_state: dict | None = None
+        self.media_visual_results: list[dict] = []
+        self.media_resume_pending: PendingPlan | None = None
+        self.media_start_blocker: str | None = None
+        self.media_start_rejections = 0
         self.conversation_id = UUID(str(conversation.id))
         self.project = project
         self.request = request
@@ -238,7 +248,7 @@ class PlanTurn:
         self.stored = (
             PendingPlan.model_validate(self.project.pending_brief)
             if isinstance(self.project.pending_brief, dict)
-            else None
+            else self.media_resume_pending
         )
         return self.stored
 
@@ -301,7 +311,7 @@ class PlanTurn:
         self.pending_q = pending_q
 
         await prime_web_page_captures_from_text(
-            UUID(str(project.id)), self.user_id, text
+            UUID(str(project.id)), self.user_id, text, turn_id=self.turn_id
         )
         assets = list(
             (
@@ -446,6 +456,24 @@ class PlanTurn:
                 f"Material status: {failed_count} uploaded file(s) FAILED "
                 "processing — their content will not become readable."
             )
+        from app.chat.readiness import infer_task_kind
+        if material_pending_line is None and infer_task_kind(text) == "website_promo":
+            web_assets = [asset for asset in assets if asset.type == AssetType.WEB_PAGE]
+            if any(asset.processing_status == AssetStatus.FAILED for asset in web_assets):
+                material_pending_line = (
+                    "Website capture failed for this URL. The page is not readable evidence yet; "
+                    "do not infer a brand direction or ask creative questions."
+                )
+            elif any(asset.processing_status in {AssetStatus.PENDING, AssetStatus.PROCESSING} for asset in web_assets):
+                material_pending_line = (
+                    "Website capture is pending for this URL. "
+                    "The page is not readable evidence yet."
+                )
+            else:
+                material_pending_line = (
+                    "Website capture exists for this URL. Prepare and verify its frozen body text "
+                    "and required PNG views before treating them as readable evidence."
+                )
 
         recent_lines: list[str] = []
         from app.chat.video_turn_seats import video_context_lines
@@ -453,17 +481,6 @@ class PlanTurn:
             db, project, request.mentions,
             skill=self.skill, skill_ambiguity=self.skill_ambiguity,
         ))
-        for m in recent or []:
-            attached = [a.get("name") for a in (m.attachments or []) if a.get("name")]
-            if not m.content and not attached:
-                continue
-            # The caller already bounds history by its token budget. Keep
-            # each retained message whole: clipping a presented storyboard
-            # loses its settings and approval question on the very next turn.
-            line = f"- {m.role}: {m.content or ''}"
-            if attached:
-                line += f" [attached: {', '.join(attached)}]"
-            recent_lines.append(line)
         # The presented chain (ADR-043): the panel's current task list when the
         # caller sends one (hand edits ride along), else the stored plan's. The
         # intent router sees it as a JSON chain and re-emits the WHOLE refined chain
@@ -540,11 +557,7 @@ class PlanTurn:
                 )
             plans_lines = lines or None
         self.infer_kwargs = dict(
-            message=(
-                f"{text}\n{self.suggestion_note}"
-                if self.suggestion_note
-                else text
-            ),
+            message=self.suggestion_note or "",
             brief=brief_in,
             persona=persona,
             pending_question=pending_q,
@@ -703,6 +716,14 @@ class PlanTurn:
         PERCEPTION call short-circuits the seats above: reads are dispatched
         to the family registry and ride back as a ToolObservation (the loop
         iterates — 终态工具一调即停 covers the terminal tools only)."""
+        if self.media_journey is not None and name == "design_video" and getattr(params, "save", False):
+            return "This staged preparation cannot save a Composition."
+        if self.media_state is not None:
+            from app.chat.media_journey import media_write_rejection
+
+            rejection = media_write_rejection(self.media_state["phase"], name, params)
+            if rejection:
+                return rejection
         if name == "read_conversation_context":
             return await self._conversation_context.read(params)
         if name in PERCEPTION_TOOLS:
@@ -760,6 +781,12 @@ class PlanTurn:
             getattr(params, "pending_disposition", "none") if params is not None else "none"
         )
         result = await self._dispatch(name, params, prose)
+        if self.media_state is not None and isinstance(result, ToolObservation):
+            from app.chat.media_journey import dock_media_observation
+
+            result = await dock_media_observation(self, name, result)
+            if result.stop_after_observation:
+                await self._resolve_deferred()
         if result is None:
             if name == "ask_user":
                 self._video_target_ambiguity = None
@@ -801,9 +828,14 @@ class PlanTurn:
                 name=name,
                 args=params,
             )
+        if name == "analyze_brand":
+            from app.chat.video_turn_seats import analyze_brand_seat
+            return await analyze_brand_seat(project=self.project, args=params, user_text=self.text)
         if name == "prepare_video_materials":
             from app.chat.video_turn_seats import prepare_video_materials_seat
-            return await prepare_video_materials_seat(project=self.project, args=params)
+            return await prepare_video_materials_seat(
+                project=self.project, args=params, turn_id=self.turn_id
+            )
         if name == "capture_web":
             from app.chat.video_turn_seats import capture_web_seat
             return await capture_web_seat(project=self.project, args=params)
@@ -812,7 +844,7 @@ class PlanTurn:
             assert isinstance(params, CompositionDesignVideoArgs)
             return await self._design_video(params)
         if name == "revise_video":
-            assert isinstance(params, (ReviseVideoArgs, ReviseVideoActionArgs, ReviseVideoTextArgs))
+            assert isinstance(params, (ReviseVideoArgs, ReviseVideoOpsArgs, ReviseVideoTextArgs))
             return await self._revise_video(params)
         if name == "review_working_draft":
             from app.chat.video_turn_seats import review_working_draft_seat
@@ -864,6 +896,12 @@ class PlanTurn:
             return await prepare_narration_seat(
                 project=self.project, args=params, mentions=self.request.mentions
             )
+        if name == "prepare_visual_assets":
+            from app.chat.video_turn_seats import prepare_visual_assets_seat
+            return await prepare_visual_assets_seat(project=self.project, args=params)
+        if name == "prepare_music":
+            from app.chat.video_turn_seats import prepare_music_seat
+            return await prepare_music_seat(project=self.project, args=params)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat
@@ -970,6 +1008,10 @@ class PlanTurn:
             skill_ambiguity=self.skill_ambiguity,
             package_sessions=self.__dict__.setdefault("_skill_package_sessions", {}),
             user_text=self.text,
+            pending_brief=(
+                self.media_resume_pending.model_dump(mode="json")
+                if self.media_resume_pending is not None else None
+            ),
         )
         if read is None:
             if isinstance(feedback, ToolObservation) and not feedback.ok:
@@ -980,9 +1022,9 @@ class PlanTurn:
         self._video_presentation_pending = read
         return feedback
 
-    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoActionArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
+    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         """revise_video → the targeted-revision beat (ADR-145 phase B):
-        the shared seat applies bounded actions or complete entity writes through the write
+        the shared seat applies a direct Op batch or complete entity writes through the write
         door (own session); the observation carries the system-computed
         change set + the full current facts. The revision alone never starts
         production."""
@@ -990,9 +1032,9 @@ class PlanTurn:
             VideoTargetAmbiguityFeedback,
             bind_video_revision_base,
             revise_video_seat,
+            video_mention_guard,
             video_request_id,
         )
-        from app.chat.video_turn_seats import video_mention_guard
         params = bind_video_revision_base(params, getattr(self, "_video_base_ref", None))
         if params.base_ref is not None:
             guard = await video_mention_guard(
@@ -1037,6 +1079,12 @@ class PlanTurn:
             pending_read=self._video_presentation_pending, production_intent=params.production_intent, mentions=self.request.mentions)
         if video_guard is not None:
             return video_guard
+        if params.production_intent is None:
+            return (
+                "production_intent is required. Judge whether the user's current "
+                "message asks for this work to be made now, set it explicitly "
+                "true or false, then call present_plan again."
+            )
 
         # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
         # — the echo IS its introduction (three duties), so a silent dock
@@ -1101,7 +1149,7 @@ class PlanTurn:
                 "or paste their transcript to unlock them, or ask for the "
                 "text work only."
             )
-        has_root = any(t.tool in {"produce_video", "prepare_narration"} for t in params.tasks) or (
+        has_root = any(t.tool in {"produce_video", "prepare_narration", "prepare_visual_assets", "prepare_music"} for t in params.tasks) or (
             bool((merged_brief.topic.value or "").strip())
             # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
             # user skipped the topic ask is not a root — the skip chose
@@ -1204,7 +1252,6 @@ class PlanTurn:
         # later write) — the brief is the accumulated state now, the prompt is
         # only the plan's birth narrative (Start's instruction fallback).
         birth_prompt = stored.prompt if stored and stored.prompt else self.text
-        echo = echo + _estimate_tail(self.text, task_estimate, reason=need.reason)
         # Caption mode (ADR-099 §8 default absorption): what the call didn't
         # set rides the shared funnel — the user's own words (literal
         # bilingual keyword) > the previous dock's value > source_only when a
@@ -1239,6 +1286,7 @@ class PlanTurn:
         # to fire here — the draft ACTIVITY frame (opened at this call's
         # name-known beat, settled at its acceptance) is the work's only
         # user-safe face now (三通道分家).
+        from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
         from app.editing.service import video_carry_state  # deferred: editing seam
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
@@ -1247,6 +1295,9 @@ class PlanTurn:
             # landed by source precedence + the material state code-stamped in
             # the absorb; the gate and the ask execution read this same object.
             brief=merged_brief,
+            creative_state=creative_state_with_brief(
+                creative_state_for_pending(stored) or CreativeState(), merged_brief
+            ),
             reasons=reasons,
             persona_id=persona_id,
             derived=derived,
@@ -1296,7 +1347,7 @@ class PlanTurn:
         (``assistant.candidates``) at the door's success — the milestone's
         count-only whitelist never carries members. The SSE route ALSO
         collects every emitted payload and persists them as ONE
-        ``candidates_log`` message row at turn settle (the activity_log
+        ``candidates_log`` message row at turn settle (the activity-row
         precedent), so a refresh rebuilds the surface from the archive —
         数据链全程消息载, no endpoint. No-op on the one-shot path."""
         if self.on_candidates is not None:
@@ -1304,15 +1355,46 @@ class PlanTurn:
 
 
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
-        """ask → the ONE question docks through the ask_user machinery.
-        Guards first: the pending-question law and the asked-roll bound
-        the loop."""
+        """Dock one clarification interaction through the ask_user machinery."""
         stored = self._current_pending()
         merged_brief = await self._absorb(
             params.brief,
             params.material_text,
             getattr(params, "material_urls", None),
         )
+        from app.chat.readiness import (
+            brief_with_user_constraints,
+            creative_state_for_pending,
+            creative_state_with_brief,
+            infer_task_kind,
+            website_promo_question_items,
+        )
+        source_text = (
+            self.text if infer_task_kind(self.text) == "website_promo"
+            else stored.prompt or self.text
+        )
+        website_promo = infer_task_kind(source_text) == "website_promo"
+        if website_promo:
+            merged_brief = brief_with_user_constraints(self.text, merged_brief)
+            current_state = creative_state_for_pending(stored)
+            if current_state is None or current_state.brand_profile is None:
+                return "website promo clarification requires analyze_brand before ask_user; no question was docked"
+        group_items = []
+        group_digest = None
+        if website_promo:
+            try:
+                group_items = website_promo_question_items(params.items, merged_brief)
+            except ValueError as exc:
+                return str(exc)
+            group_digest = question_group_digest(group_items, merged_brief)
+        elif params.items:
+            try:
+                group_items = missing_brief_question_items(params.items, merged_brief)
+            except ValueError as exc:
+                return str(exc)
+            if not group_items:
+                return "every requested Brief field is already present; do not re-ask it"
+            group_digest = question_group_digest(group_items, merged_brief)
         # 空散文护栏 (answer 裸调用护栏的对称座): an LLM ask without its
         # framing speech is NEVER legitimate (schema's empty-prose tolerance
         # exists for code-composed questions only) — reject it into the
@@ -1326,7 +1408,7 @@ class PlanTurn:
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
-                "pass the ONE bare question, or call present_plan / answer "
+                "pass the bare question or group title, or call present_plan / answer "
                 "instead."
             )
         # 判词⑦ 扩座 (2026-09-12, S5) as a REJECTION (its structural form):
@@ -1342,7 +1424,7 @@ class PlanTurn:
                 "second question while one is pending."
             )
         if params.slot is not None and params.slot in merged_brief.asked:
-            # The ask loop is bounded (一轮一问决定槽, each slot asks at most
+            # The ask loop is bounded (每个槽位至多询问一次, each slot asks at most
             # once): the router re-asked an already-asked slot — the turn is
             # a plan turn; the 出书门槛 docks the draft-from-persona plan
             # instead of looping the question.
@@ -1359,7 +1441,12 @@ class PlanTurn:
         # stored plan's intent is preserved verbatim (an ask never clobbers
         # the plan), and a fresh project's row carries intent=None (never
         # startable).
-        if params.slot is not None:
+        if group_items:
+            merged_brief.asked = list(dict.fromkeys([
+                *merged_brief.asked, *(item.slot for item in group_items)
+            ]))
+            params = params.model_copy(update={"slot": None})
+        elif params.slot is not None:
             merged_brief.asked = [*merged_brief.asked, params.slot]
         if params.slot == "asset_role":
             # 资产角色消歧 (ADR-078 判词④): the question's options are
@@ -1392,6 +1479,9 @@ class PlanTurn:
             prompt=stored.prompt if stored and stored.prompt else self.text,
             intent=stored.intent if stored else None,
             brief=merged_brief,
+            creative_state=creative_state_with_brief(
+                creative_state_for_pending(stored) or CreativeState(), merged_brief
+            ),
             reasons=stored.reasons if stored else [],
             persona_id=(
                 self.request.persona_id
@@ -1432,7 +1522,7 @@ class PlanTurn:
         assistant_message, bailed_run_ids = await _dock_question(
             self.db,
             self.conversation_id,
-            _ask_content(ask),
+            _ask_content(ask, has_dock_options=bool(group_items)),
             QuestionPayload(
                 kind="question",
                 question=params.question,
@@ -1441,6 +1531,8 @@ class PlanTurn:
                 recommended_id=recommended_id,
                 slot=params.slot,
                 default_path=params.default_path,
+                items=group_items,
+                group_digest=group_digest,
             ),
             intent=intent.model_dump(mode="json"),
         )
@@ -1550,6 +1642,12 @@ class PlanTurn:
         """answer → a plain assistant message; the stored plan stays
         untouched. The envelope seats still absorb (an answer can carry the
         user's declared material)."""
+        if self.media_state is not None:
+            message = await _create_message(
+                self.db, self.conversation_id, "assistant", self._media_stop_text()
+            )
+            self.outcome = (message, None, self.settled_pending, [])
+            return None
         await self._absorb(
             params.brief,
             params.material_text,
@@ -1564,25 +1662,43 @@ class PlanTurn:
         # and the stored plan stays untouched — an answer turn never
         # overwrites the plan the user is confirming. When a question
         # survived the turn unsettled (an interjection, ADR-053 R2), the
-        # reply ends with the code-composed reminder tail (the question +
-        # its default path — never the LLM's voice).
-        content = prose
+        # code-composed reminder rides a system block after the prose.
+        blocks = None
         if self.pending_q is not None:
-            content += _reminder_tail(
+            blocks = [_reminder_block(
                 self.text,
                 _bare_question(self.pending_q),
                 (self.pending_q.question or {}).get("default_path"),
-            )
+            )]
         assistant_message = await _create_message(
             self.db,
             self.conversation_id,
             "assistant",
-            content,
+            prose,
+            blocks=blocks,
         )
         self.outcome = (assistant_message, None, self.settled_pending, [])
         return None
 
     # ---- the outcome mapping -------------------------------------------------
+
+    def _media_stop_text(self) -> str:
+        zh = str(self.project.language or "").startswith("zh")
+        phase = self.media_state["phase"]
+        if phase in {"images", "images_blocked"}:
+            content = "分镜图片尚未全部准备并通过审阅，本次停在图片阶段。" if zh else (
+                "Some scene images are still missing or unapproved. Preparation stopped at images."
+            )
+        else:
+            content = "旁白与配乐尚未全部就绪，本次停在音频准备阶段。" if zh else (
+                "Narration and music are not fully ready. Preparation stopped at audio."
+            )
+        if self.media_start_blocker:
+            content += (
+                " 准备计划未能提交，因此没有启动该步骤。"
+                if zh else " The preparation plan was rejected before execution."
+            )
+        return content
 
     async def finish(self, result) -> PlanTurnOutcome:
         """LoopResult → the caller's 4-tuple. An accepted execution stashed
@@ -1599,6 +1715,14 @@ class PlanTurn:
         # flushes (the queued prose IS the reply), a rejection-marked queue
         # drops (every queued word was rejected speech).
         await self._resolve_deferred()
+        if self.media_state is not None and (
+            result.exhausted or result.no_progress_tool is not None
+            or result.ended_by is not None or result.tool_name is None
+            or self.media_start_blocker is not None
+        ):
+            content = self._media_stop_text()
+            message = await _create_message(self.db, self.conversation_id, "assistant", content)
+            return message, None, self.settled_pending, []
         if result.no_progress_tool is not None:
             video_read = self._video_presentation_pending
             assistant_message = await _create_message(
@@ -1642,17 +1766,19 @@ class PlanTurn:
             # The bare final reply (no tool called) — the read-tolerant
             # answer floor: the prose IS the reply.
             content = result.prose.strip() or _cannot_do_text(self.text)
+            blocks = None
             if self.pending_q is not None:
-                content += _reminder_tail(
+                blocks = [_reminder_block(
                     self.text,
                     _bare_question(self.pending_q),
                     (self.pending_q.question or {}).get("default_path"),
-                )
+                )]
             assistant_message = await _create_message(
                 self.db,
                 self.conversation_id,
                 "assistant",
                 content,
+                blocks=blocks,
             )
             # The bare reply IS the presentation when the model closed a
             # design beat without a further call — same association seat.
@@ -1675,11 +1801,15 @@ class PlanTurn:
             merged_brief = self.merged_brief or Brief()
             merged_brief.asked = [*merged_brief.asked, "topic"]
 
+            from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
             from app.editing.service import video_carry_state  # deferred: editing seam
             self.project.pending_brief = PendingPlan(
                 prompt=stored.prompt if stored and stored.prompt else self.text,
                 intent=stored.intent if stored else None,
                 brief=merged_brief,
+                creative_state=creative_state_with_brief(
+                    creative_state_for_pending(stored) or CreativeState(), merged_brief
+                ),
                 reasons=stored.reasons if stored else [],
                 persona_id=(
                     self.request.persona_id
@@ -1746,6 +1876,8 @@ async def run_plan_turn(
     on_candidates=None,
     on_row_append=None,
     turn_id: UUID | None = None,
+    media_journey: dict | None = None,
+    media_resume_pending: PendingPlan | None = None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1765,15 +1897,26 @@ async def run_plan_turn(
         on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
         on_row_append=on_row_append, turn_id=turn_id,
     )
-    from app.chat.video_turn_seats import prepare_bound_skill_context, requested_video_production, video_target_hint
+    from app.chat.context import conversation_messages
     from app.chat.prompts import assemble_video_round
+    from app.chat.video_turn_seats import (
+        prepare_bound_skill_context,
+        requested_video_production,
+        video_target_hint,
+    )
     context_reader = await prepare_bound_skill_context(
         project=project, skill=skill, message=request.message,
         package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}),
     )
+    turn.media_resume_pending = media_resume_pending
     await turn.assemble(recent)
     mention_target = await video_target_hint(db, project, request.mentions)
     opening = await db.get(Message, turn_id) if turn_id is not None else None
+    from app.chat.media_journey import initial_media_journey, visual_results
+
+    turn.media_journey = media_journey or initial_media_journey(opening)
+    if turn.media_journey is not None:
+        turn.media_visual_results = await visual_results(db, project.id)
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path
@@ -1816,40 +1959,55 @@ async def run_plan_turn(
         interim_prose_hook = on_interim_prose_after_flush
     else:
         interim_prose_hook = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
-    from app.chat.turn_tools import tools_for_bound_skill
     from app.chat.conversation_context import ConversationContext, conversation_context_tool
+    from app.chat.turn_tools import tools_for_bound_skill
     conversation_context = (
         ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
-                            turn_id=turn_id, skill=getattr(turn, "skill", None))
+                            turn_id=turn_id, skill=getattr(turn, "skill", None),
+                            resume_turn=media_resume_pending is not None)
         if turn_id is not None else None
     )
     turn._conversation_context = conversation_context
     context_tools = [conversation_context_tool()] if conversation_context is not None else []
 
+    from app.chat.readiness import creative_state_for_pending, infer_task_kind
     from app.pipeline.assets import urls_in_text
     turn.infer_kwargs["pending_question"] = None
 
     def assemble_round(**facts):
+        current_pending = turn._current_pending()
+        source_text = (
+            request.message if infer_task_kind(request.message) == "website_promo"
+            else (current_pending.prompt if current_pending is not None else "") or request.message
+        )
+        if media_resume_pending is not None:
+            source_text = media_resume_pending.prompt
         assembly = assemble_video_round({
             **facts,
+            "media_journey": turn.media_journey,
+            "media_visual_results": turn.media_visual_results,
             "mode": "plan",
             "skill": turn.skill,
             "user_text": request.message,
+            "source_text": source_text,
             "video_confirmation": confirmation,
             "ui_language": getattr(conversation, "ui_language", None) or getattr(project, "language", None) or "en",
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,
             "target_hint": mention_target or turn._video_target_ambiguity,
             "material_pending": bool(urls_in_text(request.message) or request.attachments or request.mentions),
+            "creative_state": creative_state_for_pending(current_pending),
             "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
         })
         turn._video_base_ref = (
             (assembly.caller_state or {}).get("video_target") or {}
         ).get("base_ref")
+        turn.media_state = (assembly.caller_state or {}).get("media_state")
         return assembly
 
     result = await intent_router.call_loop(
         turn.execute,
+        dialogue=conversation_messages(recent or []),
         tools=[*tools_for_bound_skill(intent_router.tools, turn.skill), *context_tools],
         round_assembler=assemble_round,
         on_delta=on_delta,

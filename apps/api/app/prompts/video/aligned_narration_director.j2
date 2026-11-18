@@ -14,7 +14,7 @@ Correct only the implicated scene/source and preserve every other valid scene ex
 {% if instruction %}DESIGN REQUIREMENTS:
 {{ instruction }}{% endif %}
 
-Return `name`, `language`, optional `background`, and 1–6 `scenes`. Each scene selects one or more `sentence_ids`; across the scenes, cover every sentence exactly once in script order. Use semantics to decide grouping and emphasis: main definitions/processes deserve visual hierarchy, subordinate evidence/examples may group together, and transition sentences should stay concise.
+Return `name`, `language`, optional `background`, and as many `scenes` as the narration structure needs. Each scene selects one or more `sentence_ids`; across the scenes, cover every sentence exactly once in script order. Use semantics to decide grouping and emphasis: main definitions/processes deserve visual hierarchy, subordinate evidence/examples may group together, and transition sentences should stay concise.
 
 For each scene provide `lines` (1–3 exact fragments copied from its selected sentences, each at most 40 characters), `intent` (at most 120 characters), one factual `visual_description` (at most 240 characters), `size` (medium | large | hero), `align`, optional text `color`, `enter` (fade | rise | lines | words | graphemes), and `drift` (none | push_in | pull_out). These entrance choices affect the native title only; emphasized narration words already have server-resolved caption impact animation. Do not add `emphasis_word_ids` or any timing fields to a scene.
 

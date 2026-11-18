@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Integer, cast, delete, or_, select, update
+from sqlalchemy import Float, Integer, cast, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
@@ -22,19 +22,19 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
+    CompositionVersion,
     Conversation,
     ConversationUsage,
-    CompositionVersion,
     GraphEdge,
     GraphNode,
     Message,
     Output,
-    Publication,
-    WorkflowStep,
     Persona,
     Project,
+    Publication,
     User,
     WorkflowRun,
+    WorkflowStep,
 )
 from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.outputs import (
@@ -42,8 +42,8 @@ from app.pipeline.outputs import (
     chat_delivery_output_ids,
     is_chat_video_output,
     output_to_response,
-    workflow_step_to_response,
     run_to_response,
+    workflow_step_to_response,
 )
 from app.platform.billing import (
     release_run,
@@ -108,7 +108,9 @@ async def list_projects(
         select(
             Output.project_id.label("project_id"),
             Output.files["video"].as_string().label("video_url"),
-            cast(Output.payload["duration"].as_string(), Integer).label("duration"),
+            cast(
+                func.floor(cast(Output.payload["duration"].as_string(), Float)), Integer
+            ).label("duration"),
             Output.render_spec.label("render_spec"),
         )
         .distinct(Output.project_id)

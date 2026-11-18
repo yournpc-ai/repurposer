@@ -20,7 +20,7 @@ from app.models.schemas import (
     PersonaAssetUpdateRequest,
     PersonaMediaCreateRequest,
 )
-from app.models.tables import Asset, Persona, Project, User
+from app.models.tables import Asset, Persona, Project, SourceSnapshot, User
 from app.providers.storage import (
     delete_file,
     exists,
@@ -29,6 +29,7 @@ from app.providers.storage import (
     get_persona_upload_path,
     get_staging_upload_prefix,
     get_upload_path,
+    presign_download,
     presign_upload,
     save_persona_upload,
     save_upload,
@@ -668,3 +669,28 @@ async def delete_persona_asset(
     await delete_file(asset.file_url)
     await db.delete(asset)
     await db.commit()
+
+
+@router.get("/{project_id}/audio/{snapshot_id}/playback")
+async def get_audio_playback(
+    project_id: UUID,
+    snapshot_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+):
+    """Issue a short-lived read URL for an owned, fixed project audio Snapshot."""
+    await _get_user_project(project_id, current_user.id, db)
+    snapshot = await db.get(SourceSnapshot, snapshot_id)
+    if (
+        snapshot is None
+        or snapshot.owner_id != current_user.id
+        or snapshot.origin_project_id != project_id
+        or snapshot.kind != "audio"
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio not found")
+    return {
+        "url": await presign_download(snapshot.storage_key),
+        "snapshot_id": str(snapshot.id),
+        "digest": snapshot.digest,
+        "expires_in": 300,
+    }

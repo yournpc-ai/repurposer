@@ -1,0 +1,44 @@
+{# Multimodal website BrandProfile extraction; actual PNG inputs are mandatory. #}
+Read the attached website PNG view(s) as visual evidence, not as file paths. Use the frozen lines and images together.
+
+Current Brief slots:
+{{ brief_json }}
+
+Immutable website evidence (citable_lines, SourceSnapshot identities and view identities):
+{{ evidence_json }}
+
+The dominant_color_evidence entries are deterministic pixel measurements from the attached images. Use their exact hex values for visually inferred brand colors when they match the visible role; do not replace them with approximate shades. These measurements are visual evidence, not CSS confirmation.
+
+Return ONE JSON object with exactly these keys and shapes:
+{
+  "positioning": "One concise brand positioning statement",
+  "claims": [
+    {"text": "A citable product claim", "line_ids": ["line_0000"], "kind": "fact"}
+  ],
+  "taglines": [
+    {"text": "Exact original declaration", "line_ids": ["line_0000"]}
+  ],
+  "colors": [
+    {"value": "#A1B2C3", "role": "primary", "source": "visual", "confidence": "inferred", "source_refs": []}
+  ],
+  "typography": [
+    {"candidate": "接近 Inter", "weight": "", "source": "visual", "confidence": "inferred", "source_refs": []}
+  ],
+  "brand_assets": [
+    {"kind": "wordmark", "ref": "Visible wordmark description", "source_refs": []}
+  ],
+  "creative_direction": {
+    "summary": "Evidence-led, restrained visual direction",
+    "media_preferences": [],
+    "avoid": [],
+    "provenance": "inferred"
+  },
+  "unknowns": ["Material fact that cannot be confirmed"],
+  "conflicts": ["Actual conflict between sources, or an empty list"]
+}
+
+Use kind=inferred whenever a claim is an interpretation. Preserve cited original taglines exactly; do not paraphrase them. CSS/DOM confirmation is allowed only when that fact is explicitly present in evidence; otherwise use source=visual and confidence=inferred. From pixels alone, name only a font resemblance, never a confirmed website font. Logo/wordmark/icon assets require visible or explicit evidence. creative_direction is an interpretation and its provenance must remain inferred. Use unknowns and conflicts instead of guesses.
+
+Use exactly the displayed key names and nested object shapes. Do not return aliases such as positioning_and_claims, typography_candidates, logo_wordmark_icon_assets or hex. Do not replace nested objects with strings.
+
+Do not generate media, a storyboard, TTS, music, production tasks, source digests, extractor_version or content_digest. The server owns those identities.

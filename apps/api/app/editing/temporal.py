@@ -635,13 +635,20 @@ def snap_cut(content, outgoing, incoming, music, facts, tolerance):
     grid = (facts.get("meta") or {}).get("beat_grid") or {}
     beats = grid.get("beats") or []
     source = music.source.source_range
-    if not beats and grid.get("bpm"):
-        period = 60 / grid["bpm"]
+    bpm = grid.get("bpm")
+    if isinstance(bpm, dict):
+        bpm = Fraction(int(bpm["num"]), int(bpm["den"]))
+    if not beats and bpm:
+        period = 60 / float(bpm)
         beats = [i*period for i in range(int(source.end / SOURCE_TIMEBASE / period)+1)]
     candidates = []
     settings = content.settings
     for beat in beats:
-        position = seconds_to_ticks(beat, SOURCE_TIMEBASE)
+        position = (
+            int(beat)
+            if grid.get("source_timebase") == SOURCE_TIMEBASE
+            else seconds_to_ticks(beat, SOURCE_TIMEBASE)
+        )
         if not source.start <= position < source.end:
             continue
         mapped = music.range.start + seconds_to_ticks(str(Fraction(position-source.start, SOURCE_TIMEBASE)), settings.timebase)

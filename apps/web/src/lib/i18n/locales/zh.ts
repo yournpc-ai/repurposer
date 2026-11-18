@@ -57,7 +57,7 @@ const zh: Resources = {
     },
     mode: { auto: "自动", ask: "询问" },
     footnote:
-      "估价始终随方案显示。超高额或无法提前估价的方案，任何设置下都会先问你一次。",
+      "估价始终随方案显示。超过费用守卫线的方案任何设置下都会先确认；无法提前估价只在执行或费用设为“询问”时确认，自动档不重复询问。",
     updateFailed: "设置保存失败，请重试",
   },
   general: {
@@ -1157,16 +1157,16 @@ const zh: Resources = {
      * 由触发轮询拾取——有 LLM 调用就必定有 now-line）。文案只说在整理
      * 制作结果，永不暗示仍在渲染或在检查视频画面。 */
     closingReview: "正在整理制作结果…",
-    /** 分镜起草落定行（legacy 节拍回放）：跨度的落定行（born-settled
-     * 素材节拍）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同
+    /** 分镜起草落定行（legacy 活动回放）：跨度的落定行（born-settled
+     * activity）——活动日志寄存器（动宾+事实，无进行态），与素材读取族同
      * 三寄存器律。 */
     storyboard: {
       draftingDone: "起草完分镜",
     },
     /** now-line 的素材阅读行（2026-09-24 用户拍板——thinking 就是 activity
      * 行的空态）：素材处理中 → reading（文件名插值）。*Done / *Failed 是
-     * 持久化的完成态行（素材节拍入库——pipeline 每节拍落一条消息行，回放
-     * 映过去时）；Progress 带批次计数「N/M」（带计数拍板）。
+     * 持久化的完成态行（统一 activity 行——pipeline 完成时写入或复用
+     * 同一消息行，回放映过去时）；Progress 带批次计数「N/M」。
      * 动词分叉（2026-09-27 批「动词」）：动词随资产类型——video=看 /
      * audio=听 / 文本及其他=读；多文件批次落中性词「处理」。typed key
      * 缺席时回落基 key（前后端两个合成点同一分叉律：ChatDock now-line
@@ -1254,12 +1254,18 @@ const zh: Resources = {
       seek: "调整播放进度",
       previewUnavailable: "音频预览不可用",
     },
+    audio: {
+      narration: "旁白",
+      music: "背景音乐",
+      loading: "正在准备音频播放…",
+      unavailable: "音频尚未就绪，暂时无法播放",
+    },
     /** 活动流里程碑文案（ADR-087 §3 Phase 2）：active 帧带进行态、completed
      * 帧带完成态；failed 保留诚实的进行态键，cancelled 尝试从可见时间线
      * 退役，不变成删除线历史。 */
     /** 2026-09-25 文案批 (用户拍板——「计划已起草 / 创建 workflow」那套
      * 机器状态腔退役): 说人话，说当下在干的事。draft 按工具分两副面孔
-     * ——出方案 / 改已有产物（projector 的 _EDIT_TOOLS 选 key）。draft / run
+     * ——出方案 / 改已有产物（由 ChatTool.presentation 声明）。draft / run
      * 跨度只有 active 态（落定即退役——2026-09-28 draft、2026-09-29 扩到
      * run）：落定收据行退役，方案卡 / 开工言语 + RunTaskList 收据就是证据，
      * 故无 draftDone/editDone/runDone 键（下方分镜键族是唯一例外——分镜
@@ -1286,8 +1292,17 @@ const zh: Resources = {
       skillReadDone: "已读取 Skill 方法",
       skillPreview: "正在查看 Skill 预览…",
       skillPreviewDone: "已查看 Skill 预览",
+      importMusic: "正在导入音乐…",
+      visualAssets: "正在查看画面素材…",
+      visualAssetsDone: "已查看画面素材",
+      readHistory: "正在查看对话记录…",
+      readHistoryDone: "已查看对话记录",
+      viewWebPage: "正在查看网页…",
+      viewWebPageDone: "已查看网页",
       videoMaterials: "正在准备视频素材…",
       videoMaterialsDone: "已准备视频素材",
+      brandAnalyze: "正在提炼品牌档案…",
+      brandAnalyzeDone: "已提炼品牌档案",
       videoCapturePlan: "正在采集计划的网页状态…",
       videoCapturePlanDone: "已采集计划的网页状态",
       videoRevise: "正在调整视频分镜…",
@@ -1310,6 +1325,8 @@ const zh: Resources = {
       musicSearchDone: "已找到配乐",
       musicSelection: "正在选择配乐…",
       musicSelectionDone: "已选择配乐",
+      musicPrepare: "正在准备电子配乐…",
+      musicPrepareDone: "已准备电子配乐",
       upload: "正在上传视频…",
       uploadDone: "已上传视频",
       narrationPrepare: "正在准备旁白对齐…",
@@ -1402,6 +1419,7 @@ const zh: Resources = {
      * 回放缺少该客户端事实时只报可观察活动跨度。展开 = 类目分解
      * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
     activityFold: {
+      workedWithoutTime: "已工作",
       worked: "工作了 {{elapsed}}",
       failed: "这次没能完成 · {{elapsed}}",
       actionCount: "{{count}} 项操作",
@@ -1501,6 +1519,7 @@ const zh: Resources = {
       fonts: "准备字体",
       generator_media: "生成画面",
       speech_media: "生成旁白",
+      visual_assets: "准备分镜图片",
       compile_spec: "编译视频规格",
       output_preparation: "创建待交付产物",
       output_resume: "复用已准备产物",
@@ -1615,6 +1634,10 @@ const zh: Resources = {
     bail: "停止生成",
     skip: "跳过问题",
     recommended: "推荐",
+    previous: "上一页",
+    next: "下一页",
+    submit: "提交回答",
+    page: "{{current}} / {{total}}",
   },
   clipMenu: {
     more: "更多操作",

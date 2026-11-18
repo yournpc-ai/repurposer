@@ -132,7 +132,7 @@ async def test_real_music_bytes_freeze_once_and_reuse_across_owned_chats(databas
         a=Project(user_id=owner.id,title='A');b=Project(user_id=owner.id,title='B')
         track=Music(mood=uuid4().hex,title='Real local fixture',ext='mp3',file_path='music/fixture.mp3',size_bytes=len(audio),is_public=True)
         db.add_all([a,b,track]);await db.commit();uid,pa,pb,mid=owner.id,a.id,b.id,track.id
-    objects={preparation.music_file_path(mid):audio}
+    objects={track.file_path:audio}
     async def read(key):return objects[key]
     async def exists(key):return key in objects
     async def save(key,data,**kwargs):objects[key]=data
@@ -141,7 +141,11 @@ async def test_real_music_bytes_freeze_once_and_reuse_across_owned_chats(databas
     monkeypatch.setattr(preparation.storage,'save',save)
     monkeypatch.setattr(design,'AsyncSessionLocal',database)
     args=PrepareVideoMaterialsArgs(material_music_ids=[mid])
-    first,_=await design.prepare_video_materials(owner_id=uid,project_id=pa,args=args)
+    from app.agents.tool_progress import ToolProgress, bind_progress
+    steps = []
+    with bind_progress("import", steps.append):
+        first, _ = await design.prepare_video_materials(owner_id=uid, project_id=pa, args=args)
+    assert steps == [ToolProgress("import", "import_music")]
     repeated,_=await design.prepare_video_materials(owner_id=uid,project_id=pa,args=args)
     other,_=await design.prepare_video_materials(owner_id=uid,project_id=pb,args=args)
     ids=[r['resources'][0]['snapshot_id'] for r in (first,repeated,other)]
@@ -532,3 +536,48 @@ async def test_video_defaults_to_bounded_real_frames_and_keeps_builder_source_ra
     }
     assert resource['width'] == 64 and resource['height'] == 32
     assert facts['media_omitted'] == []
+
+
+async def test_resumed_loop_restores_prior_draft_but_owns_new_exchanges(monkeypatch):
+    import json
+    from app.chat.conversation_context import ConversationContext
+
+    turn_id = uuid4()
+    draft_id = 'current-draft'
+    digest = 'a' * 64
+    prior = {
+        'id': f'{turn_id}:0:0:design', 'turn_id': str(turn_id),
+        'tool': 'design_video', 'arguments': {},
+        'executed_arguments': {'content': {'scenes': []}},
+        'text': json.dumps({'draft_id': draft_id, 'draft_digest': digest}),
+        'ok': True, 'media_refs': [], 'resource_keys': [],
+        'candidate': {'candidate_id': draft_id, 'candidate_digest': digest,
+                      'target_tool': 'design_video', 'active': True},
+    }
+    records = [prior]
+
+    async def load():
+        return records, {str(turn_id): 'Make a video'}, 120000
+
+    async def media(items):
+        return (), []
+
+    context = ConversationContext(
+        conversation_id=uuid4(), owner_id=uuid4(), turn_id=turn_id, resume_turn=True,
+    )
+    monkeypatch.setattr(context, '_load', load)
+    monkeypatch.setattr(context, '_media', media)
+    history = await context.restore(None, [])
+    assert len(history.candidates) == 1
+    assert history.candidates[0].candidate_id == draft_id
+    assert history.candidates[0].candidate_digest == digest
+    records.append({**prior, 'id': f'{turn_id}:1:0:lookup', 'tool': 'get_asset',
+                    'text': 'new loop result', 'candidate': None})
+    history = await context.restore(None, [])
+    assert len(history.candidates) == 1
+    assert 'new loop result' not in str(history.messages)
+
+    ordinary = ConversationContext(conversation_id=uuid4(), owner_id=uuid4(), turn_id=turn_id)
+    monkeypatch.setattr(ordinary, '_load', load)
+    monkeypatch.setattr(ordinary, '_media', media)
+    assert not (await ordinary.restore(None, [])).candidates

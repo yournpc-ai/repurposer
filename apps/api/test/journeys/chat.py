@@ -636,7 +636,10 @@ def check_stream_law(
         )
 
 
-def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, label: str) -> None:
+def check_turn_stream_law(
+    stream: "StreamTurn", content: str, question: dict, label: str,
+    blocks: list[dict] | None = None,
+) -> None:
     """The ask-branch-aware stream law (journey 公共断言的 SSE 线格式座):
     an OPTIONS ask's content IS the streamed framing (the question rides the
     dock title); a TEXT ask keeps the bare question IN the speech —
@@ -660,13 +663,6 @@ def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, la
         )
         return
     if question.get("kind") == "task_book":
-        # 估价尾行 (ADR-111 §2 / BILLING §2.1 — 2026-10-23 T5/T7 取证):
-        # content = [iteration-0 ledger speech] + the dock echo (composed
-        # at the terminal call, never streamed) + the code-composed
-        # estimate whisper (appended at compose, blank-line join — the
-        # reminder tail's same doctrine; the settled envelope paces it out
-        # whole client-side). Iteration-0 read-first speech may instead
-        # ride the INTERIM PROSE channel (ADR-104 — never enters the ledger).
         streamed = "".join(stream.deltas).strip()
         interim_prose_text = {c.strip() for c in stream.interim_prose_rows}
         check(
@@ -677,14 +673,18 @@ def check_turn_stream_law(stream: "StreamTurn", content: str, question: dict, la
             "content or rode the interim_prose channel (ADR-104)",
             f"{streamed[:120]!r} vs {content[:120]!r}",
         )
+        notices = [
+            block.get("text") or "" for block in blocks or []
+            if block.get("kind") == "system_notice"
+        ]
         check(
-            "\n\n（估价" in content
-            or "\n\n(Estimated" in content
-            or "\n\n(From" in content
-            or "\n\n(Credits" in content
-            or content.strip().startswith(("（估价", "(Estimated", "(From", "(Credits")),
-            f"{label}: the dock echo carries the compose-appended estimate "
-            "whisper (blank-line join, never streamed)",
+            any(text.startswith(("（估价", "(Estimated", "(From", "(Credits")) for text in notices),
+            f"{label}: the estimate is a structured system block, never assistant prose",
+            {"content": content[-120:], "blocks": blocks},
+        )
+        check(
+            not content.strip().startswith(("（估价", "(Estimated", "(From", "(Credits")),
+            f"{label}: the assistant body excludes the system estimate",
             content[-120:],
         )
         return
@@ -1031,7 +1031,7 @@ def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
     msg = stream.completed["assistant_message"]
     content = msg.get("content") or ""
     q = msg.get("question") or {}
-    check_turn_stream_law(stream, content, q, label)
+    check_turn_stream_law(stream, content, q, label, msg.get("blocks") or [])
     check_activity_shape(stream, label)
     check_interim_prose_shape(stream, content, label)
     # question.preview 预览帧律（言语提交协议 G2：预览骑缓冲、接受才释
@@ -2283,7 +2283,7 @@ async def _p1_revise(ctx: Ctx, pid: str, message: str, label: str, expected_vers
         for schema in declarations
     ), f"{label}: final provider declarations expose only high-level revision intent", declarations)
     assistant = turn.get("assistant_message") or {}
-    if assistant.get("blocks"):
+    if any(block.get("kind") == "video_storyboard" for block in assistant.get("blocks") or []):
         await ctx.acknowledge_video_presentation(turn)
     versions = await composition_versions_of(pid)
     check(len(versions) == expected_version,
@@ -2940,12 +2940,11 @@ async def sequential_oxvalue_draft_review(ctx: Ctx) -> None:
             and event["data"].get("key") == "chat.activity.videoDesign"
             and event["data"].get("status") == "active"
         )
-        check(sum(position < first_preview_done for position in interim_positions) <= 1,
-              "P2 opening plan occurs at most once before the first evidence", stream.interim_prose_rows)
+        check(any(position < first_preview_done for position in interim_positions),
+              "P2 service message precedes the first review receipt", stream.interim_prose_rows)
         check(any(second_preview_done < position < edit_started for position in interim_positions),
               "P2 second-Scene finding follows its actual preview and precedes repair", stream.raw_events)
-        check(len(interim_positions) <= 2,
-              "P2 later repair and recheck do not repeat the opening plan", stream.interim_prose_rows)
+
 
         versions = await composition_versions_of(pid)
         check(len(versions) == 1, "P2 final working draft lands exactly one editable version", versions)
@@ -2998,8 +2997,8 @@ async def sequential_oxvalue_draft_review(ctx: Ctx) -> None:
         title_tool_calls = [item for call in title_calls for item in _p1_tool_calls(call)]
         check(any(name == "revise_video" for name, _ in title_tool_calls),
               "P2 title feedback writes through saved-version revision", title_tool_calls)
-        check(not title_stream.interim_prose_rows,
-              "P2 targeted saved-version edit calls tools without opening or progress prose",
+        check(bool(title_stream.interim_prose_rows),
+              "P2 targeted saved-version edit explains its revision",
               title_stream.interim_prose_rows)
         for call in title_calls:
             payload = call["request"].get("payload") or {}

@@ -13,10 +13,11 @@
 
 import type {
   ActivityFramePayload,
+  BriefQuestionItem,
   CandidateMemberPayload,
   CandidateSurface,
+  MessageBlock,
   OverlayMessage,
-  VideoStoryboardBlock,
 } from "@/components/chat/timeline/types"
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the
@@ -36,8 +37,11 @@ export interface ThinkingPayload {
  * envelope stays authoritative (envelope always wins). */
 export interface QuestionPreviewPayload {
   question?: string | null
-  options?: { id: string; label: string }[]
+  options?: { id: string; label: string; description?: string }[]
+  items?: BriefQuestionItem[]
+  group_digest?: string | null
   allow_freeform?: boolean
+  recommended_id?: string | null
   slot?: string | null
   default_path?: string | null
 }
@@ -85,7 +89,7 @@ export interface RowAppendPayload {
   intent?: unknown
   /** Structured presentation blocks (Video Project phase B) — the
    * storyboard card's resolve references on the presenting row. */
-  blocks?: VideoStoryboardBlock[]
+  blocks?: MessageBlock[]
   created_at?: string | null
 }
 

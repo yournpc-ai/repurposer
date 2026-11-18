@@ -63,35 +63,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from app.tools.video.design import CompositionDesignVideoArgs
 
-from app.chat.context import build_context
+from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.tool_loop import (
     TerminalRefusal,
     ToolObservation,
+)
+from app.agents.tool_loop import (
     ToolRejected as LoopToolRejected,  # alias: app.tools.ToolRejected (the
     # chain-adjudication exception, imported below) shadows the loop event's
     # name in this module — the retract seat must match the LOOP's class
 )
-from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
+from app.chat.context import build_context
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.intent import chat_intent_agent
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
-from app.chat.turn_tools import video_rejection_stop
 from app.chat.service import (
     _ask_content,
     _auto_start_docked_plan,
     _bare_question,
-    _loop_incomplete_text,
-    _interim_prose_callback,
     _compute_plan_reasons,
     _create_message,
     _design_no_progress_text,
     _dock_question,
-    _estimate_tail,
+    _interim_prose_callback,
+    _loop_incomplete_text,
     _parked_interrupt_run,
     _prefers_zh,
+    _reminder_block,
     _resume_ack_line,
-    _reminder_tail,
     _safe_task_estimate,
     _sfx_import_failure_text,
     _video_capability_text,
@@ -102,29 +102,31 @@ from app.chat.service import (
     resolve_suggestion_note,
     sync_plan_question,
 )
+from app.chat.turn_tools import video_rejection_stop
 from app.models.schemas import (
+    AnnotateNarrationArgs,
     AnswerPayload,
     AnswerProposal,
-    AnnotateNarrationArgs,
     AssetType,
     Brief,
     ChatAnswerArgs,
     ChatAskArgs,
     ChatMention,
+    CreativeState,
     EditGraphArgs,
     GetNarrationAlignmentArgs,
-    InferredIntent,
     ImportSfxArgs,
+    InferredIntent,
     PendingPlan,
+    PlanEstimate,
     PrepareNarrationArgs,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
-    PlanEstimate,
     RetryUploadArgs,
     ReviewVideoArgs,
-    ReviseVideoActionArgs,
     ReviseVideoArgs,
+    ReviseVideoOpsArgs,
     ReviseVideoTextArgs,
     SearchSfxArgs,
     SelectMusicArgs,
@@ -133,6 +135,8 @@ from app.models.schemas import (
     ShowVideoPresetsArgs,
     SkillReference,
     SuggestionRef,
+    missing_brief_question_items,
+    question_group_digest,
     resolve_recommended_id,
 )
 from app.models.tables import (
@@ -321,7 +325,7 @@ class ChatTurn:
             )
         self.context = (
             await build_context(
-                db, project, recent, mentions, pending,
+                db, project, mentions, pending,
                 canvas_available=self.canvas_available,
                 confirmation=confirmation,
                 skill=self.skill,
@@ -536,9 +540,14 @@ class ChatTurn:
                 name=name,
                 args=params,
             )
+        if name == "analyze_brand":
+            from app.chat.video_turn_seats import analyze_brand_seat
+            return await analyze_brand_seat(project=self.project, args=params, user_text=self.text)
         if name == "prepare_video_materials":
             from app.chat.video_turn_seats import prepare_video_materials_seat
-            return await prepare_video_materials_seat(project=self.project, args=params)
+            return await prepare_video_materials_seat(
+                project=self.project, args=params, turn_id=self.turn_id
+            )
         if name == "capture_web":
             from app.chat.video_turn_seats import capture_web_seat
             return await capture_web_seat(project=self.project, args=params)
@@ -547,7 +556,7 @@ class ChatTurn:
             assert isinstance(params, CompositionDesignVideoArgs)
             return await self._design_video(params)
         if name == "revise_video":
-            assert isinstance(params, (ReviseVideoArgs, ReviseVideoActionArgs, ReviseVideoTextArgs))
+            assert isinstance(params, (ReviseVideoArgs, ReviseVideoOpsArgs, ReviseVideoTextArgs))
             return await self._revise_video(params)
         if name == "review_working_draft":
             from app.chat.video_turn_seats import review_working_draft_seat
@@ -603,6 +612,12 @@ class ChatTurn:
             return await prepare_narration_seat(
                 project=self.project, args=params, mentions=self.mentions
             )
+        if name == "prepare_visual_assets":
+            from app.chat.video_turn_seats import prepare_visual_assets_seat
+            return await prepare_visual_assets_seat(project=self.project, args=params)
+        if name == "prepare_music":
+            from app.chat.video_turn_seats import prepare_music_seat
+            return await prepare_music_seat(project=self.project, args=params)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat
@@ -682,6 +697,12 @@ class ChatTurn:
             pending_read=self._video_presentation_pending, production_intent=params.production_intent, mentions=self.mentions)
         if video_guard is not None:
             return video_guard
+        if params.production_intent is None:
+            return (
+                "production_intent is required. Judge whether the user's current "
+                "message asks for this work to be made now, set it explicitly "
+                "true or false, then call propose_tasks again."
+            )
         if not params.tasks:
             return (
                 "empty task list — to ask the user first, call ask_user; for "
@@ -787,9 +808,9 @@ class ChatTurn:
         self._video_presentation_pending = read
         return feedback
 
-    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoActionArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
+    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         """revise_video → the targeted-revision beat (ADR-145 phase B, the
-        plan path's mirror): the shared seat applies bounded actions or complete entity writes
+        plan path's mirror): the shared seat applies a direct Op batch or complete entity writes
         through the write door; the observation carries the system-computed
         change set + the full current facts. The revision alone never starts
         production."""
@@ -799,10 +820,9 @@ class ChatTurn:
             VideoTargetAmbiguityFeedback,
             bind_video_revision_base,
             revise_video_seat,
+            video_mention_guard,
             video_request_id,
         )
-
-        from app.chat.video_turn_seats import video_mention_guard
         params = bind_video_revision_base(params, getattr(self, "_video_base_ref", None))
         if params.base_ref is not None:
             guard = await video_mention_guard(
@@ -866,13 +886,8 @@ class ChatTurn:
         from the stored pending)."""
         db, project = self.db, self.project
         assert project is not None  # the dock seat is project-bound
-        # Resolve the dock's quote BEFORE the intent so the echo tail reads
-        # it (ADR-111 §2 — the plan path's present_plan seat's same law):
-        # the chat path's dock echo carries the code-composed estimate
-        # whisper as its tail — the card row's retirement left no other
-        # total-price face here, and the disclosure duty (BILLING §2.1)
-        # holds on every dock seat. The tailed answer rides intent.answer,
-        # so a stored-echo re-dock replays it single-tailed.
+        # The shared dock seat turns this quote into a structured system
+        # notice after the assistant's echo (BILLING §2.1 disclosure).
         resolved_estimate = (
             await _safe_task_estimate(db, project, tasks)
             if estimate is _ESTIMATE_UNSET
@@ -906,13 +921,9 @@ class ChatTurn:
         birth_prompt = (
             stored.prompt if stored is not None and stored.prompt else None
         ) or self.text
-        answer = (
-            (answer or "")
-            # 展示一座 (ADR-129): the storyboard markdown's presentation seat
-            # is the design beat's own message — a dock echo NEVER
-            # re-embeds it.
-            + _estimate_tail(self.text, resolved_estimate, reason=need.reason)
-        )
+        # 展示一座 (ADR-129): the storyboard markdown's presentation seat
+        # is the design beat's own message — a dock echo NEVER re-embeds it.
+        answer = answer or ""
         intent = InferredIntent(
             action="draft",
             tasks=tasks,
@@ -926,11 +937,15 @@ class ChatTurn:
             and isinstance(project.pending_brief.get("brief"), dict)
             else Brief()
         )
+        from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
         from app.editing.service import video_carry_state  # deferred: editing seam
         project.pending_brief = PendingPlan(
             prompt=birth_prompt,
             intent=intent,
             brief=preserved_brief,
+            creative_state=creative_state_with_brief(
+                creative_state_for_pending(stored) or CreativeState(), preserved_brief
+            ),
             reasons=await _compute_plan_reasons(db, project, intent),
             persona_id=(
                 persona_id
@@ -989,7 +1004,7 @@ class ChatTurn:
         (``assistant.candidates``) at the door's success — the milestone's
         count-only whitelist never carries members. The SSE route ALSO
         collects every emitted payload and persists them as ONE
-        ``candidates_log`` message row at turn settle (the activity_log
+        ``candidates_log`` message row at turn settle (the activity-row
         precedent), so a refresh rebuilds the surface from the archive —
         数据链全程消息载, no endpoint. No-op on the one-shot path."""
         if self.on_candidates is not None:
@@ -1033,8 +1048,55 @@ class ChatTurn:
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
-                "pass the ONE bare question, or call another tool."
+                "pass the bare question or group title, or call another tool."
             )
+        from app.chat.readiness import (
+            brief_with_user_constraints,
+            creative_state_for_pending,
+            creative_state_with_brief,
+            infer_task_kind,
+            website_promo_question_items,
+        )
+        stored = PendingPlan.model_validate(self.project.pending_brief or {})
+        current_state = creative_state_for_pending(stored)
+        brief = current_state.brief if current_state is not None else stored.brief
+        source_text = (
+            self.text if infer_task_kind(self.text) == "website_promo"
+            else stored.prompt or self.text
+        )
+        website_promo = infer_task_kind(source_text) == "website_promo"
+        if website_promo:
+            if current_state is None or current_state.brand_profile is None:
+                return "website promo clarification requires analyze_brand before ask_user; no question was docked"
+            brief = brief_with_user_constraints(self.text, brief)
+        group_items = []
+        group_digest = None
+        if website_promo:
+            try:
+                group_items = website_promo_question_items(params.items, brief)
+            except ValueError as exc:
+                return str(exc)
+            group_digest = question_group_digest(group_items, brief)
+        elif params.items:
+            try:
+                group_items = missing_brief_question_items(params.items, brief)
+            except ValueError as exc:
+                return str(exc)
+            if not group_items:
+                return "every requested Brief field is already present; do not re-ask it"
+            group_digest = question_group_digest(group_items, brief)
+        if group_items:
+            brief.asked = list(dict.fromkeys([
+                *brief.asked, *(item.slot for item in group_items)
+            ]))
+            stored.brief = brief
+            stored.creative_state = creative_state_with_brief(
+                current_state or CreativeState(),
+                brief,
+            )
+            if not stored.prompt:
+                stored.prompt = self.text
+            self.project.pending_brief = stored.model_dump(mode="json")
         # ask 三分解剖: content carries the framing prose (the turn's echo),
         # the bare question rides the payload. 推荐标记 (2026-09-27 一问拍
         # 一体化): the shared validation lives in resolve_recommended_id.
@@ -1050,7 +1112,7 @@ class ChatTurn:
         assistant_message, bailed_run_ids = await _dock_question(
             self.db,
             self.conversation_id,
-            _ask_content(ask),
+            _ask_content(ask, has_dock_options=bool(group_items)),
             QuestionPayload(
                 kind="question",
                 question=params.question,
@@ -1058,6 +1120,8 @@ class ChatTurn:
                 allow_freeform=params.allow_freeform,
                 recommended_id=recommended_id,
                 default_path=params.default_path,
+                items=group_items,
+                group_digest=group_digest,
             ),
             intent=ask.model_dump(mode="json"),
         )
@@ -1091,9 +1155,9 @@ class ChatTurn:
     # ---- the outcome mapping -------------------------------------------------
 
     async def finish(self, result) -> ProposeTurnOutcome:
-        """LoopResult → the caller's 4-tuple + the reminder tail (ADR-053 R2):
+        """LoopResult → the caller's 4-tuple + the reminder system block:
         the pre-turn question survived unsettled and unsuperseded (an
-        interjection) — the reply ends with the code-composed reminder."""
+        interjection) — the reminder follows the assistant's prose."""
         if self.outcome is not None:
             assistant_message, run_id, bailed_run_ids, settled = self.outcome
             # 呈现关联 (2026-10-18 裁决, the plan path's mirror): a design
@@ -1194,13 +1258,14 @@ class ChatTurn:
         ):
             still_open = await latest_pending_question(self.db, self.conversation_id)
             if still_open is not None and still_open.id == self.pending.id:
-                assistant_message.content = (
-                    assistant_message.content or ""
-                ) + _reminder_tail(
-                    self.text,
-                    _bare_question(self.pending),
-                    (self.pending.question or {}).get("default_path"),
-                )
+                assistant_message.blocks = [
+                    *(assistant_message.blocks or []),
+                    _reminder_block(
+                        self.text,
+                        _bare_question(self.pending),
+                        (self.pending.question or {}).get("default_path"),
+                    ),
+                ]
         return assistant_message, run_id, bailed_run_ids, settled
 
 
@@ -1240,7 +1305,11 @@ async def run_propose_turn(
         on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
         on_row_append=on_row_append, turn_id=turn_id,
     )
-    from app.chat.video_turn_seats import prepare_bound_skill_context, requested_video_production, video_target_hint
+    from app.chat.video_turn_seats import (
+        prepare_bound_skill_context,
+        requested_video_production,
+        video_target_hint,
+    )
     context_reader = await prepare_bound_skill_context(
         project=project, skill=skill, message=text,
         package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}),
@@ -1298,8 +1367,8 @@ async def run_propose_turn(
             if turn.project is not None
             else None
         )
-    from app.chat.turn_tools import tools_for_bound_skill
     from app.chat.conversation_context import ConversationContext, conversation_context_tool
+    from app.chat.turn_tools import tools_for_bound_skill
     conversation_context = (
         ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
                             turn_id=turn_id, skill=getattr(turn, "skill", None))
@@ -1309,21 +1378,33 @@ async def run_propose_turn(
     context_tools = [conversation_context_tool()] if conversation_context is not None else []
 
     try:
-        from app.pipeline.assets import urls_in_text
+        from app.chat.context import conversation_messages
         from app.chat.prompts import assemble_video_round
+        from app.chat.readiness import creative_state_for_pending, infer_task_kind
+        from app.pipeline.assets import urls_in_text
 
         def assemble_round(**facts):
+            current_pending = (
+                PendingPlan.model_validate(project.pending_brief)
+                if isinstance(project.pending_brief, dict) else None
+            )
+            source_text = (
+                text if infer_task_kind(text) == "website_promo"
+                else (current_pending.prompt if current_pending is not None else "") or text
+            )
             assembly = assemble_video_round({
                 **facts,
                 "mode": "conversation",
                 "skill": getattr(turn, "skill", None),
                 "user_text": text,
+                "source_text": source_text,
                 "video_confirmation": confirmation,
                 "ui_language": getattr(conversation, "ui_language", None) or getattr(project, "language", None) or "en",
                 "production_requested": requested_video_production(text),
                 "pending_question": lambda: turn.pending,
                 "target_hint": mention_target or turn._video_target_ambiguity,
                 "material_pending": bool(urls_in_text(text) or mentions),
+                "creative_state": creative_state_for_pending(current_pending),
                 "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
             })
             turn._video_base_ref = (
@@ -1335,11 +1416,8 @@ async def run_propose_turn(
             turn.execute,
             tools=[*tools_for_bound_skill(chat_intent_agent.tools, getattr(turn, "skill", None)), *context_tools],
             round_assembler=assemble_round,
-            message=(
-                f"{text}\n{turn.suggestion_note}"
-                if turn.suggestion_note
-                else text
-            ),
+            dialogue=conversation_messages(recent),
+            message=turn.suggestion_note or "",
             context=turn.context,
             on_delta=on_delta,
             on_reasoning=on_reasoning,

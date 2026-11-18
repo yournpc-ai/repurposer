@@ -116,6 +116,12 @@ async def _cached_manifest(
     return manifest
 
 
+async def find_fixed_generated_image(clip: Clip) -> dict[str, Any] | None:
+    """Read the exact shared image, with no provider submission."""
+    obj = _image_object(clip)
+    return await _cached_manifest(obj, _manifest_key(obj, None, False))
+
+
 async def has_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> bool:
     """Quote one missing image without generating it or mutating any state."""
     obj = _image_object(clip)

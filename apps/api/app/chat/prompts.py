@@ -2,6 +2,7 @@
 
 import json
 import re
+from copy import deepcopy
 from dataclasses import replace
 from typing import Literal
 
@@ -92,9 +93,7 @@ def _compact_title_round(facts: dict, resolution: dict, tools: list) -> RoundAss
         ]
     if not compact_tools:
         return None
-    from app.ui_locale import current_ui_language
 
-    language = current_ui_language() or facts.get("ui_language") or "the user's language"
     if saved:
         rule = (
             "In your message text, confirm the actual saved title change in one short sentence. "
@@ -110,16 +109,16 @@ def _compact_title_round(facts: dict, resolution: dict, tools: list) -> RoundAss
             "Claim a save only after the tool confirms it."
         )
     dynamic = {
-        "video_stage": "version_edit", "speech_rule": "silent",
+        "video_stage": "version_edit",
         "base_ref": base_ref, "title_targets": candidates,
     }
     return RoundAssembly(
         tools=compact_tools,
-        system=f"You are the Rookie Cut video editor. Reply in {language}. {rule}",
+        system=f"You are the Rookie Cut video editor. Reply in the language the user speaks in this conversation. {rule}",
         context="CURRENT VIDEO ROUND (server-derived target and state; not model claims):\n"
         + json.dumps(dynamic, ensure_ascii=False),
         stage="version_edit", include_project_context=False, include_observation_media=False,
-        allow_interim_prose=False, opening_text=user_text,
+        allow_interim_prose=True, opening_text=user_text,
     )
 
 
@@ -130,6 +129,7 @@ def chat_system(
     video_stage: str = "none",
     video_speech: str | None = None,
     scene_authoring: bool = False,
+    staged_media: bool = False,
 ) -> str:
     from app.config import settings
 
@@ -146,7 +146,74 @@ def chat_system(
         video_stage=video_stage,
         video_speech=video_speech,
         scene_authoring=scene_authoring,
+        staged_media=staged_media,
     )
+
+
+def _current_source_resources(snapshot, readiness, creative_state) -> list[tuple[str, dict]]:
+    from app.chat.readiness import canonical_url
+
+    urls = {canonical_url(url) for url in readiness.urls}
+    source_ids = {
+        str(ref.snapshot_id)
+        for ref in [
+            *(creative_state.source_refs if creative_state is not None else []),
+            *(creative_state.brand_profile.source_refs
+              if creative_state is not None and creative_state.brand_profile is not None else []),
+        ]
+    }
+    selected = []
+    for key, resource in getattr(snapshot, "resources", ()) or ():
+        kind = resource.get("kind")
+        if kind == "project":
+            selected.append((key, resource))
+            continue
+        raw_url = resource.get("url") or resource.get("canonical_url")
+        if raw_url and canonical_url(str(raw_url)) in urls:
+            selected.append((key, resource))
+            continue
+        if str(resource.get("snapshot_id") or "") in source_ids:
+            selected.append((key, resource))
+    return selected
+
+
+def _region_target_candidates(target: dict, region: dict) -> list[dict]:
+    from app.tools.project_context import region_target_candidates
+
+    return region_target_candidates(target, region)
+
+
+def _target_resource_projection(target: dict, region: dict | None) -> dict:
+    keys = (
+        "kind", "composition_id", "name", "version_id", "version", "content_digest",
+        "base_ref", "schema_version", "skill_provenance", "settings", "sources",
+    )
+    projected = {key: target[key] for key in keys if key in target}
+    projected["scenes"] = [
+        {key: scene[key] for key in ("scene_id", "range", "intent") if key in scene}
+        for scene in target.get("scenes") or []
+    ]
+    projected["clip_targets"] = (
+        _region_target_candidates(target, region)
+        if region is not None else list(target.get("clip_targets") or [])
+    )
+    return projected
+
+
+def _creative_state_projection(creative_state) -> dict:
+    """Keep creative facts while source identities stay in the resource projection."""
+    def compact(value):
+        if isinstance(value, dict):
+            return {
+                key: compact(item)
+                for key, item in value.items()
+                if key not in {"source_refs", "content_digest"}
+            }
+        if isinstance(value, list):
+            return [compact(item) for item in value]
+        return value
+
+    return compact(creative_state.model_dump(mode="json"))
 
 
 def assemble_video_round(facts: dict) -> RoundAssembly:
@@ -156,7 +223,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
 
     confirmation = facts.get("video_confirmation")
     if confirmation is not None:
-        from app.ui_locale import current_ui_language
 
         action = confirmation["action"]
         action_tool = {
@@ -170,7 +236,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "stale": "Tell the user the storyboard has changed and the current version needs to be presented before production.",
             "already_started": "Tell the user that production has already been requested for this storyboard, using the supplied run_status and delivery facts. If run_status is completed, tell them the existing result is ready and point to its video card; if it is pending or running, tell them it is underway. Otherwise state the exact status without guessing.",
         }
-        language = current_ui_language() or facts.get("ui_language") or "the user's language"
         available = [tool for tool in facts["tools"] if tool.name in {action_tool, "answer"}]
         if action == "produce":
             from app.agents.tool_loop import prune_wire_parameters
@@ -187,45 +252,68 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             ]
         return RoundAssembly(
             tools=available,
-            system=f"Reply in {language}. {rules[action]} For an informational reply, speak in message text then call answer.",
+            system=f"Reply in the language the user speaks in this conversation. {rules[action]} For an informational reply, speak in message text then call answer.",
             context=json.dumps({"video_confirmation": confirmation}, ensure_ascii=False),
             stage="video_confirmation",
             include_project_context=False,
             include_observation_media=False,
-            allow_interim_prose=False,
+            allow_interim_prose=True,
             opening_text=facts.get("user_text") or "",
         )
 
     if facts.get("draft_finalized"):
-        from app.ui_locale import current_ui_language
 
-        language = current_ui_language() or facts.get("ui_language") or "the user's language"
         presentation = jinja_env.get_template("chat/_video_presentation.j2").render()
         return RoundAssembly(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
             system=(
-                f"Reply in {language}. The reviewed draft is already saved. "
+                f"Reply in the language the user speaks in this conversation. The reviewed draft is already saved. "
                 "Present that saved version from the design_video result, then call answer. "
                 "Use message text for the presentation.\n" + presentation
             ),
             context='CURRENT VIDEO ROUND (server-derived target and state; not model claims):\n'
-            '{"video_stage": "draft_present", "speech_rule": "silent"}',
+            '{"video_stage": "draft_present"}',
             stage="draft_present", include_project_context=False,
             include_observation_media=False, observation_tools=frozenset({"design_video"}),
-            allow_interim_prose=False,
+            allow_interim_prose=True,
         )
 
     pending = facts.get("pending_question")
     if callable(pending):
         pending = pending()
+    from app.chat.readiness import compute_source_readiness, render_readiness_context
+
+    creative_state = facts.get("creative_state")
+    if callable(creative_state):
+        creative_state = creative_state()
+    snapshot = facts.get("snapshot")
+    resources = list(getattr(snapshot, "resources", ()) or ())
+    readiness = compute_source_readiness(
+        user_text=facts.get("user_text") or "",
+        source_text=facts.get("source_text"),
+        assets=[resource for _key, resource in resources if resource.get("kind") == "asset"],
+        snapshots=[resource for _key, resource in resources if resource.get("kind") == "web"],
+        creative_state=creative_state,
+        draft_present=bool(facts.get("drafts")),
+    )
     resolution = resolve_video_stage(
         tools=facts["tools"],
         drafts=facts.get("drafts") or (),
-        snapshot=facts.get("snapshot"),
+        snapshot=snapshot,
         user_text=facts.get("user_text") or "",
         pending_question=pending,
         target_hint=facts.get("target_hint"),
+        readiness=readiness,
     )
+    if (
+        readiness.task_kind == "website_promo"
+        and facts.get("new_result_tool") in {"design_video", "prepare_visual_assets"}
+        and resolution.get("draft") is not None
+        and resolution.get("stage") != "draft_build"
+    ):
+        resolution["stage"] = "draft_build"
+    resolution.setdefault("readiness", readiness)
+    resolution["selected_region"] = (facts.get("target_hint") or {}).get("selected_region")
     tools = video_round_tools(
         facts["tools"],
         resolution=resolution,
@@ -235,6 +323,24 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         package_sessions=facts.get("package_sessions"),
         user_text=facts.get("user_text") or "",
     )
+    media_state = None
+    if facts.get("media_journey") and resolution["stage"] in {
+        "draft_build", "draft_review", "draft_repair", "draft_finalize", "draft_hold",
+    }:
+        from app.chat.media_journey import allowed_media_tools, audio_timing_ready, media_actions
+
+        resolution["stage"] = "draft_build"
+        current = resolution.get("draft")
+        media_state = media_actions(
+            current.arguments if current is not None else None,
+            facts.get("media_visual_results") or [],
+        )
+        permitted = allowed_media_tools(media_state["phase"])
+        if media_state["phase"] == "audio":
+            media_state["audio_timing_ready"] = audio_timing_ready(current.arguments)
+            if not media_state["audio_timing_ready"]:
+                permitted = permitted - {"prepare_music"}
+        tools = [tool for tool in tools if tool.name in permitted]
     compact = _compact_title_round(facts, resolution, tools)
     if compact is not None:
         return compact
@@ -250,13 +356,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     context_parts: list[str] = []
     if stage == "draft_build" and draft is None and snapshot is not None and snapshot.skill_method:
         context_parts.append(snapshot.skill_method)
-    include_project_context = stage == "none" or (stage == "draft_build" and draft is None)
+    include_project_context = stage == "none"
     if not include_project_context and snapshot is not None and not judging_preview:
         resources = []
         if resolution.get("target") is not None:
+            target = resolution["target"]
+            region = (facts.get("target_hint") or {}).get("selected_region")
             resources = [(
-                f"composition:{resolution['target']['version_id']}:{resolution['target']['content_digest']}",
-                resolution["target"],
+                f"composition:{target['version_id']}:{target['content_digest']}",
+                _target_resource_projection(target, region),
             )]
         elif draft is not None:
             content = draft.arguments.get("content") or {}
@@ -279,6 +387,12 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                             "read this snapshot with prepare_video_materials material_targets."
                         )
                     resources.append((key, compact))
+        elif stage in {"source_preparing", "briefing", "draft_build"}:
+            resources = (
+                _current_source_resources(snapshot, readiness, creative_state)
+                if readiness.task_kind == "website_promo"
+                else list(snapshot.resources)
+            )
         else:
             resources = [
                 (key, {
@@ -291,6 +405,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if resources:
             context_parts.append(render_resources(resources).text)
     dynamic: dict = {"video_stage": stage}
+    if readiness.task_kind == "website_promo":
+        if creative_state is not None and stage in {"source_preparing", "briefing", "draft_build"}:
+            dynamic["creative_state"] = _creative_state_projection(creative_state)
     if resolution.get("user_constraints"):
         dynamic["user_constraints"] = resolution["user_constraints"]
     if resolution.get("pending") is not None:
@@ -305,10 +422,44 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 key: draft_facts[key]
                 for key in ("content_digest", "scenes", "review_started", "save_ready")
             }
+        elif stage == "draft_review":
+            dynamic["draft"] = {
+                key: draft_facts[key]
+                for key in (
+                    "content_digest", "scenes", "review_started", "save_ready",
+                    "current_scene_id", "current_scene_ordinal", "next_review_target",
+                    "reviewed_ranges_seconds", "invalidated_ranges_seconds",
+                    "unreviewed_ranges_seconds", "awaiting_judgment",
+                    "unjudged_evidence_ids", "confirmation_blocked", "open_issues",
+                )
+            }
+        elif stage == "draft_repair":
+            issue_clip_ids = {
+                clip_id
+                for issue in draft_facts.get("open_issues") or []
+                for clip_id in issue.get("clip_ids") or []
+            }
+            dynamic["draft"] = {
+                key: draft_facts[key]
+                for key in (
+                    "content_digest", "scenes", "review_started", "save_ready",
+                    "current_scene_id", "next_review_target", "open_issues",
+                )
+            }
+            dynamic["draft"]["editable_targets"] = [
+                target for target in draft_facts.get("editable_targets") or []
+                if not issue_clip_ids or target.get("clip_id") in issue_clip_ids
+            ]
         else:
             dynamic["draft"] = draft_facts
         if stage == "draft_build" and draft_facts["scenes"]:
             content = draft.arguments["content"]
+            dynamic["scene_assets"] = deepcopy(
+                (draft.arguments.get("design") or {}).get("scene_assets") or []
+            )
+            from app.tools.video.narration_draft import current_narration_facts
+
+            dynamic["narrations"] = current_narration_facts(draft.arguments)
             dynamic["next_unfilled_scene"] = next(
                 (scene for scene in draft_facts["scenes"] if not scene["clip_ids"]), None,
             )
@@ -322,6 +473,20 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         target = resolution["target"]
         dynamic["base_ref"] = target["base_ref"]
         dynamic["target_composition_id"] = target["composition_id"]
+        selected_region = (facts.get("target_hint") or {}).get("selected_region")
+        if selected_region is not None:
+            dynamic["selected_region"] = selected_region
+            dynamic["region_target_candidates"] = [
+                {
+                    key: candidate[key]
+                    for key in (
+                        "clip_id", "object_id", "scene_id", "object_kind",
+                        "range", "motion_at_selection",
+                    )
+                    if key in candidate
+                }
+                for candidate in _region_target_candidates(target, selected_region)
+            ]
     elif resolution.get("candidates") is not None:
         dynamic["target_candidates"] = [
             {
@@ -357,22 +522,23 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 "rule": "Copy one exact id from each list; aliases are rejected.",
             }
     draft_facts = dynamic.get("draft") or {}
-    video_speech = None
-    if stage != "none":
-        if facts.get("active_repair") is not None or stage in {
-            "resolve_target", "draft_repair", "draft_finalize", "version_edit",
-        }:
-            video_speech = "silent"
-        elif facts.get("iteration") == 0 and facts.get("interim_prose_count", 0) == 0:
-            video_speech = "opening"
-        elif facts.get("new_result") and (
-            stage == "draft_build"
-            or (stage == "draft_review" and bool(draft_facts.get("awaiting_judgment")))
-        ):
-            video_speech = "finding"
-        else:
-            video_speech = "silent"
-    dynamic["speech_rule"] = video_speech
+    if media_state is not None:
+        dynamic["media_preparation"] = media_state
+        dynamic["media_instruction"] = (
+            "The initial make request authorizes continuation subject to ordinary execution and "
+            "credit policy. Preparation tools hand a verified task to the server automatically. "
+            "During images, write only scene_plan and scene_assets, then prepare current pictures. "
+            "Use review_existing for the listed retry scenes. Repair failed content locally. "
+            "Use scene_failures to correct invalid SVG sources, and choose a local source when "
+            "the provider outcome is unknown. Keep approved scenes unchanged. "
+            "If the server lists blocked scenes, report them and stop. "
+            "During audio, author draft scenes, prepare and align narration, retime from actual "
+            "durations, then prepare electronic music. Do not request another user decision, "
+            "search the music library, save the Composition or render."
+        )
+    if readiness.task_kind == "website_promo":
+        dynamic["required_next_action"] = readiness.required_next_action
+        context_parts.append(render_readiness_context(readiness))
     context_parts.append(
         "CURRENT VIDEO ROUND (server-derived target and state; not model claims):\n"
         + json.dumps(dynamic, ensure_ascii=False)
@@ -394,31 +560,36 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             facts["mode"],
             available_tools=tools,
             video_stage=stage,
-            video_speech=video_speech,
             scene_authoring=scene_authoring,
-        ),
+            staged_media=media_state is not None,
+            ),
         context="\n\n".join(context_parts),
         stage=stage,
         include_project_context=include_project_context,
         observation_tools=(
-            frozenset({"design_video", "prepare_video_materials", "capture_web"})
+            frozenset({
+                "design_video", "prepare_visual_assets", "prepare_video_materials", "capture_web",
+                "prepare_narration", "get_narration_alignment", "annotate_narration", "prepare_music",
+            })
             if draft is not None and stage in {"draft_build", "draft_finalize", "draft_hold"}
             else None
         ),
-        allow_interim_prose=video_speech != "silent",
+        allow_interim_prose=True,
         missing_tool_feedback=(
+            "Continue the current media preparation using an available tool, or answer with the exact blocker."
+            if media_state is not None and media_state["phase"] in {"images", "audio"} else
             "This requested video is still an unsaved draft. If you can proceed, call design_video "
             "for the next write or save. If a user decision is required, call ask_user. "
             "If a verified blocker prevents completion, state it and call answer."
-            if stage == "draft_build" and draft is not None and not facts.get("version_saved")
+            if media_state is None and stage == "draft_build" and draft is not None and not facts.get("version_saved")
             and facts.get("production_requested")
             else None
         ),
         include_observation_media=(
-            stage in {"none", "draft_build"}
+            stage in {"none", "briefing", "draft_build"}
             or (stage == "draft_review" and bool(draft_facts.get("awaiting_judgment")))
         ),
-        caller_state={"video_target": resolution.get("target")},
+        caller_state={"video_target": resolution.get("target"), "media_state": media_state},
     )
 
 

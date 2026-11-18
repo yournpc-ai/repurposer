@@ -16,12 +16,37 @@ from typing import Any, Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.editing.edits import AddClip, BindSource, ClipEntityWrite, EntityWrites, Op, apply_ops
+from app.agents.errors import AgentOutputError, AgentStopError
+from app.agents.working_drafts import (
+    WorkingDraftUpdated,
+    apply_working_draft_writes,
+    working_draft_arguments,
+)
+from app.editing.audio import MusicBed, instantiate_music_bed
+from app.editing.edits import (
+    AddClip,
+    AddTrack,
+    BindSource,
+    ClipEntityWrite,
+    EntityWrites,
+    Op,
+    apply_ops,
+)
+from app.editing.presets import PresetError, expand_preset
 from app.editing.schemas import (
+    SCHEMA_VERSION,
     Clip,
     CompositionContent,
     GeneratorObject,
@@ -32,7 +57,7 @@ from app.editing.schemas import (
     RemotionSourceFile,
     Scene,
     SourceBinding,
-    SCHEMA_VERSION,
+    SpeechObject,
     TimeRange,
     Track,
     Transform,
@@ -51,15 +76,13 @@ from app.editing.store import (
     snapshot_facts,
 )
 from app.editing.storyboard import storyboard_payload
-from app.editing.audio import MusicBed, instantiate_music_bed
-from app.editing.web_shots import ViewFact
 from app.editing.timing import (
     SOURCE_TIMEBASE,
     frames_to_ticks,
     output_ticks_to_source_ticks,
     seconds_to_ticks,
 )
-from app.editing.presets import PresetError, expand_preset
+from app.editing.web_shots import ViewFact
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetStatus,
@@ -72,13 +95,12 @@ from app.models.schemas import (
 )
 from app.models.tables import Asset, Output, Project, SourceSnapshot
 from app.skills.loading import SkillCreativeContext, load_skill_creative_context
-from app.agents.errors import AgentOutputError, AgentStopError
-from app.agents.working_drafts import (
-    WorkingDraftUpdated,
-    apply_working_draft_writes,
-    working_draft_arguments,
+from app.tools.research.capture import (
+    CapturePlan,
+    CaptureRequest,
+    capture_plan_digest,
+    compile_capture_request,
 )
-from app.tools.research.capture import CapturePlan, CaptureRequest, capture_plan_digest, compile_capture_request
 from app.tools.video.preparation import (
     snapshot_audio_asset,
     snapshot_image_asset,
@@ -87,6 +109,8 @@ from app.tools.video.preparation import (
     snapshot_video_output,
     snapshot_web_asset,
 )
+from app.tools.video.narration_draft import SceneNarrationUpdate
+from app.tools.video.visual_assets import SceneAssetSpec
 
 logger = structlog.get_logger()
 
@@ -163,11 +187,11 @@ class CompositionSceneAuthoring(BaseModel):
     )
     snapshot_id: UUID | None = Field(
         default=None,
-        description="Frozen SourceSnapshot for this Scene; omit for a native copy-only Scene.",
+        description="Frozen SourceSnapshot for this Scene; prefer the parent web Snapshot for a normal webpage Scene. Ordinary image/video and derived web_view images are also accepted; omit for a native copy-only Scene.",
     )
     view_id: str | None = Field(
         default=None, max_length=80,
-        description="Exact view_id belonging to snapshot_id; use the frozen source catalog.",
+        description="Required for a parent web Snapshot; use its exact catalog view_id. A derived web_view image's unique view_id is inferred when omitted. Omit for ordinary image/video snapshots.",
     )
     element_id: str | None = Field(
         default=None, max_length=80,
@@ -196,6 +220,18 @@ class CompositionSceneAuthoring(BaseModel):
     narration_alignment_id: UUID | None = Field(
         default=None,
         description="READY NarrationAlignment for narration_snapshot_id; supplies the actual narration sentence timings and provenance.",
+    )
+    narration: str | None = Field(
+        default=None, min_length=1, max_length=9000,
+        description="Exact reviewed spoken copy for this Scene. Creates a pending SpeechObject on the dialogue Track; authorized production synthesizes it inside the reviewed window. Mutually exclusive with narration_snapshot_id.",
+    )
+    narration_language: str | None = Field(
+        default=None, min_length=2, max_length=16,
+        description="Spoken language for narration, matching the work's language unless the user specifies otherwise.",
+    )
+    narration_voice_id: str | None = Field(
+        default=None, min_length=1, max_length=255,
+        description="Optional TTS voice for narration; omit to use the video default voice.",
     )
     source_gain_db: float | None = Field(
         default=None, ge=-60, le=12,
@@ -265,6 +301,14 @@ class CompositionSceneAuthoring(BaseModel):
             raise ValueError("ASR selection and captions require a frozen video snapshot")
         if (self.narration_snapshot_id is None) != (self.narration_alignment_id is None):
             raise ValueError("narration_snapshot_id and narration_alignment_id must arrive together")
+        if self.narration is not None and self.narration_snapshot_id is not None:
+            raise ValueError("use either pending narration or a prepared narration snapshot, not both")
+        if self.narration is not None and self.narration_language is None:
+            raise ValueError("pending narration needs narration_language")
+        if self.narration is None and (
+            self.narration_language is not None or self.narration_voice_id is not None
+        ):
+            raise ValueError("narration_language and narration_voice_id require narration")
         return self
 
 
@@ -287,10 +331,10 @@ class CompositionDesignVideoArgs(EntityWrites):
                 normalized[key] = [value]
         for key in (
             "settings", "sources", "draft_ref", "copy_references",
-            "composition_id", "scene_count", "target_seconds", "aspect",
+            "composition_id", "scene_count", "target_seconds", "fps", "aspect",
             "background", "language", "name", "pending_disposition", "scrub",
             "focus_clip_id", "focus_element_id", "verbatim_copy",
-            "scene", "scene_plan", "source_ids", "music_snapshot_id",
+            "scene", "scene_plan", "scene_assets", "narration_update", "source_ids", "music_snapshot_id",
         ):
             if normalized.get(key) in (None, ""):
                 normalized.pop(key, None)
@@ -308,8 +352,16 @@ class CompositionDesignVideoArgs(EntityWrites):
     )
     scene_plan: list[CompositionScenePlan] | None = Field(
         default=None,
-        max_length=6,
-        description="One to six narrative Scenes in playback order; merge related beats instead of exceeding six. Server derives ranges and native entities.",
+        description="Narrative Scenes in playback order; use only as many distinct beats as the work needs. Server derives ranges and native entities.",
+    )
+    scene_assets: list[SceneAssetSpec] | None = Field(
+        default=None,
+        max_length=64,
+        description="Current visual source requirements for existing scene_plan ids. Add or replace only the supplied Scenes; no Composition version or media generation occurs in this write.",
+    )
+    narration_update: SceneNarrationUpdate | None = Field(
+        default=None,
+        description="After real narration arrives, revise or confirm one target Scene. The server resolves READY alignment, actual duration, cues, ticks and unchanged media digests.",
     )
     source_ids: list[UUID] | None = Field(
         default=None,
@@ -363,7 +415,6 @@ class CompositionDesignVideoArgs(EntityWrites):
     scene_count: int | None = Field(
         default=None,
         ge=1,
-        le=6,
         description="Exact scene count explicitly fixed by the user. Never infer a constraint from your own outline.",
     )
     target_seconds: float | None = Field(
@@ -371,6 +422,10 @@ class CompositionDesignVideoArgs(EntityWrites):
         gt=0,
         le=118,
         description="Exact total duration explicitly fixed by the user. Never infer a fixed duration from a short-video request.",
+    )
+    fps: Literal[24, 25, 30, 60] | None = Field(
+        default=None,
+        description="Exact integer frame rate explicitly fixed by the user; omit otherwise.",
     )
     aspect: Literal["16:9", "9:16", "1:1"] | None = Field(
         default=None,
@@ -402,6 +457,7 @@ class CompositionDesignVideoArgs(EntityWrites):
     )
     _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
     _explicit_constraints: dict[str, Any] | None = PrivateAttr(default=None)
+    _creative_state: Any = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _draft_target(self) -> "CompositionDesignVideoArgs":
@@ -450,6 +506,17 @@ class CompositionDesignVideoArgs(EntityWrites):
                 or self.remove_transition_ids or self.settings is not None or self.sources is not None
             ):
                 raise ValueError("a single-scene continuation writes only tracks[].clips for its scene_id")
+        if self.scene_assets is not None and self.draft_ref is None and self.scene_plan is None:
+            raise ValueError("scene_assets need an initial scene_plan or an existing draft_ref")
+        if self.narration_update is not None:
+            if self.draft_ref is None or self.save:
+                raise ValueError("narration_update changes one existing draft with save=false")
+            if (
+                self.scene is not None or self.scene_plan is not None or self.scene_assets is not None
+                or self.scene_id is not None or self.entity_writes().has_changes()
+                or self.settings is not None or self.sources is not None
+            ):
+                raise ValueError("narration_update changes only its target Scene")
         if self.save and self.draft_ref is None:
             raise ValueError("save=true requires an existing draft_ref; create and update the draft with save=false first")
         if self.save and (
@@ -460,6 +527,8 @@ class CompositionDesignVideoArgs(EntityWrites):
             or self.skill_resource is not None
             or self.scene is not None
             or self.scene_plan is not None
+            or self.scene_assets is not None
+            or self.narration_update is not None
         ):
             raise ValueError("save=true only commits the existing draft; submit settings, sources and entity writes with save=false first")
         return self
@@ -473,7 +542,7 @@ class CompositionDesignVideoArgs(EntityWrites):
         self._working_draft = deepcopy(value)
 
 
-_EXPLICIT_CONSTRAINT_FIELDS = ("scene_count", "target_seconds", "aspect", "background")
+_EXPLICIT_CONSTRAINT_FIELDS = ("scene_count", "target_seconds", "fps", "aspect", "background")
 
 
 def _affirmative_constraint(text: str, start: int) -> bool:
@@ -485,6 +554,9 @@ def _constraint_text_values(text: str) -> dict[str, Any]:
     if not isinstance(text, str) or not text.strip():
         return {}
     values: dict[str, Any] = {}
+    fps = re.search(r"(?<![\d.])(24|25|30|60)\s*(?:fps|帧\s*(?:每秒|/秒))", text, re.IGNORECASE)
+    if fps and _affirmative_constraint(text, fps.start()):
+        values["fps"] = int(fps.group(1))
     aspect = re.search(
         r"(?:画幅(?:比例)?|画布比例|画面比例|aspect(?:\s+ratio)?|frame(?:\s+format)?)"
         r"\s*(?:固定\s*)?(?:为|是|用|使用|设为|设置为|改成|改为|到|=|:|to|is)?\s*[\"']?"
@@ -501,12 +573,19 @@ def _constraint_text_values(text: str) -> dict[str, Any]:
     scene_patterns = (
         r"\bexactly\s+(\d+)\s+(?:scenes|shots)\b",
         r"\b(\d+)\s+(?:scenes|shots)\s+exactly\b",
-        r"(?:恰好|刚好|固定为|固定成|只做|做|分成|分为|总共|共)\s*(\d+)\s*(?:个)?\s*(?:幕|场景|镜头)",
+        r"(?:恰好|刚好|固定为|固定成|只做|做|分成|分为|总共|共)\s*(\d+|[一二两三四五六七八九十])\s*(?:个)?\s*(?:幕|场景|镜头)",
+        r"(?<![\d一二两三四五六七八九十])([一二两三四五六七八九十])\s*幕",
     )
     for pattern in scene_patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match and _affirmative_constraint(text, match.start()):
-            values["scene_count"] = int(match.group(1))
+            raw_count = match.group(1)
+            values["scene_count"] = (
+                int(raw_count) if raw_count.isdigit() else {
+                    "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+                    "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+                }[raw_count]
+            )
             break
     duration_patterns = (
         r"\bexactly\s+\d+\s+(?:scenes|shots)\s+and\s+(\d+(?:\.\d+)?)\s*(?:seconds|s)\b",
@@ -552,6 +631,10 @@ def explicit_design_constraints(
 
         raw_brief = brief.get("brief") if isinstance(brief, dict) and isinstance(brief.get("brief"), dict) else brief
         parsed = raw_brief if isinstance(raw_brief, Brief) else Brief.model_validate(raw_brief or {})
+        if parsed.target_seconds.source == BriefSlotSource.USER_STATED and parsed.target_seconds.value is not None:
+            resolved["target_seconds"] = float(parsed.target_seconds.value)
+        if parsed.aspect.source == BriefSlotSource.USER_STATED and parsed.aspect.value is not None:
+            resolved["aspect"] = parsed.aspect.value
         for item in parsed.constraints:
             if item.value and item.source == BriefSlotSource.USER_STATED:
                 resolved.update(_constraint_text_values(item.value))
@@ -673,12 +756,22 @@ async def _await_media_settled(db: AsyncSession, owner_id: UUID, asset_ids: set[
 async def _ready_web_pages(db, *, project_id, owner_id, asset_ids=None, urls=None):
     """Prepare existing material in code, not by asking Chat to probe readiness."""
     from sqlalchemy import update
+
     from app.models.tables import now_utc
     query = select(Asset).where(Asset.user_id == owner_id, Asset.type == AssetType.WEB_PAGE)
     query = query.where(Asset.id.in_(asset_ids)) if asset_ids else query.where(Asset.project_id == project_id)
     rows = list((await db.scalars(query.execution_options(populate_existing=True))).all())
-    rows = [a for a in rows if (urls is None or (a.meta or {}).get("capture_url") in urls)
-            and (asset_ids or not (a.meta or {}).get("capture_plan"))]
+    parent_ids = {
+        a.id for a in rows
+        if urls is None or (a.meta or {}).get("capture_url") in urls
+    }
+    def selected(asset):
+        return (
+            urls is None
+            or (asset.meta or {}).get("capture_url") in urls
+            or (asset.meta or {}).get("discovered_from") in {str(parent_id) for parent_id in parent_ids}
+        ) and (asset_ids or not (asset.meta or {}).get("capture_plan"))
+    rows = [a for a in rows if selected(a)]
     pending = [a for a in rows if a.processing_status in (AssetStatus.PENDING, AssetStatus.PROCESSING)]
     if pending:
         # Same worker claim flag as URL birth/understanding, in its own short
@@ -694,8 +787,7 @@ async def _ready_web_pages(db, *, project_id, owner_id, asset_ids=None, urls=Non
             await _await_captures_settled(db, origin,
                 asset_ids={a.id for a in pending if a.project_id == origin})
         rows = list((await db.scalars(query.execution_options(populate_existing=True))).all())
-        rows = [a for a in rows if (urls is None or (a.meta or {}).get("capture_url") in urls)
-                and (asset_ids or not (a.meta or {}).get("capture_plan"))]
+        rows = [a for a in rows if selected(a)]
     ready = [a for a in rows if a.processing_status == AssetStatus.COMPLETED and (a.meta or {}).get("shots")]
     if (asset_ids and len(ready) != len(set(asset_ids))) or (rows and not ready):
         raise AgentOutputError("The existing webpage capture failed or has no usable frozen views; no storyboard was saved.")
@@ -1275,6 +1367,11 @@ async def _save_composition_version(
     route_builtin_id: str | None,
 ) -> dict[str, Any]:
     """Save one fully resolved and validated assembled Composition."""
+    creative_state = args._creative_state or (
+        base_content.creative_state if base_content is not None else None
+    )
+    if creative_state is not None:
+        direct_composition["creative_state"] = creative_state.model_dump(mode="json")
     if base_version is not None:
         provenance = deepcopy(base_version.skill_provenance or {})
     if skill is not None:
@@ -1568,6 +1665,8 @@ def _scene_reading_ticks(
     )
     minimum = 4.0 if scene.snapshot_id is not None else 3.0
     seconds = min(max(minimum, 1.2 + characters / 18.0), 8.0)
+    if scene.narration is not None:
+        seconds = max(seconds, min(1.2 + len(scene.narration) / 8.0, 8.0))
     return frames_to_ticks(
         round(seconds * 30), settings.timebase, settings.fps.num, settings.fps.den
     )
@@ -1694,7 +1793,10 @@ async def _expand_scene_authoring(
             parent = derived.get("web_snapshot_id")
             if not parent:
                 reject("derived web view has no immutable parent", ["scene", "snapshot_id"], "source_not_ready")
-            if source.view_id is not None and str(derived.get("view_id")) != source.view_id:
+            derived_view_id = derived.get("view_id")
+            if source.view_id is None and isinstance(derived_view_id, str) and derived_view_id:
+                source = source.model_copy(update={"view_id": derived_view_id})
+            elif source.view_id is not None and str(derived_view_id) != source.view_id:
                 reject("derived web view and view_id disagree", ["scene", "view_id"], "target_not_found")
             snapshot_id = UUID(str(parent))
             fact = facts.get(snapshot_id)
@@ -1709,7 +1811,12 @@ async def _expand_scene_authoring(
             views = (fact.get("meta") or {}).get("views") or []
             view = next((item for item in views if str(item.get("view_id")) == view_id), None)
             if view is None or not view.get("storage_key") or not view.get("digest"):
-                reject("view_id is absent or has no immutable bytes", ["scene", "view_id"], "target_not_found")
+                available = [str(item.get("view_id")) for item in views if item.get("view_id")]
+                reject(
+                    f"webpage sources need an explicit view_id; available view_ids: {available}",
+                    ["scene", "view_id"],
+                    "target_not_found",
+                )
             width, height = view.get("width"), view.get("height")
         else:
             if source.view_id is not None or source.element_id is not None:
@@ -1872,6 +1979,45 @@ async def _expand_scene_authoring(
                 source_range=source_range,
                 sentences=caption_sentences,
             ), digests)
+        if scene.narration is not None:
+            from app.tools.video.narration import DEFAULT_VIDEO_VOICE_ID
+
+            speech_scene = next(item for item in candidate.scenes if item.scene_id == scene.scene_id)
+            speech_clip_id = f"clp_speech_{scene.scene_id}"
+            speech_ops: list[Op] = []
+            dialogue_track = next(
+                (track for track in candidate.timeline.tracks if track.kind == "audio" and track.role == "dialogue"),
+                None,
+            )
+            if dialogue_track is None:
+                dialogue_track = Track(
+                    track_id="trk_dialogue",
+                    kind="audio",
+                    role="dialogue",
+                    order=max((track.order for track in candidate.timeline.tracks if track.kind == "audio"), default=-1) + 1,
+                    clips=[],
+                )
+                speech_ops.append(AddTrack(op="add_track", track=dialogue_track))
+            speech_ops.append(AddClip(
+                op="add_clip",
+                track_id=dialogue_track.track_id,
+                clip=Clip(
+                    clip_id=speech_clip_id,
+                    range=speech_scene.range,
+                    scene_id=scene.scene_id,
+                    source=None,
+                    object=SpeechObject(
+                        kind="speech",
+                        object_id=f"obj_speech_{scene.scene_id}",
+                        text=scene.narration,
+                        voice_id=scene.narration_voice_id or DEFAULT_VIDEO_VOICE_ID,
+                        language=scene.narration_language,
+                    ),
+                    animations=[],
+                ),
+            ))
+            speech_scene.speech_clip_ids.append(speech_clip_id)
+            candidate = apply_ops(candidate, speech_ops, digests)
         if scene.narration_snapshot_id is not None:
             from app.editing.narration_audio import narration_audio_ops
             from app.models.tables import NarrationAlignment
@@ -1933,6 +2079,14 @@ def _music_bed_write(
         op for op in ops
         if not isinstance(op, BindSource) or op.snapshot_id not in bound
     ]
+    audio_orders = {track.order for track in candidate.timeline.tracks if track.kind == "audio"}
+    for op in ops:
+        if isinstance(op, AddTrack) and op.track.kind == "audio":
+            order = 0
+            while order in audio_orders:
+                order += 1
+            op.track.order = order
+            audio_orders.add(order)
     return apply_ops(candidate, ops, {music_snapshot_id: music["digest"]}).model_dump(mode="json")
 
 
@@ -1980,6 +2134,7 @@ async def _design_composition_locked(
     if state is not None:
         update = deepcopy(state.get("design") or {})
         update.pop("skill_resources", None)
+        update.pop("narrations", None)
         update.pop("authoring", None)
         for field in (*_EXPLICIT_CONSTRAINT_FIELDS, "user_constraints"):
             update.pop(field, None)
@@ -2023,6 +2178,15 @@ async def _design_composition_locked(
             sources=args.sources,
         )
     if args.scene_plan is not None:
+        if args.scene_count is not None and len(args.scene_plan) != args.scene_count:
+            raise CandidateDesignError(
+                "scene_plan must preserve the user-fixed Scene count",
+                errors=[{
+                    "loc": ["scene_plan"], "type": "user_constraint",
+                    "msg": "scene_plan must preserve the user-fixed Scene count",
+                    "expected": args.scene_count, "actual": len(args.scene_plan),
+                }],
+            )
         source_ids = set(args.source_ids or [])
         if args.music_snapshot_id is not None:
             source_ids.add(args.music_snapshot_id)
@@ -2040,6 +2204,7 @@ async def _design_composition_locked(
         derived_settings = args.settings or VersionSettings(
             width=width,
             height=height,
+            fps={"num": args.fps or 30, "den": 1},
             background=args.background or "#F8FAFC",
         )
         bindings = [
@@ -2074,7 +2239,8 @@ async def _design_composition_locked(
             content = await _expand_scene_authoring(content, args.scene, facts, owner_id=owner_id)
             _validate_scene_verbatim_copy(args=args, composition=content)
         if high_level_draft and not args.save and args.music_snapshot_id is not None:
-            content = _music_bed_write(content, args.music_snapshot_id, facts)
+            music_facts = await snapshot_facts(db, {args.music_snapshot_id})
+            content = _music_bed_write(content, args.music_snapshot_id, music_facts)
     except CandidateDesignError as exc:
         if original_scene_content is not None:
             exc.working_content = original_scene_content
@@ -2104,7 +2270,39 @@ async def _design_composition_locked(
     if args.skill_resource is not None:
         content = _resolve_raw_snapshot_references(content, facts, owner_id=owner_id)
         await db.commit()
+    if args.scene_assets is not None:
+        from app.tools.video.visual_assets import VisualAssetError, scene_asset_specs
+
+        try:
+            scene_asset_specs(content, args.scene_assets)
+        except VisualAssetError as exc:
+            raise DesignError(str(exc)) from exc
+    narration_fact = None
+    if args.narration_update is not None:
+        from app.tools.video.narration_draft import update_scene_narration
+
+        try:
+            content, narration_fact = await update_scene_narration(
+                db, owner_id=owner_id, project_id=project_id,
+                draft=state or {}, update=args.narration_update,
+            )
+        except ValueError as exc:
+            raise CandidateDesignError(
+                str(exc),
+                errors=[{
+                    "loc": ["narration_update"], "type": "narration_retiming", "msg": str(exc),
+                }],
+                working_content=deepcopy((state or {}).get("content") or content),
+            ) from exc
     args._working_draft = working_draft_arguments(args, content)
+    if args.narration_update is not None:
+        design = args._working_draft["design"]
+        design["narrations"] = [
+            item for item in design.get("narrations") or []
+            if item.get("scene_id") != args.narration_update.scene_id
+        ]
+        if narration_fact is not None:
+            design["narrations"].append(narration_fact)
     if skill_resources:
         args._working_draft["design"]["skill_resources"] = skill_resources
     if not args.save:
@@ -2176,8 +2374,10 @@ async def prepare_video_materials(
     owner_id: UUID,
     project_id: UUID,
     args: Any,
+    turn_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[Any]]:
     """Commit immutable source preparation independently of any later design."""
+    from app.agents.tool_progress import report_progress
     from app.pipeline.assets import create_web_page_assets_committed_from_urls
     from app.tools.video.preparation import canonical_resource, snapshot_web_generator_resources
 
@@ -2201,6 +2401,7 @@ async def prepare_video_materials(
         ]
         if pending:
             from sqlalchemy import update
+
             from app.models.tables import now_utc
 
             async with AsyncSessionLocal() as session:
@@ -2222,9 +2423,11 @@ async def prepare_video_materials(
         ):
             raise DesignError("every selected source asset must be processed and readable")
 
+        if args.material_urls or any(asset.type == AssetType.WEB_PAGE for asset in referenced_assets):
+            await report_progress("view_webpage")
         if args.material_urls:
             await create_web_page_assets_committed_from_urls(
-                project_id, owner_id, args.material_urls,
+                project_id, owner_id, args.material_urls, turn_id=turn_id,
             )
         web_ids = {asset.id for asset in referenced_assets if asset.type == AssetType.WEB_PAGE}
         web_assets = await _ready_web_pages(
@@ -2249,6 +2452,7 @@ async def prepare_video_materials(
         for asset in referenced_assets:
             if asset.type == AssetType.WEB_PAGE:
                 continue
+            await report_progress("prepare_media")
             snapshots.append(await (
                 snapshot_image_asset(db, asset, owner_id=owner_id)
                 if asset.type == AssetType.IMAGE
@@ -2257,6 +2461,7 @@ async def prepare_video_materials(
                 else snapshot_audio_asset(db, asset, owner_id=owner_id)
             ))
         if args.material_output_ids:
+            await report_progress("prepare_media")
             outputs = list((await db.scalars(
                 select(Output).join(Project, Output.project_id == Project.id).where(
                     Output.id.in_(args.material_output_ids), Project.user_id == owner_id,
@@ -2271,6 +2476,7 @@ async def prepare_video_materials(
             ])
         music_ids = getattr(args, "material_music_ids", None)
         if music_ids:
+            await report_progress("import_music")
             from app.models.tables import Music
             tracks = list((await db.scalars(select(Music).where(
                 Music.id.in_(music_ids),
@@ -2286,6 +2492,7 @@ async def prepare_video_materials(
                 snapshots.append(snapshot)
         targets = list(getattr(args, "material_targets", None) or [])
         if targets:
+            await report_progress("prepare_media")
             selected = list((await db.scalars(select(SourceSnapshot).where(
                 SourceSnapshot.id.in_({target.snapshot_id for target in targets}),
                 SourceSnapshot.owner_id == owner_id,
@@ -2435,6 +2642,33 @@ async def design_video(
 ) -> dict[str, Any] | WorkingDraftUpdated:
     """The incremental Composition design entry, optionally Skill-bound."""
     context = request_context or {}
+    from app.chat.readiness import infer_task_kind
+
+    existing_scene_assets = (
+        (getattr(args, "_working_draft", None) or {}).get("design", {}).get("scene_assets")
+    )
+    if (
+        infer_task_kind(str(context.get("user_text") or "")) == "website_promo"
+        and args.scene_assets is None
+        and not existing_scene_assets
+    ):
+        content = (getattr(args, "_working_draft", None) or {}).get("content")
+        raise CandidateDesignError(
+            "website promo needs SceneAssetSpec before other design writes",
+            errors=[{
+                "loc": ["scene_assets"],
+                "type": "required_visual_asset_foundation",
+                "msg": "Attach SceneAssetSpec for every planned Scene before scene authoring, music, narration or saving.",
+            }],
+            working_content=content if isinstance(content, dict) else None,
+        )
+    if isinstance(context.get("brief"), dict):
+        from app.models.schemas import CreativeState, PendingPlan, seal_creative_state
+
+        pending = PendingPlan.model_validate(context["brief"])
+        args._creative_state = pending.creative_state or seal_creative_state(
+            CreativeState(brief=pending.brief)
+        )
     args = bind_explicit_design_constraints(
         args, user_text=str(context.get("user_text") or ""), brief=context.get("brief"),
     )
@@ -2463,6 +2697,40 @@ async def design_video(
             if skill_version_id is not None
             else None
         )
+        if args.save and infer_task_kind(str(context.get("user_text") or "")) == "website_promo":
+            from app.tools.video.visual_assets import (
+                VisualAssetError,
+                cached_visual_asset,
+                current_scene_assets,
+            )
+            if current_scene_assets(args._working_draft or {}):
+                raise CandidateDesignError(
+                    "website promo audio/media preparation remains an unsaved working draft",
+                    errors=[{
+                        "loc": ["save"], "type": "media_preparation_scope",
+                        "msg": "Do not save a CompositionVersion during scene media preparation.",
+                    }],
+                    working_content=(args._working_draft or {}).get("content"),
+                )
+
+            try:
+                for spec in current_scene_assets(args._working_draft or {}):
+                    if await cached_visual_asset(
+                        owner_id=owner_id, project_id=project_id, spec=spec
+                    ) is None:
+                        raise VisualAssetError(
+                            f"scene {spec.scene_id} has no fixed PNG, analysis and ContentReview"
+                        )
+            except VisualAssetError as exc:
+                raise CandidateDesignError(
+                    "website promo visual assets must be fixed before saving",
+                    errors=[{
+                        "loc": ["prepare_visual_assets"],
+                        "type": "visual_assets_not_prepared",
+                        "msg": str(exc),
+                    }],
+                    working_content=(args._working_draft or {}).get("content"),
+                ) from exc
         try:
             return await _design_composition_locked(
                 db,

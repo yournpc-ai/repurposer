@@ -31,7 +31,11 @@ vi.mock("./ActivityStream", async (importOriginal) => ({
   WorkSegmentRow: ({ liveLabel }: { liveLabel?: ReactNode }) => <div>{liveLabel ?? "Chat work"}</div>,
   ActivityRow: () => <div>Activity</div>,
 }))
-vi.mock("./blocks/ComponentSlot", () => ({ ComponentSlot: () => <div>Delivered video</div> }))
+vi.mock("./blocks/ComponentSlot", () => ({
+  ComponentSlot: ({ slot }: { slot: { kind: string; block?: { text: string } } }) => (
+    <div>{slot.kind === "systemNotice" ? slot.block?.text : "Delivered video"}</div>
+  ),
+}))
 vi.mock("@/components/ui/message-scroller", () => {
   const Container = ({ children, className }: { children?: ReactNode; className?: string }) => <div className={className}>{children}</div>
   const Item = ({ children, className }: { children?: ReactNode; className?: string }) => (
@@ -96,6 +100,27 @@ it("does not give an empty streaming speech row its own flex gap", () => {
   expect(items.map((item) => item.textContent)).toEqual([
     "Make a video", "Starting", "Chat work", "chat.thinking",
   ])
+})
+
+it("keeps thinking below a submitted questionnaire when the continuation reuses the turn id", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
+  const rows: OverlayMessage[] = [user, { ...opening, runId: null }, {
+    id: "answers", role: "assistant", content: "", turnId: "turn", independentKind: "qa",
+    qa: { question: "Brief", answer: "Demo", muted: false, items: [{ question: "Purpose?", answer: "Demo" }] },
+  }]
+  const thinking = { activity_id: "__now__", kind: "think" as const, status: "active" as const, key: null }
+  const busy = { chatBusy: true, activeTurnId: "turn", nowRow: thinking, bottomNowRow: thinking }
+  const view = render(<ChatConversation {...props(rows, busy)} />)
+  act(() => vi.advanceTimersByTime(1000))
+  const before = (first: string, second: string) =>
+    expect(screen.getByText(first).compareDocumentPosition(screen.getByText(second)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  before("Demo", "chat.thinking")
+
+  view.rerender(<ChatConversation {...props([...rows, {
+    id: "reply", role: "assistant", content: "Building the storyboard", turnId: "turn",
+  }], busy)} />)
+  before("Demo", "Building the storyboard")
+  before("Building the storyboard", "chat.thinking")
 })
 
 it("skips brief standalone waits and shows only the latest status after a second", () => {
@@ -163,4 +188,19 @@ it("independent upload remains in its current reply, outside the failed Run", ()
   expect(response.closest('[data-slot="run-response"]')).toBeNull()
   expect(response.contains(screen.getByText("Delivered video"))).toBe(true)
   expect(screen.getAllByTestId("run-work")).toHaveLength(1)
+})
+
+it("renders system notices after assistant prose through the shared component slot", () => {
+  const reply: OverlayMessage = {
+    id: "reply",
+    role: "assistant",
+    content: "Here is the answer.",
+    turnId: "turn",
+    proseDrainedAtMs: 1,
+    blocks: [{ kind: "system_notice", text: "Still waiting for your answer." }],
+  }
+  render(<ChatConversation {...props([user, reply])} />)
+  const response = screen.getByText("Here is the answer.").closest('[data-slot="assistant-response"]')!
+  expect(response.contains(screen.getByText("Still waiting for your answer."))).toBe(true)
+  expect(screen.getByText("Here is the answer.").textContent).not.toContain("Still waiting")
 })

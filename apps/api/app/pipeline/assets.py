@@ -97,6 +97,8 @@ async def create_web_page_asset_from_url(
     project_id: UUID,
     user_id: UUID,
     url: str,
+    *,
+    turn_id: UUID | None = None,
 ) -> Asset:
     """Persist a user-named URL as a WEB_PAGE asset (网页采集资产化).
 
@@ -123,7 +125,7 @@ async def create_web_page_asset_from_url(
         title=_url_title(url),
         processing_status=AssetStatus.PENDING,
         processing_requested_at=now_utc(),
-        meta={"capture_url": url},
+        meta={"capture_url": url, **({"turn_id": str(turn_id)} if turn_id else {})},
     )
     db.add(asset)
     # 上传即落图 (ADR-057 K2) — same flush, same wiring door as the
@@ -140,13 +142,15 @@ async def create_web_page_assets_from_urls(
     project_id: UUID,
     user_id: UUID,
     urls: list[str],
+    *,
+    turn_id: UUID | None = None,
 ) -> list[Asset]:
     """Explicit multi-URL entry: N URLs → N assets through the singular
     seat (同一 processor 循环, 零新机制). Sub-page auto-discovery (ADR-121
     B4) births through this same seat too — from the processing chain
     (``asset_processing._spawn_discovered_pages``), never from chat."""
     return [
-        await create_web_page_asset_from_url(db, project_id, user_id, url)
+        await create_web_page_asset_from_url(db, project_id, user_id, url, turn_id=turn_id)
         for url in urls
     ]
 
@@ -174,6 +178,8 @@ async def create_web_page_assets_committed_from_urls(
     project_id: UUID,
     user_id: UUID,
     urls: list[str],
+    *,
+    turn_id: UUID | None = None,
 ) -> list[UUID]:
     """Commit user-named URL assets in their OWN transaction and return the
     newborn ids (existing captures dedupe to no id).
@@ -229,10 +235,12 @@ async def create_web_page_assets_committed_from_urls(
 
                 for a in siblings:
                     reset_asset_processing(a)
+                    if turn_id and not (a.meta or {}).get("turn_id"):
+                        a.meta = {**(a.meta or {}), "turn_id": str(turn_id)}
                 created.extend(UUID(str(a.id)) for a in siblings)
                 continue
             asset = await create_web_page_asset_from_url(
-                session, project_id, user_id, url
+                session, project_id, user_id, url, turn_id=turn_id
             )
             created.append(UUID(str(asset.id)))
         await session.commit()
@@ -322,6 +330,8 @@ async def prime_web_page_captures_from_text(
     project_id: UUID,
     user_id: UUID,
     text: str,
+    *,
+    turn_id: UUID | None = None,
 ) -> list[UUID]:
     """Birth committed WEB_PAGE capture assets for the message's URLs (the
     direction-turn priming seat above). Idempotent per capture_url through
@@ -335,7 +345,7 @@ async def prime_web_page_captures_from_text(
         try:
             created.extend(
                 await create_web_page_assets_committed_from_urls(
-                    project_id, user_id, [url]
+                    project_id, user_id, [url], turn_id=turn_id
                 )
             )
         except CaptureBlocked as e:

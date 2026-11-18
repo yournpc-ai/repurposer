@@ -5,8 +5,8 @@ import pytest
 
 from app.editing.alignment import NarrationPayload, NarrationSentence, NarrationWord
 from app.editing.edits import AddClip, AddTrack, BindSource, apply_ops
-from app.editing.revisions import AddNarrationAction
-from app.editing.revisions import SetTextAction, expand_revision_action, set_text_ops
+from app.editing.revisions import AddNarrationOp
+from app.editing.revisions import SetTextOp, expand_revision_op, set_text_ops
 from app.editing.schemas import (
     AudioObject,
     Clip,
@@ -217,8 +217,8 @@ async def test_hand_edited_caption_becomes_independent_without_changing_source_w
     content = await expanded_content()
     content = apply_ops(content, set_text_ops(
         content,
-        SetTextAction(
-            action="set_text",
+        SetTextOp(
+            op="set_text",
             clip_id="clp_caption_scn_pricing_asr_0003",
             text="Pricing made simple.",
         ),
@@ -351,11 +351,11 @@ async def test_ready_narration_audio_and_caption_provenance():
         algorithm="minimax-t2a-v2-sentence-v1",
         payload=payload.model_dump(mode="json"),
     )
-    from app.editing.revisions import AddNarrationAction
+    from app.editing.revisions import AddNarrationOp
 
-    content = apply_ops(content, expand_revision_action(
-        AddNarrationAction(
-            action="add_narration",
+    content = apply_ops(content, expand_revision_op(
+        AddNarrationOp(
+            op="add_narration",
             source_id=AUDIO_ID,
             alignment_id=alignment_id,
             scene_id="scn_pricing",

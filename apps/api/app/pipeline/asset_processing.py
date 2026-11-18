@@ -40,15 +40,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
-from app.models.tables import Asset, Conversation, Message, Project
+from app.models.tables import Asset, Project
 from app.pipeline.assets import asset_text_content
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
 from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.web_capture import web_capture_processor
-from app.tools.world import upsert_page_reading
 from app.providers.storage import download_to_cache, get_project_output_dir
+from app.tools.world import upsert_page_reading
 
 logger = structlog.get_logger()
 
@@ -348,14 +348,10 @@ def _clear_processing_stage(asset: Asset) -> None:
         asset.meta = cleaned
 
 
-async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> None:
-    """素材节拍入库 (2026-09-24 用户拍板): the dock's settled reading row
-    ("读完 X") is a plain message row so it survives a refresh — written
-    through the ConversationBridge (ADR-087: pipeline never touches messages
-    directly). ``count``/``total`` carry the project set's drain progress so
-    the label can say "N/M" when several files ride together. Best-effort:
-    the asset's terminal state is already committed, a beat failure degrades
-    to a warning, never a processing failure."""
+async def _record_reading_activity(db: AsyncSession, asset: Asset, status: str) -> None:
+    """Persist a settled reading ActivityFrame through the ConversationBridge.
+    A tool-originated asset reuses its existing activity row; independent
+    background processing uses the same frame shape and message writer."""
     if asset.project_id is None:
         return
     try:
@@ -363,25 +359,6 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
 
         project = await db.get(Project, asset.project_id)
         if project is None:
-            return
-        # beat 抑制 (ADR-102 后续批): a user turn in flight means the read
-        # path triggered this processing — the get_understanding read frame
-        # already narrates the whole wait in the flow, so the beat row would
-        # be a second narrator for the same fact. The run-birthplace path
-        # (no user turn in flight) keeps its beats. SQL 直查 — the pipeline
-        # never imports the chat layer.
-        in_flight = (
-            await db.execute(
-                select(Message.id)
-                .join(Conversation, Message.conversation_id == Conversation.id)
-                .where(
-                    Conversation.project_id == asset.project_id,
-                    Message.turn_state == "in_flight",
-                )
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if in_flight is not None:
             return
         base = select(func.count(Asset.id)).where(Asset.project_id == asset.project_id)
         total = (await db.execute(base)).scalar_one()
@@ -403,24 +380,24 @@ async def _record_reading_beat(db: AsyncSession, asset: Asset, status: str) -> N
                 (asset.processed_at - asset.created_at).total_seconds() * 1000
             )
             duration_ms = span_ms if span_ms >= 0 else None
-        await conversation_bridge.record_material_beat(
+        await conversation_bridge.record_asset_activity(
             db,
             project.user_id,
             asset.project_id,
-            "reading",
             status=status,
             name=asset.display_name,
             count=settled,
             total=total,
             ref=str(asset.id),
             duration_ms=duration_ms,
-            # 批「动词」: the type rides so the replay forks watch/listen/read.
             asset_type=str(getattr(asset.type, "value", asset.type)),
+            at=None,
+            turn_id=(asset.meta or {}).get("turn_id"),
         )
         await db.commit()
     except Exception as e:  # noqa: BLE001 — the beat is best-effort
         logger.warning(
-            "material_beat_reading_failed", asset_id=str(asset.id), error=str(e)
+            "asset_activity_reading_failed", asset_id=str(asset.id), error=str(e)
         )
 
 
@@ -458,9 +435,16 @@ async def _spawn_discovered_pages(
             continue
         try:
             child = await create_web_page_asset_from_url(
-                db, parent.project_id, parent.user_id, url
+                db, parent.project_id, parent.user_id, url,
+                turn_id=(
+                    UUID(str(parent.meta["turn_id"]))
+                    if (parent.meta or {}).get("turn_id") else None
+                ),
             )
-            child.meta = {**(child.meta or {}), "discovered_from": str(parent.id)}
+            child.meta = {
+                **(child.meta or {}),
+                "discovered_from": str(parent.id),
+            }
             existing.add(url)
             born += 1
         except Exception as e:  # noqa: BLE001 — discovery is best-effort
@@ -539,7 +523,7 @@ async def process_asset(asset_id: UUID) -> None:
             # ADR-113: no transcript card to flip — the asset row IS the
             # transcript's seat; the /graph read face and the transcript
             # endpoint read this status raw.
-            await _record_reading_beat(db, asset, "completed")
+            await _record_reading_activity(db, asset, "completed")
             logger.info(
                 "asset_processed",
                 asset_id=str(asset_id),
@@ -564,4 +548,4 @@ async def process_asset(asset_id: UUID) -> None:
             asset.processing_error = str(e)
             _clear_processing_stage(asset)
             await db.commit()
-            await _record_reading_beat(db, asset, "failed")
+            await _record_reading_activity(db, asset, "failed")

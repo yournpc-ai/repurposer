@@ -33,7 +33,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.agents.tool_loop import ChatTool, ToolObservation
+from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.chat.perception import executes
 from app.chat.perception.executes import (
     GetAssetParams,
@@ -281,6 +281,7 @@ def perception_chat_tools(*names: str) -> list[ChatTool]:
                 terminal=False,
                 batchable=True,
                 wire_view=entry.wire_view,
+                presentation=ToolPresentation(kind="read", active_key=entry.activity_key),
             )
         )
     return tools
@@ -313,8 +314,8 @@ async def run_perception_tool(
     if isinstance(text, ToolObservation):
         return text
     if name == "get_web_page" and isinstance(params, GetWebPageParams):
-        from app.tools.world import page_reading_for_url
         from app.tools.project_context import page_context_key
+        from app.tools.world import page_reading_for_url
         # A best-effort store write may have failed. In that case the result
         # remains turn-local and must not be folded into an absent resource.
         page = await page_reading_for_url(db, project.id, params.url)

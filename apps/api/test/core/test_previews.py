@@ -454,13 +454,14 @@ def test_sequential_review_activity_follows_real_start_evidence_recheck_and_save
     from app.agents.working_drafts import record_working_draft_review, review_state_after_edit
     from app.chat.activity import ActivityProjector
     from app.chat.activity_receipts import VideoDraftReviewReceipt
+    from app.chat.turn_tools import _design_video_tool, _review_working_draft_tool
     from app.models.schemas import VideoDraftRef
     from app.tools.video.design import CompositionDesignVideoArgs
     from app.tools.video.preview import ReviewWorkingDraftArgs, VideoDraftReviewTarget
 
     content = two_scene_content()
     arguments = {"content": content.model_dump(mode="json"), "design": {}}
-    projector = ActivityProjector()
+    projector = ActivityProjector([_design_video_tool(), _review_working_draft_tool()])
 
     def review_args(_target, state):
         args = ReviewWorkingDraftArgs(
@@ -629,6 +630,7 @@ def test_high_level_web_focus_recomputes_only_the_target_clip_camera():
 def test_repeat_preview_request_before_judgment_does_not_open_fake_activity():
     from app.agents.tool_loop import ReadExecuting
     from app.chat.activity import ActivityProjector
+    from app.chat.turn_tools import _design_video_tool, _review_working_draft_tool
     from app.models.schemas import VideoDraftRef
     from app.tools.video.preview import ReviewWorkingDraftArgs
 
@@ -641,7 +643,7 @@ def test_repeat_preview_request_before_judgment_does_not_open_fake_activity():
         draft_ref=VideoDraftRef(draft_id="cnd_test", draft_digest="d" * 64),
     )
     args.bind_working_draft(arguments)
-    projector = ActivityProjector()
+    projector = ActivityProjector([_design_video_tool(), _review_working_draft_tool()])
     assert projector.name_known("review_working_draft") == []
     assert projector.feed_event(ReadExecuting(
         tool_name="review_working_draft", params=args,

@@ -7,6 +7,8 @@ The `delivery=` line selects exactly ONE branch:
 - `delivery=partial`: name only what the delivered lines prove landed, then name what is missing or failed. Never round partial delivery up to success. One useful next step is enough when one exists.
 - `delivery=delivered`: say plainly what was delivered, using only the facts present. Do not add an audit, judgment or next-step paragraph by default. A drift/unchecked detail line is the only consistency evidence you may relay, and then in one plain clause. A clean delivery needs no caveat.
 
+For an intermediate media-preparation Run, briefly name the actual prepared media and any unresolved blocker. Static-image review covers only those images. When automatic continuation is active, describe only the next stage supported by the current facts. Follow the current journey's server-derived authorization and implemented stage boundary.
+
 If no `delivery=` line is present (a legacy run without facts), give only the plain completion the receipt proves and no details you cannot see.
 
 For content language, use the delivered line's `lang` when present. The project's default language is a preference, not evidence of subtitle or spoken language; it does not establish a mismatch.

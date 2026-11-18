@@ -50,6 +50,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+
 if TYPE_CHECKING:
     from app.pipeline.lifecycle import ConfirmationNeed
 
@@ -59,13 +60,13 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 # The two chat agents no longer take calls HERE (the turn runners —
 # app/chat/plan_turn.py / propose_turn.py — drive them through the tool
 # loop); importing the declarations module keeps them registered in AGENTS
 # at startup (the orchestrator's roster self-check walks it).
 from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
 from app.chat.intent import intent_router as _intent_router  # noqa: F401
-from app.chat.context import recent_history_within_budget
 from app.chat.suggestions import (
     build_suggestion_records,
     compose_suggestion_note,
@@ -89,11 +90,11 @@ from app.models.schemas import (
     InferredIntent,
     Option,
     PendingPlan,
+    PlanEstimate,
     ProjectStatus,
     QuestionPayload,
     QuestionProposal,
     SkillReference,
-    PlanEstimate,
     StartAnswerRequest,
     SuggestionRef,
     TaskItem,
@@ -191,25 +192,21 @@ def _bare_question(message: Message) -> str:
     return (message.question or {}).get("question") or message.content or ""
 
 
-def _ask_content(ask: QuestionProposal) -> str:
+def _ask_content(ask: QuestionProposal, *, has_dock_options: bool = False) -> str:
     """The question row's content (ask 三分解剖 ①): the framing prose when
-    the ask brings one. A TEXT ask (options empty — it never docks, 形态律
-    ADR-053 R1) keeps its bare question IN the speech: the message IS the
-    whole ask, prose + question; an options ask's question rides the dock's
-    title (payload ②), so the content stays the prose alone."""
+    the ask brings one. A TEXT ask (options/items empty — it never docks)
+    keeps its bare question IN the speech; a docked ask keeps the title only
+    in the payload."""
     prose = ask.prose.strip()
     if not prose:
         return ask.question
-    if not ask.options:
+    if not ask.options and not has_dock_options:
         return f"{prose}\n\n{ask.question}"
     return prose
 
 
 def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
-    """插话提醒尾 (ADR-053 R2): an interjection turn's reply ends with a
-    code-composed reminder — the still-pending question plus its default
-    path, in the turn's language (code-forced text, never the LLM's voice —
-    the draft-from-persona declaration's doctrine)."""
+    """Build the interjection reminder's localized system-notice text."""
     if _prefers_zh(text):
         tail = f"\n\n（还在等你的回答：{question}"
         tail += f"——{default_path}）" if default_path else "——一句话就行）"
@@ -222,14 +219,9 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
 def _estimate_tail(
     text: str, estimate: PlanEstimate | None, *, reason: str = ""
 ) -> str:
-    """Dock echo 的估价尾行 (ADR-111 §2 — 确认 dock 卡面退役后总估价的新家;
-    BILLING §2.1 披露义务不变: capture 前估价必须可见): a code-composed
-    whisper appended to the plan's dock echo — the total range plus the
-    hold/settle semantics, in the turn's language (code-forced text, never
-    the LLM's voice — the reminder tail's doctrine; 真实数字 = 世界自证,
-    ADR-058 的合法二源). A deferred (None) quote says so honestly — never
-    a fabricated number. The per-task half stays on the canvas's draft
-    nodes (逐节点估价, ADR-057 K5).
+    """Build the dock estimate's localized system-notice text (BILLING §2.1).
+    A deferred quote says so honestly — never a fabricated number. The
+    per-task half stays on the canvas's draft nodes (ADR-057 K5).
 
     ``reason`` (ADR-117 §4) = the dock's stamped ConfirmationNeed reason.
     The held clauses key on it — the auto regime's guardrail/unquotable
@@ -364,18 +356,26 @@ def _estimate_tail(
     )
 
 
+def _system_notice(text: str) -> dict[str, str]:
+    return {"kind": "system_notice", "text": text.strip()}
+
+
+def _reminder_block(
+    text: str, question: str, default_path: str | None
+) -> dict[str, str]:
+    return _system_notice(_reminder_tail(text, question, default_path))
+
+
+def _estimate_block(
+    text: str, estimate: PlanEstimate | None, *, reason: str = ""
+) -> dict[str, str]:
+    return _system_notice(_estimate_tail(text, estimate, reason=reason))
+
+
 def _auto_start_rejected_line(detail: dict[str, Any] | None) -> str:
-    """The auto 道's birthplace-422 honesty line (ADR-117 §2): the
-    presentation-time start failed AFTER the echo's work-start beat spoke,
-    and no pill / grey row / toast carries it (the ask 道's client-side
-    surfacing never fires on this path) — so the reason lands as a
-    code-composed tail on the dock row's content (the estimate tail's
-    lawful seat: code-forced text, real numbers from the 422 detail, never
-    the LLM's voice). ``credits.insufficient`` names the two numbers
-    (BILLING §5 文案纪律: factual, no top-up CTA — the purchase entry is
-    W11); every other 422 gets the generic retry line (a retry through
-    the ask 道 surfaces the full reason there). Language = the request's
-    ui locale (the wallet route's same seat)."""
+    """Build the auto-start rejection's localized system-notice text.
+    ``credits.insufficient`` names the two real numbers; every other 422
+    gets the generic retry line. Language follows the request's UI locale."""
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     zh = (current_ui_language() or "").startswith("zh")
@@ -540,6 +540,7 @@ async def _create_message(
     suggestions: list[dict[str, Any]] | None = None,
     suggestion_ref: dict[str, Any] | None = None,
     turn_id: UUID | None = None,
+    blocks: list[dict[str, Any]] | None = None,
 ) -> Message:
     if role == "assistant":
         # 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉): the model
@@ -564,6 +565,7 @@ async def _create_message(
         suggestions=suggestions or [],
         suggestion_ref=suggestion_ref,
         turn_id=turn_id,
+        blocks=blocks or [],
         seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
@@ -746,7 +748,11 @@ _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.USER_STATED: 2,
 }
 
-_BRIEF_SCALAR_SLOTS = ("topic", "audience", "tone", "material_state")
+_BRIEF_SCALAR_SLOTS = (
+    "topic", "audience", "tone", "material_state", "purpose", "target_seconds",
+    "narrative_mode", "narration_language", "subtitle_languages", "aspect",
+    "voice_requirements", "must_include", "avoid", "success_criteria",
+)
 
 
 _CONSTRAINT_DIGITS = re.compile(r"\d+")
@@ -824,12 +830,161 @@ def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
         else PendingPlan()
     )
     update = Brief()
+    normalized: Any = value
+    if slot == "target_seconds" and isinstance(value, str):
+        match = re.search(r"\d+", value)
+        normalized = int(match.group(0)) if match else value
+    elif slot == "subtitle_languages" and isinstance(value, str):
+        normalized = [
+            _language_code(part) for part in re.split(r"[+,，、/\s]+", value) if part.strip()
+        ]
+    elif slot in {"must_include", "avoid", "success_criteria"} and isinstance(value, str):
+        normalized = [value]
     setattr(
         update,
         slot,
-        BriefSlot(value=value, source=BriefSlotSource.USER_STATED),
+        BriefSlot(value=normalized, source=BriefSlotSource.USER_STATED),
     )
     stored.brief = merge_brief(update, stored.brief)
+    from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
+    from app.models.schemas import CreativeState
+
+    stored.creative_state = creative_state_with_brief(
+        creative_state_for_pending(stored) or CreativeState(), stored.brief
+    )
+    project.pending_brief = stored.model_dump(mode="json")
+
+
+def _language_code(value: str) -> str:
+    normalized = value.strip().lower()
+    return {
+        "english": "en", "英文": "en", "英语": "en", "en": "en",
+        "chinese": "zh", "中文": "zh", "汉语": "zh", "zh": "zh",
+    }.get(normalized, normalized)
+
+
+def _group_slot_value(item, answer) -> Any:
+    from app.models.schemas import BriefAnswerItem
+
+    assert isinstance(answer, BriefAnswerItem)
+    display = (answer.text or "").strip() or next(
+        (option.label for option in item.options if option.id == answer.option_id),
+        "",
+    )
+    if item.slot == "target_seconds":
+        match = re.search(r"\d+", display)
+        if match is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "target_seconds needs a number")
+        return int(match.group(0))
+    if item.slot == "aspect":
+        match = re.search(r"16:9|9:16|1:1", display)
+        if match is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "aspect must be 16:9, 9:16 or 1:1")
+        return match.group(0)
+    if item.slot == "subtitle_languages":
+        values = re.split(r"[+,，、/\s]+", display) if answer.kind == "freeform" else display.split("+")
+        languages = [_language_code(value) for value in values if value.strip()]
+        if not languages or any(not value for value in languages):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "subtitle_languages needs at least one language")
+        return list(dict.fromkeys(languages))
+    if item.slot in {"must_include", "avoid", "success_criteria"}:
+        return [display]
+    return display
+
+
+def _validate_group_answers(
+    question: QuestionPayload, data, *, require_required: bool = True
+) -> list:
+    from app.models.schemas import BriefAnswerItem
+
+    if not question.items or not question.group_digest:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "This question is not a clarification group")
+    if data.group_digest != question.group_digest:
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "question.group_digest_mismatch"})
+    by_slot = {item.slot: item for item in question.items}
+    seen: set[str] = set()
+    normalized: list[BriefAnswerItem] = []
+    for answer in data.answers:
+        if answer.slot in seen:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Duplicate answer slot '{answer.slot}'")
+        seen.add(answer.slot)
+        item = by_slot.get(answer.slot)
+        if item is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unexpected answer slot '{answer.slot}'")
+        if answer.kind == "option":
+            option = next((option for option in item.options if option.id == answer.option_id), None)
+            if option is None:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown option for slot '{answer.slot}'")
+            answer = answer.model_copy(update={"text": option.label})
+        else:
+            text = (answer.text or "").strip()
+            if not item.allow_freeform:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Freeform is disabled for slot '{answer.slot}'")
+            if not text or len(text) > 4000:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid freeform length for slot '{answer.slot}'")
+            answer = answer.model_copy(update={"text": text})
+        normalized.append(answer)
+    missing = [item.slot for item in question.items if item.required and item.slot not in seen]
+    if require_required and missing:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Missing required slots: {missing}")
+    return normalized
+
+
+def _backfill_brief_group(project: Project, question: QuestionPayload, answers: list) -> None:
+    stored = PendingPlan.model_validate(project.pending_brief or {})
+    by_slot = {item.slot: item for item in question.items}
+    for answer in answers:
+        item = by_slot[answer.slot]
+        update = Brief()
+        setattr(update, item.slot, BriefSlot(
+            value=_group_slot_value(item, answer),
+            source=BriefSlotSource.USER_STATED,
+        ))
+        stored.brief = merge_brief(update, stored.brief)
+    from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
+    from app.models.schemas import CreativeState
+
+    stored.creative_state = creative_state_with_brief(
+        creative_state_for_pending(stored) or CreativeState(), stored.brief
+    )
+    project.pending_brief = stored.model_dump(mode="json")
+
+
+async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project) -> None:
+    from app.chat.readiness import (
+        creative_state_for_pending,
+        creative_state_with_brief,
+        infer_task_kind,
+        website_promo_default_brief,
+    )
+    from app.models.schemas import CreativeState
+    from app.models.tables import SourceSnapshot
+
+    stored = PendingPlan.model_validate(project.pending_brief or {})
+    if infer_task_kind(stored.prompt) != "website_promo":
+        return
+    state = creative_state_for_pending(stored) or CreativeState()
+    profile = state.brand_profile
+    refs = profile.source_refs if profile is not None else state.source_refs
+    snapshot_ids = []
+    for ref in refs:
+        try:
+            snapshot_ids.append(UUID(str(ref.snapshot_id)))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    snapshots = (
+        list((await db.scalars(
+            select(SourceSnapshot).where(SourceSnapshot.id.in_(snapshot_ids))
+        )).all())
+        if snapshot_ids
+        else []
+    )
+    stored.brief = website_promo_default_brief(
+        stored.brief,
+        snapshots,
+        fallback_language="zh" if _prefers_zh(stored.prompt) else "en",
+    )
+    stored.creative_state = creative_state_with_brief(state, stored.brief)
     project.pending_brief = stored.model_dump(mode="json")
 
 
@@ -1488,6 +1643,7 @@ async def _dock_question(
     content: str,
     payload: QuestionPayload,
     intent: dict[str, Any] | None = None,
+    blocks: list[dict[str, Any]] | None = None,
 ) -> tuple[Message, list[UUID]]:
     """Raise a new pending question (ask 落库): at most one pending per
     conversation, so any still-open question retires as superseded first.
@@ -1512,6 +1668,7 @@ async def _dock_question(
         content,
         question=payload.model_dump(mode="json"),
         intent=intent,
+        blocks=blocks,
     )
     return message, bailed_run_ids
 
@@ -1641,6 +1798,7 @@ async def sync_plan_question(
             plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
+        blocks=[_estimate_block(prompt, estimate, reason=need.reason)],
     )
     return bailed_run_ids
 
@@ -1791,16 +1949,14 @@ async def _auto_start_docked_plan(
             # The auto 道 must not fail silent: the echo's work-start beat
             # already spoke, no pill renders (requires_confirmation=False),
             # and the ask 道's surfacing (the client grey row off the 422)
-            # never fires here — so the reason lands as a code-composed
-            # tail on the dock row's content (the estimate tail's lawful
-            # seat: persisted, so live envelope and replay read it alike;
-            # intent.answer stays clean — a future re-dock's echo must not
-            # ghost this moment-in-time fact).
-            line = _auto_start_rejected_line(
-                exc.detail if isinstance(exc.detail, dict) else None
-            )
-            base = (pending_question.content or "").rstrip()
-            pending_question.content = (base + line) if base else line.lstrip()
+            # never fires here — so the reason lands as a persisted system
+            # block, keeping live envelope and replay on the same read path.
+            pending_question.blocks = [
+                *(pending_question.blocks or []),
+                _system_notice(_auto_start_rejected_line(
+                    exc.detail if isinstance(exc.detail, dict) else None
+                )),
+            ]
         await db.flush()
         logger.info(
             "auto_start_rejected",
@@ -1894,9 +2050,8 @@ async def _continue_chat_answer(
     turn_id: UUID | None = None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
     """The generic question-answer 续聊 continuation: the user's pick is
-    their say for the next turn, and the turn's inference message carries
-    the answered question's bare text as a factual frame (作答语境帧 —
-    the QA link survives settlement).
+    their say for the next turn. The archived question and its answer
+    enter the model transcript with their respective speaker roles.
     Dispatch: asset_role answers pin by code, brief-slot answers backfill
     user-stated, everything else (ADR-081 trigger suggestions, plain asks)
     rides plan-or-propose by the project's run state. Two seats call this:
@@ -1910,27 +2065,12 @@ async def _continue_chat_answer(
     path's answered dump or the proposal path's settled question, both
     advisory to the caller."""
     project = await db.get(Project, conversation.project_id)
-    say = (data.text if data.kind == "freeform" else None) or option_label or ""
-    # 作答语境帧 (assembly): nothing on this path persists a user row —
-    # the QA archive is the record — so the turn's inference message
-    # carries the one disambiguating world fact the bare say lacks:
-    # WHICH open question it answers. Stripped of it, "就加一个中文字幕
-    # 吧" reads as a fresh standalone ask and the additive misreading
-    # opens ("add subtitles TO the earlier recommendation"). A factual
-    # frame, never a behavioral instruction — the model does the language
-    # understanding (the typed-answer path always had this: its pending
-    # block carries the bare question; the endpoint path lost it at
-    # settlement).
-    bare_q = (question.question or "").strip()
-    turn_say = (
-        f'{say}\n(This message answers your open question: "{bare_q}")'
-        if bare_q
-        else say
+    say = (
+        (data.text if data.kind == "freeform" else None)
+        or option_label
+        or (" · ".join(answer.text or answer.option_id or "" for answer in data.answers) if data.kind == "group" else "")
     )
-    history = await list_conversation_messages(db, UUID(str(conversation.id)))
-    # 滑动窗口装配 (ADR-117 D4): the scattered fixed-count slices converge
-    # on the one budget predicate — world state never rides this window.
-    recent = await recent_history_within_budget(db, history)
+    recent = await list_conversation_messages(db, UUID(str(conversation.id)))
     # 输入耐久边界 (the answer continuation's ONE seam — prepare_chat_turn's
     # input-durability commit's mirror): every settle write the answer
     # implies — an asset_role pick's code-settled pins (ADR-078 判词④), a
@@ -1944,7 +2084,9 @@ async def _continue_chat_answer(
     # can clear. The refresh restarts the continuation on committed truth:
     # the seam released the row, and a concurrent request may have moved it
     # in between, so nothing below decides on pre-commit state.
-    if project is not None and question.slot == "asset_role":
+    if project is not None and data.kind == "group":
+        _backfill_brief_group(project, question, answers=data.answers)
+    elif project is not None and question.slot == "asset_role":
         await _settle_role_answer(db, project, data, say)
     elif project is not None and question.slot is not None:
         _backfill_brief_slot(project, question.slot, say)
@@ -1960,7 +2102,7 @@ async def _continue_chat_answer(
             user_id,
             conversation,
             project,
-            ChatRequest(project_id=project.id, message=turn_say),
+            ChatRequest(project_id=project.id, message=say),
             recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
@@ -1974,7 +2116,7 @@ async def _continue_chat_answer(
             turn_id=turn_id,
         )
         return follow_up, run_id, bailed, answered
-    if question.slot is not None and project is not None:
+    if (question.slot is not None or data.kind == "group") and project is not None:
         # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot took
         # the answer user-stated at the seam; the plan path resumes on the
         # enriched brief — draft the (now-rooted) plan or ask the next
@@ -1985,7 +2127,7 @@ async def _continue_chat_answer(
             user_id,
             conversation,
             project,
-            ChatRequest(project_id=project.id, message=turn_say),
+            ChatRequest(project_id=project.id, message=say),
             recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
@@ -2021,7 +2163,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(
-                project_id=project.id, message=turn_say, suggestion_ref=suggestion_ref
+                project_id=project.id, message=say, suggestion_ref=suggestion_ref
             ),
             recent=recent,
             on_delta=on_delta,
@@ -2037,7 +2179,7 @@ async def _continue_chat_answer(
         )
         return follow_up, run_id, bailed, answered
     follow_up, run_id, bailed, settled = await _propose_turn(
-        db, user_id, conversation, project, turn_say, [], recent,
+        db, user_id, conversation, project, say, [], recent,
         suggestion_ref=suggestion_ref,
         on_delta=on_delta,
         # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
@@ -2055,6 +2197,15 @@ async def _continue_chat_answer(
         turn_id=turn_id,
     )
     return follow_up, run_id, bailed, settled
+
+
+def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> dict:
+    if (
+        pending is None or pending.creative_state is None
+        or (context or {}).get("version_ref")
+    ):
+        return {}
+    return {"creative_state": pending.creative_state.model_dump(mode="json")}
 
 
 async def answer_question(
@@ -2216,11 +2367,29 @@ async def answer_question(
             )
         option_label = by_id[str(data.option_id)].label
 
+    group_answers = (
+        _validate_group_answers(
+            question,
+            data,
+            require_required=data.kind == "group",
+        )
+        if data.kind == "group" or (data.kind == "bail" and question.items)
+        else []
+    )
+    if group_answers:
+        data = data.model_copy(update={"answers": group_answers})
+    group_text = " · ".join(answer.text or answer.option_id or "" for answer in group_answers)
     message.answer = AnswerPayload(
         kind=data.kind,
         option_id=data.option_id if data.kind == "option" else None,
         # The answered question shows the option's human label, not its bare id.
-        text=(data.text if data.kind == "freeform" else None) or option_label,
+        text=(data.text if data.kind == "freeform" else None) or option_label or group_text or None,
+        group_digest=(
+            data.group_digest
+            if data.kind == "group" or (data.kind == "bail" and question.items)
+            else None
+        ),
+        answers=group_answers,
         answered_at=datetime.now(UTC),
     ).model_dump(mode="json")
 
@@ -2275,7 +2444,7 @@ async def answer_question(
             # active conflicting run) all surface as machine-readable codes
             # before paid create_run, never as disguised business errors.
             from app.pipeline.lifecycle import (  # deferred: chat → pipeline
-                evaluate_start_gate,               # only, one-directional
+                evaluate_start_gate,  # only, one-directional
                 project_lifecycle,
             )
             from app.ui_locale import current_ui_language  # deferred
@@ -2391,6 +2560,7 @@ async def answer_question(
             )
             run.context = {
                 **(run.context or {}),
+                **_creative_run_context(pending, run.context),
                 "confirmed_scope": {
                     "confirmation_id": str(message.id),
                     "confirmed_at": datetime.now(UTC).isoformat(),
@@ -2432,7 +2602,7 @@ async def answer_question(
                         _resume_ack_line("", "blocked"),
                         turn_id=turn_id,
                     )
-        elif data.kind in ("option", "freeform"):
+        elif data.kind in ("option", "freeform", "group"):
             # No parked node → this run id was the display anchor (trigger
             # suggestion) or the interrupt already expired — the pick is the
             # user's say, carried by the generic continuation (same seat as
@@ -2464,7 +2634,7 @@ async def answer_question(
                 accrued=_usage_bind.accrued,
             )
 
-    elif question.kind == "question" and data.kind in ("option", "freeform"):
+    elif question.kind == "question" and data.kind in ("option", "freeform", "group"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
         with bind_conversation_turn(
@@ -2499,14 +2669,15 @@ async def answer_question(
             accrued=_usage_bind.accrued,
         )
 
-    elif question.kind == "question" and data.kind == "bail" and question.slot is not None:
+    elif question.kind == "question" and data.kind == "bail" and (question.slot is not None or question.items):
         # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default
-        # path — the plan path resumes and the 出书门槛 docks the
-        # draft-from-persona plan (the asked roll already bounds the loop).
-        # Nothing backfills; the stand-in line only feeds the inference (it
-        # is never persisted as a user message).
+        # path — the plan path resumes. A group preserves its explicitly
+        # selected answers and fills only the remaining fields with defaults.
         project = await db.get(Project, conversation.project_id)
         if project is not None:
+            if question.items:
+                _backfill_brief_group(project, question, group_answers)
+                await _apply_website_promo_group_defaults(db, project)
             if question.slot == "asset_role":
                 # 判词④'s promised default, kept by code: skip = upload
                 # order — first video the material, the next the exemplar
@@ -2519,10 +2690,7 @@ async def answer_question(
             # continuation failure.
             await db.commit()
             await db.refresh(project)
-            history = await list_conversation_messages(db, UUID(str(conversation.id)))
-            # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
-            # fixed-count slice.
-            recent = await recent_history_within_budget(db, history)
+            recent = await list_conversation_messages(db, UUID(str(conversation.id)))
             with bind_conversation_turn(
                 conversation_id=conversation.id, turn_id=turn_id or message.id,
                 project_id=conversation.project_id,
@@ -2794,11 +2962,10 @@ async def prepare_chat_turn(
         db, user_id, request.project_id
     )
     conversation_id = UUID(str(conversation.id))
-    # 界面语言 owner 盖章（ADR-080 单一叙事者律）: the request's locale is
-    # the conversation's ONE speech-language fact — every assistant writer
-    # (this turn's reply AND the worker-born trigger) inherits it instead of
-    # deriving its own. None-safe: outside a request there is nothing to
-    # stamp, and a worker path never erases the owner.
+    # Worker-born speech and deterministic chrome inherit this locale owner;
+    # plan/chat instead infer speech from user messages and history. None-safe:
+    # outside a request there is nothing to stamp, and a worker path never
+    # erases the owner.
     from app.ui_locale import current_ui_language  # deferred: request ctx
 
     _ui = current_ui_language()
@@ -2948,16 +3115,7 @@ async def prepare_chat_turn(
     user_message.turn_state = "in_flight"
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
-    history = list(
-        (
-            await db.execute(
-                select(Message)
-                .where(Message.conversation_id == conversation_id)
-                .order_by(Message.created_at.asc())
-            )
-        ).scalars()
-    )
-
+    history = await list_conversation_messages(db, conversation_id)
     # Deterministic autoResume (zero LLM): while a question is pending,
     # the user's free text settles it ONLY on an unambiguous option hit
     # (letter / number / verbatim label — ADR-053: the "any text =
@@ -3527,14 +3685,6 @@ async def execute_chat_turn(
             project_id=prepared.conversation.project_id,
         ) as _usage_bind:
             if prepared.plan_path:
-                # The intent router's context excludes this turn's own message
-                # (already the prompt being judged); the latest rounds before
-                # it are the disambiguating conversation (G-7) — budget-
-                # windowed by the one predicate (ADR-117 D4).
-                recent = await recent_history_within_budget(
-                    db,
-                    [m for m in prepared.history if m.id != prepared.user_message.id],
-                )
                 (
                     assistant_message,
                     run_id,
@@ -3548,7 +3698,7 @@ async def execute_chat_turn(
                     request,
                     skill=prepared.skill,
                     skill_ambiguity=prepared.skill_ambiguity,
-                    recent=recent,
+                    recent=prepared.history,
                     on_delta=on_delta,
                     on_reasoning=on_reasoning,
                     on_phase=on_phase,
@@ -3576,7 +3726,7 @@ async def execute_chat_turn(
                     prepared.project,
                     request.message,
                     request.mentions,
-                    await recent_history_within_budget(db, prepared.history),
+                    prepared.history,
                     skill=prepared.skill,
                     skill_ambiguity=prepared.skill_ambiguity,
                     suggestion_ref=request.suggestion_ref,
@@ -3621,6 +3771,12 @@ async def execute_chat_turn(
             Message.intent["type"].astext == "partial",
         )
     )
+    if prepared.answered_question is not None:
+        # A typed reply already has its own transcript position.
+        turn_row.intent = {
+            **(turn_row.intent or {}),
+            "answered_question_id": str(prepared.answered_question.id),
+        }
     turn_row.turn_state = "settled"
     prepared.user_message.turn_state = "settled"
     await db.commit()
@@ -3677,91 +3833,67 @@ async def list_conversation_messages(
     return list(result.scalars().all())
 
 
-# ---- Material beats (2026-09-24 用户拍板) ---------------------------------
-#
-# The dock's material rows ("正在阅读 X…" / "正在理解素材内容…") were
-# frontend-synthesized and DIED on refresh — the settled gray row the live
-# surface showed simply vanished from the rebuilt history. The fix is a
-# plain message row: the pipeline records one settled row per beat through
-# the ConversationBridge (ADR-087 — pipeline never writes messages directly),
-# and the history replay maps it back onto the same ActivityRow component.
-# Beats are BORN SETTLED (completed/failed) — the live active row stays the
-# dock's synthesized now-line; only the durable settled form rides the wire.
-
-MATERIAL_BEAT_TYPE = "material_beat"
+# ---- Activity row persistence through the ConversationBridge ----------------
 
 
-async def record_material_beat(
+async def record_asset_activity(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
-    beat: str,
     *,
-    status: str = "completed",
-    name: str | None = None,
-    count: int | None = None,
-    total: int | None = None,
-    ref: str | None = None,
-    duration_ms: int | None = None,
-    asset_type: str | None = None,
-    at: str | None = None,
+    status: str,
+    name: str,
+    count: int,
+    total: int,
+    ref: str,
+    duration_ms: int | None,
+    asset_type: str,
+    at: str | None,
+    turn_id: str | None,
 ) -> Message | None:
-    """Persist one settled material beat as a message row (once-only per
-    (beat, ref) — the warm's re-materialization race and the worker's
-    retries collapse onto the first landed row, same doctrine as the
-    trigger dump's ``_already_spoke``).
-
-    ``beat``: "reading" (an asset's processing drained — ref = asset id,
-    ``name`` = the asset's display name, ``count``/``total`` = the project
-    set's drain progress, ``duration_ms`` = the user-perceived reading span
-    upload→processed, so the settled row can whisper "· 41s" like every
-    other settled activity row) | "understanding" (the warm materialized —
-    ref = the asset digest, ``count`` = the asset count). Returns None when
-    the beat already landed (dedup) so callers stay fire-and-forget.
-
-    ``asset_type`` (批「动词」2026-09-27): the reading beat carries the
-    asset's type so the replay forks the verb (watch/listen/read) — absent
-    on rows predating the fork, the replay's read tolerance falls to the
-    base key. ``at`` overrides the row's birth stamp for the fold's clock —
-    absent on beats whose span starts at landing (reading/understanding)."""
     conversation = await _get_or_create_project_conversation(db, user_id, project_id)
+    if turn_id:
+        existing = (
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.turn_id == UUID(turn_id),
+                Message.intent["type"].astext == ACTIVITY_ROW_TYPE,
+            )
+            .order_by(Message.seq.desc())
+            .limit(1)
+        )
+        return (await db.execute(existing)).scalar_one_or_none()
+
+    activity_id = f"asset-reading:{ref}"
     dedup = select(Message.id).where(
         Message.conversation_id == conversation.id,
-        Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
-        Message.intent["beat"].astext == beat,
+        Message.intent["type"].astext == ACTIVITY_ROW_TYPE,
+        Message.intent["frame"]["activity_id"].astext == activity_id,
     )
-    if ref is not None:
-        dedup = dedup.where(Message.intent["ref"].astext == ref)
     if (await db.execute(dedup.limit(1))).scalar_one_or_none() is not None:
         return None
-    intent: dict[str, Any] = {"type": MATERIAL_BEAT_TYPE, "beat": beat, "status": status}
-    if name is not None:
-        intent["name"] = name
-    if count is not None:
-        intent["count"] = count
-    if total is not None:
-        intent["total"] = total
-    if ref is not None:
-        intent["ref"] = ref
+    if status == "failed":
+        key = "chat.material.readingFailed"
+    elif total > 1:
+        key = "chat.material.readingDoneProgress"
+    else:
+        key = "chat.material.readingDone"
+    if asset_type in {"video", "audio"}:
+        key = f"{key}_{asset_type}"
+    frame = {
+        "activity_id": activity_id,
+        "kind": "read",
+        "status": status,
+        "key": key,
+        "count": count,
+        "total": total,
+        "name": name,
+        "at": at or datetime.now(UTC).isoformat(),
+    }
     if duration_ms is not None:
-        intent["duration_ms"] = duration_ms
-    if asset_type is not None:
-        intent["asset_type"] = asset_type
-    if at is not None:
-        intent["at"] = at
-    message = Message(
-        conversation_id=conversation.id,
-        role="assistant",
-        content="",
-        attachments=[],
-        mentions=[],
-        intent=intent,
-        seq=await alloc_message_seq(UUID(str(conversation.id)), db),
-    )
-    db.add(message)
-    await db.flush()
-    await db.refresh(message)
-    return message
+        frame["duration_ms"] = duration_ms
+    return await append_activity_row(db, conversation.id, frame)
 
 
 # ---- 建议谱系 (ADR-099 §4): 点选 provenance 落地解算 -----------------------
@@ -3850,7 +3982,7 @@ async def resolve_suggestion_note(
             select(Message.id)
             .where(
                 Message.conversation_id == conversation_id,
-                Message.intent["type"].astext == MATERIAL_BEAT_TYPE,
+                Message.intent["type"].astext == "material_beat",
                 Message.intent["beat"].astext == "understanding",
                 Message.created_at > source.created_at,
             )
@@ -4009,7 +4141,7 @@ async def record_candidates_log(
 ) -> Message | None:
     """Persist one turn's candidate-surface events (set births + selection
     updates, in emission order) as a single message row — the same doctrine
-    as ``record_activity_log``: once-only per ``ref``, completed path only,
+    as activity-row persistence: once-only per ``ref``, completed path only,
     a failed turn persists nothing (the client rolls its live cards back)."""
     if not events:
         return None

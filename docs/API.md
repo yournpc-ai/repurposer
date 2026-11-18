@@ -75,15 +75,16 @@ POST /api/v1/outputs/{output_id}/render
 
 ## 3. File Streaming
 
-Uploads and rendered outputs live in S3-compatible object storage (Volcengine TOS). These endpoints first perform an **ownership check** (key prefix must be the caller's user id, otherwise 403/404), then redirect to the storage URL — Range requests and delivery are handled by the object store:
+Uploads and rendered outputs live in S3-compatible object storage (Volcengine TOS). Upload/output endpoints check the caller's key-prefix ownership; project audio playback instead validates the exact owned Snapshot and returns a short-lived signed URL. Range requests and delivery are handled by the object store:
 
 ```http
 GET /api/v1/files/{file_path}            # 307 → public object URL (source uploads)
 GET /api/v1/files/{file_path}?proxy=1    # stream bytes through the API (no redirect)
 GET /api/v1/outputs/{file_path}          # 307 → public object URL (rendered MP4/SRT)
 GET /api/v1/outputs/{file_path}?download=1   # 307 → presigned GET with Content-Disposition: attachment
-GET /api/v1/music/{music_id}/stream      # 307 → public audio URL (no auth)
+GET /api/v1/music/{music_id}/stream      # 307 → public audio, or owner-authorized private audio
 GET /api/v1/music/{music_id}             # public piece metadata (no auth)
+GET /api/v1/projects/{project_id}/audio/{snapshot_id}/playback # auth → 200 + short-lived signed URL
 ```
 
 `mood` (calm / uplifting / corporate / …) is a metadata field on each `Music` row, not a path — see §10.
@@ -638,6 +639,25 @@ POST /api/v1/chat/messages/{id}/answer
 ```
 
 Answers a docked question (the question machine) — writing the answer is what unblocks the pending decision: a task-book start begins the run, an options answer continues the conversation (the follow-up reply rides back in the response). The body is discriminated on `kind`: `start` (confirm the docked task book; carries the review panel's edited book), `option` / `freeform` (answers to options questions), `bail` (graceful exit, never an error). Response: `{ "answered_question", "follow_up" }`.
+
+A pending question may additively carry `items: BriefQuestionItem[]` and a server-issued `group_digest` while retaining the legacy `question/options/slot/default_path` fields. Each item declares `slot`, `question`, `options`, `recommended_id`, `allow_freeform`, `required` and `default_path`. A grouped answer is submitted once for the entire pending row:
+
+```json
+{
+  "kind": "group",
+  "group_digest": "server-issued-digest",
+  "answers": [
+    {"slot": "purpose", "kind": "option", "option_id": "website"},
+    {"slot": "target_seconds", "kind": "option", "option_id": "60"},
+    {"slot": "narrative_mode", "kind": "option", "option_id": "mission_tech"},
+    {"slot": "narration_language", "kind": "option", "option_id": "en"},
+    {"slot": "subtitle_languages", "kind": "option", "option_id": "en"},
+    {"slot": "aspect", "kind": "option", "option_id": "16:9"}
+  ]
+}
+```
+
+The server validates the pending row and digest, slot whitelist, duplicate answers, required fields, option ownership and freeform permission/length, then settles the row and backfills all Brief slots atomically with `user-stated` provenance. Wrong options/duplicates/missing required fields return 422; stale digests and already-settled rows return 409 without a second settlement or Run. Item selection and freeform edits stay local; only final submit or skip calls this endpoint. A group `bail` may carry the same `group_digest` and the answers selected so far: those answers remain `user-stated`, while only the remaining fields receive task defaults with `default` provenance. `question.preview` carries the same `items/group_digest`; the final envelope remains authoritative. Unsubmitted drafts are not synchronized across devices.
 
 ### Video Version Presentation and Scrub Apply
 

@@ -1,4 +1,4 @@
-"""Executable tasks for the saved-Composition production RunPlan."""
+"""Executable tasks for authorized video production and preparation RunPlans."""
 
 from __future__ import annotations
 
@@ -9,7 +9,12 @@ from pydantic import BaseModel
 
 import app.pipeline.node_runners  # noqa: F401
 from app.tools.video.production.node import ProduceVideo  # noqa: F401
-from app.tools.video.params import PrepareNarrationParams, ProduceVideoParams
+from app.tools.video.params import (
+    PrepareMusicParams,
+    PrepareNarrationParams,
+    PrepareVisualAssetsParams,
+    ProduceVideoParams,
+)
 from app.pipeline.graph import NODE_KINDS
 
 
@@ -53,6 +58,26 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             params_model=PrepareNarrationParams,
             summary_templates={"en": "Prepared narration · {duration_seconds:g}s",
                                "zh": "已准备旁白原音 · {duration_seconds:g} 秒"},
+        ),
+        ToolEntry(
+            name="prepare_visual_assets",
+            description="Prepare one bounded batch of images selected by draft_ref and scene_ids, "
+            "or use review_existing to retry an unavailable review on fixed PNGs. "
+            "Runs as the only task in its Run; it creates no Composition version or Output.",
+            behavior="deterministic",
+            params_model=PrepareVisualAssetsParams,
+            summary_templates={"en": "Prepared scene images · {total_assets}",
+                               "zh": "已准备分镜图片 · {total_assets} 张"},
+        ),
+        ToolEntry(
+            name="prepare_music",
+            description="Synthesize one authorized deterministic electronic ScoreSpec for the current draft, "
+            "freeze private Music and its audio Snapshot, and retain an authored BeatGrid and audio analysis. "
+            "Runs as the only task in its Run; it creates no Composition version or Output.",
+            behavior="deterministic",
+            params_model=PrepareMusicParams,
+            summary_templates={"en": "Prepared electronic score · {duration_seconds:g}s",
+                               "zh": "已准备电子配乐 · {duration_seconds:g} 秒"},
         ),
     ]
 }

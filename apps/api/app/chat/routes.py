@@ -19,11 +19,10 @@ pill the moment an ask_user call's arguments validate. The terminal envelope
 
 import asyncio
 import json
-
-import structlog
 from datetime import UTC, datetime
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, TypeAdapter
@@ -31,6 +30,30 @@ from sqlalchemy import select
 
 from app.agents.contexts import output_one_liner
 from app.agents.tool_loop import ReadExecuting
+from app.chat.activity import (
+    KIND_READ,
+    STATUS_ACTIVE,
+    ActivityProjector,
+    frame_persistence,
+)
+from app.chat.service import (
+    TurnStopped,
+    answer_question,
+    append_activity_row,
+    chat,
+    execute_chat_turn,
+    list_conversation_messages,
+    persist_partial_prose,
+    persist_turn_failed_line,
+    prepare_chat_turn,
+    record_activity_forensics,
+    record_candidates_log,
+    settle_activity_row,
+    settle_interrupted_turn,
+    stamp_turn_failed,
+    stop_turn_at_visible_frontier,
+)
+from app.chat.turn_tools import make_tool_echo_delta_filter
 from app.dependencies import DBDep, get_current_user_required
 from app.models.schemas import (
     AnswerRequest,
@@ -43,37 +66,13 @@ from app.models.schemas import (
     MessageListResponse,
 )
 from app.models.tables import Conversation, Message, Project, User
-from app.chat.activity import (
-    KIND_READ,
-    STATUS_ACTIVE,
-    ActivityProjector,
-    frame_persistence,
-)
-from app.chat.turn_tools import make_tool_echo_delta_filter
-from app.chat.service import (
-    TurnStopped,
-    answer_question,
-    append_activity_row,
-    chat,
-    execute_chat_turn,
-    list_conversation_messages,
-    prepare_chat_turn,
-    record_activity_forensics,
-    record_candidates_log,
-    settle_activity_row,
-    persist_partial_prose,
-    settle_interrupted_turn,
-    stamp_turn_failed,
-    persist_turn_failed_line,
-    stop_turn_at_visible_frontier,
-)
-from app.providers.llm.base import LLMError
 from app.pipeline.errors import user_error_line
 from app.platform.conversation_context import (
     find_conversation,
     latest_pending_question,
 )
 from app.platform.project_context import get_output_for_user, get_project_for_user
+from app.providers.llm.base import LLMError
 from app.ui_locale import current_ui_language
 
 logger = structlog.get_logger()
@@ -141,6 +140,8 @@ def _question_preview_frame(payload: dict) -> str:
             {
                 "question": payload.get("question"),
                 "options": payload.get("options") or [],
+                "items": payload.get("items") or [],
+                "group_digest": payload.get("group_digest"),
                 "allow_freeform": payload.get("allow_freeform", True),
                 "slot": payload.get("slot"),
                 "default_path": payload.get("default_path"),
@@ -148,6 +149,48 @@ def _question_preview_frame(payload: dict) -> str:
             ensure_ascii=False,
         ),
     )
+
+
+def _group_digest_resolver(conversation_id: UUID, user_text: str = ""):
+    async def resolve(items, proposed_brief):
+        from app.chat.readiness import (
+            brief_with_user_constraints,
+            creative_state_for_pending,
+            infer_task_kind,
+        )
+        from app.chat.service import merge_brief
+        from app.models.database import AsyncSessionLocal
+        from app.models.schemas import (
+            Brief,
+            PendingPlan,
+            missing_brief_question_items,
+            question_group_digest,
+        )
+
+        async with AsyncSessionLocal() as db:
+            conversation = await db.get(Conversation, conversation_id)
+            project = (
+                await db.get(Project, conversation.project_id)
+                if conversation is not None else None
+            )
+            stored = (
+                PendingPlan.model_validate(project.pending_brief or {})
+                if project is not None else PendingPlan()
+            )
+            state = creative_state_for_pending(stored)
+            baseline = state.brief if state is not None else stored.brief or Brief()
+            brief = merge_brief(proposed_brief, baseline)
+            if infer_task_kind(user_text) == "website_promo":
+                brief = brief_with_user_constraints(user_text, brief)
+            try:
+                missing = missing_brief_question_items(items, brief)
+            except ValueError:
+                return None
+            if not missing:
+                return None
+            return missing, question_group_digest(missing, brief)
+
+    return resolve
 
 
 _HEARTBEAT_SECONDS = 15
@@ -169,7 +212,11 @@ def _make_delta_hook(queue: asyncio.Queue, persist=None):
     return make_tool_echo_delta_filter(on_delta)
 
 
-def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None = None):
+def _make_tool_hooks(
+    queue: asyncio.Queue,
+    projector: ActivityProjector | None = None,
+    group_digest=None,
+):
     """The structure frames (both turn pumps share the shape):
 
     - ``on_tool_call``: a call's NAME became known — one fact, ONE
@@ -198,6 +245,15 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
 
     async def on_tool_ready(name: str, params) -> None:
         if name == "ask_user" and params is not None:
+            items = list(getattr(params, "items", None) or [])
+            digest = None
+            if items:
+                if group_digest is None:
+                    return
+                resolved = await group_digest(items, getattr(params, "brief", None))
+                if resolved is None:
+                    return
+                items, digest = resolved
             await queue.put(
                 _question_preview_frame(
                     {
@@ -205,6 +261,8 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
                         "options": [
                             o.model_dump(mode="json") for o in params.options
                         ],
+                        "items": [item.model_dump(mode="json") for item in items],
+                        "group_digest": digest,
                         "allow_freeform": params.allow_freeform,
                         "slot": getattr(params, "slot", None),
                         "default_path": params.default_path,
@@ -217,6 +275,14 @@ def _make_tool_hooks(queue: asyncio.Queue, projector: ActivityProjector | None =
             )
 
     return on_tool_call, on_tool_ready
+
+
+def _new_activity_projector() -> ActivityProjector:
+    from app.chat.intent import chat_intent_agent, intent_router
+
+    from app.chat.conversation_context import conversation_context_tool
+
+    return ActivityProjector([*intent_router.tools, *chat_intent_agent.tools, conversation_context_tool()])
 
 
 def _activity_frame(frame) -> str:
@@ -279,7 +345,8 @@ def _make_activity_persister(
                     db, conversation_id, frame, turn_id=turn_id
                 )
                 await db.commit()
-            open_rows[frame["activity_id"]] = (row.id, frame)
+            if frame["status"] == STATUS_ACTIVE:
+                open_rows[frame["activity_id"]] = (row.id, frame)
             await queue.put(_row_frame("append", {"row": _row_payload(row)}))
         except TurnStopped:
             raise
@@ -290,14 +357,14 @@ def _make_activity_persister(
                 error=str(e),
             )
 
-    async def append_open_read() -> None:
+    async def append_open_read():
         """The ReadExecuting seat: append the open READ span's row."""
         desc = projector.open_activity()
         if desc is None:
-            return
+            return None
         activity_id, kind, key = desc
         if kind != KIND_READ or activity_id in open_rows:
-            return
+            return None
         await _append(
             {
                 "activity_id": activity_id,
@@ -315,9 +382,12 @@ def _make_activity_persister(
         if action == "append":
             await _append(frame.to_dict())  # born-terminal
             return
-        if action != "settle":
+        updating = frame.status == STATUS_ACTIVE and frame.activity_id in open_rows
+        if updating and open_rows[frame.activity_id][1].get("key") == frame.key:
             return
-        entry = open_rows.pop(frame.activity_id, None)
+        if not updating and action != "settle":
+            return
+        entry = open_rows.get(frame.activity_id) if updating else open_rows.pop(frame.activity_id, None)
         if entry is None:
             return  # rejected before execute entry — never appended
         row_id, open_d = entry
@@ -325,7 +395,7 @@ def _make_activity_persister(
             **open_d,
             "status": frame.status,
             "key": frame.key,
-            "settled_at": frame.at,
+            **({} if updating else {"settled_at": frame.at}),
         }
         if frame.duration_ms is not None:
             merged["duration_ms"] = frame.duration_ms
@@ -337,6 +407,8 @@ def _make_activity_persister(
             async with AsyncSessionLocal() as db:
                 await settle_activity_row(db, row_id, merged)
                 await db.commit()
+            if updating:
+                open_rows[frame.activity_id] = (row_id, merged)
             await queue.put(_row_frame("update", {"id": str(row_id), "frame": merged}))
         except TurnStopped:
             raise
@@ -373,9 +445,10 @@ def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector, ap
     user-safe activity frames out — the translation lives entirely in the
     projector. ReadExecuting additionally seats the row append (ADR-108)."""
     async def on_loop_event(event) -> None:
+        frames = projector.feed_event(event)
         if isinstance(event, ReadExecuting):
             await append_open_read()
-        for frame in projector.feed_event(event):
+        for frame in frames:
             await queue.put(_activity_frame(frame))
             await mirror(frame)
 
@@ -407,7 +480,7 @@ def _make_candidates_hook(
     moment the door succeeds — the milestone channel's count-only whitelist
     never carries them. Every emitted payload ALSO lands in ``sink``; the
     completed path persists the sink as ONE candidates_log message row (the
-    activity_log precedent), so the surface survives a refresh — 消息载数据链,
+    activity-row precedent), so the surface survives a refresh — 消息载数据链,
     no endpoint."""
     async def on_candidates(payload: dict) -> None:
         sink.append(payload)
@@ -491,7 +564,7 @@ async def _persist_candidates_log(
 ) -> None:
     """Candidate surface 持久化 (v4.2 C8-c): the turn's emitted
     ``assistant.candidates`` payloads land as ONE candidates_log message row
-    — same doctrine as ``_persist_activity_log`` (completed path only, own
+    — same doctrine as activity-row persistence (completed path only, own
     session, best-effort), so a refresh replays the candidate card and its
     selection highlight instead of silently dropping them."""
     if not events:
@@ -626,7 +699,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
     bookkeeping breaks it.)
     """
     queue: asyncio.Queue = asyncio.Queue()
-    projector = ActivityProjector()
+    projector = _new_activity_projector()
     candidate_events: list[dict] = []
 
     async def run_turn() -> None:
@@ -678,7 +751,10 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     return str(partial_message_id) if partial_message_id else None
 
                 on_delta = _make_delta_hook(queue, persist_delta)
-                on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
+                on_tool_call, on_tool_ready = _make_tool_hooks(
+                    queue, projector,
+                    group_digest=_group_digest_resolver(turn_conversation_id, data.message),
+                )
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(
@@ -852,7 +928,7 @@ async def _answer_stream(
     the JSON path's error as a frame).
     """
     queue: asyncio.Queue = asyncio.Queue()
-    projector = ActivityProjector()
+    projector = _new_activity_projector()
     candidate_events: list[dict] = []
 
     async def run_answer() -> None:
@@ -880,7 +956,10 @@ async def _answer_stream(
                     answer_turn_id,
                 )
                 on_delta = _make_delta_hook(queue)
-                on_tool_call, on_tool_ready = _make_tool_hooks(queue, projector)
+                on_tool_call, on_tool_ready = _make_tool_hooks(
+                    queue, projector,
+                    group_digest=_group_digest_resolver(UUID(str(conversation_id))),
+                )
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(
@@ -1225,8 +1304,8 @@ async def complete_video_presentation(
         raise HTTPException(404, "Presentation not found")
     project = await get_project_for_user(db, conversation.project_id, current_user.id)
     await db.refresh(project, with_for_update=True)
-    from app.models.schemas import PendingPlan
     from app.editing.service import video_version_read
+    from app.models.schemas import PendingPlan
     stored = PendingPlan.model_validate(project.pending_brief or {})
     receipt = stored.video_presentation or {}
     expected = str(data.composition_version_id)

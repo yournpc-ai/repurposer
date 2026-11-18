@@ -38,58 +38,6 @@ from app.chat.turn_tools import (
 )
 from app.models.schemas import Brief
 from app.models.tables import Message, Persona
-from app.ui_locale import current_ui_language
-
-
-_LANG_NATIVE = {"zh": "中文", "en": "English"}
-
-
-def _speech_language_line(lang: str, mirror: bool = True) -> str:
-    """The speech-language directive riding every LLM turn (2026-09-24 用户
-    拍板，修订 2026-09-04 的「一律 = 系统语言」): speech MIRRORS the
-    language of the user's own message — the LLM judges that itself
-    (中文提问中文答 / English question English answer); the request's
-    Accept-Language (app.ui_locale) named here is only the FLOOR for
-    messages with no clear language signal. This governs OUR messages to
-    the user (questions, option labels, prose, summaries), never the
-    CONTENT's language — task language params follow their own rules, and
-    the 2026-09-04 pantry-drag guard still holds: the persona's and the
-    material's languages never steer speech. The floor language is named
-    in its own tongue (中文 / English) — a bare subtag was empirically too
-    weak against an all-English system prompt.
-
-    mirror=False is the worker-born trigger turn's form: the turn's 'user
-    message' there is a system EVENT line (English), not the user's voice —
-    so never mirror the EVENT; mirror the conversation's own user messages
-    instead (the recent history rides the context), the pinned language
-    demoted to the no-signal floor (2026-10-15 修订: the absolute interface
-    pin split the single narrator in two — an English UI chatting in
-    Chinese got Chinese chat replies but an English delivery)."""
-    native = _LANG_NATIVE.get(lang, lang)
-    if not mirror:
-        return (
-            "Speech language: mirror the language of the user's OWN messages "
-            "in this conversation (the recent history rides the context "
-            "above) — the event line below is a system signal, never the "
-            "user's voice, so never mirror its English. ALL user-facing "
-            "text you write (prose, every suggestion label) rides the "
-            "conversation's language. When no user message carries a clear "
-            f"language signal, use the interface language: {native} "
-            f"({lang}). (Content-language task params follow their own "
-            "rules.)"
-        )
-    return (
-        f"Speech language: reply in the language of the user's CURRENT "
-        f"message — judge it yourself (a pasted text or quoted fragment "
-        f"inside the message is content, not the user's voice). If the "
-        f"message gives no clear signal, use the interface language: "
-        f"{native} ({lang}). ALL user-facing text you write (the question, "
-        f"every option label, prose, the summary, default_path) follows "
-        f"this choice. Never infer your speech language from the persona "
-        f"or the material. (Content-language task params follow their own "
-        f"rules.)"
-    )
-
 
 def _assemble_plan_turn(
     message: str,
@@ -182,7 +130,11 @@ def _assemble_plan_turn(
     brief_lines: list[str] | None = None
     if brief is not None:
         lines = []
-        for name in ("topic", "audience", "tone"):
+        for name in (
+            "topic", "audience", "tone", "purpose", "target_seconds",
+            "narrative_mode", "narration_language", "subtitle_languages", "aspect",
+            "voice_requirements", "must_include", "avoid", "success_criteria",
+        ):
             slot = getattr(brief, name)
             if slot.value:
                 lines.append(f"- {name}: {slot.value} ({slot.source})")
@@ -231,12 +183,20 @@ def _assemble_plan_turn(
                 "- options: "
                 + "; ".join(f"{o.get('id')}) {o.get('label')}" for o in options)
             )
+        for item in payload.get("items") or []:
+            item_options = "; ".join(
+                f"{option.get('id')}) {option.get('label')}"
+                for option in item.get("options") or []
+            )
+            lines.append(
+                f"- item {item.get('slot')}: {item.get('question')}"
+                + (f" [{item_options}]" if item_options else "")
+            )
         if payload.get("slot"):
             lines.append(f"- slot: {payload['slot']}")
         if payload.get("default_path"):
             lines.append(f"- fallback if unanswered: {payload['default_path']}")
         pending_lines = lines
-    speech_language = current_ui_language()
     return (
         {
             "message": message,
@@ -253,12 +213,6 @@ def _assemble_plan_turn(
             "speaker_form_lines": speaker_form_lines,
             "asset_lines": asset_lines,
             "material_pending_line": material_pending_line,
-            # None outside a request (worker / scenario script) → the
-            # directive is omitted and the LLM simply mirrors the
-            # message's language.
-            "speech_language": (
-                _speech_language_line(speech_language) if speech_language else None
-            ),
             # The surface FACT (2026-09-25; 用户话术改口 2026-09-27 — v4.2
             # 封板⑪: the user's word is workspace/工作空间, the internal
             # enum stays "canvas"): a plain statement of where the plan
@@ -306,6 +260,7 @@ intent_router = ToolLoopAgent(
     # The current Composition authoring and production tools share one loop.
     tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
     max_iterations=20,
+    service_per_call=True,
 )
 
 
@@ -314,13 +269,6 @@ def _assemble_chat_turn(message: str, context: dict[str, Any]):
     digest (``agents/contexts.py``). Adjudication feedback never passes
     through here — it is the funnel's reserved ``repair_feedback`` kwarg."""
     context_text = context.get("text", "")
-    lang = current_ui_language()
-    if lang:
-        # Same speech-language law as the plan path (2026-09-24, mirror the
-        # message / UI floor) — the chat loop's ask/answer/prose follows it,
-        # never the persona's or the material's language.
-        line = _speech_language_line(lang)
-        context_text = f"{context_text}\n\n{line}" if context_text else line
     return ({"context_text": context_text, "message": message}, [])
 
 
@@ -333,4 +281,5 @@ chat_intent_agent = ToolLoopAgent(
     # Saved video edits use the same Composition and Run contracts as first creation.
     tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS],
     max_iterations=20,
+    service_per_call=True,
 )

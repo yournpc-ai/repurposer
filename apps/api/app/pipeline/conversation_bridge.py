@@ -39,9 +39,8 @@ class ConversationBridge:
         [AsyncSession, UUID, UUID, str], Awaitable[Message | None]
     ]
     discard_unanswered_plan: Callable[[AsyncSession, UUID, UUID], Awaitable[None]]
-    record_material_beat: Callable[..., Awaitable[Message | None]]
-    """``(db, user_id, project_id, beat, *, status, name, count, total, ref)``
-    — ``...`` because ``Callable`` cannot spell keyword-only extras."""
+    record_asset_activity: Callable[..., Awaitable[Message | None]]
+    """Keyword arguments mirror ``app.chat.service.record_asset_activity``."""
 
 
 _bridge: ConversationBridge | None = None
@@ -98,26 +97,24 @@ async def discard_unanswered_plan(
     await _require().discard_unanswered_plan(db, user_id, project_id)
 
 
-async def record_material_beat(
+async def record_asset_activity(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
-    beat: str,
     *,
-    status: str = "completed",
-    name: str | None = None,
-    count: int | None = None,
-    total: int | None = None,
-    ref: str | None = None,
-    duration_ms: int | None = None,
-    asset_type: str | None = None,
+    status: str,
+    name: str,
+    count: int,
+    total: int,
+    ref: str,
+    duration_ms: int | None,
+    asset_type: str,
+    at: str | None,
+    turn_id: str | None,
 ) -> Message | None:
-    """Bridge delegate — the implementation lives in ``app.chat.service``
-    (2026-09-24: material beats persist as message rows so the settled gray
-    row survives a refresh; ``asset_type`` = 批「动词」2026-09-27 的回放
-    分叉载荷)."""
-    return await _require().record_material_beat(
-        db, user_id, project_id, beat,
+    return await _require().record_asset_activity(
+        db, user_id, project_id,
         status=status, name=name, count=count, total=total, ref=ref,
-        duration_ms=duration_ms, asset_type=asset_type,
+        duration_ms=duration_ms, asset_type=asset_type, at=at,
+        turn_id=turn_id,
     )

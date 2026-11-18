@@ -209,6 +209,7 @@ def content_of(version: CompositionVersion) -> CompositionContent:
     return CompositionContent(
         schema_version=version.schema_version,
         settings=version.settings,
+        creative_state=version.creative_state,
         sources=version.sources,
         scenes=version.scenes,
         timeline=timeline,
@@ -231,6 +232,8 @@ def content_digest_of(
         "scenes": [s.model_dump(mode="json") for s in content.scenes],
         "timeline": content.timeline.model_dump(mode="json"),
     }
+    if content.creative_state is not None:
+        parts["creative_state"] = content.creative_state.model_dump(mode="json")
     if skill_provenance is not None:
         parts["skill_provenance"] = skill_provenance
     return canonical_json_hash(parts)
@@ -463,6 +466,10 @@ async def apply_composition_edits(
             base_version_id=base_version.id if base_version else None,
             schema_version=candidate.schema_version,
             settings=candidate.settings.model_dump(mode="json"),
+            creative_state=(
+                candidate.creative_state.model_dump(mode="json")
+                if candidate.creative_state is not None else None
+            ),
             sources=[b.model_dump(mode="json") for b in candidate.sources],
             scenes=[s.model_dump(mode="json") for s in candidate.scenes],
             timeline=candidate.timeline.model_dump(mode="json"),

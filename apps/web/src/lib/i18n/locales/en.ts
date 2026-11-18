@@ -57,7 +57,7 @@ const en = {
     },
     mode: { auto: "Automatic", ask: "Ask" },
     footnote:
-      "The estimate is always shown with the plan. Unusually large or unquotable plans always ask once, whatever you set here.",
+      "The estimate is always shown with the plan. Above-guardrail plans always ask once. Unquotable plans ask only when execution or credits is set to Ask; Automatic proceeds without another confirmation.",
     updateFailed: "Couldn't save the setting — please try again",
   },
   general: {
@@ -1206,19 +1206,17 @@ const en = {
      * are being gathered — never that the video is still rendering or being
      * watched. */
     closingReview: "Gathering the results…",
-    /** 分镜起草落定行（legacy 节拍回放）: the drafting span's
-     * SETTLED row (a born-settled material beat) — the log register
-     * (verb-object + fact, no progressive), the same 三寄存器 law as the
-     * material reading family. */
+    /** Legacy drafting activity replay: the span's SETTLED row — the log
+     * register (verb-object + fact, no progressive), the same 三寄存器 law
+     * as the material reading family. */
     storyboard: {
       draftingDone: "Drafted the storyboard",
     },
     /** The now-line's material reading rows (2026-09-24 user ruling —
      * thinking IS the activity row's empty state): assets mid-processing →
      * reading (the filename interpolates). The *Done / *Failed forms are the
-     * PERSISTED settled rows (素材节拍入库 — the pipeline records one message
-     * row per beat, the replay renders the past tense); Progress carries the
-     * batch count "N/M" (带计数 ruling).
+     * PERSISTED settled rows (the pipeline writes or reuses one activity
+     * row, the replay renders the past tense); Progress carries "N/M".
      * Verb fork (2026-09-27 批「动词」): the verb follows the asset type —
      * video → watch / audio → listen / text & others → read; multi-file
      * batches fall back to the neutral "processing". Both synthesis points
@@ -1315,6 +1313,12 @@ const en = {
       seek: "Seek audio",
       previewUnavailable: "Audio preview unavailable",
     },
+    audio: {
+      narration: "Narration",
+      music: "Background music",
+      loading: "Preparing audio playback…",
+      unavailable: "Audio is not ready to play",
+    },
     /** The Activity Stream's milestone copy (ADR-087 §3 Phase 2): the active
      * frame carries the progressive form and the completed frame the
      * past-tense form. Failed rows keep their honest active-form key;
@@ -1323,8 +1327,8 @@ const en = {
      * name. */
     /** 2026-09-25 copy batch (user ruling — the machine-status register
      * retired): plain words for the work in flight. The draft kind speaks
-     * two faces by tool — proposing a plan / editing existing work (the
-     * projector's _EDIT_TOOLS picks the key). Draft / run spans are
+     * two faces by tool — proposing a plan / editing existing work (declared
+     * by ChatTool.presentation). Draft / run spans are
      * ACTIVE-only (落定即退役 — draft 2026-09-28, extended to run
      * 2026-09-29): the settled receipt retired, the docked plan card / the
      * start speech + RunTaskList receipt is the evidence, so no
@@ -1360,8 +1364,17 @@ const en = {
       skillReadDone: "Read the Skill method",
       skillPreview: "Checking the Skill preview…",
       skillPreviewDone: "Checked the Skill preview",
+      importMusic: "Importing music…",
+      visualAssets: "Checking visual assets…",
+      visualAssetsDone: "Checked visual assets",
+      readHistory: "Reading conversation history…",
+      readHistoryDone: "Read conversation history",
+      viewWebPage: "Viewing the webpage…",
+      viewWebPageDone: "Viewed the webpage",
       videoMaterials: "Preparing video materials…",
       videoMaterialsDone: "Prepared video materials",
+      brandAnalyze: "Analyzing the brand evidence…",
+      brandAnalyzeDone: "Analyzed the brand evidence",
       videoCapturePlan: "Capturing the planned webpage state…",
       videoCapturePlanDone: "Captured the planned webpage state",
       videoRevise: "Adjusting the video storyboard…",
@@ -1384,6 +1397,8 @@ const en = {
       musicSearchDone: "Found background music",
       musicSelection: "Selecting the chosen music…",
       musicSelectionDone: "Selected the music",
+      musicPrepare: "Preparing the electronic score…",
+      musicPrepareDone: "Prepared the electronic score",
       upload: "Uploading video…",
       uploadDone: "Uploaded video",
       narrationPrepare: "Preparing narration alignment…",
@@ -1479,6 +1494,7 @@ const en = {
      * activity span. Expanded rows are the foldCategories ×N decomposition.
      * `actionCount` is the honest fallback when no wall clock exists. */
     activityFold: {
+      workedWithoutTime: "Worked",
       worked: "Worked for {{elapsed}}",
       failed: "Couldn't finish this time · {{elapsed}}",
       actionCount: "{{count}} actions",
@@ -1589,6 +1605,7 @@ const en = {
       fonts: "Prepare fonts",
       generator_media: "Generate visuals",
       speech_media: "Generate narration",
+      visual_assets: "Prepare scene images",
       compile_spec: "Compile video specification",
       output_preparation: "Create output",
       output_resume: "Prepared output reuse",
@@ -1706,6 +1723,10 @@ const en = {
     bail: "Stop generation",
     skip: "Skip question",
     recommended: "Recommended",
+    previous: "Previous",
+    next: "Next",
+    submit: "Submit answers",
+    page: "{{current}} / {{total}}",
   },
   clipMenu: {
     more: "More actions",

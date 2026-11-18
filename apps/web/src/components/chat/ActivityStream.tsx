@@ -55,10 +55,9 @@ import { cn } from "@/lib/utils"
  * "success", which the settled register already says); live rows keep the
  * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批).
  * A real failure keeps a quiet alert seat, never a struck-through live
- * label. The `draft` glyph serves the settled storyboard-drafting beat (a
- * born-settled legacy material beat, not a 落定即退役 plan-draft span; the
- * timeline's draft filter keys on chat.activity.* keys and never touches
- * it). */
+ * label. The `draft` glyph serves the settled storyboard-drafting activity
+ * (not a 落定即退役 plan-draft span; the timeline's draft filter keys on
+ * chat.activity.* keys and never touches it). */
 const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
   read: Eye,
   draft: PenLine,
@@ -74,15 +73,12 @@ const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
 export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
   kind: ActivityFramePayload["kind"] | "think"
   seq?: number
-  /** Think-state interpolation (the material beats name the file being
+  /** Think-state interpolation (the material activity names the file being
    * read); wire milestones never carry it. */
   name?: string
-  /** Batch-progress interpolation (the persisted reading beat's "N/M" —
-   * 2026-09-24 素材节拍入库): replay-synthesized beat rows carry it, wire
-   * frames never do. */
+  /** Batch-progress interpolation for a settled reading activity. */
   total?: number
-  /** The material beat's asset type (replay-only, never on the wire): the
-   * settled category form forks web_page off it (activityCategoryKey). */
+  /** The material activity's asset type, used by the settled category form. */
   assetType?: string
 }
 
@@ -115,7 +111,7 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
     : t("chat.thinking")
 }
 
-export function ActivityRow({ activity }: { activity: NowRowPayload }) {
+export function ActivityRow({ activity, nested = false }: { activity: NowRowPayload; nested?: boolean }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { status } = activity
@@ -144,8 +140,9 @@ export function ActivityRow({ activity }: { activity: NowRowPayload }) {
           // shifts). Hover NEVER washes the row — expandable rows keep their
           // pointer + click toggle, and hover only brightens the label text.
           // Row metrics = the Flora tools-row anatomy: min-h-8, gap-2.5.
-          "-mx-1.5 -my-0.5 group/row flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs transition-colors",
-          "text-muted-foreground",
+          "-mx-1.5 -my-0.5 group/row flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 transition-colors",
+          nested ? "text-xs" : "text-sm leading-relaxed",
+          nested && status === "failed" ? "text-destructive" : "text-muted-foreground",
           expandable && "cursor-pointer select-none",
         )}
         role={expandable ? "button" : undefined}
@@ -492,7 +489,6 @@ export function WorkSegmentRow({
   liveDetails,
   details,
   settledLabel,
-  failed = false,
   failure = null,
 }: {
   rows?: ActivityRowFrame[]
@@ -507,7 +503,6 @@ export function WorkSegmentRow({
   details?: ReactNode
   /** Optional read fallback when a run has no honest elapsed span. */
   settledLabel?: ReactNode
-  failed?: boolean
   /** Chat's failed activity stays inside its settled segment's details. */
   failure?: NowRowPayload | null
 }) {
@@ -528,20 +523,15 @@ export function WorkSegmentRow({
   const elapsed = !live && elapsedMs != null ? formatElapsed(elapsedMs) : null
   const label = live
     ? (liveLabel ?? (activity ? activityText(activity, t) : t("chat.thinking")))
-    : (settledLabel ??
-      (failed
-        ? elapsed
-          ? t("chat.activityFold.failed", { elapsed })
-          : t("chat.failed")
-        : elapsed
-          ? t("chat.activityFold.worked", { elapsed })
-          : t("chat.activityFold.actionCount", { count: rows.length })))
+    : elapsed
+      ? t("chat.activityFold.worked", { elapsed })
+      : settledLabel ?? t("chat.activityFold.actionCount", { count: rows.length })
   const cats = foldCategories(rows)
   return (
     <div ref={rowRef} className="flex w-full flex-col gap-1">
       <div
         className={cn(
-          "-mx-1.5 -my-0.5 group/row flex items-center rounded-md px-1.5 text-xs text-muted-foreground transition-colors",
+          "-mx-1.5 -my-0.5 group/row flex items-center rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground transition-colors",
           live
             ? "min-h-8 w-full gap-2.5 py-0.5"
             : "h-7 w-fit max-w-full gap-1.5",
@@ -573,10 +563,8 @@ export function WorkSegmentRow({
           className={cn(
             "min-w-0 truncate transition-colors",
             live && "shimmer",
-            !live && failed
-              ? "text-destructive"
-              : "group-hover/row:text-foreground",
-            !live && expandable && open && !failed && "text-foreground",
+            "group-hover/row:text-foreground",
+            !live && expandable && open && "text-foreground",
           )}
         >
           {label}
@@ -624,7 +612,7 @@ export function WorkSegmentRow({
                     </div>
                   )
                 })}
-                {failure ? <ActivityRow activity={failure} /> : null}
+                {failure ? <ActivityRow activity={failure} nested /> : null}
               </div>
             ))
         : null}

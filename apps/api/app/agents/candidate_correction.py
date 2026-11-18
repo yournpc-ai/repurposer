@@ -561,10 +561,11 @@ def apply_correction(record: CandidateRecord, request: PatchCandidate | ReplaceC
 
 
 def correction_tool():
-    from app.agents.tool_loop import ChatTool
+    from app.agents.tool_loop import NATIVE_PRESENTATION, ChatTool
 
     return ChatTool(
         name=CORRECTION_TOOL_NAME,
+        presentation=NATIVE_PRESENTATION,
         terminal=False,
         description=(
             "Correct the server-retained, NOT-EXECUTED candidate named by the latest validation diagnostic. "

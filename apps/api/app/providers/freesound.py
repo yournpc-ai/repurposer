@@ -115,7 +115,7 @@ async def _download(
         async with httpx.AsyncClient(
             timeout=_TIMEOUT,
             follow_redirects=False,
-            trust_env=True,
+            trust_env=False,
         ) as client:
             for redirect_count in range(_MAX_REDIRECTS + 1):
                 async with client.stream("GET", current, headers=headers, params=params) as response:

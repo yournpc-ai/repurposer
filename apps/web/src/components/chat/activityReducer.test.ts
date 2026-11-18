@@ -45,6 +45,16 @@ describe("upsertActivityFrame", () => {
     expect(list).toHaveLength(1)
   })
 
+  it("keeps the latest step and never reopens a settled call", () => {
+    const viewing = { ...frame("a", "active", 1), key: "chat.activity.viewWebPage" }
+    const importing = { ...frame("a", "active", 2), key: "chat.activity.importMusic" }
+    const list = upsertActivityFrame([viewing], importing)
+    expect(list).toEqual([importing])
+    expect(upsertActivityFrame(list, viewing)).toBe(list)
+    const stopped = sweepActivities(list, "cancelled")
+    expect(upsertActivityFrame(stopped, { ...viewing, seq: 3 })).toBe(stopped)
+  })
+
   it("never mutates the previous list (React state discipline)", () => {
     const prev = [frame("a", "active", 1)]
     const next = upsertActivityFrame(prev, frame("a", "completed", 2))

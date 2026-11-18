@@ -5,5 +5,5 @@ import { cn } from "@/lib/utils"
  * only spaces whole containers; prose/work/components never negotiate gaps
  * with their neighbours outside this boundary. */
 export function AssistantResponse({ className, ...props }: ComponentProps<"div">) {
-  return <div data-slot="assistant-response" className={cn("flex min-w-0 flex-col gap-3", className)} {...props} />
+  return <div data-slot="assistant-response" className={cn("flex min-w-0 flex-col empty:hidden gap-3", className)} {...props} />
 }

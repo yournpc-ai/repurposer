@@ -879,6 +879,34 @@ describe("material beats (2026-09-24 素材节拍入库)", () => {
     expect(out[0].activity?.kind).toBe("draft")
     expect(out[0].activity?.at).toBe("2026-10-16T10:01:30Z")
   })
+  it.each(["chat.activity.videoMaterialsDone", "chat.activity.viewWebPageDone"])(
+    "deduplicates a legacy material beat already covered by %s", (key) => {
+    const out = mapHistoryRows([
+      row({
+        id: "aggregate",
+        intent: {
+          type: "activity",
+          frame: {
+            activity_id: "prepare-1",
+            kind: "read",
+            status: "completed",
+            key,
+          },
+        },
+      }),
+      row({
+        id: "late-material",
+        intent: {
+          type: "material_beat",
+          beat: "reading",
+          status: "completed",
+          ref: "asset-child",
+        },
+      }),
+    ], ctx)
+
+    expect(out.map((message) => message.id)).toEqual(["aggregate"])
+  })
 })
 
 describe("activity array rows (ADR-108 — 每帧一行)", () => {
@@ -998,4 +1026,60 @@ it("upload refs stay on a follow-up question's framing speech through QA hydrati
   expect(pending.find((m) => m.id === "upload-question-echo")?.outputRefs).toEqual(["uploaded-video"])
   const answered = mapHistoryRows([{ ...question, answer: { kind: "option", option_id: "yes" } }], ctx)
   expect(answered.find((m) => m.id === "upload-question-echo")?.outputRefs).toEqual(["uploaded-video"])
+})
+
+
+describe("question groups", () => {
+  it("replays every Q/A item instead of flattening the group", () => {
+    const messages = mapHistoryRows([
+      row({
+        id: "group-1",
+        content: "Production setup",
+        question: {
+          kind: "question",
+          question: "Production setup",
+          items: [
+            { slot: "purpose", question: "Where will it run?", options: [{ id: "1", label: "Website" }] },
+            { slot: "target_seconds", question: "How long?", options: [{ id: "2", label: "60 seconds" }] },
+          ],
+          group_digest: "digest-1",
+        },
+        answer: {
+          kind: "group",
+          group_digest: "digest-1",
+          text: "Website · 60 seconds",
+          answers: [
+            { slot: "purpose", kind: "option", option_id: "1" },
+            { slot: "target_seconds", kind: "option", option_id: "2" },
+          ],
+          answered_at: "2026-01-01T00:00:00Z",
+        },
+      }),
+    ], ctx)
+    const qa = messages.find((message) => message.qa)?.qa
+    expect(qa?.items).toEqual([
+      { question: "Where will it run?", answer: "Website" },
+      { question: "How long?", answer: "60 seconds" },
+    ])
+    expect(qa?.answerKind).toBe("group")
+  })
+
+  it("removes a legacy group title suffix from the pending echo", () => {
+    const messages = mapHistoryRows([
+      row({
+        id: "group-pending",
+        content: "Brand evidence is ready.\n\nProduction setup",
+        question: {
+          kind: "question",
+          question: "Production setup",
+          options: [],
+          items: [{ slot: "purpose", question: "Where?", options: [] }],
+        },
+        answer: null,
+      }),
+    ], ctx)
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe("Brand evidence is ready.")
+  })
 })

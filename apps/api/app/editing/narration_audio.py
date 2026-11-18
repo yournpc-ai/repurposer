@@ -37,11 +37,13 @@ def narration_audio_ops(
     if alignment.status != "READY" or not alignment.content_digest:
         raise ValueError("narration alignment is not READY")
     payload = NarrationPayload.model_validate(alignment.payload)
-    duration = min(payload.duration_ticks, scene.range.duration)
+    output_duration = source_ticks_to_output_ticks(payload.duration_ticks, content.settings.timebase)
+    if output_duration > scene.range.duration:
+        raise ValueError("READY narration exceeds its Scene; retime the Scene instead of trimming audio")
+    duration = payload.duration_ticks
     caption_sentences = [
-        (sentence, sentence.start_tick, min(sentence.end_tick, duration))
+        (sentence, sentence.start_tick, sentence.end_tick)
         for sentence in payload.sentences
-        if sentence.start_tick < duration
     ]
     ops: list[Op] = []
     if snapshot_id not in {binding.snapshot_id for binding in content.sources}:
@@ -66,7 +68,7 @@ def narration_audio_ops(
         track_id=dialogue_track.track_id,
         clip=Clip(
             clip_id=f"clp_dialogue_{scene_id}",
-            range=TimeRange(start=scene.range.start, end=scene.range.start + duration),
+            range=TimeRange(start=scene.range.start, end=scene.range.start + output_duration),
             scene_id=scene_id,
             source={
                 "snapshot_id": snapshot_id,

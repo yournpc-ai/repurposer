@@ -55,14 +55,15 @@ would be a lie.
 
 import json
 import time
-from copy import deepcopy
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 import structlog
 from pydantic import BaseModel, ValidationError
 
+from app.agents.arguments import normalize_numeric_arguments, numeric_string_changes
 from app.agents.base import AGENTS, jinja_env
 from app.agents.candidate_correction import (
     CORRECTION_TOOL_NAME,
@@ -75,6 +76,7 @@ from app.agents.candidate_correction import (
     apply_correction,
     correction_tool,
 )
+from app.agents.tool_progress import ToolProgress, bind_progress
 from app.agents.working_drafts import (
     WorkingDraftRejected,
     WorkingDraftReviewed,
@@ -90,7 +92,6 @@ from app.metering import bind_model_prompt
 from app.providers.llm import get_llm_client
 from app.providers.llm.base import LLMClient, LLMError, LLMSchemaError
 from app.providers.llm.trace import trace_argument_normalization
-from app.agents.arguments import normalize_numeric_arguments, numeric_string_changes
 
 logger = structlog.get_logger()
 
@@ -104,6 +105,28 @@ async def _emit(hook: _Hook | None, *args: Any) -> None:
     result = hook(*args)
     if result is not None:
         await result
+
+
+@dataclass(frozen=True)
+class ToolPresentationVariant:
+    matches: Callable[[BaseModel | None], bool]
+    active_key: str
+    done_key: str
+
+
+@dataclass(frozen=True)
+class ToolPresentation:
+    kind: str
+    active_key: str
+    done_key: str | None = None
+    defer_start: bool = False
+    policy: str | None = None
+    receipt_kind: str | None = None
+    variants: tuple[ToolPresentationVariant, ...] = ()
+    steps: tuple[tuple[str, str], ...] = ()
+
+
+NATIVE_PRESENTATION = ToolPresentation(kind="native", active_key="")
 
 
 @dataclass(frozen=True)
@@ -140,6 +163,7 @@ class ChatTool:
     draftable: bool = False
     # Evidence reads authenticate and retain the same draft without merging writes.
     draft_reader: bool = False
+    presentation: ToolPresentation | None = None
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -391,6 +415,8 @@ class ToolObservation:
     persist: bool = True
     # Accepted domain evidence may supply one user-facing finding after acceptance.
     accepted_interim_prose: str | None = None
+    # A caller-owned handoff settled the observation and can finish this turn.
+    stop_after_observation: bool = False
 
 
 @dataclass(frozen=True)
@@ -513,6 +539,7 @@ class ReadExecuting:
 
     tool_name: str
     params: BaseModel | None = None
+    call_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -524,7 +551,7 @@ class LoopExhausted:
     iterations: int
 
 
-LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | LoopExhausted
+LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | ToolProgress | LoopExhausted
 
 # A synchronous, caller-owned stop decision. The kernel supplies the real
 # rejection and the preceding history; it never imports chat/Film policy.
@@ -566,6 +593,7 @@ class ToolLoopAgent:
         max_iterations: int = 4,
         client: LLMClient | None = None,
         packs: list[str] | None = None,
+        service_per_call: bool = False,
     ) -> None:
         if not tools:
             raise ValueError("a tool-loop agent declares its tool set")
@@ -581,6 +609,7 @@ class ToolLoopAgent:
         self.max_iterations = max_iterations
         self.client = client or get_llm_client()
         self.packs = packs or []
+        self.service_per_call = service_per_call
         if name in AGENTS:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
         AGENTS[name] = self
@@ -604,6 +633,7 @@ class ToolLoopAgent:
         candidate_scope: CandidateScope | None = None,
         tools: list[ChatTool] | None = None,
         round_assembler: Callable[..., RoundAssembly] | None = None,
+        dialogue: list[dict] | None = None,
         system_prompt: str | None = None,
         **ctx: Any,
     ) -> LoopResult:
@@ -648,7 +678,7 @@ class ToolLoopAgent:
           never stream — the frontend paces the full text out under the
           typewriter law. InterimProse speech rides its own channel: it
           never enters ``speech_parts``, so the settled reply must stand
-          alone. Fires at most ``MAX_INTERIM_PROSES_PER_TURN`` times per turn;
+          alone. Chat delivers every call. For other agents the cap applies;
           beyond the cap the prose is dropped with a log (节奏护栏 — a
           breaching model loses the channel, it does not overflow it).
           None (the one-shot JSON path) keeps the ledger behavior — the
@@ -688,7 +718,9 @@ class ToolLoopAgent:
         # shape is the plain string (StreamingAgent 形态律 — the payload
         # shape is a behavioral surface, byte-preserved here).
         if self.packs:
-            from app.agents.contexts import pack_instructions  # deferred: contexts pulls the chat/pipeline assembly layer
+            from app.agents.contexts import (
+                pack_instructions,  # deferred: contexts pulls the chat/pipeline assembly layer
+            )
 
             template_kwargs["packs"] = pack_instructions(self.packs)
         if self.prompt == "chat/user.j2":
@@ -699,6 +731,7 @@ class ToolLoopAgent:
                 "trigger_delivery": "delivery",
             }[self.name]
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
+        service_instruction = jinja_env.get_template("chat/_tool_service.j2").render() if self.service_per_call else ""
         active_tools = self.tools if tools is None else tools
         if not active_tools:
             raise ValueError("a tool-loop call declares its tool set")
@@ -784,6 +817,8 @@ class ToolLoopAgent:
         retired_candidate_ids: set[str] = set()
         repair_candidate_id: str | None = None
         latest_draft_id: str | None = None
+        execution_by_name: dict[str, ChatTool] = {}
+        execution_parameter_schemas: dict[str, dict] = {}
 
         async def retire_failed_candidate(record: CandidateRecord, *, iteration: int, kind: str) -> None:
             """A terminal design failure is a durable inactive fact, not a
@@ -928,7 +963,7 @@ class ToolLoopAgent:
             # any newly rejected call's own feedback.
             pending_rejection_feedback = None
             shared = [{"role": "user", "content": observation_wire_content(ToolObservation(snapshot.text, images=snapshot.images))}] if snapshot and (snapshot.text or snapshot.images) else []
-            history = await restore_context(snapshot, [*base_messages, *tail, *feedback, *shared]) if restore_context is not None else ConversationHistory()
+            history = await restore_context(snapshot, [*base_messages, *(dialogue or []), *tail, *feedback, *shared]) if restore_context is not None else ConversationHistory()
             current_restored_ids: set[str] = set()
             current_draft_ids: set[str] = set()
             for restored in history.candidates:
@@ -992,7 +1027,10 @@ class ToolLoopAgent:
                 assembled = RoundAssembly(tools=restricted_tools, system=effective_system)
             round_tools = assembled.tools
             effective_system = assembled.system
-            base_messages[0] = {"role": "system", "content": effective_system}
+            wire_system = effective_system
+            if self.service_per_call:
+                wire_system += "\n" + service_instruction
+            base_messages[0] = {"role": "system", "content": wire_system}
             if not assembled.include_project_context:
                 shared = []
             if assembled.context:
@@ -1037,23 +1075,62 @@ class ToolLoopAgent:
             if assembled.opening_text is not None:
                 history_messages = []
                 opening = [{"role": "user", "content": assembled.opening_text}]
-            by_name = {t.name: t for t in [*round_tools, correction_declaration]}
-            parameter_schemas = {
-                t.name: t.params_model.model_json_schema()
-                for t in [*round_tools, correction_declaration]
-                if t.params_model is not None
+            by_name = {
+                **{t.name: t for t in active_tools},
+                **execution_by_name,
+                **{t.name: t for t in [*round_tools, correction_declaration]},
             }
+            parameter_schemas = {
+                **{
+                    t.name: t.params_model.model_json_schema()
+                    for t in active_tools if t.params_model is not None
+                },
+                **execution_parameter_schemas,
+                **{
+                    t.name: t.params_model.model_json_schema()
+                    for t in [*round_tools, correction_declaration]
+                    if t.params_model is not None
+                },
+            }
+            execution_by_name = by_name
+            execution_parameter_schemas = parameter_schemas
             round_specs = specs if round_tools == active_tools else [tool_spec(t) for t in round_tools]
-            # The refreshed world snapshot is the LAST message. Rebuilding it
-            # must not invalidate the stable history/observation prefix.
-            messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
+            # Keep refreshed evidence outside the stable history/observation prefix.
+            if dialogue is not None:
+                # On this provider, application-supplied evidence (including images)
+                # uses user-role content parts. Name the source separately from the human.
+                opening = [{**message, "name": "application_context"} for message in opening]
+                shared = [{**message, "name": "project_evidence"} for message in shared]
+                feedback = [{**message, "name": "tool_feedback"} for message in feedback]
             opening_index = 1 + len(history_messages)
-            observation_start = opening_index + 1
-            feedback_start = observation_start + len(tail)
-            project_start = feedback_start + len(feedback)
+            if dialogue is not None and self.name in {"trigger_turn", "trigger_delivery"}:
+                dialogue_start = opening_index
+                opening_index += len(dialogue)
+                observation_start = opening_index + len(opening)
+                feedback_start = observation_start + len(tail)
+                project_start = feedback_start + len(feedback)
+                messages = [base_messages[0], *history_messages, *dialogue, *opening,
+                            *tail, *feedback, *shared]
+            elif dialogue is None:
+                messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
+                dialogue_start = opening_index + len(opening)
+                observation_start = dialogue_start
+                feedback_start = observation_start + len(tail)
+                project_start = feedback_start + len(feedback)
+            else:
+                # The transcript includes the current input, even when it was a dock pick.
+                # Keep server evidence apart from speech and preserve live tool protocol pairs.
+                if assembled.opening_text is not None:
+                    opening = []
+                project_start = opening_index + len(opening)
+                dialogue_start = project_start + len(shared)
+                observation_start = dialogue_start + len(dialogue)
+                feedback_start = observation_start + len(tail)
+                messages = [base_messages[0], *history_messages, *opening, *shared,
+                            *dialogue, *tail, *feedback]
             assembly = {
                 "agent": self.name, "iteration": iteration, "max_iterations": self.max_iterations,
-                "system_sources": getattr(effective_system, "sources", []),
+                "system_sources": [*getattr(effective_system, "sources", []), *getattr(service_instruction, "sources", [])],
                 "user_sources": getattr(user_prompt, "sources", []),
                 "template_variables": sorted(template_kwargs),
                 "declared_packs": self.packs,
@@ -1078,11 +1155,12 @@ class ToolLoopAgent:
                         for candidate in rejected_candidates)
                     if rejected_candidates else None
                 ),
-                "message_sections": {"system": [0], "conversation_history": list(range(1, opening_index)),
-                                     "opening_and_feedback": [opening_index],
+                "message_sections": {"system": [0], "conversation_history": list(range(1, 1 + len(history_messages))),
+                                     "opening_and_feedback": list(range(opening_index, opening_index + len(opening))),
                                      "observations": list(range(observation_start, feedback_start)),
-                                     "loop_feedback": list(range(feedback_start, project_start)),
-                                     "project_context": list(range(project_start, project_start + len(shared)))},
+                                     "loop_feedback": list(range(feedback_start, feedback_start + len(feedback))),
+                                     "project_context": list(range(project_start, project_start + len(shared))),
+                                     "dialogue": list(range(dialogue_start, dialogue_start + len(dialogue or [])))},
             }
             try:
                 with bind_model_prompt(assembly):
@@ -1094,7 +1172,7 @@ class ToolLoopAgent:
                             thinking=False,
                             on_delta=on_delta if assembled.allow_interim_prose else None,
                             on_reasoning=on_reasoning,
-                            on_tool_call=on_tool_call,
+                            on_tool_call=None if self.service_per_call else on_tool_call,
                         )
                     else:
                         result = await self.client.generate_with_tools(
@@ -1103,7 +1181,7 @@ class ToolLoopAgent:
                             temperature=self.temperature,
                             thinking=False,
                         )
-                        for tool_call in result.tool_calls:
+                        for tool_call in (() if self.service_per_call else result.tool_calls):
                             await _emit(on_tool_call, tool_call.name)
             except LLMSchemaError as e:
                 # The truncation signature (finish_reason=tool_calls but
@@ -1173,6 +1251,8 @@ class ToolLoopAgent:
                 required_feedback = (
                     bare_rejection_feedback() if bare_rejection_feedback is not None else None
                 ) or assembled.missing_tool_feedback
+                if self.service_per_call and not required_feedback:
+                    required_feedback = "Send the reply in assistant content and call the appropriate terminal tool."
                 if required_feedback:
                     stopped = await _reject(
                         ToolRejected(
@@ -1316,9 +1396,12 @@ class ToolLoopAgent:
 
             unsafe = [call for call in result.tool_calls if call.name in by_name
                       and (by_name[call.name].terminal or not by_name[call.name].batchable)]
-            if batched and unsafe:
+            invalid_service = self.service_per_call and (batched or not prose.strip())
+            if invalid_service or (batched and unsafe):
                 # Reject BEFORE any work: no first write, silent drops or forked starts.
                 feedback = "This batch was not executed. Content writes and terminal actions must be submitted alone; batch only declared reads/resource preparation."
+                if invalid_service:
+                    feedback = "No tool executed. Send one tool call with its user-facing message in assistant content."
                 calls.extend(call.name for call in result.tool_calls)
                 for call_index, call in enumerate(result.tool_calls):
                     await remember(call, wire_calls[call_index]["id"], ToolObservation(feedback, ok=False))
@@ -1327,7 +1410,7 @@ class ToolLoopAgent:
                 rejection_owner = (
                     active_repair.tool_name if active_repair is not None and correction_call is not None
                     else correction_candidate.tool_name if correction_candidate is not None
-                    else unsafe[0].name
+                    else result.tool_calls[0].name
                 )
                 stopped = await _reject(ToolRejected(kind="execute_guardrail", tool_name=rejection_owner,
                     iteration=iteration, detail=feedback, duration_ms=0), feedback=feedback, iteration=iteration)
@@ -1578,33 +1661,11 @@ class ToolLoopAgent:
                 tool = dispatch_tool
                 if is_correction:
                     assert candidate_record is not None and correction_merge is not None
-                # The read speech's routing is decided BEFORE execution (发射座
-                # 前移, ADR-104 发射时点修订): a read was ACCEPTED the moment its
-                # params validated — the perception dispatch always observes,
-                # never rejects — so the speech-commit protocol's retraction
-                # window is already closed, and for a WAITING read (ADR-102 —
-                # execute blocks until the material's terminal state) a
-                # post-execution emission would hold the waiter line hostage for
-                # the whole wait: delivered after the silence it exists to
-                # cover, and persisted with a created_at that sorts it AFTER the
-                # read's activity by birth moment. Emitted here, the speech lands
-                # before the wait begins and the activity sorts BETWEEN the two
-                # speeches.
-                #   The ONE routing rule (ADR-109 — 言语座位通用化): prose before
-                #   a TERMINAL call is settled speech (the ledger — the
-                #   ``not tool.terminal`` guard is what keeps the reply itself
-                #   off the interim_prose channel); prose riding ANY non-terminal
-                #   call is a INTERIM_PROSE — the seat is universal (白名单退役:
-                #   per-tool eligibility asked the registry to license speech;
-                #   the model's phase-narration instinct is the judge, the
-                #   harness provides the seat, the cap guards the rhythm).
-                #   It rides on_interim_prose, never the ledger. Without an
-                #   on_interim_prose channel (the one-shot JSON path) the ledger
-                #   keeps everything; capped prose is dropped (earned, never
-                #   scheduled — never merged back).
+                # Read speech lands before execution. Terminal speech belongs to its
+                # answer/card. With no delivery hook, the ledger keeps both.
                 prose_handled = True
                 # Draft judgments speak only from their accepted observation.
-                if not tool.terminal and (
+                if not self.service_per_call and not tool.terminal and (
                     not assembled.allow_interim_prose
                     or (tool.draft_reader and getattr(params, "judgment", None) is not None)
                 ):
@@ -1614,7 +1675,7 @@ class ToolLoopAgent:
                     and bool(prose.strip())
                     and on_interim_prose is not None
                 )
-                if interim_prose_route and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN:
+                if interim_prose_route and (self.service_per_call or interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN):
                     await _emit(on_interim_prose, prose.strip())
                     interim_proses_sent += 1
                     logger.info(
@@ -1631,6 +1692,8 @@ class ToolLoopAgent:
                     )
                 elif not tool.terminal:
                     speech_parts.append(prose)
+                if self.service_per_call:
+                    await _emit(on_tool_call, dispatch_name)
                 await _emit(on_tool_ready, dispatch_name, params)
                 # The composed speech: a TERMINAL call gets the ledger + this
                 # iteration's prose (it never entered the ledger — the guard
@@ -1651,8 +1714,9 @@ class ToolLoopAgent:
                     # waiter row is appended (and persisted) BEFORE the
                     # activity row's birth: 服务员话 → 读活动 → 读后回复 is
                     # array order, never a clock race.
-                    await _emit(on_loop_event, ReadExecuting(tool_name=dispatch_name, params=params))
-                outcome = await execute(dispatch_name, params, speech)
+                    await _emit(on_loop_event, ReadExecuting(tool_name=dispatch_name, params=params, call_id=call_id))
+                with bind_progress(call_id, on_loop_event):
+                    outcome = await execute(dispatch_name, params, speech)
                 if isinstance(outcome, WorkingDraftReviewed):
                     if not tool.draft_reader or candidate_record is None:
                         raise RuntimeError(f"{dispatch_name} returned draft evidence without draft_reader=True")
@@ -1787,13 +1851,19 @@ class ToolLoopAgent:
                         ),
                     )
                     if (
-                        outcome.ok
+                        not self.service_per_call
+                        and outcome.ok
                         and outcome.accepted_interim_prose
                         and on_interim_prose is not None
                         and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN
                     ):
                         await _emit(on_interim_prose, outcome.accepted_interim_prose)
                         interim_proses_sent += 1
+                    if outcome.stop_after_observation:
+                        return _finish(LoopResult(
+                            prose=speech, tool_name=dispatch_name, params=params,
+                            iterations=iteration + 1, calls=calls,
+                        ))
                     continue
                 if isinstance(outcome, TerminalRefusal):
                     if is_correction:

@@ -1,6 +1,16 @@
-"""Production names an immutable saved version; never creative instructions."""
-from pydantic import BaseModel, ConfigDict, Field
-from app.models.schemas import VideoVersionRef
+"""Authorized production and preparation inputs, never creative instructions."""
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
+
+from app.models.schemas import VideoDraftRef, VideoVersionRef
+from app.tools.music.score import ScoreSpecDraft
+from app.tools.video.visual_assets import (
+    VISUAL_ASSET_MAX_PER_CALL,
+    SceneAssetSpec,
+    SceneId,
+    VisualAssetSelection,
+    select_scene_assets,
+)
 
 NARRATION_FIT_MARGIN = 1.08
 
@@ -38,6 +48,50 @@ class PrepareNarrationParams(BaseModel):
     text: str = Field(min_length=1, max_length=9000)
     voice_id: str = Field(min_length=1, max_length=255)
     language: str = Field(min_length=2, max_length=16)
+    draft_ref: VideoDraftRef | None = None
+    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class PrepareVisualAssetsParams(VisualAssetSelection):
+    """One bounded batch from an authenticated working draft."""
+
+    # Persisted plans and Runs may still contain the old full-spec request.
+    scene_assets: SkipJsonSchema[list[SceneAssetSpec] | None] = Field(
+        default=None, min_length=1, max_length=VISUAL_ASSET_MAX_PER_CALL
+    )
+    scene_ids: list[SceneId] | None = Field(
+        default=None, min_length=1, max_length=VISUAL_ASSET_MAX_PER_CALL
+    )
+
+    @model_validator(mode="after")
+    def _request_shape(self):
+        if (self.scene_ids is None) == (self.scene_assets is None):
+            raise ValueError("provide scene_ids to select scenes from the current draft")
+        if self.review_existing and self.scene_ids is None:
+            raise ValueError("review_existing requires scene_ids")
+        return self
+
+    def resolve(self, draft: dict) -> list[SceneAssetSpec]:
+        if self.scene_ids is not None:
+            return select_scene_assets(draft, self.scene_ids)
+
+        # Keep historical authorization exact. Legacy plans cannot update a draft.
+        legacy = self.scene_assets or []
+        selected = select_scene_assets(draft, [spec.scene_id for spec in legacy])
+        for current, supplied in zip(selected, legacy):
+            if current != supplied:
+                raise ValueError(f"Scene {current.scene_id} does not match its current SceneAssetSpec")
+        return selected
+
+
+class PrepareMusicParams(BaseModel):
+    """One bounded creative score resolved against an authorized working draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    draft_ref: VideoDraftRef
+    name: str = Field(min_length=1, max_length=255)
+    score: ScoreSpecDraft
 
 
 class ProduceVideoParams(BaseModel):

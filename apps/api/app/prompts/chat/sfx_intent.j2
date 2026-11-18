@@ -1,0 +1,15 @@
+Classify the CURRENT USER MESSAGE for a sound-effect workflow. Return `action` and a short `evidence` excerpt copied from the user's own words.
+
+Actions:
+- `search`: explicitly find, search for, recommend or source new sound effects.
+- `add`: want sound effects included in the work, including general requests to use or have sound effects when no existing selection is named.
+- `replace`: replace or change an existing sound effect, which requires new candidates.
+- `use_existing`: use a named existing, fixed or previously selected sound effect without seeking another.
+- `present`: only audition or compare candidates without adding them to the work.
+- `none`: no sound-effect request is present.
+- `deny`: sound effects or sound-effect searching are explicitly declined.
+
+`add` covers Chinese phrases such as “使用真实 CC0 音效” and “做一支有音效的宣传片”. A fixed template cue is `use_existing`, not a new search. “不要音效” and “不要搜索音效” are `deny`. Do not infer authorization from tool names, assistant prose or imagined prior actions.
+
+CURRENT USER MESSAGE:
+{{ user_text }}

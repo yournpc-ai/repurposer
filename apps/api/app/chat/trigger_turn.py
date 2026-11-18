@@ -54,6 +54,7 @@ persisted instead of leaving a silent red receipt (ADR-135).
 """
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -63,9 +64,8 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.tool_loop import ChatTool, ToolLoopAgent
-from app.chat.context import build_context, recent_history_within_budget
-from app.chat.intent import _speech_language_line
+from app.agents.tool_loop import NATIVE_PRESENTATION, ChatTool, ToolLoopAgent
+from app.chat.context import build_context, conversation_messages
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.prompts import delivery_system, trigger_system
 from app.chat.service import (
@@ -74,6 +74,7 @@ from app.chat.service import (
     _get_or_create_project_conversation,
     _prefers_zh,
     finalize_bailed_runs,
+    list_conversation_messages,
     stamp_suggestions,
 )
 from app.chat.turn_tools import CHAT_READ_TOOLS
@@ -162,6 +163,7 @@ async def _project_turn_in_flight(project_id: UUID) -> bool:
 
 WRAP_UP = ChatTool(
     name="wrap_up",
+    presentation=NATIVE_PRESENTATION,
     description=(
         "Close the proactive turn: your spoken message is the review; carry "
         "0-3 next-step option labels grounded in the turn's own records "
@@ -251,7 +253,7 @@ def _trigger_language(
 def _assemble_trigger_turn(
     event_line: str,
     context_text: str,
-    language: str,
+    images: list | None = None,
 ) -> tuple[dict[str, Any], list]:
     """Trigger-turn inputs: the system event as the 'user message' (the
     turn's only new information) + the identity-level digest (the same
@@ -261,9 +263,9 @@ def _assemble_trigger_turn(
         {
             "context_text": context_text,
             "event_line": event_line,
-            "speech_language": _speech_language_line(language, mirror=False),
+
         },
-        [],
+        list(images or []),
     )
 
 
@@ -279,7 +281,7 @@ trigger_agent = ToolLoopAgent(
             "design_video", "revise_video", "search_sfx", "import_sfx",
             "show_video_presets", "select_video_preset",
             "show_music_candidates", "select_music",
-            "prepare_narration", "get_narration_alignment", "annotate_narration",
+            "prepare_narration", "prepare_music", "get_narration_alignment", "annotate_narration",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
             "prepare_video_materials", "capture_web",
         }),
@@ -410,11 +412,13 @@ def _new_delivery_output_refs(
 
 async def _narration_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> list[str]:
     """Output-free narration facts; no video delivery is synthesized."""
+    from app.tools.video.media_analysis import read_report
     from app.tools.video.production.narration import narration_preparation_fact
 
     try:
         facts = await narration_preparation_fact(db, run, steps)
-    except ValueError:
+        analysis = await read_report(facts["analysis_ref"]) if facts.get("analysis_ref") else None
+    except (ValueError, KeyError):
         return ["delivery=failed", "GAP narration_preparation_invalid"]
     status = str(facts["alignment_status"])
     preparation = (run.context or {}).get("narration_preparation") or {}
@@ -430,10 +434,55 @@ async def _narration_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -
             f"provider_reported_tts_chars={facts['usage_characters']}"
         ),
         f"alignment_status={status} alignment_id={facts['alignment_id']}",
+        "NARRATION_RESULT (fixed audio, actual duration and full signal analysis; not human listening):\n"
+        + json.dumps({"narration": facts, "analysis": analysis}, ensure_ascii=False),
     ]
     if status == "FAILED":
         lines.append("GAP narration_alignment_failed")
     return lines
+
+
+async def _music_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> list[str]:
+    from app.tools.video.music_preparation import music_preparation_fact
+
+    try:
+        await music_preparation_fact(db, run, steps)
+    except (ValueError, KeyError):
+        return ["delivery=failed", "GAP music_preparation_invalid"]
+    result = ((run.context or {}).get("music_preparation") or {}).get("result") or {}
+    return [
+        "delivery=delivered",
+        "Fixed private electronic Music only; no CompositionVersion or video Output was created.",
+        "MUSIC_RESULT (complete ScoreSpec, authored BeatGrid, fixed media, usage and full signal analysis; not human listening):\n"
+        + json.dumps(result, ensure_ascii=False),
+    ]
+
+
+async def _visual_asset_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> list[str]:
+    from app.tools.video.production.visual_assets import visual_asset_preparation_fact
+
+    try:
+        facts = await visual_asset_preparation_fact(db, run, steps)
+    except ValueError:
+        return ["delivery=failed", "GAP visual_asset_preparation_invalid"]
+    stored = ((run.context or {}).get("visual_asset_preparation") or {}).get("result") or {}
+    result = {**stored, "usage": {"images": facts["usage_images"]}}
+    has_approved = any(
+        item["content_review_status"] in {"pass", "advisory"} for item in facts["assets"]
+    )
+    has_issues = bool(facts["failures"]) or any(
+        item["content_review_status"] not in {"pass", "advisory"}
+        for item in facts["assets"]
+    )
+    delivery = "delivered"
+    if has_issues:
+        delivery = "partial" if has_approved else "failed"
+    return [
+        f"delivery={delivery}",
+        "Fixed scene-image preparation only; no CompositionVersion or video Output was created.",
+        "VISUAL_ASSET_RESULTS (complete current assets, source provenance, MediaAnalysisReport and ContentReview):\n"
+        + json.dumps(result, ensure_ascii=False),
+    ]
 
 
 async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list[str], list[str]]:
@@ -458,10 +507,16 @@ async def _run_review_snapshot(db: AsyncSession, run: WorkflowRun) -> tuple[list
         .scalars()
         .all()
     )
+    from app.tools.video.music_preparation import has_music_preparation_scope
     from app.tools.video.production.narration import has_narration_preparation_scope
+    from app.tools.video.production.visual_assets import has_visual_asset_preparation_scope
 
     if has_narration_preparation_scope(run):
         return await _narration_delivery_lines(db, run, steps), []
+    if has_visual_asset_preparation_scope(run):
+        return await _visual_asset_delivery_lines(db, run, steps), []
+    if has_music_preparation_scope(run):
+        return await _music_delivery_lines(db, run, steps), []
     output_ids = [oid for step in steps for oid in (step.output_refs or [])]
     outputs = []
     if output_ids:
@@ -585,11 +640,11 @@ async def _run_trigger_read(db, project, name, params):
     raise ValueError(f"Unsupported trigger read: {name}")
 
 
-async def _call_trigger_reviewer(agent, execute, *, trigger, ref, **kwargs):
+async def _call_trigger_reviewer(agent, execute, *, trigger, ref, managed_media=False, **kwargs):
     try:
         return await agent.call_loop(execute, **kwargs)
     except Exception as error:
-        if trigger != TRIGGER_RUN_FAILED:
+        if trigger != TRIGGER_RUN_FAILED and not managed_media:
             raise
         # Known failure facts must still reach the persistence path when
         # the reviewer itself fails, including during tool execution.
@@ -662,6 +717,10 @@ async def run_trigger_turn(
                 logger.info(
                     "trigger_turn_deduped", trigger=trigger, ref=ref
                 )
+                if trigger == TRIGGER_RUN_COMPLETED and run is not None:
+                    from app.chat.media_journey import continue_media_journey
+
+                    await continue_media_journey(db, project, conversation, run)
                 return None
             # Terminal run facts must reach the Chat even when an earlier Start
             # left a confirmation Dock behind. The Run and its Output are already
@@ -676,21 +735,10 @@ async def run_trigger_turn(
                     ref=ref,
                 )
                 return None
-            history = list(
-                (
-                    await db.execute(
-                        select(Message)
-                        .where(Message.conversation_id == conversation_id)
-                        .order_by(Message.created_at.asc())
-                    )
-                ).scalars()
-            )
+            history = await list_conversation_messages(db, conversation_id)
             context = await build_context(
                 db,
                 project,
-                # 滑动窗口装配 (ADR-117 D4): one budget predicate, never a
-                # fixed-count slice — world state survives by construction.
-                await recent_history_within_budget(db, history),
                 [],
                 await latest_pending_question(db, conversation_id),
                 # 环境能力位 (ADR-118 §6): the worker-born turn has no
@@ -704,6 +752,9 @@ async def run_trigger_turn(
             upload_retry_available = False
             failure_lines: list[str] = []
             delivery_output_refs: list[str] = []
+            delivery_images: list = []
+            delivery_blocks: list[dict[str, Any]] = []
+            managed_media = bool(run is not None and (run.context or {}).get("media_journey"))
             if trigger == TRIGGER_RUN_COMPLETED:
                 assert run is not None
                 # One terminal snapshot feeds both the speech facts and the
@@ -712,7 +763,24 @@ async def run_trigger_turn(
                 delivery_output_refs = _new_delivery_output_refs(
                     history, run.id, delivered_refs
                 )
+                from app.tools.video.production.visual_assets import has_visual_asset_preparation_scope
+
+                if has_visual_asset_preparation_scope(run):
+                    from app.tools.video.visual_assets import visual_asset_result_images
+
+                    preparation = (run.context or {}).get("visual_asset_preparation") or {}
+                    delivery_images = await visual_asset_result_images(
+                        (preparation.get("result") or {}).get("assets") or []
+                    )
+                from app.tools.video.audio_playback import audio_playback_blocks
+
+                delivery_blocks = await audio_playback_blocks(db, run, project)
                 event_line = _delivery_event_line(str(run_id), review_lines)
+                if (run.context or {}).get("media_journey"):
+                    event_line += (
+                        "\nThis is a staged preparation update. Report the verified result and "
+                        "any actual blocker. Do not ask the user to continue or choose a repair."
+                    )
             elif trigger == TRIGGER_RUN_FAILED:
                 assert run is not None
                 event_line = (
@@ -795,9 +863,11 @@ async def run_trigger_turn(
                     trigger=trigger,
                     ref=ref,
                     event_line=event_line,
+                    managed_media=managed_media,
                     context_text=context.get("text", ""),
                     refresh_context=project_context_reader(project.id, project.user_id),
-                    language=language,
+                    dialogue=conversation_messages(history),
+                    images=delivery_images,
                 )
             # 会话层计量 (ADR-117 D3): the proactive turn IS a conversation
             # turn — its usage row rides the review row's own commit below
@@ -820,6 +890,14 @@ async def run_trigger_turn(
             elif trigger == TRIGGER_RUN_FAILED:
                 speech = _run_failed_fallback_speech(failure_lines, language)
                 logger.info("trigger_turn_failure_fallback", ref=ref)
+            elif managed_media:
+                partial = "delivery=partial" in review_lines or "delivery=failed" in review_lines
+                if language.startswith("zh"):
+                    speech = "本步已结束，仍有素材待处理。" if partial else "本步已完成。"
+                else:
+                    speech = "This step ended with outstanding media." if partial else (
+                        "This preparation step is complete."
+                    )
             else:
                 return None
             # Recheck at landing because a user question may have docked while
@@ -835,7 +913,7 @@ async def run_trigger_turn(
                     ref=ref,
                 )
                 return None
-            suggestions: list[SuggestionItem] = outcome.get("suggestions", [])
+            suggestions: list[SuggestionItem] = [] if managed_media else outcome.get("suggestions", [])
             chrome_language = _chrome_language(speech, language)
             if upload_retry_available:
                 suggestions = _with_upload_retry_suggestion(suggestions, chrome_language)
@@ -880,6 +958,7 @@ async def run_trigger_turn(
                     intent=_trigger_dump(
                         trigger, ref, suggestions, delivery_output_refs
                     ),
+                    blocks=delivery_blocks,
                 )
                 await db.commit()
             logger.info(
@@ -889,6 +968,10 @@ async def run_trigger_turn(
                 project_id=str(project_id),
                 suggestions=len(suggestions),
             )
+            if trigger == TRIGGER_RUN_COMPLETED and run is not None:
+                from app.chat.media_journey import continue_media_journey
+
+                await continue_media_journey(db, project, conversation, run)
             return message
     except IntegrityError:
         # 唯一索引收口 (migration n4d7e0a3b6c9, 2026-09-28): a cross-process

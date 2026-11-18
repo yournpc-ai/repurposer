@@ -316,6 +316,102 @@ async def test_repair_observation_leaves_speech_to_the_current_stage(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_correction_retains_original_tool_execution_schema(monkeypatch):
+    from pydantic import BaseModel, ConfigDict
+    from app.agents import tool_loop
+    from app.agents.candidate_correction import CandidateRecord, CandidateScope
+    from app.providers.llm.base import ProviderCapabilities, ToolGeneration
+
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        base_ref: str
+
+    class ProjectedArgs(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+    original_create = CandidateRecord.create.__func__
+
+    def fixed_create(_cls, **kwargs):
+        kwargs["candidate_id"] = "cnd_fixed"
+        return original_create(_cls, **kwargs)
+
+    monkeypatch.setattr(CandidateRecord, "create", classmethod(fixed_create))
+    monkeypatch.setattr(CandidateRecord, "verify", lambda self, request: None)
+    scope = CandidateScope(
+        owner_id="agent:repair-execution-schema",
+        conversation_id="loop:repair-execution-schema",
+    )
+    candidate_digest = CandidateRecord.create(
+        tool_name="answer",
+        arguments={"unexpected": True},
+        errors=[],
+        schema=ProjectedArgs.model_json_schema(),
+        scope=scope,
+        base_keys=frozenset(),
+        call_id="invalid",
+    ).candidate_digest
+    calls = []
+
+    class Client:
+        capabilities = ProviderCapabilities(supports_native_tools=True)
+
+        async def generate_with_tools(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return ToolGeneration("", [ToolCall(
+                    id="invalid", name="answer", arguments={"unexpected": True},
+                )])
+            return ToolGeneration("", [ToolCall(
+                id="correct",
+                name="correct_tool_candidate",
+                arguments={
+                    "candidate_id": "cnd_fixed",
+                    "candidate_digest": candidate_digest,
+                    "mode": "replace",
+                    "reason": "Replace the invalid arguments",
+                    "arguments": {},
+                },
+            )])
+
+    class Template:
+        def render(self, **_kwargs):
+            return "test"
+
+    class Environment:
+        def get_template(self, _name):
+            return Template()
+
+    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
+    agent = tool_loop.ToolLoopAgent(
+        name="repair-execution-schema", prompt="unused.j2", system="test",
+        assemble=lambda **_kwargs: ({}, None),
+        tools=[tool_loop.ChatTool(
+            name="answer", description="Finish", params_model=Args, repairable=True,
+        )],
+        client=Client(),
+    )
+    executed = []
+
+    async def execute(name, _params, _speech):
+        executed.append(name)
+
+    def assemble(**facts):
+        if facts.get("active_repair") is not None:
+            from app.agents.candidate_correction import correction_tool
+
+            return tool_loop.RoundAssembly(system="test", tools=[correction_tool()])
+        return tool_loop.RoundAssembly(system="test", tools=[tool_loop.ChatTool(
+            name="answer", description="Finish", params_model=ProjectedArgs, repairable=True,
+        )])
+
+    result = await agent.call_loop(execute, round_assembler=assemble)
+    assert result.tool_name == "answer"
+    assert executed == ["answer"]
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_structured_thinking_opt_out_uses_provider_config(monkeypatch):
     import json
     from contextlib import asynccontextmanager
@@ -630,6 +726,7 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
         skill=skill, material_pending=True,
     ).tools
     fresh_names = {tool.name for tool in fresh}
+    assert not {"get_graph", "get_node", "edit_graph"} & fresh_names
     assert "design_video" not in fresh_names
     assert "get_understanding" in fresh_names
     assert "prepare_video_materials" in fresh_names
@@ -715,6 +812,7 @@ async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_pro
     assert {"draft_ref", "scene"} <= set(properties)
     assert not {"scenes", "clips", "tracks", "settings", "sources", "scene_id"} & set(properties)
     assert "high-level scene object" in round.system
+    assert "DEFAULT SOUNDTRACK" in round.system
 
     args = CompositionDesignVideoArgs.model_validate({
         "draft_ref": {"draft_id": draft.candidate_id, "draft_digest": draft.candidate_digest},
@@ -725,6 +823,8 @@ async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_pro
             "headline": "OxValue",
             "supporting_text": "Defensible valuations",
             "text_preset": "title-lockup",
+            "narration": "See the evidence behind every valuation.",
+            "narration_language": "en",
         },
     })
     merged = merge_working_draft(draft, args)
@@ -758,16 +858,81 @@ async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_pro
     texts = [clip.object.text for track in candidate.timeline.tracks for clip in track.clips
              if clip.object.kind == "text"]
     assert texts == ["OxValue", "Defensible valuations"]
+    speech = [clip for track in candidate.timeline.tracks for clip in track.clips
+              if clip.object.kind == "speech"]
+    assert len(speech) == 1
+    assert speech[0].object.text == "See the evidence behind every valuation."
+    assert speech[0].object.language == "en"
+    assert speech[0].object.voice_id == "presenter_male"
+    assert speech[0].clip_id in candidate.scenes[0].speech_clip_ids
     music = next(track for track in candidate.timeline.tracks if track.track_id == "trk_music")
-    assert music.clips[0].scene_id is None
+    assert music.clips and all(clip.scene_id is None for clip in music.clips)
     from app.editing.service import format_storyboard_text
     from app.editing.storyboard import storyboard_payload
 
     presentation = storyboard_payload(
         candidate, composition_id=uuid4(), version_id=uuid4(), version=1, content_digest="c" * 64,
     )
+    assert presentation["scenes"][0]["narration"] == "See the evidence behind every valuation."
     read = {**presentation, "composition_name": "Promo", "base_ref": {}, "storyboard": presentation}
-    assert "Music: 1 saved Clip(s) in this version." in format_storyboard_text(read)
+    assert f"Music: {len(music.clips)} saved Clip(s) in this version." in format_storyboard_text(read)
+    assert "Narration: reviewed SpeechObjects" in format_storyboard_text(read)
+
+
+def test_scene_plan_and_explicit_count_have_no_six_scene_cap():
+    from app.skills.external import SkillPolicy
+    from app.tools.video.design import CompositionDesignVideoArgs, CompositionScenePlan
+
+    scenes = [CompositionScenePlan(scene_id=f"scene-{index}", intent=f"Beat {index}") for index in range(7)]
+    args = CompositionDesignVideoArgs.model_validate({"scene_plan": scenes, "scene_count": 7})
+    assert len(args.scene_plan) == 7
+    assert args.scene_count == 7
+    assert SkillPolicy(scene_count=7).scene_count == 7
+
+
+@pytest.mark.asyncio
+async def test_derived_web_view_infers_its_unique_view_id():
+    from uuid import uuid4
+
+    from app.editing.schemas import CompositionContent, VersionSettings
+    from app.editing.validators import validate_content
+    from app.tools.video.design import (
+        CompositionSceneAuthoring,
+        CompositionScenePlan,
+        _expand_scene_authoring,
+        _scene_plan_write,
+    )
+
+    parent_id, derived_id = uuid4(), uuid4()
+    facts = {
+        parent_id: {
+            "kind": "web", "digest": "p" * 64, "storage_key": "web.json",
+            "meta": {"views": [{
+                "view_id": "view-3", "storage_key": "view.png", "digest": "v" * 64,
+                "width": 1440, "height": 900, "elements": [],
+            }]},
+        },
+        derived_id: {
+            "kind": "image", "digest": "d" * 64, "storage_key": "derived.png",
+            "meta": {
+                "origin": "web_view", "web_snapshot_id": str(parent_id), "view_id": "view-3",
+                "width": 1440, "height": 900,
+            },
+        },
+    }
+    content = _scene_plan_write({
+        "schema_version": 1,
+        "settings": VersionSettings(width=1920, height=1080).model_dump(mode="json"),
+        "sources": [], "scenes": [], "timeline": {"tracks": [], "transitions": []},
+    }, [CompositionScenePlan(scene_id="feature", intent="Show the actual feature")])
+    expanded = await _expand_scene_authoring(content, CompositionSceneAuthoring(
+        scene_id="feature", snapshot_id=derived_id, source_motion="hold", headline="Feature",
+    ), facts)
+    candidate = CompositionContent.model_validate(expanded)
+    validate_content(candidate, facts)
+    web = next(clip for track in candidate.timeline.tracks for clip in track.clips if clip.object.kind == "web")
+    assert web.object.view_id == "view-3"
+    assert web.source.snapshot_id == parent_id
 
 
 @pytest.mark.asyncio
@@ -885,6 +1050,7 @@ def test_chat_tool_loops_allow_twenty_bounded_iterations():
 
 
 def test_video_modes_use_the_shared_pending_question_rule():
+    from app.agents.base import jinja_env
     from app.chat.intent import chat_intent_agent, intent_router
     from app.chat.prompts import chat_system
 
@@ -892,7 +1058,37 @@ def test_video_modes_use_the_shared_pending_question_rule():
     conversation = chat_system("conversation", available_tools=chat_intent_agent.tools)
     assert plan.count("PENDING QUESTION:") == 1
     assert conversation.count("PENDING QUESTION:") == 1
+    assert plan.count("SPEECH LANGUAGE:") == 1
+    assert conversation.count("SPEECH LANGUAGE:") == 1
     assert "pending_disposition" in plan and "pending_disposition" in conversation
+
+    video = chat_system(
+        "plan", available_tools=intent_router.tools,
+        video_stage="draft_build", video_speech="opening", scene_authoring=True,
+    )
+    assert video.count("SPEECH LANGUAGE:") == 1
+    ordered_rules = (
+        "SPEECH LANGUAGE:", "READ TOOLS:", "REJECTIONS:", "Video works",
+        "- answer:", "- ask_user:", "PENDING QUESTION:",
+    )
+    assert [video.index(rule) for rule in ordered_rules] == sorted(
+        video.index(rule) for rule in ordered_rules
+    )
+
+    opening = jinja_env.get_template("chat/user.j2").render(
+        mode="plan", recent=["- user: earlier"], message="latest answer",
+        asset_lines=["- page (web_page)"], understanding_lines=["- Summary: evidence"],
+        persona_lines=["- tone: rational"], brief_lines=["- target_seconds: 30 (user-stated)"],
+        confirmation_line="Confirmation settings: execution=auto, spending=auto.",
+        pending_lines=["- question: specs?"],
+    )
+    opening_order = (
+        "Recent conversation:", "Uploaded files", "The system's read", "The user's persona",
+        "The brief so far", "Confirmation settings:", "A question of yours", "User message:",
+    )
+    assert [opening.index(block) for block in opening_order] == sorted(
+        opening.index(block) for block in opening_order
+    )
 
 
 def test_missing_package_session_keeps_generic_high_level_protocol(installed_promo):
@@ -969,6 +1165,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     judging_tool = next(tool for tool in judging.tools if tool.name == "review_working_draft")
     assert "judgment" in tool_spec(judging_tool)["function"]["parameters"]["required"]
     assert "frozen source page only" not in judging.context
+    assert "editable_targets" not in judging.context
     assert judging.include_observation_media
 
     saved = _composition_resource()
@@ -1050,7 +1247,7 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
             if len(calls) == 1:
                 return ToolGeneration("", [ToolCall(
                     id="revise-1", name="revise_video",
-                    arguments={"action": {"action": "remove_clip", "clip_id": "title-second"}, "pending_disposition": "answer"},
+                    arguments={"ops": [{"op": "remove_clip", "clip_id": "title-second"}], "pending_disposition": "answer"},
                 )])
             return ToolGeneration("Saved", [ToolCall(id="answer-1", name="answer", arguments={})])
 
@@ -1157,27 +1354,14 @@ def test_explicit_title_edit_only_projects_current_title_and_its_write():
     assert {tool.name for tool in ambiguous.tools} == {"ask_user"}
 
 
-def test_video_round_speech_follows_opening_new_evidence_and_silent_edits():
+def test_video_rounds_allow_service_text_for_reads_and_edits():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
 
-    empty = ContextSnapshot("empty")
-    opening = _video_round(intent_router.tools, snapshot=empty, iteration=0)
-    assert "you MAY say ONE short plan" in opening.system
-    assert "Speak only at PHASE TURNS" not in opening.system
-    assert '"speech_rule": "opening"' in opening.context
-
-    finding = _video_round(
-        intent_router.tools, snapshot=empty, iteration=1, interim_prose_count=1, new_result=True,
-    )
-    assert "new valid evidence has just arrived" in finding.system
-    assert "do not repeat the plan" in finding.system
-
-    later = _video_round(
-        intent_router.tools, snapshot=empty, iteration=2, interim_prose_count=1,
-    )
-    assert "call the next non-terminal tool silently" in later.system
-    assert "you MAY say ONE short plan" not in later.system
+    for iteration in (0, 1, 6):
+        projected = _video_round(intent_router.tools, snapshot=ContextSnapshot("empty"), iteration=iteration)
+        assert projected.allow_interim_prose
+        assert "speech_rule" not in projected.context
 
     saved = _composition_resource()
     edit = _video_round(
@@ -1188,9 +1372,7 @@ def test_video_round_speech_follows_opening_new_evidence_and_silent_edits():
         user_text="Change the title", iteration=0, new_result=True,
     )
     assert edit.stage == "version_edit"
-    assert not edit.allow_interim_prose
-    assert "call the next non-terminal tool silently" in edit.system
-    assert "you MAY say ONE short plan" not in edit.system
+    assert edit.allow_interim_prose
 
 
 def test_draft_repair_focus_schema_uses_real_clip_and_element_ids():
@@ -1408,7 +1590,7 @@ async def test_accepted_issue_summary_is_interim_once_before_repair(monkeypatch)
 
     monkeypatch.setattr(tool_loop, "jinja_env", Environment())
     agent = tool_loop.ToolLoopAgent(
-        name="accepted-issue-interim", prompt="unused.j2", system="test",
+        name="accepted-issue-interim", service_per_call=True, prompt="unused.j2", system="test",
         assemble=lambda **_kwargs: ({}, None), tools=intent_router.tools, client=Client(),
     )
 
@@ -1446,8 +1628,8 @@ async def test_accepted_issue_summary_is_interim_once_before_repair(monkeypatch)
     )
     assert result.tool_name == "answer"
     assert events == [
-        "review_execute", "accepted", "interim:Value / Defend are not visible",
-        "repair_execute", "accepted",
+        "interim:The second scene has a framing issue.", "review_execute", "accepted",
+        "interim:I'll apply the repair now.", "repair_execute", "accepted",
     ]
 
     passing_args = ReviewWorkingDraftArgs(

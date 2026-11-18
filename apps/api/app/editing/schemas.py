@@ -21,13 +21,16 @@ import hashlib
 import json
 import math
 import re
-from typing import Annotated, Any, Literal, get_args
+from typing import TYPE_CHECKING, Annotated, Any, Literal, get_args
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, LAYOUT_VERSION, SEGMENTATION_VERSION
 from app.editing.timing import DEFAULT_TIMEBASE
+
+if TYPE_CHECKING:
+    from app.models.schemas import CreativeState
 
 SCHEMA_VERSION = 1
 
@@ -1009,6 +1012,7 @@ class CompositionContent(BaseModel):
 
     schema_version: int = SCHEMA_VERSION
     settings: VersionSettings
+    creative_state: "CreativeState | None" = None
     sources: list[SourceBinding] = []
     scenes: list[Scene] = []
     timeline: Timeline = Timeline()

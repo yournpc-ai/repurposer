@@ -12,9 +12,11 @@ video_presentation slice) and the storyboard block on the presenting row.
 import json
 import re
 import time
-import structlog
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+import structlog
 
 from app.agents.tool_loop import TerminalRefusal, ToolObservation
 from app.agents.working_drafts import (
@@ -26,17 +28,17 @@ from app.agents.working_drafts import (
     working_draft_arguments,
     working_draft_review_facts,
 )
-from app.editing.validators import ContentValidationError
 from app.chat.activity_receipts import (
-    component_receipt,
+    SkillReadReceipt,
     VideoDraftReviewReceipt,
+    component_receipt,
     music_search_receipt,
     music_selection_receipt,
-    SkillReadReceipt,
     sfx_import_receipt,
     sfx_search_receipt,
     video_revision_receipt,
 )
+from app.editing.validators import ContentValidationError
 from app.models.schemas import (
     AnnotateNarrationArgs,
     BuiltInSkillReference,
@@ -79,51 +81,6 @@ def bind_video_revision_base(params: Any, base_ref: dict[str, Any] | None) -> An
 def _sfx_display_title(title: str) -> str:
     """Model-facing title; the raw provider title stays persisted for audit."""
     return re.sub(r"\.[A-Za-z][A-Za-z0-9]{0,15}$", "", title)
-
-
-_SFX_SOUND_EN = r"(?:sfx|sound(?:\s+effect)?s?|audio\s+cues?|click(?:\s+sound)?)"
-_SFX_SOUND_ZH = r"(?:音效|声音|提示音|点击音)"
-_SFX_STRONG_ACTION_EN = re.compile(
-    rf"\b(?:search(?:\s+for)?|find|look\s+for|source|replace|swap|change)\b"
-    rf"[^\n.!?]{{0,80}}\b{_SFX_SOUND_EN}\b",
-    re.IGNORECASE,
-)
-_SFX_ADD_ACTION_EN = re.compile(
-    rf"\badd\b[^\n.!?]{{0,80}}\b{_SFX_SOUND_EN}\b", re.IGNORECASE
-)
-_SFX_STRONG_ACTION_ZH = re.compile(
-    rf"(?:搜索|搜寻|检索|查找|找|替换|更换|换掉|换成)"
-    rf"[^。！？\n]{{0,32}}{_SFX_SOUND_ZH}"
-    rf"|(?:把|将)[^。！？\n]{{0,32}}{_SFX_SOUND_ZH}[^。！？\n]{{0,16}}(?:替换|更换|换掉)"
-)
-_SFX_ADD_ACTION_ZH = re.compile(
-    rf"(?:添加|新增|加入)[^。！？\n]{{0,32}}{_SFX_SOUND_ZH}"
-)
-
-
-def sfx_search_requested(user_text: str) -> bool:
-    """Server-side admission for provider search, keyed to the current user words.
-
-    Naming a template's already-fixed cue is not a request to search. Explicit
-    search/replacement remains admissible; an add request is too unless the
-    same message explicitly says the effect is fixed.
-    """
-    text = user_text.strip()
-    if not text:
-        return False
-    if re.search(
-        r"\b(?:do\s+not|don't|never|without)\s+(?:search|find|look\s+for|source)\b",
-        text,
-        re.IGNORECASE,
-    ) or re.search(r"(?:不要|不用|禁止|无需|不需要|不)[^。！？\n]{0,12}(?:搜索|搜寻|检索|查找|找)", text):
-        return False
-    if _SFX_STRONG_ACTION_EN.search(text) or _SFX_STRONG_ACTION_ZH.search(text):
-        return True
-    has_fixed_declaration = bool(re.search(r"\bfixed\b|固定", text, re.IGNORECASE))
-    return bool(
-        (_SFX_ADD_ACTION_EN.search(text) or _SFX_ADD_ACTION_ZH.search(text))
-        and not has_fixed_declaration
-    )
 
 
 def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[str]:
@@ -198,6 +155,7 @@ def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[
 
 async def _owned_video_output(db, project, mention):
     from sqlalchemy import select
+
     from app.models.tables import Output
 
     try:
@@ -215,7 +173,11 @@ async def video_target_hint(db, project, mentions=()):
             continue
         row = await _owned_video_output(db, project, mention)
         if row is not None and row.composition_id is not None:
-            return {"composition_id": str(row.composition_id)}
+            return {
+                "composition_id": str(row.composition_id),
+                **({"selected_region": mention.region.model_dump(mode="json")}
+                   if mention.region is not None else {}),
+            }
     return None
 
 
@@ -225,7 +187,9 @@ async def video_context_lines(
 ):
     """Skill, candidate and presentation facts; resources have one fresh assembler."""
     import json
+
     from sqlalchemy import select
+
     from app.models.tables import Asset, Conversation
     candidate_logs = list((await db.execute(
         select(Message.intent)
@@ -291,7 +255,7 @@ def _version_context_keys(read: dict) -> tuple[str, ...]:
 
 async def read_video_for_presentation(db, project, params):
     """Read the saved version and prepare an explicitly requested local Scrub."""
-    from app.editing.service import video_version_read, format_storyboard_text
+    from app.editing.service import format_storyboard_text, video_version_read
     from app.editing.store import CompositionNotFound, PermissionDenied
     try:
         read = await video_version_read(db, owner_id=project.user_id,
@@ -327,6 +291,7 @@ async def review_video_seat(
     """Decode and review the exact Output; persist its advisory report."""
 
     import json
+
     from app.models.database import AsyncSessionLocal
     from app.tools.video.review import ReviewAttemptFailed, ReviewError, review_video
 
@@ -358,6 +323,21 @@ async def review_video_seat(
 
 
 async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
+    for task in tasks:
+        if task.tool != "prepare_visual_assets":
+            continue
+        from app.tools.video.params import PrepareVisualAssetsParams
+        from app.tools.video.production import resolve_visual_asset_selection
+        from app.tools.video.visual_assets import preflight_scene_svgs
+
+        try:
+            selection = PrepareVisualAssetsParams.model_validate(task.params)
+            if selection.scene_ids is None:
+                return "Use draft_ref and scene_ids for image preparation. Do not copy scene_assets into a plan."
+            specs = await resolve_visual_asset_selection(db, project, selection)
+            preflight_scene_svgs(specs)
+        except ValueError as exc:
+            return f"Image preparation plan rejected: {exc}"
     if not any(t.tool == "produce_video" for t in tasks):
         return None
     # Native tool loops occasionally serialize a nested object as JSON text.
@@ -377,8 +357,8 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
             if not isinstance(ref, dict):
                 return "Video production held: version_ref must be the saved base_ref object. Re-read the version and relay its base_ref."
             task.params = {**params, "version_ref": ref}
-    from app.tools.video.production import pin_video_production, latest_video_approval
     from app.editing.store import CompositionNotFound, PermissionDenied
+    from app.tools.video.production import latest_video_approval, pin_video_production
     # A later revision may carry this turn's explicit "change and make".
     # It still waits for the creative overview to finish before auto Start.
     prior = (project.pending_brief or {}).get("video_presentation") or {}
@@ -389,6 +369,7 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
                or (tasks[0].params or {}).get("version_ref") or {})
         if prior.get("composition_version_id") != ref.get("composition_version_id"):
             from sqlalchemy import select
+
             from app.models.tables import Conversation
             shown = await db.scalar(select(Message).join(Conversation, Message.conversation_id == Conversation.id)
                 .where(Conversation.project_id == project.id, Message.blocks.contains([
@@ -443,7 +424,7 @@ async def video_mention_guard(db, project, mentions, composition_id):
     pins = [m for m in mentions or [] if m.type == "output"]
     if len(pins) != 1:
         return None
-    from app.editing.service import video_version_read, VideoServiceError
+    from app.editing.service import VideoServiceError, video_version_read
     try:
         read = await video_version_read(db, owner_id=project.user_id, output_id=UUID(str(pins[0].id)))
     except VideoServiceError:
@@ -480,9 +461,10 @@ async def prepare_bound_skill_context(*, project, skill, message, package_sessio
     Skill/package budgets, permissions and existing read receipts are reused.
     """
     from dataclasses import replace
+
+    from app.metering import current_conversation_trace
     from app.skills.package_session import ReadSkillReferenceArgs
     from app.tools.project_context import project_context_reader
-    from app.metering import current_conversation_trace
 
     if project is None or skill is None:
         return project_context_reader(project.id, project.user_id) if project is not None else None
@@ -621,14 +603,16 @@ def _shared_material_summary(facts: dict) -> str:
     return json.dumps(summary, ensure_ascii=False)
 
 
-async def prepare_video_materials_seat(*, project: Project, args: Any) -> ToolObservation:
-    from app.tools.video.design import DesignError, prepare_video_materials
+async def prepare_video_materials_seat(
+    *, project: Project, args: Any, turn_id: UUID | None = None,
+) -> ToolObservation:
     from app.agents.errors import AgentStopError
     from app.tools.research.capture import CaptureError
+    from app.tools.video.design import DesignError, prepare_video_materials
 
     try:
         facts, images = await prepare_video_materials(
-            owner_id=project.user_id, project_id=project.id, args=args,
+            owner_id=project.user_id, project_id=project.id, args=args, turn_id=turn_id,
         )
     except (DesignError, ValueError, AgentStopError, CaptureError, OSError) as exc:
         return ToolObservation(f"Material preparation rejected: {exc}", ok=False)
@@ -640,6 +624,69 @@ async def prepare_video_materials_seat(*, project: Project, args: Any) -> ToolOb
         context_keys=keys,
         project_text=_shared_material_summary(facts) if images else None,
     )
+
+
+async def analyze_brand_seat(*, project: Project, args: Any, user_text: str) -> ToolObservation:
+    """Extract with real PNG evidence, then save through one independent short transaction."""
+    from app.chat.readiness import (
+        brief_with_user_constraints,
+        creative_state_for_pending,
+        urls_from_text,
+    )
+    from app.chat.service import merge_brief
+    from app.models.database import AsyncSessionLocal
+    from app.models.schemas import CreativeState, PendingPlan, seal_creative_state
+    from app.providers.llm.base import LLMError
+    from app.tools.video.brand import BrandEvidenceError, analyze_brand
+
+    stored = PendingPlan.model_validate(project.pending_brief or {})
+    current = creative_state_for_pending(stored) or CreativeState()
+    source_text = user_text if urls_from_text(user_text) else stored.prompt or user_text
+    brief = merge_brief(
+        args.brief,
+        brief_with_user_constraints(
+            user_text, brief_with_user_constraints(source_text, current.brief)
+        ),
+    )
+    try:
+        profile, facts = await analyze_brand(
+            owner_id=project.user_id,
+            project_id=project.id,
+            user_text=source_text,
+            brief=brief,
+        )
+    except (BrandEvidenceError, LLMError, ValueError, OSError) as exc:
+        return ToolObservation(
+            f"Brand analysis failed without saving a BrandProfile: {exc}", ok=False
+        )
+
+    async with AsyncSessionLocal() as db:
+        current_project = await db.get(Project, project.id, with_for_update=True)
+        if current_project is None or current_project.user_id != project.user_id:
+            return ToolObservation("Brand analysis could not save: project unavailable", ok=False)
+        latest = PendingPlan.model_validate(current_project.pending_brief or {})
+        latest_state = creative_state_for_pending(latest) or CreativeState()
+        latest_source_text = (
+            user_text if urls_from_text(user_text) else latest.prompt or source_text
+        )
+        latest_brief = merge_brief(
+            args.brief,
+            brief_with_user_constraints(
+                user_text, brief_with_user_constraints(latest_source_text, latest_state.brief)
+            ),
+        )
+        if not latest.prompt:
+            latest.prompt = source_text
+        latest.brief = latest_brief
+        latest.creative_state = seal_creative_state(CreativeState(
+            brief=latest_brief,
+            brand_profile=profile,
+            source_refs=profile.source_refs,
+        ))
+        current_project.pending_brief = latest.model_dump(mode="json")
+        await db.commit()
+        project.pending_brief = current_project.pending_brief
+    return ToolObservation(json.dumps(facts, ensure_ascii=False))
 
 
 async def capture_web_seat(*, project: Project, args: Any) -> ToolObservation:
@@ -740,9 +787,11 @@ async def design_video_seat(
     skill_ambiguity: list[str] | None = None,
     package_sessions: dict[str, Any] | None = None,
     user_text: str = "",
+    pending_brief: dict | None = None,
 ) -> tuple[dict[str, Any] | None, Any]:
     """Merge one draft write or save the assembled version through the write door."""
 
+    from app.agents.errors import AgentStopError
     from app.editing.edits import EditError  # deferred: write door
     from app.editing.service import format_storyboard_text  # deferred: editing seam
     from app.editing.store import (  # deferred: write door
@@ -750,9 +799,12 @@ async def design_video_seat(
         CompositionNotFound,
         PermissionDenied,
     )
-    from app.tools.video.design import CandidateDesignError, DesignError, design_video  # deferred: tool seam
-    from app.agents.errors import AgentStopError
     from app.providers.llm.base import LLMError
+    from app.tools.video.design import (  # deferred: tool seam
+        CandidateDesignError,
+        DesignError,
+        design_video,
+    )
 
     if skill_ambiguity:
         return None, (
@@ -778,7 +830,7 @@ async def design_video_seat(
             ),
             request_context={
                 "user_text": user_text,
-                "brief": getattr(project, "pending_brief", None),
+                "brief": pending_brief or getattr(project, "pending_brief", None),
             },
         )
         if isinstance(read, WorkingDraftUpdated):
@@ -879,13 +931,12 @@ async def revise_video_seat(
     user_text: str = "",
     pending_question: Any = None,
 ) -> tuple[dict[str, Any] | None, Any]:
-    """Revise an exact saved version through complete entities or one bounded action."""
+    """Revise an exact saved version through one direct Op batch or complete entities."""
 
     from app.agents.candidate_correction import CandidateRejected
     from app.editing.edits import EditError
-    from app.editing.revisions import RevisionInputError, RevisionTargetAmbiguityError
-    from app.editing.validators import ContentValidationError
     from app.editing.presets import PresetError
+    from app.editing.revisions import RevisionInputError, RevisionTargetAmbiguityError
     from app.editing.service import (  # deferred: editing seam
         VideoServiceError,
         format_revision_text,
@@ -898,12 +949,12 @@ async def revise_video_seat(
         PermissionDenied,
         StaleBase,
     )
+    from app.editing.validators import ContentValidationError
     from app.models.database import AsyncSessionLocal  # deferred: db seam
+    from app.models.schemas import ReviseVideoOpsArgs
     from app.tools.video.programs import generator_preview_images
 
-    from app.models.schemas import ReviseVideoActionArgs
-
-    if isinstance(args, ReviseVideoActionArgs):
+    if isinstance(args, ReviseVideoOpsArgs):
         args.bind_request_context(user_text=user_text, pending_question=pending_question)
 
     try:
@@ -1092,14 +1143,24 @@ async def search_sfx_seat(
 ) -> ToolObservation:
     """Emit real CC0 candidates; only the settled turn makes them importable."""
 
-    if not sfx_search_requested(user_text):
+    from app.chat.sfx_intent import allows_provider_search, sfx_intent_agent
+    from app.providers.llm.base import LLMError
+
+    try:
+        decision = await sfx_intent_agent.call(user_text=user_text)
+    except LLMError as exc:
         return ToolObservation(
-            "search_sfx admission rejected: the current user message does not "
-            "explicitly ask to find, add or replace a sound effect; no provider "
-            "search ran and no candidates were emitted.",
+            f"search_sfx admission unavailable ({type(exc).__name__}); no provider search ran",
             ok=False,
         )
-    import json
+    admission = decision.model_dump(mode="json")
+    if not allows_provider_search(decision):
+        return ToolObservation(
+            "search_sfx admission rejected by the classified user intent; no provider "
+            "search ran and no candidates were emitted.\n"
+            + json.dumps({"admission": admission}, ensure_ascii=False),
+            ok=False,
+        )
     from app.providers.freesound import FreesoundError
     from app.tools.video.sfx import SfxError, search_sfx_candidates
 
@@ -1126,7 +1187,7 @@ async def search_sfx_seat(
         "The response facts are the candidate count, display titles and durations. "
         "The candidate cards provide actual playback for the user to audition and choose "
         "by ordinal; this search observation contains no listening result.\n"
-        + json.dumps(selection_facts, ensure_ascii=False),
+        + json.dumps({"admission": admission, **selection_facts}, ensure_ascii=False),
         receipt=sfx_search_receipt(selection_facts),
     )
 
@@ -1140,6 +1201,7 @@ async def import_sfx_seat(
     """Resolve a settled candidate, freeze its MP3 and repaint its selection."""
 
     import json
+
     from app.models.database import AsyncSessionLocal
     from app.providers.freesound import FreesoundError
     from app.tools.video.sfx import SfxError, import_sfx_candidate
@@ -1170,7 +1232,7 @@ async def import_sfx_seat(
     selection_facts["title"] = _sfx_display_title(facts["title"])
     return ToolObservation(
         "World facts: the selected MP3 is a completed audio asset with this immutable "
-        "SourceSnapshot; no CompositionVersion changed. Use revise_video with a complete audio Clip (and its Track when adding a new Track).\n"
+        "SourceSnapshot; no CompositionVersion changed. Add it through revise_video with an add_audio_effect Op and the current base_ref.\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=sfx_import_receipt(
             selection_facts,
@@ -1269,15 +1331,102 @@ async def select_music_seat(
     )
 
 
+async def prepare_visual_assets_seat(*, project: Project | None, args: Any) -> ToolObservation:
+    if project is None:
+        return ToolObservation("visual asset preparation needs a project context", ok=False)
+    from app.tools.video.visual_assets import (
+        cached_visual_asset,
+        preflight_scene_svgs,
+        select_scene_assets,
+        visual_asset_result_images,
+    )
+
+    try:
+        if not isinstance(args._working_draft, dict):
+            return ToolObservation("the current visual asset draft could not be restored", ok=False)
+        specs = select_scene_assets(args._working_draft, args.scene_ids)
+        preflight_scene_svgs(specs)
+        results = []
+        pending = []
+        for spec in specs:
+            cached = await cached_visual_asset(
+                owner_id=project.user_id, project_id=project.id, spec=spec
+            )
+            if cached is None:
+                if args.review_existing:
+                    raise ValueError(f"scene {spec.scene_id} has no fixed PNG to review")
+                pending.append(spec.scene_id)
+            elif (
+                args.review_existing
+                and cached["content_review"]["status"] == "unavailable"
+                and not cached.get("review_retry_of")
+            ):
+                pending.append(spec.scene_id)
+            else:
+                results.append(cached)
+    except (ValueError, PermissionError) as exc:
+        return ToolObservation(f"prepare_visual_assets rejected: {exc}", ok=False)
+    if pending:
+        task = {
+            "tool": "prepare_visual_assets",
+            "params": {
+                "draft_ref": args.draft_ref.model_dump(mode="json"),
+                "scene_ids": pending,
+                "review_existing": args.review_existing,
+            },
+        }
+        return ToolObservation(json.dumps({
+            "ok": True,
+            "cache": "miss",
+            "cached_scene_ids": [item["scene_id"] for item in results],
+            "pending_scene_ids": pending,
+            "execution": "not executed",
+            "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and quote. Close after the plan or Run; do not execute or poll the provider here.",
+            "plan_task": task,
+        }, ensure_ascii=False), fold_after_delivery=True)
+    payload = {
+        "ok": True,
+        "cache": "hit",
+        "draft_ref": args.draft_ref.model_dump(mode="json"),
+        "assets": results,
+        "scope": "Only these current SceneAssetSpec images and their actual reports are returned; no Composition version or video Output was created.",
+    }
+    images = await visual_asset_result_images(results)
+    return ToolObservation(
+        json.dumps(payload, ensure_ascii=False),
+        images=tuple(images),
+        fold_after_delivery=True,
+    )
+
+
 async def prepare_narration_seat(
     *, project: Project | None, args: PrepareNarrationArgs, mentions=()
 ) -> str | ToolObservation:
     if project is None:
         return "narration preparation needs a project context"
+    from app.editing.schemas import SpeechObject
+    from app.editing.timing import SOURCE_TIMEBASE
     from app.models.database import AsyncSessionLocal
     from app.tools.video.alignment_store import request_alignment, wait_for_alignment
+    from app.tools.video.params import PrepareNarrationParams
 
     try:
+        if args.draft_ref is not None:
+            if not isinstance(args._working_draft, dict):
+                return ToolObservation("the current narration draft could not be restored", ok=False)
+            from app.tools.video.narration_draft import scene_narration_request
+
+            request = scene_narration_request(args._working_draft, args.scene_id or "")
+            params = PrepareNarrationParams(
+                **request, draft_ref=args.draft_ref, scene_id=args.scene_id
+            )
+        elif args.audio_asset_id is None:
+            params = PrepareNarrationParams(
+                text=args.text or "", voice_id=args.voice_id or "", language=args.language or ""
+            )
+        else:
+            params = None
+        request_text = params.text if params is not None else args.text or ""
         mentions = mentions or ()
         if args.audio_asset_id is not None:
             async with AsyncSessionLocal() as db:
@@ -1304,46 +1453,76 @@ async def prepare_narration_seat(
                 await db.commit()
                 snapshot_id = snapshot.id
         else:
-            # A cache probe stays read-only. Missing audio is prepared only by
-            # the ordinary presented/authorized narration-only Run scope.
-            from app.editing.schemas import SpeechObject
             from app.tools.video.narration_store import peek_original
             from app.tools.video.preparation import snapshot_narration_original
 
             speech = SpeechObject(
                 kind="speech",
                 object_id="obj_prepare_narration",
-                text=args.text,
-                voice_id=args.voice_id,
-                language=args.language,
+                text=request_text,
+                voice_id=params.voice_id,
+                language=params.language,
             )
             original = await peek_original(project.user_id, speech)
             if original is None:
-                return (
-                    "No fixed VideoNarration original exists for this exact script, voice "
-                    "and language, so no alignment was requested. For fresh synthesis, "
-                    "present exactly one prepare_narration task with the same text, voice_id "
-                    "and language through the current turn's ordinary plan tool "
-                    "(present_plan or propose_tasks), carrying the user's actual "
-                    "production_intent. The plan/Start machinery owns quote and spending "
-                    "authorization; produce_video is not a substitute. After the plan is "
-                    "presented or its Run starts, close this turn and do not poll synthesis"
-                )
+                return ToolObservation(json.dumps({
+                    "ok": True,
+                    "cache": "miss",
+                    "execution": "not executed",
+                    "draft_ref": params.draft_ref.model_dump(mode="json") if params.draft_ref else None,
+                    "scene_id": args.scene_id,
+                    "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and quote. Close after the plan or Run; do not execute or poll the provider here.",
+                    "plan_task": {"tool": "prepare_narration", "params": params.model_dump(mode="json")},
+                }, ensure_ascii=False), fold_after_delivery=True)
             async with AsyncSessionLocal() as db:
                 _, snapshot = await snapshot_narration_original(
-                    db, project, text=args.text, original=original
+                    db, project, text=request_text, original=original, scene_id=args.scene_id
                 )
                 await db.commit()
                 snapshot_id = snapshot.id
         requested = await request_alignment(
-            owner_id=project.user_id, audio_snapshot_id=snapshot_id, text=args.text
+            owner_id=project.user_id, audio_snapshot_id=snapshot_id, text=request_text
         )
         read = await wait_for_alignment(
             owner_id=project.user_id, alignment_id=UUID(requested["alignment_id"])
         )
+        analysis = None
+        async with AsyncSessionLocal() as db:
+            from app.models.tables import SourceSnapshot
+
+            fixed = await db.get(SourceSnapshot, snapshot_id)
+            analysis_ref = (fixed.meta or {}).get("analysis_ref") if fixed is not None else None
+        if analysis_ref:
+            from app.tools.video.media_analysis import read_report
+
+            analysis = await read_report(analysis_ref)
     except (ValueError, PermissionError) as exc:
-        return f"prepare_narration rejected: {exc}"
-    return ToolObservation(json.dumps(read, ensure_ascii=False))
+        return ToolObservation(f"prepare_narration rejected: {exc}", ok=False)
+    payload = (read.get("payload") or {})
+    duration_ticks = payload.get("duration_ticks")
+    read.update({
+        "draft_ref": (
+            params.draft_ref.model_dump(mode="json")
+            if params is not None and params.draft_ref else None
+        ),
+        "scene_id": args.scene_id,
+        "actual_duration_seconds": (
+            duration_ticks / (payload.get("source_timebase") or SOURCE_TIMEBASE)
+            if duration_ticks is not None else None
+        ),
+        "cues": [
+            {
+                "sentence_id": sentence.get("sentence_id"),
+                "text": sentence.get("text"),
+                "start_tick": sentence.get("start_tick"),
+                "end_tick": sentence.get("end_tick"),
+            }
+            for sentence in payload.get("sentences") or []
+        ],
+        "analysis": analysis,
+        "scope": "Original-speed audio and its actual alignment only; no CompositionVersion or video Output was created.",
+    })
+    return ToolObservation(json.dumps(read, ensure_ascii=False), fold_after_delivery=True)
 
 
 async def get_narration_alignment_seat(
@@ -1442,7 +1621,10 @@ def stamp_video_presentation(
     stored = PendingPlan.model_validate(project.pending_brief or {})
     updated = stored.model_copy(update={"video_presentation": receipt})
     project.pending_brief = updated.model_dump(mode="json")
-    message.blocks = [{**storyboard_block(read), "presented_message_id": str(message.id)}]
+    message.blocks = [
+        *(block for block in message.blocks or [] if block.get("kind") != "video_storyboard"),
+        {**storyboard_block(read), "presented_message_id": str(message.id)},
+    ]
     return updated
 
 
@@ -1455,7 +1637,7 @@ def requested_video_production(text: str) -> bool:
         text, re.I,
     ):
         return False
-    return bool(re.search(r"制作|做(?:一[个部条支]|成片)|\b(?:make|produce|create)\b", text, re.I))
+    return bool(re.search(r"制作|做(?:一[个部条支只]|成片)|\b(?:make|produce|create)\b", text, re.I))
 
 
 def confirmed_video_task(confirmation: dict):
@@ -1467,6 +1649,7 @@ def confirmed_video_task(confirmation: dict):
 async def short_video_confirmation(db, project, conversation_id, text, pending):
     """Resolve a brief affirmation against the last visible confirmation."""
     from sqlalchemy import select
+
     from app.models.tables import Composition, WorkflowRun
     from app.tools.video.production import is_short_video_affirmation
 
@@ -1559,3 +1742,44 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     if not current:
         return {"action": "stale", **target}
     return {"action": "produce" if receipt.get("presentation_complete") else "wait", **target}
+
+
+async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObservation:
+    if project is None:
+        return ToolObservation("music preparation needs a project context", ok=False)
+    from app.tools.video.music_preparation import cached_music_preparation, score_for_current_draft
+
+    try:
+        if not isinstance(args._working_draft, dict):
+            return ToolObservation("the current music draft could not be restored", ok=False)
+        score = score_for_current_draft(args._working_draft, args.score)
+        cached = await cached_music_preparation(
+            owner_id=project.user_id, project_id=project.id, score=score
+        )
+    except (ValueError, PermissionError) as exc:
+        return ToolObservation(f"prepare_music rejected: {exc}", ok=False)
+    if cached is None:
+        return ToolObservation(json.dumps({
+            "ok": True,
+            "cache": "miss",
+            "execution": "not executed",
+            "draft_ref": args.draft_ref.model_dump(mode="json"),
+            "score_digest": score.score_digest,
+            "score_spec": score.model_dump(mode="json"),
+            "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and resources. Close after the plan or Run; do not synthesize or poll here.",
+            "plan_task": {
+                "tool": "prepare_music",
+                "params": {
+                    "draft_ref": args.draft_ref.model_dump(mode="json"),
+                    "name": args.name,
+                    "score": args.score.model_dump(mode="json"),
+                },
+            },
+        }, ensure_ascii=False), fold_after_delivery=True)
+    return ToolObservation(json.dumps({
+        "ok": True,
+        "cache": "hit",
+        "draft_ref": args.draft_ref.model_dump(mode="json"),
+        "result": cached,
+        "scope": "Fixed private electronic Music, audio Snapshot, ScoreSpec, authored BeatGrid and full signal analysis only; no CompositionVersion or video Output was created. No human listening review is implied.",
+    }, ensure_ascii=False), fold_after_delivery=True)

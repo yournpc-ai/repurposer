@@ -20,6 +20,7 @@ import i18n from "@/lib/i18n"
 import { formatMediaTimeMs, type MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { cn } from "@/lib/utils"
 import { MentionPicker } from "@/components/mentions/MentionPicker"
+import { MENTION_CHIP_CLASS_NAME } from "@/components/mentions/MentionChip"
 import {
   SKILL_CHIP_CLASS_NAME,
   skillChipLabel,
@@ -79,6 +80,7 @@ export interface MentionEditorProps {
   /** Live surface data for registry candidate feeds (keep referentially
    * stable — e.g. useMemo — or the picker reloads every render). */
   mentionContext?: MentionContext
+  mentionChipClassName?: string
   /** Controlled, optional single Skill binding. The option supplies the exact
    * reference for POST /chat plus the DTO display name for the chip. */
   selectedSkill?: SkillOption | null
@@ -151,6 +153,7 @@ export function MentionEditor({
   onChange,
   onSubmit,
   mentionContext,
+  mentionChipClassName,
   selectedSkill,
   onSkillChange,
   className,
@@ -214,8 +217,7 @@ export function MentionEditor({
       chip.dataset.mentionLabel = mention.label
       if (mention.quote) chip.dataset.mentionQuote = mention.quote
       if (mention.region) chip.dataset.mentionRegion = JSON.stringify(mention.region)
-      chip.className =
-        "mx-0.5 inline-flex items-baseline gap-0.5 rounded-md bg-muted px-1 text-foreground"
+      chip.className = cn(MENTION_CHIP_CLASS_NAME, mentionChipClassName)
 
       const label = document.createElement("span")
       label.textContent = `@${mention.label}`
@@ -244,7 +246,7 @@ export function MentionEditor({
 
       return chip
     },
-    [],
+    [mentionChipClassName],
   )
 
   /** Track the "@" and "/" triggers against the live selection: query = text

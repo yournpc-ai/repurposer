@@ -2,6 +2,7 @@ import { useCallback, useState } from "react"
 
 import { Message, MessageContent } from "@/components/ui/message"
 import { AnchorCards } from "../AnchorCards"
+import { AudioPlaybackSurface } from "../video/AudioPlaybackSurface"
 import { StoryboardCard } from "../video/StoryboardCard"
 import type { ComponentSlot as ComponentSlotFact } from "../timeline/types"
 import {
@@ -45,6 +46,44 @@ export function ComponentSlot({
       >
         <AnchorCards outputs={slot.outputs} onOpen={onOpen ?? (() => {})} />
       </RevealSlot>
+    )
+  }
+  if (slot.kind === "systemNotice") {
+    return (
+      <Message align="start">
+        <MessageContent>
+          <RevealSlot
+            ready
+            priorDrained={slot.priorDrained}
+            history={slot.history}
+            structureId={structureId}
+            structureTurnId={structureTurnId}
+            onStructureVisible={onStructureVisible}
+          >
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+              {slot.block.text}
+            </p>
+          </RevealSlot>
+        </MessageContent>
+      </Message>
+    )
+  }
+  if (slot.kind === "audioPlayback") {
+    return (
+      <Message align="start">
+        <MessageContent>
+          <RevealSlot
+            ready={slot.block.items.length > 0}
+            priorDrained={slot.priorDrained}
+            history={slot.history}
+            structureId={structureId}
+            structureTurnId={structureTurnId}
+            onStructureVisible={onStructureVisible}
+          >
+            <AudioPlaybackSurface block={slot.block} />
+          </RevealSlot>
+        </MessageContent>
+      </Message>
     )
   }
   return (

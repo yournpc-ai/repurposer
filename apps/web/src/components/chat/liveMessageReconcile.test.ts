@@ -105,27 +105,25 @@ describe("polled activity identity", () => {
       createdAt: "2026-10-30T00:00:00Z",
       turnId: "turn-1",
       beat,
-      material: false,
     })
     expect(recovered.registerHost).toBe(true)
     expect(recovered.message).toMatchObject({
       id: "row-1",
       turnId: "turn-1",
-      independentKind: undefined,
       activity: { ...beat, at: "2026-10-30T00:00:00Z" },
     })
+    expect(recovered.message.independentKind).toBeUndefined()
   })
 
-  it("material recovery stays independent and never registers as a turn work host", () => {
+  it("legacy material recovery uses the same turn identity and host registration", () => {
     const recovered = buildRecoveredActivityRow({
       id: "material-1",
       turnId: "turn-1",
       beat,
-      material: true,
     })
-    expect(recovered.registerHost).toBe(false)
+    expect(recovered.registerHost).toBe(true)
     expect(recovered.message.turnId).toBe("turn-1")
-    expect(recovered.message.independentKind).toBe("material")
+    expect(recovered.message.independentKind).toBeUndefined()
   })
 
   it("legacy recovered rows keep an explicit identity-unknown fallback", () => {
@@ -133,7 +131,6 @@ describe("polled activity identity", () => {
       id: "legacy-1",
       turnId: null,
       beat,
-      material: false,
     })
     expect(recovered.message.turnId).toBeUndefined()
   })

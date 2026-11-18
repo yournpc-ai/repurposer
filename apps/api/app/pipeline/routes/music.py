@@ -4,7 +4,7 @@ Endpoints (prefix ``/api/v1/music``):
 
 - ``GET  ""``                  list pieces (auth; public + caller's own).
 - ``POST "/generate"``         generate a custom piece from a prompt (auth).
-- ``GET  "/{music_id}/stream"`` redirect to a piece's public audio URL (no auth).
+- ``GET  "/{music_id}/stream"`` redirect to public audio or its owner's private audio.
 - ``PUT  "/{music_id}"``       update metadata (auth).
 - ``DELETE "/{music_id}"``     delete (auth; 409 if referenced by any clip).
 - ``GET "/{ref}"``             UUID → metadata (auth-free, public only).
@@ -114,10 +114,17 @@ async def generate_music_endpoint(
 
 
 @router.get("/{music_id}/stream")
-async def stream_music_by_id(music_id: UUID, db: DBDep):
-    """Redirect to a music piece's public audio URL (no auth)."""
+async def stream_music_by_id(
+    music_id: UUID,
+    db: DBDep,
+    current_user: User | None = Depends(get_current_user),
+):
+    """Redirect to public audio, or to the caller's own private Music."""
     music = await get_music(db, music_id)
-    if music is None:
+    if music is None or (
+        not music.is_public
+        and (current_user is None or music.generated_by_user_id != current_user.id)
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Music not found"
         )

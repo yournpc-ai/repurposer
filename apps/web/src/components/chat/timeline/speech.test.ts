@@ -72,6 +72,7 @@ function manualTypewriter(append: (text: string) => void) {
 function harness(baseId = "preview-1", turnId?: string, initialRows: OverlayMessage[] = []) {
   let rows: OverlayMessage[] = initialRows
   const visible: { rowId: string; atMs: number }[] = []
+  const gateEvents: string[] = []
   let tw!: ReturnType<typeof manualTypewriter>
   const rawSegments = createSpeechSegments({
     baseId,
@@ -80,6 +81,8 @@ function harness(baseId = "preview-1", turnId?: string, initialRows: OverlayMess
     },
     setProseActive: () => {},
     onVisible: (rowId, atMs) => visible.push({ rowId, atMs }),
+    onInterimStart: (rowId) => gateEvents.push(`start:${rowId}`),
+    onInterimSettled: (rowId) => gateEvents.push(`settled:${rowId}`),
     turnId: () => turnId,
     typewriterFactory: ((append: (text: string) => void) => {
       tw = manualTypewriter(append)
@@ -146,6 +149,7 @@ function harness(baseId = "preview-1", turnId?: string, initialRows: OverlayMess
     ids: () => rows.map((m) => m.id),
     row: (id: string) => rows.find((m) => m.id === id),
     visible,
+    gateEvents,
   }
 }
 
@@ -277,6 +281,38 @@ describe("createSpeechSegments", () => {
     expect(h.ids()).toEqual(["preview-1#ip1", "activity-row-1", "preview-1"])
     expect(h.row("preview-1#ip1")?.content).toBe("先去读一下版本事实。")
     expect(h.row("preview-1")?.content).toBe("读完了：版本 2。")
+  })
+
+  it("releases the Activity display gate only after interim prose fully drains", async () => {
+    const h = harness()
+    h.segments.onInterimProse("先抓取页面，再确认方向。")
+    expect(h.gateEvents).toEqual(["start:preview-1#ip1"])
+
+    h.appendActivityRow("activity-row-1")
+    h.tw().releaseSome(2)
+    expect(h.gateEvents).toEqual(["start:preview-1#ip1"])
+    expect(h.ids()).toEqual(["preview-1#ip1", "activity-row-1"])
+
+    h.tw().release()
+    await h.segments.drain()
+    expect(h.gateEvents).toEqual([
+      "start:preview-1#ip1",
+      "settled:preview-1#ip1",
+    ])
+    expect(h.ids()).toEqual(["preview-1#ip1", "activity-row-1"])
+  })
+
+  it("releases the Activity display gate when Stop halts interim prose", () => {
+    const h = harness()
+    h.segments.onInterimProse("这段正文还没有播完。")
+    h.appendActivityRow("activity-row-1")
+
+    h.segments.halt()
+
+    expect(h.gateEvents).toEqual([
+      "start:preview-1#ip1",
+      "settled:preview-1#ip1",
+    ])
   })
 
   it("zero-delta reply after a interim_prose: the envelope-paced text births a fresh main row after the activity rows", async () => {

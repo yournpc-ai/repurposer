@@ -75,7 +75,7 @@ class Config(Base):                       # configs — 公共运营参数表（
 
 ### NULL 估价的诚实处理
 
-`estimate=None`（编译期量未知，如 runtime render fanout，或未出生 clips 上的 dub/translate）的 step：hold 按 0 计，结算按 actual 照扣——余额可能因此击穿为负，**允许负余额**（§5）。**含 NULL 不可报价族的方案在任何权限档都必须先带价说明并取得一次费用确认**；0 hold 不是免确认或免费承诺。这是当前报价能力边界，不是对“编译期精确总价”的隐性承诺；方向是把 NULL 报价节点随校准闭环逐步消灭，不在钱包里打补丁。
+`estimate=None`（编译期量未知，如 runtime render fanout，或未出生 clips 上的 dub/translate）的 step：hold 按 0 计，结算按 actual 照扣——余额可能因此击穿为负，**允许负余额**（§5）。**含 NULL 不可报价族的方案在 execution=ask 或 credits=ask 时必须带价说明并取得一次费用确认；auto/auto 不另设确认**。0 hold 不是免费承诺，实际费用仍照扣。这是当前报价能力边界，不是对“编译期精确总价”的隐性承诺；方向是把 NULL 报价节点随校准闭环逐步消灭，不在钱包里打补丁。
 
 ## 4. 消耗比例参数 + 公共 config 表
 

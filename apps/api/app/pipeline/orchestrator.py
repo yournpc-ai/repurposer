@@ -362,9 +362,16 @@ async def create_run(
             "这个项目已有生成在进行中——等它结束再开始新的。"
             if (task.ui_language or "").startswith("zh") else RUN_ALREADY_ACTIVE
         )
-    from app.tools.video.production import pin_narration_preparation, pin_video_production
+    from app.tools.video.production import (
+        pin_music_preparation,
+        pin_narration_preparation,
+        pin_video_production,
+        pin_visual_asset_preparation,
+    )
     video_context = await pin_video_production(db, project, task.tasks, task.video_authorized_by)
     narration_context = await pin_narration_preparation(project, task.tasks)
+    visual_context = await pin_visual_asset_preparation(db, project, task.tasks)
+    music_context = await pin_music_preparation(db, project, task.tasks)
     for pin, role_word, must_be_video in (
         (task.exemplar_asset_id, "exemplar", True),
         (task.source_asset_id, "source", False),
@@ -383,7 +390,13 @@ async def create_run(
     run = WorkflowRun(
         project_id=project.id,
         status=WorkflowStatus.PENDING,
-        context={**task.model_dump(mode="json"), **video_context, **narration_context},
+        context={
+            **task.model_dump(mode="json"),
+            **video_context,
+            **narration_context,
+            **visual_context,
+            **music_context,
+        },
         progress=0,
     )
     db.add(run)
@@ -398,8 +411,11 @@ async def create_run(
         if ns.kind == "produce_video":
             spec["narration_policy"] = video_context["narration_policy"]
             spec["aspect"] = video_context["aspect"]
-        else:
+        elif ns.kind == "prepare_narration":
             spec["narration_policy"] = narration_context["narration_preparation"]["narration_policy"]
+        elif ns.kind == "prepare_music":
+            spec["score_spec"] = music_context["music_preparation"]["score_spec"]
+            spec["score_digest"] = music_context["music_preparation"]["score_digest"]
         label = NODE_KINDS[ns.kind].label(
             IntentSlot.model_validate(spec["slot"]) if isinstance(spec.get("slot"), dict) else None,
             task.ui_language or "en",
@@ -1249,27 +1265,38 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         missing_delivery = len(delivered) < len(output_ids)
         project = await db.get(Project, run.project_id)
 
-        # A narration-only Run succeeds on fixed audio + alignment + settled
-        # usage, never on a fabricated Output. Other zero-Output Runs keep
-        # the ordinary verdict unchanged.
-        narration_error = None
+        # Output-free preparation succeeds only on fixed media, exact report
+        # references and settled actual usage, never on a fabricated Output.
+        preparation_error = None
         if not failed_verdict:
             from app.tools.video.production.narration import (
                 has_narration_preparation_scope,
                 narration_preparation_fact,
             )
+            from app.tools.video.production.visual_assets import (
+                has_visual_asset_preparation_scope,
+                visual_asset_preparation_fact,
+            )
+            from app.tools.video.music_preparation import (
+                has_music_preparation_scope,
+                music_preparation_fact,
+            )
 
-            if has_narration_preparation_scope(run):
-                try:
+            try:
+                if has_narration_preparation_scope(run):
                     await narration_preparation_fact(db, run, nodes)
-                except ValueError as exc:
-                    narration_error = str(exc)
+                if has_visual_asset_preparation_scope(run):
+                    await visual_asset_preparation_fact(db, run, nodes)
+                if has_music_preparation_scope(run):
+                    await music_preparation_fact(db, run, nodes)
+            except ValueError as exc:
+                preparation_error = str(exc)
 
-        if failed_verdict or missing_delivery or narration_error:
+        if failed_verdict or missing_delivery or preparation_error:
             run.status = WorkflowStatus.FAILED
             run.error = (
                 (failed_verdict[0].error if failed_verdict else None)
-                or narration_error
+                or preparation_error
                 or next((o.render_error for o in outputs if o.render_error), None)
                 or user_line("delivery_missing", (project.language if project else None) or "en")
             )

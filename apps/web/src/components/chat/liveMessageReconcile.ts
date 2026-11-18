@@ -9,7 +9,7 @@
 import type {
   ActivityRowFrame,
   OverlayMessage,
-  VideoStoryboardBlock,
+  MessageBlock,
 } from "./timeline/types"
 import { stampServerMessageId } from "./timeline/identity"
 import { triggerOutputRefs } from "./timeline/history"
@@ -116,7 +116,7 @@ export function buildRecoveredProseMessage({
   createdAt?: string
   turnId?: string | null
   runId?: string | null
-  blocks?: VideoStoryboardBlock[]
+  blocks?: MessageBlock[]
   runDelivery: boolean
   runDeliveryRef?: string
   outputRefs?: string[]
@@ -138,23 +138,18 @@ export function buildRecoveredProseMessage({
   }
 }
 
-/** Adapt one fresh polled activity/material row with the same identity facts
- * as history replay. Only ordinary turn activities register as live work
- * hosts; material beats are independent world facts and never join that set. */
 export function buildRecoveredActivityRow({
   id,
   seq,
   createdAt,
   turnId,
   beat,
-  material,
 }: {
   id: string
   seq?: number | null
   createdAt?: string
   turnId?: string | null
   beat: ActivityRowFrame
-  material: boolean
 }): { message: OverlayMessage; registerHost: boolean } {
   return {
     message: {
@@ -162,12 +157,11 @@ export function buildRecoveredActivityRow({
       role: "assistant",
       content: "",
       turnId: turnId ?? undefined,
-      independentKind: material ? "material" : undefined,
       seq: seq ?? undefined,
       at: createdAt,
       activity: { ...beat, at: beat.at ?? createdAt },
     },
-    registerHost: !material,
+    registerHost: true,
   }
 }
 
@@ -177,7 +171,7 @@ export function buildRecoveredActivityRow({
 export function stampMessagePresentation(
   messages: OverlayMessage[],
   previewId: string,
-  message: { id: string; blocks?: VideoStoryboardBlock[]; intent?: unknown },
+  message: { id: string; blocks?: MessageBlock[]; intent?: unknown },
 ): OverlayMessage[] {
   const blocks = message.blocks?.length ? message.blocks : undefined
   const outputRefs = triggerOutputRefs(message.intent)

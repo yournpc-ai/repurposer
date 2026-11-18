@@ -112,7 +112,7 @@ supervise() {
 # src/server.ts 项目）会误伤——本机开发约定下可接受。
 SERVICE_PATTERNS=(
   "uvicorn app\.main"        # API：uv run 包装器 + reload 主进程
-  "\-m app\.worker"          # worker：无端口，只能模式杀（2026-09-08 孤儿教训）
+  "scripts/dev_worker\.py|\-m app\.worker"  # worker：uv、文件监视器和队列进程
   "src/server\.ts"           # render：tsx watch 父与 node 子 argv 同串
   "vite/bin/vite\.js dev"    # web：vite 本体（pnpm 包装器随子进程退出）
 )
@@ -184,7 +184,10 @@ api_command() {
   ( cd "$ROOT/apps/api" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee -a "$LOG_API" )
 }
 worker_command() {
-  ( cd "$ROOT/apps/api" && uv run python -m app.worker 2>&1 | tee -a "$LOG_WORKER" )
+  (
+    set -o pipefail
+    cd "$ROOT/apps/api" && uv run python scripts/dev_worker.py 2>&1 | tee -a "$LOG_WORKER"
+  )
 }
 web_command() {
   ( cd "$ROOT/apps/web" && pnpm dev 2>&1 | tee -a "$LOG_WEB" )
@@ -198,7 +201,7 @@ API_PID=$!
 # --- worker ----------------------------------------------------------------
 # Processes the Postgres-backed job queue in a separate process so heavy jobs
 # never compete with the API's online requests.
-echo "Starting background worker (auto-restart enabled) ..."
+echo "Starting background worker (file reload and auto-restart enabled) ..."
 supervise worker "$LOG_WORKER" worker_command
 WORKER_PID=$!
 
@@ -271,11 +274,11 @@ sleep 5
 echo "Service status:"
 DEAD=0
 check_alive "$API_PID"    "API    http://localhost:8000"  "( cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 )" || DEAD=1
-check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python -m app.worker )"                                   || DEAD=1
+check_alive "$WORKER_PID" "worker (job queue)"            "( cd apps/api && uv run python scripts/dev_worker.py )"                                   || DEAD=1
 check_alive "$RENDER_PID" "render http://localhost:3001"  "( cd apps/render && HTTPS_PROXY=http://127.0.0.1:6152 pnpm dev )"                   || DEAD=1
 check_alive "$WEB_PID"    "web    http://localhost:3000"  "( cd apps/web && pnpm dev )"                                                         || DEAD=1
 # Unique-instance guard：启动时每个服务家族必须恰好有预期进程数；少了是
-# 崩溃/重启中，多了是孤儿/复活。API 2、worker 2、render 2、web 1。
+# 崩溃/重启中，多了是孤儿/复活。API 2、worker 3（含文件监视器）、render 2、web 1。
 family_count() { pgrep -f "$1" 2>/dev/null | wc -l | tr -d ' '; }
 check_family() {
   local pattern=$1 name=$2 expected=$3 count
@@ -287,7 +290,7 @@ check_family() {
   fi
 }
 check_family "uvicorn app\.main"     "API   " 2
-check_family "\-m app\.worker"       "worker" 2
+check_family "scripts/dev_worker\.py|\-m app\.worker" "worker" 3
 check_family "src/server\.ts"        "render" 2
 check_family "vite/bin/vite\.js dev" "web   " 1
 if [ "$DEAD" -ne 0 ]; then

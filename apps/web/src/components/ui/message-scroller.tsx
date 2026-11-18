@@ -291,7 +291,7 @@ function MessageScrollerButton({
   children,
   render,
   variant = "ghost",
-  size = "icon-lg",
+  size = "icon-sm",
   ...props
 }: Omit<React.ComponentProps<typeof MessageScrollerPrimitive.Button>, "render"> &
   Pick<React.ComponentProps<typeof Button>, "variant" | "size" | "render">) {
@@ -359,8 +359,7 @@ function MessageScrollerButton({
     >
       {children ?? (
         <>
-          <ArrowDownIcon
-          />
+          <ArrowDownIcon className="size-4" />
           <span className="sr-only">
             {direction === "end" ? "Scroll to end" : "Scroll to start"}
           </span>

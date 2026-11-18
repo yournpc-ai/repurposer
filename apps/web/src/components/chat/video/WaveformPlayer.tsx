@@ -60,12 +60,15 @@ export function WaveformPlayer({
   src,
   durationSeconds,
   waveformKey,
+  measuredPeaks,
   className,
 }: {
   src: string
   durationSeconds?: number | null
   /** Candidate identity for deterministic bars. Other audio uses src. */
   waveformKey?: string
+  /** Real full-decode PCM peaks from the fixed audio's analysis report. */
+  measuredPeaks?: number[]
   className?: string
 }) {
   const { t } = useTranslation()
@@ -80,7 +83,9 @@ export function WaveformPlayer({
     progress,
     (value) => `inset(0 ${Math.max(0, 100 - value * 100)}% 0 0)`,
   )
-  const peaks = deterministicWaveform(waveformKey ?? src)
+  const peaks = measuredPeaks?.length
+    ? measuredPeaks.map((peak) => Number.isFinite(peak) ? Math.min(Math.max(peak, 0), 1) : 0)
+    : deterministicWaveform(waveformKey ?? src)
   const actualProgress = duration > 0 ? Math.min(Math.max(currentTime / duration, 0), 1) : 0
 
   useEffect(() => {

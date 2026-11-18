@@ -47,10 +47,11 @@ class ReadConversationContextArgs(BaseModel):
 
 
 def conversation_context_tool():
-    from app.agents.tool_loop import ChatTool
+    from app.agents.tool_loop import ToolPresentation, ChatTool
     return ChatTool(
         name="read_conversation_context", terminal=False, batchable=True,
         description="Read exact earlier tool exchanges omitted from this request by the context budget. Use item ids listed in CONVERSATION TOOL HISTORY, or empty item_ids with cursor to page the historical item catalog. This does not repeat the original operation or execute its arguments.",
+        presentation=ToolPresentation(kind="read", active_key="chat.activity.readHistory", done_key="chat.activity.readHistoryDone"),
         params_model=ReadConversationContextArgs,
     )
 
@@ -61,7 +62,8 @@ def context_items(context):
     return [item for item in context.get("items", []) if isinstance(item, dict)]
 
 
-def select_items(items, *, current_turn, valid_turns, keys, skill_reference, budget):
+def select_items(items, *, current_turn, valid_turns, keys, skill_reference, budget,
+                 resumed_item_ids=frozenset()):
     """Newest complete records win; every omitted item gets an exact reason."""
     chosen, omitted, seen = [], [], set()
     seen_candidates = set()
@@ -80,7 +82,7 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
         elif candidate_id:
             seen_candidates.add(candidate_id)
         write_key = (target_tool, effective_args.get("composition_id"), json.dumps(effective_args.get("base_ref"), sort_keys=True))
-        if item["turn_id"] == str(current_turn):
+        if item["turn_id"] == str(current_turn) and identity not in resumed_item_ids:
             # The current ToolLoop owns these protocol pairs already.
             continue
         if item["turn_id"] not in valid_turns:
@@ -152,12 +154,14 @@ async def discard_turn_context(db, conversation_id, turn_id):
 
 
 class ConversationContext:
-    def __init__(self, *, conversation_id, owner_id, turn_id, skill=None):
+    def __init__(self, *, conversation_id, owner_id, turn_id, skill=None, resume_turn=False):
         self.conversation_id = conversation_id
         self.owner_id = owner_id
         self.turn_id = turn_id
         self.skill_reference = skill.model_dump(mode="json") if skill is not None else None
         self._media_cache = {}
+        self._resume_turn = resume_turn
+        self._resumed_item_ids = None
 
     async def _load(self):
         async with AsyncSessionLocal() as db:
@@ -271,10 +275,17 @@ class ConversationContext:
 
     async def restore(self, snapshot, assembled_messages):
         items, valid_turns, budget = await self._load()
+        if self._resumed_item_ids is None:
+            # A resumed loop has no protocol pairs from its previous execution.
+            # Capture only the existing records, so new pairs stay loop-owned.
+            self._resumed_item_ids = frozenset(
+                item["id"] for item in items
+                if self._resume_turn and item["turn_id"] == str(self.turn_id)
+            )
         used = text_cost(assembled_messages)
         selected, omitted = select_items(items, current_turn=self.turn_id, valid_turns=valid_turns,
             keys=snapshot.keys if snapshot else frozenset(), skill_reference=self.skill_reference,
-            budget=max(0, budget - used - 3000))
+            budget=max(0, budget - used - 3000), resumed_item_ids=self._resumed_item_ids)
         images, media_notes = await self._media(selected)
         # Reuse the single wire projection for actual media content parts.
         from app.agents.tool_loop import observation_wire_content
@@ -289,7 +300,6 @@ class ConversationContext:
                 "Only attached media is visual evidence.\n" + json.dumps({"omitted_count": len(omitted),
                 "omitted": omitted[:16], "omitted_catalog_truncated": len(omitted) > 16,
                 "media": media_notes}, ensure_ascii=False))})
-        prior_turn = None
         restored_candidates = []
         candidate_rejections = []
         for item in selected:
@@ -328,9 +338,6 @@ class ConversationContext:
                 except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
                     if not item["ok"]:
                         candidate_rejections.append({"item_id": item["id"], "reason": str(exc)})
-            if item["turn_id"] != prior_turn:
-                messages.append({"role": "user", "content": "Previous user request (historical turn " + item["turn_id"] + "): " + valid_turns[item["turn_id"]]})
-                prior_turn = item["turn_id"]
             messages.append({"role": "assistant", "content": "", "tool_calls": [{
                 "id": wire_id, "type": "function", "function": {"name": item["tool"],
                     "arguments": json.dumps(item["arguments"], ensure_ascii=False)}}]})

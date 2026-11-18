@@ -30,13 +30,14 @@
  * flow.
  */
 
-import { useState } from "react"
-import { Loader2, Pencil, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ArrowLeft, ArrowRight, Check, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import type { BriefAnswerItem, BriefQuestionItem } from "./timeline/types"
 
 /** One option on a structured question (mirrors the API's Option). */
 export interface DockOption {
@@ -52,6 +53,11 @@ interface OptionDockProps {
   /** The question's human text (LLM-written user data, shown as-is). */
   question: string
   options: DockOption[]
+  items?: BriefQuestionItem[]
+  groupDigest?: string | null
+  groupAnswers?: BriefAnswerItem[]
+  onGroupAnswersChange?: (answers: BriefAnswerItem[]) => void
+  onGroupSubmit?: (answers: BriefAnswerItem[]) => void
   /** 推荐标记 (2026-09-27 一问拍一体化): at most one option id the agent
    * recommends — its row carries the muted 推荐 suffix. */
   recommendedId?: string | null
@@ -102,16 +108,16 @@ function OptionForm({
     setFreeform("")
   }
   return (
-    <div className={plain ? "px-4 py-2.5" : "mb-2 rounded-lg bg-muted px-4 py-2.5"}>
+    <div className={plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"}>
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
           channel. */}
-      <div className="flex items-start gap-2 text-sm">
+      <div className="flex items-start gap-3 text-sm leading-6">
         <span className="min-w-0 flex-1 break-words">{question}</span>
         {onBail ? (
           <Button
             variant="ghost"
-            size="icon"
-            className="-mr-1 -mt-1 h-6 w-6 shrink-0"
+            size="icon-sm"
+            className="-mr-1.5 -mt-1.5 shrink-0 text-muted-foreground hover:text-foreground"
             aria-label={bailLabel ?? t("questionDock.bail")}
             disabled={answering}
             onClick={onBail}
@@ -121,11 +127,8 @@ function OptionForm({
         ) : null}
       </div>
       {options.length > 0 ? (
-        // Full-width rows, not pills: long option labels must wrap inside
-        // the card (the old button row let them bleed past the right edge).
-        // 行距 (2026-09-28 用户走查): gap 收紧到 4px——行自养 py-2 已给足
-        // 触控面与 hover 底, 行间只留一道视觉分组缝.
-        <div className="mt-2 flex flex-col gap-1">
+        // Full-width options keep long labels within the dock.
+        <div className="mt-4 flex flex-col gap-1.5">
           {options.map((option, index) => (
             <Button
               key={option.id}
@@ -136,24 +139,14 @@ function OptionForm({
                 onAnswer(option.id)
               }}
               className={cn(
-                "h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-md px-3 py-2 text-left hover:bg-accent",
+                "h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md px-3 py-3 text-left text-sm font-normal hover:bg-accent",
                 answering && pickedId === option.id
                   ? "bg-accent disabled:opacity-100"
                   : "bg-card"
               )}
             >
-              {/* The badge is the POSITIONAL NUMBER (1/2/3…), never the raw
-                  option id — the id is a transport fact the LLM may spell as
-                  a slug ("tech_innovation"), which used to overflow this 20px
-                  tile and bleed across the card (2026-09-10). The number is
-                  also the typed-answer channel: _match_option resolves it
-                  positionally server-side. ADR-081 (2026-09-17): the badge
-                  went a/b/c → 1/2/3 — one option grammar for every source
-                  (plan / ask_user / trigger). self-start (2026-09-28 对齐走
-                  查): the badge pins itself to the title's 20px line box —
-                  per-item alignment that holds regardless of which align
-                  class the row container carries. */}
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center self-start rounded bg-muted text-[11px] font-medium text-muted-foreground">
+              {/* Position numbers also support typed option selection. */}
+              <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
                 {index + 1}
               </span>
               <span className="min-w-0 break-words leading-5">
@@ -173,23 +166,15 @@ function OptionForm({
                 ) : null}
               </span>
               {answering && pickedId === option.id ? (
-                <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground" />
               ) : null}
             </Button>
           ))}
-          {/* 尾行铅笔手输入 (ADR-053 R1 阻塞形态) — the freeform channel
-              while the input row is morphed away (freeform 恒在, 判词 5),
-              rendered as ONE MORE ITEM ROW (2026-09-04 用户拍板, FLORA /
-              Opus "Something else…" 同款解剖): the pencil sits in the same
-              badge tile as the option numbers, the input aligns with the
-              option labels. Enter settles through the answer endpoint —
-              the client-side number/letter/label mapping (the server's
-              autoResume mirror) converts a hit to the option pick,
-              anything else records kind="freeform". */}
+          {/* Freeform answers share the option text alignment and submit on Enter. */}
           {onFreeform ? (
-            <div className="flex w-full items-center gap-2.5 rounded-md bg-card px-3 py-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-                <Pencil className="h-3 w-3" />
+            <div className="flex min-h-11 w-full items-center gap-3 rounded-md border border-subtle px-3 py-3 transition-colors focus-within:border-ring focus-within:outline-2 focus-within:outline-ring/30">
+              <span className="flex size-5 shrink-0 items-center justify-center text-meta-foreground">
+                <Pencil className="size-3.5" />
               </span>
               {/* dark:bg-transparent is NOT redundant with bg-transparent:
                   the Input base carries bg-input/20 + dark:bg-input/30, and
@@ -209,7 +194,7 @@ function OptionForm({
                 placeholder={t("chat.choicePlaceholder")}
                 aria-label={t("chat.choicePlaceholder")}
                 disabled={answering || freeformDisabled}
-                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none dark:bg-transparent"
+                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
               />
             </div>
           ) : null}
@@ -220,5 +205,158 @@ function OptionForm({
 }
 
 export function QuestionDock(props: OptionDockProps) {
-  return <OptionForm {...props} />
+  return props.items?.length ? <QuestionGroupForm {...props} /> : <OptionForm {...props} />
+}
+
+
+function QuestionGroupForm(props: OptionDockProps) {
+  const { t } = useTranslation()
+  const items = props.items ?? []
+  const answers = props.groupAnswers ?? []
+  const [page, setPage] = useState(0)
+  const pageCount = Math.max(1, items.length)
+  const currentItems = items.slice(page, page + 1)
+  const lastPage = page === pageCount - 1
+
+  useEffect(() => {
+    setPage(0)
+  }, [props.groupDigest])
+
+  const answered = (slot: string) => {
+    const answer = answers.find((candidate) => candidate.slot === slot)
+    return answer?.kind === "option"
+      ? !!answer.option_id
+      : !!(answer?.text ?? "").trim()
+  }
+  const canSubmit = items.every((item) => item.required === false || answered(item.slot))
+  const updateAnswer = (slot: string, answer?: BriefAnswerItem) => {
+    const next = answers.filter((candidate) => candidate.slot !== slot)
+    if (answer) next.push(answer)
+    props.onGroupAnswersChange?.(next)
+  }
+  const submit = () => {
+    if (canSubmit && !props.answering) props.onGroupSubmit?.(answers)
+  }
+
+  return (
+    <div className={props.plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"} role="group" aria-label={props.question}>
+      <div className="flex items-start gap-3 text-xs leading-5 text-muted-foreground">
+        <span className="min-w-0 flex-1 break-words">{props.question}</span>
+        {props.onBail ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="-mr-1.5 -mt-1.5 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label={props.bailLabel ?? t("questionDock.bail")}
+            disabled={props.answering}
+            onClick={props.onBail}
+          >
+            <X className="size-3.5" />
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-3 flex flex-col gap-4">
+        {currentItems.map((item) => {
+          const answer = answers.find((candidate) => candidate.slot === item.slot)
+          return (
+            <fieldset key={item.slot} className="min-w-0">
+              <legend className="mb-3 max-w-full whitespace-normal break-words text-sm font-medium leading-6 text-foreground">
+                {item.question}
+              </legend>
+              <div className="flex flex-col gap-1.5">
+                {(item.options ?? []).map((option, index) => {
+                  const selected = answer?.kind === "option" && answer.option_id === option.id
+                  return (
+                    <Button
+                      key={option.id}
+                      variant="ghost"
+                      disabled={props.answering}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        updateAnswer(item.slot, { slot: item.slot, kind: "option", option_id: option.id })
+                        if (!lastPage) setPage((current) => Math.min(pageCount - 1, current + 1))
+                      }}
+                      className={cn(
+                        "h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md border px-3 py-3 text-left text-sm font-normal",
+                        selected
+                          ? "border-primary/25 bg-primary/10 text-primary hover:bg-primary/15"
+                          : "border-transparent bg-card hover:bg-accent"
+                      )}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words leading-5">
+                        {option.label}
+                        {item.recommended_id === option.id ? (
+                          <span className="ml-1.5 text-xs text-muted-foreground">· {t("questionDock.recommended")}</span>
+                        ) : null}
+                        {option.description ? (
+                          <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{option.description}</span>
+                        ) : null}
+                      </span>
+                      {selected ? <Check className="size-4 shrink-0 self-center" aria-hidden="true" /> : null}
+                    </Button>
+                  )
+                })}
+                {item.allow_freeform !== false ? (
+                  <div className="flex min-h-11 w-full items-center gap-3 rounded-md border border-subtle px-3 py-3 transition-colors focus-within:border-ring focus-within:outline-2 focus-within:outline-ring/30">
+                    <span className="flex size-5 shrink-0 items-center justify-center text-meta-foreground">
+                      <Pencil className="size-3.5" />
+                    </span>
+                    <Input
+                      value={answer?.kind === "freeform" ? answer.text ?? "" : ""}
+                      onChange={(event) => {
+                        const text = event.target.value
+                        updateAnswer(item.slot, text
+                          ? { slot: item.slot, kind: "freeform", text }
+                          : undefined)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                          event.preventDefault()
+                          if (lastPage) submit()
+                          else setPage((current) => Math.min(pageCount - 1, current + 1))
+                        }
+                      }}
+                      placeholder={t("chat.choicePlaceholder")}
+                      aria-label={item.question}
+                      disabled={props.answering || props.freeformDisabled}
+                      className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </fieldset>
+          )
+        })}
+      </div>
+      <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-subtle pt-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-self-start gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+          disabled={page === 0 || props.answering}
+          onClick={() => setPage((current) => Math.max(0, current - 1))}
+        >
+          <ArrowLeft className="size-3.5" />
+          {t("questionDock.previous")}
+        </Button>
+        <span className="text-xs tabular-nums text-meta-foreground" aria-live="polite">
+          {t("questionDock.page", { current: page + 1, total: pageCount })}
+        </span>
+        {lastPage ? (
+          <Button size="sm" className="justify-self-end px-4 font-normal" disabled={!canSubmit || props.answering} onClick={submit}>
+            {props.answering ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {t("questionDock.submit")}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="justify-self-end gap-1.5 px-2 font-normal" disabled={props.answering} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>
+            {t("questionDock.next")}
+            <ArrowRight className="size-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
 }

@@ -283,6 +283,27 @@ async def test_loop_exhaustion_distinguishes_working_draft_from_saved_version(
             assert "作品版本已保存" not in content
 
 
+@pytest.mark.asyncio
+async def test_present_plan_requires_an_explicit_production_intent_judgment():
+    from app.chat.plan_turn import PlanTurn
+    from app.models.schemas import ChatRequest, PresentPlanArgs
+
+    request = ChatRequest(project_id=uuid4(), message="制作产品宣传片")
+    turn = PlanTurn(
+        db=None,
+        user_id=uuid4(),
+        conversation=SimpleNamespace(id=uuid4()),
+        project=SimpleNamespace(pending_brief=None),
+        request=request,
+    )
+    result = await turn._present_plan(
+        PresentPlanArgs(tasks=[], production_intent=None),
+        "Prepare the scene images.",
+    )
+    assert "production_intent is required" in result
+    assert "true or false" in result
+
+
 async def test_no_progress_without_saved_version_does_not_claim_saved_history():
     from app.chat.service import _design_no_progress_text
 
@@ -1207,7 +1228,7 @@ async def test_promo_ambiguity_requires_real_ask_and_answer_settles_without_revi
     from app.chat.intent import chat_intent_agent
     from app.chat.propose_turn import ChatTurn
     from app.chat.video_turn_seats import VideoTargetAmbiguityFeedback
-    from app.models.schemas import ChatAnswerArgs, ReviseVideoActionArgs
+    from app.models.schemas import ChatAnswerArgs, ReviseVideoOpsArgs
     from app.editing.revisions import RevisionTargetAmbiguityError
     from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
 
@@ -1240,7 +1261,7 @@ async def test_promo_ambiguity_requires_real_ask_and_answer_settles_without_revi
 
         async def saved_seat(*, args, **_kwargs):
             answer_attempts.append(args)
-            if args.action.scope == "window" and args.action.end_seconds is not None:
+            if args.ops[0].scope == "window" and args.ops[0].end_seconds is not None:
                 return None, VideoTargetAmbiguityFeedback(
                     "Choose an exact time window",
                     candidates=candidates,
@@ -1252,13 +1273,13 @@ async def test_promo_ambiguity_requires_real_ask_and_answer_settles_without_revi
         monkeypatch.setattr("app.editing.service.revise_video", ambiguous_revise)
         turn = ChatTurn(db, uid, conversation, project, "Add an overlay")
         turn.text = "Add an overlay"
-        missing_target = ReviseVideoActionArgs.model_validate({
+        missing_target = ReviseVideoOpsArgs.model_validate({
             "base_ref": base_ref,
-            "action": {
-                "action": "add_media_overlay", "source_id": str(uuid4()),
+            "ops": [{
+                "op": "add_media_overlay", "source_id": str(uuid4()),
                 "position": "bottom_right", "width_ratio": 0.28,
                 "margin_px": 48, "motion": "none",
-            },
+            }],
         })
         feedback = await turn._revise_video(missing_target)
         assert isinstance(feedback, VideoTargetAmbiguityFeedback)
@@ -1318,28 +1339,28 @@ async def test_promo_ambiguity_requires_real_ask_and_answer_settles_without_revi
 
         answering = ChatTurn(db, uid, conversation, project, "整个第二镜")
         await answering.assemble([], [])
-        answered_target = ReviseVideoActionArgs.model_validate({
+        answered_target = ReviseVideoOpsArgs.model_validate({
             "base_ref": base_ref,
             "pending_disposition": "answer",
-            "action": {
-                "action": "add_media_overlay", "source_id": str(uuid4()),
+            "ops": [{
+                "op": "add_media_overlay", "source_id": str(uuid4()),
                 "scene_id": "proof", "scope": "whole_scene",
                 "position": "bottom_right", "width_ratio": 0.28,
                 "margin_px": 48, "motion": "none",
-            },
+            }],
         })
         omitted_payload = answered_target.model_dump(mode="json")
         omitted_payload.pop("pending_disposition")
-        omitted = ReviseVideoActionArgs.model_validate(omitted_payload)
+        omitted = ReviseVideoOpsArgs.model_validate(omitted_payload)
         feedback = await answering.execute("revise_video", omitted, "Saving the answered scope.")
         assert "pending_disposition" in feedback
         assert answering._video_presentation_pending is None
         assert asked.answer is None
 
         end_only_payload = answered_target.model_dump(mode="json")
-        end_only_payload["action"].pop("scope")
-        end_only_payload["action"]["end_seconds"] = 6.5
-        end_only = ReviseVideoActionArgs.model_validate(end_only_payload)
+        end_only_payload["ops"][0].pop("scope")
+        end_only_payload["ops"][0]["end_seconds"] = 6.5
+        end_only = ReviseVideoOpsArgs.model_validate(end_only_payload)
         feedback = await answering.execute("revise_video", end_only, "Saving the answered scope.")
         assert isinstance(feedback, VideoTargetAmbiguityFeedback)
         assert len(answer_attempts) == 1
@@ -1493,4 +1514,4 @@ async def test_completed_video_delivery_survives_its_unanswered_dock(database, m
         "tools": [],
         "user_text": "OK",
     })
-    assert assembly.system.startswith("Reply in zh.")
+    assert "language the user speaks in this conversation" in assembly.system

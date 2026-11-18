@@ -217,6 +217,9 @@ async def run_worker() -> None:
         await reap_stale_publications(db)
         await reap_stale_alignments(db)
     await finalize_stuck_runs()
+    from app.chat.media_journey import recover_settled_media_journeys
+
+    await recover_settled_media_journeys()
 
     while True:
         try:

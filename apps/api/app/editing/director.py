@@ -82,7 +82,7 @@ class MgDirection(BaseModel):
     name: str | None = Field(default=None)
     language: str | None = None
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    scenes: list[MgSceneAnswer] = Field(min_length=1, max_length=6)
+    scenes: list[MgSceneAnswer] = Field(min_length=1)
 
 
 class ComponentFileAnswer(BaseModel):
@@ -149,7 +149,7 @@ class AlignedNarrationDirection(BaseModel):
     name: str | None = Field(default=None, max_length=24)
     language: str | None = None
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    scenes: list[AlignedNarrationSceneAnswer] = Field(min_length=1, max_length=6)
+    scenes: list[AlignedNarrationSceneAnswer] = Field(min_length=1)
 
 
 class ProgramDirection(BaseModel):
@@ -193,7 +193,7 @@ class ComponentVideoDirection(BaseModel):
 
     name: str | None = Field(default=None, max_length=24)
     language: str | None = None
-    scenes: list[ComponentSceneDirection] = Field(min_length=1, max_length=6)
+    scenes: list[ComponentSceneDirection] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _bounded_work(self) -> ComponentVideoDirection:

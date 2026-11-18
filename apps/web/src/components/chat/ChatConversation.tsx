@@ -245,6 +245,7 @@ export function ChatConversation({
               question={m.qa.question}
               questionDetail={m.qa.detail}
               answer={m.qa.answer}
+              items={m.qa.items}
               muted={m.qa.muted}
               hydrated={m.hydrated}
             />
@@ -325,15 +326,20 @@ export function ChatConversation({
                 onStructureVisible={onStructureVisible}
               />
             ) : null}
-            {/* Structured presentation blocks (Video Project phase B): the
-                visible storyboard is the assistant's Markdown above; this
-                companion resolves the version reference and ACKs after prose
-                and any real previews are ready. Unknown kinds render nothing. */}
-            {m.blocks?.map((block, index) =>
-              block.kind === "video_storyboard" ? (
+            {m.blocks?.map((block, index) => {
+              const key = `${m.id}-b${index}`
+              const priorDrained = m.hydrated === true || m.proseDrainedAtMs != null
+              const slot = block.kind === "video_storyboard"
+                ? { kind: "storyboard" as const, key, message: m, block }
+                : block.kind === "system_notice"
+                  ? { kind: "systemNotice" as const, key, block, priorDrained, history: m.hydrated }
+                  : block.kind === "audio_playback"
+                    ? { kind: "audioPlayback" as const, key, block, priorDrained, history: m.hydrated }
+                    : null
+              return slot ? (
                 <ComponentSlot
-                  key={`${m.id}-b${index}`}
-                  slot={{ kind: "storyboard", key: `${m.id}-b${index}`, message: m, block }}
+                  key={key}
+                  slot={slot}
                   onRunStarted={onRunStarted}
                   pendingPlanMessageId={pendingPlanMessageId}
                   presentationRecovery={presentationRecovery}
@@ -341,8 +347,8 @@ export function ChatConversation({
                   structureTurnId={m.turnId}
                   onStructureVisible={onStructureVisible}
                 />
-              ) : null,
-            )}
+              ) : null
+            })}
           </>
         )}
       </MessageScrollerItem>
@@ -386,7 +392,6 @@ export function ChatConversation({
           rows={unit.rows}
           elapsedMs={unit.elapsedMs}
           liveLabel={live ? chatStatusLabel : null}
-          failed={unit.failure != null}
           failure={unit.failure}
         />
       </MessageScrollerItem>
@@ -399,6 +404,9 @@ export function ChatConversation({
   })
   let bottomSeatBlockKey: string | null = null
   for (const block of conversationBlocks) {
+    // An answer resumes the same server turn, but starts a new visible
+    // response below the QA card, even before its first stream row arrives.
+    if (block.kind === "standalone" && block.factKind === "qa") bottomSeatBlockKey = null
     if (block.kind !== "turn") continue
     // A world fact may split one turn into contiguous blocks. The live seat
     // belongs to the LAST matching block, never an earlier pre-fact fragment.
@@ -472,8 +480,8 @@ export function ChatConversation({
                 ? // Panel rails (2026-09-28 user ruling, two-step):
                   // the message column holds FLORA's px-6; the bottom
                   // register below runs one step tighter (px-4).
-                  "w-full gap-6 px-6 pb-6 pt-3"
-                : "mx-auto w-full max-w-3xl gap-8 px-4 pb-8 pt-4"
+                  "w-full gap-0 px-6 pb-6 pt-3 [&>*+*]:mt-6 [&>*+[data-slot=run-response]]:mt-3"
+                : "mx-auto w-full max-w-3xl gap-0 px-4 pb-8 pt-4 [&>*+*]:mt-8 [&>*+[data-slot=run-response]]:mt-3"
             }
           >
             {/* ONE row stream: transcript rows keep their array order;

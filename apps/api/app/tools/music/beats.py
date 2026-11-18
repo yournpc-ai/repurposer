@@ -48,8 +48,11 @@ def _decode_mono_pcm(data: bytes) -> np.ndarray:
 
 
 def analyze_beat_grid(data: bytes) -> dict[str, Any] | None:
-    """Audio bytes → {"bpm": float, "beats": [seconds…]} or None (honest
-    degrade: too short / no periodicity worth snapping to)."""
+    """Audio bytes → estimated {"bpm", "beats": [seconds…], "origin"} or None.
+
+    Only programmatic ScoreSpec grids are authored; this analyzer never supplies
+    that provenance. Too-short or non-periodic audio honestly has no grid.
+    """
     pcm = _decode_mono_pcm(data)
     duration_s = len(pcm) / _RATE
     if duration_s < _MIN_TRACK_S:
@@ -104,7 +107,7 @@ def analyze_beat_grid(data: bytes) -> dict[str, Any] | None:
     beat_frames = best_offset + np.arange(n_frames) * period
     beat_frames = beat_frames[beat_frames < n_frames]
     beats = [round(float(f) * _HOP / _RATE, 3) for f in beat_frames]
-    grid = {"bpm": round(bpm, 1), "beats": beats}
+    grid = {"bpm": round(bpm, 1), "beats": beats, "origin": "estimated"}
     logger.info(
         "beat_grid_analyzed",
         bpm=grid["bpm"],

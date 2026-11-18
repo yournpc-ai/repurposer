@@ -50,6 +50,21 @@ async def narration_preparation_fact(db, run, steps) -> dict:
     ):
         raise ValueError("narration preparation alignment identity is inconsistent")
 
+    analysis_ref = result.get("analysis_ref") or (snapshot.meta or {}).get("analysis_ref")
+    if result.get("scene_id") is not None and not analysis_ref:
+        raise ValueError("scene narration has no fixed audio analysis")
+    analysis = None
+    if analysis_ref:
+        from app.tools.video.media_analysis import read_report
+
+        analysis = await read_report(analysis_ref)
+        if (
+            analysis.get("media_kind") != "audio"
+            or analysis.get("analysis_scope") != "full"
+            or (analysis.get("source_ref") or {}).get("digest") != snapshot.digest
+            or not ((analysis.get("media_facts") or {}).get("decode") or {}).get("fully_decoded")
+        ):
+            raise ValueError("scene narration audio analysis is not trustworthy")
     expected_usage = int(result.get("usage_characters") or 0)
     actual_usage = (step.cost or {}).get("units", {}).get("tts_chars", 0)
     if float(actual_usage or 0) != float(expected_usage):
@@ -61,6 +76,9 @@ async def narration_preparation_fact(db, run, steps) -> dict:
         "duration_seconds": snapshot.duration_ticks / SOURCE_TIMEBASE,
         "alignment_id": str(alignment.id),
         "alignment_status": alignment.status,
+        "scene_id": result.get("scene_id"),
+        "draft_ref": result.get("draft_ref"),
+        "analysis_ref": result.get("analysis_ref") or (snapshot.meta or {}).get("analysis_ref"),
         "usage_characters": expected_usage,
         "cache_hit": bool(result.get("cache_hit")),
     }

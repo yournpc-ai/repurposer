@@ -5,6 +5,7 @@ version bindings, validation and pure font descriptors.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -484,17 +485,24 @@ async def snapshot_narration_original(
     *,
     text: str,
     original: dict[str, Any],
+    scene_id: str | None = None,
 ) -> tuple[Asset, SourceSnapshot]:
     """Register one already-fixed VideoNarration original as ordinary audio."""
     media = original["media"]
-    asset = await db.scalar(
-        select(Asset).where(
-            Asset.user_id == project.user_id,
-            Asset.project_id == project.id,
-            Asset.type == AssetType.AUDIO,
-            Asset.file_url == media["storage_key"],
-        )
+    query = select(Asset).where(
+        Asset.user_id == project.user_id,
+        Asset.project_id == project.id,
+        Asset.type == AssetType.AUDIO,
+        Asset.file_url == media["storage_key"],
     )
+    if scene_id is not None:
+        from app.tools.video.media_analysis import AUDIO_ANALYZER_SET_VERSION
+
+        query = query.where(
+            Asset.meta["origin"]["scene_id"].as_string() == scene_id,
+            Asset.meta["origin"]["analysis_version"].as_string() == AUDIO_ANALYZER_SET_VERSION,
+        )
+    asset = await db.scalar(query)
     if asset is None:
         asset = Asset(
             user_id=project.user_id,
@@ -504,12 +512,16 @@ async def snapshot_narration_original(
             transcript=text,
             processing_status=AssetStatus.COMPLETED,
             duration_seconds=max(1, round(float(original["duration_s"]))),
-            meta={"origin": {"video_narration_hash": original["content_hash"]}},
+            meta={"origin": {
+                "video_narration_hash": original["content_hash"],
+                **({"scene_id": scene_id} if scene_id is not None else {}),
+                **({"analysis_version": AUDIO_ANALYZER_SET_VERSION} if scene_id is not None else {}),
+            }},
             processed_at=now_utc(),
         )
         db.add(asset)
         await db.flush()
-    snapshot = await snapshot_audio_asset(db, asset, owner_id=project.user_id)
+    snapshot = await snapshot_audio_asset(db, asset, owner_id=project.user_id, analyze=True)
     return asset, snapshot
 
 
@@ -523,6 +535,7 @@ async def _snapshot_audio_bytes(
     captured_at: datetime,
     asset: Asset | None = None,
     identity: UUID | None = None,
+    analyze: bool = False,
 ) -> SourceSnapshot:
     content_type = "audio/wav" if suffix == ".wav" else "audio/mpeg"
     key, digest = await store_source_bytes(data, suffix, content_type)
@@ -543,6 +556,30 @@ async def _snapshot_audio_bytes(
     meta: dict[str, Any] = {"media": media}
     if origin is not None:
         meta["origin"] = origin
+    if analyze:
+        from app.models.ids import source_snapshot_id
+        from app.tools.video.media_analysis import analyze_audio_bytes, store_media_analysis
+
+        anchor = asset.id if asset is not None else identity
+        if anchor is None:
+            raise ValueError("analyzed audio needs a stable snapshot identity")
+        snapshot_id = source_snapshot_id(owner_id, anchor, "audio", digest)
+        report = await asyncio.to_thread(
+            analyze_audio_bytes,
+            data,
+            snapshot_id=str(snapshot_id),
+            source_digest=digest,
+        )
+        meta["analysis_ref"] = await store_media_analysis(report)
+        decode = report.media_facts["decode"]
+        duration_ticks = _round_half_up(
+            Fraction(decode["sample_count"], report.media_facts["sample_rate"]) * SOURCE_TIMEBASE
+        )
+        media = {
+            "sample_rate": report.media_facts["sample_rate"],
+            "channels": report.media_facts["channels"],
+        }
+        meta["media"] = media
     return await register_snapshot(
         db,
         owner_id=owner_id,
@@ -595,7 +632,9 @@ async def snapshot_image_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID
     )
 
 
-async def snapshot_audio_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) -> SourceSnapshot:
+async def snapshot_audio_asset(
+    db: AsyncSession, asset: Asset, *, owner_id: UUID, analyze: bool = False
+) -> SourceSnapshot:
     """Freeze an AUDIO Asset and probe its real source-time duration."""
     if asset.user_id != owner_id:
         raise PermissionError("audio snapshot source belongs to another user")
@@ -609,6 +648,7 @@ async def snapshot_audio_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID
         origin=(asset.meta or {}).get("origin"),
         captured_at=_captured_at(asset.created_at),
         asset=asset,
+        analyze=analyze,
     )
 
 
@@ -749,12 +789,16 @@ async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) 
     authoritative identity. The snapshot carries no Asset anchor — the Music
     row's id is the stable identity (platform-owned source).
     """
-    data = await storage.read(music_file_path(track.id))
-    expected_digest = (track.meta or {}).get("content_sha256")
+    source_key = track.file_path or music_file_path(track.id)
+    data = await storage.read(source_key)
+    track_meta = track.meta or {}
+    expected_digest = track_meta.get("content_sha256")
     actual_digest = hashlib.sha256(data).hexdigest()
     if expected_digest is not None and actual_digest != expected_digest:
         raise ValueError(f"music {track.id} bytes do not match meta.content_sha256")
-    key, digest = await store_source_bytes(data, f".{AUDIO_EXT}", "audio/mpeg")
+    suffix = Path(source_key).suffix.lower() or f".{AUDIO_EXT}"
+    content_type = "audio/wav" if suffix == ".wav" else "audio/mpeg"
+    key, digest = await store_source_bytes(data, suffix, content_type)
 
     container = av.open(io.BytesIO(data), mode="r")
     try:
@@ -770,18 +814,30 @@ async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) 
     finally:
         container.close()
 
+    beat_grid = track_meta.get("beat_grid") or {
+        key: track_meta.get(key) for key in ("bpm", "beats")
+    }
+    if beat_grid.get("beats") and not beat_grid.get("origin"):
+        beat_grid = {**beat_grid, "origin": "estimated"}
+    meta = {
+        "media": media,
+        "music": {"music_id": str(track.id), "title": track.title},
+        "beat_grid": beat_grid,
+    }
+    for field in ("score_digest", "score_spec_ref", "analysis_ref"):
+        if track_meta.get(field) is not None:
+            meta[field] = track_meta[field]
     return await register_snapshot(
         db,
         owner_id=owner_id,
         asset=None,
         identity=uuid5(track.id, "music-beat-grid-v1:" + hashlib.sha256(
-            json.dumps(track.meta or {}, sort_keys=True).encode()).hexdigest()),
+            json.dumps(track_meta, sort_keys=True).encode()).hexdigest()),
         kind="audio",
         storage_key=key,
         digest=digest,
         duration_ticks=duration_ticks,
-        meta={"media": media, "music": {"music_id": str(track.id), "title": track.title},
-              "beat_grid": {key: (track.meta or {}).get(key) for key in ("bpm", "beats")}},
+        meta=meta,
         captured_at=_captured_at(getattr(track, "created_at", None)),
     )
 

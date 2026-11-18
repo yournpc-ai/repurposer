@@ -89,6 +89,24 @@ describe("buildConversationUnits — the array map (ADR-108)", () => {
     expect(units.map(unitId)).toEqual(["user", "a1", "a2", "reply"])
   })
 
+  it("holds Activity out of the visible walk until interim prose settles", () => {
+    const held = {
+      ...activityMsg("held", { status: "active" }),
+      activityDisplayHeld: true,
+    }
+    expect(buildConversationUnits([
+      assistantMsg("opening"),
+      held,
+      assistantMsg("later"),
+    ]).map(unitId)).toEqual(["opening", "later"])
+
+    expect(buildConversationUnits([
+      assistantMsg("opening"),
+      { ...held, activityDisplayHeld: undefined },
+      assistantMsg("later"),
+    ]).map(unitId)).toEqual(["opening", "held", "later"])
+  })
+
   it("an ACTIVE activity enters the walk at its host position and owns the live segment", () => {
     const rows = [
       {

@@ -102,6 +102,12 @@ def _draft_facts(record: CandidateRecord) -> dict[str, Any]:
     }
 
 
+def _current_narration_facts(arguments: dict[str, Any]) -> list[dict[str, Any]]:
+    from app.tools.video.narration_draft import current_narration_facts
+
+    return current_narration_facts(arguments)
+
+
 def working_draft_observation(record: CandidateRecord) -> dict[str, Any]:
     review = working_draft_review_facts(record.arguments)
     if not review["review_started"]:
@@ -113,6 +119,8 @@ def working_draft_observation(record: CandidateRecord) -> dict[str, Any]:
         "ok": True,
         "saved": False,
         **_draft_facts(record),
+        "scene_assets": deepcopy((record.arguments.get("design") or {}).get("scene_assets") or []),
+        "narrations": _current_narration_facts(record.arguments),
         "review": review,
         "errors": [],
     }
@@ -209,7 +217,7 @@ def working_draft_arguments(
     previous = previous_arguments.get("design", {})
     excluded = {
         *EntityWrites.model_fields, "settings", "sources", "save", "draft_ref", "scene_id",
-        "scene", "scene_plan", "source_ids", "focus_clip_id", "focus_element_id", "skill_resource",
+        "scene", "scene_plan", "scene_assets", "narration_update", "source_ids", "focus_clip_id", "focus_element_id", "skill_resource",
     }
     current = args.model_dump(
         mode="json",
@@ -217,6 +225,14 @@ def working_draft_arguments(
         exclude=excluded,
     )
     design = {**deepcopy(previous), **current}
+    supplied_assets = getattr(args, "scene_assets", None)
+    if supplied_assets is not None:
+        from app.tools.video.visual_assets import VisualAssetError, merge_scene_assets
+
+        try:
+            design["scene_assets"] = merge_scene_assets(previous, content, supplied_assets)
+        except VisualAssetError as exc:
+            raise CorrectionError("invalid_scene_asset", str(exc)) from exc
     if getattr(args, "scene_plan", None) is not None or getattr(args, "scene", None) is not None:
         design["authoring"] = "high_level_scene"
     explicit_constraints = getattr(args, "_explicit_constraints", None)

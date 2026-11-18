@@ -21,9 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.edits import EditError, replace_text_ops
 from app.editing.revisions import (
-    AddMediaOverlayAction as RevisionAddMediaOverlayAction,
-    AddNarrationAction as RevisionAddNarrationAction,
-    expand_revision_action,
+    AddAudioEffectOp as RevisionAddAudioEffectOp,
+    AddMediaOverlayOp as RevisionAddMediaOverlayOp,
+    AddNarrationOp as RevisionAddNarrationOp,
+    expand_revision_op,
 )
 from app.editing.schemas import Clip, CompositionContent
 from app.editing.storyboard import storyboard_payload
@@ -35,7 +36,7 @@ from app.editing.store import (
     snapshot_facts,
 )
 from app.models.schemas import (
-    ReviseVideoActionArgs,
+    ReviseVideoOpsArgs,
     ReviseVideoArgs,
     ReviseVideoTextArgs,
     canonical_json_hash,
@@ -71,6 +72,7 @@ def version_read_dict(
             "content_digest": version.content_digest,
         },
         "presentation_digest": presentation_digest_of(payload),
+        **({"creative_state": version.creative_state} if version.creative_state is not None else {}),
         "storyboard": payload,
     }
 
@@ -112,17 +114,17 @@ async def video_version_read(
 
 
 # ---------------------------------------------------------------------------
-# Revision: complete entities → the single write door
+# Revision: direct Op batches or complete entities → the single write door
 # ---------------------------------------------------------------------------
 
 async def revise_video(
     db: AsyncSession,
     *,
     owner_id: UUID,
-    args: ReviseVideoArgs | ReviseVideoActionArgs | ReviseVideoTextArgs,
+    args: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs,
     request_id: str | None = None,
 ) -> dict[str, Any]:
-    """Apply complete entities or one bounded action to an exact base."""
+    """Apply direct Ops or complete entities to an exact base."""
     if args.base_ref is None:
         raise VideoServiceError("revise_video needs a resolved current work before execution")
     composition, base_version = await get_video_version(
@@ -150,30 +152,34 @@ async def revise_video(
         if not ops:
             raise VideoServiceError("the text already matches the requested value")
         write = {"ops": ops}
-    elif isinstance(args, ReviseVideoActionArgs):
+    elif isinstance(args, ReviseVideoOpsArgs):
         source_ids = {binding.snapshot_id for binding in base_content.sources}
-        if isinstance(args.action, RevisionAddMediaOverlayAction):
-            source_ids.add(args.action.source_id)
-        narration_alignment = None
-        if isinstance(args.action, RevisionAddNarrationAction):
-            from app.models.tables import NarrationAlignment
-
-            source_ids.add(args.action.source_id)
-            narration_alignment = await db.get(NarrationAlignment, args.action.alignment_id)
-            if narration_alignment is None or narration_alignment.owner_id != owner_id:
-                raise PermissionDenied("the narration alignment is not accessible to this user")
+        source_ids.update(
+            operation.source_id
+            for operation in args.ops
+            if isinstance(operation, (RevisionAddMediaOverlayOp, RevisionAddAudioEffectOp, RevisionAddNarrationOp))
+        )
         source_facts = await snapshot_facts(db, source_ids)
         if any(fact.get("owner_id") != owner_id for fact in source_facts.values()):
             raise PermissionDenied("a referenced source snapshot belongs to another user")
-        ops = expand_revision_action(
-            args.action,
-            base_content,
-            facts=source_facts,
-            request_context=args._request_context,
-            narration_alignment=narration_alignment,
-        )
+        ops: list = []
+        for operation in args.ops:
+            narration_alignment = None
+            if isinstance(operation, RevisionAddNarrationOp):
+                from app.models.tables import NarrationAlignment
+
+                narration_alignment = await db.get(NarrationAlignment, operation.alignment_id)
+                if narration_alignment is None or narration_alignment.owner_id != owner_id:
+                    raise PermissionDenied("the narration alignment is not accessible to this user")
+            ops.extend(expand_revision_op(
+                operation,
+                base_content,
+                facts=source_facts,
+                request_context=args._request_context,
+                narration_alignment=narration_alignment,
+            ))
         if not ops:
-            raise VideoServiceError("the action does not change the saved version")
+            raise VideoServiceError("the Op batch does not change the saved version")
         write = {"ops": ops}
     else:
         from app.editing.edits import apply_entity_writes

@@ -19,6 +19,7 @@ interface AnsweredQuestionProps {
   questionDetail?: string
   /** Resolved answer line. */
   answer: string
+  items?: { question: string; answer: string; muted?: boolean }[]
   /** Bail/supersede answers render muted — a graceful exit, not a failure. */
   muted?: boolean
   hydrated?: boolean
@@ -28,6 +29,7 @@ export function AnsweredQuestion({
   question,
   questionDetail,
   answer,
+  items,
   muted,
   hydrated,
 }: AnsweredQuestionProps) {
@@ -44,31 +46,48 @@ export function AnsweredQuestion({
           shouldAnimateEntrance(hydrated) &&
             "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
         )}>
-          <div className="flex items-start gap-2">
-            <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {t("chat.qa.q")}
-            </span>
-            <div className="min-w-0">
-              <p className="leading-relaxed text-muted-foreground">{question}</p>
-              {questionDetail ? (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
-                  {questionDetail}
+          {items?.length ? items.map((item, index) => (
+            <div key={`${item.question}-${index}`} className="space-y-2">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("chat.qa.q")}
+                </span>
+                <p className="min-w-0 break-words leading-relaxed text-muted-foreground">{item.question}</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("chat.qa.a")}
+                </span>
+                <p className={cn("min-w-0 break-words leading-relaxed", item.muted ? "text-muted-foreground" : "text-foreground")}>
+                  {item.answer}
                 </p>
-              ) : null}
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {t("chat.qa.a")}
-            </span>
-            <p
-              className={`leading-relaxed ${
-                muted ? "text-muted-foreground" : "text-foreground"
-              }`}
-            >
-              {answer}
-            </p>
-          </div>
+          )) : (
+            <>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("chat.qa.q")}
+                </span>
+                <div className="min-w-0">
+                  <p className="leading-relaxed text-muted-foreground">{question}</p>
+                  {questionDetail ? (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                      {questionDetail}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("chat.qa.a")}
+                </span>
+                <p className={cn("min-w-0 break-words leading-relaxed", muted ? "text-muted-foreground" : "text-foreground")}>
+                  {answer}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </MessageContent>
     </Message>
