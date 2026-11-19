@@ -78,9 +78,7 @@ understand: Agent[MaterialUnderstanding] = Agent(
     prompt="understand.j2",
     schema=MaterialUnderstanding,
     system=(
-        "You are a senior content strategist. You analyze source "
-        "material and output a faithful, self-contained material "
-        "understanding as valid JSON, with no extra commentary."
+        "你是资深内容策划。分析源素材，给出忠实且可独立使用的素材解读。只输出有效 JSON。"
     ),
     temperature=0.3,
     assemble=_assemble_understand,
@@ -113,8 +111,7 @@ persona: Agent[ExtractedPersonaMemory] = Agent(
     prompt="persona.j2",
     schema=ExtractedPersonaMemory,
     system=(
-        "You are a professional speaking-style analyst."
-        "You only output valid JSON, with no additional commentary."
+        "你是专业的口头表达风格分析师。只输出有效 JSON。"
     ),
     temperature=0.3,
     assemble=_assemble_persona,

@@ -215,6 +215,7 @@ export interface ProductionStage {
   reused?: boolean | null
   item_count?: number | null
   reused_count?: number | null
+  scene_id?: string | null
 }
 
 /** One step of a run's execution plan (ADR-028) — the user-facing step. */
@@ -244,6 +245,7 @@ export interface WorkflowStep {
   cost_credits?: number | null
   started_at: string | null
   finished_at: string | null
+  scene_index?: number | null
   production_stages?: ProductionStage[]
 }
 

@@ -134,6 +134,10 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "This step hit an unexpected error",
         "zh": "这一步出了意外错误",
     },
+    "audio_loudness_failed": {
+        "en": "The audio was generated. Loudness and true peak could not be verified for playback.",
+        "zh": "音频已生成。响度与真峰值校验失败，试听交付已暂停。",
+    },
     # The film storyboard's bounded rewrite exhausted (3 candidates, each
     # rejected by the grounding validator) — the honest line names what the
     # film is made of, never the machinery.

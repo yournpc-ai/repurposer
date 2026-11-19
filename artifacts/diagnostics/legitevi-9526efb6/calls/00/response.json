@@ -1,0 +1,34 @@
+{
+  "phase": "response",
+  "model_call_id": "225c5665-4bc3-41a5-9abf-fc6c07c172fb",
+  "provider": "minimax",
+  "model": "minimax-m3",
+  "finished_at": "2026-11-19T09:15:31.822864+00:00",
+  "conversation_id": "416f235c-4cbd-4e51-bacd-0a134751a10f",
+  "turn_id": "9526efb6-a3ee-47b9-b4dd-132f7cf9c871",
+  "project_id": "07d486a1-0073-465c-98fa-793ca8b1732b",
+  "response": {
+    "content": "我先把这个页面采集下来，等素材就绪后再读它的定位和视觉识别。",
+    "tool_calls": [
+      {
+        "id": "call_3043c2b15c7f2ddc4b84b61a",
+        "name": "prepare_video_materials",
+        "arguments": "{\"material_urls\": [\"https://www.legitevi.com/en\"]}"
+      }
+    ],
+    "finish_reason": "tool_calls",
+    "usage": {
+      "total_tokens": 4283,
+      "total_characters": 0,
+      "prompt_tokens": 4218,
+      "completion_tokens": 65,
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 128
+      }
+    }
+  },
+  "error": null
+}

@@ -1027,60 +1027,14 @@ def check_dock_shape(msg: dict, label: str) -> None:
 def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
     """SSE 回合的 journey 公共断言全家桶（``Ctx.chat_stream`` 在信封成功
     收官时自动携带）：线格式律（含文字问/选项问合成枝）+ Activity 帧形态
-    + interim_prose 形态 + 选项问预览帧律 + dock 形态。"""
+    + interim_prose 形态 + 提问提交 + dock 形态。"""
     msg = stream.completed["assistant_message"]
     content = msg.get("content") or ""
     q = msg.get("question") or {}
     check_turn_stream_law(stream, content, q, label, msg.get("blocks") or [])
     check_activity_shape(stream, label)
     check_interim_prose_shape(stream, content, label)
-    # question.preview 预览帧律（言语提交协议 G2：预览骑缓冲、接受才释
-    # 放——收到的预览即权威件，与信封 dock 载荷逐字段一致）。文字类提问
-    # 永不预览 dock（与 R1 文字问门禁同律）——只有选项问 dock 触发本律。
-    if q.get("kind") == "question" and (q.get("options") or []):
-        # 言语提交协议 (ADR-099 §7) 的 retracted close 形豁免：回合中途被守卫
-        # 拒（如 bare ask 缺框架言语 → execute_guardrail 拒绝）→ retract →
-        # 收官 _resolve_deferred 走 drop——散文与预览帧全部不落线，信封整体
-        # pacing 出权威 dock（零 delta 路径既有法）。该形 = 零 delta 且零
-        # preview；干净收官（flush+disarm）的选项问恒有 preview 帧，零 delta
-        # 而 preview 缺席只在 retracted close 成立。（2026-10-23 下批 B 旅程
-        # T1 实证：intent_router 首 ask 被 guardrail 拒后重试接受，预览合法
-        # 缺席——此前本律未给该形豁免。）
-        if not stream.deltas and not stream.previews:
-            check_dock_shape(msg, label)
-            return
-        check(
-            len(stream.previews) >= 1,
-            f"{label}: the ask's question.preview frame precedes the terminal envelope",
-            stream.thinking,
-        )
-        preview = stream.previews[-1]
-        check(
-            preview.get("question") == q.get("question"),
-            f"{label}: the preview's bare question IS the docked payload's",
-            preview,
-        )
-        check(
-            [o.get("id") for o in preview.get("options") or []]
-            == [o.get("id") for o in q.get("options") or []],
-            f"{label}: the preview's options match the docked payload's",
-            preview,
-        )
-        check(
-            preview.get("slot") == q.get("slot"),
-            f"{label}: the preview's slot matches the docked payload's",
-            preview,
-        )
-        check(
-            isinstance(preview.get("allow_freeform"), bool),
-            f"{label}: the preview carries allow_freeform",
-            preview,
-        )
-        check(
-            bool((preview.get("default_path") or "").strip()),
-            f"{label}: the preview carries the default path",
-            preview,
-        )
+    check(not stream.previews, f"{label}: blocking choices arrive on the settled question", stream.previews)
     check_dock_shape(msg, label)
 
 

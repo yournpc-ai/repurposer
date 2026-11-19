@@ -488,6 +488,7 @@ export function WorkSegmentRow({
   liveTrailing = null,
   liveDetails,
   details,
+  children,
   settledLabel,
   failure = null,
 }: {
@@ -501,6 +502,7 @@ export function WorkSegmentRow({
   liveDetails?: ReactNode
   /** Settled details default to chat's category projection. */
   details?: ReactNode
+  children?: ReactNode
   /** Optional read fallback when a run has no honest elapsed span. */
   settledLabel?: ReactNode
   /** Chat's failed activity stays inside its settled segment's details. */
@@ -612,6 +614,7 @@ export function WorkSegmentRow({
                     </div>
                   )
                 })}
+                {children}
                 {failure ? <ActivityRow activity={failure} nested /> : null}
               </div>
             ))

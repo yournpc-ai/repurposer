@@ -1,0 +1,15 @@
+{
+  "tool_result": {
+    "role": "tool",
+    "tool_call_id": "call_01a1f319037471a0938ff942",
+    "name": "answer",
+    "content": "{\"ok\": false, \"execution\": \"not executed\", \"saved\": false, \"kind\": \"params_validation\", \"errors\": [{\"type\": \"extra_forbidden\", \"loc\": [\"source\"], \"msg\": \"Extra inputs are not permitted\"}, {\"type\": \"extra_forbidden\", \"loc\": [\"success_criteria\"], \"msg\": \"Extra inputs are not permitted\"}, {\"type\": \"extra_forbidden\", \"loc\": [\"material_state\"], \"msg\": \"Extra inputs are not permitted\"}, {\"type\": \"extra_forbidden\", \"loc\": [\"asked\"], \"msg\": \"Extra inputs are not permitted\"}], \"candidate\": {\"brief\": {\"topic\": {\"value\": \"LegitEvi 官网宣传片\", \"source\": \"inferred\"}, \"audience\": {\"value\": \"高校科研管理者、技术政策制定者及产学研合作领域从业者\", \"source\": \"user-stated\"}, \"tone\": {\"value\": \"rational\", \"source\": \"user-stated\"}, \"purpose\": {\"value\": \"品牌官网首页或线上产品介绍\", \"source\": \"inferred\"}, \"production_direction\": {\"value\": \"用于品牌官网首页与线上产品介绍，以产品能力为主线：先呈现短视频传播中缺乏引用与学术问责的问题，再讲清 LegitEvi 将同行评审论文转为可验证短视频的转化链路与证据回溯机制，落到科研影响力与透明度价值，收尾给出行动号召\", \"source\": \"inferred\"}, \"narrative_mode\": {\"value\": \"问题到方案的递进结构，末段以价值主张收束\", \"source\": \"inferred\"}, \"target_seconds\": {\"value\": 45, \"source\": \"default\"}, \"narration_language\": {\"value\": \"zh-CN\", \"source\": \"default\"}, \"subtitle_languages\": {\"value\": [\"zh-CN\", \"en-US\"], \"source\": \"default\"}, \"aspect\": {\"value\": \"16:9\", \"source\": \"default\"}, \"must_include\": {\"value\": [\"论文到短视频的转化链路\", \"每条视频可回溯至原始论文的证据机制\", \"科学家、创作者、公众三类用户分工\", \"引用应像标签一样普及这一主张\"], \"source\": \"inferred\"}, \"avoid\": [\"未经证据支持的夸张科学效果\", \"无法核实的业务效果表述\"]}, \"source\": \"inferred\", \"success_criteria\": [\"清楚说明可验证与可追溯这一核心差异\", \"视觉上延续官网高对比极简识别\"], \"material_state\": {\"value\": \"attached\", \"source\": \"inferred\"}, \"asked\": [\"production_direction\", \"target_seconds\", \"narration_language\", \"subtitle_languages\", \"aspect\"], \"pending_disposition\": \"answer\"}, \"repair\": \"Return valid arguments for this tool.\"}"
+  },
+  "retry_instruction": [
+    {
+      "role": "user",
+      "content": "\n\n上次工具调用被拒绝：4 validation errors for PlanAnswerArgs\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='inferred', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsuccess_criteria\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['清楚说明可验证...高对比极简识别'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nmaterial_state\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'value': 'attached', 'source': 'inferred'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nasked\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['production_direction', ...le_languages', 'aspect'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden。请用有效参数调用合适的工具。",
+      "name": "tool_feedback"
+    }
+  ]
+}

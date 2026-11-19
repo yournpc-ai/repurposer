@@ -1035,16 +1035,6 @@ class ChatTurn:
         (task_book questions are raised solely by the plan path, never
         here). slot stays None — a post-run question never backfills the
         brief."""
-        # 空散文护栏 (answer 裸调用护栏的对称座): an LLM ask without its
-        # framing speech is NEVER legitimate (schema's empty-prose tolerance
-        # exists for code-composed questions only) — reject it into the
-        # repair iteration instead of docking a silent blocking card.
-        if not prose.strip():
-            return (
-                "an ask never docks without its framing speech — speak what "
-                "you understood and your lean as your message text, then "
-                "call ask_user."
-            )
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
@@ -1381,6 +1371,7 @@ async def run_propose_turn(
         from app.chat.context import conversation_messages
         from app.chat.prompts import assemble_video_round
         from app.chat.readiness import creative_state_for_pending, infer_task_kind
+        from app.chat.speech_language import conversation_speech_language
         from app.pipeline.assets import urls_in_text
 
         def assemble_round(**facts):
@@ -1399,7 +1390,6 @@ async def run_propose_turn(
                 "user_text": text,
                 "source_text": source_text,
                 "video_confirmation": confirmation,
-                "ui_language": getattr(conversation, "ui_language", None) or getattr(project, "language", None) or "en",
                 "production_requested": requested_video_production(text),
                 "pending_question": lambda: turn.pending,
                 "target_hint": mention_target or turn._video_target_ambiguity,
@@ -1417,6 +1407,7 @@ async def run_propose_turn(
             tools=[*tools_for_bound_skill(chat_intent_agent.tools, getattr(turn, "skill", None)), *context_tools],
             round_assembler=assemble_round,
             dialogue=conversation_messages(recent),
+            speech_language_hint=conversation_speech_language(recent),
             message=turn.suggestion_note or "",
             context=turn.context,
             on_delta=on_delta,

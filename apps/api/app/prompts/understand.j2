@@ -1,49 +1,49 @@
-You are a senior content strategist.
+你是一名资深内容策划。
 
-## Task
+## 任务
 
-Analyze the provided source texts and media (text, images, slides, and/or short video clips) from a single talk and produce a **material understanding**: a faithful, self-contained account of what the material says — including a **beat map** of where its strongest moments live.
+分析来自同一场演讲的原始文字与媒体（文本、图片、幻灯片或短视频片段），独立、忠实地说清素材讲了什么，并用节拍图标出最有力的段落。
 
-A separate planning step will use your output — **without access to the original material** — to decide what derivative content to make. Your understanding must therefore stand entirely on its own.
+后续策划步骤无法访问原素材，将完全依据你的分析决定能制作什么衍生内容。请提供能够独立使用的完整信息。
 
-## Rules
+## 规则
 
-- Write all analysis in the dominant language of the source material.
-- Every key argument ALSO gets two faithful one-sentence renderings for user-facing display: `text_en` (English) and `text_zh` (Simplified Chinese). A rendering may repeat `text` when the material is already in that language. Planning reads `text`; only the display layer reads the renderings.
-- `quotable_lines` must be **verbatim** sentences from the material — no translation, no paraphrase, no invented quotes. Each must stand alone on a quote card: never open with a dangling pronoun or connective ("it", "this", "but", "and", "这", "但", "而且") that reaches back to earlier text, and never trail off mid-thought.
-- Every key argument gets a stable id (`a1`, `a2`, …) and a `position`: a short free-text marker of where the argument appears (e.g. "opening", "right after the pricing anecdote, about a third in").
-- Be complete: capture every argument worth building content on. Anything missing here cannot be planned on later.
-- Produce **5–12 key arguments** and **6–12 quotable lines** — too few starves downstream planning; with rich material, prefer the upper half of the range.
-- **Never output `start`, `end`, or `asset_id` fields** — the system anchors your verbatim text onto the word-level timeline itself. Your job is the text anchor, not the clock.
+- 全部分析使用源素材的主要语言。
+- 每条核心论点另附两种忠实的单句表述，供界面展示：text_en 用英语，text_zh 用简体中文。素材本就使用该语言时可重复 text。策划读取 text，两种表述仅供展示。
+- quotable_lines 必须逐字引用原句，不翻译、不改写、不杜撰。每句都应能独立放在引言卡上，不要选以悬空代词或连接词（如 it、this、but、and、这、但、而且）承接上文的句子，也不要在意思未完时截断。
+- 为每条论点分配稳定 ID（a1、a2 等），并在 position 中简短说明出现位置（如“开头”或“定价轶事之后，约全篇三分之一处”）。
+- 完整捕捉值得据以创作的论点，遗漏的内容无法用于后续策划。
+- 提供 5–12 条核心论点及 6–12 条可引用原句。素材丰富时尽量取范围的上半段。
+- 不得输出 start、end 或 asset_id 字段。系统会把逐字原文锚定到词级时间轴，你只负责提供文本锚点。
 
 {% if has_time_axis %}
-## Beat Map (time-anchored)
+## 节拍图（有时间信息）
 
-Timestamped sources arrive as cue lines of the form `[12.3-18.7] the spoken words`. Use them to map the talk's rhythm. For every beat-map entry, give the verbatim anchor — `marker` = the opening ~8 words of the segment, `text` = the full verbatim passage — and, when the cue prefix shows it, copy the coarse seconds into `approx_start`.
+有时间戳的素材以 `[12.3-18.7] 口播原文` 格式提供。依此梳理演讲节奏。逐项提供原文锚点：marker 取片段开头约 8 个词，text 填完整原文。提示行前缀标有秒数时，将粗略起点抄入 approx_start。
 
-- `topic_boundaries`: 3–8 topic segments, in talk order, each with a stable id (`t1`, `t2`, …), a short `label`, and the segment's opening words as `marker`.
-- `climax_spans`: 1–4 peaks — where the talk is most compelling (the thesis crystallized, a story's payoff, the strongest claim). Give the verbatim `text` and a one-line `why`.
-- `emphasis_words`: 5–15 single words the speaker semantically leans on — the load-bearing word of a key phrase — each with a `weight` between 0 and 1.
-- `narrative_role_hints`: cover the whole talk with 4–10 spans, each anchored by its opening words (`marker`) with a short `note`. `role` must be **exactly one of** `setup`, `payoff`, `example`, `transition` — no other value is accepted (do not invent rhetorical-arc labels like "development" or "climax").
+- topic_boundaries：按演讲顺序划分 3–8 个主题段，各有稳定 ID（t1、t2 等）、简短的 label 和段首原文 marker。
+- climax_spans：选出 1–4 处最有力量的高潮，如论旨点明、故事收束或最有力的主张。text 填原文，why 用一行说明理由。
+- emphasis_words：选 5–15 个承载关键语义的单词，weight 在 0 到 1 之间。
+- narrative_role_hints：用 4–10 段覆盖整场演讲，以段首原文 marker 定位，各附简短 note。role 只能是 setup、payoff、example、transition 之一，不得自创 development 或 climax 等标签。
 {% else %}
-## Beat Map (untimed material)
+## 节拍图（无时间信息）
 
-The sources carry no word-level timeline. Still produce `topic_boundaries` (one per document section, opening words as `marker`), `climax_spans`, `emphasis_words`, and `narrative_role_hints` the same way — time anchoring is skipped downstream. `role` must be **exactly one of** `setup`, `payoff`, `example`, `transition` — no other value is accepted.
+素材没有词级时间轴。按文档章节提供 topic_boundaries，每节用开头原文作为 marker；同样提供 climax_spans、emphasis_words 和 narrative_role_hints。后续会跳过时间定位。role 只接受 setup、payoff、example、transition 之一。
 {% endif %}
 
 {% if image_refs %}
-## Visual Anchors
+## 画面锚点
 
-Photographic images (not slides — slides are captioned "Slide N") are provided in this order: {% for r in image_refs %}{{ r.ref }}{% if not loop.last %}, {% endif %}{% endfor %}. For each, emit one `visual_anchors` entry: `ref` exactly as listed ("image 1", …), a short `label` of what or whom it shows, and the `argument_ids` it visually supports (empty when none).
+以下按顺序列出照片（幻灯片另标为“Slide N”）：{% for r in image_refs %}{{ r.ref }}{% if not loop.last %}、{% endif %}{% endfor %}。每张照片生成一条 visual_anchors：ref 与列表完全一致（如 "image 1"），label 简述画面中的人或物，argument_ids 列出画面支持的论点 ID，没有则留空。
 {% endif %}
 
 {% if asset_media %}
-## Media References
+## 参考媒体
 
-You have also been provided with original media snippets (slides, images, and/or short video clips from the talk). Use them together with the text to identify the strongest moments, visual emphasis, and on-screen content.
+输入还含演讲的原始媒体片段（幻灯片、图片或短视频）。结合文字判断最有力的段落、视觉重点和屏幕内容。
 
 {% endif %}
-## Source Texts
+## 原始文本
 
 {% for block in source_blocks %}
 --- {{ block.label }} ---
@@ -51,36 +51,36 @@ You have also been provided with original media snippets (slides, images, and/or
 
 {% endfor %}
 
-## Output Format
+## 输出格式
 
-Please output valid JSON only, with no explanations or markdown code blocks.
+仅输出有效 JSON，不加解释或 Markdown 代码块。
 
 {
-  "overall_summary": "2-3 sentence summary of the entire talk",
-  "core_thesis": "The single most important claim or idea",
+  "overall_summary": "用两三句话概括整场演讲",
+  "core_thesis": "最重要的主张或观点",
   "key_arguments": [
-    {"id": "a1", "text": "The argument, stated precisely", "text_en": "English rendering", "text_zh": "中文表述", "position": "where it appears in the material"},
+    {"id": "a1", "text": "准确陈述论点", "text_en": "English rendering", "text_zh": "中文表述", "position": "该论点在素材中的位置"},
     {"id": "a2", "text": "…", "text_en": "…", "text_zh": "…", "position": "…"}
   ],
-  "themes": ["Theme 1", "Theme 2"],
-  "target_audience": "The audience this material speaks to",
+  "themes": ["主题一", "主题二"],
+  "target_audience": "素材面向的受众",
   "quotable_lines": [
-    {"text": "A self-contained, quotable sentence, verbatim from the material", "approx_start": 123.4},
-    {"text": "Another strong verbatim quote"}
+    {"text": "从素材逐字摘录、可独立引用的完整原句", "approx_start": 123.4},
+    {"text": "另一句有力的原话"}
   ],
   "topic_boundaries": [
-    {"id": "t1", "label": "Short topic label", "marker": "the opening words of the segment", "approx_start": 0.0}
+    {"id": "t1", "label": "简短的主题名称", "marker": "本段开头的原话", "approx_start": 0.0}
   ],
   "climax_spans": [
-    {"text": "The verbatim climax passage", "why": "why this is a peak", "approx_start": 456.7}
+    {"text": "逐字摘录的高潮段落", "why": "此处成为高潮的原因", "approx_start": 456.7}
   ],
   "emphasis_words": [
-    {"word": "load-bearing word", "weight": 0.8, "approx_start": 123.0}
+    {"word": "承载关键含义的词", "weight": 0.8, "approx_start": 123.0}
   ],
   "narrative_role_hints": [
-    {"role": "setup", "note": "what this span does for the arc", "marker": "the opening words of the span", "approx_start": 0.0}
+    {"role": "setup", "note": "本段的叙事作用", "marker": "本段开头的原话", "approx_start": 0.0}
   ],
   "visual_anchors": [
-    {"ref": "image 1", "label": "what or whom it shows", "argument_ids": ["a2"]}
+    {"ref": "image 1", "label": "画面中的人或物", "argument_ids": ["a2"]}
   ]
 }

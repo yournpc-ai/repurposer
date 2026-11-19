@@ -7,13 +7,12 @@
  * The frame vocabulary is the three-channel separation (ADR-087 §1):
  * System Status (`assistant.thinking`) / Activity (`assistant.activity`) /
  * Conversation (`assistant.delta` / `assistant.interim_prose` /
- * `question.preview` / `assistant.candidates` — the v4.2 C8-c Candidate
+ * `assistant.candidates` — the v4.2 C8-c Candidate
  * Surface channel) + the terminal pair. Unknown events route to
  * "ignored" (heartbeat comment frames never reach onmessage at all). */
 
 import type {
   ActivityFramePayload,
-  BriefQuestionItem,
   CandidateMemberPayload,
   CandidateSurface,
   MessageBlock,
@@ -32,19 +31,6 @@ export interface ThinkingPayload {
   phase?: string | null
 }
 
-/** The ask verdict's pill payload at object close (2026-09-09 用户拍板 ——
- * 「选项该和这句话一起来」): preview-dock from this frame; the terminal
- * envelope stays authoritative (envelope always wins). */
-export interface QuestionPreviewPayload {
-  question?: string | null
-  options?: { id: string; label: string; description?: string }[]
-  items?: BriefQuestionItem[]
-  group_digest?: string | null
-  allow_freeform?: boolean
-  recommended_id?: string | null
-  slot?: string | null
-  default_path?: string | null
-}
 
 /** One ``assistant.candidates`` event. ``set`` = a transcript candidate
  * set's birth, ``sfx_set``/``music_set`` = the same envelope carrying audio
@@ -105,7 +91,6 @@ export type RoutedStreamFrame =
   | { kind: "turn_started"; turnId: string }
   | { kind: "delta"; text: string; messageId: string | null }
   | { kind: "thinking"; payload: ThinkingPayload }
-  | { kind: "question_preview"; payload: QuestionPreviewPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
   | {
       kind: "interim_prose"
@@ -238,12 +223,7 @@ export function routeStreamFrame(
   if (event === "assistant.thinking") {
     return { kind: "thinking", payload: JSON.parse(data) as ThinkingPayload }
   }
-  if (event === "question.preview") {
-    return {
-      kind: "question_preview",
-      payload: JSON.parse(data) as QuestionPreviewPayload,
-    }
-  }
+
   if (event === "assistant.candidates") {
     return {
       kind: "candidates",

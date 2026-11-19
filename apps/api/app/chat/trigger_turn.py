@@ -60,6 +60,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,6 +69,7 @@ from app.agents.tool_loop import NATIVE_PRESENTATION, ChatTool, ToolLoopAgent
 from app.chat.context import build_context, conversation_messages
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.prompts import delivery_system, trigger_system
+from app.chat.speech_language import conversation_speech_language
 from app.chat.service import (
     _create_message,
     _dock_question,
@@ -165,11 +167,7 @@ WRAP_UP = ChatTool(
     name="wrap_up",
     presentation=NATIVE_PRESENTATION,
     description=(
-        "Close the proactive turn: your spoken message is the review; carry "
-        "0-3 next-step option labels grounded in the turn's own records "
-        "(the event line's facts block and anything you read — they dock "
-        "as a numbered options question — ADR-081). Speak first, then "
-        "call this."
+        "结束本次主动发言。审阅内容写在消息正文中；根据事件事实及实际读到的记录，可附 0–3 个下一步选项标签，显示为编号选择题。先说话，再调用本工具。"
     ),
     params_model=WrapUpArgs,
 )
@@ -315,17 +313,11 @@ def _delivery_event_line(ref: str, review_lines: list[str]) -> str:
     """
     if review_lines:
         return (
-            f"Delivery turn for run {ref}. Use the conversation context for "
-            "the user's request and the DELIVERY FACTS below for the latest "
-            "tool outcome. Reply with the one matching delivery branch, "
-            "then close with wrap_up."
-            "\n\nDELIVERY FACTS (deterministic world records, not user copy):\n"
+            f"本轮交付 Run {ref} 的结果。从对话了解用户的请求，从下列交付事实了解最新工具结果。只按匹配的一个交付分支作答，再调用 wrap_up。\n\n交付事实（系统记录，供参考）：\n"
             + "\n".join(review_lines)
         )
     return (
-        f"Delivery turn for run {ref}. No deterministic delivery facts "
-        "could be assembled. Give only the plain completion the receipt "
-        "proves, never invent details you cannot see, then close with wrap_up."
+        f"本轮交付 Run {ref} 的结果。未能取得确定的交付事实，只说明回执能证明的完成情况，不编造细节，再调用 wrap_up。"
     )
 
 
@@ -343,15 +335,11 @@ def _wrap_up_rejection(trigger: str, suggestions: list[SuggestionItem]) -> str |
       verbatim retry of a deterministic failure)."""
     if trigger == TRIGGER_RUN_COMPLETED and suggestions:
         return (
-            f"on {trigger} the next move rides your closing sentence or "
-            "the landed card itself, never a dock — call wrap_up again "
-            "with suggestions=[]."
+            f"{trigger} 的下一步放在收尾句或成品卡中，不单列选项。请用 suggestions=[] 重新调用 wrap_up。"
         )
     if trigger == TRIGGER_RUN_FAILED and len(suggestions) > 2:
         return (
-            f"on {trigger} the dock carries the one next step (a real "
-            "fallback at most) — call wrap_up again with at most 2 "
-            "suggestions."
+            f"{trigger} 的选项给出一个下一步，最多加一个真正可行的备用方案。请重新调用 wrap_up，至多提供 2 个建议。"
         )
     return None
 
@@ -413,19 +401,25 @@ def _new_delivery_output_refs(
 async def _narration_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> list[str]:
     """Output-free narration facts; no video delivery is synthesized."""
     from app.tools.video.media_analysis import read_report
-    from app.tools.video.production.narration import narration_preparation_fact
+    from app.tools.video.production.narration import narration_preparation_facts
 
     try:
-        facts = await narration_preparation_fact(db, run, steps)
-        analysis = await read_report(facts["analysis_ref"]) if facts.get("analysis_ref") else None
-    except (ValueError, KeyError):
+        facts = await narration_preparation_facts(db, run, steps)
+        preparation = run.context["narration_preparation"]
+        lines = ["delivery=partial" if any(f["alignment_status"] == "FAILED" for f in facts) else "delivery=delivered"]
+        for scene, part in zip(facts, preparation.get("scenes") or [preparation], strict=True):
+            analysis = await read_report(scene["analysis_ref"]) if scene.get("analysis_ref") else None
+            lines.extend(_narration_lines(scene, part, analysis))
+        return lines
+    except (ValueError, KeyError, OSError, BotoCoreError, ClientError):
         return ["delivery=failed", "GAP narration_preparation_invalid"]
+
+
+def _narration_lines(facts, preparation, analysis):
     status = str(facts["alignment_status"])
-    preparation = (run.context or {}).get("narration_preparation") or {}
     request = preparation.get("request") or {}
     script = str(request.get("text") or "")
     lines = [
-        f"delivery={'partial' if status == 'FAILED' else 'delivered'}",
         (
             "- landed narration_audio "
             f"duration={facts['duration_seconds']:.3f}s "
@@ -447,7 +441,7 @@ async def _music_delivery_lines(db: AsyncSession, run: WorkflowRun, steps) -> li
 
     try:
         await music_preparation_fact(db, run, steps)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OSError, BotoCoreError, ClientError):
         return ["delivery=failed", "GAP music_preparation_invalid"]
     result = ((run.context or {}).get("music_preparation") or {}).get("result") or {}
     return [
@@ -479,6 +473,7 @@ async def _visual_asset_delivery_lines(db: AsyncSession, run: WorkflowRun, steps
         delivery = "partial" if has_approved else "failed"
     return [
         f"delivery={delivery}",
+        "stage=scene_images",
         "Fixed scene-image preparation only; no CompositionVersion or video Output was created.",
         "VISUAL_ASSET_RESULTS (complete current assets, source provenance, MediaAnalysisReport and ContentReview):\n"
         + json.dumps(result, ensure_ascii=False),
@@ -607,7 +602,9 @@ async def _run_failure_lines(db: AsyncSession, run: WorkflowRun) -> list[str]:
     )
 
 
-def _run_failed_fallback_speech(failure_lines: list[str], language: str) -> str:
+def _run_failed_fallback_speech(
+    failure_lines: list[str], language: str, *, managed_media: bool = False,
+) -> str:
     """ADR-135's honesty floor when the reviewer itself cannot finish.
 
     The deterministic step errors are already safe user-facing facts. Reusing
@@ -617,6 +614,10 @@ def _run_failed_fallback_speech(failure_lines: list[str], language: str) -> str:
     """
     reasons = [line.split(" — ", 1)[-1].strip() for line in failure_lines]
     reasons = [reason for reason in reasons if reason]
+    if managed_media:
+        return " ".join(reason.removeprefix("DELIVERY FAILED: ") for reason in reasons) or (
+            "本次素材准备已停止。" if language.startswith("zh") else "Media preparation stopped."
+        )
     if language.startswith("zh"):
         detail = f"已知原因：{'；'.join(reasons)}。" if reasons else ""
         return (
@@ -748,9 +749,11 @@ async def run_trigger_turn(
                 # handoff gate stays closed (未知恒闭, 永不编造).
                 canvas_available=conversation.canvas_available,
             )
-            language = _trigger_language(run, history, conversation)
+            speech_language = conversation_speech_language(history)
+            language = speech_language or _trigger_language(run, history, conversation)
             upload_retry_available = False
             failure_lines: list[str] = []
+            review_lines: list[str] = []
             delivery_output_refs: list[str] = []
             delivery_images: list = []
             delivery_blocks: list[dict[str, Any]] = []
@@ -765,6 +768,14 @@ async def run_trigger_turn(
                 )
                 from app.tools.video.production.visual_assets import has_visual_asset_preparation_scope
 
+                if managed_media and has_visual_asset_preparation_scope(run) and "delivery=delivered" in review_lines:
+                    intent = _trigger_dump(trigger, ref, [], [])
+                    intent.update(presentation="media_progress", media_journey={**run.context["media_journey"], "state": "active"})
+                    message = await _create_message(db, conversation_id, "assistant", "", workflow_run_id=run.id, intent=intent)
+                    await db.commit()
+                    from app.chat.media_journey import continue_media_journey
+                    await continue_media_journey(db, project, conversation, run)
+                    return message
                 if has_visual_asset_preparation_scope(run):
                     from app.tools.video.visual_assets import visual_asset_result_images
 
@@ -774,20 +785,40 @@ async def run_trigger_turn(
                     )
                 from app.tools.video.audio_playback import audio_playback_blocks
 
-                delivery_blocks = await audio_playback_blocks(db, run, project)
+                if managed_media and "delivery=delivered" in review_lines:
+                    from app.tools.video.audio_playback import audio_preparation, record_run_audio
+                    audio = audio_preparation(run)
+                    if audio:
+                        role, preparation = audio
+                        message = await record_run_audio(
+                            db, project, conversation_id, run.context["media_journey"], role,
+                            preparation, trigger_intent=_trigger_dump(trigger, ref, [], delivery_output_refs), run_id=run.id,
+                        )
+                        await db.commit()
+                        from app.chat.media_journey import continue_media_journey
+                        await continue_media_journey(db, project, conversation, run)
+                        return message
+                if not managed_media:
+                    delivery_blocks = await audio_playback_blocks(db, run, project)
                 event_line = _delivery_event_line(str(run_id), review_lines)
                 if (run.context or {}).get("media_journey"):
                     event_line += (
-                        "\nThis is a staged preparation update. Report the verified result and "
-                        "any actual blocker. Do not ask the user to continue or choose a repair."
+                        "\n这是自动准备任务的回执。用一句话说明用户拿到了什么。有影响成片的发现时说明影响。省略常规质检指标和待办清单。"
                     )
             elif trigger == TRIGGER_RUN_FAILED:
                 assert run is not None
-                event_line = (
-                    f"Run {run_id} FAILED and nothing landed — the user got "
-                    "no result. Read what happened, then close with the "
-                    "honest reason and the one next step."
-                )
+                if managed_media:
+                    narration = (run.context or {}).get("narration_preparation") or {}
+                    scene_id = (narration.get("request") or {}).get("scene_id")
+                    event_line = (
+                        f"媒体准备 Run {run_id} 已停止。根据失败事实说明所处阶段和原因。在原 Chat 中保留已完成的工作，不要求用户再次发出制作指令或承诺重试。"
+                    )
+                    if scene_id:
+                        event_line += f"本次 Run 只准备场景 {scene_id} 的旁白。"
+                else:
+                    event_line = (
+                        f"Run {run_id} 失败，用户没有收到结果。先查明情况，再如实告知原因并给出一个下一步。"
+                    )
                 # 失败事实注入 (ADR-135): the failed verdict steps' baked
                 # user-facing lines ride the event line — deterministic,
                 # narrate-never-contradict, same doctrine as DELIVERY FACTS.
@@ -804,24 +835,18 @@ async def run_trigger_turn(
                 )
                 if upload_retry_available:
                     event_line += (
-                        "\n\nUPLOAD RETRY AVAILABLE: the finished video can be "
-                        "offered for upload-only recovery; the system appends "
-                        "that option after your turn."
+                        "\n\n可重试上传：成片可仅重传文件，系统会在本轮结束后追加该选项。"
                     )
                 if failure_lines:
                     event_line += (
-                        "\n\nFAILURE FACTS (deterministic, from the run's own "
-                        "records — narrate them, never contradict them, never "
-                        "invent a cause beyond them):\n"
+                        "\n\n失败事实（来自本次执行的记录，按事实说明，不要矛盾或编造其他原因）：\n"
                         + "\n".join(failure_lines)
                     )
             else:
                 # craft_decompiled — the pinned case's skeleton is the
                 # event; the prompt's own law orders the read first.
                 event_line = (
-                    "The pinned reference video's craft skeleton just "
-                    "landed. Read it, then tell the user what a remix will "
-                    "borrow from the case."
+                    "已固定的参考视频现已完成创作手法拆解。先读取结果，再告诉用户改编时会借鉴哪些做法。"
                 )
 
             outcome: dict[str, Any] = {}
@@ -836,8 +861,7 @@ async def run_trigger_turn(
                 assert isinstance(params, WrapUpArgs)
                 if not prose.strip():
                     return (
-                        "an empty review says nothing — speak your judgment "
-                        "as your message text, then call wrap_up."
+                        "审阅正文为空。请先在消息正文中说明判断，再调用 wrap_up。"
                     )
                 rejection = _wrap_up_rejection(trigger, params.suggestions)
                 if rejection is not None:
@@ -867,6 +891,7 @@ async def run_trigger_turn(
                     context_text=context.get("text", ""),
                     refresh_context=project_context_reader(project.id, project.user_id),
                     dialogue=conversation_messages(history),
+                    speech_language_hint=language.partition("-")[0],
                     images=delivery_images,
                 )
             # 会话层计量 (ADR-117 D3): the proactive turn IS a conversation
@@ -888,7 +913,9 @@ async def run_trigger_turn(
             if result is not None and not result.exhausted and result.prose.strip():
                 speech = result.prose.strip()
             elif trigger == TRIGGER_RUN_FAILED:
-                speech = _run_failed_fallback_speech(failure_lines, language)
+                speech = _run_failed_fallback_speech(
+                    failure_lines, language, managed_media=managed_media,
+                )
                 logger.info("trigger_turn_failure_fallback", ref=ref)
             elif managed_media:
                 partial = "delivery=partial" in review_lines or "delivery=failed" in review_lines
@@ -945,20 +972,24 @@ async def run_trigger_turn(
                 if bailed_run_ids:
                     await finalize_bailed_runs(bailed_run_ids)
             else:
+                intent = _trigger_dump(trigger, ref, suggestions, delivery_output_refs)
+                journey = (run.context or {}).get("media_journey") if run is not None else None
+                if journey:
+                    if "delivery=partial" in review_lines or "delivery=failed" in review_lines:
+                        intent["presentation"] = "preparation_issue"
+                    # A valid image settlement still has a continuation that owns
+                    # bounded repair and the final per-scene stop decision.
+                    blocked = trigger == TRIGGER_RUN_FAILED or (
+                        "delivery=partial" in review_lines and bool(run.context.get("narration_preparation"))
+                    ) or (
+                        "delivery=failed" in review_lines and "stage=scene_images" not in review_lines
+                    )
+                    intent["media_journey"] = {
+                        "opening_id": journey["opening_id"], "state": "blocked" if blocked else "active",
+                    }
                 message = await _create_message(
-                    db,
-                    conversation_id,
-                    "assistant",
-                    speech,
-                    workflow_run_id=(
-                        run_id
-                        if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED)
-                        else None
-                    ),
-                    intent=_trigger_dump(
-                        trigger, ref, suggestions, delivery_output_refs
-                    ),
-                    blocks=delivery_blocks,
+                    db, conversation_id, "assistant", speech,
+                    workflow_run_id=run_id, intent=intent, blocks=delivery_blocks,
                 )
                 await db.commit()
             logger.info(

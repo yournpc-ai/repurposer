@@ -70,6 +70,8 @@ from app.editing.service import (
     version_read_dict,
 )
 from app.editing.store import (
+    _raw_snapshot_ids,
+    _resolve_raw_snapshot_references,
     apply_composition_edits,
     content_of,
     get_video_version,
@@ -101,6 +103,7 @@ from app.tools.research.capture import (
     capture_plan_digest,
     compile_capture_request,
 )
+from app.tools.video.narration_draft import SceneNarrationUpdate
 from app.tools.video.preparation import (
     snapshot_audio_asset,
     snapshot_image_asset,
@@ -109,8 +112,7 @@ from app.tools.video.preparation import (
     snapshot_video_output,
     snapshot_web_asset,
 )
-from app.tools.video.narration_draft import SceneNarrationUpdate
-from app.tools.video.visual_assets import SceneAssetSpec
+from app.tools.video.visual_assets import ExistingImageSource, SceneAssetSpec
 
 logger = structlog.get_logger()
 
@@ -142,20 +144,20 @@ class CandidateDesignError(DesignError):
 
 
 class CompositionCopyReference(BaseModel):
-    """Display copy linked to a frozen line without re-transcribing its quote."""
+    """将显示文案关联到固定原文行，无需再次转写引用。"""
 
     model_config = ConfigDict(extra="forbid")
 
     text: str | None = Field(
         default=None, min_length=1, max_length=9000,
-        description="Omit for verbatim copy. Supply only the actual displayed wording when it differs from the frozen line.",
+        description="逐字引用时省略。仅当显示文字与固定原文行不同时填写实际措辞。",
     )
     snapshot_id: UUID
     snapshot_digest: str | None = Field(
         default=None,
         min_length=64,
         max_length=64,
-        description="Optional immutable digest returned with the source snapshot; when supplied, the server verifies it instead of trusting the reference.",
+        description="可选，填写源快照返回的不可变摘要。传入时服务端会校验，不仅凭引用判定。",
     )
     line_id: str = Field(min_length=1, max_length=80)
 
@@ -183,87 +185,87 @@ class CompositionSceneAuthoring(BaseModel):
 
     scene_id: str = Field(
         min_length=1, max_length=64,
-        description="Exact scene_id from next_unfilled_scene; write only that current Scene.",
+        description="复制 next_unfilled_scene 中的确切 scene_id，只写该场景。",
     )
     snapshot_id: UUID | None = Field(
         default=None,
-        description="Frozen SourceSnapshot for this Scene; prefer the parent web Snapshot for a normal webpage Scene. Ordinary image/video and derived web_view images are also accepted; omit for a native copy-only Scene.",
+        description="本场固定的 SourceSnapshot。常规网页场景优先使用父网页快照，也接受普通图片、视频或派生的 web_view 图片。纯原生文案场景省略。",
     )
     view_id: str | None = Field(
         default=None, max_length=80,
-        description="Required for a parent web Snapshot; use its exact catalog view_id. A derived web_view image's unique view_id is inferred when omitted. Omit for ordinary image/video snapshots.",
+        description="父网页快照必须传入目录中确切的 view_id。派生 web_view 图片的唯一 view_id 可省略，由服务端推断。普通图片或视频快照省略。",
     )
     element_id: str | None = Field(
         default=None, max_length=80,
-        description="Optional real element id inside view_id for the camera focus.",
+        description="可选，填写 view_id 内用于镜头聚焦的真实元素 ID。",
     )
     source_start_seconds: float | None = Field(
         default=None, ge=0, allow_inf_nan=False,
-        description="Explicit source-second start; omit it for a semantic source_query or to start at zero.",
+        description="显式指定源素材起始秒数。使用语义 source_query 或从零开始时省略。",
     )
     source_end_seconds: float | None = Field(
         default=None, gt=0, allow_inf_nan=False,
-        description="Explicit source-second end; omit it for a semantic source_query. Its duration sets this Scene's duration at 1x.",
+        description="显式指定源素材结束秒数；使用语义 source_query 时省略。选段按 1 倍速确定本场时长。",
     )
     source_query: str | None = Field(
         default=None, min_length=1, max_length=2000,
-        description="Full semantic passage goal, including the topic and whether to keep the previous sentence; never merely quote the preceding sentence. The server resolves real ASR sentence ids into a validated source window; never pair this with explicit source seconds.",
+        description="完整的语义选段目标，包括主题及是否保留前一句，不能仅引用前一句。服务端由真实 ASR 句子 ID 解析并校验源时间窗。不要同时提供显式源秒数。",
     )
     captions_asr: bool = Field(
         default=False,
-        description="Derive native TextObjects inside THIS source Scene on an ordinary caption track. Never create a caption-only Scene or a separate caption source.",
+        description="在这个素材场景的普通 caption 轨道上生成原生 TextObject，不创建纯字幕场景或独立字幕来源。",
     )
     narration_snapshot_id: UUID | None = Field(
         default=None,
-        description="Frozen audio SourceSnapshot prepared by prepare_narration; place it as an ordinary dialogue AudioObject with its aligned native captions.",
+        description="经 prepare_narration 准备的固定音频 SourceSnapshot。将其放为普通 dialogue AudioObject，并配以对齐的原生字幕。",
     )
     narration_alignment_id: UUID | None = Field(
         default=None,
-        description="READY NarrationAlignment for narration_snapshot_id; supplies the actual narration sentence timings and provenance.",
+        description="与 narration_snapshot_id 匹配且状态为 READY 的 NarrationAlignment，提供实际逐句时间及来源。",
     )
     narration: str | None = Field(
         default=None, min_length=1, max_length=9000,
-        description="Exact reviewed spoken copy for this Scene. Creates a pending SpeechObject on the dialogue Track; authorized production synthesizes it inside the reviewed window. Mutually exclusive with narration_snapshot_id.",
+        description="本场已审阅的确切旁白原文。将在 dialogue 轨道创建待处理 SpeechObject，制作获准后在已审阅时间窗内合成。与 narration_snapshot_id 互斥。",
     )
     narration_language: str | None = Field(
         default=None, min_length=2, max_length=16,
-        description="Spoken language for narration, matching the work's language unless the user specifies otherwise.",
+        description="旁白的口播语言。除非用户另有指定，否则与作品语言一致。",
     )
     narration_voice_id: str | None = Field(
         default=None, min_length=1, max_length=255,
-        description="Optional TTS voice for narration; omit to use the video default voice.",
+        description="可选的 TTS 旁白音色，省略时使用视频默认音色。",
     )
     source_gain_db: float | None = Field(
         default=None, ge=-60, le=12,
-        description="Optional original-audio gain for this VideoObject; the source picture and original audio stay synchronized.",
+        description="可选的 VideoObject 原声音量增益，源画面与原声保持同步。",
     )
     source_muted: bool = Field(
         default=False,
-        description="Mute the original audio without changing the source picture or creating a separate audio timeline.",
+        description="将原声静音，不改变源画面，也不创建独立音频时间线。",
     )
     source_fit: Literal["cover", "contain"] = Field(
         default="contain",
-        description="Fixed framing inside the full-canvas layout; use cover for a filled vertical crop, contain to preserve the whole image.",
+        description="全画布布局内的固定构图。铺满竖屏并裁切用 cover，保留完整画面用 contain。",
     )
     source_transform: Transform | None = Field(
         default=None,
-        description="Optional fixed transform for the source inside its layout; no frame tracking or crop_track.",
+        description="可选，设置来源在布局内的固定变换，不逐帧跟踪或创建 crop_track。",
     )
     headline: str | None = Field(
         default=None, min_length=1, max_length=9000,
-        description="Native headline for title-lockup. Omit headline whenever items is non-empty.",
+        description="title-lockup 的原生主标题。items 非空时省略 headline。",
     )
     supporting_text: str | None = Field(
         default=None, min_length=1, max_length=9000,
-        description="Optional supporting line; requires headline and is not valid with items.",
+        description="可选的补充文字。需要 headline，不能与 items 同用。",
     )
     items: list[str] = Field(
         default_factory=list, max_length=6,
-        description="Native items for list-reveal; omit headline and supporting_text in this form.",
+        description="list-reveal 的原生列表项。使用这种形式时省略 headline 和 supporting_text。",
     )
     text_preset: Literal["title-lockup", "list-reveal"] | None = Field(
         default=None,
-        description="title-lockup needs headline; list-reveal needs items. Choose the matching form before submitting.",
+        description="title-lockup 需要 headline，list-reveal 需要 items。提交前选择匹配的形式。",
     )
     source_motion: Literal["hold", "push"] = "push"
 
@@ -313,7 +315,7 @@ class CompositionSceneAuthoring(BaseModel):
 
 
 class CompositionDesignVideoArgs(EntityWrites):
-    """One complete-value write into a server-side working Composition draft."""
+    """向服务端 Composition 工作草稿写入一次完整值。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -344,120 +346,120 @@ class CompositionDesignVideoArgs(EntityWrites):
 
     draft_ref: VideoDraftRef | None = Field(
         default=None,
-        description="Latest draft_ref returned by design_video. Omit only when starting a new draft.",
+        description="design_video 返回的最新 draft_ref，仅新建草稿时省略。",
     )
     scene_id: str | None = Field(
         default=None,
-        description="Existing Scene for one single-scene continuation. Put that Scene's Clips in tracks[].clips; omit on initial and save-only calls.",
+        description="单场续写的已有 Scene。将该场的 Clip 放入 tracks[].clips。初次写入及仅保存时省略。",
     )
     scene_plan: list[CompositionScenePlan] | None = Field(
         default=None,
-        description="Narrative Scenes in playback order; use only as many distinct beats as the work needs. Server derives ranges and native entities.",
+        description="按播放顺序列出叙事场景，节拍数以作品需要为准。时间范围和原生实体由服务端推导。",
     )
     scene_assets: list[SceneAssetSpec] | None = Field(
         default=None,
         max_length=64,
-        description="Current visual source requirements for existing scene_plan ids. Add or replace only the supplied Scenes; no Composition version or media generation occurs in this write.",
+        description="已有 scene_plan ID 对应的画面来源要求。只添加或替换传入场景的规格，此次写入不生成媒体或 Composition 版本。",
     )
     narration_update: SceneNarrationUpdate | None = Field(
         default=None,
-        description="After real narration arrives, revise or confirm one target Scene. The server resolves READY alignment, actual duration, cues, ticks and unchanged media digests.",
+        description="实际旁白到位后，修改或确认一个目标场景。服务端解析 READY 对齐、实测时长、提示点、刻度和未改动的媒体摘要。",
     )
     source_ids: list[UUID] | None = Field(
         default=None,
         max_length=256,
-        description="Frozen SourceSnapshot ids available to this draft; the server verifies and binds their digests.",
+        description="可供本草稿使用的固定 SourceSnapshot ID，服务端验证并绑定相应摘要。",
     )
     scene: CompositionSceneAuthoring | None = Field(
         default=None,
-        description="One current Scene's source, framing, native copy and Preset intent; the server derives all native entities and timing.",
+        description="当前一个 Scene 的来源、构图、原生文案及 Preset 意图，原生实体和时序由服务端推导。",
     )
     music_snapshot_id: UUID | None = Field(
         default=None,
-        description="Prepared audio SourceSnapshot for the existing global music-bed capability.",
+        description="用于既有全局背景音乐的已准备音频 SourceSnapshot。",
     )
     composition_id: UUID | None = Field(
         default=None,
-        description="For an explicitly requested open redraft, initialize the working draft from this work's current saved version.",
+        description="用户明确要求开放式重写时，基于该作品当前保存的版本初始化工作草稿。",
     )
     settings: VersionSettings | None = Field(
         default=None,
-        description="Complete production settings when this call changes them; omitted settings remain unchanged.",
+        description="本次更改制作设置时提供完整设置；省略则沿用现值。",
     )
     sources: list[SourceBinding] | None = Field(
         default=None,
         max_length=256,
-        description="Complete source-binding list when this call changes it; omitted sources remain unchanged.",
+        description="本次更改来源绑定时提供完整列表；省略则沿用现值。",
     )
     save: bool = Field(
         default=False,
-        description="False merges this call into the working draft. True only validates and saves an existing draft_ref; put every settings, source or entity change in an earlier save=false call.",
+        description="false 将本次内容合入工作草稿。true 仅校验并保存已有 draft_ref。所有设置、来源或实体改动须在之前的 save=false 调用中完成。",
     )
     scrub: VideoScrubTarget | None = Field(
         default=None,
-        description="Only on save=true: optionally present one bounded Scene/Clip window or isolated Object when dynamic inspection helps answer the user. Omit by default; never target the complete video.",
+        description="仅在 save=true 且动态检查有助于回答用户时，可选一个限定的 Scene/Clip 时间窗或单独的 Object。默认省略，不得指定整片。",
     )
     name: str | None = Field(default=None, max_length=255)
     copy_references: list[CompositionCopyReference] | None = Field(
         default=None,
         max_length=64,
-        description="Optional provenance for native text already written to a Clip. TextObject.text always contains the display string. In copy_references, give snapshot_id and line_id; omit its text field if it matches the frozen line.",
+        description="已写入 Clip 的原生文字的可选来源。TextObject.text 始终填写实际显示文字。copy_references 给出 snapshot_id 和 line_id；与固定原文行一致时省略其 text。",
     )
     verbatim_copy: list[str] | None = Field(
         default=None,
         max_length=64,
-        description="Only when the user requires exact on-screen copy: list the original phrases in playback order. Each must appear once in a native Text Clip.",
+        description="仅当用户要求确切的屏幕文案时，按播放顺序列出原始短语。每个短语须在一个原生文字 Clip 中恰好出现一次。",
     )
     language: str | None = Field(
         default=None,
-        description="The video's language when one was agreed or named; omitted language remains unchanged.",
+        description="已商定或明确点名的视频语言。省略则沿用现值。",
     )
     scene_count: int | None = Field(
         default=None,
         ge=1,
-        description="Exact scene count explicitly fixed by the user. Never infer a constraint from your own outline.",
+        description="用户明确固定的确切场景数。不要根据自己的大纲推断约束。",
     )
     target_seconds: float | None = Field(
         default=None,
         gt=0,
         le=118,
-        description="Exact total duration explicitly fixed by the user. Never infer a fixed duration from a short-video request.",
+        description="用户明确固定的确切总时长。只说短视频不代表指定了固定时长。",
     )
     fps: Literal[24, 25, 30, 60] | None = Field(
         default=None,
-        description="Exact integer frame rate explicitly fixed by the user; omit otherwise.",
+        description="用户明确固定的整数帧率，其他情况省略。",
     )
     aspect: Literal["16:9", "9:16", "1:1"] | None = Field(
         default=None,
-        description="Exact canvas aspect explicitly fixed by the user.",
+        description="用户明确固定的画布宽高比。",
     )
     background: str | None = Field(
         default=None,
         pattern=r"^#[0-9a-fA-F]{6}$",
-        description="Exact canvas background explicitly fixed by the user.",
+        description="用户明确固定的画布背景。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' engages it, 'skip' declines it, and 'none' marks an unrelated interjection.",
+        description="有待回答问题时，answer 表示回应原问题，skip 表示拒答，none 表示无关插话。",
     )
     focus_clip_id: str | None = Field(
         default=None,
-        description="Repair this exact web Clip's framing from a real frozen element; pair with focus_element_id.",
+        description="用真实的固定元素修复这个确切网页 Clip 的构图，与 focus_element_id 配合使用。",
     )
     focus_element_id: str | None = Field(
         default=None,
-        description="A real element id in the target Clip's current view; the server computes camera animations.",
+        description="目标 Clip 当前视图中的真实元素 ID，镜头动画由服务端计算。",
     )
     skill_resource: SkillGeneratorPlacement | None = Field(
         default=None,
-        description="Place a generator_resources id from list_skill_shots onto a visual track. "
-        "Supply the target Scene and visual Track in scenes and tracks if they do not exist yet. "
-        "The host creates this Clip; omit it from clips. Its fixed duration must match the Scene. "
-        "Omit layout for full canvas. Use save=false.",
+        description="将 list_skill_shots 返回的 generator_resources ID 放到视觉轨道。若目标 Scene 或视觉 Track 尚不存在，在 scenes 和 tracks 中提供。"
+                    "宿主将创建该 Clip，勿在 clips 重复填写。其固定时长须与 Scene 一致。全画布时省略 layout。使用 save=false。",
     )
     _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
     _explicit_constraints: dict[str, Any] | None = PrivateAttr(default=None)
     _creative_state: Any = PrivateAttr(default=None)
+    # Issued by the current project's media journey after reviewing its SceneAssetSpecs.
+    _reviewed_scene_images: list[dict[str, Any]] | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _draft_target(self) -> "CompositionDesignVideoArgs":
@@ -848,6 +850,14 @@ def _view_facts(snapshots: list[SourceSnapshot]) -> list[ViewFact]:
 
 
 
+def _label_web_view_resources(resources: list[dict[str, Any]], views: list[ViewFact]) -> None:
+    by_page_and_view = {(str(view.snapshot_id), view.view_id): view for view in views}
+    for resource in resources:
+        view = by_page_and_view.get((resource.get("web_snapshot_id"), resource.get("view_id")))
+        if view is not None:
+            resource.update(heading=view.heading, source_url=view.source_url)
+
+
 async def _view_media_inputs(
     snapshots: list[SourceSnapshot],
     views: list[ViewFact],
@@ -905,7 +915,10 @@ async def _view_media_inputs(
             continue
         item = await media_input_for_image(
             key,
-            caption=f"V{i} — page {view.page}, view {view.view_id} ({view.heading or 'captured view'})",
+            caption=(
+                f"V{i} — page {view.page}, view {view.view_id} ({view.heading or 'captured view'}), "
+                f"web snapshot {view.snapshot_id}"
+            ),
             max_px=1280,
         )
         if item is None:
@@ -2133,6 +2146,8 @@ async def _design_composition_locked(
     skill_resources = deepcopy((state or {}).get("design", {}).get("skill_resources") or {})
     if state is not None:
         update = deepcopy(state.get("design") or {})
+        # working_draft_arguments merges only the incoming scene specs by scene_id.
+        update.pop("scene_assets", None)
         update.pop("skill_resources", None)
         update.pop("narrations", None)
         update.pop("authoring", None)
@@ -2151,8 +2166,6 @@ async def _design_composition_locked(
             db, owner_id=owner_id, composition_id=args.composition_id
         )
         base_content = content_of(base_version)
-
-    from app.editing.store import _raw_snapshot_ids, _resolve_raw_snapshot_references
 
     high_level_draft = (
         getattr(args, "scene_plan", None) is not None or getattr(args, "scene", None) is not None
@@ -2226,7 +2239,35 @@ async def _design_composition_locked(
     original_scene_content = deepcopy(content) if args.scene is not None else None
     try:
         if args.scene is not None:
-            facts = await snapshot_facts(db, _raw_snapshot_ids(content))
+            scene = args.scene
+            source_ids = _raw_snapshot_ids(content)
+            approved = None
+            if args._reviewed_scene_images is not None and scene.snapshot_id is not None:
+                approved = next((
+                    item.get("snapshot") for item in args._reviewed_scene_images
+                    if item["scene_id"] == scene.scene_id
+                ), None)
+                if not approved or approved.get("snapshot_id") != str(scene.snapshot_id):
+                    message = "Use the current approved picture for this scene from approved_images."
+                    raise CandidateDesignError(message, errors=[{
+                        "loc": ["scene", "snapshot_id"], "type": "source_not_ready", "msg": message,
+                    }])
+                # These images are prepared after scene_plan freezes its initial sources.
+                source_ids.add(scene.snapshot_id)
+            facts = await snapshot_facts(db, source_ids)
+            if approved is not None:
+                image = facts.get(scene.snapshot_id) or {}
+                if (
+                    image.get("owner_id") != owner_id
+                    or image.get("kind") != "image"
+                    or not image.get("storage_key")
+                    or not approved.get("digest")
+                    or image.get("digest") != approved["digest"]
+                ):
+                    message = "The reviewed picture could not be resolved at its approved digest."
+                    raise CandidateDesignError(message, errors=[{
+                        "loc": ["scene", "snapshot_id"], "type": "source_not_ready", "msg": message,
+                    }])
             parent_ids = {
                 UUID(str(parent))
                 for fact in facts.values()
@@ -2260,12 +2301,30 @@ async def _design_composition_locked(
             "declaration_digest": declaration_digest,
             "skill_version_id": str(skill.version.id),
         }
-    facts = await snapshot_facts(db, _raw_snapshot_ids(content))
+    content_source_ids = _raw_snapshot_ids(content)
+    existing_images = [
+        (spec.scene_id, spec.source) for spec in args.scene_assets or []
+        if isinstance(spec.source, ExistingImageSource)
+    ]
+    facts = await snapshot_facts(db, content_source_ids | {
+        source.snapshot_id for _, source in existing_images
+    })
     if any(
         snapshot_id not in facts or facts[snapshot_id].get("owner_id") != owner_id
-        for snapshot_id in _raw_snapshot_ids(content)
+        for snapshot_id in content_source_ids
     ):
         raise DesignError("a referenced source snapshot is not accessible to this user")
+    for scene_id, source in existing_images:
+        image = facts.get(source.snapshot_id) or {}
+        if (
+            image.get("owner_id") != owner_id or image.get("kind") != "image"
+            or image.get("digest") != source.snapshot_digest
+        ):
+            raise DesignError(
+                f"Scene {scene_id} needs a fixed image. Use the snapshot_id and digest "
+                "from the same image resource returned by prepare_video_materials. For a webpage "
+                "screenshot, select its view with material_targets to read the image reference."
+            )
     content = _apply_focus_write(content, args, facts)
     if args.skill_resource is not None:
         content = _resolve_raw_snapshot_references(content, facts, owner_id=owner_id)
@@ -2303,6 +2362,17 @@ async def _design_composition_locked(
         ]
         if narration_fact is not None:
             design["narrations"].append(narration_fact)
+    if args._working_draft["design"].get("narrations"):
+        from app.tools.video.narration_draft import NarrationDraftError, reproject_narration_timing
+
+        try:
+            reproject_narration_timing(args._working_draft)
+        except NarrationDraftError as exc:
+            raise CandidateDesignError(
+                str(exc),
+                errors=[{"loc": ["narration_update"], "type": "narration_retiming", "msg": str(exc)}],
+                working_content=deepcopy((state or {}).get("content") or content),
+            ) from exc
     if skill_resources:
         args._working_draft["design"]["skill_resources"] = skill_resources
     if not args.save:
@@ -2503,14 +2573,26 @@ async def prepare_video_materials(
                 source = next(item for item in selected if item.id == target.snapshot_id)
                 if source.kind != "web" and (target.view_id or target.element_id):
                     raise DesignError("view_id/element_id targets apply only to web snapshots")
-            snapshots.extend(selected)
+            for source in selected:
+                if source in snapshots:
+                    continue
+                snapshots.append(source)
+                view_ids = {
+                    target.view_id for target in targets
+                    if target.snapshot_id == source.id and target.view_id
+                }
+                if view_ids:
+                    snapshots.extend(await snapshot_web_generator_resources(
+                        db, owner_id=owner_id, web_snapshot=source, view_ids=view_ids,
+                    ))
         snapshots = list({snapshot.id: snapshot for snapshot in snapshots}.values())
         await db.commit()
         omitted: list[dict[str, str]] = []
         evidence: dict[str, Any] = {}
+        pages = [snapshot for snapshot in snapshots if snapshot.kind == "web"]
+        views = _view_facts(pages)
         images = await _view_media_inputs(
-            [snapshot for snapshot in snapshots if snapshot.kind == "web"],
-            _view_facts([snapshot for snapshot in snapshots if snapshot.kind == "web"]),
+            pages, views,
             omitted=omitted,
             targets=targets or None,
         )
@@ -2534,6 +2616,7 @@ async def prepare_video_materials(
             if str(snapshot.id) in evidence:
                 resource["model_evidence"] = evidence[str(snapshot.id)]
             resources.append(resource)
+        _label_web_view_resources(resources, views)
         return {
             "resources": resources,
             "context_keys": [f"snapshot:{snapshot.id}:{snapshot.digest}" for snapshot in snapshots],
@@ -2574,7 +2657,8 @@ async def capture_video_web(
         ))
         await db.commit()
         omitted: list[dict[str, str]] = []
-        images = await _view_media_inputs([snapshot], _view_facts([snapshot]), omitted=omitted)
+        views = _view_facts([snapshot])
+        images = await _view_media_inputs([snapshot], views, omitted=omitted)
         snapshot_meta = snapshot.meta or {}
         snapshot_issues = list(snapshot_meta.get("capture_issues") or [])
         all_issues = snapshot_issues + derivation_issues
@@ -2610,6 +2694,7 @@ async def capture_video_web(
                         if element.get("target_id") is not None or element.get("member_id") is not None
                     ]
             resources.append(resource)
+        _label_web_view_resources(resources, views)
         return {
             "resources": resources,
             "context_keys": [f"snapshot:{item.id}:{item.digest}" for item in snapshots],
@@ -2688,6 +2773,18 @@ async def design_video(
     elif isinstance(skill_reference, ExternalSkillReference):
         skill_version_id = skill_reference.skill_version_id
     async with AsyncSessionLocal() as db:
+        if args.scene_assets and args._creative_state and args._creative_state.brand_profile:
+            from app.tools.video.visual_citations import validate_website_scene_citations
+
+            await validate_website_scene_citations(
+                db, owner_id=owner_id, state=args._creative_state, specs=args.scene_assets,
+                user_text="\n".join(filter(None, (
+                    (context.get("brief") or {}).get("prompt"), context.get("user_text"),
+                ))),
+                source_ids=set(args.source_ids or ()) | _raw_snapshot_ids(
+                    (args._working_draft or {}).get("content") or {}
+                ),
+            )
         skill = (
             await load_skill_creative_context(
                 db,

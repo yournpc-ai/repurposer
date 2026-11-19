@@ -91,9 +91,15 @@ export function foldActivityUnits(
       // A failed activity owns its own terminal edge. Do not move the first
       // host's clock to a later turn envelope or add the tool duration to the
       // segment's wall clock.
-      const endedAtMs = run[0].workEndedAtMs ?? activityEndMs(failure)
+      const lastActivity = run.at(-1)?.activity
+      const workRuns = run.filter((unit) => unit.workRunId != null)
+      const lastRun = workRuns.at(-1)
+      // A silent hand-off to a worker continues the same visible work segment.
+      const endedAtMs = (lastRun ?? run[0]).workEndedAtMs ?? activityEndMs(failure)
       out.push({
         kind: "activityFold",
+        ...(lastActivity?.status === "active" ? { liveActivity: lastActivity } : {}),
+        ...(workRuns.length ? { workRunIds: workRuns.map((unit) => unit.workRunId!) } : {}),
         rows,
         failure,
         firstActivityAt: run[0].activity.at,
@@ -120,7 +126,7 @@ export function foldActivityUnits(
     }
     if (
       unit.kind === "activity" &&
-      (unit.activity.status === "completed" || unit.activity.status === "active")
+      (unit.activity.status === "completed" || unit.activity.status === "active" || !!unit.workRunId)
     ) {
       // A WorkSegment may fold only within one explicit ownership domain.
       // Legacy rows share a non-semantic "legacy" domain (their existing

@@ -38,7 +38,7 @@ _ID = Field(min_length=1, max_length=64)
 _HEX_COLOR = Field(pattern=r"^#[0-9a-fA-F]{6}$")
 _OPACITY = Field(
     default=1.0, ge=0, le=1,
-    description="Normalized opacity in [0, 1]: 0 is transparent and 1 is opaque; not a percentage.",
+    description="归一化透明度，范围 [0, 1]。0 为透明，1 为不透明，不使用百分比。",
 )
 
 
@@ -54,7 +54,7 @@ def _list_wire(value: Any) -> Any:
 
 
 class Fps(BaseModel):
-    """Rational frame rate: 30/1 today; 30000/1001 stays expressible."""
+    """用有理数表示的帧率。当前为 30/1，也可表示 30000/1001。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -63,27 +63,26 @@ class Fps(BaseModel):
 
 
 class VersionSettings(BaseModel):
-    """Production settings snapshot of one version (§2.1 ``settings``)."""
+    """单个版本的制作设置快照（§2.1 settings）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    width: int = Field(gt=0, description="Canvas width in pixels.")
-    height: int = Field(gt=0, description="Canvas height in pixels.")
+    width: int = Field(gt=0, description="画布宽度，单位为像素。")
+    height: int = Field(gt=0, description="画布高度，单位为像素。")
     fps: Fps = Fps()
-    timebase: int = Field(default=DEFAULT_TIMEBASE, gt=0, description="Output and clip-local clock rate in ticks per second; all such times are integer ticks, not seconds or frames.")
+    timebase: int = Field(default=DEFAULT_TIMEBASE, gt=0, description="输出及片段局部时钟的每秒刻度数。相关时间均为整数刻度，不使用秒数或帧数。")
     sample_rate: int = Field(default=48000, gt=0)
     channels: int = Field(default=2, gt=0)
     background: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
 
 
 class TimeRange(BaseModel):
-    """Half-open ``[start, end)`` in integer ticks (which clock = the field
-    the range sits in — see the module docstring's three domains)."""
+    """用整数刻度表示的左闭右开范围 [start, end)。具体字段决定采用哪种时钟，参见模块说明中的三个时间域。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    start: int = Field(ge=0, description="Inclusive integer tick. The containing field determines output, source or clip-local time; never substitute seconds or frames.")
-    end: int = Field(gt=0, description="Exclusive integer tick in the same time domain and timebase as start; end must be greater than start.")
+    start: int = Field(ge=0, description="包含起点的整数刻度。具体字段决定这是成片、源素材还是片段局部时间。不要填秒数或帧数。")
+    end: int = Field(gt=0, description="不包含终点的整数刻度，与 start 的时间域和时基一致。end 必须大于 start。")
 
     @model_validator(mode="after")
     def _half_open(self) -> TimeRange:
@@ -97,12 +96,7 @@ class TimeRange(BaseModel):
 
 
 class SourceBinding(BaseModel):
-    """One immutable SourceSnapshot this version binds (§2.1 ``sources``).
-
-    The digest is pinned INTO the version at bind time (resolved from the
-    snapshot row by the write door) — a later refresh of the asset produces
-    a new snapshot row and never rewrites this binding.
-    """
+    """此版本绑定的一个不可变 SourceSnapshot（§2.1 sources）。绑定时写入入口从快照记录解析摘要并固定在版本内。以后刷新素材会产生新快照，不改写已有绑定。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -111,45 +105,40 @@ class SourceBinding(BaseModel):
 
 
 class ClipSource(BaseModel):
-    """A clip's media source: one bound snapshot + an optional source window.
-
-    ``source_range`` exists only for time-based media (audio/video). Static
-    sources (image, static webpage views) never carry one — their display
-    length is the clip's own output range (§4.2: no fabricated source windows).
-    """
+    """片段的媒体来源，包含一个已绑定快照和可选的源时间窗。只有音频或视频才有 source_range。图片、静态网页视图等静态来源不设源时间窗，显示时长由 Clip 自身的成片范围决定（§4.2）。"""
 
     model_config = ConfigDict(extra="forbid")
 
     snapshot_id: UUID
     snapshot_digest: str = Field(min_length=64, max_length=64)
-    source_range: TimeRange | None = Field(default=None, description="Optional half-open source window in SOURCE_TIMEBASE ticks; this is source time, not output/clip-local time and not seconds.")
+    source_range: TimeRange | None = Field(default=None, description="可选，按 SOURCE_TIMEBASE 刻度表示的左闭右开源时间窗。填写源素材时间，不使用成片时间、片段局部时间或秒数。")
 
 
 class LayoutBox(BaseModel):
-    """The static box in canvas pixels (§4.3: layout owns the box)."""
+    """布局在画布中的静态矩形框，单位为像素（§4.3）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    x: float = Field(description="Left edge in canvas pixels.")
-    y: float = Field(description="Top edge in canvas pixels.")
-    width: float = Field(gt=0, description="Box width in canvas pixels, not a normalized fraction.")
-    height: float = Field(gt=0, description="Box height in canvas pixels, not a normalized fraction.")
+    x: float = Field(description="左边缘在画布中的像素位置。")
+    y: float = Field(description="上边缘在画布中的像素位置。")
+    width: float = Field(gt=0, description="框的宽度，单位为画布像素，不使用归一化比例。")
+    height: float = Field(gt=0, description="框的高度，单位为画布像素，不使用归一化比例。")
 
 
 class Transform(BaseModel):
-    """Relative to the layout box (§4.3: never a second absolute truth)."""
+    """相对于布局框的变换，不另设第二套绝对位置（§4.3）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    x: float = Field(default=0.0, description="Horizontal offset from the layout box in canvas pixels.")
-    y: float = Field(default=0.0, description="Vertical offset from the layout box in canvas pixels.")
-    scale: float = Field(default=1.0, gt=0, description="Positive scale multiplier: 1 is unchanged, 2 is twice the layout size; not pixels or percent.")
-    rotation: float = Field(default=0.0, description="Rotation in degrees around the declared origin; not radians.")
+    x: float = Field(default=0.0, description="相对于布局框的水平偏移，单位为画布像素。")
+    y: float = Field(default=0.0, description="相对于布局框的垂直偏移，单位为画布像素。")
+    scale: float = Field(default=1.0, gt=0, description="正的缩放倍数。1 为原大小，2 为布局尺寸的两倍，不使用像素或百分比。")
+    rotation: float = Field(default=0.0, description="绕指定原点旋转的角度，单位为度，不使用弧度。")
     origin: Literal["center", "top_left"] = "center"
 
 
 class FontRef(BaseModel):
-    """Immutable font-set identity; the compiler resolves concrete files."""
+    """不可变的字体集标识，编译器负责解析到具体文件。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -158,38 +147,38 @@ class FontRef(BaseModel):
 
 
 class TextStroke(BaseModel):
-    """Renderer-neutral text outline; width is in canvas pixels."""
+    """与渲染器无关的文字描边，宽度以画布像素计。"""
 
     model_config = ConfigDict(extra="forbid")
 
     color: str = _HEX_COLOR
-    width: float = Field(ge=0, le=64, description="Stroke width in canvas pixels.")
+    width: float = Field(ge=0, le=64, description="描边宽度，单位为画布像素。")
 
 
 class TextShadow(BaseModel):
-    """One structured text shadow, never an arbitrary CSS shadow list."""
+    """一项结构化的文字阴影，不接受任意 CSS 阴影列表。"""
 
     model_config = ConfigDict(extra="forbid")
 
     color: str = _HEX_COLOR
-    offset: tuple[float, float] = Field(description="Shadow [x, y] offset in canvas pixels.")
-    blur: float = Field(ge=0, le=100, description="Shadow blur radius in canvas pixels.")
+    offset: tuple[float, float] = Field(description="阴影的 [x, y] 偏移，单位为画布像素。")
+    blur: float = Field(ge=0, le=100, description="阴影模糊半径，单位为画布像素。")
 
 
 class TextStyle(BaseModel):
-    """Closed text style set (no free CSS — §11.1 spec law)."""
+    """使用封闭的文字样式集合，不接受自由 CSS（§11.1）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    font_size: int = Field(gt=0, le=400, description="Font size in canvas pixels.")
+    font_size: int = Field(gt=0, le=400, description="字号，单位为画布像素。")
     color: str = _HEX_COLOR
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     weight: Literal[400, 500, 600, 700, 800, 900] = 600
     align: Literal["left", "center", "right"] = "left"
-    line_height: float = Field(default=1.2, gt=0, description="Line-height multiplier relative to font size; not pixels.")
+    line_height: float = Field(default=1.2, gt=0, description="相对字号的行高倍数，不使用像素。")
     letter_spacing: float = Field(
         default=0.0, ge=-0.2, le=0.5,
-        description="Letter spacing in em units, relative to font size. Valid range [-0.2, 0.5] em; never enter pixels or an unscaled pixel count.",
+        description="相对字号的字间距，单位为 em，有效范围 [-0.2, 0.5]。不要填像素或未经换算的像素数。",
     )
     stroke: TextStroke | None = None
     shadow: TextShadow | None = None
@@ -204,13 +193,7 @@ class TextStyle(BaseModel):
 
 
 class CaptionDerivation(BaseModel):
-    """A caption's editable link to the reviewed SpeechObject text.
-
-    Actual cue times are execution facts, not version mutations. ``derived``
-    captions follow Speech edits; ``independent`` preserves a user's manual
-    text until an explicit sync operation re-links it. Source-aligned captions
-    additionally pin the READY alignment and its semantic content digest.
-    """
+    """字幕与已审阅 SpeechObject 文本的可编辑关联。实际提示点时间来自执行结果，不修改版本。derived 字幕随 Speech 编辑更新，independent 保留用户手改文字，直至显式同步重新建立关联。源音频对齐的字幕还固定 READY 对齐结果及其语义内容摘要。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -236,7 +219,7 @@ class CaptionDerivation(BaseModel):
 
 
 class SourceCaptionDerivation(BaseModel):
-    """Native caption text and timing from frozen ASR or narration alignment."""
+    """从固定的 ASR 或旁白对齐结果取得的原生字幕文字和时序。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -287,11 +270,7 @@ class ImageObject(BaseModel):
 
 
 class WebObject(BaseModel):
-    """One static view of an immutable webpage snapshot.
-
-    Camera motion uses the same transform animations as other visual objects;
-    the view itself has no fabricated source-time window.
-    """
+    """不可变网页快照的一个静态视图。运镜与其他视觉对象采用相同的变换动画，不为视图编造源时间窗。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -305,11 +284,7 @@ class WebObject(BaseModel):
 
 
 class VideoObject(BaseModel):
-    """One real video window and its synchronized original audio.
-
-    The picture and source audio share this Clip's source/output windows;
-    muting never creates or removes a second audio clip.
-    """
+    """一个真实视频片段及其同步原声。画面和原声共用此 Clip 的源和成片时间窗，静音不会增删第二个音频片段。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -324,7 +299,7 @@ class VideoObject(BaseModel):
 
 
 class ShapeObject(BaseModel):
-    """One native vector primitive; path data is geometry, never renderer code."""
+    """一个原生矢量图元，路径数据仅描述几何，不传渲染器代码。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -364,7 +339,7 @@ GENERATOR_MAX_FRAMES = 3600
 
 
 class ProgramOutput(BaseModel):
-    """Fixed raster constraints for one controlled visual program."""
+    """单个受控视觉程序的固定画幅约束。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -382,7 +357,7 @@ class ProgramOutput(BaseModel):
 
 
 class GeneratedImageOutput(BaseModel):
-    """The single image-generation output constraint consumed by B-V."""
+    """B-V 使用的单张生成图片输出约束。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -497,7 +472,7 @@ class RemotionSourceFile(BaseModel):
 
 
 class RemotionResource(BaseModel):
-    """A fixed image bound to the same immutable SourceSnapshot as other media."""
+    """固定的图片，与其他媒体一样绑定到不可变 SourceSnapshot。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -618,7 +593,7 @@ class RemotionProjectSource(BaseModel):
 
 
 class GeneratorObject(BaseModel):
-    """A reviewable program or model request; production resolves fixed media."""
+    """可审阅的程序或模型请求，制作时据此解析固定媒体。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -712,7 +687,7 @@ class AudioObject(BaseModel):
 
 
 class NarrationAlignmentRef(BaseModel):
-    """The READY alignment and immutable audio bytes behind a source-aligned Speech."""
+    """源音频对齐的 Speech 所引用的 READY 对齐结果及不可变音频字节。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -723,11 +698,7 @@ class NarrationAlignmentRef(BaseModel):
 
 
 class SpeechObject(BaseModel):
-    """Reviewed narration; production resolves it into ordinary audio.
-
-    Pending Speech requires its TTS request fields. A source-aligned Speech
-    instead carries fixed audio provenance and never opens a new synthesis.
-    """
+    """已审阅的旁白，制作时转换为普通音频。待合成的 Speech 需要 TTS 请求字段。已与源音频对齐的 Speech 使用固定音频来源，不启动新合成。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -765,9 +736,7 @@ Object = Annotated[
 
 
 class Easing(BaseModel):
-    """Segment easing (§5.1): an easing belongs to the segment FROM this
-    keyframe TO the next; ``hold`` keeps the value until the next keyframe,
-    then jumps."""
+    """分段缓动（§5.1），作用于当前关键帧至下一关键帧的区间。hold 将当前值保持至下一关键帧，再跳变。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -794,12 +763,12 @@ class Easing(BaseModel):
 
 
 class Keyframe(BaseModel):
-    """``at`` is CLIP-LOCAL ticks (settings.timebase, 0 = clip start)."""
+    """at 使用 Clip 局部整数刻度，时基为 settings.timebase，0 表示片段开始。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    at: int = Field(ge=0, description="Clip-local integer tick at settings.timebase: 0 is the clip's output start. Never seconds, frames or absolute timeline time.")
-    value: float | tuple[float, float] | str = Field(description="Value units follow the parent Animation.property: opacity/path.reveal are normalized [0,1]; transform.scale is a multiplier; transform.rotation is degrees; transform.position is [x,y] canvas-pixel offsets; filter.blur/text.stroke_width are pixels; text.letter_spacing is em; audio.gain is a linear multiplier. Exact #RRGGBB string only for text.color/text.stroke_color.")
+    at: int = Field(ge=0, description="以 settings.timebase 表示的片段局部整数刻度。0 对应该 Clip 在成片中的起点，不使用秒数、帧数或绝对时间线时间。")
+    value: float | tuple[float, float] | str = Field(description="单位由所属 Animation.property 决定：opacity/path.reveal 为 [0,1] 的归一化值，transform.scale 为倍数，transform.rotation 为度，transform.position 为画布像素偏移 [x,y]，filter.blur/text.stroke_width 为像素，text.letter_spacing 为 em，audio.gain 为线性倍数。仅 text.color/text.stroke_color 使用精确的 #RRGGBB 字符串。")
     easing: Easing = Easing()
 
 
@@ -820,21 +789,17 @@ AnimatableProperty = Literal[
 
 
 class TextPartTarget(BaseModel):
-    """Explicit derived-part targets plus clip-local stagger ticks.
-
-    IDs are content/range addressed, never array indexes. A text edit that
-    invalidates one is rejected instead of re-pointing the animation silently.
-    """
+    """明确指定派生文字部分及片段局部的错峰刻度。ID 由内容和范围确定，不用数组下标。编辑文字若导致目标失效则拒绝修改，不静默改指其他动画目标。"""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["line", "word", "grapheme"]
     part_ids: list[str] = Field(min_length=1)
-    stagger: int = Field(default=0, ge=0, description="Clip-local delay between derived TextParts in settings.timebase ticks, not seconds.")
+    stagger: int = Field(default=0, ge=0, description="派生 TextParts 之间的片段局部延迟，单位为 settings.timebase 刻度，不使用秒数。")
 
 
 class NarrationAnchor(BaseModel):
-    """Server-resolved word provenance for a clip-local animation."""
+    """服务端解析的词级来源，用于片段局部动画。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -845,12 +810,12 @@ class NarrationAnchor(BaseModel):
 
 
 class Animation(BaseModel):
-    """One property track on one object or its derived TextParts."""
+    """一个对象或其派生 TextParts 上的一条属性动画轨迹。"""
 
     model_config = ConfigDict(extra="forbid")
 
     animation_id: str = _ID
-    target_object_id: str = Field(..., description="The object_id of an Object inside the Clip that owns this Animation; cross-clip targets are invalid.", min_length=1, max_length=64)
+    target_object_id: str = Field(..., description="该 Animation 所属 Clip 内的 object_id，不可跨片段指定目标。", min_length=1, max_length=64)
     text_part: TextPartTarget | None = None
     property: AnimatableProperty
     keyframes: list[Keyframe] = Field(min_length=1)
@@ -898,17 +863,17 @@ class Animation(BaseModel):
 
 
 class Clip(BaseModel):
-    """The unified edit item on a track (§4.2) — time + source + object."""
+    """轨道上的统一剪辑单元，包括时间、来源和对象（§4.2）。"""
 
     model_config = ConfigDict(extra="forbid")
 
     clip_id: str = _ID
-    range: TimeRange = Field(description="Half-open OUTPUT range in integer ticks at settings.timebase; not source time, seconds or frames.")
+    range: TimeRange = Field(description="以 settings.timebase 整数刻度表示的左闭右开成片时间范围，不使用源时间、秒数或帧数。")
     scene_id: str | None = None
     linked_group_id: str | None = None
     source: ClipSource | None = None
     object: Object
-    animations: list[Animation] = Field(default_factory=list, description="Animations belong inside this complete Clip. Each target_object_id names this Clip's own Object.")
+    animations: list[Animation] = Field(default_factory=list, description="动画放在这个完整 Clip 内。每个 target_object_id 都指向本 Clip 自身的对象。")
 
     @field_validator("animations", mode="before")
     @classmethod
@@ -921,16 +886,15 @@ TrackRole = Literal["main", "title", "caption", "dialogue", "music", "effect"]
 
 
 class Track(BaseModel):
-    """A track spans the whole timeline (§4.1); visual ``order`` decides the
-    stacking (lower order paints first / sits at the bottom)."""
+    """每条轨道贯穿整条时间线（§4.1）。视觉轨道以 order 决定叠放顺序，值越小越先绘制，位于底层。"""
 
     model_config = ConfigDict(extra="forbid")
 
     track_id: str = _ID
     kind: TrackKind
-    role: TrackRole = Field(description="Semantic role, not a unique lane. Multiple tracks may share a role; concurrent visual objects require separate tracks.")
+    role: TrackRole = Field(description="语义角色。多个轨道可共享角色，同时出现的视觉对象需要独立轨道。")
     order: int = Field(ge=0)
-    clips: list[Clip] = Field(default_factory=list, description="One temporal lane: clip ranges must not overlap. Use distinct tracks with distinct order for simultaneous visual objects.")
+    clips: list[Clip] = Field(default_factory=list, description="一条时序轨道内各片段的范围不得重叠。要同时展示视觉对象，使用不同轨道并指定不同 order。")
 
     @field_validator("clips", mode="before")
     @classmethod
@@ -939,12 +903,12 @@ class Track(BaseModel):
 
 
 class Scene(BaseModel):
-    """Narrative range over output time (§3.1); never a track container."""
+    """成片时间线上的叙事范围，不是 Track 的容器（§3.1）。"""
 
     model_config = ConfigDict(extra="forbid")
 
     scene_id: str = _ID
-    range: TimeRange = Field(description="Narrative OUTPUT range in integer ticks at settings.timebase; Scenes do not own Tracks.")
+    range: TimeRange = Field(description="以 settings.timebase 整数刻度表示的叙事成片范围。Scene 不持有 Track。")
     intent: str = ""
     visual_description: str | None = None
     speech_clip_ids: list[str] = []
@@ -961,7 +925,7 @@ class Transition(BaseModel):
     from_clip_id: str = _ID
     to_clip_id: str = _ID
     kind: Literal["crossfade"] = "crossfade"
-    duration: int = Field(gt=0, description="Transition duration in output ticks at settings.timebase, not seconds or frames.")
+    duration: int = Field(gt=0, description="转场时长，单位为 settings.timebase 的成片刻度，不使用秒数或帧数。")
     alignment: Literal["center"] = "center"
 
 

@@ -17,8 +17,10 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
+from botocore.exceptions import BotoCoreError, ClientError
 
 from app.agents.tool_loop import TerminalRefusal, ToolObservation
+from app.agents.tool_progress import report_progress
 from app.agents.working_drafts import (
     WorkingDraftRejected,
     WorkingDraftReviewed,
@@ -148,7 +150,7 @@ def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[
     if not sets:
         return []
     return [
-        "Persisted audio candidate sets (internal references for a later selection turn):",
+        "已保存的音频候选集（供后续选择时引用）：",
         *(json.dumps(item, ensure_ascii=False) for item in sets.values()),
     ]
 
@@ -208,20 +210,20 @@ async def video_context_lines(
     ]
     if skill is not None:
         lines.append(
-            "Server-pinned Skill for this turn's FIRST design only: "
+            "服务端仅为本轮首稿绑定的 Skill："
             + json.dumps(skill.model_dump(mode="json"), ensure_ascii=False)
         )
     if skill_ambiguity:
         lines.append(
-            "The user's Skill name is ambiguous between "
+            "用户提供的名称可能指以下多个 Skill："
             + ", ".join(skill_ambiguity)
-            + "; ask which exact Skill/version they mean before designing."
+            + "。设计前先询问用户指的是哪个 Skill 和版本。"
         )
     # Assets, page bodies, frozen sources and complete compositions ride the
     # fresh shared project context, never a second stale identity-only list.
     receipt = (project.pending_brief or {}).get("video_presentation")
     if receipt:
-        lines.append("Video currently under review: " + json.dumps(receipt, ensure_ascii=False))
+        lines.append("正在审阅的视频：" + json.dumps(receipt, ensure_ascii=False))
     for mention in mentions or []:
         if mention.type == "asset":
             try:
@@ -230,7 +232,7 @@ async def video_context_lines(
                 continue  # A staged local file has no server asset id yet.
             asset = await db.scalar(select(Asset).where(Asset.id == asset_id, Asset.user_id == project.user_id))
             if asset is not None:
-                lines.append("Mentioned source material: " + json.dumps({"asset_id": str(asset.id),
+                lines.append("用户提到的源素材：" + json.dumps({"asset_id": str(asset.id),
                     "type": asset.type.value, "name": asset.title,
                     "processing_status": asset.processing_status.value}, ensure_ascii=False))
             continue
@@ -244,7 +246,7 @@ async def video_context_lines(
                 "content_digest": (row.payload or {}).get("composition_digest")}
             if mention.region:
                 payload["selected_region"] = mention.region.model_dump(mode="json")
-            lines.append("Mentioned video output: " + json.dumps(payload, ensure_ascii=False))
+            lines.append("用户提到的视频输出：" + json.dumps(payload, ensure_ascii=False))
     return lines
 
 
@@ -315,8 +317,7 @@ async def review_video_seat(
     from app.chat.activity_receipts import video_review_receipt
 
     return ToolObservation(
-        "Content review saved on the exact reviewed Output. These are the persisted report facts "
-        "(advisory still-frame findings, not a delivery gate):\n"
+        "内容审阅结果已保存在本次审阅的确切 Output 上。以下为已保存的报告事实，仅基于静帧给出建议，不决定能否交付：\n"
         + json.dumps(report, ensure_ascii=False),
         receipt=video_review_receipt(report),
     )
@@ -353,9 +354,9 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
             try:
                 ref = json.loads(ref)
             except (TypeError, ValueError):
-                return "Video production held: version_ref must be the saved base_ref object, not opaque text. Re-read the version and relay its base_ref."
+                return "暂缓制作：version_ref 须为已保存的 base_ref 对象，不能传不透明字符串。请重新读取版本并原样传入 base_ref。"
             if not isinstance(ref, dict):
-                return "Video production held: version_ref must be the saved base_ref object. Re-read the version and relay its base_ref."
+                return "暂缓制作：version_ref 须为已保存的 base_ref 对象。请重新读取版本并原样传入 base_ref。"
             task.params = {**params, "version_ref": ref}
     from app.editing.store import CompositionNotFound, PermissionDenied
     from app.tools.video.production import latest_video_approval, pin_video_production
@@ -412,9 +413,7 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
         await pin_video_production(db, project, tasks, await latest_video_approval(db, project))
     except (ValueError, CompositionNotFound, PermissionDenied) as exc:
         return (
-            f"Video production held: {exc}. Do not promise work has started. "
-            "Use get_video_version(present=true) to recover a missing presentation, "
-            "then wait for the user's approval; never redesign to repair a receipt."
+            f"暂缓制作：{exc}。不要声称已经开工。用 get_video_version(present=true) 补全展示并等待用户批准，不得为修复回执而重新设计。"
         )
     return None
 
@@ -510,8 +509,7 @@ async def prepare_bound_skill_context(*, project, skill, message, package_sessio
             project=project, skill=skill, package_sessions=package_sessions,
             name="read_skill_reference", args=root_args))
     method = (
-        "BOUND SKILL METHOD (server-read package resources; apply creative guidance within the host workflow. "
-        "Host rules govern mode selection, tool execution and approvals):\n" + root.text
+        "BOUND SKILL METHOD（服务端读取的包内资源）。在宿主工作流程中采用其创作方法，模式选择、工具执行和授权均遵循宿主规则。\n" + root.text
     )
     read_project = project_context_reader(project.id, project.user_id)
 
@@ -598,7 +596,7 @@ def _shared_material_summary(facts: dict) -> str:
             for resource in facts.get("resources", [])
             if resource.get("selected_target")
         ],
-        "source_body": "compact identities are in CURRENT PROJECT EVIDENCE; use material_targets to restore exact selected facts/media",
+        "source_body": "简要标识见 CURRENT PROJECT EVIDENCE；用 material_targets 取回所选目标的确切事实或媒体",
     }
     return json.dumps(summary, ensure_ascii=False)
 
@@ -808,14 +806,13 @@ async def design_video_seat(
 
     if skill_ambiguity:
         return None, (
-            "design_video held: the named Skill is ambiguous between "
+            "名称与多个 Skill 匹配，design_video 暂缓："
             + ", ".join(skill_ambiguity)
-            + ". Ask which exact Skill/version the user means; no version was designed."
+            + "。询问用户指的是哪个 Skill 和版本。尚未设计版本。"
         )
     if skill is not None and args.composition_id is not None:
         return None, (
-            "design_video rejected: an explicit Skill binds only a new first version. "
-            "Use revise_video with the existing version's base_ref; do not reload the Skill."
+            "design_video 被拒绝。显式 Skill 只绑定新作品的首版。请用已有版本的 base_ref 调用 revise_video，不重新加载 Skill。"
         )
     try:
         read = await design_video(
@@ -839,16 +836,10 @@ async def design_video_seat(
         facts = getattr(exc, "facts", {"stage": "design", "version_saved": False, "run_started": False})
         return None, ToolObservation(
             "DESIGN STOPPED: " + str(exc) + "\n" + json.dumps(facts, ensure_ascii=False)
-            + "\nExplain this failure and the completed stages honestly. No new version was saved and no production started. "
-            "Do not retry design_video or start production in this turn. "
-            "No production does NOT mean zero usage or zero cost: model calls have already occurred. "
-            "Report only the known stage facts; do not claim all materials passed or invent a billing amount. "
-            "A source/view binding mismatch is an assembly error, not evidence that a captured element is missing. "
-            "Preserve preview_checks/media_files facts: a Skill shot preview is separate from native presets; "
-            "do not claim a successfully read Skill preview is absent merely because no native preset matches. "
-            "Use plain user-facing language about completed work, the obstacle and saved/production status. "
-            "Do not dump schema fields, internal IDs, counters or stack traces. Do not tell the user that "
-            "repeating the same request will repair this failure; do not ask them to resend the production request, and do not invent new preference questions.",
+            + "\n如实说明失败原因和已完成的阶段。没有保存新版本或启动制作，本轮不要重试 design_video 或启动制作。此前已发生模型调用，不能据此声称零用量或零费用。"
+              "只报告已知阶段事实，不声称所有素材均已通过或编造费用。来源与视图绑定不符属于装配错误，不能证明页面缺少元素。"
+              "按 preview_checks/media_files 的事实说明。Skill 镜头预览与原生预设相互独立，不能仅因没有匹配的原生预设就声称已读取的 Skill 预览缺失。"
+              "用平实语言说清进展、阻碍及保存和制作状态，不罗列参数字段、内部 ID、计数器或堆栈。不要声称重复请求就能解决问题，也不要让用户重发制作指令或另答无关偏好问题。",
             ok=False,
         )
     except (CompositionNotFound, PermissionDenied):
@@ -982,14 +973,13 @@ async def revise_video_seat(
                         read["scrub_rejected"] = str(exc)
     except RevisionTargetAmbiguityError as exc:
         return None, VideoTargetAmbiguityFeedback(
-            "revise_video needs clarification before any write: "
+            "写入前需澄清 revise_video 的目标："
             + str(exc)
-            + ". Candidate facts from the current base version: "
+            + "。当前基准版本的候选事实："
             + json.dumps(exc.candidates, ensure_ascii=False)
-            + ". Current base_ref: "
+            + "。当前 base_ref："
             + json.dumps(args.base_ref.model_dump(mode="json"), ensure_ascii=False)
-            + ". Call ask_user with one question and options grounded in these candidates; "
-            "do not answer in prose, guess a target, or retry a write before the user answers.",
+            + "。根据这些候选调用 ask_user 提一个问题并给出选项。在用户作答前，不要仅用正文结束、猜测目标或重试写入。",
             candidates=exc.candidates,
             base_ref=args.base_ref.model_dump(mode="json"),
         )
@@ -999,7 +989,7 @@ async def revise_video_seat(
         return None, (
             "revise_video did not write: "
             + str(exc)
-            + ". Re-read the current version with get_video_version and create a new candidate from its base_ref."
+            + "。通过 get_video_version 重读当前版本，再用它的 base_ref 构建新候选。"
         )
     except (CandidateContentError, ContentValidationError, EditError) as exc:
         return None, f"revise_video rejected: {exc}"
@@ -1036,11 +1026,7 @@ async def revise_video_seat(
             }, ensure_ascii=False)
         )
     return read, ToolObservation(
-        f"World facts: video version {read['version']} is saved as a revision; "
-        "no run started and nothing has been produced. The saved version "
-        "reference rides the presenting reply. Follow the Video works law "
-        "for the user-facing natural-language handoff. These saved facts contain the system-computed "
-        "field-level delta and the reference needed by the next tool:\n"
+        f"事实：视频版本 {read['version']} 的修订已保存，尚未启动 Run 或制作成片。展示回复会附带保存版本的引用。按视频创作规则用自然语言交接。以下已保存的事实包括系统计算的逐字段差异，以及下一工具所需的引用：\n"
         + format_revision_text(read)
         + scrub_facts,
         images=tuple(await generator_preview_images(
@@ -1082,9 +1068,7 @@ async def show_video_presets_seat(
         ],
     }
     return ToolObservation(
-        "World facts: 2–4 real native Preset previews were emitted; no CompositionVersion, "
-        "Run, production intent or selection was created. The cards own playback. Close "
-        "with a concise comparison and invite an ordinary ordinal choice.\n"
+        "事实：已展示 2–4 个真实的原生 Preset 预览。未创建 CompositionVersion 或 Run，用户尚未选择或表示制作意图。可在卡片播放。简要比较并请用户按序号选择，然后结束本轮。\n"
         + json.dumps(facts, ensure_ascii=False)
     )
 
@@ -1183,10 +1167,7 @@ async def search_sfx_seat(
         ],
     }
     return ToolObservation(
-        "World facts: the candidates were emitted; no asset or video version was written. "
-        "The response facts are the candidate count, display titles and durations. "
-        "The candidate cards provide actual playback for the user to audition and choose "
-        "by ordinal; this search observation contains no listening result.\n"
+        "事实：已展示候选，未写入素材或视频版本。可报告候选数量、显示名称和时长。用户可在卡片实际试听并按序号选择；本次搜索没有试听结果。\n"
         + json.dumps({"admission": admission, **selection_facts}, ensure_ascii=False),
         receipt=sfx_search_receipt(selection_facts),
     )
@@ -1231,8 +1212,7 @@ async def import_sfx_seat(
     }
     selection_facts["title"] = _sfx_display_title(facts["title"])
     return ToolObservation(
-        "World facts: the selected MP3 is a completed audio asset with this immutable "
-        "SourceSnapshot; no CompositionVersion changed. Add it through revise_video with an add_audio_effect Op and the current base_ref.\n"
+        "事实：选中的 MP3 已作为音频素材导入，并有下列不可变 SourceSnapshot。未修改 CompositionVersion。使用当前 base_ref，通过 revise_video 的 add_audio_effect Op 添加。\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=sfx_import_receipt(
             selection_facts,
@@ -1277,9 +1257,7 @@ async def show_music_candidates_seat(
         ],
     }
     return ToolObservation(
-        "World facts: local Music candidates were emitted; no asset, CompositionVersion "
-        "or Run was written. The cards provide actual playback for a later ordinal choice. "
-        "This observation contains no listening result.\n"
+        "事实：已展示本地 Music 候选，未写入素材、CompositionVersion 或 Run。用户可在卡片实际播放，再按序号选择。本次观察没有试听结果。\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=music_search_receipt(selection_facts),
     )
@@ -1319,9 +1297,7 @@ async def select_music_seat(
         for key in ("music_id", "title", "duration_seconds")
     }
     return ToolObservation(
-        "World facts: the persisted local Music choice is resolved; no asset was imported, "
-        "no CompositionVersion changed and no Run started. prepare_video_materials freezes "
-        "this music_id; revise_video owns its music-track placement.\n"
+        "事实：已解析保存的本地 Music 选择，未导入素材、修改 CompositionVersion 或启动 Run。用 prepare_video_materials 固定该 music_id，通过 revise_video 放置到音乐轨。\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=music_selection_receipt(
             selection_facts,
@@ -1346,6 +1322,7 @@ async def prepare_visual_assets_seat(*, project: Project | None, args: Any) -> T
             return ToolObservation("the current visual asset draft could not be restored", ok=False)
         specs = select_scene_assets(args._working_draft, args.scene_ids)
         preflight_scene_svgs(specs)
+        await report_progress("check_fixed_images")
         results = []
         pending = []
         for spec in specs:
@@ -1381,7 +1358,7 @@ async def prepare_visual_assets_seat(*, project: Project | None, args: Any) -> T
             "cached_scene_ids": [item["scene_id"] for item in results],
             "pending_scene_ids": pending,
             "execution": "not executed",
-            "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and quote. Close after the plan or Run; do not execute or poll the provider here.",
+            "next": "仅用常规方案工具展示这一个任务，按用户实际意图填写 production_intent，由方案及 Start 流程负责授权和报价。展示方案或启动 Run 后结束，不在此执行或轮询供应商。",
             "plan_task": task,
         }, ensure_ascii=False), fold_after_delivery=True)
     payload = {
@@ -1389,8 +1366,9 @@ async def prepare_visual_assets_seat(*, project: Project | None, args: Any) -> T
         "cache": "hit",
         "draft_ref": args.draft_ref.model_dump(mode="json"),
         "assets": results,
-        "scope": "Only these current SceneAssetSpec images and their actual reports are returned; no Composition version or video Output was created.",
+        "scope": "仅返回这些当前 SceneAssetSpec 图片及其实际报告。未创建 Composition 版本或视频 Output。",
     }
+    await report_progress("read_fixed_images")
     images = await visual_asset_result_images(results)
     return ToolObservation(
         json.dumps(payload, ensure_ascii=False),
@@ -1471,7 +1449,7 @@ async def prepare_narration_seat(
                     "execution": "not executed",
                     "draft_ref": params.draft_ref.model_dump(mode="json") if params.draft_ref else None,
                     "scene_id": args.scene_id,
-                    "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and quote. Close after the plan or Run; do not execute or poll the provider here.",
+                    "next": "自动分镜准备由服务端汇总本轮所有待录场景并启动；其他场合使用常规方案和 Start 流程。",
                     "plan_task": {"tool": "prepare_narration", "params": params.model_dump(mode="json")},
                 }, ensure_ascii=False), fold_after_delivery=True)
             async with AsyncSessionLocal() as db:
@@ -1498,9 +1476,12 @@ async def prepare_narration_seat(
             analysis = await read_report(analysis_ref)
     except (ValueError, PermissionError) as exc:
         return ToolObservation(f"prepare_narration rejected: {exc}", ok=False)
+    except (BotoCoreError, ClientError, OSError):
+        return ToolObservation("Narration audio or its measured analysis is unavailable.", ok=False)
     payload = (read.get("payload") or {})
     duration_ticks = payload.get("duration_ticks")
     read.update({
+        "cache": "hit",
         "draft_ref": (
             params.draft_ref.model_dump(mode="json")
             if params is not None and params.draft_ref else None
@@ -1520,7 +1501,7 @@ async def prepare_narration_seat(
             for sentence in payload.get("sentences") or []
         ],
         "analysis": analysis,
-        "scope": "Original-speed audio and its actual alignment only; no CompositionVersion or video Output was created.",
+        "scope": "结果仅含原速音频及其实际对齐，未创建 CompositionVersion 或视频 Output。",
     })
     return ToolObservation(json.dumps(read, ensure_ascii=False), fold_after_delivery=True)
 
@@ -1758,6 +1739,8 @@ async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObser
         )
     except (ValueError, PermissionError) as exc:
         return ToolObservation(f"prepare_music rejected: {exc}", ok=False)
+    except (BotoCoreError, ClientError, OSError):
+        return ToolObservation("The fixed score or its measured analysis is unavailable.", ok=False)
     if cached is None:
         return ToolObservation(json.dumps({
             "ok": True,
@@ -1766,7 +1749,7 @@ async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObser
             "draft_ref": args.draft_ref.model_dump(mode="json"),
             "score_digest": score.score_digest,
             "score_spec": score.model_dump(mode="json"),
-            "next": "Present exactly this one task through the ordinary plan tool with the user's actual production_intent; plan/Start owns authorization and resources. Close after the plan or Run; do not synthesize or poll here.",
+            "next": "仅用常规方案工具展示这一个任务，按用户实际意图填写 production_intent，由方案及 Start 流程负责授权和资源。展示方案或启动 Run 后结束，不在此合成或轮询。",
             "plan_task": {
                 "tool": "prepare_music",
                 "params": {
@@ -1781,5 +1764,5 @@ async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObser
         "cache": "hit",
         "draft_ref": args.draft_ref.model_dump(mode="json"),
         "result": cached,
-        "scope": "Fixed private electronic Music, audio Snapshot, ScoreSpec, authored BeatGrid and full signal analysis only; no CompositionVersion or video Output was created. No human listening review is implied.",
+        "scope": "结果仅含固定的私有电子配乐 Music、音频 Snapshot、ScoreSpec、编排的 BeatGrid 和完整信号分析。未创建 CompositionVersion 或视频 Output，也未进行人工试听。",
     }, ensure_ascii=False), fold_after_delivery=True)

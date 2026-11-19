@@ -13,47 +13,18 @@ metadata:
     - remotion-project
 ---
 
-## Knowledge-explainer method
+## 知识讲解视频的创作方法
 
-Explain the knowledge in the user's script, or in a clearly disclosed simulated
-knowledge script supplied for a demo. Organize the explanation into a coherent
-visual progression from the central idea to its supporting points. Use a
-controlled Generator to explain the concepts rather than add unrelated
-decoration. Keep important standalone labels, captions, narration, and sound as
-native editable objects. A simulated script is a creative demo input, not an
-interview, research citation, or factual source.
+从用户的文稿中讲清知识，也可使用已明确标明为演示而模拟的知识文稿。从核心概念出发，按能支撑它的要点安排连贯的画面。用受控 Generator 解释概念，避免无关装饰。重要的独立标签、字幕、旁白和声音保留为可编辑的原生对象。模拟文稿仅供创作演示，不能当作访谈、研究引文或事实来源。
 
-For a final recording with its exact script, use a READY NarrationAlignment.
-Select real sentence ids and emphasis_word_ids from that alignment; the system
-resolves immutable audio ranges and word anchors. Native caption-phrases and
-text-impact expansions may use those facts directly. Never estimate a word
-time, invent a word id, or treat PENDING, PROCESSING, or review_required as
-READY. Include exactly one explanatory Generator in the scene that carries the
-central concept; the server owns its output window and saves the source for review; execution waits for authorized production.
-Use draw-2d for relationships its four primitives express well. When an active
-isolated component runner is available, use remotion-project for precise
-layouts, multi-stage transformations, or richer motion that needs controlled
-TSX. Necessary graphic-bound labels may live inside that visual, but they do
-not become independently editable native text.
+若已有最终录音及其确切原稿，使用状态为 READY 的 NarrationAlignment。从中选择真实的句子 ID 和 emphasis_word_ids，由系统解析不可变的音频范围和词锚点。原生 caption-phrases 及 text-impact 效果可直接使用这些事实。不得估算词级时间、编造词 ID，也不要把 PENDING、PROCESSING 或 review_required 当作 READY。在承载核心概念的场景中放置恰好一个用于解释的 Generator。服务端确定输出时间窗并保存源码供审阅，执行须等待制作授权。
 
-When the requested picture needs a simple animated diagram and no suitable
-READY alignment exists, use draw-2d with declared commands and bounded output.
-For a complete multi-scene explanation or a continuous longer transformation,
-component mode can organize ordinary Composition scenes when the isolated
-runner is active. Preserve important explanatory text as native objects where
-the design contract supports it.
+四种基础图元能清楚表达的关系用 draw-2d。有可用且已隔离的组件运行环境时，可用 remotion-project 实现精确布局、多阶段变换或需要受控 TSX 的复杂运动。图形关系本身必需的标签可画入画面，此时不能作为独立的原生文字编辑。
 
-### Inputs and boundaries
+没有适当的 READY 对齐结果，但需要简单的动态示意图时，用 draw-2d 的已声明指令，在限定的输出范围内设计。有隔离运行环境时，多场讲解或较长的连续变换可用组件模式组织普通 Composition 场景。在设计契约允许的范围内，让重要的解释文字保留为原生对象。
 
-- The knowledge itself may be the only content input; real image, video,
-  webpage, interview, or other evidence assets are not required. A
-  source-aligned design requires fixed audio, its verbatim final script, and a
-  READY alignment.
-- remotion-project requires both the API opt-in and a render runner that
-  reports active isolation. When either is absent, do not imply that TSX
-  component authoring is live; choose draw-2d only when it can honestly express
-  the picture, or state the specific capability gap.
-- No interface, dataset, quotation, user material, narration timing, or media
-  asset may be invented. Diagram relationships must explain the supplied
-  knowledge. The Skill grants no tool, network, file, production, or billing
-  permission and is not reloaded for revision or a Run.
+### 输入与边界
+
+- 知识内容本身可以是唯一输入，无需真实图片、视频、网页、访谈或其他证据素材。要按源音频对齐设计，则必须有固定音频、逐字定稿及 READY 对齐结果。
+- remotion-project 需要 API 显式启用，且渲染运行环境报告隔离已生效。缺少任一条件就不能声称可用 TSX 创作。若 draw-2d 足以表达所需画面则用它，否则说明具体能力缺口。
+- 不得编造界面、数据集、引语、用户素材、旁白时间或媒体。图解关系须解释提供的知识。本 Skill 不授予工具、网络、文件、制作或计费权限。后续修订及 Run 不重新加载它。

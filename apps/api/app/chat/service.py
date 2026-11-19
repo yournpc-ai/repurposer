@@ -216,146 +216,6 @@ def _reminder_tail(text: str, question: str, default_path: str | None) -> str:
     return tail
 
 
-def _estimate_tail(
-    text: str, estimate: PlanEstimate | None, *, reason: str = ""
-) -> str:
-    """Build the dock estimate's localized system-notice text (BILLING §2.1).
-    A deferred quote says so honestly — never a fabricated number. The
-    per-task half stays on the canvas's draft nodes (ADR-057 K5).
-
-    ``reason`` (ADR-117 §4) = the dock's stamped ConfirmationNeed reason.
-    The held clauses key on it — the auto regime's guardrail/unquotable
-    trip: the echo's spoken close announced the start (the model speaks
-    before the quote exists), but the dock waits for the priced beat, so
-    the tail carries the honest correction. ``above_guardrail`` names the
-    high side (the threshold itself is ops-internal, never shown);
-    ``unquotable`` leads with the deferred-pricing truth EVEN when a
-    partial range exists (a NULL per-task with quotable siblings — the
-    pill's deferred label and the tail must say one thing);
-    ``unmet_condition`` (7276ef13 ③) says the requested change never
-    landed and the dock therefore waits — confirming starts the STANDING
-    (unfixed) version, so the tail states the choice honestly.
-    ``copy_drift`` (7276ef13 定点收尾②) says the published version's copy
-    drifted from what the user can verify (the drift note above names the
-    clauses) — confirming accepts the drifted copy, so the tail names the
-    two honest outs (accept / restore the original). The prefs
-    family (execution_pref / credits_pref) keeps the standard
-    estimate-only shape: there the model's own closing question IS the
-    confirmation ask."""
-    zh = _prefers_zh(text)
-    if estimate is not None:
-        low, high = estimate.total
-        if reason == "copy_drift":
-            if zh:
-                return (
-                    f"\n\n（估价 {low}–{high} 积分——注意：这版的文案与你提供的原文"
-                    "有出入（见上文标注）；确认即按这版开始，或说一句恢复原文。"
-                    "开始时按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
-                )
-            return (
-                f"\n\n(Estimated {low}–{high} credits — note: this "
-                "version's copy differs from the text you gave (marked "
-                "above); confirming starts THIS version, or say the word "
-                "and I'll restore your original. On start the high end is "
-                "held; you're charged only for what actually runs, failed "
-                "steps are free, and the remainder is returned.)"
-            )
-        if reason == "unmet_condition":
-            if zh:
-                return (
-                    f"\n\n（估价 {low}–{high} 积分——注意：你刚才要的修改没能落实，"
-                    "当前仍是修改前的版本；确认即按这个版本开始，或先说一句继续改。"
-                    "开始时按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
-                )
-            return (
-                f"\n\n(Estimated {low}–{high} credits — note: the change "
-                "you asked for did not land, so this is still the "
-                "pre-change version; confirming starts THIS version, or "
-                "say the word and I'll keep fixing. On start the high end "
-                "is held; you're charged only for what actually runs, "
-                "failed steps are free, and the remainder is returned.)"
-            )
-        if reason == "unquotable":
-            if zh:
-                return (
-                    f"\n\n（估价 {low}–{high} 积分起——含暂无法提前估价的步骤，"
-                    "确认后才开始：按上限预扣，按实际用量结算，"
-                    "失败的步骤不收费，剩余退回）"
-                )
-            return (
-                f"\n\n(From {low}–{high} credits — some steps can't be "
-                "quoted up front, so the work starts once you confirm: the "
-                "high end is held, you're charged only for what actually "
-                "runs, failed steps are free, and the remainder is "
-                "returned.)"
-            )
-        if reason == "above_guardrail":
-            if zh:
-                return (
-                    f"\n\n（估价 {low}–{high} 积分——金额较高，确认后才开始："
-                    "按上限预扣，按实际用量结算，失败的步骤不收费，剩余退回）"
-                )
-            return (
-                f"\n\n(Estimated {low}–{high} credits — on the high side, "
-                "so the work starts once you confirm: the high end is held, "
-                "you're charged only for what actually runs, failed steps "
-                "are free, and the remainder is returned.)"
-            )
-        if zh:
-            return (
-                f"\n\n（估价 {low}–{high} 积分——开始时按上限预扣，"
-                "按实际用量结算，失败的步骤不收费，剩余退回）"
-            )
-        return (
-            f"\n\n(Estimated {low}–{high} credits — on start the high end "
-            "is held; you're charged only for what actually runs, failed "
-            "steps are free, and the remainder is returned.)"
-        )
-    if reason in ("above_guardrail", "unquotable"):
-        if zh:
-            return (
-                "\n\n（估价随运行确定——这个方案无法提前估价，确认后才开始；"
-                "开始后才计费，失败的步骤不收费）"
-            )
-        return (
-            "\n\n(Credits are priced when the run starts — this plan can't "
-            "be quoted up front, so it starts once you confirm; billing "
-            "begins only when you start, and failed steps are free.)"
-        )
-    if reason == "unmet_condition":
-        if zh:
-            return (
-                "\n\n（注意：你刚才要的修改没能落实，当前仍是修改前的版本；"
-                "确认即按这个版本开始，或先说一句继续改。开始后才计费，"
-                "失败的步骤不收费）"
-            )
-        return (
-            "\n\n(Note: the change you asked for did not land, so this is "
-            "still the pre-change version; confirming starts THIS version, "
-            "or say the word and I'll keep fixing. Billing begins only "
-            "when you start, and failed steps are free.)"
-        )
-    if reason == "copy_drift":
-        if zh:
-            return (
-                "\n\n（注意：这版的文案与你提供的原文有出入（见上文标注）；"
-                "确认即按这版开始，或说一句恢复原文。开始后才计费，"
-                "失败的步骤不收费）"
-            )
-        return (
-            "\n\n(Note: this version's copy differs from the text you "
-            "gave (marked above); confirming starts THIS version, or say "
-            "the word and I'll restore your original. Billing begins only "
-            "when you start, and failed steps are free.)"
-        )
-    if zh:
-        return "\n\n（估价随运行确定——开始后才计费，失败的步骤不收费）"
-    return (
-        "\n\n(Credits are priced when the run starts — billing begins only "
-        "when you start, and failed steps are free.)"
-    )
-
-
 def _system_notice(text: str) -> dict[str, str]:
     return {"kind": "system_notice", "text": text.strip()}
 
@@ -364,12 +224,6 @@ def _reminder_block(
     text: str, question: str, default_path: str | None
 ) -> dict[str, str]:
     return _system_notice(_reminder_tail(text, question, default_path))
-
-
-def _estimate_block(
-    text: str, estimate: PlanEstimate | None, *, reason: str = ""
-) -> dict[str, str]:
-    return _system_notice(_estimate_tail(text, estimate, reason=reason))
 
 
 def _auto_start_rejected_line(detail: dict[str, Any] | None) -> str:
@@ -749,7 +603,7 @@ _SOURCE_RANK: dict[BriefSlotSource, int] = {
 }
 
 _BRIEF_SCALAR_SLOTS = (
-    "topic", "audience", "tone", "material_state", "purpose", "target_seconds",
+    "topic", "audience", "tone", "material_state", "production_direction", "purpose", "target_seconds",
     "narrative_mode", "narration_language", "subtitle_languages", "aspect",
     "voice_requirements", "must_include", "avoid", "success_criteria",
 )
@@ -867,6 +721,8 @@ def _group_slot_value(item, answer) -> Any:
     from app.models.schemas import BriefAnswerItem
 
     assert isinstance(answer, BriefAnswerItem)
+    if answer.kind == "option" and item.option_values is not None:
+        return item.option_values[answer.option_id]
     display = (answer.text or "").strip() or next(
         (option.label for option in item.options if option.id == answer.option_id),
         "",
@@ -881,6 +737,8 @@ def _group_slot_value(item, answer) -> Any:
         if match is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "aspect must be 16:9, 9:16 or 1:1")
         return match.group(0)
+    if item.slot == "narration_language":
+        return _language_code(display)
     if item.slot == "subtitle_languages":
         values = re.split(r"[+,，、/\s]+", display) if answer.kind == "freeform" else display.split("+")
         languages = [_language_code(value) for value in values if value.strip()]
@@ -905,9 +763,29 @@ def _validate_group_answers(
     seen: set[str] = set()
     normalized: list[BriefAnswerItem] = []
     for answer in data.answers:
+        if answer.page_slots is not None:
+            item = by_slot.get(answer.slot)
+            page = item.decision_page if item else None
+            if (answer.kind != "freeform" or page is None
+                or answer.page_slots != page.slots or answer.slot != page.slots[0]
+                or any(not by_slot[slot].allow_freeform for slot in page.slots)
+                or seen.intersection(page.slots)):
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid decision-page answer")
+            text = (answer.text or "").strip()
+            if not 0 < len(text) <= 4000:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid decision-page answer length")
+            seen.update(page.slots)
+            normalized.append(answer.model_copy(update={"text": text}))
+            continue
         if answer.slot in seen:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Duplicate answer slot '{answer.slot}'")
         seen.add(answer.slot)
+        if answer.slot == "constraints" and any(item.decision_page for item in question.items):
+            text = (answer.text or "").strip()
+            if answer.kind != "freeform" or not 0 < len(text) <= 4000:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid production notes")
+            normalized.append(answer.model_copy(update={"text": text}))
+            continue
         item = by_slot.get(answer.slot)
         if item is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unexpected answer slot '{answer.slot}'")
@@ -934,23 +812,51 @@ def _backfill_brief_group(project: Project, question: QuestionPayload, answers: 
     stored = PendingPlan.model_validate(project.pending_brief or {})
     by_slot = {item.slot: item for item in question.items}
     for answer in answers:
-        item = by_slot[answer.slot]
         update = Brief()
-        setattr(update, item.slot, BriefSlot(
-            value=_group_slot_value(item, answer),
-            source=BriefSlotSource.USER_STATED,
-        ))
+        if answer.page_slots and len(answer.page_slots) > 1:
+            # A historical paired page's sentence answers the page as a whole. Preserve it
+            # without pretending it is a typed value for every covered field.
+            from app.chat.readiness import brief_with_user_constraints
+
+            page = by_slot[answer.slot].decision_page
+            update.constraints = [BriefSlot(
+                value=f"{page.title} {answer.text}", source=BriefSlotSource.USER_STATED,
+            )]
+            stored.brief = merge_brief(update, stored.brief)
+            stored.brief = brief_with_user_constraints(
+                f"{stored.prompt}\n{answer.text}", stored.brief,
+            )
+            continue
+        if answer.slot == "constraints":
+            update.constraints = [BriefSlot(value=answer.text, source=BriefSlotSource.USER_STATED)]
+        else:
+            item = by_slot[answer.slot]
+            value = _group_slot_value(item, answer)
+            if item.slot == "production_direction" and answer.kind == "freeform":
+                from app.chat.readiness import direction_with_known_details
+
+                value = direction_with_known_details(stored.brief, value)
+            setattr(update, item.slot, BriefSlot(
+                value=value,
+                source=BriefSlotSource.USER_STATED,
+            ))
         stored.brief = merge_brief(update, stored.brief)
-    from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
+    from app.chat.readiness import (
+        creative_state_for_pending, creative_state_with_brief, infer_task_kind, resolve_legacy_direction,
+    )
     from app.models.schemas import CreativeState
 
+    if infer_task_kind(stored.prompt or "") == "website_promo":
+        resolve_legacy_direction(stored.brief)
     stored.creative_state = creative_state_with_brief(
         creative_state_for_pending(stored) or CreativeState(), stored.brief
     )
     project.pending_brief = stored.model_dump(mode="json")
 
 
-async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project) -> None:
+async def _apply_website_promo_group_defaults(
+    db: AsyncSession, project: Project, question: QuestionPayload,
+) -> None:
     from app.chat.readiness import (
         creative_state_for_pending,
         creative_state_with_brief,
@@ -983,6 +889,7 @@ async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project
         stored.brief,
         snapshots,
         fallback_language="zh" if _prefers_zh(stored.prompt) else "en",
+        legacy_split_direction=any(item.slot in {"purpose", "narrative_mode"} for item in question.items),
     )
     stored.creative_state = creative_state_with_brief(state, stored.brief)
     project.pending_brief = stored.model_dump(mode="json")
@@ -1780,6 +1687,13 @@ async def sync_plan_question(
     # passes it through — one computation per dock.
     if need is None:
         need = await resolve_confirmation_need(db, user_id, estimate)
+    version_notice = None
+    if need.reason == "unmet_condition":
+        version_notice = ("当前版本仍有未落实的修改。可以继续修改，或确认使用当前版本。" if _prefers_zh(prompt) else
+                          "The requested changes are incomplete. You can revise further or confirm the current version.")
+    elif need.reason == "copy_drift":
+        version_notice = ("当前版本的文案与原文有出入。可以恢复原文，或确认使用当前版本。" if _prefers_zh(prompt) else
+                          "The copy differs from the original. You can restore it or confirm the current version.")
     _message, bailed_run_ids = await _dock_question(
         db,
         conversation_id,
@@ -1798,7 +1712,7 @@ async def sync_plan_question(
             plans=plans or [],
         ),
         intent=intent.model_dump(mode="json"),
-        blocks=[_estimate_block(prompt, estimate, reason=need.reason)],
+        blocks=[_system_notice(version_notice)] if version_notice else None,
     )
     return bailed_run_ids
 
@@ -2677,7 +2591,7 @@ async def answer_question(
         if project is not None:
             if question.items:
                 _backfill_brief_group(project, question, group_answers)
-                await _apply_website_promo_group_defaults(db, project)
+                await _apply_website_promo_group_defaults(db, project, question)
             if question.slot == "asset_role":
                 # 判词④'s promised default, kept by code: skip = upload
                 # order — first video the material, the next the exemplar

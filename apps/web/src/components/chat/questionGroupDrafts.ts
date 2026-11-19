@@ -1,4 +1,4 @@
-import type { BriefAnswerItem } from "./timeline/types"
+import type { BriefAnswerItem, BriefQuestionItem } from "./timeline/types"
 
 const PREFIX = "repurposer.chat.question-group-drafts.v1"
 
@@ -37,4 +37,22 @@ export function saveQuestionGroupDrafts(
   } catch {
     // Storage quotas or privacy settings must not block answering the question.
   }
+}
+
+
+export function questionPages(items: BriefQuestionItem[]) {
+  const pages = items.flatMap((item) => {
+    if (!item.decision_page) return []
+    const page = item.decision_page
+    return [{
+      title: page.title,
+      fields: page.slots.flatMap((slot) => items.filter((field) => field.slot === slot)),
+      choices: page.choices,
+    }]
+  })
+  return pages.length ? pages : items.map((item) => ({
+    title: item.question,
+    fields: [item],
+    choices: [] as Record<string, string>[],
+  }))
 }

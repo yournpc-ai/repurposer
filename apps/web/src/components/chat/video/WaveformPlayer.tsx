@@ -59,11 +59,14 @@ function stamp(seconds: number): string {
 export function WaveformPlayer({
   src,
   durationSeconds,
+  resolvePlaybackUrl,
   waveformKey,
   measuredPeaks,
   className,
 }: {
-  src: string
+  src?: string
+  /** Project audio resolves a fresh, digest-checked signed URL at play time. */
+  resolvePlaybackUrl?: (retry: boolean) => Promise<string>
   durationSeconds?: number | null
   /** Candidate identity for deterministic bars. Other audio uses src. */
   waveformKey?: string
@@ -78,6 +81,7 @@ export function WaveformPlayer({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(durationSeconds ?? 0)
   const [failed, setFailed] = useState(false)
+  const [loading, setLoading] = useState(false)
   const progress = useMotionValue(0)
   const playedClip = useTransform(
     progress,
@@ -85,7 +89,7 @@ export function WaveformPlayer({
   )
   const peaks = measuredPeaks?.length
     ? measuredPeaks.map((peak) => Number.isFinite(peak) ? Math.min(Math.max(peak, 0), 1) : 0)
-    : deterministicWaveform(waveformKey ?? src)
+    : deterministicWaveform(waveformKey ?? src ?? "")
   const actualProgress = duration > 0 ? Math.min(Math.max(currentTime / duration, 0), 1) : 0
 
   useEffect(() => {
@@ -99,12 +103,13 @@ export function WaveformPlayer({
   useEffect(() => {
     const audio = new Audio()
     audio.preload = "metadata"
-    audio.src = src
+    if (src) audio.src = src
     audioRef.current = audio
     setPlaying(false)
     setCurrentTime(0)
     setDuration(durationSeconds ?? 0)
     setFailed(false)
+    setLoading(false)
 
     const onPlay = () => {
       if (activeAudio && activeAudio !== audio) activeAudio.pause()
@@ -148,21 +153,38 @@ export function WaveformPlayer({
     }
   }, [src, durationSeconds])
 
-  const toggle = () => {
+  const toggle = async () => {
     const audio = audioRef.current
-    if (!audio || failed) return
+    if (!audio || loading || (failed && !resolvePlaybackUrl)) return
     if (playing) {
       audio.pause()
       return
     }
-    if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration) {
-      audio.currentTime = 0
-      setCurrentTime(0)
+    try {
+      if (resolvePlaybackUrl) {
+        setLoading(true)
+        const url = await resolvePlaybackUrl(failed)
+        if (audioRef.current !== audio) return
+        if (failed || audio.src !== url) {
+          const position = audio.currentTime
+          audio.src = url
+          audio.currentTime = duration > 0 && position < duration ? position : 0
+        }
+        setFailed(false)
+      }
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration) {
+        audio.currentTime = 0
+        setCurrentTime(0)
+      }
+      await audio.play()
+    } catch {
+      if (audioRef.current === audio) {
+        setFailed(true)
+        setPlaying(false)
+      }
+    } finally {
+      if (resolvePlaybackUrl && audioRef.current === audio) setLoading(false)
     }
-    void audio.play().catch(() => {
-      setFailed(true)
-      setPlaying(false)
-    })
   }
 
   const seek = (next: number) => {
@@ -181,8 +203,11 @@ export function WaveformPlayer({
           size="icon-sm"
           className="shrink-0 rounded-full"
           onClick={toggle}
-          disabled={failed}
-          aria-label={playing ? t("chat.sfx.pause") : t("chat.sfx.play")}
+          disabled={loading || (failed && !resolvePlaybackUrl)}
+          aria-busy={loading}
+          aria-label={resolvePlaybackUrl
+            ? t(failed ? "chat.audio.retry" : playing ? "chat.audio.pause" : "chat.audio.play")
+            : t(playing ? "chat.sfx.pause" : "chat.sfx.play")}
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
@@ -239,7 +264,7 @@ export function WaveformPlayer({
       </div>
       {failed ? (
         <span className="text-xs text-muted-foreground">
-          {t("chat.sfx.previewUnavailable")}
+          {t(resolvePlaybackUrl ? "chat.audio.unavailable" : "chat.sfx.previewUnavailable")}
         </span>
       ) : null}
     </div>

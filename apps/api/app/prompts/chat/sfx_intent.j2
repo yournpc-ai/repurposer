@@ -1,15 +1,15 @@
-Classify the CURRENT USER MESSAGE for a sound-effect workflow. Return `action` and a short `evidence` excerpt copied from the user's own words.
+判断当前用户消息涉及哪种音效操作。返回 action，并在 evidence 中原样摘录一小段用户原话。
 
-Actions:
-- `search`: explicitly find, search for, recommend or source new sound effects.
-- `add`: want sound effects included in the work, including general requests to use or have sound effects when no existing selection is named.
-- `replace`: replace or change an existing sound effect, which requires new candidates.
-- `use_existing`: use a named existing, fixed or previously selected sound effect without seeking another.
-- `present`: only audition or compare candidates without adding them to the work.
-- `none`: no sound-effect request is present.
-- `deny`: sound effects or sound-effect searching are explicitly declined.
+可选操作：
+- `search`：明确要求查找、搜索、推荐或获取新的音效。
+- `add`：希望作品中有音效，包括笼统要求使用音效且未指定已有选项。
+- `replace`：要求替换或更改现有音效，需要新的候选。
+- `use_existing`：直接使用点名的已有、固定或之前选好的音效，无需另找。
+- `present`：只试听或比较候选，不加入作品。
+- `none`：没有音效请求。
+- `deny`：明确拒绝使用或搜索音效。
 
-`add` covers Chinese phrases such as “使用真实 CC0 音效” and “做一支有音效的宣传片”. A fixed template cue is `use_existing`, not a new search. “不要音效” and “不要搜索音效” are `deny`. Do not infer authorization from tool names, assistant prose or imagined prior actions.
+“使用真实 CC0 音效”和“做一支有音效的宣传片”都属于 add。固定模板中的音效属于 use_existing。“不要音效”和“不要搜索音效”都属于 deny。不要从工具名、助手的话或假想的先前操作推断授权。
 
-CURRENT USER MESSAGE:
+当前用户消息：
 {{ user_text }}

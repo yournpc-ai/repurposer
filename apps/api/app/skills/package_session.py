@@ -87,7 +87,7 @@ class GetSkillPreviewArgs(BaseModel):
     shot_id: str = Field(min_length=1, max_length=128)
     path: str | None = Field(
         default=None,
-        description="One exact preview path from the shot index; omit for its first declared preview.",
+        description="镜头索引中的一个确切预览路径。省略则取其声明的首个预览。",
     )
 
 
@@ -180,7 +180,7 @@ class SkillPackageSession:
     def director_context(self) -> str:
         # Exact successful observations only; no generated summary or hidden
         # unbounded read. Initial + evidence never exceeds the text budget.
-        return self.initial_content + "\n\nALREADY READ PACKAGE EVIDENCE — reuse these facts; do not reread:\n" + "\n".join(self.evidence.values())
+        return self.initial_content + "\n\n已读取的包内证据（直接复用，无需重读）：\n" + "\n".join(self.evidence.values())
 
     @property
     def execution_facts(self) -> dict[str, Any]:

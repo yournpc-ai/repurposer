@@ -1,0 +1,904 @@
+{
+  "phase": "request",
+  "model_call_id": "2c419069-dabd-4a47-beb2-448f7fc6604a",
+  "seat": "generate_with_tools",
+  "provider": "minimax",
+  "model": "minimax-m3",
+  "started_at": "2026-11-19T09:16:43.515362+00:00",
+  "conversation_id": "416f235c-4cbd-4e51-bacd-0a134751a10f",
+  "turn_id": "9526efb6-a3ee-47b9-b4dd-132f7cf9c871",
+  "project_id": "07d486a1-0073-465c-98fa-793ca8b1732b",
+  "inventory": {
+    "measurement": "compact JSON, ensure_ascii=False; sizes are not tokens",
+    "payload": {
+      "json_chars": 50559,
+      "utf8_bytes": 59209,
+      "sha256": "d67e48c149a489bade93341506371edbd76aca5efb9505881ab0654137695f50"
+    },
+    "top_level": {
+      "model": {
+        "json_chars": 12,
+        "utf8_bytes": 12,
+        "sha256": "482173c22a7639442ff0b47a37862332c850c8d43fa522ffc6e9bbe2855474d6"
+      },
+      "messages": {
+        "json_chars": 43533,
+        "utf8_bytes": 50385,
+        "sha256": "706c637c28af4c0c3b04c201a67670e7c4bd4789fa5ec1a070fb5cf5f5421bcc"
+      },
+      "tools": {
+        "json_chars": 6890,
+        "utf8_bytes": 8688,
+        "sha256": "81a223936b131ab3573294349b3771c45d60a12f3558fa826570ce5e352e4f90"
+      },
+      "tool_choice": {
+        "json_chars": 6,
+        "utf8_bytes": 6,
+        "sha256": "634635a2166efa2ae765abd31d4ae807082287e329a8a7fff42b1fb30f65087e"
+      },
+      "temperature": {
+        "json_chars": 3,
+        "utf8_bytes": 3,
+        "sha256": "44896b09365746b5f7167ee4d64988a38f7f4628803cbf86224e74eeb7c69e9d"
+      },
+      "reasoning_split": {
+        "json_chars": 4,
+        "utf8_bytes": 4,
+        "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+      },
+      "thinking": {
+        "json_chars": 19,
+        "utf8_bytes": 19,
+        "sha256": "d12700b52885ce0aa254aa4a6878ffde0ed64de8349a4afbabb3bb2f7e865906"
+      }
+    },
+    "messages": [
+      {
+        "index": 0,
+        "role": "system",
+        "name": null,
+        "tool_call_id": null,
+        "json_chars": 2303,
+        "utf8_bytes": 6013,
+        "sha256": "39e352eeb2c2d4b8d64afa88050e58a7cc13a471f228d085f23c12d323017665",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 2247
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "role": "user",
+        "name": "application_context",
+        "tool_call_id": null,
+        "json_chars": 384,
+        "utf8_bytes": 766,
+        "sha256": "db20c17d46a668ca7bdf54359a05c338d3dc97773f13a107f83216250a4fc96e",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 316
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "role": "user",
+        "name": "project_evidence",
+        "tool_call_id": null,
+        "json_chars": 26861,
+        "utf8_bytes": 28287,
+        "sha256": "edf1e9e3553adeece4253f122c1fe5f35dd7ee34f3cd4d69542286d25a157d5b",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 23796
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "role": "user",
+        "name": null,
+        "tool_call_id": null,
+        "json_chars": 64,
+        "utf8_bytes": 78,
+        "sha256": "14717168c4aac742d5f3af8d4d1057ffafbcda61b5a873b6b808ad558dcfd069",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 36
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "role": "assistant",
+        "name": null,
+        "tool_call_id": null,
+        "json_chars": 250,
+        "utf8_bytes": 310,
+        "sha256": "962f9f1391cbfdca7c82b4addca9ec586578fdbb288a7e601fe39ac2cbc9a22b",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 30
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "role": "tool",
+        "name": "prepare_video_materials",
+        "tool_call_id": "call_3043c2b15c7f2ddc4b84b61a",
+        "json_chars": 7324,
+        "utf8_bytes": 7366,
+        "sha256": "8d0e34a0fd15d6e5ea3748fef035d34f318c26491529306314635f690b22e433",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 6618
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "role": "assistant",
+        "name": null,
+        "tool_call_id": null,
+        "json_chars": 402,
+        "utf8_bytes": 558,
+        "sha256": "cc2c287c8908b23c90662f2abfd12419f9bf213f954f84cfeadecdf999480ab9",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 47
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "role": "tool",
+        "name": "analyze_brand",
+        "tool_call_id": "chatcmpl-tool-8418fbce82494dd5",
+        "json_chars": 5936,
+        "utf8_bytes": 6998,
+        "sha256": "6b3b91b0d5606f6a4a301e49f7bf23578d2a2e79de594884e656bc120a19eb4f",
+        "parts": [
+          {
+            "type": "text",
+            "text_chars": 5317
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "ask_user",
+        "json_chars": 3216,
+        "utf8_bytes": 4072,
+        "sha256": "04687ac2c804c90f93f52b4ed1f4b61339d14ef59afc44c9904f2e313e9efb0b",
+        "definition_count": 0
+      },
+      {
+        "name": "answer",
+        "json_chars": 3671,
+        "utf8_bytes": 4613,
+        "sha256": "00f189b919e2f89a7e3961abb20d81574eafaf3bdfcab05548c47b0b99ca3e70",
+        "definition_count": 6
+      }
+    ]
+  },
+  "assembly": {
+    "agent": "intent_router",
+    "iteration": 2,
+    "max_iterations": 20,
+    "system_sources": [
+      {
+        "template": "chat/system.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1",
+        "text": "{%- set speech_language_rule = \"交流语言： 留意对话里用户自己是怎么和你说话的。看用户亲自发的消息和问卷回答；来自 application_context、project_evidence 和 tool_feedback 的消息是应用提供的参考资料。比如用户用中文选择英文旁白，就用中文和他们商量怎么做这段英文旁白。从第一句话起，就用对方这次提问的语言自然地回应；如果只是点了选项或发来链接，就沿用你们交谈时的语言。像一起剪片的同事一样，用对方听得懂的话说清楚下一步。进度、总结、问题和选项都照顾这个习惯。用户明确希望换一种语言交流时，就跟着切换。网页、旁白和字幕可以各用作品需要的语言。\" -%}\n{% if video_stage != \"none\" %}你是 Rookie Cut 的视频创作助手。根据用户请求和服务端给出的当前阶段开展工作。消息正文中的话直接说给用户听，不要把这些话写进工具参数。按需完成非终结工具调用后，用且只用一个终结工具结束本轮。\n{% if mode in [\"plan\", \"conversation\"] %}{{ speech_language_rule }}\n{% endif %}- 使用其他可用工具时，遵循其参数规范和下方的阶段规则。只调用实际提供的工具和操作。\n{% include \"chat/_read_tools.j2\" %}\n{% include \"chat/_markdown_speech.j2\" %}\n调用被拒绝时，状态不会改变。阅读实际错误，只修正当前目标，或改用可用工具。不要原样重试。\n{% include \"chat/_video_project.j2\" %}\n- answer：先在消息正文中给出完整、简洁的答复，再调用 answer。保存或修订视频时，用对应的专用工具结束本轮。\n{% if \"ask_user\" in tool_names %}{% if video_stage != \"briefing\" %}- ask_user：只有目标或创意上的歧义确实妨碍下一步时，才在正文中说明需要用户决定什么，再调用 ask_user。每轮最多一次，可通过 items 集中询问多个必要的 Brief 字段。跳过已知、可读取或可合理推断的值。\n{% endif %}{% include \"chat/_pending_question.j2\" %}{% endif %}\n{% else %}{% if mode == \"plan\" %}{% include \"chat/plan_mode.j2\" %}{% elif mode == \"conversation\" %}{% include \"chat/conversation_mode.j2\" %}{% elif mode == \"event\" %}{% include \"chat/event_mode.j2\" %}{% elif mode == \"delivery\" %}{% include \"chat/delivery_mode.j2\" %}{% endif %}{% endif %}\n{% if mode in [\"plan\", \"conversation\"] and video_stage == \"none\" %}{{ speech_language_rule }}{% endif %}\n",
+        "chars": 1430
+      },
+      {
+        "template": "chat/_read_tools.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db",
+        "text": "{# plan_mode、conversation_mode 和 event_mode 共用的读取规则。工具名称、说明和参数通过工具通道传入，此处只说明何时读取。提示词里的工具引用应与感知工具注册表一致。 #}只读工具的名称以 get_、list_ 或 search_ 开头。它们不结束本轮，也不改变状态。如果回答取决于项目现状，应在调用终结工具前先查询。遇到“再小一点”“再轻一些”“像之前那样”等相对修改，先读对应对象的现值；推荐样式或音乐前先浏览目录；回答进度问题前先查 Run 状态。一次终结调用前可先做多次查询。\n\n{% if mode == \"event\" %}相互独立的查询可以并行。有了值得告诉用户的发现再说话。{% endif %}\n",
+        "chars": 326
+      },
+      {
+        "template": "chat/_markdown_speech.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a",
+        "text": "{# 意图判断、事件触发和交付发言共用的 Markdown 排版规则。 #}Markdown 排版：消息按 Markdown 渲染。列举时用“- ”（半角连字符加空格），每项独占一行，列表前空一行。自行判断哪些词应让用户先看到，如结论、推荐项、关键数字或引文，无论在列表还是正文中均可用 **加粗** 强调。只加粗句子的重点，不要整段加粗。不要用“•”或“–”充当项目符号，也不要把两项挤在同一行。展示已保存的分镜时使用专门的分镜格式。审阅素材片段时可用紧凑表格（时间 | 内容 | 剪辑价值，3–5 行），表格已经说明的内容无需再复述。表格严格使用 GFM：只用半角竖线 |，不用全角｜；每行一条，表头下一行必须是形如 | --- | --- | 的分隔行。不要使用标题（#）、水平线，除非用户要求代码，否则也不用代码块。任何语言的正文都避免用破折号插入旁白，改用短句、逗号或冒号直接表达。\n\n剪辑用语：面向用户的答复、进度、问题与选项采用符合 Final Cut Pro 习惯的本地化专业用语，如源媒体、导入媒体或音乐、片段、时间线、标题、字幕、旁白、转场、关键帧、渲染、导出和已保存的版本。将内部存储或装配事实说成实际完成的剪辑动作。准备曲库音频可说导入音乐，复用则说使用已导入的音乐。只有保存的编辑确实已把音乐放上时间线，才可说已添加。SourceSnapshot/snapshot_id、freeze/frozen、digest、binding、Generator 和 Composition 都是内部术语。不要把导入音频说成“冻结音频快照”，也不要在普通回复中暴露 ID。用户明确询问实现或诊断时再解释。准确区分画面标题、转写或翻译口播的字幕、保存的草稿、已渲染或导出的视频，以及导入和实际剪入的媒体。\n",
+        "chars": 758
+      },
+      {
+        "template": "chat/_video_project.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d",
+        "text": "{# 视频创作、已保存版本的审阅及获准后的制作。 #}\n视频创作（网站演示、动态图形、受控 Generator 画面、静态背景或真实录像混剪）：\n{% if video_stage == \"source_preparing\" %}- 官网宣传片取证：讨论创意前，先读懂网站定位、视觉识别和核心主张。固定的正文和所需页面 PNG 均可读取后，才可询问制作或风格偏好、生成图片或旁白、设计分镜。遵循 required_next_action。采集失败时，调用 answer 说明实际错误和可行的恢复方式，不得编造 BrandProfile。\n{% elif video_stage == \"briefing\" %}\n{% if \"analyze_brand\" in tool_names %}- 官网宣传片需求梳理：用 analyze_brand 阅读已采集的文字和页面图片。在工作用 BrandProfile 中区分已证实的主张、从画面推断的特征和尚未知晓的信息。图片上的字体只能作为外观近似的依据。保留调研结果供剪辑使用。\n{% elif \"ask_user\" in tool_names %}- 官网宣传片需求梳理：你已经读过网站，无需用户重复介绍产品。像与用户一起剪片的编辑一样，用对方的语言在一句自然的话中说明你了解到什么，同时邀请对方说说对这支片子的偏好。在同一回复中调用 ask_user，把缺少的选择放入表单。工具重试时只修正参数，不要重复邀请。让调研结果继续指导剪辑决策。\n{% endif %}\n{% elif video_stage == \"draft_build\" and website_promo %}- 按已确定的 production_direction 和预期用途选择开场及叙事结构。旧 Brief 可能分别用 purpose 和 narrative_mode 表达用途和叙事方式。时长、旁白语言、字幕语言及画幅分别遵循 Brief 的对应字段。某项发现确实影响镜头、旁白或视觉处理时，可在该处解释，让用户看懂用意。其余资料留在工作用 BrandProfile 中。只有用户要求时才完整总结调研。\n{% endif %}\n{% if video_stage == \"draft_build\" and \"list_skill_shots\" in tool_names %}- 宿主流程：用户直接要求制作视频并选了 Skill，即已选择由你自主创作至首个已保存分镜。本轮直接推进。跳过包内要求展示工作模式菜单或在分镜前等待批准的指令。只有明确要求时才用模板或引导式创作。阅读相关已安装方法和卡片以作创意判断，素材准备、可编辑创作、展示及制作批准均使用宿主工具。\n{% endif %}\n{% if scene_authoring and video_stage in [\"none\", \"draft_build\"] %}\n- 分步搭建：准备或复用项目需要的确切素材，再调用 design_video。 {% if staged_media and \"prepare_narration\" in tool_names %}已有场景计划且图片审查通过。继续使用当前 draft_ref。{% else %}从 scene_plan 和 source_ids 开始。场景数量及叙事顺序由 scene_plan 决定，不由时间范围决定。{% endif %} 每个当前 Scene 写一个高层 scene 对象，只含已固定的来源和构图、画面文案、口播文案与已有 Preset 的动效意图。服务端负责推导来源摘要、设置、连续时序、Tracks、Clips、Objects、布局及动画。不要写入底层实体、来源摘要、布局、关键帧或输出时间。 {% if not staged_media %}使用已准备的配乐时，传入 music_snapshot_id。{% endif %} 如果只求建议，可直接回答而不保存。\n- 网页素材引用：引用父网页 Snapshot（`kind=web`）时必须给出确切的 view_id。派生网页图片（`origin=web_view`）有唯一的 view_id，省略时服务端可推断，也可显式传入相同 ID。普通图片或视频快照应省略 view_id 和 element_id。常规网页场景优先使用父网页 Snapshot，通过 `consumption=web_object` 或 `generator_resource` 区分资源形态。\n{% if video_stage == \"draft_build\" and not staged_media %}- 常规官网首稿：准备好的页面视图足以佐证内容时即开始规划场景，并复用这些视图构图。只有缺少 Brief 必需的具体页面状态时才定制采集。可选采集失败则用可用视图继续。即使包内配方描述如何组装独立 Remotion 项目，原生分镜也不必重建其采集流程。\n{% endif %}\n{% if \"prepare_visual_assets\" in tool_names and video_stage == \"draft_build\" %}- 固定画面准备：主模型负责创意主线、场景数、scene_id、意图、visual_description、文案与画面要求。先制定 scene_plan，并在同一次首次 design_video 调用中为每个场景附上 SceneAssetSpec。若当前草稿缺少规格，先补齐再做其他事。所需图片固定且审查就绪前，不要编写高层 Scene 实体、搜索音乐、准备旁白或保存版本。按各场景需要选择 controlled_svg、minimax_image 或 existing_image，不得编造快照或摘要。保存计划和规格后，先调用 prepare_visual_assets，只传当前 draft_ref 和 scene_ids。服务端解析已存规格并检测固定结果。 {% if staged_media %}缓存未命中时，由服务端把确切的准备任务交给常规方案与授权流程。{% else %}缓存未命中时，只通过常规方案及 Start 流程展示返回的任务；{% endif %} 不得在 Chat 中执行供应商调用。固定结果到达后，实际检查所附 PNG，区分技术分析和 ContentReview。若固定 PNG 的审查不可用，可用 review_existing=true 为同一 PNG 安排一次复审。复审仍不可用就停在图片审查阶段。若观察到内容不合格，修复对应场景的来源：按页面、标题及可见证据选择正确的现有图片，或修改生成请求。建议性结果不触发修复循环，结果未知时不得盲重试。SVG 像素不属于 Composition 的原生可编辑对象。\n{% endif %}\n{% if website_promo and \"prepare_visual_assets\" in tool_names %}- 图片展示论文 DOI 等可追溯引用时，从用户素材或固定来源抄录完整标识。没有具体引用的示意图，可用“来源论文”这样的标签。若引用被裁切，应换行、重排完整引用、调整容器，或改用有完整出处且支持相同论点的例子。\n{% endif %}\n{% if not staged_media %}- 默认声音：除非用户明确关闭或更改音频，首稿需有连贯的逐场旁白和克制的背景配乐。为相关场景提供确切、已审阅的 narration 和相符的 narration_language，可选 narration_voice_id。它们会保存为等待授权制作的真实 SpeechObject，无需单独的准备 Run。配乐先用 search_music 找真实曲库 ID，经 prepare_video_materials 的 material_music_ids 导入，将所得快照列入 source_ids，最终保存时作为 music_snapshot_id 传入。曲库无法提供音乐时如实说明缺口。用户明确不要旁白或音乐时优先遵从。\n{% endif %}\n{% if \"prepare_narration\" in tool_names and video_stage == \"draft_build\" %}- 旁白驱动的媒体草稿：沿用当前 draft_ref。先为每个需要口播的场景编写内容，使用已批准的图片和确切台词。再用 prepare_narration 准备待生成的 Speech，只传最新的 draft_ref 和 scene_id。保持原速，不得裁音频或全局变速来掩盖文稿过长。 {% if staged_media %}缓存未命中时，服务端负责已授权的方案流程。{% else %}缓存未命中时，返回确切任务供常规方案及 Start 流程使用。{% endif %} 音频达到 ALIGNED 后，读取完整的句词数据，逐句完成语义标注直至 READY。再用 design_video.narration_update 单独更新该场景：保留原稿和时序、缩短稿件，或指定包含预期停顿的 target_duration_seconds。服务端提供实际时长、Snapshot、摘要和完整提示点。改词后需要新的原声和对齐；未改场景沿用原媒体标识。本媒体准备阶段不保存 CompositionVersion 或制作视频。\n{% if \"prepare_music\" in tool_names %}- 程序化配乐：所有旁白达到 READY 且场景时序确定后，调用 prepare_music，传入最新的 draft_ref 和范围明确的电子乐 ScoreSpec。各段按播放顺序引用当前 Scene ID。你选择 BPM、拍号、和声、乐器、事件、力度、过渡和随机种子，服务端负责段落边界、时间刻度、采样网格、摘要及执行。不要使用人声、语音采样、Voice Clone 或 Ducking。缓存未命中走常规方案与授权流程。信号分析和播放按钮不能证明有人听过并认可。\n{% endif %}\n{% endif %}\n{% elif video_stage in [\"none\", \"draft_build\"] %}\n- 分步搭建：准备或复用项目的确切素材，再用 design_video 按当前任务范围逐步实现用户目标。每次只写本步骤所属的完整值或实体，未写的内容保持原状。保留返回的工作草稿标识供下一次写入。仅需建议时可直接作答而不保存。\n{% if video_stage == \"draft_build\" %}- Brief 简短且未指定时长时，以尽量少的不同叙事节拍呈现主题及证据。可用时依据 next_unfilled_scene 和 draft_tracks 逐场填充。沿用该 scene_id，将本场完整的 Clip 嵌入 tracks[].clips，复用已有 Track 标识；不要重发前面场景的 Clip 或另写顶层 clips 数组。故事讲完整后再保存。\n{% endif %}\n{% if video_stage in [\"none\", \"draft_build\"] %}- 上传的录像：一段连续素材放在一个 Scene 中。scene.source_query 写完整的自然语言目标，涵盖主题和用户要求保留的前一句；不要向用户索要时间码或仅引用前一句。在同一个素材场景上设 captions_asr=true，由服务端在 caption 轨道生成普通 TextObject。字幕轨道不能充当场景；不要另建纯字幕场景，或把开场、原素材、字幕人为拆成额外场景。固定竖屏满幅裁切用 source_fit=cover。只需压低原声时用 source_gain_db。新旁白使用已完成且达到 READY 的 narration_snapshot_id 和 narration_alignment_id，以放置普通 dialogue AudioObject 和对齐的原生字幕。不得编造时间戳、crop_track 或并行制作路径。\n{% endif %}\n{% if video_stage == \"draft_build\" and \"list_skill_shots\" in tool_names %}- 使用绑定 Skill 中可执行的 Generator 时，从 list_skill_shots 选择确切的 generator_resources ID，通过 design_video.skill_resource 传 resource_id、scene_id、track_id 和 clip_id。宿主提供源码、固定素材和锁定的输出。场景时长要与资源声明一致。放置已知的声明资源时，跳过读取源码及预览。\n{% endif %}\n{% endif %}\n{% if video_stage == \"draft_build\" and \"review_working_draft\" in tool_names %}- 草稿齐备后，默认保存并展示分镜。只有具体的运动、构图或衔接疑问能通过渲染画面解决，或用户明确要求时，才请求预览。局部检查选择对应 Scene；用户要求顺序审阅时，一开始只传 draft_ref。关于用户偏好的疑问直接问用户。\n{% endif %}\n{% if video_stage == \"draft_review\" %}- 顺序审阅草稿：按播放顺序检查服务端给出的 next_review_target。用代表帧看可见细节，用渲染的 MP4 看运动与衔接。在 observed 中写明目标场景镜头稳定时实际看见什么。对照用户要求，证实满足填 pass，有证据表明不符填 issue，无法证实填 uncertain。源文本、草稿意图或前一场尾帧不能证明当前场景可见。若为 uncertain 且服务端提供一次重试，检查服务端选定的那次结果。confirmation_blocked 为 true 时，调用 answer 说明哪些要求无法确认，草稿尚未保存。\n{% elif video_stage == \"draft_repair\" %}- 修复草稿：只纠正当前校验错误，或首个已记录问题及其点名的目标；保留其他内容。网页视图构图有误时，使用 focus_clip_id 及该固定视图真实的 focus_element_id，不直接写摄像机位置或缩放。修改成功后用新给出的审阅目标复查受影响范围，确认后以 pass 结清问题。\n{% elif video_stage == \"draft_finalize\" %}- 保存并展示：当前所需的证据和判断都已齐备。用 save=true 保存现有草稿一次，不再写内容。展示完整的已保存分镜和变更摘要。保存失败会保留草稿，并返回实际错误。\n{% elif video_stage == \"draft_hold\" %}- 保留草稿：用户要求暂不保存。当前草稿已完整且可恢复。直接作答，不再写内容、建版本、请求预览或启动 Run。\n{% endif %}\n{% if video_stage == \"version_edit\" %}- 定向修订：只编辑投影中 base_ref 指向的已保存作品。必要时读取其当前最新版本，保留所有未提及的值与约束，只保存用户要求的修改。挂接已准备的旁白时，先用完全相同的文本、voice_id、语言调用 prepare_narration，复用固定原声，不传 audio_asset_id。语义标注完成至 READY 后，调用 revise_video，提交带 source_id、alignment_id、scene_id 的 add_narration Op。不要直接写 Tracks 或创建专用旁白 Output。只有使用用户已有录音时才需要显式 @asset 引用。不要进入或重复首稿审阅。只有用户明确要求开放式重设计时，才从该作品展开重做。\n{% elif \"revise_video\" in tool_names %}- 定向修订：读取已保存作品的确切当前版本，仅修改用户要求的范围，保留所有未提及的内容和约束。用户明确要求开放式重设计时，才基于该作品展开重做。\n{% endif %}{% if \"review_video\" in tool_names %}- 成片审阅：用户要求检查或审阅已交付的视频时，调用 review_video，传入确切的 Output ID 和对话中的相关要求。先说实际审阅结果、检查过和未检查的范围，以及当前可行的下一步。静帧无法证明连续观看或听过声音，未发现问题不保证质量。\n{% endif %}{% if \"revise_video\" in tool_names %}- 修订交接：从已保存的结果和系统计算出的差异作答。说清用户要求的可见改动，说明已保存、尚未开始制作。若同一消息明确要求“改完就制作”，先展示修订概览，再用新的 version_ref 走常规 produce_video 流程。\n{% endif %}{% if \"design_video\" in tool_names and not staged_media %}{% if video_stage in [\"none\", \"draft_build\"] %}- 保存并展示：作品编排完整后，将组装好的草稿保存一次。失败时保留工作草稿并报告实际错误；成功会生成不可变版本，尚未制作成片。展示完整的已保存分镜、修改摘要及可用的静态代表帧。\n{% endif %}- 制作前的画面检查：默认只展示分镜。制作前即使用户索要，也不提供整片动态预览。仅当动态要求需要对比或澄清、用户修改的部分需要检查，或用户明确要求看某个特效时，可附一个局部 Scrub。保存或修订时只为限定目标提供 scrub；重新展示当前作品用 get_video_version 并传 present=true 和 scrub。可指定确切的 Scene/Clip ID 及时间窗，或单独指定 object_id。纯文案或静态修改通常无需 Scrub。孤立对象只能证实自身样式和动画，无法证明整场布局、遮挡或衔接。要看与当前作品无关的通用示例，用 show_video_presets。\n{% endif %}{% if \"design_video\" in tool_names or \"get_video_version\" in tool_names %}{% include \"chat/_video_presentation.j2\" %}\n{% endif %}{% if \"show_video_presets\" in tool_names %}- 预设候选：show_video_presets 展示真实的原生运动参考，不写版本或 Run。后续 select_video_preset 显示已保存的选择，须通过实际视频创作流程将选中的效果应用到作品。仅选中不会修改作品，也不表示同意制作。\n{% endif %}{% if \"show_music_candidates\" in tool_names or \"search_sfx\" in tool_names %}- 音效与音乐：用户请求声音时，沿用现有的候选、选择和准备流程。通过对保存版本的定向修订应用选好的声音；搜索、选择或准备媒体都不会制作成片。\n{% endif %}{% if \"present_plan\" in tool_names or \"propose_tasks\" in tool_names %}- 制作：确切保存版本的创意概览已完整展示且用户要求制作后，通过 present_plan/propose_tasks 提议 produce_video，带上该版本的 version_ref。按既有确认偏好和积分保护规则开工。首稿总要等待审阅，即便最初请求说“直接做”。worker 只制作这个保存版本，不重新设计；常规编辑不触发渲染。展示未完成时，授权前先用 get_video_version 补全展示。\n{% endif %}- 能力边界：保存不会合成、执行、烘焙或渲染 Generator 内容。设计或模型调用本身可能有成本。只有得到对应工具的事实证明后，才可声称某项能力可用、版本已保存、素材已生成、Run 存在或视频已交付。不支持的修改要如实说明。\n",
+        "chars": 8470
+      },
+      {
+        "template": "chat/_pending_question.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29",
+        "text": "待回答的问题：上下文有待回答的问题时，先结合它理解当前消息，在处理答案的工具调用中填写 pending_disposition。用户回答、讨论或把选择交给你时，填 `answer`。调用被接受后，系统用用户原话结清原问题。综合问题和回答采取行动，不再重复提问。只有明确拒答才填 `skip`。只有明显无关的插话才填 `none`；原问题继续待答，代码会添加提醒，不要自行提示或另提第二个问题。没有待回答的问题时，可省略该字段或填 `none`。\n",
+        "chars": 223
+      },
+      {
+        "template": "chat/_tool_service.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88",
+        "text": "每次只调用一个工具。按当前阶段自然交流。开始一项有意义的工作前说明目的，结果会影响用户的决定或接下来的剪辑时再简短说明。同一阶段的连续工具调用可以不附正文。参数校验与重试由工具反馈处理，向用户说明影响结果或需要其处理的问题。制作开工前说明这次要制作的内容。集中提问时，用一句自然的过渡邀请用户参与，具体问题和选项交给问题卡。方案和最终回答通过消息正文完整表达。交流语言遵循共享的 SPEECH LANGUAGE 规则。\n",
+        "chars": 210
+      },
+      {
+        "template": "chat/_conversation_language.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c",
+        "text": "对话语言：{{ language }}。从首次进度说明到提问、选项和交付，都用这种语言与用户交流。若用户在自己的话中明显切换语言，或明确指定另一种交流语言，以用户为准。旁白和字幕的语言选择仅适用于作品。\n",
+        "chars": 102
+      }
+    ],
+    "user_sources": [
+      {
+        "template": "chat/user.j2",
+        "path": "/Users/sylas/repurposer/apps/api/app/prompts/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f",
+        "text": "{% if mode == \"plan\" %}{%- if recent -%}\n最近的对话：\n{{ recent|join('\\n') }}\n\n{% endif -%}\n{%- if asset_lines %}\n上传的文件（按上传顺序）：\n{{ asset_lines|join('\\n') }}\n{%- endif %}\n{%- if material_pending_line %}\n{{ material_pending_line }}\n{%- endif %}\n{%- if understanding_lines %}\n系统对本组素材的理解（判断内容及论点时优先使用这份语义证据，依据应能追溯到原文）：\n{{ understanding_lines|join('\\n') }}\n{%- endif %}\n{%- if speaker_form_lines %}\n视频中的说话形式（来自逐个视频的说话人分析，供构图时参考。访谈轮流发言或单人讲话时，可以让镜头对准当前说话者）：\n{{ speaker_form_lines|join('\\n') }}\n{%- endif %}\n{%- if filename %}\n已上传文件：{{ filename }}{% if file_language %}（检测到的语言：{{ file_language }}）{% endif %}\n{%- if material_excerpt %}\n素材开头的原文摘录（据此判断素材内容，不要只看文件名）：\n{{ material_excerpt }}\n{%- endif %}\n{%- else %}\n{%- if not asset_lines and not material_pending_line %}\n未上传文件，本次仅有文本输入。\n{%- endif %}\n{%- endif %}\n{%- if persona_lines %}\n用户人设（提问策略②的选项来源。优先从这里取受众、领域等具体词语；没有合适的值时，可以少给或不给选项）：\n{{ persona_lines|join('\\n') }}\n{%- endif %}\n{%- if brief_lines %}\n目前的 Brief（代码合并后的状态。user-stated 字段是用户亲口说明的既定事实；已问字段行列出已问过的字段，不要再问）：\n{{ brief_lines|join('\\n') }}\n{%- endif %}\n{%- if confirmation_line %}\n{{ confirmation_line }}\n{%- endif %}\n{%- if presented_plan %}\n已向用户展示并等待确认的方案（JSON 任务链）：{{ presented_plan }}\n这是当前方案，可能包含用户直接在面板中的修改，对话中不会留下这些修改的记录。输出完整的修订链。用户没提到的任务及参数（工具、数量、语言、角度）照旧；诸如“只要两个场景”“字幕改成德语”“去掉配音”等修改要逐项准确落实。以最新用户消息为准。\n{%- endif %}\n{%- if plans_lines %}\n你整理的决策方案正待确认。以下 Content Plans 中的 plan_id 是指定修订目标的唯一合法来源，不得编造：\n{{ plans_lines|join('\\n') }}\n{%- endif %}\n{%- if pending_lines %}\n你之前的问题仍待回答，先结合它理解本条消息。如果用户给出了待填字段的值，在 Brief 更新中提出该值并将 source 设为 'user-stated'。如果只是无关插话，则独立处理本条消息，保留原字段和待回答状态，用户会收到提醒。\n{{ pending_lines|join('\\n') }}\n{%- endif %}\n{% if message %}用户消息：{{ message }}{% endif %}\n{%- if surface_line %}\n{{ surface_line }}\n{%- endif %}\n{% elif mode == \"conversation\" %}上下文：\n{{ context_text }}\n\n{% if message %}用户消息：{{ message }}{% endif %}{% elif mode == \"event\" or mode == \"delivery\" %}上下文：\n{{ context_text }}\n\n[系统事件，本轮没有用户消息]：{{ event_line }}\n请用用户在上述对话中使用的语言回答。\n{% endif %}",
+        "chars": 1970
+      }
+    ],
+    "template_variables": [
+      "asset_lines",
+      "brief_lines",
+      "confirmation_line",
+      "file_language",
+      "filename",
+      "material_excerpt",
+      "material_pending_line",
+      "message",
+      "mode",
+      "pending_lines",
+      "persona_lines",
+      "plans_lines",
+      "presented_plan",
+      "recent",
+      "speaker_form_lines",
+      "surface_line",
+      "understanding_lines"
+    ],
+    "declared_packs": [],
+    "pack_text": null,
+    "conversation_context": {
+      "retained_ids": [],
+      "omitted": [],
+      "media": [],
+      "budget_tokens": 120000,
+      "available_tokens": 108013,
+      "restored_candidate_ids": [],
+      "candidate_rejections": []
+    },
+    "rejections": [],
+    "accepted_reads": [
+      "prepare_video_materials",
+      "analyze_brand"
+    ],
+    "omitted_observation_ids": [],
+    "summarized_observation_ids": [
+      "call_3043c2b15c7f2ddc4b84b61a"
+    ],
+    "repair_tool": null,
+    "repair_candidate": null,
+    "available_candidate_ids": [],
+    "available_draft_ids": [],
+    "retained_observation_ids": [
+      "call_3043c2b15c7f2ddc4b84b61a",
+      "chatcmpl-tool-8418fbce82494dd5"
+    ],
+    "rejected_candidates": [],
+    "candidate_retained": null,
+    "message_sections": {
+      "system": [
+        0
+      ],
+      "conversation_history": [],
+      "opening_and_feedback": [
+        1
+      ],
+      "observations": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "loop_feedback": [],
+      "project_context": [
+        2
+      ],
+      "dialogue": [
+        3
+      ]
+    },
+    "model_call_id": "2c419069-dabd-4a47-beb2-448f7fc6604a",
+    "provider": "minimax",
+    "model": "minimax-m3"
+  },
+  "payload": {
+    "model": "minimax-m3",
+    "messages": [
+      {
+        "role": "system",
+        "content": "你是 Rookie Cut 的视频创作助手。根据用户请求和服务端给出的当前阶段开展工作。消息正文中的话直接说给用户听，不要把这些话写进工具参数。按需完成非终结工具调用后，用且只用一个终结工具结束本轮。\n交流语言： 留意对话里用户自己是怎么和你说话的。看用户亲自发的消息和问卷回答；来自 application_context、project_evidence 和 tool_feedback 的消息是应用提供的参考资料。比如用户用中文选择英文旁白，就用中文和他们商量怎么做这段英文旁白。从第一句话起，就用对方这次提问的语言自然地回应；如果只是点了选项或发来链接，就沿用你们交谈时的语言。像一起剪片的同事一样，用对方听得懂的话说清楚下一步。进度、总结、问题和选项都照顾这个习惯。用户明确希望换一种语言交流时，就跟着切换。网页、旁白和字幕可以各用作品需要的语言。\n- 使用其他可用工具时，遵循其参数规范和下方的阶段规则。只调用实际提供的工具和操作。\n只读工具的名称以 get_、list_ 或 search_ 开头。它们不结束本轮，也不改变状态。如果回答取决于项目现状，应在调用终结工具前先查询。遇到“再小一点”“再轻一些”“像之前那样”等相对修改，先读对应对象的现值；推荐样式或音乐前先浏览目录；回答进度问题前先查 Run 状态。一次终结调用前可先做多次查询。\n\n\nMarkdown 排版：消息按 Markdown 渲染。列举时用“- ”（半角连字符加空格），每项独占一行，列表前空一行。自行判断哪些词应让用户先看到，如结论、推荐项、关键数字或引文，无论在列表还是正文中均可用 **加粗** 强调。只加粗句子的重点，不要整段加粗。不要用“•”或“–”充当项目符号，也不要把两项挤在同一行。展示已保存的分镜时使用专门的分镜格式。审阅素材片段时可用紧凑表格（时间 | 内容 | 剪辑价值，3–5 行），表格已经说明的内容无需再复述。表格严格使用 GFM：只用半角竖线 |，不用全角｜；每行一条，表头下一行必须是形如 | --- | --- | 的分隔行。不要使用标题（#）、水平线，除非用户要求代码，否则也不用代码块。任何语言的正文都避免用破折号插入旁白，改用短句、逗号或冒号直接表达。\n\n剪辑用语：面向用户的答复、进度、问题与选项采用符合 Final Cut Pro 习惯的本地化专业用语，如源媒体、导入媒体或音乐、片段、时间线、标题、字幕、旁白、转场、关键帧、渲染、导出和已保存的版本。将内部存储或装配事实说成实际完成的剪辑动作。准备曲库音频可说导入音乐，复用则说使用已导入的音乐。只有保存的编辑确实已把音乐放上时间线，才可说已添加。SourceSnapshot/snapshot_id、freeze/frozen、digest、binding、Generator 和 Composition 都是内部术语。不要把导入音频说成“冻结音频快照”，也不要在普通回复中暴露 ID。用户明确询问实现或诊断时再解释。准确区分画面标题、转写或翻译口播的字幕、保存的草稿、已渲染或导出的视频，以及导入和实际剪入的媒体。\n调用被拒绝时，状态不会改变。阅读实际错误，只修正当前目标，或改用可用工具。不要原样重试。\n\n视频创作（网站演示、动态图形、受控 Generator 画面、静态背景或真实录像混剪）：\n\n- 官网宣传片需求梳理：你已经读过网站，无需用户重复介绍产品。像与用户一起剪片的编辑一样，用对方的语言在一句自然的话中说明你了解到什么，同时邀请对方说说对这支片子的偏好。在同一回复中调用 ask_user，把缺少的选择放入表单。工具重试时只修正参数，不要重复邀请。让调研结果继续指导剪辑决策。\n\n\n\n\n\n\n- 能力边界：保存不会合成、执行、烘焙或渲染 Generator 内容。设计或模型调用本身可能有成本。只有得到对应工具的事实证明后，才可声称某项能力可用、版本已保存、素材已生成、Run 存在或视频已交付。不支持的修改要如实说明。\n- answer：先在消息正文中给出完整、简洁的答复，再调用 answer。保存或修订视频时，用对应的专用工具结束本轮。\n待回答的问题：上下文有待回答的问题时，先结合它理解当前消息，在处理答案的工具调用中填写 pending_disposition。用户回答、讨论或把选择交给你时，填 `answer`。调用被接受后，系统用用户原话结清原问题。综合问题和回答采取行动，不再重复提问。只有明确拒答才填 `skip`。只有明显无关的插话才填 `none`；原问题继续待答，代码会添加提醒，不要自行提示或另提第二个问题。没有待回答的问题时，可省略该字段或填 `none`。\n\n\n每次只调用一个工具。按当前阶段自然交流。开始一项有意义的工作前说明目的，结果会影响用户的决定或接下来的剪辑时再简短说明。同一阶段的连续工具调用可以不附正文。参数校验与重试由工具反馈处理，向用户说明影响结果或需要其处理的问题。制作开工前说明这次要制作的内容。集中提问时，用一句自然的过渡邀请用户参与，具体问题和选项交给问题卡。方案和最终回答通过消息正文完整表达。交流语言遵循共享的 SPEECH LANGUAGE 规则。\n对话语言：zh。从首次进度说明到提问、选项和交付，都用这种语言与用户交流。若用户在自己的话中明显切换语言，或明确指定另一种交流语言，以用户为准。旁白和字幕的语言选择仅适用于作品。"
+      },
+      {
+        "role": "user",
+        "content": "\n此 URL 的网站采集仍在等待，页面尚不能用作可读证据。\n用户人设（提问策略②的选项来源。优先从这里取受众、领域等具体词语；没有合适的值时，可以少给或不给选项）：\n- name: 严谨学术技术评估者\n- audience: 高校科研管理者、技术政策制定者及产学研合作领域从业者\n- 核心价值观：技术创新, 技术评估, 产学研结合, 严谨求证, 学术诚信\n- tone: rational\n目前的 Brief（代码合并后的状态。user-stated 字段是用户亲口说明的既定事实；已问字段行列出已问过的字段，不要再问）：\n- material: none\n确认设置：execution=auto, spending=auto。\n\n",
+        "name": "application_context"
+      },
+      {
+        "role": "user",
+        "content": "CURRENT PROJECT EVIDENCE（服务端读取的事实）。直接使用已有内容，只读取缺失细节或用户明确要求刷新的资源。以已保存的作品为准，失败的候选不属于已保存版本。\n\n{\"resource_key\": \"project:07d486a1-0073-465c-98fa-793ca8b1732b\", \"kind\": \"project\", \"project_id\": \"07d486a1-0073-465c-98fa-793ca8b1732b\", \"title\": \"给 https://www.l…\", \"status\": \"draft\", \"resource_counts\": {\"web_page\": 2, \"asset\": 3, \"web\": 1, \"image\": 5}, \"user_stated_constraints\": []}\n\n{\"resource_key\": \"page:07d486a1-0073-465c-98fa-793ca8b1732b:https://www.legitevi.com/en:add494e55f4d0423349b628166022143b48765dfba14c73136aacc41cce8bff3\", \"kind\": \"web_page\", \"url\": \"https://www.legitevi.com/en\", \"captured_at\": \"2026-11-19 09:16:13.877063+00:00\", \"text\": \"\", \"edited_text\": null, \"text_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"text_projection\": \"deduplicated; snapshot citable_lines are the semantic text seat\"}\n\n{\"resource_key\": \"asset:d9480503-77be-48b4-afde-4b4ce0ce0baf\", \"kind\": \"asset\", \"asset_id\": \"d9480503-77be-48b4-afde-4b4ce0ce0baf\", \"type\": \"web_page\", \"name\": \"www.legitevi.com/en\", \"status\": \"completed\", \"text\": \"\", \"edited_text\": null, \"url\": \"https://www.legitevi.com/en\", \"captured_view_count\": 5, \"language\": null, \"text_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"text_projection\": \"deduplicated; snapshot citable_lines are the semantic text seat\"}\n\n{\"resource_key\": \"snapshot:1cf05a4b-8ef9-5069-9581-0c9d16d3dbec:f624663f1909aa8abb408a5a5a0a0d51d193e8c0cdf64af1ebc12f9545c6ca68\", \"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"kind\": \"web\", \"digest\": \"f624663f1909aa8abb408a5a5a0a0d51d193e8c0cdf64af1ebc12f9545c6ca68\", \"duration_ticks\": null, \"origin_project_id\": \"07d486a1-0073-465c-98fa-793ca8b1732b\", \"citable_lines\": [{\"line_id\": \"line_0000\", \"kind\": \"h1\", \"text\": \"Building the Global Standard for Evidence-Backed Short-Form Media\"}, {\"line_id\": \"line_0001\", \"kind\": \"h2\", \"text\": \"Download App\"}, {\"line_id\": \"line_0002\", \"kind\": \"h2\", \"text\": \"What We Do\"}, {\"line_id\": \"line_0003\", \"kind\": \"h2\", \"text\": \"Why LegitEvi?\"}, {\"line_id\": \"line_0004\", \"kind\": \"h2\", \"text\": \"Ready to Transform Scientific Impact?\"}, {\"line_id\": \"line_0005\", \"kind\": \"h2\", \"text\": \"LegitEvi Assistant\"}, {\"line_id\": \"line_0006\", \"kind\": \"h3\", \"text\": \"For Scientists\"}, {\"line_id\": \"line_0007\", \"kind\": \"h3\", \"text\": \"For Influencers\"}, {\"line_id\": \"line_0008\", \"kind\": \"h3\", \"text\": \"For Everyone\"}, {\"line_id\": \"line_0009\", \"kind\": \"h3\", \"text\": \"Paper-Based Short Videos\"}, {\"line_id\": \"line_0010\", \"kind\": \"h3\", \"text\": \"Verifiable & Traceable\"}, {\"line_id\": \"line_0011\", \"kind\": \"h3\", \"text\": \"Influence Through Evidence\"}, {\"line_id\": \"line_0012\", \"kind\": \"h3\", \"text\": \"Science Meets Short Video\"}, {\"line_id\": \"line_0013\", \"kind\": \"h3\", \"text\": \"Quick Links\"}, {\"line_id\": \"line_0014\", \"kind\": \"h3\", \"text\": \"Legal\"}, {\"line_id\": \"line_0015\", \"kind\": \"paragraph\", \"text\": \"LegitEvi: Where Research Powers Influence\"}, {\"line_id\": \"line_0016\", \"kind\": \"paragraph\", \"text\": \"Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.\"}, {\"line_id\": \"line_0017\", \"kind\": \"paragraph\", \"text\": \"Billions of people now learn through short-form video — shaping their health behaviors, scientific beliefs, and everyday decisions.\"}, {\"line_id\": \"line_0018\", \"kind\": \"paragraph\", \"text\": \"Yet most of this content carries no citations, no transparency, and no scientific accountability, fueling an unprecedented rise in misinformation.\"}, {\"line_id\": \"line_0019\", \"kind\": \"paragraph\", \"text\": \"LegitEvi addresses this structural problem.\"}, {\"line_id\": \"line_0020\", \"kind\": \"paragraph\", \"text\": \"We equip researchers to translate complex science into accessible, accurate narratives.\"}, {\"line_id\": \"line_0021\", \"kind\": \"paragraph\", \"text\": \"We empower creators to communicate responsibly with evidence-backed claims.\"}, {\"line_id\": \"line_0022\", \"kind\": \"paragraph\", \"text\": \"And we help the public access trustworthy scientific information — reducing misinformation at population scale and strengthening global digital trust.\"}, {\"line_id\": \"line_0023\", \"kind\": \"paragraph\", \"text\": \"Our vision is simple and transformative:\"}, {\"line_id\": \"line_0024\", \"kind\": \"paragraph\", \"text\": \"Citations should be as universal as hashtags.\"}, {\"line_id\": \"line_0025\", \"kind\": \"paragraph\", \"text\": \"Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.\"}, {\"line_id\": \"line_0026\", \"kind\": \"paragraph\", \"text\": \"Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.\"}, {\"line_id\": \"line_0027\", \"kind\": \"paragraph\", \"text\": \"Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.\"}, {\"line_id\": \"line_0028\", \"kind\": \"paragraph\", \"text\": \"Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.\"}, {\"line_id\": \"line_0029\", \"kind\": \"paragraph\", \"text\": \"Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.\"}, {\"line_id\": \"line_0030\", \"kind\": \"paragraph\", \"text\": \"Your short videos gain credibility from real research. Build influence that's backed by science, not just opinions.\"}, {\"line_id\": \"line_0031\", \"kind\": \"paragraph\", \"text\": \"Turn research papers into viral short videos. Make evidence accessible, verifiable, and influential in today's content ecosystem.\"}, {\"line_id\": \"line_0032\", \"kind\": \"paragraph\", \"text\": \"Join universities and researchers worldwide in building a transparent, fair scientific ecosystem.\"}, {\"line_id\": \"line_0033\", \"kind\": \"paragraph\", \"text\": \"Empowering Scientific Transparency Through Blockchain\"}, {\"line_id\": \"line_0034\", \"kind\": \"paragraph\", \"text\": \"© 2025 LegitEvi. All rights reserved.\"}, {\"line_id\": \"line_0035\", \"kind\": \"text\", \"text\": \"Legit\"}, {\"line_id\": \"line_0036\", \"kind\": \"text\", \"text\": \"Evi\"}, {\"line_id\": \"line_0037\", \"kind\": \"text\", \"text\": \"Download on the\"}, {\"line_id\": \"line_0038\", \"kind\": \"text\", \"text\": \"App Store\"}, {\"line_id\": \"line_0039\", \"kind\": \"text\", \"text\": \"Get it on\"}, {\"line_id\": \"line_0040\", \"kind\": \"text\", \"text\": \"Google Play\"}, {\"line_id\": \"line_0041\", \"kind\": \"text\", \"text\": \"We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.\"}, {\"line_id\": \"line_0042\", \"kind\": \"text\", \"text\": \"Coming soon...\"}, {\"line_id\": \"line_0043\", \"kind\": \"text\", \"text\": \"Hi, welcome to LegitEvi. How can I help?\"}, {\"line_id\": \"line_0044\", \"kind\": \"button\", \"text\": \"English\"}, {\"line_id\": \"line_0045\", \"kind\": \"button\", \"text\": \"Manage My Paper\"}, {\"line_id\": \"line_0046\", \"kind\": \"button\", \"text\": \"Download App\"}, {\"line_id\": \"line_0047\", \"kind\": \"button\", \"text\": \"App Tutorial\"}, {\"line_id\": \"line_0048\", \"kind\": \"button\", \"text\": \"Clear\"}, {\"line_id\": \"line_0049\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"line_id\": \"line_0050\", \"kind\": \"link\", \"text\": \"LegitEvi\"}, {\"line_id\": \"line_0051\", \"kind\": \"link\", \"text\": \"Home\"}, {\"line_id\": \"line_0052\", \"kind\": \"link\", \"text\": \"How it Works\"}, {\"line_id\": \"line_0053\", \"kind\": \"link\", \"text\": \"Research Survey\"}, {\"line_id\": \"line_0054\", \"kind\": \"link\", \"text\": \"News\"}, {\"line_id\": \"line_0055\", \"kind\": \"link\", \"text\": \"About Us\"}, {\"line_id\": \"line_0056\", \"kind\": \"link\", \"text\": \"Get Started\"}, {\"line_id\": \"line_0057\", \"kind\": \"link\", \"text\": \"Learn More\"}, {\"line_id\": \"line_0058\", \"kind\": \"link\", \"text\": \"Download on theApp Store\"}, {\"line_id\": \"line_0059\", \"kind\": \"link\", \"text\": \"Get it onGoogle Play\"}, {\"line_id\": \"line_0060\", \"kind\": \"link\", \"text\": \"Manage My Paper\"}, {\"line_id\": \"line_0061\", \"kind\": \"link\", \"text\": \"Privacy Policy\"}, {\"line_id\": \"line_0062\", \"kind\": \"link\", \"text\": \"Terms of Service\"}, {\"line_id\": \"line_0063\", \"kind\": \"link\", \"text\": \"Contact\"}], \"views\": [{\"view_id\": \"view-0\", \"heading\": \"(top)\", \"width\": 2880, \"height\": 1800, \"digest\": \"c80b2e36d8fd1ac7688d483b7795423057be7cba084a717b6e2b96a422316908\", \"storage_key\": \"source-snapshots/c80b2e36d8fd1ac7688d483b7795423057be7cba084a717b6e2b96a422316908.png\", \"targets\": [{\"id\": \"s0e0\", \"kind\": \"heading\", \"text\": \"Building the Global Standard for Evidence-Backed Short-Form Media\"}, {\"id\": \"s0e1\", \"kind\": \"text\", \"text\": \"LegitEvi: Where Research Powers Influence\"}, {\"id\": \"s0e2\", \"kind\": \"text\", \"text\": \"Scientists transform their papers into compelling short videos. Every claim is verifiable.\"}, {\"id\": \"s0e3\", \"kind\": \"button\", \"text\": \"Get Started\"}, {\"id\": \"s0e4\", \"kind\": \"button\", \"text\": \"Learn More\"}, {\"id\": \"s0e5\", \"kind\": \"heading\", \"text\": \"Download App\"}, {\"id\": \"s0e6\", \"kind\": \"button\", \"text\": \"Download on the App Store\"}, {\"id\": \"s0e7\", \"kind\": \"button\", \"text\": \"Get it on Google Play\"}, {\"id\": \"s0e8\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"id\": \"s0e9\", \"kind\": \"pinned\", \"text\": \"Legit Evi\"}, {\"id\": \"s0e10\", \"kind\": \"pinned\", \"text\": \"Home\"}, {\"id\": \"s0e11\", \"kind\": \"pinned\", \"text\": \"How it Works\"}, {\"id\": \"s0e12\", \"kind\": \"pinned\", \"text\": \"Research Survey\"}, {\"id\": \"s0e13\", \"kind\": \"pinned\", \"text\": \"News\"}, {\"id\": \"s0e14\", \"kind\": \"pinned\", \"text\": \"About Us\"}, {\"id\": \"s0e15\", \"kind\": \"pinned\", \"text\": \"English\"}, {\"id\": \"s0e16\", \"kind\": \"pinned\", \"text\": \"Manage My Paper\"}]}, {\"view_id\": \"view-1\", \"heading\": \"Download App\", \"width\": 2880, \"height\": 1800, \"digest\": \"ac49aa5a3906c1036454962be643c5d750f2753cf92b1be540c423ee5a17b10f\", \"storage_key\": \"source-snapshots/ac49aa5a3906c1036454962be643c5d750f2753cf92b1be540c423ee5a17b10f.png\", \"targets\": [{\"id\": \"s1e0\", \"kind\": \"heading\", \"text\": \"Download App\"}, {\"id\": \"s1e1\", \"kind\": \"button\", \"text\": \"Download on the App Store\"}, {\"id\": \"s1e2\", \"kind\": \"button\", \"text\": \"Get it on Google Play\"}, {\"id\": \"s1e3\", \"kind\": \"text\", \"text\": \"Billions of people now learn through short-form video — shaping their health behaviors, sc\"}, {\"id\": \"s1e4\", \"kind\": \"text\", \"text\": \"Yet most of this content carries no citations, no transparency, and no scientific accounta\"}, {\"id\": \"s1e5\", \"kind\": \"text\", \"text\": \"LegitEvi addresses this structural problem.\"}, {\"id\": \"s1e6\", \"kind\": \"text\", \"text\": \"We equip researchers to translate complex science into accessible, accurate narratives.\"}, {\"id\": \"s1e7\", \"kind\": \"text\", \"text\": \"We empower creators to communicate responsibly with evidence-backed claims.\"}, {\"id\": \"s1e8\", \"kind\": \"text\", \"text\": \"And we help the public access trustworthy scientific information — reducing misinformation\"}, {\"id\": \"s1e9\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"id\": \"s1e10\", \"kind\": \"pinned\", \"text\": \"Legit Evi\"}, {\"id\": \"s1e11\", \"kind\": \"pinned\", \"text\": \"Home\"}, {\"id\": \"s1e12\", \"kind\": \"pinned\", \"text\": \"How it Works\"}, {\"id\": \"s1e13\", \"kind\": \"pinned\", \"text\": \"Research Survey\"}, {\"id\": \"s1e14\", \"kind\": \"pinned\", \"text\": \"News\"}, {\"id\": \"s1e15\", \"kind\": \"pinned\", \"text\": \"About Us\"}, {\"id\": \"s1e16\", \"kind\": \"pinned\", \"text\": \"English\"}, {\"id\": \"s1e17\", \"kind\": \"pinned\", \"text\": \"Manage My Paper\"}]}, {\"view_id\": \"view-2\", \"heading\": \"Citations should be as universal as hashtags.\", \"width\": 2880, \"height\": 1800, \"digest\": \"2a86851bb34e9001c6818b4689df3de677faa03504fdfe87c3067397e462aa29\", \"storage_key\": \"source-snapshots/2a86851bb34e9001c6818b4689df3de677faa03504fdfe87c3067397e462aa29.png\", \"targets\": [{\"id\": \"s2e0\", \"kind\": \"text\", \"text\": \"We empower creators to communicate responsibly with evidence-backed claims.\"}, {\"id\": \"s2e1\", \"kind\": \"text\", \"text\": \"And we help the public access trustworthy scientific information — reducing misinformation\"}, {\"id\": \"s2e2\", \"kind\": \"text\", \"text\": \"Our vision is simple and transformative:\"}, {\"id\": \"s2e3\", \"kind\": \"text\", \"text\": \"Citations should be as universal as hashtags.\"}, {\"id\": \"s2e4\", \"kind\": \"heading\", \"text\": \"What We Do\"}, {\"id\": \"s2e5\", \"kind\": \"heading\", \"text\": \"For Scientists\"}, {\"id\": \"s2e6\", \"kind\": \"heading\", \"text\": \"For Influencers\"}, {\"id\": \"s2e7\", \"kind\": \"heading\", \"text\": \"For Everyone\"}, {\"id\": \"s2e8\", \"kind\": \"text\", \"text\": \"Create short videos backed by real scientific papers. Every claim you make can be verified\"}, {\"id\": \"s2e9\", \"kind\": \"text\", \"text\": \"Watch short videos you can trust. Every video links back to research. See the evidence beh\"}, {\"id\": \"s2e10\", \"kind\": \"text\", \"text\": \"Coming soon...\"}, {\"id\": \"s2e11\", \"kind\": \"text\", \"text\": \"Coming soon...\"}, {\"id\": \"s2e12\", \"kind\": \"button\", \"text\": \"Manage My Paper\"}, {\"id\": \"s2e13\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"id\": \"s2e14\", \"kind\": \"pinned\", \"text\": \"Legit Evi\"}, {\"id\": \"s2e15\", \"kind\": \"pinned\", \"text\": \"Home\"}, {\"id\": \"s2e16\", \"kind\": \"pinned\", \"text\": \"How it Works\"}, {\"id\": \"s2e17\", \"kind\": \"pinned\", \"text\": \"Research Survey\"}, {\"id\": \"s2e18\", \"kind\": \"pinned\", \"text\": \"News\"}, {\"id\": \"s2e19\", \"kind\": \"pinned\", \"text\": \"About Us\"}, {\"id\": \"s2e20\", \"kind\": \"pinned\", \"text\": \"English\"}, {\"id\": \"s2e21\", \"kind\": \"pinned\", \"text\": \"Manage My Paper\"}]}, {\"view_id\": \"view-3\", \"heading\": \"Why LegitEvi?\", \"width\": 2880, \"height\": 1800, \"digest\": \"a55694084f2016bbf6a49ac5f90aea059de5401c10fdf1f6ae11aef650b640fd\", \"storage_key\": \"source-snapshots/a55694084f2016bbf6a49ac5f90aea059de5401c10fdf1f6ae11aef650b640fd.png\", \"targets\": [{\"id\": \"s3e0\", \"kind\": \"button\", \"text\": \"Manage My Paper\"}, {\"id\": \"s3e1\", \"kind\": \"heading\", \"text\": \"Why LegitEvi?\"}, {\"id\": \"s3e2\", \"kind\": \"heading\", \"text\": \"Verifiable & Traceable\"}, {\"id\": \"s3e3\", \"kind\": \"heading\", \"text\": \"Paper-Based Short Videos\"}, {\"id\": \"s3e4\", \"kind\": \"heading\", \"text\": \"Influence Through Evidence\"}, {\"id\": \"s3e5\", \"kind\": \"heading\", \"text\": \"Science Meets Short Video\"}, {\"id\": \"s3e6\", \"kind\": \"text\", \"text\": \"Each short video links directly to its source paper. Viewers can verify every claim. Creat\"}, {\"id\": \"s3e7\", \"kind\": \"text\", \"text\": \"Your short videos gain credibility from real research. Build influence that's backed by sc\"}, {\"id\": \"s3e8\", \"kind\": \"text\", \"text\": \"Turn research papers into viral short videos. Make evidence accessible, verifiable, and in\"}, {\"id\": \"s3e9\", \"kind\": \"text\", \"text\": \"Every short video is created from research. AI transforms scientific papers into engaging \"}, {\"id\": \"s3e10\", \"kind\": \"heading\", \"text\": \"Ready to Transform Scientific Impact?\"}, {\"id\": \"s3e11\", \"kind\": \"text\", \"text\": \"Join universities and researchers worldwide in building a transparent, fair scientific eco\"}, {\"id\": \"s3e12\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"id\": \"s3e13\", \"kind\": \"pinned\", \"text\": \"Legit Evi\"}, {\"id\": \"s3e14\", \"kind\": \"pinned\", \"text\": \"Home\"}, {\"id\": \"s3e15\", \"kind\": \"pinned\", \"text\": \"How it Works\"}, {\"id\": \"s3e16\", \"kind\": \"pinned\", \"text\": \"Research Survey\"}, {\"id\": \"s3e17\", \"kind\": \"pinned\", \"text\": \"News\"}, {\"id\": \"s3e18\", \"kind\": \"pinned\", \"text\": \"About Us\"}, {\"id\": \"s3e19\", \"kind\": \"pinned\", \"text\": \"English\"}, {\"id\": \"s3e20\", \"kind\": \"pinned\", \"text\": \"Manage My Paper\"}]}, {\"view_id\": \"view-4\", \"heading\": \"Ready to Transform Scientific Impact?\", \"width\": 2880, \"height\": 1800, \"digest\": \"fa6cb74abd7fa11571097c26f8ebada2b644d445668ceb832fa52d97349b0d4e\", \"storage_key\": \"source-snapshots/fa6cb74abd7fa11571097c26f8ebada2b644d445668ceb832fa52d97349b0d4e.png\", \"targets\": [{\"id\": \"s4e0\", \"kind\": \"text\", \"text\": \"Each short video links directly to its source paper. Viewers can verify every claim. Creat\"}, {\"id\": \"s4e1\", \"kind\": \"text\", \"text\": \"Your short videos gain credibility from real research. Build influence that's backed by sc\"}, {\"id\": \"s4e2\", \"kind\": \"text\", \"text\": \"Turn research papers into viral short videos. Make evidence accessible, verifiable, and in\"}, {\"id\": \"s4e3\", \"kind\": \"text\", \"text\": \"Every short video is created from research. AI transforms scientific papers into engaging \"}, {\"id\": \"s4e4\", \"kind\": \"heading\", \"text\": \"Ready to Transform Scientific Impact?\"}, {\"id\": \"s4e5\", \"kind\": \"text\", \"text\": \"Join universities and researchers worldwide in building a transparent, fair scientific eco\"}, {\"id\": \"s4e6\", \"kind\": \"button\", \"text\": \"Download App\"}, {\"id\": \"s4e7\", \"kind\": \"text\", \"text\": \"Download App\"}, {\"id\": \"s4e8\", \"kind\": \"text\", \"text\": \"Legit\"}, {\"id\": \"s4e9\", \"kind\": \"text\", \"text\": \"Evi\"}, {\"id\": \"s4e10\", \"kind\": \"heading\", \"text\": \"Quick Links\"}, {\"id\": \"s4e11\", \"kind\": \"heading\", \"text\": \"Legal\"}, {\"id\": \"s4e12\", \"kind\": \"text\", \"text\": \"Empowering Scientific Transparency Through Blockchain\"}, {\"id\": \"s4e13\", \"kind\": \"button\", \"text\": \"Home\"}, {\"id\": \"s4e14\", \"kind\": \"button\", \"text\": \"Privacy Policy\"}, {\"id\": \"s4e15\", \"kind\": \"button\", \"text\": \"How it Works\"}, {\"id\": \"s4e16\", \"kind\": \"button\", \"text\": \"Terms of Service\"}, {\"id\": \"s4e17\", \"kind\": \"button\", \"text\": \"About Us\"}, {\"id\": \"s4e18\", \"kind\": \"button\", \"text\": \"Contact\"}, {\"id\": \"s4e19\", \"kind\": \"button\", \"text\": \"App Tutorial\"}, {\"id\": \"s4e20\", \"kind\": \"text\", \"text\": \"© 2025 LegitEvi. All rights reserved.\"}, {\"id\": \"s4e21\", \"kind\": \"button\", \"text\": \"Ask LegitEvi\"}, {\"id\": \"s4e22\", \"kind\": \"pinned\", \"text\": \"Legit Evi\"}, {\"id\": \"s4e23\", \"kind\": \"pinned\", \"text\": \"Home\"}, {\"id\": \"s4e24\", \"kind\": \"pinned\", \"text\": \"How it Works\"}, {\"id\": \"s4e25\", \"kind\": \"pinned\", \"text\": \"Research Survey\"}, {\"id\": \"s4e26\", \"kind\": \"pinned\", \"text\": \"News\"}, {\"id\": \"s4e27\", \"kind\": \"pinned\", \"text\": \"About Us\"}, {\"id\": \"s4e28\", \"kind\": \"pinned\", \"text\": \"English\"}, {\"id\": \"s4e29\", \"kind\": \"pinned\", \"text\": \"Manage My Paper\"}]}], \"capabilities\": {\"reuse_frozen_views\": true, \"dom_recapture_element_ids\": [\"s0e0\", \"s0e1\", \"s0e10\", \"s0e11\", \"s0e12\", \"s0e13\", \"s0e14\", \"s0e15\", \"s0e16\", \"s0e2\", \"s0e3\", \"s0e4\", \"s0e5\", \"s0e6\", \"s0e7\", \"s0e8\", \"s0e9\", \"s1e0\", \"s1e1\", \"s1e10\", \"s1e11\", \"s1e12\", \"s1e13\", \"s1e14\", \"s1e15\", \"s1e16\", \"s1e17\", \"s1e2\", \"s1e3\", \"s1e4\", \"s1e5\", \"s1e6\", \"s1e7\", \"s1e8\", \"s1e9\", \"s2e0\", \"s2e1\", \"s2e10\", \"s2e11\", \"s2e12\", \"s2e13\", \"s2e14\", \"s2e15\", \"s2e16\", \"s2e17\", \"s2e18\", \"s2e19\", \"s2e2\", \"s2e20\", \"s2e21\", \"s2e3\", \"s2e4\", \"s2e5\", \"s2e6\", \"s2e7\", \"s2e8\", \"s2e9\", \"s3e0\", \"s3e1\", \"s3e10\", \"s3e11\", \"s3e12\", \"s3e13\", \"s3e14\", \"s3e15\", \"s3e16\", \"s3e17\", \"s3e18\", \"s3e19\", \"s3e2\", \"s3e20\", \"s3e3\", \"s3e4\", \"s3e5\", \"s3e6\", \"s3e7\", \"s3e8\", \"s3e9\", \"s4e0\", \"s4e1\", \"s4e10\", \"s4e11\", \"s4e12\", \"s4e13\", \"s4e14\", \"s4e15\", \"s4e16\", \"s4e17\", \"s4e18\", \"s4e19\", \"s4e2\", \"s4e20\", \"s4e21\", \"s4e22\", \"s4e23\", \"s4e24\", \"s4e25\", \"s4e26\", \"s4e27\", \"s4e28\", \"s4e29\", \"s4e3\", \"s4e4\", \"s4e5\", \"s4e6\", \"s4e7\", \"s4e8\", \"s4e9\"]}, \"projection\": \"此处仅列简要信息；用 prepare_video_materials 选取 snapshot/view/element 可读取目标的确切事实\"}\n\n当前路径：website_promo\n当前准备状态：\n- 含 URL：true\n- URL: https://www.legitevi.com/en\n- 等待采集：false\n- 采集失败：false\n- 采集已就绪：true\n- 正文已就绪：true\n- 所需视图已就绪：true\n- 品牌档案已就绪：true\n- Brief 已就绪：false\n- Brief 缺失字段：[production_direction, target_seconds, narration_language, subtitle_languages, aspect]\n- 已有草稿：false\n\n当前视频轮次（目标和状态由服务端提供）：\n{\"video_stage\": \"briefing\", \"creative_state\": {\"schema_version\": 1, \"brief\": {\"topic\": {\"value\": null, \"source\": \"default\"}, \"audience\": {\"value\": null, \"source\": \"default\"}, \"tone\": {\"value\": null, \"source\": \"default\"}, \"purpose\": {\"value\": null, \"source\": \"default\"}, \"target_seconds\": {\"value\": null, \"source\": \"default\"}, \"narrative_mode\": {\"value\": null, \"source\": \"default\"}, \"narration_language\": {\"value\": null, \"source\": \"default\"}, \"subtitle_languages\": {\"value\": null, \"source\": \"default\"}, \"aspect\": {\"value\": null, \"source\": \"default\"}, \"voice_requirements\": {\"value\": null, \"source\": \"default\"}, \"must_include\": {\"value\": null, \"source\": \"default\"}, \"avoid\": {\"value\": null, \"source\": \"default\"}, \"success_criteria\": {\"value\": null, \"source\": \"default\"}, \"constraints\": [], \"material_state\": {\"value\": null, \"source\": \"default\"}, \"asked\": []}, \"brand_profile\": {\"schema_version\": 1, \"extractor_version\": \"website-brand-v1\", \"positioning\": \"LegitEvi 是面向科学家与内容创作者的 AI 平台，将研究论文转化为可验证、可追溯且由证据支持的短视频。\", \"claims\": [{\"text\": \"Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.\", \"line_ids\": [\"line_0016\"], \"kind\": \"fact\"}, {\"text\": \"We equip researchers to translate complex science into accessible, accurate narratives.\", \"line_ids\": [\"line_0020\"], \"kind\": \"fact\"}, {\"text\": \"We empower creators to communicate responsibly with evidence-backed claims.\", \"line_ids\": [\"line_0021\"], \"kind\": \"fact\"}, {\"text\": \"Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.\", \"line_ids\": [\"line_0025\"], \"kind\": \"fact\"}, {\"text\": \"Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.\", \"line_ids\": [\"line_0026\"], \"kind\": \"fact\"}, {\"text\": \"Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.\", \"line_ids\": [\"line_0028\"], \"kind\": \"fact\"}, {\"text\": \"Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.\", \"line_ids\": [\"line_0029\"], \"kind\": \"fact\"}, {\"text\": \"Your short videos gain credibility from real research. Build influence that's backed by science, not just opinions.\", \"line_ids\": [\"line_0030\"], \"kind\": \"fact\"}, {\"text\": \"We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.\", \"line_ids\": [\"line_0041\"], \"kind\": \"fact\"}], \"taglines\": [{\"text\": \"Building the Global Standard for Evidence-Backed Short-Form Media\", \"line_ids\": [\"line_0000\"]}, {\"text\": \"LegitEvi: Where Research Powers Influence\", \"line_ids\": [\"line_0015\"]}, {\"text\": \"Citations should be as universal as hashtags.\", \"line_ids\": [\"line_0024\"]}, {\"text\": \"Empowering Scientific Transparency Through Blockchain\", \"line_ids\": [\"line_0033\"]}], \"colors\": [{\"value\": \"#DC0000\", \"role\": \"primary\", \"source\": \"visual\", \"confidence\": \"inferred\"}, {\"value\": \"#000000\", \"role\": \"text\", \"source\": \"visual\", \"confidence\": \"inferred\"}, {\"value\": \"#F9F9F9\", \"role\": \"background\", \"source\": \"visual\", \"confidence\": \"inferred\"}, {\"value\": \"#D88F8F\", \"role\": \"accent\", \"source\": \"visual\", \"confidence\": \"inferred\"}], \"typography\": [{\"candidate\": \"接近 Inter 的现代无衬线字体\", \"weight\": \"主标题为粗体，正文与导航为常规或中等字重\", \"source\": \"visual\", \"confidence\": \"inferred\"}], \"brand_assets\": [{\"kind\": \"wordmark\", \"ref\": \"导航栏左上角可见“LegitEvi”字样，其中“Legit”为黑色、“Evi”为红色。\"}, {\"kind\": \"other\", \"ref\": \"页面右下角可见带对话气泡图标的红色“Ask LegitEvi”按钮。\"}, {\"kind\": \"other\", \"ref\": \"下载区域可见 Apple 标志及“Download on the App Store”徽章，以及 Google Play 标志及“Get it on Google Play”徽章。\"}], \"creative_direction\": {\"summary\": \"采用极简、高对比的科研传播视觉体系：以大面积白色留白承载清晰信息层级，以黑色无衬线文字建立可信度，并用精确测得的红色强调品牌名称、关键宣言、行动按钮与可信科技元素。视觉叙事应突出“研究—证据—短视频—可验证影响”的清晰转化链路。\", \"media_preferences\": [\"白色或近白色背景\", \"黑色高对比正文\", \"红色品牌强调\", \"简洁居中的英雄区构图\", \"清晰按钮和行动层级\", \"可验证研究证据的视觉表达\"], \"avoid\": [\"未经证据支持的夸张科学效果\", \"削弱可验证性与可追溯性的表达\", \"复杂装饰导致信息层级不清\", \"把视觉观察结果表述为已确认的 CSS 或字体文件\"], \"provenance\": \"inferred\"}, \"unknowns\": [\"无法仅凭页面像素确认实际使用的字体家族、字重名称或 CSS 字体声明。\", \"无法从所附视图确认短视频的目标时长、叙事结构、旁白语言或字幕语言。\", \"无法从该视图确认除 English 之外的其他网站语言版本。\", \"无法从该视图确认移动应用的具体功能范围或已上线的应用商店版本。\", \"无法仅凭该页面确认“reach millions”“viral”等表述的实际业务效果。\", \"无法从该视图确认区块链实现的具体技术方案。\"], \"conflicts\": []}}, \"available_actions\": [\"ask_user\", \"answer\"], \"required_next_action\": \"ask_user\"}",
+        "name": "project_evidence"
+      },
+      {
+        "role": "user",
+        "content": "给 https://www.legitevi.com/en 做一只宣传片"
+      },
+      {
+        "role": "assistant",
+        "content": "我先把这个页面采集下来，等素材就绪后再读它的定位和视觉识别。",
+        "tool_calls": [
+          {
+            "id": "call_3043c2b15c7f2ddc4b84b61a",
+            "type": "function",
+            "function": {
+              "name": "prepare_video_materials",
+              "arguments": "{\"material_urls\": [\"https://www.legitevi.com/en\"]}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_3043c2b15c7f2ddc4b84b61a",
+        "name": "prepare_video_materials",
+        "content": "{\"resources\": [{\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"kind\": \"web\", \"digest\": \"f624663f1909aa8abb408a5a5a0a0d51d193e8c0cdf64af1ebc12f9545c6ca68\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"consumption\": \"web_object\", \"canonical_url\": \"https://www.legitevi.com/en\", \"capture_plan_digest\": null}, {\"snapshot_id\": \"77826a44-1867-5fe1-9a82-b8f0ef32eb0f\", \"kind\": \"image\", \"digest\": \"c80b2e36d8fd1ac7688d483b7795423057be7cba084a717b6e2b96a422316908\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"width\": 2880, \"height\": 1800, \"origin\": \"web_view\", \"consumption\": \"generator_resource\", \"coordinate_space\": \"captured_view_pixels\", \"state_id\": null, \"output_id\": null, \"artifact_role\": \"view\", \"web_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-0\", \"paired_view_id\": null, \"target_id\": null, \"target_ids\": [], \"target_element_id\": null, \"member_id\": null, \"transparent\": null, \"cutout_snapshot_id\": null, \"cutout_digest\": null, \"paired_view_digest\": null, \"fixed_resource\": {\"path\": \"source-snapshots/c80b2e36d8fd1ac7688d483b7795423057be7cba084a717b6e2b96a422316908.png\", \"snapshot_id\": \"77826a44-1867-5fe1-9a82-b8f0ef32eb0f\", \"snapshot_digest\": \"c80b2e36d8fd1ac7688d483b7795423057be7cba084a717b6e2b96a422316908\", \"content_type\": \"image/png\"}, \"heading\": \"(top)\", \"source_url\": \"https://www.legitevi.com/en\"}, {\"snapshot_id\": \"6f7ec874-58e9-54ce-90f6-9c9051fccb6c\", \"kind\": \"image\", \"digest\": \"ac49aa5a3906c1036454962be643c5d750f2753cf92b1be540c423ee5a17b10f\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"width\": 2880, \"height\": 1800, \"origin\": \"web_view\", \"consumption\": \"generator_resource\", \"coordinate_space\": \"captured_view_pixels\", \"state_id\": null, \"output_id\": null, \"artifact_role\": \"view\", \"web_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-1\", \"paired_view_id\": null, \"target_id\": null, \"target_ids\": [], \"target_element_id\": null, \"member_id\": null, \"transparent\": null, \"cutout_snapshot_id\": null, \"cutout_digest\": null, \"paired_view_digest\": null, \"fixed_resource\": {\"path\": \"source-snapshots/ac49aa5a3906c1036454962be643c5d750f2753cf92b1be540c423ee5a17b10f.png\", \"snapshot_id\": \"6f7ec874-58e9-54ce-90f6-9c9051fccb6c\", \"snapshot_digest\": \"ac49aa5a3906c1036454962be643c5d750f2753cf92b1be540c423ee5a17b10f\", \"content_type\": \"image/png\"}, \"heading\": \"Download App\", \"source_url\": \"https://www.legitevi.com/en\"}, {\"snapshot_id\": \"b94c9b1f-be75-54b2-8467-a7bf0642aca0\", \"kind\": \"image\", \"digest\": \"2a86851bb34e9001c6818b4689df3de677faa03504fdfe87c3067397e462aa29\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"width\": 2880, \"height\": 1800, \"origin\": \"web_view\", \"consumption\": \"generator_resource\", \"coordinate_space\": \"captured_view_pixels\", \"state_id\": null, \"output_id\": null, \"artifact_role\": \"view\", \"web_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-2\", \"paired_view_id\": null, \"target_id\": null, \"target_ids\": [], \"target_element_id\": null, \"member_id\": null, \"transparent\": null, \"cutout_snapshot_id\": null, \"cutout_digest\": null, \"paired_view_digest\": null, \"fixed_resource\": {\"path\": \"source-snapshots/2a86851bb34e9001c6818b4689df3de677faa03504fdfe87c3067397e462aa29.png\", \"snapshot_id\": \"b94c9b1f-be75-54b2-8467-a7bf0642aca0\", \"snapshot_digest\": \"2a86851bb34e9001c6818b4689df3de677faa03504fdfe87c3067397e462aa29\", \"content_type\": \"image/png\"}, \"heading\": \"Citations should be as universal as hashtags.\", \"source_url\": \"https://www.legitevi.com/en\"}, {\"snapshot_id\": \"360882e8-b3a1-53e1-acf8-3fd3b05fec2d\", \"kind\": \"image\", \"digest\": \"a55694084f2016bbf6a49ac5f90aea059de5401c10fdf1f6ae11aef650b640fd\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"width\": 2880, \"height\": 1800, \"origin\": \"web_view\", \"consumption\": \"generator_resource\", \"coordinate_space\": \"captured_view_pixels\", \"state_id\": null, \"output_id\": null, \"artifact_role\": \"view\", \"web_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-3\", \"paired_view_id\": null, \"target_id\": null, \"target_ids\": [], \"target_element_id\": null, \"member_id\": null, \"transparent\": null, \"cutout_snapshot_id\": null, \"cutout_digest\": null, \"paired_view_digest\": null, \"fixed_resource\": {\"path\": \"source-snapshots/a55694084f2016bbf6a49ac5f90aea059de5401c10fdf1f6ae11aef650b640fd.png\", \"snapshot_id\": \"360882e8-b3a1-53e1-acf8-3fd3b05fec2d\", \"snapshot_digest\": \"a55694084f2016bbf6a49ac5f90aea059de5401c10fdf1f6ae11aef650b640fd\", \"content_type\": \"image/png\"}, \"heading\": \"Why LegitEvi?\", \"source_url\": \"https://www.legitevi.com/en\"}, {\"snapshot_id\": \"afd04833-5a17-57f9-bad3-1de5adfc3682\", \"kind\": \"image\", \"digest\": \"fa6cb74abd7fa11571097c26f8ebada2b644d445668ceb832fa52d97349b0d4e\", \"duration_ticks\": null, \"captured_at\": \"2026-11-19T09:15:29.634135+00:00\", \"state\": \"frozen\", \"width\": 2880, \"height\": 1800, \"origin\": \"web_view\", \"consumption\": \"generator_resource\", \"coordinate_space\": \"captured_view_pixels\", \"state_id\": null, \"output_id\": null, \"artifact_role\": \"view\", \"web_snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-4\", \"paired_view_id\": null, \"target_id\": null, \"target_ids\": [], \"target_element_id\": null, \"member_id\": null, \"transparent\": null, \"cutout_snapshot_id\": null, \"cutout_digest\": null, \"paired_view_digest\": null, \"fixed_resource\": {\"path\": \"source-snapshots/fa6cb74abd7fa11571097c26f8ebada2b644d445668ceb832fa52d97349b0d4e.png\", \"snapshot_id\": \"afd04833-5a17-57f9-bad3-1de5adfc3682\", \"snapshot_digest\": \"fa6cb74abd7fa11571097c26f8ebada2b644d445668ceb832fa52d97349b0d4e\", \"content_type\": \"image/png\"}, \"heading\": \"Ready to Transform Scientific Impact?\", \"source_url\": \"https://www.legitevi.com/en\"}], \"media_files\": 1, \"media_omitted\": [{\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-1\", \"part\": \"view\", \"reason\": \"not attached; select it with material_targets\"}, {\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-2\", \"part\": \"view\", \"reason\": \"not attached; select it with material_targets\"}, {\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-3\", \"part\": \"view\", \"reason\": \"not attached; select it with material_targets\"}, {\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"view_id\": \"view-4\", \"part\": \"view\", \"reason\": \"not attached; select it with material_targets\"}], \"selected_targets\": [], \"source_body\": \"简要标识见 CURRENT PROJECT EVIDENCE；用 material_targets 取回所选目标的确切事实或媒体\"}"
+      },
+      {
+        "role": "assistant",
+        "content": "页面已采集完成，正文和五个页面视图都在。我先把这些内容整理成带来源的品牌档案，供后续剪辑引用。",
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-8418fbce82494dd5",
+            "type": "function",
+            "function": {
+              "name": "analyze_brand",
+              "arguments": "{\"brief\": {\"topic\": \"LegitEvi 官网宣传片\", \"audience\": {\"value\": \"高校科研管理者、技术政策制定者及产学研合作领域从业者\", \"source\": \"user-stated\"}, \"tone\": {\"value\": \"rational\", \"source\": \"user-stated\"}}}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "chatcmpl-tool-8418fbce82494dd5",
+        "name": "analyze_brand",
+        "content": "{\"brand_profile\": {\"schema_version\": 1, \"source_refs\": [{\"snapshot_id\": \"1cf05a4b-8ef9-5069-9581-0c9d16d3dbec\", \"digest\": \"f624663f1909aa8abb408a5a5a0a0d51d193e8c0cdf64af1ebc12f9545c6ca68\", \"view_ids\": [\"view-0\"], \"line_ids\": [\"line_0000\", \"line_0001\", \"line_0002\", \"line_0003\", \"line_0004\", \"line_0005\", \"line_0006\", \"line_0007\", \"line_0008\", \"line_0009\", \"line_0010\", \"line_0011\", \"line_0012\", \"line_0013\", \"line_0014\", \"line_0015\", \"line_0016\", \"line_0017\", \"line_0018\", \"line_0019\", \"line_0020\", \"line_0021\", \"line_0022\", \"line_0023\", \"line_0024\", \"line_0025\", \"line_0026\", \"line_0027\", \"line_0028\", \"line_0029\", \"line_0030\", \"line_0031\", \"line_0032\", \"line_0033\", \"line_0034\", \"line_0035\", \"line_0036\", \"line_0037\", \"line_0038\", \"line_0039\", \"line_0040\", \"line_0041\", \"line_0042\", \"line_0043\", \"line_0044\", \"line_0045\", \"line_0046\", \"line_0047\", \"line_0048\", \"line_0049\", \"line_0050\", \"line_0051\", \"line_0052\", \"line_0053\", \"line_0054\", \"line_0055\", \"line_0056\", \"line_0057\", \"line_0058\", \"line_0059\", \"line_0060\", \"line_0061\", \"line_0062\", \"line_0063\"]}], \"extractor_version\": \"website-brand-v1\", \"positioning\": \"LegitEvi 是面向科学家与内容创作者的 AI 平台，将研究论文转化为可验证、可追溯且由证据支持的短视频。\", \"claims\": [{\"text\": \"Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.\", \"line_ids\": [\"line_0016\"], \"kind\": \"fact\"}, {\"text\": \"We equip researchers to translate complex science into accessible, accurate narratives.\", \"line_ids\": [\"line_0020\"], \"kind\": \"fact\"}, {\"text\": \"We empower creators to communicate responsibly with evidence-backed claims.\", \"line_ids\": [\"line_0021\"], \"kind\": \"fact\"}, {\"text\": \"Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.\", \"line_ids\": [\"line_0025\"], \"kind\": \"fact\"}, {\"text\": \"Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.\", \"line_ids\": [\"line_0026\"], \"kind\": \"fact\"}, {\"text\": \"Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.\", \"line_ids\": [\"line_0028\"], \"kind\": \"fact\"}, {\"text\": \"Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.\", \"line_ids\": [\"line_0029\"], \"kind\": \"fact\"}, {\"text\": \"Your short videos gain credibility from real research. Build influence that's backed by science, not just opinions.\", \"line_ids\": [\"line_0030\"], \"kind\": \"fact\"}, {\"text\": \"We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.\", \"line_ids\": [\"line_0041\"], \"kind\": \"fact\"}], \"taglines\": [{\"text\": \"Building the Global Standard for Evidence-Backed Short-Form Media\", \"line_ids\": [\"line_0000\"]}, {\"text\": \"LegitEvi: Where Research Powers Influence\", \"line_ids\": [\"line_0015\"]}, {\"text\": \"Citations should be as universal as hashtags.\", \"line_ids\": [\"line_0024\"]}, {\"text\": \"Empowering Scientific Transparency Through Blockchain\", \"line_ids\": [\"line_0033\"]}], \"colors\": [{\"value\": \"#DC0000\", \"role\": \"primary\", \"source\": \"visual\", \"confidence\": \"inferred\", \"source_refs\": [\"line_0015\"]}, {\"value\": \"#000000\", \"role\": \"text\", \"source\": \"visual\", \"confidence\": \"inferred\", \"source_refs\": [\"line_0000\", \"line_0016\"]}, {\"value\": \"#F9F9F9\", \"role\": \"background\", \"source\": \"visual\", \"confidence\": \"inferred\", \"source_refs\": []}, {\"value\": \"#D88F8F\", \"role\": \"accent\", \"source\": \"visual\", \"confidence\": \"inferred\", \"source_refs\": []}], \"typography\": [{\"candidate\": \"接近 Inter 的现代无衬线字体\", \"weight\": \"主标题为粗体，正文与导航为常规或中等字重\", \"source\": \"visual\", \"confidence\": \"inferred\", \"source_refs\": [\"line_0000\", \"line_0015\", \"line_0016\"]}], \"brand_assets\": [{\"kind\": \"wordmark\", \"ref\": \"导航栏左上角可见“LegitEvi”字样，其中“Legit”为黑色、“Evi”为红色。\", \"source_refs\": [\"line_0035\", \"line_0036\", \"line_0050\"]}, {\"kind\": \"other\", \"ref\": \"页面右下角可见带对话气泡图标的红色“Ask LegitEvi”按钮。\", \"source_refs\": [\"line_0043\", \"line_0049\"]}, {\"kind\": \"other\", \"ref\": \"下载区域可见 Apple 标志及“Download on the App Store”徽章，以及 Google Play 标志及“Get it on Google Play”徽章。\", \"source_refs\": [\"line_0037\", \"line_0038\", \"line_0039\", \"line_0040\", \"line_0058\", \"line_0059\"]}], \"creative_direction\": {\"summary\": \"采用极简、高对比的科研传播视觉体系：以大面积白色留白承载清晰信息层级，以黑色无衬线文字建立可信度，并用精确测得的红色强调品牌名称、关键宣言、行动按钮与可信科技元素。视觉叙事应突出“研究—证据—短视频—可验证影响”的清晰转化链路。\", \"media_preferences\": [\"白色或近白色背景\", \"黑色高对比正文\", \"红色品牌强调\", \"简洁居中的英雄区构图\", \"清晰按钮和行动层级\", \"可验证研究证据的视觉表达\"], \"avoid\": [\"未经证据支持的夸张科学效果\", \"削弱可验证性与可追溯性的表达\", \"复杂装饰导致信息层级不清\", \"把视觉观察结果表述为已确认的 CSS 或字体文件\"], \"provenance\": \"inferred\"}, \"unknowns\": [\"无法仅凭页面像素确认实际使用的字体家族、字重名称或 CSS 字体声明。\", \"无法从所附视图确认短视频的目标时长、叙事结构、旁白语言或字幕语言。\", \"无法从该视图确认除 English 之外的其他网站语言版本。\", \"无法从该视图确认移动应用的具体功能范围或已上线的应用商店版本。\", \"无法仅凭该页面确认“reach millions”“viral”等表述的实际业务效果。\", \"无法从该视图确认区块链实现的具体技术方案。\"], \"conflicts\": [], \"content_digest\": \"d06a6b7ceb121938c67f48ffd1d62171879a107df5684a2dbc3456d5cca00b98\"}, \"media_files\": 1, \"citable_line_count\": 64, \"source_snapshots_unchanged\": true}"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "ask_user",
+          "description": "用对话语言展示一份澄清表单。每个待决定的事项各有问题和选项，用户一次提交整份表单。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+            "properties": {
+              "question": {
+                "description": "用对话语言写简短的表单标题。",
+                "title": "Question",
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5,
+                "description": "按以下顺序，为每个尚未确定的事项各设一问：production_direction, target_seconds, narration_language, subtitle_languages, aspect。问题和用户可见的所有选项文字均使用对话语言。",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "production_direction"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "请用用户的语言询问：这支片会在哪里播放？你希望我们怎样讲这个故事？ 每个选项都应保留用户已说明的场合或叙事方式。受众信息放在 Brief 中，来源 URL 用于指明调研素材。"
+                        },
+                        "options": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "use_case": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "成片实际播放的场合，例如发布会或品牌官网首页。"
+                              },
+                              "treatment": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "根据网站证据，具体说明在该场合如何讲述产品故事。"
+                              }
+                            },
+                            "required": [
+                              "use_case",
+                              "treatment"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "question_language": {
+                          "type": "string",
+                          "description": "本问题使用的 BCP 47 语言代码，如 zh-CN 或 en。"
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "question",
+                        "options",
+                        "question_language"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "target_seconds"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "询问期望片长，问题中注明单位为秒。"
+                        },
+                        "options": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "question",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "narration_language"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "询问旁白要说哪种语言。每个选项标签只写一种语言。"
+                        },
+                        "options": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "value": {
+                                "type": "string",
+                                "description": "BCP 47 语言代码。"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "question",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "subtitle_languages"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "询问字幕需要哪些语言。每个选项标签写明其覆盖的语言。"
+                        },
+                        "options": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "value": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "description": "BCP 47 语言代码。"
+                                },
+                                "minItems": 1
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "question",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "aspect"
+                          ]
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "询问用户需要什么画幅。"
+                        },
+                        "options": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "16:9",
+                              "9:16",
+                              "1:1"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "question",
+                        "options"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "default_path": {
+                "default": "",
+                "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+                "title": "Default Path",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "items",
+              "default_path"
+            ],
+            "title": "PlanAskArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "answer",
+          "description": "仅提供信息，如能力说明、项目解释或闲聊，不创建方案或 Run。先在消息正文中给出答复，同时调用本工具；没有正文的 answer 会被拒绝。用户已点名的工作在创意方向达成一致后应展示为方案。官网视频在商定方向阶段可用有依据的总结及下一步问题结束本轮。",
+          "parameters": {
+            "$defs": {
+              "Brief": {
+                "additionalProperties": false,
+                "description": "结构化的对话需求，合并与来源由代码管理。每个字段都有值及来源，优先级为 user-stated > inferred > default。constraints 是带来源的约束数组。material_state 和 asked 由代码根据实际状态及提问记录维护。",
+                "properties": {
+                  "topic": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "audience": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "tone": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "production_direction": {
+                    "$ref": "#/$defs/BriefSlot_str_",
+                    "description": "将视频用途与叙事方式结合为一个创作方向。两者已知时才设此字段。如果只确定一项，先用 purpose 或 narrative_mode 保留该信息。时长、旁白语言、字幕语言和画幅各用独立字段。"
+                  },
+                  "purpose": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "target_seconds": {
+                    "$ref": "#/$defs/BriefSlot_int_"
+                  },
+                  "narrative_mode": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "narration_language": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "subtitle_languages": {
+                    "$ref": "#/$defs/BriefSlot_list_str__"
+                  },
+                  "aspect": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "voice_requirements": {
+                    "$ref": "#/$defs/BriefSlot_str_"
+                  },
+                  "must_include": {
+                    "$ref": "#/$defs/BriefSlot_list_str__"
+                  },
+                  "avoid": {
+                    "$ref": "#/$defs/BriefSlot_list_str__"
+                  },
+                  "success_criteria": {
+                    "$ref": "#/$defs/BriefSlot_list_str__"
+                  },
+                  "constraints": {
+                    "items": {
+                      "$ref": "#/$defs/BriefSlot_str_"
+                    },
+                    "title": "Constraints",
+                    "type": "array"
+                  },
+                  "material_state": {
+                    "$ref": "#/$defs/BriefSlot_Literal__none____pasted____attached___"
+                  },
+                  "asked": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Asked",
+                    "type": "array"
+                  }
+                },
+                "title": "Brief",
+                "type": "object"
+              },
+              "BriefSlotSource": {
+                "description": "单个 Brief 字段值的来源。合并优先级依次为用户陈述、推断和默认值。",
+                "enum": [
+                  "user-stated",
+                  "inferred",
+                  "default"
+                ],
+                "title": "BriefSlotSource",
+                "type": "string"
+              },
+              "BriefSlot_Literal__none____pasted____attached___": {
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "none",
+                          "pasted",
+                          "attached"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Value"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/BriefSlotSource",
+                    "default": "default"
+                  }
+                },
+                "title": "BriefSlot[Literal['none', 'pasted', 'attached']]",
+                "type": "object"
+              },
+              "BriefSlot_int_": {
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Value"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/BriefSlotSource",
+                    "default": "default"
+                  }
+                },
+                "title": "BriefSlot[int]",
+                "type": "object"
+              },
+              "BriefSlot_list_str__": {
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Value"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/BriefSlotSource",
+                    "default": "default"
+                  }
+                },
+                "title": "BriefSlot[list[str]]",
+                "type": "object"
+              },
+              "BriefSlot_str_": {
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Value"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/BriefSlotSource",
+                    "default": "default"
+                  }
+                },
+                "title": "BriefSlot[str]",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+            "properties": {
+              "brief": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Brief"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "本轮 Brief 更新（如有），规则与其他工具一致。"
+              },
+              "material_text": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "用户本轮明确声明为自有素材的逐字原文，其他情况填 null。",
+                "title": "Material Text"
+              },
+              "material_urls": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
+                "title": "Material Urls"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "title": "PlanAnswerArgs",
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "temperature": 0.2,
+    "reasoning_split": true,
+    "thinking": {
+      "type": "disabled"
+    }
+  }
+}

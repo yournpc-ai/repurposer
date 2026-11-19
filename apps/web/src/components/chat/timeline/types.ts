@@ -184,6 +184,11 @@ export interface CandidateMemberPayload {
 }
 
 export interface BriefQuestionItem {
+  decision_page?: {
+    slots: string[]
+    title: string
+    choices: Record<string, string>[]
+  } | null
   slot: string
   question: string
   options?: { id: string; label: string; description?: string }[]
@@ -194,6 +199,7 @@ export interface BriefQuestionItem {
 }
 
 export interface BriefAnswerItem {
+  page_slots?: string[] | null
   slot: string
   kind: "option" | "freeform"
   option_id?: string | null
@@ -266,6 +272,7 @@ export interface AudioPlaybackBlock {
     snapshot_id: string
     digest: string
     scene_id?: string | null
+    scene_label?: string | null
     title: string
     duration_seconds: number
     peaks: number[]
@@ -277,6 +284,11 @@ export type MessageBlock = VideoStoryboardBlock | SystemNoticeBlock | AudioPlayb
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
+  mediaProgress?: boolean
+  mediaOpeningId?: string
+  sceneOrder?: string[]
+  continuationTurnId?: string
+
   id: string
   /** The RENDER key law (2026-10-19 interim_prose-flicker fix): React keys the
    * flow by `birthKey ?? id`. Stamped ONCE at birth for rows whose semantic
@@ -356,6 +368,7 @@ export interface OverlayMessage {
     questionId?: string
     answerKind?: QuestionAnswer["kind"]
     items?: { question: string; answer: string; muted?: boolean }[]
+    productionNote?: string
   }
   /** The canvas product this turn was pointed at (ADR-041 D8, WRITE-RETIRED
    * ADR-058 — pointing is an @mention chip now): old server rows still carry
@@ -530,12 +543,6 @@ export interface QuestionMessage {
   suggestions?: unknown
   /** Server-stamped system notices and domain component references. */
   blocks?: MessageBlock[]
-  /** ask 预览帧的乐观 dock (2026-09-09): the ask object closed stream-side
-   * but the turn's tail — and with it the row's server-side birth — is
-   * still generating, so this id does NOT exist server-side yet. A click
-   * stashes and fires at the envelope's authoritative dock; a flip or
-   * turn.failed rolls the preview back. Never persisted anywhere. */
-  preview?: boolean
   /** Per-conversation transcript position; null only on legacy rows. */
   seq?: number | null
   created_at?: string
@@ -585,6 +592,7 @@ export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | {
       kind: "activity"
+      workRunId?: string
       activity: ActivityRowFrame
       rowKey: string
       turnId?: string
@@ -594,6 +602,8 @@ export type ConversationUnit =
     }
   | {
       kind: "activityFold"
+      liveActivity?: ActivityRowFrame
+      workRunIds?: string[]
       rows: ActivityRowFrame[]
       /** A contiguous failure settles this same segment; isolated failures
        * remain standalone activity units instead. */

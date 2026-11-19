@@ -1,0 +1,44 @@
+{# 从文本和实际附上的 PNG 提取网站 BrandProfile。 #}
+直接检查所附网站 PNG 视图的像素，结合已固定的文本行和画面提取证据。
+
+当前 Brief 字段：
+{{ brief_json }}
+
+不可变的网站证据（citable_lines、SourceSnapshot 和视图标识）：
+{{ evidence_json }}
+
+dominant_color_evidence 来自所附图片的确定性像素测量。当测量值与画面中的颜色用途相符，用其准确的十六进制值填写推断的品牌色，不要换成近似色。像素测量只能说明视觉表现，无法证实 CSS。
+
+返回一个 JSON 对象，严格使用以下键名和结构：
+{
+  "positioning": "用一句简明的话概括品牌定位",
+  "claims": [
+    {"text": "有原文可引的产品主张", "line_ids": ["line_0000"], "kind": "fact"}
+  ],
+  "taglines": [
+    {"text": "品牌宣言原文", "line_ids": ["line_0000"]}
+  ],
+  "colors": [
+    {"value": "#A1B2C3", "role": "primary", "source": "visual", "confidence": "inferred", "source_refs": []}
+  ],
+  "typography": [
+    {"candidate": "接近 Inter", "weight": "", "source": "visual", "confidence": "inferred", "source_refs": []}
+  ],
+  "brand_assets": [
+    {"kind": "wordmark", "ref": "画面中可见的文字标志描述", "source_refs": []}
+  ],
+  "creative_direction": {
+    "summary": "依据证据提出克制的视觉方向",
+    "media_preferences": [],
+    "avoid": [],
+    "provenance": "inferred"
+  },
+  "unknowns": ["尚无法确认的重要事实"],
+  "conflicts": ["来源间的实际矛盾，无则用空列表"]
+}
+
+解释性的主张用 kind=inferred。引用的品牌宣言必须逐字保留。只有证据明确给出 CSS/DOM 事实时，才可据此确认，否则用 source=visual 和 confidence=inferred。仅凭像素只能说字体与什么相似。标志、文字标志、图标都需要可见或明确证据。creative_direction 是解读，provenance 必须为 inferred。未知和矛盾分别写入 unknowns 和 conflicts，不猜测。
+
+严格保留上面的键名和嵌套对象结构。不要使用 positioning_and_claims、typography_candidates、logo_wordmark_icon_assets、hex 等别名，不将嵌套对象替换为字符串。
+
+不要生成媒体、分镜、TTS、音乐、制作任务、来源摘要、extractor_version 或 content_digest。标识由服务端负责。

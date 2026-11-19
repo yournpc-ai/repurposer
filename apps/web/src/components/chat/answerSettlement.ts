@@ -113,7 +113,7 @@ export function spliceAnswerEnvelope(
           runId: followUp?.workflow_run_id ?? m.runId,
           turnId: followUp?.turn_id ?? m.turnId,
           ...(followUp
-            ? { blocks: followUp.blocks?.length ? followUp.blocks : undefined, outputRefs: triggerOutputRefs(followUp.intent) }
+            ? { serverMessageId: followUp.id, blocks: followUp.blocks?.length ? followUp.blocks : undefined, outputRefs: triggerOutputRefs(followUp.intent) }
             : {}),
           ...(followUp?.seq != null ? { seq: followUp.seq } : {}),
           // Re-anchor on the server row's created_at — the preview's client

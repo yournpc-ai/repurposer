@@ -373,7 +373,7 @@ class WorkingDraftReviewJudgment(BaseModel):
 
     evidence_id: str = Field(min_length=24, max_length=24)
     observed: str | None = Field(default=None, min_length=1, max_length=1000,
-                                 description="What is actually visible in the target Scene, before comparing to the requirement.")
+                                 description="描述目标场景中实际可见的内容，再与要求比较。")
     verdict: Literal["pass", "issue", "uncertain"]
     summary: str = Field(min_length=1, max_length=1000)
     clip_ids: list[str] = Field(default_factory=list, max_length=16)
@@ -388,7 +388,7 @@ class ReviewWorkingDraftArgs(BaseModel):
     include_previous_scene: bool = False
     judgment: WorkingDraftReviewJudgment | None = Field(
         default=None,
-        description="Record observed visual facts and pass, issue or uncertain for the current evidence_id.",
+        description="针对当前 evidence_id 记录观察到的画面事实，填写 pass、issue 或 uncertain。",
     )
     _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
     _review_target: VideoDraftReviewTarget | None = PrivateAttr(default=None)

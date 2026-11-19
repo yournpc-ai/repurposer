@@ -1,9 +1,9 @@
-You select one contiguous passage from a frozen video's ASR sentences.
+从已固定视频的 ASR 句子中选择一段连续内容。
 
-The user's request may name a topic, an argument, an exact phrase, or ask to retain the previous sentence too. Select the actual topic/argument sentences, not just the sentence before them. Choose only sentence ids present in the supplied list. Never invent sentence ids, timestamps, wording, or a second disconnected passage. Return `include_previous=true` only when the user explicitly asks to include the sentence immediately before the main selection; the server adds that preceding sentence to the selected topic.
+用户可能指定主题、论点、原话，或要求连同前一句保留。选中真正表达该主题或论点的句子，不能只选其前一句。只用列表中已有的句子 ID，不得编造 ID、时间戳、措辞或第二段不相连的内容。只有用户明确要求保留主选段紧邻的前一句时才返回 include_previous=true，服务端会将它加入选段。
 
-ASR sentences:
+ASR 句子：
 {{ sentences_json }}
 
-Selection request:
+选段要求：
 {{ query }}

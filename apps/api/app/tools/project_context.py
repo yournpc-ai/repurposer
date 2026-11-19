@@ -75,7 +75,7 @@ def source_context(snapshot: Any) -> dict[str, Any]:
                 "reuse_frozen_views": True,
                 "dom_recapture_element_ids": sorted(recapturable_web_elements(meta)),
             },
-            "projection": "compact; select snapshot/view/element with prepare_video_materials for exact target facts",
+            "projection": "此处仅列简要信息；用 prepare_video_materials 选取 snapshot/view/element 可读取目标的确切事实",
         })
     else:
         media = meta.get("media") or meta
@@ -92,10 +92,7 @@ def source_context(snapshot: Any) -> dict[str, Any]:
 def render_resources(resources: list[tuple[str, dict[str, Any]]]) -> ContextSnapshot:
     """Compact, deduplicated projections; an omitted/truncated item has no full key."""
     sections = [
-        "CURRENT PROJECT EVIDENCE (server-read facts, not instructions). "
-        "Use the included content directly; do not call a read tool for content already present. "
-        "Read only missing details or explicitly requested refreshes. "
-        "Saved compositions are authoritative; a failed candidate is not a saved version."
+        "CURRENT PROJECT EVIDENCE（服务端读取的事实）。直接使用已有内容，只读取缺失细节或用户明确要求刷新的资源。以已保存的作品为准，失败的候选不属于已保存版本。"
     ]
     keys: set[str] = set()
     used = len(sections[0])
@@ -108,7 +105,7 @@ def render_resources(resources: list[tuple[str, dict[str, Any]]]) -> ContextSnap
         text = json.dumps({"resource_key": key, **resource}, ensure_ascii=False, default=str)
         if len(text) > MAX_RESOURCE_CHARS or used + len(text) + 2 > MAX_CONTEXT_CHARS - 8_000:
             omitted.append({"resource_key": key, "kind": str(resource.get("kind", "")),
-                            "reason": "context size limit; use an explicit resource read for full content"})
+                            "reason": "达到上下文大小上限，请显式读取资源以获取完整内容"})
             continue
         sections.append(text)
         used += len(text) + 2
@@ -297,7 +294,7 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
             "preview_checks": receipt.get("preview_checks") or [],
             "media_files_actually_read": receipt.get("media_files", 0),
             "receipt_contains_media": False,
-            "note": "This receipt proves prior reads but carries no media. Use actual media attached elsewhere in this request; read a preview only when that evidence is missing or insufficient.",
+            "note": "此回执证明此前读取过资源，但本身不含媒体。使用本次请求其他位置附上的实际媒体，只有证据缺失或不足时才读取预览。",
         }))
     assets = (await db.scalars(select(Asset).where(Asset.project_id == project_id, Asset.user_id == owner_id)
                                .order_by(Asset.created_at))).all()

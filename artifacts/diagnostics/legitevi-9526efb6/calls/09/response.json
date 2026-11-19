@@ -1,0 +1,58 @@
+{
+  "phase": "response",
+  "model_call_id": "e5f0980f-b20b-426e-93bb-0f8649c9f25b",
+  "provider": "minimax",
+  "model": "minimax-m3",
+  "finished_at": "2026-11-19T09:17:50.416659+00:00",
+  "conversation_id": "416f235c-4cbd-4e51-bacd-0a134751a10f",
+  "turn_id": "9526efb6-a3ee-47b9-b4dd-132f7cf9c871",
+  "project_id": "07d486a1-0073-465c-98fa-793ca8b1732b",
+  "response": {
+    "id": "074df1b98a3df426e8bc0854e6bd5fdd",
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "call_01a1f31916ca7484aa2642e9",
+              "type": "function",
+              "function": {
+                "name": "answer",
+                "arguments": "{\"brief\":{\"topic\":{\"value\":\"LegitEvi 官网宣传片\",\"source\":\"inferred\"},\"audience\":{\"value\":\"高校科研管理者、技术政策制定者及产学研合作领域从业者\",\"source\":\"user-stated\"},\"tone\":{\"value\":\"rational\",\"source\":\"user-stated\"},\"purpose\":{\"value\":\"品牌官网首页或线上产品介绍\",\"source\":\"inferred\"},\"production_direction\":{\"value\":\"用于品牌官网首页与线上产品介绍，以产品能力为主线：先呈现短视频传播中缺乏引用与学术问责的问题，再讲清 LegitEvi 将同行评审论文转为可验证短视频的转化链路与证据回溯机制，落到科研影响力与透明度价值，收尾给出行动号召\",\"source\":\"inferred\"},\"narrative_mode\":{\"value\":\"问题到方案的递进结构，末段以价值主张收束\",\"source\":\"inferred\"},\"target_seconds\":{\"value\":45,\"source\":\"default\"},\"narration_language\":{\"value\":\"zh-CN\",\"source\":\"default\"},\"subtitle_languages\":{\"value\":[\"zh-CN\",\"en-US\"],\"source\":\"default\"},\"aspect\":{\"value\":\"16:9\",\"source\":\"default\"},\"must_include\":{\"value\":[\"论文到短视频的转化链路\",\"每条视频可回溯至原始论文的证据机制\",\"科学家、创作者、公众三类用户分工\",\"引用应像标签一样普及这一主张\"],\"source\":\"inferred\"},\"avoid\":[\"未经证据支持的夸张科学效果\",\"无法核实的业务效果表述\"]},\"pending_disposition\":\"answer\"}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "created": 1795079866,
+    "model": "MiniMax-M3",
+    "object": "chat.completion",
+    "usage": {
+      "total_tokens": 26260,
+      "total_characters": 0,
+      "prompt_tokens": 25685,
+      "completion_tokens": 575,
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 23989
+      }
+    },
+    "input_sensitive": false,
+    "output_sensitive": false,
+    "input_sensitive_type": 0,
+    "output_sensitive_type": 0,
+    "output_sensitive_int": 0,
+    "service_tier": "standard",
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": ""
+    }
+  },
+  "error": null
+}

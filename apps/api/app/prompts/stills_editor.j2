@@ -1,54 +1,54 @@
-You are cutting one photo-slideshow clip to a fixed narration span.
+为固定长度的旁白剪辑一段照片轮播。
 
-## Inputs
+## 输入
 
-The narration span ({{ span_seconds }}s) arrives as timestamped cue lines (`[12.3-18.7] the spoken words`). The backing visuals are listed below with their anchors. You decide the **shot list**: about {{ target_beats }} beats, each = one visual holding over one slice of the narration, with motion and emphasis.
+旁白覆盖 {{ span_seconds }} 秒，以带时间的提示行提供（如 `[12.3-18.7] 口播原文`）。下方列出可用画面及其锚点。请设计镜头表，约 {{ target_beats }} 个节拍，每拍用一个画面覆盖一小段旁白，并安排运动和强调方式。
 
-## Backing visuals
+## 可用画面
 
 {% for img in images %}
-- {{ img.ref }}: {{ img.label }}{% if img.has_face %} (has a face{% if img.subject_box %}, subject box {{ img.subject_box }}{% endif %}){% endif %}{% if img.argument_ids %} — backs arguments {{ img.argument_ids | join(", ") }}{% endif %}
+- {{ img.ref }}：{{ img.label }}{% if img.has_face %}（有人脸{% if img.subject_box %}，主体框 {{ img.subject_box }}{% endif %}）{% endif %}{% if img.argument_ids %}，支持论点 {{ img.argument_ids | join(", ") }}{% endif %}
 {% endfor %}
 
 {% if emphasis_hints %}
-## Where the narration peaks (evidence from the material understanding)
+## 旁白中的高潮（来自素材分析）
 
 {% for h in emphasis_hints %}
-- {{ h.kind }}: "{{ h.text or h.word }}"{% if h.at is defined and h.at is not none %} @{{ h.at }}s{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
+- {{ h.kind }}：“{{ h.text or h.word }}”{% if h.at is defined and h.at is not none %}（{{ h.at }} 秒）{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if handoff %}
-## Handoff state (本段在两段式的逐拍段 — the beats before you are already cut)
+## 交接状态（按大纲逐拍剪辑，此前的节拍已剪好）
 
-- Section role: {{ handoff.role }}{% if handoff.note %} — {{ handoff.note }}{% endif %}
-- Your section span: [{{ handoff.span_start }}s – {{ handoff.span_end }}s]
-- Visuals already used (never reuse): {{ handoff.used_image_refs | join(", ") or "none" }}
-- Your assigned visuals (use only these): {{ handoff.assigned_image_refs | join(", ") }}
-- Previous beat's out-point: motion={{ handoff.last_motion }}, emphasis={{ handoff.last_emphasis }} — do not open with the same device.
+- 本节作用：{{ handoff.role }}{% if handoff.note %}，{{ handoff.note }}{% endif %}
+- 本节范围：[{{ handoff.span_start }} 秒至 {{ handoff.span_end }} 秒]
+- 已用画面（不得复用）：{{ handoff.used_image_refs | join(", ") or "无" }}
+- 本节分配的画面（只可用这些）：{{ handoff.assigned_image_refs | join(", ") }}
+- 上一拍结束时的运动与强调方式：motion={{ handoff.last_motion }}，emphasis={{ handoff.last_emphasis }}。本节开头换一种手法。
 {% endif %}
 
-## Rules
+## 规则
 
-- One visual at most once. Beat boundaries land at sentence/clause boundaries — you never write `start`/`end`: anchor each beat with its opening words (`marker`, verbatim from the cue lines) and optionally copy the cue seconds into `approx_start`. The first beat starts at the span start by construction — its `marker` should be the span's opening words.
-- The first beat IS the hook: pick the visual whose subject matches the opening phrase.
-- `motion` is one of `none` / `zoom_in` / `zoom_out` / `pan_left` / `pan_right`; `motion_rate` is the endpoint scale (1.05–1.20 when moving).
-- `emphasis` is one of `none` / `hold` / `punch_in` / `caption_pop`; keep it scarce and vary the device.
-- Mark `reset: true` on deliberate breathing shots (wider, slower, quieter).
-- Every beat carries a one-line `note`: why this shot, here (evidence for review).
+- 每个画面最多用一次。节拍边界选在句子或分句之间，不写 start/end。marker 原样摘录该拍旁白的开头，可将对应秒数抄入 approx_start。第一拍从整段起点开始，marker 使用整段的开头原文。
+- 第一拍负责吸引注意，选择主体与开头措辞相符的画面。
+- motion 仅可选 none / zoom_in / zoom_out / pan_left / pan_right。motion_rate 为终点缩放比例，有运动时取 1.05–1.20。
+- emphasis 仅可选 none / hold / punch_in / caption_pop。少用强调，手法要有变化。
+- 刻意留白、让观众缓口气的镜头（更宽、更慢、更安静）标记 reset: true。
+- 每拍用一行 note 说明为何此处用这个镜头，供审阅。
 
-## Narration span
+## 旁白原文
 
 {{ span_transcript }}
 
-## Output Format
+## 输出格式
 
-Please output valid JSON only, with no explanations or markdown code blocks.
+仅输出有效 JSON，不加解释或 Markdown 代码块。
 
 {
-  "arc": "one line: the emotional journey of this clip",
+  "arc": "用一句话概括这一段的情绪走向",
   "beats": [
-    {"image_ref": "image 1", "marker": "the opening words of this beat's narration", "approx_start": 0.0, "motion": "zoom_in", "motion_rate": 1.1, "emphasis": "none", "reset": false, "note": "why this shot here"},
+    {"image_ref": "image 1", "marker": "本拍旁白开头的原话", "approx_start": 0.0, "motion": "zoom_in", "motion_rate": 1.1, "emphasis": "none", "reset": false, "note": "此处选用这个镜头的原因"},
     {"image_ref": "image 2", "marker": "…", "motion": "none", "motion_rate": 1.0, "emphasis": "caption_pop", "reset": false, "note": "…"}
   ]
 }

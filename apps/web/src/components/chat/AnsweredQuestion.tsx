@@ -20,6 +20,7 @@ interface AnsweredQuestionProps {
   /** Resolved answer line. */
   answer: string
   items?: { question: string; answer: string; muted?: boolean }[]
+  productionNote?: string
   /** Bail/supersede answers render muted — a graceful exit, not a failure. */
   muted?: boolean
   hydrated?: boolean
@@ -30,6 +31,7 @@ export function AnsweredQuestion({
   questionDetail,
   answer,
   items,
+  productionNote,
   muted,
   hydrated,
 }: AnsweredQuestionProps) {
@@ -88,6 +90,12 @@ export function AnsweredQuestion({
               </div>
             </>
           )}
+          {productionNote ? (
+            <div className="space-y-1 border-t border-subtle pt-2">
+              <p className="text-xs text-muted-foreground">{t("questionDock.productionInstructions")}</p>
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{productionNote}</p>
+            </div>
+          ) : null}
         </div>
       </MessageContent>
     </Message>

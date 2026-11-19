@@ -1,0 +1,79 @@
+{
+  "invalid": "Validation failed for tool \"ask\":\n  - questions.0.question: must have required properties question\n\nReceived arguments:\n{\n  \"questions\": [\n    {\n      \"options\": [\n        {\n          \"label\": \"官网\"\n        },\n        {\n          \"label\": \"发布会\"\n        }\n      ]\n    }\n  ]\n}",
+  "valid": {
+    "pendingBeforeAnswer": true,
+    "form": [
+      {
+        "id": "q0",
+        "question": "希望在哪播放？",
+        "header": null,
+        "options": [
+          {
+            "label": "官网"
+          },
+          {
+            "label": "发布会"
+          }
+        ],
+        "customId": "q0_own",
+        "multi": false
+      }
+    ],
+    "accepted": "希望在哪播放？\nAnswer: 官网"
+  },
+  "declined": "The person skipped the questions: decide yourself and say what you chose.",
+  "deliveryFailure": "The person skipped the questions: decide yourself and say what you chose.",
+  "schema": {
+    "type": "object",
+    "required": [
+      "questions"
+    ],
+    "properties": {
+      "questions": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "required": [
+            "question",
+            "options"
+          ],
+          "properties": {
+            "question": {
+              "type": "string",
+              "description": "The question, as a full sentence."
+            },
+            "header": {
+              "type": "string",
+              "description": "A label of a few words."
+            },
+            "options": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 5,
+              "items": {
+                "type": "object",
+                "required": [
+                  "label"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multiSelect": {
+              "type": "boolean",
+              "description": "More than one option may be chosen."
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.models.schemas import (
     Brief,
+    BriefQuestionItem,
     BriefSlot,
     BriefSlotSource,
     CreativeState,
@@ -16,9 +17,8 @@ from app.models.schemas import (
 )
 
 WEBSITE_PROMO_REQUIRED_SLOTS = (
-    "purpose",
+    "production_direction",
     "target_seconds",
-    "narrative_mode",
     "narration_language",
     "subtitle_languages",
     "aspect",
@@ -86,13 +86,50 @@ def _put(brief: Brief, slot: str, value: Any) -> None:
     setattr(brief, slot, BriefSlot(value=value, source=BriefSlotSource.USER_STATED))
 
 
+def resolve_legacy_direction(brief: Brief) -> None:
+    """Promote a complete legacy choice only on an active authoring Brief."""
+    if brief.production_direction.value or not (brief.purpose.value and brief.narrative_mode.value):
+        return
+    sources = {brief.purpose.source, brief.narrative_mode.source}
+    source = BriefSlotSource.USER_STATED
+    if BriefSlotSource.DEFAULT in sources:
+        source = BriefSlotSource.DEFAULT
+    elif BriefSlotSource.INFERRED in sources:
+        source = BriefSlotSource.INFERRED
+    brief.production_direction = BriefSlot(
+        value=" · ".join(dict.fromkeys((brief.purpose.value, brief.narrative_mode.value))),
+        source=source,
+    )
+
+
+def direction_with_known_details(brief: Brief, direction: str) -> str:
+    """Preserve the known half when a custom answer completes a partial legacy Brief."""
+    details = stated_direction_inputs(brief)
+    if brief.production_direction.value or len(details) != 1:
+        return direction
+    known = next(iter(details.values()))
+    return direction if known.casefold() in direction.casefold() else f"{known} · {direction}"
+
+
+def stated_direction_inputs(brief: Brief) -> dict[str, str]:
+    return {
+        name: slot.value for name in ("purpose", "narrative_mode")
+        if (slot := getattr(brief, name)).value and slot.source == BriefSlotSource.USER_STATED
+    }
+
+
 def brief_with_user_constraints(user_text: str, stored: Brief | None = None) -> Brief:
     """Merge literal website-promo constraints into the existing Brief slots."""
     brief = (stored or Brief()).model_copy(deep=True)
-    text = user_text or ""
+    text = _URL_RE.sub(" ", user_text or "").strip()
     if not _PROMO_RE.search(text):
+        resolve_legacy_direction(brief)
         return brief
-    if re.search(r"官网|website", text, re.IGNORECASE):
+    if re.search(
+        r"官网(?:首页|首屏|宣传片|片)|(?:发布在|放在|用在|用于|投放在)\s*(?:品牌)?官网"
+        r"|\b(?:on (?:our |the |this )?(?:website|homepage)|homepage (?:hero|film|promo|video))\b",
+        text, re.IGNORECASE,
+    ):
         _put(brief, "purpose", "website")
     seconds = re.search(r"(?<!\d)(\d{1,3})\s*(?:秒|seconds?|secs?)(?![\dA-Za-z])", text, re.IGNORECASE)
     if seconds:
@@ -126,8 +163,12 @@ def brief_with_user_constraints(user_text: str, stored: Brief | None = None) -> 
         subtitle_languages.append("en")
     if re.search(r"中文字幕|chinese\s+subtitles?", text, re.IGNORECASE):
         subtitle_languages.append("zh")
+    if re.search(r"帧|fps|配乐|bgm|music|电子|electronic|[一二两三四五六七八九十\d]\s*幕|\bscenes?\b", text, re.I):
+        if not any(item.value == user_text for item in brief.constraints):
+            brief.constraints.append(BriefSlot(value=user_text, source=BriefSlotSource.USER_STATED))
     if subtitle_languages:
         _put(brief, "subtitle_languages", subtitle_languages)
+    resolve_legacy_direction(brief)
     return brief
 
 
@@ -215,21 +256,28 @@ def website_promo_default_brief(
     snapshots: list[Any] | tuple[Any, ...] = (),
     *,
     fallback_language: str = "en",
+    legacy_split_direction: bool = False,
 ) -> Brief:
     """Fill only missing fields after a group skip; user answers keep precedence."""
     brief = stored.model_copy(deep=True)
     language = website_promo_evidence_language(snapshots, fallback=fallback_language)
     values = {
-        "purpose": "website",
         "target_seconds": 30,
-        "narrative_mode": "product_evidence",
         "narration_language": language,
         "subtitle_languages": [language],
         "aspect": "16:9",
     }
+    if legacy_split_direction:
+        values.update(purpose="website", narrative_mode="product_evidence")
     for slot, value in values.items():
         if not getattr(brief, slot).value:
             setattr(brief, slot, BriefSlot(value=value, source=BriefSlotSource.DEFAULT))
+    resolve_legacy_direction(brief)
+    if not brief.production_direction.value:
+        brief.production_direction = BriefSlot(
+            value=f"{brief.purpose.value or 'website'} · {brief.narrative_mode.value or 'product_evidence'}",
+            source=BriefSlotSource.DEFAULT,
+        )
     if not brief.tone.value:
         brief.tone = BriefSlot(value="minimal_tech", source=BriefSlotSource.DEFAULT)
     return brief
@@ -332,8 +380,6 @@ def compute_source_readiness(
         required_next = "prepare_video_materials"
     elif not brand_profile_ready:
         required_next = "analyze_brand"
-    elif missing:
-        required_next = "ask_user"
     else:
         required_next = "design_video"
     return SourceReadiness(
@@ -355,19 +401,19 @@ def compute_source_readiness(
 
 def render_readiness_context(readiness: SourceReadiness) -> str:
     lines = [
-        f"CURRENT ROUTE: {readiness.task_kind}",
-        "CURRENT READINESS:",
-        f"- Has URL: {str(readiness.has_url).lower()}",
+        f"当前路径：{readiness.task_kind}",
+        "当前准备状态：",
+        f"- 含 URL：{str(readiness.has_url).lower()}",
         *(f"- URL: {url}" for url in readiness.urls),
-        f"- Capture pending: {str(readiness.capture_pending).lower()}",
-        f"- Capture failed: {str(readiness.capture_failed).lower()}",
-        f"- Capture ready: {str(readiness.capture_ready).lower()}",
-        f"- Text ready: {str(readiness.text_ready).lower()}",
-        f"- Required views ready: {str(readiness.required_views_ready).lower()}",
-        f"- Brand profile ready: {str(readiness.brand_profile_ready).lower()}",
-        f"- Brief ready: {str(readiness.brief_ready).lower()}",
-        "- Brief missing slots: [" + ", ".join(readiness.brief_missing_slots) + "]",
-        f"- Draft present: {str(readiness.draft_present).lower()}",
+        f"- 等待采集：{str(readiness.capture_pending).lower()}",
+        f"- 采集失败：{str(readiness.capture_failed).lower()}",
+        f"- 采集已就绪：{str(readiness.capture_ready).lower()}",
+        f"- 正文已就绪：{str(readiness.text_ready).lower()}",
+        f"- 所需视图已就绪：{str(readiness.required_views_ready).lower()}",
+        f"- 品牌档案已就绪：{str(readiness.brand_profile_ready).lower()}",
+        f"- Brief 已就绪：{str(readiness.brief_ready).lower()}",
+        "- Brief 缺失字段：[" + ", ".join(readiness.brief_missing_slots) + "]",
+        f"- 已有草稿：{str(readiness.draft_present).lower()}",
     ]
     return "\n".join(lines)
 
@@ -379,10 +425,93 @@ def _narration_option_is_packaged(label: str) -> bool:
     ))
 
 
+def _valid_option_value(slot: str, value: Any) -> bool:
+    language = r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*"
+    if slot == "target_seconds":
+        return type(value) is int and value > 0
+    if slot == "aspect":
+        return value in ("16:9", "9:16", "1:1")
+    if slot == "narration_language":
+        return isinstance(value, str) and bool(re.fullmatch(language, value))
+    if slot == "subtitle_languages":
+        return isinstance(value, list) and bool(value) and all(
+            isinstance(code, str) and re.fullmatch(language, code) for code in value
+        )
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _website_direction_title(item: BriefQuestionItem, brief: Brief) -> str:
+    locale = item.question_language or ""
+    if not locale:  # Older tool clients supplied only the localized question.
+        if re.search(r"宣传片|这支|在哪里|怎么|讲给谁", item.question):
+            locale = "zh"
+        elif re.search(r"宣傳片|這支|在哪裡|怎麼|講給誰", item.question):
+            locale = "zh-Hant"
+        elif re.match(r"\s*(where|who|how|what|which)\b", item.question, re.I):
+            locale = "en"
+    language = locale.lower().split("-")
+    if language[0] not in {"zh", "en"}:
+        return item.question
+    traditional = bool(set(language) & {"hant", "tw", "hk", "mo"})
+    known = stated_direction_inputs(brief)
+    if "purpose" in known:
+        titles = ("希望用怎样的方式来讲这个故事？", "希望用怎樣的方式來講這個故事？",
+                  "How would you like us to tell the story?")
+    elif "narrative_mode" in known:
+        titles = ("这支片子主要准备在哪里播放？", "這支片子主要準備在哪裡播放？",
+                  "Where do you plan to show the film?")
+    else:
+        titles = ("这支片子主要用在哪里，你希望怎么讲？", "這支片子主要用在哪裡，你希望怎麼講？",
+                  "Where will you show the film, and how would you like us to tell the story?")
+    zh, zh_hant, en = titles
+    if language[0] == "en":
+        return en
+    return zh_hant if traditional else zh
+
+
+def project_website_question_pages(items: list[BriefQuestionItem], brief: Brief) -> list[BriefQuestionItem]:
+    from app.models.schemas import BriefDecisionPage
+
+    by_slot = {item.slot: item for item in items}
+    ordered = []
+    for slot in WEBSITE_PROMO_REQUIRED_SLOTS:
+        item = by_slot.get(slot)
+        if item is None:
+            continue
+        title = _website_direction_title(item, brief) if slot == "production_direction" else item.question
+        page = BriefDecisionPage(
+            slots=[slot], title=title, choices=[{slot: option.id} for option in item.options],
+        )
+        ordered.append(item.model_copy(update={"question": title, "decision_page": page}))
+    return ordered
+
+
+def _website_measure_options(item: BriefQuestionItem) -> BriefQuestionItem:
+    """Freeze factual choices from their values before preview, digest and settlement."""
+    values = dict(item.option_values or {option.id: option.label for option in item.options})
+    options = []
+    for option in item.options:
+        value = values.get(option.id)
+        if item.slot == "target_seconds" and isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+            value = int(value)
+            values[option.id] = value
+        if not _valid_option_value(item.slot, value):
+            raise ValueError(f"{item.slot} options need valid typed values for every label")
+        if item.slot == "target_seconds":
+            unit = "秒" if "秒" in item.question or "秒" in option.label else "s"
+            label = f"{value} {unit}"
+        else:
+            label = value
+        options.append(option.model_copy(update={"label": label, "description": ""}))
+    return item.model_copy(update={"options": options, "option_values": values})
+
+
 def website_promo_question_items(items: list[Any], brief: Brief) -> list[Any]:
-    """Validate one complete clarification group against the current Brief."""
+    """Validate the selected clarification fields against the current Brief."""
     from app.models.schemas import missing_brief_question_items
 
+    brief = brief.model_copy(deep=True)
+    resolve_legacy_direction(brief)
     expected = [
         slot for slot in WEBSITE_PROMO_REQUIRED_SLOTS if not getattr(brief, slot).value
     ]
@@ -395,17 +524,24 @@ def website_promo_question_items(items: list[Any], brief: Brief) -> list[Any]:
         )
     group = missing_brief_question_items(items, brief)
     actual = [item.slot for item in group]
-    if len(actual) != len(expected) or set(actual) != set(expected):
+    if not actual or len(set(actual)) != len(actual) or not set(actual) <= set(expected):
         raise ValueError(
-            "the clarification group must cover exactly the current missing fields: "
+            "ask only about unsettled fields from: "
             + ", ".join(expected)
         )
-    for item in group:
+    for index, item in enumerate(group):
         option_ids = [option.id for option in item.options]
         if len(option_ids) > 3 or len(option_ids) != len(set(option_ids)):
             raise ValueError(f"{item.slot} needs unique options within the 1-3 bound")
         if any(option_id not in {"1", "2", "3"} for option_id in option_ids):
             raise ValueError(f"{item.slot} options use numeric ids 1-3")
+        if item.slot in {"target_seconds", "aspect"}:
+            item = group[index] = _website_measure_options(item)
+        if item.option_values is not None and (
+            set(item.option_values) != set(option_ids)
+            or not all(_valid_option_value(item.slot, value) for value in item.option_values.values())
+        ):
+            raise ValueError(f"{item.slot} options need valid typed values for every label")
         if item.slot == "narration_language" and any(
             _narration_option_is_packaged(option.label) for option in item.options
         ):
@@ -413,7 +549,7 @@ def website_promo_question_items(items: list[Any], brief: Brief) -> list[Any]:
                 "narration_language accepts exactly one spoken language per Scene; "
                 "do not offer bilingual or subtitle-packaged options"
             )
-    return group
+    return project_website_question_pages(group, brief)
 
 
 def creative_state_for_pending(pending: Any) -> CreativeState | None:

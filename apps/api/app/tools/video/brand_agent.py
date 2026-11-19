@@ -225,10 +225,8 @@ brand_profile_agent: Agent[BrandProfileExtraction] = Agent(
     prompt="video/brand_profile.j2",
     schema=BrandProfileExtraction,
     system=(
-        "You are a brand evidence analyst. Ground every factual statement in the supplied "
-        "citable lines and actually attached page images. Distinguish source facts from "
-        "visual inference and unknowns. Preserve quoted source taglines exactly. Never "
-        "claim a font is a CSS fact from pixels alone. Output valid JSON and no commentary."
+        "你负责分析品牌证据。每个事实陈述都要有可引用的原文行和实际附上的页面图片作依据。区分来源事实、视觉推断及未知信息。"
+        "逐字保留引用的品牌宣言，不得只凭像素认定 CSS 字体。只输出有效 JSON。"
     ),
     temperature=0.2,
     assemble=_assemble_brand_profile,

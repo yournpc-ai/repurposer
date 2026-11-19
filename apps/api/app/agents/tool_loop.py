@@ -54,6 +54,7 @@ would be a lie.
 """
 
 import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
@@ -164,6 +165,7 @@ class ChatTool:
     # Evidence reads authenticate and retain the same draft without merging writes.
     draft_reader: bool = False
     presentation: ToolPresentation | None = None
+    finish_batch: Callable[[list[tuple[BaseModel, "ToolObservation"]]], Awaitable["ToolObservation | None"]] | None = None
 
 
 def tool_spec(tool: ChatTool) -> dict:
@@ -302,8 +304,7 @@ def _loop_echo(feedback: str) -> str:
     rolling the dice twice (ADR-039 P3 — the one bounded repair, re-homed
     into the loop)."""
     return (
-        f"\n\nYour previous tool call was rejected: {feedback}. "
-        "Call the right tool with valid arguments."
+        f"\n\n上次工具调用被拒绝：{feedback}。请用有效参数调用合适的工具。"
     )
 
 
@@ -364,6 +365,8 @@ class RoundAssembly:
     missing_tool_feedback: str | None = None
     opening_text: str | None = None
     caller_state: dict | None = None
+    # Keep this form's opening invitation across consecutive argument repairs.
+    invitation_tool: str | None = None
 
 
 @dataclass(frozen=True)
@@ -573,6 +576,8 @@ LoopExecute = Callable[
 ]
 
 
+# A stage can start with a silent tool call. Announce the work once, before
+# its activity row; only actual tool results can substantiate completion.
 class ToolLoopAgent:
     """One chat-surface agent in the tool-loop form — a declared instance,
     not a subclass per agent (N-30 sibling to ``Agent``). Same declaration
@@ -634,6 +639,7 @@ class ToolLoopAgent:
         tools: list[ChatTool] | None = None,
         round_assembler: Callable[..., RoundAssembly] | None = None,
         dialogue: list[dict] | None = None,
+        speech_language_hint: str | None = None,
         system_prompt: str | None = None,
         **ctx: Any,
     ) -> LoopResult:
@@ -731,7 +737,13 @@ class ToolLoopAgent:
                 "trigger_delivery": "delivery",
             }[self.name]
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
-        service_instruction = jinja_env.get_template("chat/_tool_service.j2").render() if self.service_per_call else ""
+        system_supplements = []
+        if self.service_per_call:
+            system_supplements.append(jinja_env.get_template("chat/_tool_service.j2").render())
+        if speech_language_hint and re.fullmatch(r"[a-z]{2,3}", speech_language_hint):
+            system_supplements.append(jinja_env.get_template("chat/_conversation_language.j2").render(
+                language=speech_language_hint,
+            ))
         active_tools = self.tools if tools is None else tools
         if not active_tools:
             raise ValueError("a tool-loop call declares its tool set")
@@ -808,6 +820,7 @@ class ToolLoopAgent:
         # rejection's retry, never an accepted read's continuation.
         prev_rejected = False
         pending_rejection_feedback: str | None = None
+        invitation: str | None = None
         rejections: list[ToolRejected] = []
         rejected_candidates: list[dict] = []
         candidates: dict[str, CandidateRecord] = {}
@@ -1027,9 +1040,7 @@ class ToolLoopAgent:
                 assembled = RoundAssembly(tools=restricted_tools, system=effective_system)
             round_tools = assembled.tools
             effective_system = assembled.system
-            wire_system = effective_system
-            if self.service_per_call:
-                wire_system += "\n" + service_instruction
+            wire_system = "\n".join([effective_system, *system_supplements])
             base_messages[0] = {"role": "system", "content": wire_system}
             if not assembled.include_project_context:
                 shared = []
@@ -1130,7 +1141,10 @@ class ToolLoopAgent:
                             *dialogue, *tail, *feedback]
             assembly = {
                 "agent": self.name, "iteration": iteration, "max_iterations": self.max_iterations,
-                "system_sources": [*getattr(effective_system, "sources", []), *getattr(service_instruction, "sources", [])],
+                "system_sources": [
+                    source for prompt in (effective_system, *system_supplements)
+                    for source in getattr(prompt, "sources", [])
+                ],
                 "user_sources": getattr(user_prompt, "sources", []),
                 "template_variables": sorted(template_kwargs),
                 "declared_packs": self.packs,
@@ -1213,6 +1227,14 @@ class ToolLoopAgent:
             # Misplaced speech (an args-level "prose" habit key) reads as
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
+            if (
+                len(result.tool_calls) == 1
+                and result.tool_calls[0].name == assembled.invitation_tool
+            ):
+                if invitation is None and prose.strip():
+                    invitation = prose.strip()
+            else:
+                invitation = None
             delivered_observations.update(observation_scopes)
             if not result.tool_calls:
                 if not prose.strip():
@@ -1239,9 +1261,7 @@ class ToolLoopAgent:
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
                         feedback=(
-                            "your reply came back empty — nothing said, no tool "
-                            "called. Answer the message now: speak the reply as "
-                            "your text, or call exactly one tool."
+                            "上次回复为空，既没有正文也没有调用工具。请在正文中作答，或只调用一个工具。"
                         ),
                         iteration=iteration,
                     )
@@ -1252,7 +1272,7 @@ class ToolLoopAgent:
                     bare_rejection_feedback() if bare_rejection_feedback is not None else None
                 ) or assembled.missing_tool_feedback
                 if self.service_per_call and not required_feedback:
-                    required_feedback = "Send the reply in assistant content and call the appropriate terminal tool."
+                    required_feedback = "在助手消息正文中回答，并调用合适的终结工具。"
                 if required_feedback:
                     stopped = await _reject(
                         ToolRejected(
@@ -1288,14 +1308,20 @@ class ToolLoopAgent:
                  "function": {"name": call.name, "arguments": json.dumps(call.arguments, ensure_ascii=False)}}
                 for index, call in enumerate(result.tool_calls)
             ]
+            assistant_message = result.assistant_message or {"role": "assistant", "content": prose or ""}
+            # Keep the provider's arguments and optional reasoning for the next
+            # model request. Use the same fallback id as the tool result if needed.
+            original_calls = assistant_message.get("tool_calls") or wire_calls
+            assistant_message = {"role": "assistant", **assistant_message, "tool_calls": [
+                {**original, "id": wire["id"]} for original, wire in zip(original_calls, wire_calls, strict=True)
+            ]}
             if batched:
-                observation_tail.append({"role": "assistant", "content": prose or "", "tool_calls": wire_calls})
+                observation_tail.append(assistant_message)
 
             async def remember(call, call_id, observation, executed_arguments=None, *,
                                candidate_record: CandidateRecord | None = None,
                                candidate_active: bool = True,
-                               target_tool: str | None = None,
-                               wire_arguments: dict[str, Any] | None = None):
+                               target_tool: str | None = None):
                 if observation.context_lifetime not in {"call", "turn", "project"}:
                     raise ValueError("unknown observation context lifetime")
                 fold_keys = observation.context_keys if not observation.images or observation.project_text is not None else ()
@@ -1304,18 +1330,12 @@ class ToolLoopAgent:
                 if observation.fold_after_delivery:
                     fold_after_delivery.add(call_id)
                 observation_scopes[call_id] = (observation.context_lifetime, fold_keys)
-                projected_arguments = call.arguments if wire_arguments is None else wire_arguments
                 if not batched:
-                    projected_calls = wire_calls if wire_arguments is None else [
-                        {**wire_call, "function": {**wire_call["function"], "arguments": json.dumps(wire_arguments, ensure_ascii=False)}}
-                        if wire_call["id"] == call_id else wire_call
-                        for wire_call in wire_calls
-                    ]
-                    observation_tail.append({"role": "assistant", "content": prose or "", "tool_calls": projected_calls})
+                    observation_tail.append(assistant_message)
                 observation_tail.append({"role": "tool", "tool_call_id": call_id, "name": call.name,
                                          "content": observation_wire_content(observation)})
                 await _emit(on_context_event, ToolExchange(
-                    call_id=call_id, tool_name=call.name, arguments=projected_arguments,
+                    call_id=call_id, tool_name=call.name, arguments=call.arguments,
                     observation=observation, base_keys=snapshot.keys if snapshot else frozenset(),
                     executed_arguments=executed_arguments, iteration=iteration, call_index=call_index,
                     target_tool=target_tool,
@@ -1354,9 +1374,7 @@ class ToolLoopAgent:
                 return await _reject(
                     ToolRejected(event_kind, record.tool_name, iteration, detail[:200], 0),
                     feedback=(
-                        f"The retained {record.tool_name} candidate was not executed. "
-                        f"Use {CORRECTION_TOOL_NAME} with candidate_id={record.candidate_id} "
-                        "and the current digest/diagnostics in its tool result; do not repeat resource preparation."
+                        f"保留的 {record.tool_name} 候选尚未执行。请使用 {CORRECTION_TOOL_NAME}，传入 candidate_id={record.candidate_id} 及工具结果中的当前摘要，按诊断修正。不要重复准备资源。"
                     ),
                     iteration=iteration,
                 )
@@ -1390,18 +1408,21 @@ class ToolLoopAgent:
                         event_kind, record.tool_name, iteration, detail[:200], 0,
                         candidate_digest=candidate_progress_digest(record),
                     ),
-                    feedback="The working draft was not saved; its latest identity and errors are in the tool result.",
+                    feedback="工作草稿未保存。最新标识和错误见工具结果。",
                     iteration=iteration,
                 )
 
             unsafe = [call for call in result.tool_calls if call.name in by_name
                       and (by_name[call.name].terminal or not by_name[call.name].batchable)]
-            invalid_service = self.service_per_call and (batched or not prose.strip())
+            group = by_name.get(result.tool_calls[0].name)
+            finish_batch = group.finish_batch if group and all(call.name == group.name for call in result.tool_calls) else None
+            batch_observations = []
+            invalid_service = self.service_per_call and batched and not finish_batch
             if invalid_service or (batched and unsafe):
                 # Reject BEFORE any work: no first write, silent drops or forked starts.
-                feedback = "This batch was not executed. Content writes and terminal actions must be submitted alone; batch only declared reads/resource preparation."
+                feedback = "本批未执行。内容写入和终结操作必须单独提交，只有声明为可批量执行的读取或资源准备可以合并。"
                 if invalid_service:
-                    feedback = "No tool executed. Send one tool call with its user-facing message in assistant content."
+                    feedback = "未执行本批工具。请一次调用一个工具。"
                 calls.extend(call.name for call in result.tool_calls)
                 for call_index, call in enumerate(result.tool_calls):
                     await remember(call, wire_calls[call_index]["id"], ToolObservation(feedback, ok=False))
@@ -1420,9 +1441,7 @@ class ToolLoopAgent:
 
             if active_repair is not None and any(call.name != CORRECTION_TOOL_NAME for call in result.tool_calls):
                 feedback = (
-                    f"This entire reply was not executed. Only {CORRECTION_TOOL_NAME} is available. "
-                    "Use the retained candidate diagnostic and target_parameters_schema; "
-                    "do not invent schema lookup tools. Choose patch or explicit replace."
+                    f"本次回复中的调用均未执行。当前只可使用 {CORRECTION_TOOL_NAME}。请参照保留候选的诊断和 target_parameters_schema，选择 patch 或显式 replace，不得编造查询参数结构的工具。"
                 )
                 for call_index, call in enumerate(result.tool_calls):
                     calls.append(call.name)
@@ -1461,7 +1480,7 @@ class ToolLoopAgent:
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
                         feedback=(
-                            f"unknown tool {call.name!r} — call exactly one of: "
+                            f"未知工具 {call.name!r}。请从以下工具中选一个："
                             + ", ".join(t.name for t in active_tools)
                         ),
                         iteration=iteration,
@@ -1665,9 +1684,9 @@ class ToolLoopAgent:
                 # answer/card. With no delivery hook, the ledger keeps both.
                 prose_handled = True
                 # Draft judgments speak only from their accepted observation.
-                if not self.service_per_call and not tool.terminal and (
+                if not tool.terminal and (
                     not assembled.allow_interim_prose
-                    or (tool.draft_reader and getattr(params, "judgment", None) is not None)
+                    or (not self.service_per_call and tool.draft_reader and getattr(params, "judgment", None) is not None)
                 ):
                     prose = ""
                 interim_prose_route = (
@@ -1705,7 +1724,7 @@ class ToolLoopAgent:
                 # interim_prose words back into the ledger (regression caught by
                 # test_read_observation_continues_the_loop_and_keeps_speech).
                 speech = _compose_speech(
-                    speech_parts if not tool.terminal else [*speech_parts, prose]
+                    speech_parts if not tool.terminal else [*speech_parts, invitation or prose]
                 )
                 if not tool.terminal:
                     # The read's work-START stamp (ADR-108 数组位置律): the
@@ -1859,6 +1878,8 @@ class ToolLoopAgent:
                     ):
                         await _emit(on_interim_prose, outcome.accepted_interim_prose)
                         interim_proses_sent += 1
+                    if finish_batch and outcome.ok:
+                        batch_observations.append((params, outcome))
                     if outcome.stop_after_observation:
                         return _finish(LoopResult(
                             prose=speech, tool_name=dispatch_name, params=params,
@@ -1976,6 +1997,20 @@ class ToolLoopAgent:
                 )
                 if stopped is not None:
                     return stopped
+            if finish_batch and len(batch_observations) == len(result.tool_calls):
+                settlement = await finish_batch(batch_observations)
+                if settlement is not None:
+                    if settlement.stop_after_observation:
+                        return _finish(LoopResult(prose="", tool_name=group.name, params=params,
+                                                  iterations=iteration + 1, calls=calls))
+                    if not settlement.ok:
+                        stopped = await _reject(
+                            ToolRejected(kind="execute_guardrail", tool_name=group.name, iteration=iteration,
+                                         detail=settlement.text[:200], duration_ms=0),
+                            feedback=settlement.text, iteration=iteration,
+                        )
+                        if stopped is not None:
+                            return stopped
         exhausted_candidate = candidates.get(repair_candidate_id or "")
         if exhausted_candidate is not None:
             await retire_failed_candidate(exhausted_candidate, iteration=self.max_iterations - 1, kind="exhausted")

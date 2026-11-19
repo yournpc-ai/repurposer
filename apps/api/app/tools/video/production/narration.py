@@ -1,4 +1,4 @@
-"""Terminal facts for the single narration-only Run scope."""
+"""Verified terminal facts for narration-only Runs."""
 from __future__ import annotations
 
 from uuid import UUID
@@ -13,15 +13,25 @@ def has_narration_preparation_scope(run) -> bool:
     return isinstance((run.context or {}).get("narration_preparation"), dict)
 
 
-async def narration_preparation_fact(db, run, steps) -> dict:
+async def narration_preparation_facts(db, run, steps) -> list[dict]:
     """Re-read fixed audio, alignment and actual usage; never infer success."""
     preparation = (run.context or {}).get("narration_preparation") or {}
+    parts = preparation.get("scenes") or [preparation]
+    nodes = sorted((s for s in steps if s.kind == "prepare_narration"), key=lambda s: getattr(s, "seq", 0))
+    if len(nodes) != len(parts):
+        raise ValueError("narration settlement is incomplete")
+    return [await _scene_fact(db, run, step, part) for step, part in zip(nodes, parts, strict=True)]
+
+
+async def _scene_fact(db, run, step, preparation) -> dict:
     request = preparation.get("request") or {}
     result = preparation.get("result") or {}
     if not request or not result:
         raise ValueError("narration preparation has no fixed result")
-    step = next((item for item in steps if item.kind == "prepare_narration"), None)
-    if step is None or step.status != "done" or step.output_refs:
+    scene = request.get("scene_id")
+    if scene and (scene != result.get("scene_id") or scene != (step.spec or {}).get("scene_id")):
+        raise ValueError("narration preparation scene identity is inconsistent")
+    if step.status != "done" or step.output_refs:
         raise ValueError("narration preparation did not settle as an Output-free step")
 
     project = await db.get(Project, run.project_id)

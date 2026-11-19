@@ -12,6 +12,8 @@
  * persisted rows and never owns layout. */
 
 import { messageAssetsFromAttachments, type MessageAttachment } from "@/lib/chatAttachments"
+import { continuationTurnId, journeyMark, journeyTranscriptRow, mediaProgress, preparationActivity, sceneOrder } from "../mediaJourneyMessages"
+import { questionPages } from "../questionGroupDrafts"
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityReceipt,
@@ -60,20 +62,22 @@ export function answeredQuestionText(
   return { text: answer.text || answer.option_id || "", muted: false }
 }
 
-export function groupAnswerDisplayItems(
+export function groupAnswerDisplay(
   question: QuestionMessage,
   answers: BriefAnswerItem[],
-): { question: string; answer: string }[] {
-  return (question.question?.items ?? []).map((item) => {
-    const answer = answers.find((candidate) => candidate.slot === item.slot)
-    const selected = answer?.kind === "option"
-      ? (item.options ?? []).find((option) => option.id === answer.option_id)
-      : undefined
-    return {
-      question: item.question,
-      answer: selected?.label || answer?.text || answer?.option_id || "",
-    }
-  })
+) {
+  const items = questionPages(question.question?.items ?? []).map((page) => ({
+    question: page.title,
+    answer: answers.find((answer) => answer.page_slots?.includes(page.fields[0]?.slot))?.text || page.fields.map((item) => {
+      const answer = answers.find((candidate) => candidate.slot === item.slot)
+      const selected = answer?.kind === "option"
+        ? item.options?.find((option) => option.id === answer.option_id)
+        : undefined
+      return selected?.label || answer?.text || answer?.option_id || ""
+    }).filter(Boolean).join(" · "),
+  }))
+  const productionNote = answers.find((answer) => answer.slot === "constraints")?.text || undefined
+  return { items, productionNote }
 }
 
 /** The explicit deterministic-option association persisted on the real user row. */
@@ -744,13 +748,22 @@ export function mapHistoryRows(
   // a LATER turn's selection event repaints the earlier card's highlight
   // (the surface is one seat; rows never move).
   const cardBySetId = new Map<string, OverlayMessage>()
-  for (const m of rows) {
+  let workerOpeningId: string | undefined
+  for (const raw of rows) {
+    const progress = mediaProgress(raw, workerOpeningId)
+    const mark = journeyMark(raw)
+    const m = journeyTranscriptRow(raw, workerOpeningId)
     // Every projection of one persisted row carries its transcript position,
     // including an echo + QA pair. Recovered live rows can therefore find
     // their existing successor without re-deriving order from timestamps.
+    const continuation = continuationTurnId(m, workerOpeningId)
+    if (m.role === "user" || mark) workerOpeningId = mark?.state === "active" ? mark.openingId : undefined
     const pushRow = (row: OverlayMessage): OverlayMessage => {
       const positioned = {
         ...row,
+        ...(progress ? { mediaProgress: true } : {}),
+        ...(mark ? { mediaOpeningId: mark.openingId, sceneOrder: sceneOrder(raw) } : {}),
+        ...(continuation && !progress ? { continuationTurnId: continuation } : {}),
         turnId: m.turn_id ?? undefined,
         hydrated: true,
       }
@@ -782,10 +795,12 @@ export function mapHistoryRows(
           // task_book 的 start 确认（chat 文本 / pill 手势同）不是
           // option 选择——QA 块只归真问答（2026-09-05 用户拍板），
           // 薄书的记录 = echo + 用户原话 + run 收据行。
-          if ((m.content ?? "").trim()) {
+          const activity = preparationActivity(m)
+          if ((m.content ?? "").trim() || activity) {
             pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
+              activity,
               content: m.content ?? "",
               // The start's workflow_run_id rides the replay (parity
               // with the plain-row branch): the stamp is the
@@ -834,9 +849,7 @@ export function mapHistoryRows(
               muted: display.muted,
               questionId: m.id,
               answerKind: m.answer.kind,
-              items: (m.answer.answers?.length ?? 0) > 0
-                ? groupAnswerDisplayItems(m, m.answer.answers ?? [])
-                : undefined,
+              ...(m.answer.answers?.length ? groupAnswerDisplay(m, m.answer.answers) : {}),
             },
           })
         } else {

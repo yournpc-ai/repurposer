@@ -1,0 +1,67 @@
+{% if mode == "plan" %}{%- if recent -%}
+最近的对话：
+{{ recent|join('\n') }}
+
+{% endif -%}
+{%- if asset_lines %}
+上传的文件（按上传顺序）：
+{{ asset_lines|join('\n') }}
+{%- endif %}
+{%- if material_pending_line %}
+{{ material_pending_line }}
+{%- endif %}
+{%- if understanding_lines %}
+系统对本组素材的理解（判断内容及论点时优先使用这份语义证据，依据应能追溯到原文）：
+{{ understanding_lines|join('\n') }}
+{%- endif %}
+{%- if speaker_form_lines %}
+视频中的说话形式（来自逐个视频的说话人分析，供构图时参考。访谈轮流发言或单人讲话时，可以让镜头对准当前说话者）：
+{{ speaker_form_lines|join('\n') }}
+{%- endif %}
+{%- if filename %}
+已上传文件：{{ filename }}{% if file_language %}（检测到的语言：{{ file_language }}）{% endif %}
+{%- if material_excerpt %}
+素材开头的原文摘录（据此判断素材内容，不要只看文件名）：
+{{ material_excerpt }}
+{%- endif %}
+{%- else %}
+{%- if not asset_lines and not material_pending_line %}
+未上传文件，本次仅有文本输入。
+{%- endif %}
+{%- endif %}
+{%- if persona_lines %}
+用户人设（提问策略②的选项来源。优先从这里取受众、领域等具体词语；没有合适的值时，可以少给或不给选项）：
+{{ persona_lines|join('\n') }}
+{%- endif %}
+{%- if brief_lines %}
+目前的 Brief（代码合并后的状态。user-stated 字段是用户亲口说明的既定事实；已问字段行列出已问过的字段，不要再问）：
+{{ brief_lines|join('\n') }}
+{%- endif %}
+{%- if confirmation_line %}
+{{ confirmation_line }}
+{%- endif %}
+{%- if presented_plan %}
+已向用户展示并等待确认的方案（JSON 任务链）：{{ presented_plan }}
+这是当前方案，可能包含用户直接在面板中的修改，对话中不会留下这些修改的记录。输出完整的修订链。用户没提到的任务及参数（工具、数量、语言、角度）照旧；诸如“只要两个场景”“字幕改成德语”“去掉配音”等修改要逐项准确落实。以最新用户消息为准。
+{%- endif %}
+{%- if plans_lines %}
+你整理的决策方案正待确认。以下 Content Plans 中的 plan_id 是指定修订目标的唯一合法来源，不得编造：
+{{ plans_lines|join('\n') }}
+{%- endif %}
+{%- if pending_lines %}
+你之前的问题仍待回答，先结合它理解本条消息。如果用户给出了待填字段的值，在 Brief 更新中提出该值并将 source 设为 'user-stated'。如果只是无关插话，则独立处理本条消息，保留原字段和待回答状态，用户会收到提醒。
+{{ pending_lines|join('\n') }}
+{%- endif %}
+{% if message %}用户消息：{{ message }}{% endif %}
+{%- if surface_line %}
+{{ surface_line }}
+{%- endif %}
+{% elif mode == "conversation" %}上下文：
+{{ context_text }}
+
+{% if message %}用户消息：{{ message }}{% endif %}{% elif mode == "event" or mode == "delivery" %}上下文：
+{{ context_text }}
+
+[系统事件，本轮没有用户消息]：{{ event_line }}
+请用用户在上述对话中使用的语言回答。
+{% endif %}

@@ -123,6 +123,7 @@ export function buildRecoveredProseMessage({
 }): OverlayMessage {
   return {
     id,
+    serverMessageId: id,
     role: "assistant",
     content: "",
     streaming: true,

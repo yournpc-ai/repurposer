@@ -197,39 +197,40 @@ async def existing_video_production(db, project, tasks):
 
 
 async def pin_narration_preparation(project, tasks):
-    """Pin the one original-only request after the ordinary plan/Start gate."""
+    """Pin every scene script against the same authorized draft at Start."""
     narration_tasks = [t for t in tasks or [] if t.tool == "prepare_narration"]
     if not narration_tasks:
         return {}
     from app.tools.video.narration import narration_original_quote_characters
     from app.tools.video.params import narration_original_policy
 
-    if len(narration_tasks) != 1 or len(tasks or []) != 1:
-        raise ValueError("Prepare narration runs as one narration-only task")
-    params = PrepareNarrationParams.model_validate(narration_tasks[0].params)
-    if (params.draft_ref is None) != (params.scene_id is None):
-        raise ValueError("Scene narration needs exactly one draft_ref and scene_id")
-    if params.draft_ref is not None:
-        from app.models.database import AsyncSessionLocal
-        from app.tools.video.narration_draft import recover_current_draft, scene_narration_request
+    from app.tools import validate_task_list
+    from app.tools.video.narration_draft import recover_current_draft, scene_narration_request
+    from app.models.database import AsyncSessionLocal
 
+    validate_task_list(tasks)
+    requests = [PrepareNarrationParams.model_validate(task.params) for task in narration_tasks]
+    draft = None
+    if requests[0].draft_ref is not None:
         async with AsyncSessionLocal() as db:
-            draft = await recover_current_draft(db, project, params.draft_ref)
-        expected = scene_narration_request(draft, params.scene_id or "")
-        if any(getattr(params, key) != value for key, value in expected.items()):
-            raise ValueError("The narration request no longer matches its authorized Scene script")
-    characters = await narration_original_quote_characters(
-        text=params.text,
-        voice_id=params.voice_id,
-        language=params.language,
-        user_id=project.user_id,
-    )
-    return {
-        "narration_preparation": {
-            "request": params.model_dump(mode="json"),
-            "narration_policy": narration_original_policy(characters).model_dump(mode="json"),
-        }
-    }
+            draft = await recover_current_draft(db, project, requests[0].draft_ref)
+    order = [scene["scene_id"] for scene in draft["content"]["scenes"]] if draft is not None else []
+    parts = []
+    for params in requests:
+        part = {"request": params.model_dump(mode="json")}
+        if (params.draft_ref is None) != (params.scene_id is None):
+            raise ValueError("Scene narration needs exactly one draft_ref and scene_id")
+        if draft is not None:
+            expected = scene_narration_request(draft, params.scene_id)
+            if any(getattr(params, key) != value for key, value in expected.items()):
+                raise ValueError("The narration request no longer matches its authorized Scene script")
+            part["scene_index"] = order.index(params.scene_id) + 1
+        characters = await narration_original_quote_characters(
+            text=params.text, voice_id=params.voice_id, language=params.language, user_id=project.user_id,
+        )
+        part["narration_policy"] = narration_original_policy(characters).model_dump(mode="json")
+        parts.append(part)
+    return {"narration_preparation": parts[0] if len(parts) == 1 else {"scenes": parts}}
 
 
 async def pin_video_production(db, project, tasks, approved_by):

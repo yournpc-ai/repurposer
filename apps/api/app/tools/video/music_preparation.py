@@ -12,12 +12,9 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from app.editing.schemas import CompositionContent
 from app.editing.timing import (
     SOURCE_TIMEBASE,
     quantize_ticks,
-    seconds_to_ticks,
-    ticks_to_frames,
 )
 from app.models.database import AsyncSessionLocal
 from app.models.ids import source_snapshot_id
@@ -58,27 +55,7 @@ class PrepareMusicArgs(BaseModel):
 
 def score_for_current_draft(draft: dict[str, Any], creative: ScoreSpecDraft) -> ScoreSpec:
     assert_narration_ready_for_score(draft)
-    score = build_score_spec(creative, draft)
-    content = CompositionContent.model_validate(draft.get("content") or {})
-    constraints = (draft.get("design") or {}).get("user_constraints") or {}
-    target_seconds = constraints.get("target_seconds")
-    if target_seconds is not None:
-        settings = content.settings
-        actual_frames = ticks_to_frames(
-            max((scene.range.end for scene in content.scenes), default=0),
-            settings.timebase, settings.fps.num, settings.fps.den,
-        )
-        expected_frames = ticks_to_frames(
-            seconds_to_ticks(float(target_seconds), settings.timebase),
-            settings.timebase, settings.fps.num, settings.fps.den,
-        )
-        if actual_frames != expected_frames:
-            actual = score.duration_ticks / SOURCE_TIMEBASE
-            raise MusicPreparationError(
-                f"the retimed draft is {actual:g}s but the user fixed {float(target_seconds):g}s; "
-                "finish model-directed Scene retiming before scoring"
-            )
-    return score
+    return build_score_spec(creative, draft)
 
 
 def _manifest_key(owner_id: UUID, project_id: UUID, score_digest: str) -> str:

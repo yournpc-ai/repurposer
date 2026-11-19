@@ -212,7 +212,7 @@ async def test_settled_candidate_log_feeds_next_turn_context_but_not_same_turn_i
     async with database() as db:
         project = await db.get(Project, project_id)
         lines = await video_context_lines(db, project)
-    assert lines[0].startswith("Persisted audio candidate sets")
+    assert lines[0].startswith("已保存的音频候选集")
     projected = json.loads(lines[1])
     assert projected["candidate_set_id"] == str(CANDIDATE_SET_ID)
     assert projected["members"] == [{

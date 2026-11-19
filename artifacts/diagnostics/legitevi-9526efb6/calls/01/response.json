@@ -1,0 +1,59 @@
+{
+  "phase": "response",
+  "model_call_id": "7620bc04-9732-4615-b614-38a553f24643",
+  "provider": "minimax",
+  "model": "minimax-m3",
+  "finished_at": "2026-11-19T09:16:32.304571+00:00",
+  "conversation_id": "416f235c-4cbd-4e51-bacd-0a134751a10f",
+  "turn_id": "9526efb6-a3ee-47b9-b4dd-132f7cf9c871",
+  "project_id": "07d486a1-0073-465c-98fa-793ca8b1732b",
+  "response": {
+    "id": "074df169d8e3e6fb763896d87a0f1e70",
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "index": 0,
+        "message": {
+          "content": "页面已采集完成，正文和五个页面视图都在。我先把这些内容整理成带来源的品牌档案，供后续剪辑引用。",
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-8418fbce82494dd5",
+              "type": "function",
+              "function": {
+                "name": "analyze_brand",
+                "arguments": "{\"brief\":{\"topic\":\"LegitEvi 官网宣传片\",\"audience\":{\"value\":\"高校科研管理者、技术政策制定者及产学研合作领域从业者\",\"source\":\"user-stated\"},\"tone\":{\"value\":\"rational\",\"source\":\"user-stated\"}}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "created": 1795079788,
+    "model": "MiniMax-M3",
+    "object": "chat.completion",
+    "usage": {
+      "total_tokens": 14203,
+      "total_characters": 0,
+      "prompt_tokens": 14063,
+      "completion_tokens": 140,
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "input_sensitive": false,
+    "output_sensitive": false,
+    "input_sensitive_type": 0,
+    "output_sensitive_type": 0,
+    "output_sensitive_int": 0,
+    "service_tier": "standard",
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": ""
+    }
+  },
+  "error": null
+}

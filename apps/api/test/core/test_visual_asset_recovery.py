@@ -2,11 +2,13 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from PIL import Image
 
+from app.agents.base import jinja_env
 from app.chat.video_turn_seats import prepare_visual_assets_seat, video_proposal_guard
 from app.models.schemas import TaskItem, VideoDraftRef
 from app.models.tables import Project, SourceSnapshot
@@ -15,6 +17,8 @@ from app.providers.llm.base import LLMSchemaError
 from app.tools.video import visual_assets
 from app.tools.video.media_analysis import (
     analyze_image_bytes,
+    image_content_reviewer,
+    image_reviewer_version,
     review_image_content,
     store_content_review,
     store_media_analysis,
@@ -49,6 +53,218 @@ class VisualDraftDB:
         entity = query.column_descriptions[0]["entity"]
         rows = [SimpleNamespace(context=self.context)] if entity.__name__ == "Conversation" else []
         return SimpleNamespace(all=lambda: rows)
+
+
+@pytest.mark.asyncio
+async def test_existing_source_refits_legacy_png_before_review_and_cache(database, monkeypatch):
+    from test.core.test_compositions import _project, _user
+
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    image = Image.new("RGB", (80, 50), "white")
+    image.paste("red", (0, 0, 5, 50))
+    image.paste("blue", (75, 0, 80, 50))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    original = buffer.getvalue()
+    source = SourceSnapshot(
+        id=uuid4(), owner_id=owner, origin_project_id=project_id, kind="image",
+        digest=hashlib.sha256(original).hexdigest(), storage_key="original.png",
+    )
+    async with database() as db:
+        db.add(source)
+        await db.commit()
+    spec = visual_assets.SceneAssetSpec(
+        scene_id="process", intent="Show the original diagram",
+        source={"kind": "existing_image", "snapshot_id": source.id, "snapshot_digest": source.digest},
+        on_screen_copy="The editorial title", output={"width": 160, "height": 90},
+    )
+    assert "visible_evidence" not in spec.model_dump(mode="json")["source"]
+    key = visual_assets.request_key(owner, project_id, spec.request_digest())
+    stored = {"original.png": original, key: json.dumps({
+        "state": "fixed", "scene_id": spec.scene_id, "request_digest": spec.request_digest(),
+        "snapshot": {"snapshot_id": str(source.id), "digest": source.digest},
+        "media": {"width": 80, "height": 50, "storage_key": source.storage_key, "digest": source.digest},
+    }).encode()}
+
+    async def save(key, data, content_type):
+        stored[key] = data
+
+    monkeypatch.setattr(visual_assets, "AsyncSessionLocal", database)
+    monkeypatch.setattr(visual_assets.storage, "exists", AsyncMock(side_effect=stored.__contains__))
+    monkeypatch.setattr(visual_assets.storage, "read", AsyncMock(side_effect=stored.__getitem__))
+    monkeypatch.setattr(visual_assets.storage, "save", save)
+    reviewer = AsyncMock(return_value={"status": "pass", "summary": "The diagram is visible."})
+    kwargs = dict(
+        owner_id=owner, project_id=project_id, spec=spec, reviewer=reviewer,
+        draft_ref=VideoDraftRef(draft_id="draft", draft_digest="a" * 64),
+    )
+    result = await visual_assets.prepare_visual_asset(**kwargs, execution_id="first")
+    assert not result["cache_hit"] and result["usage"] == {}
+    assert result["provenance"]["snapshot_digest"] == source.digest
+    assert result["snapshot"]["digest"] != source.digest and stored[source.storage_key] == original
+    assert (result["media"]["width"], result["media"]["height"]) == (160, 90)
+    assert result["content_review"]["reviewer_version"] == image_reviewer_version("existing_image")
+    with Image.open(io.BytesIO(stored[result["media"]["storage_key"]])) as fitted:
+        assert fitted.getchannel("A").getbbox() == (8, 0, 152, 90)
+        assert fitted.getpixel((8, 0)) == (255, 0, 0, 255)
+        assert fitted.getpixel((151, 89)) == (0, 0, 255, 255)
+    evidence_args, media = image_content_reviewer.assemble(**reviewer.await_args.kwargs)
+    assert media and evidence_args["existing_image"]
+    prompt = jinja_env.get_template(image_content_reviewer.prompt).render(**evidence_args)
+    assert "页面区段错误" in prompt and "由后续剪辑负责" in prompt
+    cached = await visual_assets.prepare_visual_asset(**kwargs, execution_id="again")
+    assert cached["cache_hit"] and cached["snapshot"] == result["snapshot"]
+    reviewer.assert_awaited_once()
+
+
+def website_state(snapshot):
+    from app.models.schemas import BrandSourceRef, CreativeState
+    from test.core.test_website_promo_readiness import profile
+
+    ref = BrandSourceRef(snapshot_id=str(snapshot.id), digest=snapshot.digest)
+    return CreativeState(brand_profile=profile().model_copy(update={"source_refs": [ref]}))
+
+
+@pytest.mark.asyncio
+async def test_website_design_from_selected_view_reaches_image_plan(database, monkeypatch):
+    from app.agents.working_drafts import WorkingDraftUpdated
+    from app.chat.video_turn_seats import design_video_seat
+    from app.models.schemas import PendingPlan, PrepareVideoMaterialsArgs
+    from app.tools.video import design
+    from test.core.test_compositions import _project, _user
+
+    owner = await _user(database)
+    project = SimpleNamespace(id=await _project(database, owner), user_id=owner)
+    page = SourceSnapshot(
+        id=uuid4(), owner_id=owner, origin_project_id=project.id, kind="web",
+        digest="a" * 64, storage_key="site.json", meta={
+            "canonical_url": "https://example.org/en",
+            "lines": [{"text": "Source 10.1234/paper"}],
+            "views": [
+                {"view_id": view, "digest": digest, "storage_key": f"{view}.png",
+                 "width": 1280, "height": 720, "heading": heading}
+                for view, digest, heading in [
+                    ("home", "b" * 64, "Welcome"), ("paper", "c" * 64, "Read the paper"),
+                ]
+            ],
+        },
+    )
+    archive = SourceSnapshot(
+        id=uuid4(), owner_id=owner, origin_project_id=project.id, kind="web",
+        digest="d" * 64, storage_key="archive.json", meta={
+            "canonical_url": "https://example.org/archive",
+            "views": [{"view_id": "paper", "heading": "Earlier papers", "digest": "e" * 64,
+                       "storage_key": "archive.png", "width": 1280, "height": 720}],
+        },
+    )
+    async with database() as db:
+        db.add_all([page, archive])
+        await db.commit()
+    monkeypatch.setattr(design, "AsyncSessionLocal", database)
+    monkeypatch.setattr(design, "_view_media_inputs", AsyncMock(return_value=[]))
+    materials, _ = await design.prepare_video_materials(
+        owner_id=owner, project_id=project.id,
+        args=PrepareVideoMaterialsArgs(material_targets=[
+            {"snapshot_id": page.id, "view_id": "paper"},
+            {"snapshot_id": archive.id, "view_id": "paper"},
+        ]),
+    )
+    images = {row["web_snapshot_id"]: row for row in materials["resources"] if row["kind"] == "image"}
+    assert images[str(archive.id)]["heading"] == "Earlier papers"
+    image = images[str(page.id)]
+    assert image["view_id"] == "paper" and image["web_snapshot_id"] == str(page.id)
+    assert image["heading"] == "Read the paper" and image["source_url"] == "https://example.org/en"
+    source = {
+        "kind": "existing_image", "snapshot_id": image["snapshot_id"],
+        "snapshot_digest": image["digest"],
+    }
+    prompt = "给 https://example.org/en 做一只宣传片"
+    project.pending_brief = PendingPlan(
+        prompt=prompt, creative_state=website_state(page),
+    ).model_dump(mode="json")
+    specs = [
+        {"scene_id": "citation", "intent": "Name the paper", "source": {
+            "kind": "controlled_svg", "program": "<svg><text>10.1234/paper</text></svg>",
+        }},
+        {"scene_id": "demo", "intent": "Show its page", "source": source},
+    ]
+    plan = [{"scene_id": spec["scene_id"], "intent": spec["intent"]} for spec in specs]
+
+    async def author(**fields):
+        return (await design_video_seat(
+            project=project, args=design.CompositionDesignVideoArgs(**fields),
+            user_text=prompt, request_id="website-draft",
+        ))[1]
+
+    for invalid in (dict(source, snapshot_id=str(page.id)), dict(source, snapshot_digest="d" * 64)):
+        rejected = await author(source_ids=[page.id], scene_plan=plan, scene_assets=[
+            specs[0], dict(specs[1], source=invalid),
+        ])
+        assert "Scene demo needs a fixed image" in rejected
+    bad_citation = dict(specs[0]["source"], program="<svg><text>10.1234/truncated</text></svg>")
+    rejected = await author(source_ids=[page.id], scene_plan=plan, scene_assets=[
+        dict(specs[0], source=bad_citation), specs[1],
+    ])
+    assert "citation (10.1234/truncated)" in rejected
+    draft = await author(source_ids=[page.id], scene_plan=plan, scene_assets=specs)
+    assert isinstance(draft, WorkingDraftUpdated)
+    reference = VideoDraftRef(draft_id="draft", draft_digest="e" * 64)
+    revised = design.CompositionDesignVideoArgs(
+        draft_ref=reference, scene_assets=[dict(specs[1], on_screen_copy="Open the paper")],
+    )
+    revised.bind_working_draft(draft.arguments)
+    _, updated = await design_video_seat(
+        project=project, args=revised, user_text=prompt, request_id="revise-demo",
+    )
+    first, second = visual_assets.current_scene_assets(updated.arguments)
+    assert first.source.program == specs[0]["source"]["program"]
+    assert second.on_screen_copy == "Open the paper"
+    assert str(second.source.snapshot_id) == image["snapshot_id"]
+    probe = visual_assets.PrepareVisualAssetsArgs(
+        draft_ref=reference, scene_ids=["citation", "demo"],
+    )
+    probe.bind_working_draft(updated.arguments)
+    monkeypatch.setattr(visual_assets, "cached_visual_asset", AsyncMock(return_value=None))
+    result = await prepare_visual_assets_seat(project=project, args=probe)
+    assert json.loads(result.text)["plan_task"]["params"]["scene_ids"] == ["citation", "demo"]
+
+
+@pytest.mark.asyncio
+async def test_website_citation_reflows_preserve_full_frozen_or_supplied_dois():
+    from app.tools.video.visual_citations import validate_website_scene_citations
+
+    snapshot = SourceSnapshot(id=uuid4(), kind="web", digest="a" * 64, meta={
+        "lines": [{"text": "Source paper (https://doi.org/10.1234/paper.2024-77)."}],
+        "views": [{"elements": [{"text": "Read paper", "href": "https://doi.org/10.5678/linked"}]}],
+    })
+    state = website_state(snapshot)
+
+    class SourceDB:
+        async def scalars(self, query):
+            return [snapshot]
+
+    async def author(markup):
+        scene = visual_assets.SceneAssetSpec(
+            scene_id="paper", intent="Show how a viewer follows a citation",
+            source={"kind": "controlled_svg", "program": f"<svg>{markup}</svg>"},
+        )
+        await validate_website_scene_citations(
+            SourceDB(), owner_id=uuid4(), state=state, specs=[scene],
+            user_text="Also show the reference 10.2222/user-supplied.", source_ids=[],
+        )
+
+    await author("<text>DOI 10.1234/paper.</text><text>2024-77</text>")
+    await author("<text><tspan>10.1234/paper.</tspan><tspan>2024-77</tspan></text>")
+    await author("<text>10.2222/user-supplied</text>")
+    await author("<text>10.5678/linked</text>")
+    await author("<text>Source paper</text><text>Example format: 10.XXXX/article</text>")
+    await author('<defs><text>10.9999/unpainted</text></defs>'
+                 '<g display="none"><text>10.9999/hidden</text></g>')
+    with pytest.raises(visual_assets.VisualAssetError, match="no full match"):
+        await author("<text>DOI 10.1234/paper.2024</text>")
+    with pytest.raises(visual_assets.VisualAssetError, match="no full match"):
+        await author("<text>DOI 10.9999/unverified-example</text>")
 
 
 @pytest.mark.asyncio
@@ -353,10 +569,16 @@ async def test_bad_svg_is_reported_before_quote_and_later_batches_still_settle(m
         return {"scene_id": spec.scene_id}
 
     monkeypatch.setattr(visual_assets, "prepare_visual_asset", worker_item)
+    progress = AsyncMock()
+    active_scene = AsyncMock()
     settled = await visual_assets.prepare_visual_assets(
         owner_id=project.user_id, project_id=project.id, specs=specs,
-        draft_ref=draft_ref, execution_id=str(uuid4()),
+        draft_ref=draft_ref, execution_id=str(uuid4()), on_prepared=progress, on_active_scene=active_scene,
     )
+    ticks = [call.args for call in active_scene.await_args_list]
+    assert [scene for count, scene in ticks if scene is not None] == [s.scene_id for s in specs]
+    assert ticks[-1] == (len(specs), None)
+    assert [call.args for call in progress.await_args_list] == [(1,), (2,), (3,), (4,), (5,)]
     assert [a["scene_id"] for a in settled.assets] == [
         "scene-0", "scene-1", "scene-3", "scene-4", "scene-5",
     ]

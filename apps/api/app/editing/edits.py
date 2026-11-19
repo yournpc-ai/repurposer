@@ -236,12 +236,7 @@ class TemporalEdit(BaseModel):
 
 
 class ClipEntityWrite(BaseModel):
-    """One complete Clip plus its parent Track identity.
-
-    Clip deliberately has no parent pointer in CompositionContent, so the
-    placement envelope carries only the target track_id; ``clip`` itself is
-    byte-for-byte the final persisted entity.
-    """
+    """完整的 Clip 及其所属 Track 标识。CompositionContent 中 Clip 没有父指针，所以外层只用 track_id 指定位置；clip 本身与最终持久化的实体逐字节一致。"""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1,0 +1,160 @@
+{
+  "project_id": "07d486a1-0073-465c-98fa-793ca8b1732b",
+  "turn_id": "9526efb6-a3ee-47b9-b4dd-132f7cf9c871",
+  "runs": 0,
+  "compositions": 0,
+  "inspected_at": "2026-11-19 09:33:14.742470+00:00",
+  "brief": {
+    "topic": {
+      "value": null,
+      "source": "default"
+    },
+    "audience": {
+      "value": null,
+      "source": "default"
+    },
+    "tone": {
+      "value": null,
+      "source": "default"
+    },
+    "purpose": {
+      "value": null,
+      "source": "default"
+    },
+    "target_seconds": {
+      "value": null,
+      "source": "default"
+    },
+    "narrative_mode": {
+      "value": null,
+      "source": "default"
+    },
+    "narration_language": {
+      "value": null,
+      "source": "default"
+    },
+    "subtitle_languages": {
+      "value": null,
+      "source": "default"
+    },
+    "aspect": {
+      "value": null,
+      "source": "default"
+    },
+    "voice_requirements": {
+      "value": null,
+      "source": "default"
+    },
+    "must_include": {
+      "value": null,
+      "source": "default"
+    },
+    "avoid": {
+      "value": null,
+      "source": "default"
+    },
+    "success_criteria": {
+      "value": null,
+      "source": "default"
+    },
+    "constraints": [],
+    "material_state": {
+      "value": null,
+      "source": "default"
+    },
+    "asked": []
+  },
+  "brand_profile_present": true,
+  "messages": [
+    {
+      "seq": 1,
+      "role": "user",
+      "content": "给 https://www.legitevi.com/en 做一只宣传片",
+      "question": null,
+      "answer": null,
+      "turn_state": "settled",
+      "workflow_run_id": null,
+      "intent": null
+    },
+    {
+      "seq": 3,
+      "role": "assistant",
+      "content": "我先把这个页面采集下来，等素材就绪后再读它的定位和视觉识别。",
+      "question": null,
+      "answer": null,
+      "turn_state": null,
+      "workflow_run_id": null,
+      "intent": {
+        "type": "interim_prose",
+        "interaction_policy_version": "interaction_constitution.v2"
+      }
+    },
+    {
+      "seq": 4,
+      "role": "assistant",
+      "content": "",
+      "question": null,
+      "answer": null,
+      "turn_state": null,
+      "workflow_run_id": null,
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-19T09:15:31.903420+00:00",
+          "key": "chat.activity.viewWebPageDone",
+          "kind": "read",
+          "status": "completed",
+          "settled_at": "2026-11-19T09:16:24.971574+00:00",
+          "activity_id": "537932ec413445959d319c7946e162a3",
+          "duration_ms": 53068
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "role": "assistant",
+      "content": "页面已采集完成，正文和五个页面视图都在。我先把这些内容整理成带来源的品牌档案，供后续剪辑引用。",
+      "question": null,
+      "answer": null,
+      "turn_state": null,
+      "workflow_run_id": null,
+      "intent": {
+        "type": "interim_prose",
+        "interaction_policy_version": "interaction_constitution.v2"
+      }
+    },
+    {
+      "seq": 6,
+      "role": "assistant",
+      "content": "",
+      "question": null,
+      "answer": null,
+      "turn_state": null,
+      "workflow_run_id": null,
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-19T09:16:32.339097+00:00",
+          "key": "chat.activity.brandAnalyzeDone",
+          "kind": "read",
+          "status": "completed",
+          "settled_at": "2026-11-19T09:16:43.406251+00:00",
+          "activity_id": "4050d7f5ae6c4e548b49e9ea70320cad",
+          "duration_ms": 11067
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "role": "assistant",
+      "content": "我把设定记入需求单，随后开始搭建片子。",
+      "question": null,
+      "answer": null,
+      "turn_state": null,
+      "workflow_run_id": null,
+      "intent": {
+        "interaction_policy_version": "interaction_constitution.v2"
+      }
+    }
+  ]
+}

@@ -135,7 +135,7 @@ class ScoreTransition(BaseModel):
 
 
 class ScoreSpecDraft(BaseModel):
-    """The model's bounded creative input; no executable code or media commands."""
+    """模型在限定范围内给出的配乐创意，不含可执行代码或媒体命令。"""
 
     model_config = ConfigDict(extra="forbid")
 

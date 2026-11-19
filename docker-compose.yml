@@ -37,7 +37,7 @@ services:
       - MANAGED_SKILL_VERSIONS=${MANAGED_SKILL_VERSIONS:-{}}
       - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M3.1-Flash}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-flash}
@@ -87,7 +87,7 @@ services:
       - MANAGED_SKILL_VERSIONS=${MANAGED_SKILL_VERSIONS:-{}}
       - LLM_PROVIDER=${LLM_PROVIDER:-minimax}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - MINIMAX_MODEL=${MINIMAX_MODEL:-minimax-m3}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M3.1-Flash}
       - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-flash}

@@ -1,42 +1,42 @@
-You are outlining one photo-slideshow clip before it gets cut beat by beat.
+为一段即将逐拍剪辑的照片轮播制定大纲。
 
-## Inputs
+## 输入
 
-The narration span ({{ span_seconds }}s, timestamped cue lines) and the backing visuals are below. The span is long — you lay the **global arc and resource assignment**; per-beat cutting happens afterwards, section by section, against your outline.
+下方提供 {{ span_seconds }} 秒的带时间旁白和可用画面。旁白较长，请规划整体叙事和素材分配，随后会根据大纲分段逐拍剪辑。
 
-## Backing visuals
+## 可用画面
 
 {% for img in images %}
-- {{ img.ref }}: {{ img.label }}{% if img.has_face %} (has a face{% if img.subject_box %}, subject box {{ img.subject_box }}{% endif %}){% endif %}{% if img.argument_ids %} — backs arguments {{ img.argument_ids | join(", ") }}{% endif %}
+- {{ img.ref }}：{{ img.label }}{% if img.has_face %}（有人脸{% if img.subject_box %}，主体框 {{ img.subject_box }}{% endif %}）{% endif %}{% if img.argument_ids %}，支持论点 {{ img.argument_ids | join(", ") }}{% endif %}
 {% endfor %}
 
 {% if emphasis_hints %}
-## Where the narration peaks (evidence from the material understanding)
+## 旁白中的高潮（来自素材分析）
 
 {% for h in emphasis_hints %}
-- {{ h.kind }}: "{{ h.text or h.word }}"{% if h.at is defined and h.at is not none %} @{{ h.at }}s{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
+- {{ h.kind }}：“{{ h.text or h.word }}”{% if h.at is defined and h.at is not none %}（{{ h.at }} 秒）{% endif %}{% if h.start is defined and h.start is not none %} [{{ h.start }}-{{ h.end }}]{% endif %}
 {% endfor %}
 {% endif %}
 
-## Rules
+## 规则
 
-- Split the span into 3–6 sections, each with a `role`: exactly one `hook` (the opening), exactly one `payoff` (the close), the rest `build` / `reset`.
-- Assign each section its visuals (`image_refs`) — one visual at most once across the WHOLE outline; the hook section gets the visual whose subject matches the opening phrase; the strongest visual belongs to the payoff.
-- Anchor each section with its opening words (`marker`, verbatim from the cue lines) + optional `approx_start` seconds. The first section starts at the span start by construction. You never write `start`/`end`.
-- `arc` = one line: the emotional journey. `note` per section = what this section does for the arc.
+- 分成 3–6 节。每节填写 role，开头有且只有一个 hook，结尾有且只有一个 payoff，其余为 build 或 reset。
+- 通过 image_refs 给各节分配画面，同一画面在整份大纲中最多出现一次。开场画面的主体应与第一句相符，最有力的画面留给结尾。
+- marker 逐字摘录本节的开头，可另填 approx_start 秒数。第一节从整段起点开始。不要填写 start/end。
+- arc 用一句话概括情绪走向，各节用 note 说明该节如何推进这条线。
 
-## Narration span
+## 旁白原文
 
 {{ span_transcript }}
 
-## Output Format
+## 输出格式
 
-Please output valid JSON only, with no explanations or markdown code blocks.
+仅输出有效 JSON，不加解释或 Markdown 代码块。
 
 {
-  "arc": "one line: the emotional journey of this clip",
+  "arc": "用一句话概括这一段的情绪走向",
   "sections": [
-    {"role": "hook", "image_refs": ["image 1"], "marker": "the opening words of this section", "approx_start": 0.0, "note": "what this section does"},
+    {"role": "hook", "image_refs": ["image 1"], "marker": "本节开头的原话", "approx_start": 0.0, "note": "本节作用"},
     {"role": "build", "image_refs": ["image 2", "image 3"], "marker": "…", "note": "…"}
   ]
 }

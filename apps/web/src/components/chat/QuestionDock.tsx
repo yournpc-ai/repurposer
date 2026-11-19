@@ -37,6 +37,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { questionPages } from "./questionGroupDrafts"
 import type { BriefAnswerItem, BriefQuestionItem } from "./timeline/types"
 
 /** One option on a structured question (mirrors the API's Option). */
@@ -214,8 +215,14 @@ function QuestionGroupForm(props: OptionDockProps) {
   const items = props.items ?? []
   const answers = props.groupAnswers ?? []
   const [page, setPage] = useState(0)
-  const pageCount = Math.max(1, items.length)
-  const currentItems = items.slice(page, page + 1)
+  const pages = questionPages(items)
+  const pageCount = Math.max(1, pages.length)
+  const currentPage = pages[Math.min(page, pageCount - 1)]
+  const currentItems = currentPage?.fields ?? []
+  const paired = currentItems.length > 1
+  const grouped = items.some((item) => item.decision_page)
+  const note = answers.find((answer) => answer.slot === "constraints")?.text ?? ""
+
   const lastPage = page === pageCount - 1
 
   useEffect(() => {
@@ -223,7 +230,7 @@ function QuestionGroupForm(props: OptionDockProps) {
   }, [props.groupDigest])
 
   const answered = (slot: string) => {
-    const answer = answers.find((candidate) => candidate.slot === slot)
+    const answer = answers.find((candidate) => candidate.slot === slot || candidate.page_slots?.includes(slot))
     return answer?.kind === "option"
       ? !!answer.option_id
       : !!(answer?.text ?? "").trim()
@@ -256,12 +263,73 @@ function QuestionGroupForm(props: OptionDockProps) {
         ) : null}
       </div>
       <div className="mt-3 flex flex-col gap-4">
-        {currentItems.map((item) => {
+        {paired && (
+          <fieldset className="min-w-0">
+            <legend className="mb-3 text-sm font-medium">{currentPage.title}</legend>
+            <div className="flex flex-col gap-1.5">
+              {currentPage.choices.map((choice, index) => {
+                const values = currentItems.map((field): BriefAnswerItem => ({
+                  slot: field.slot, kind: "option", option_id: choice[field.slot],
+                }))
+                const selected = values.every((value) => answers.some((answer) =>
+                  answer.slot === value.slot && answer.kind === "option" && answer.option_id === value.option_id))
+                const label = currentItems.map((field) =>
+                  field.options?.find((option) => option.id === choice[field.slot])?.label).join(" · ")
+                return (
+                  <Button key={index} variant="ghost" aria-pressed={selected} disabled={props.answering}
+                    className={cn("h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md border border-transparent bg-card px-3 py-3 text-left text-sm font-normal", selected && "border-primary/25 bg-primary/10 text-primary")}
+                    onClick={() => {
+                      props.onGroupAnswersChange?.([...answers.filter((answer) => !(answer.slot in choice) && !answer.page_slots?.some((slot) => slot in choice)), ...values])
+                      if (!lastPage) setPage(page + 1)
+                    }}>
+                    <span className="flex size-5 shrink-0 items-center justify-center text-xs tabular-nums text-meta-foreground">{index + 1}</span>
+                    <span className="min-w-0 flex-1 break-words leading-5">{label}</span>
+                    {selected && <Check className="ml-auto size-4" />}
+                  </Button>
+                )
+              })}
+              {currentPage.choices.length > 0 && currentItems.every((item) => item.allow_freeform !== false) && (
+                <div className="flex min-h-11 w-full items-center gap-3 rounded-md border border-subtle bg-card px-3 py-3 transition-colors focus-within:border-ring focus-within:outline-2 focus-within:outline-ring/30">
+                  <span className="flex size-5 shrink-0 items-center justify-center text-meta-foreground">
+                    <Pencil className="size-3.5" />
+                  </span>
+                  <Input
+                    value={answers.find((answer) => answer.page_slots?.includes(currentItems[0].slot))?.text ?? ""}
+                    onChange={(event) => {
+                      const text = event.target.value
+                      const slots = currentItems.map((item) => item.slot)
+                      const remaining = answers.filter((answer) => !slots.includes(answer.slot)
+                        && !answer.page_slots?.some((slot) => slots.includes(slot)))
+                      props.onGroupAnswersChange?.(text ? [...remaining, {
+                        slot: slots[0], kind: "freeform", text, page_slots: slots,
+                      }] : remaining)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                        event.preventDefault()
+                        if (lastPage) submit()
+                        else if (currentItems.every((item) => item.required === false || answered(item.slot))) {
+                          setPage((current) => Math.min(pageCount - 1, current + 1))
+                        }
+                      }
+                    }}
+                    aria-label={currentPage.title}
+                    placeholder={t("chat.choicePlaceholder")}
+                    maxLength={4000}
+                    disabled={props.answering || props.freeformDisabled}
+                    className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm leading-5 text-foreground shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
+                  />
+                </div>
+              )}
+            </div>
+          </fieldset>
+        )}
+        {(!paired || currentPage.choices.length === 0) && currentItems.map((item) => {
           const answer = answers.find((candidate) => candidate.slot === item.slot)
           return (
             <fieldset key={item.slot} className="min-w-0">
               <legend className="mb-3 max-w-full whitespace-normal break-words text-sm font-medium leading-6 text-foreground">
-                {item.question}
+                {paired ? item.question : currentPage.title}
               </legend>
               <div className="flex flex-col gap-1.5">
                 {(item.options ?? []).map((option, index) => {
@@ -274,7 +342,7 @@ function QuestionGroupForm(props: OptionDockProps) {
                       aria-pressed={selected}
                       onClick={() => {
                         updateAnswer(item.slot, { slot: item.slot, kind: "option", option_id: option.id })
-                        if (!lastPage) setPage((current) => Math.min(pageCount - 1, current + 1))
+                        if (!paired && !lastPage) setPage((current) => Math.min(pageCount - 1, current + 1))
                       }}
                       className={cn(
                         "h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md border px-3 py-3 text-left text-sm font-normal",
@@ -315,12 +383,13 @@ function QuestionGroupForm(props: OptionDockProps) {
                       onKeyDown={(event) => {
                         if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                           event.preventDefault()
+                          if (paired) return
                           if (lastPage) submit()
                           else setPage((current) => Math.min(pageCount - 1, current + 1))
                         }
                       }}
                       placeholder={t("chat.choicePlaceholder")}
-                      aria-label={item.question}
+                      aria-label={paired ? item.question : currentPage.title}
                       disabled={props.answering || props.freeformDisabled}
                       className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
                     />
@@ -330,6 +399,12 @@ function QuestionGroupForm(props: OptionDockProps) {
             </fieldset>
           )
         })}
+        {grouped && lastPage && <label className="flex flex-col gap-1.5 text-sm">
+          {t("questionDock.notes")}
+          <Input value={note} maxLength={4000} disabled={props.answering}
+            onChange={(event) => updateAnswer("constraints", event.target.value.trim()
+              ? { slot: "constraints", kind: "freeform", text: event.target.value } : undefined)} />
+        </label>}
       </div>
       <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-subtle pt-3">
         <Button

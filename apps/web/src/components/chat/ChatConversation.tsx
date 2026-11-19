@@ -246,6 +246,7 @@ export function ChatConversation({
               questionDetail={m.qa.detail}
               answer={m.qa.answer}
               items={m.qa.items}
+              productionNote={m.qa.productionNote}
               muted={m.qa.muted}
               hydrated={m.hydrated}
             />
@@ -391,9 +392,19 @@ export function ChatConversation({
         <WorkSegmentRow
           rows={unit.rows}
           elapsedMs={unit.elapsedMs}
+          settledLabel={unit.workRunIds?.length ? t("chat.activityFold.workedWithoutTime") : undefined}
           liveLabel={live ? chatStatusLabel : null}
           failure={unit.failure}
-        />
+        >
+          {unit.workRunIds?.flatMap((id) => {
+            const start = messages.find((m) => m.runId === id && m.activity?.kind === "run")
+            return (start?.blocks ?? []).map((block, i) => block.kind === "system_notice"
+              ? <ComponentSlot key={`${id}-notice-${i}`} slot={{
+                  kind: "systemNotice", key: `${id}-notice-${i}`, block, priorDrained: true, history: true,
+                }} />
+              : null)
+          })}
+        </WorkSegmentRow>
       </MessageScrollerItem>
     )
   }

@@ -160,12 +160,16 @@ async def snapshot_web_cutout_canvas(db, *, owner_id, web_snapshot, view_id):
     )
 
 
-async def snapshot_web_generator_resources(db, *, owner_id, web_snapshot, issues=None):
-    """Expose every independently usable view; failed alignment never hides peers."""
+async def snapshot_web_generator_resources(
+    db, *, owner_id, web_snapshot, issues=None, view_ids: set[str] | None = None,
+):
+    """Expose usable image resources for the selected views, or the whole capture."""
     from app.editing.sources import register_web_view_snapshot
 
     resources = []
     for view in (web_snapshot.meta or {}).get("views") or []:
+        if view_ids is not None and view.get("view_id") not in view_ids:
+            continue
         role = view.get("artifact_role") or "view"
         if role == "hero":
             continue

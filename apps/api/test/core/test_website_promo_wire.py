@@ -5,9 +5,11 @@ from uuid import uuid4
 import pytest
 
 from app.agents.tool_loop import ContextSnapshot, ToolObservation
+from app.chat.context import conversation_messages
 from app.chat.intent import intent_router
-from app.chat.readiness import brief_with_user_constraints
+from app.chat.readiness import brief_with_user_constraints, website_promo_question_items
 from app.chat.service import _backfill_brief_group
+from app.chat.speech_language import conversation_speech_language
 from app.models.schemas import (
     BrandColor,
     BrandSourceRef,
@@ -21,11 +23,11 @@ from app.models.schemas import (
     QuestionPayload,
     seal_creative_state,
 )
-from app.models.tables import Project, SourceSnapshot
+from app.models.tables import Message, Project, SourceSnapshot
 from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
 from app.tools.video.brand import build_brand_profile
 from app.tools.video.brand_agent import BrandProfileExtraction, brand_profile_agent
-from test.core.test_website_promo_readiness import URL, asset, snapshot
+from test.core.test_website_promo_readiness import URL, asset, snapshot, website_question_arguments
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,10 +51,12 @@ class FakeToolProvider:
 
     async def generate_with_tools(self, *, messages, tools, **kwargs):
         self.wires.append({"messages": wire_copy(messages), "tools": wire_copy(tools)})
-        name, arguments = self.calls_to_make.pop(0)
+        batch = self.calls_to_make.pop(0)
+        calls = batch if isinstance(batch, list) else [batch]
         return ToolGeneration(
             content="我来处理这一步。",
-            tool_calls=[ToolCall(id=f"call-{len(self.wires)}", name=name, arguments=arguments)],
+            tool_calls=[ToolCall(id=f"call-{len(self.wires)}-{index}", name=name, arguments=arguments)
+                        for index, (name, arguments) in enumerate(calls)],
         )
 
     async def generate_stream_with_tools(self, **kwargs):
@@ -69,33 +73,6 @@ def png():
         mime="image/png",
         data_url="data:image/png;base64,iVBORw0KGgo=",
     )
-
-
-def group_arguments():
-    values = (
-        ("purpose", "website"),
-        ("target_seconds", "60"),
-        ("narrative_mode", "mission_tech"),
-        ("narration_language", "en"),
-        ("subtitle_languages", "en"),
-        ("aspect", "16:9"),
-    )
-    return {
-        "question": "Confirm the production setup",
-        "options": [],
-        "items": [
-            {
-                "slot": slot,
-                "question": f"Choose {slot}",
-                "options": [option_id],
-                "required": True,
-                "allow_freeform": True,
-                "default_path": f"Safe {slot}",
-            }
-            for slot, option_id in values
-        ],
-        "default_path": "Use safe defaults",
-    }
 
 
 def source_row(owner_id):
@@ -133,18 +110,21 @@ class BrandFakeClient:
         )
 
 
-async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypatch):
+async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch):
     provider = FakeToolProvider(
         [
             ("prepare_video_materials", {"material_urls": [URL]}),
             ("analyze_brand", {}),
-            ("ask_user", group_arguments()),
+            ("ask_user", website_question_arguments()),
         ]
     )
     monkeypatch.setattr(intent_router, "client", provider)
     brand_fake = BrandFakeClient()
     monkeypatch.setattr(brand_profile_agent, "client", brand_fake)
     text = f"给 {URL} 做一只宣传片"
+    rows = [Message(role="user", content=text)]
+    speech_language = conversation_speech_language(rows)
+    assert speech_language and speech_language.split("-")[0] == "zh"
     owner_id = uuid4()
     state = CreativeState()
     world = ContextSnapshot("pending", frozenset(), resources=(("asset:1", asset()),))
@@ -207,38 +187,39 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
         execute,
         round_assembler=assemble,
         refresh_context=refresh_context,
-        dialogue=[{"role": "user", "content": text}],
+        dialogue=conversation_messages(rows),
+        speech_language_hint=speech_language,
         message="",
         material_pending_line=(
-            "Website capture is pending for this URL. The page is not readable evidence yet."
+            "此 URL 的网站采集仍在等待，页面尚不能用作可读证据。"
         ),
     )
     assert result.tool_name == "ask_user"
     assert len(provider.wires) == 3
     assert tool_names(provider.wires[0]) == {"prepare_video_materials", "answer"}
     assert tool_names(provider.wires[1]) == {"analyze_brand", "answer"}
-    assert tool_names(provider.wires[2]) == {"ask_user", "answer"}
-    assert "design_video" not in tool_names(provider.wires[2])
+    assert {"ask_user", "design_video"} <= tool_names(provider.wires[2])
     for wire in provider.wires:
         assert wire["messages"].count({"role": "user", "content": text}) == 1
         assert [message["role"] for message in wire["messages"][:2]] == ["system", "user"]
+        assert f"对话语言：{speech_language}" in wire["messages"][0]["content"]
         assert "一轮一问" not in json.dumps(wire["tools"], ensure_ascii=False)
         assert "five slots" not in json.dumps(wire["tools"], ensure_ascii=False)
     first_user = provider.wires[0]["messages"][1]["content"]
-    assert "Website capture is pending" in first_user
-    assert "No file uploaded" not in first_user
+    assert "网站采集仍在等待" in first_user
+    assert "未上传文件" not in first_user
     first_system = provider.wires[0]["messages"][0]["content"]
-    assert "WEBSITE PROMO EVIDENCE" in first_system
-    assert first_system.index("READ TOOLS:") < first_system.index("Video works")
-    assert first_system.index("Video works") < first_system.index("- answer:")
+    assert "官网宣传片取证" in first_system
+    assert first_system.index("只读工具的名称") < first_system.index("视频创作（网站演示")
+    assert first_system.index("视频创作（网站演示") < first_system.index("- answer：")
     full_context = "\n".join(
         str(message.get("content")) for message in provider.wires[0]["messages"]
     )
-    assert "CURRENT ROUTE: website_promo" in full_context
-    assert "Capture ready: false" in full_context
-    assert "Text ready: false" in full_context
-    assert "Required views ready: false" in full_context
-    assert "Brief ready: false" in full_context
+    assert "当前路径：website_promo" in full_context
+    assert "采集已就绪：false" in full_context
+    assert "正文已就绪：false" in full_context
+    assert "所需视图已就绪：false" in full_context
+    assert "Brief 已就绪：false" in full_context
     assert '"required_next_action": "prepare_video_materials"' in full_context
     assert full_context.count('"required_next_action":') == 1
     assert '"source_readiness"' not in full_context
@@ -247,11 +228,10 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
     assert "Citations should be as universal as hashtags." in brand_parts[-1]["text"]
 
     ask_arguments = provider.wires[2]["messages"][0]
-    assert "WEBSITE PROMO BRIEFING" in ask_arguments["content"]
+    assert "用户要求做宣传片时直接搭建" in ask_arguments["content"]
     ask_system = ask_arguments["content"]
-    assert ask_system.index("Video works") < ask_system.index("- answer:")
-    assert ask_system.index("- answer:") < ask_system.index("- ask_user:")
-    assert ask_system.index("- ask_user:") < ask_system.index("PENDING QUESTION:")
+    assert ask_system.index("视频创作（网站演示") < ask_system.index("- answer：")
+    assert ask_system.index("用户要求做宣传片时直接搭建") < ask_system.index("待回答的问题：")
     current_wire = json.dumps(provider.wires[2]["messages"], ensure_ascii=False)
     assert "creative_state" in current_wire, current_wire
     assert '"source_refs"' not in provider.wires[2]["messages"][-2]["content"]
@@ -266,18 +246,26 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
     assert set(ask_schema["required"]) == {"question", "items", "default_path"}
     assert ask_schema["properties"]["items"]["minItems"] == 1
     assert "Brief" not in ask_schema.get("$defs", {})
-    assert "required" not in ask_schema["$defs"]["BriefQuestionItem"]["properties"]
-    assert "allow_freeform" not in ask_schema["$defs"]["BriefQuestionItem"]["properties"]
-    assert ask_schema["$defs"]["BriefQuestionItem"]["properties"]["slot"]["enum"] == [
-        "purpose", "target_seconds", "narrative_mode", "narration_language",
-        "subtitle_languages", "aspect",
+    questions = ask_schema["properties"]["items"]["items"]["anyOf"]
+    assert [q["properties"]["slot"]["enum"][0] for q in questions] == [
+        "production_direction", "target_seconds", "narration_language", "subtitle_languages", "aspect",
     ]
     assert "Option" not in ask_schema.get("$defs", {})
-    assert ask_schema["$defs"]["BriefQuestionItem"]["properties"]["options"]["items"]["type"] == "string"
-    assert "recommended_id" not in ask_schema["$defs"]["BriefQuestionItem"]["properties"]
-    assert [option.id for option in result.params.items[0].options] == ["1"]
+    assert questions[0]["properties"]["options"]["items"]["required"] == ["use_case", "treatment"]
+    assert questions[1]["properties"]["options"]["items"]["type"] == "integer"
+    assert questions[4]["properties"]["options"]["items"]["enum"] == ["16:9", "9:16", "1:1"]
+    assert [option.id for option in result.params.items[0].options] == ["1", "2"]
     asked = result.params
-    assert len(asked.items) == 6
+    asked.items = website_promo_question_items(asked.items, state.brief)
+    assert [item.decision_page.slots for item in asked.items if item.decision_page] == [
+        ["production_direction"], ["target_seconds"], ["narration_language"],
+        ["subtitle_languages"], ["aspect"],
+    ]
+    assert len(asked.items) == 5
+    assert asked.items[0].question == asked.items[0].decision_page.title == "这支片子主要用在哪里，你希望怎么讲？"
+    assert asked.items[1].option_values == {"1": 30, "2": 60}
+    for item in asked.items:
+        assert item.decision_page.choices == [{item.slot: option.id} for option in item.options]
     payload = QuestionPayload(
         kind="question",
         question=asked.question,
@@ -295,14 +283,17 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
             brief=state.brief,
         ).model_dump(mode="json"),
     )
-    answers = [
-        BriefAnswerItem(
-            slot=item.slot, kind="option", option_id=item.options[0].id, text=item.options[0].label
-        )
-        for item in asked.items
-    ]
+    answers = []
+    for item in asked.items:
+        pick = item.options[1 if item.slot in {"target_seconds", "subtitle_languages"} else 0]
+        answers.append(BriefAnswerItem(slot=item.slot, kind="option", option_id=pick.id, text=pick.label))
     _backfill_brief_group(project, payload, answers)
     state = PendingPlan.model_validate(project.pending_brief).creative_state
+    assert state.brief.production_direction.value == "官网推广 · 用真实案例演示产品"
+    assert state.brief.target_seconds.value == 60
+    assert state.brief.narration_language.value == "en"
+    assert state.brief.subtitle_languages.value == ["zh"]
+    assert state.brief.aspect.value == "16:9"
 
     resumed_provider = FakeToolProvider([("answer", {})])
     monkeypatch.setattr(intent_router, "client", resumed_provider)
@@ -324,11 +315,17 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
             }
         )
 
-    dialogue = [{"role": "user", "content": text}, {"role": "assistant", "content": "旁白语言？"},
-                {"role": "user", "content": "英语"}]
+    rows.append(Message(
+        id=uuid4(), role="assistant", content="旁白语言？",
+        answer={"kind": "option", "option_id": "1", "text": "English voiceover"},
+    ))
+    dialogue = conversation_messages(rows)
+    resumed_language = conversation_speech_language(rows)
+    assert resumed_language == speech_language
     await intent_router.call_loop(
         execute_answer,
         dialogue=dialogue,
+        speech_language_hint=resumed_language,
         round_assembler=assemble_answer,
         refresh_context=refresh_context,
         message="",
@@ -336,8 +333,26 @@ async def test_vague_legitevi_wire_gates_source_brand_group_then_design(monkeypa
     assert len(resumed_provider.wires) == 1
     messages = resumed_provider.wires[0]["messages"]
     assert messages[-3:] == dialogue
+    assert f"对话语言：{resumed_language}" in messages[0]["content"]
+    assert state.brief.production_direction.value in str(messages)
     assert "design_video" in tool_names(resumed_provider.wires[0])
     assert '"required_next_action": "design_video"' in str(resumed_provider.wires[0]["messages"])
+
+
+async def test_url_and_suggestion_preserve_speech_language_until_user_writes_in_english():
+    source_turn = uuid4()
+    rows = [
+        Message(role="user", content=f"给 {URL} 做一只宣传片"),
+        Message(id=source_turn, role="assistant", content="Which voiceover would you like?"),
+        Message(role="user", content="Use the English voiceover for this film.",
+                suggestion_ref={"source_turn": str(source_turn), "suggestion_id": "en"}),
+        Message(role="user", content=URL),
+    ]
+    chinese = conversation_speech_language(rows)
+    assert chinese and chinese.split("-")[0] == "zh"
+    rows.append(Message(role="user", content="Please walk me through your plan for the film."))
+    english = conversation_speech_language(rows)
+    assert english and english.split("-")[0] == "en"
 
 
 async def test_complete_legitevi_never_reasks_and_has_no_forced_skill(monkeypatch):
@@ -467,7 +482,7 @@ async def test_failed_capture_and_non_website_paths(monkeypatch):
         message="做一只宣传片",
     )
     assert "design_video" in tool_names(generic_provider.wires[0])
-    assert "CURRENT ROUTE: website_promo" not in str(generic_provider.wires[0]["messages"])
+    assert "当前路径：website_promo" not in str(generic_provider.wires[0]["messages"])
     assert "promo-video" not in generic_provider.wires[0]["messages"][0]["content"]
 
 
@@ -476,19 +491,26 @@ async def test_failed_capture_and_non_website_paths(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_one_service_message_per_accepted_call_without_a_turn_cap(monkeypatch, streaming):
+async def test_stage_speech_precedes_activity_and_silent_calls_can_continue(monkeypatch, streaming):
     from app.agents.tool_loop import ChatTool, ToolObservation
 
     class Provider(FakeToolProvider):
         async def generate_with_tools(self, **kwargs):
+            self.wires.append(wire_copy(kwargs["messages"]))
             return self.calls_to_make.pop(0)
 
     def call(n, name):
         return ToolCall(id=f"call-{n}", name=name, arguments={})
 
+    original = {
+        "role": "assistant", "reasoning_content": "test-only protocol marker",
+        "tool_calls": [{"id": "call-c", "type": "function",
+                        "function": {"name": "analyze_brand", "arguments": "{  }"}}],
+    }
     requests = [
         ToolGeneration("这一批不应执行。", [call("a", "read"), call("b", "read")]),
-        ToolGeneration("", [call("c", "read")]),
+        ToolGeneration("", [call("c", "analyze_brand")], assistant_message=original),
+        ToolGeneration("", [call("again", "analyze_brand")]),
         *(ToolGeneration(f"查看素材 {i}。", [call(i, "read")]) for i in range(6)),
         ToolGeneration("已完成。", [call("end", "answer")]),
     ]
@@ -498,16 +520,20 @@ async def test_one_service_message_per_accepted_call_without_a_turn_cap(monkeypa
 
     async def execute(name, params, speech):
         events.append(name)
-        return ToolObservation("observed") if name == "read" else None
+        return ToolObservation("observed") if name != "answer" else None
 
     result = await intent_router.call_loop(
         execute, tools=[
+            ChatTool(name="analyze_brand", description="Read the brand", params_model=None, terminal=False),
             ChatTool(name="read", description="Read", params_model=None, terminal=False, batchable=True),
             ChatTool(name="answer", description="Reply", params_model=None),
         ],
         message="给 https://www.legitevi.com/en 做一只宣传片",
+        speech_language_hint="zh",
         on_interim_prose=events.append,
         on_delta=(lambda _: None) if streaming else None,
     )
-    assert events == [entry for i in range(6) for entry in (f"查看素材 {i}。", "read")] + ["answer"]
+    assert original in provider.wires[2]
+    assert events[:2] == ["analyze_brand", "analyze_brand"]
+    assert events[2:] == [entry for i in range(6) for entry in (f"查看素材 {i}。", "read")] + ["answer"]
     assert result.prose == "已完成。"

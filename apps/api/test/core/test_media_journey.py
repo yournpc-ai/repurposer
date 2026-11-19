@@ -14,7 +14,7 @@ from app.chat.media_journey import (
 from app.chat.plan_turn import PlanTurn
 from app.models.schemas import ChatRequest, WorkflowStatus
 from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
-from app.tools.video.media_analysis import IMAGE_REVIEWER_VERSION
+from app.tools.video.media_analysis import IMAGE_REVIEWER_VERSION, image_reviewer_version
 from app.tools.video.visual_assets import SceneAssetSpec
 
 
@@ -34,7 +34,7 @@ def result_for(spec, status, **extra):
     return {
         "scene_id": spec.scene_id,
         "request_digest": spec.request_digest(),
-        "content_review": {"status": status, "reviewer_version": IMAGE_REVIEWER_VERSION},
+        "content_review": {"status": status, "reviewer_version": image_reviewer_version(spec.source.kind)},
         **extra,
     }
 
@@ -60,6 +60,34 @@ def test_staged_media_preserves_original_intent_and_enforces_current_images():
     changed = spec.model_copy(update={"intent": "New scene intent"})
     draft["design"]["scene_assets"] = [changed.model_dump(mode="json")]
     assert media_actions(draft, [passed])["phase"] == "images"
+
+
+def test_existing_image_repair_uses_current_evidence_review_and_keeps_attempt_bound():
+    spec = SceneAssetSpec(
+        scene_id="process", intent="Show the four steps", on_screen_copy="From paper to post",
+        source={"kind": "existing_image", "snapshot_id": uuid4(), "snapshot_digest": "a" * 64,
+                "visible_evidence": "The Process diagram with the four numbered steps"},
+    )
+    draft = {
+        "content": {"scenes": [{"scene_id": spec.scene_id}]},
+        "design": {"scene_assets": [spec.model_dump(mode="json")]},
+    }
+    old = result_for(spec, "pass")
+    old["content_review"]["reviewer_version"] = IMAGE_REVIEWER_VERSION
+    assert media_actions(draft, [old])["missing_scene_ids"] == ["process"]
+    wrong_section = result_for(spec, "fail", execution={"run_id": "first"})
+    wrong_section["content_review"]["summary"] = "The footer has no process diagram."
+    state = media_actions(draft, [wrong_section])
+    assert state["repair_scene_ids"] == ["process"]
+    assert state["scene_failures"][0]["detail"] == "The footer has no process diagram."
+
+    changed = spec.model_copy(update={"source": spec.source.model_copy(update={
+        "snapshot_id": uuid4(), "snapshot_digest": "b" * 64,
+    })})
+    draft["design"]["scene_assets"] = [changed.model_dump(mode="json")]
+    for status, phase in [("fail", "images_blocked"), ("pass", "audio")]:
+        retry = result_for(changed, status, execution={"run_id": "second"})
+        assert media_actions(draft, [wrong_section, retry])["phase"] == phase
 
 
 @pytest.mark.asyncio
@@ -118,6 +146,36 @@ async def test_rejected_verified_plan_can_retry_without_searching_or_saving(monk
 
 
 @pytest.mark.asyncio
+async def test_media_stop_reports_the_scene_from_the_failed_image_write(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
+    from app.chat import video_turn_seats
+
+    project = SimpleNamespace(id=uuid4(), language="zh")
+    turn = PlanTurn(None, uuid4(), SimpleNamespace(id=uuid4()), project, ChatRequest(
+        project_id=project.id, message="继续制作",
+    ))
+    turn.media_state = {"phase": "audio", "approved_images": []}
+    scene = SimpleNamespace(scene_id="demo", snapshot_id=uuid4())
+    draft = {"content": {"scenes": [{"scene_id": "opening"}, {"scene_id": "demo"}]}}
+    failed = WorkingDraftRejected(
+        "source snapshot is missing or not prepared",
+        [{"type": "source_not_ready", "loc": ["scene", "snapshot_id"]}],
+        draft,
+    )
+    monkeypatch.setattr(video_turn_seats, "video_request_id", AsyncMock(return_value="request"))
+    monkeypatch.setattr(video_turn_seats, "design_video_seat", AsyncMock(side_effect=[
+        (None, failed), (None, WorkingDraftUpdated(draft)),
+    ]))
+    params = SimpleNamespace(scene=scene)
+    await turn._design_video(params)
+    assert "第 2 幕" in turn._media_stop_text()
+    await turn._design_video(params)
+    assert "第 2 幕" not in turn._media_stop_text()
+
+
+@pytest.mark.asyncio
 async def test_settled_read_handoff_ends_the_loop_without_an_extra_model_call(monkeypatch):
     class Provider:
         capabilities = ProviderCapabilities(supports_native_tools=True)
@@ -147,8 +205,8 @@ async def test_settled_read_handoff_ends_the_loop_without_an_extra_model_call(mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("blocked", [True, False])
-async def test_visual_settlement_continues_at_most_once_in_original_chat(monkeypatch, blocked):
+@pytest.mark.parametrize("stop_reason", [None, "review", "stale", "stop", "newer", "pending", "missing_opening"])
+async def test_visual_settlement_continues_at_most_once_in_original_chat(monkeypatch, stop_reason):
     from app.chat import media_journey, plan_turn, service
     from app.models.schemas import PendingPlan
     from app.models.tables import Message, WorkflowRun
@@ -156,35 +214,39 @@ async def test_visual_settlement_continues_at_most_once_in_original_chat(monkeyp
     draft, spec = draft_with_scene()
     conversation = SimpleNamespace(
         id=uuid4(), context={"schema_version": 1, "items": [{
-            "candidate": {"target_tool": "design_video", "active": True, "candidate_id": "draft"},
+            "candidate": {"target_tool": "design_video", "active": True, "candidate_id": "draft",
+                          "candidate_digest": "a" * 64},
             "executed_arguments": draft,
         }]},
     )
     opening = SimpleNamespace(
-        id=uuid4(), conversation_id=conversation.id, turn_state="settled", intent={}, seq=1,
+        id=uuid4(), conversation_id=conversation.id, turn_state="settled",
+        intent={"stop_requested_at": "now"} if stop_reason == "stop" else {}, seq=1,
         content="给 https://www.legitevi.com/en 做一只宣传片",
     )
     run = SimpleNamespace(
         id=uuid4(), status=WorkflowStatus.COMPLETED,
         context={
             "media_journey": {"opening_id": str(opening.id)},
-            "visual_asset_preparation": {"request": {"draft_ref": {"draft_id": "draft"}}},
+            "visual_asset_preparation": {"request": {"draft_ref": {
+                "draft_id": "draft", "draft_digest": ("b" if stop_reason == "stale" else "a") * 64,
+            }}},
             "creative_state": {},
         },
     )
     project = SimpleNamespace(id=uuid4(), user_id=uuid4())
-    commits, resumed = [], []
+    commits, resumed, blockers = [], [], []
 
     async def get(cls, key, **kwargs):
         assert key == (run.id if cls is WorkflowRun else opening.id)
         assert cls in {WorkflowRun, Message}
-        return run if cls is WorkflowRun else opening
+        return run if cls is WorkflowRun else None if stop_reason == "missing_opening" else opening
 
     async def absent(*args):
         return None
 
     async def results(*args):
-        if blocked:
+        if stop_reason == "review":
             return [result_for(spec, "unavailable", review_retry_of={"digest": "retry"})]
         return [{
             "scene_id": spec.scene_id, "request_digest": spec.request_digest(),
@@ -195,23 +257,40 @@ async def test_visual_settlement_continues_at_most_once_in_original_chat(monkeyp
         assert kwargs["turn_id"] == opening.id
         assert isinstance(kwargs["media_resume_pending"], PendingPlan)
         assert kwargs["media_resume_pending"].prompt == opening.content
+        assert kwargs["media_resume_draft"].arguments == draft
+        assert kwargs["media_resume_draft"].candidate_digest == "a" * 64
         resumed.append(True)
         return None, None, None, []
 
     async def commit():
         commits.append(True)
 
-    monkeypatch.setattr(service, "latest_pending_question", absent)
+    async def create_message(db, conversation_id, role, content, **kwargs):
+        assert conversation_id == conversation.id and role == "assistant" and content
+        assert kwargs["workflow_run_id"] == run.id
+        assert kwargs["turn_id"] == (None if stop_reason == "missing_opening" else opening.id)
+        blockers.append(kwargs["intent"]["media_journey"])
+
+    async def pending_question(*args):
+        return object() if stop_reason == "pending" else None
+
+    async def newer(*args):
+        return uuid4() if stop_reason == "newer" else None
+
+    monkeypatch.setattr(service, "latest_pending_question", pending_question)
+    monkeypatch.setattr(service, "_create_message", create_message)
     monkeypatch.setattr(service, "list_conversation_messages", absent)
     monkeypatch.setattr(service, "fold_conversation_usage", lambda *a, **k: absent())
     monkeypatch.setattr(plan_turn, "run_plan_turn", resume)
     monkeypatch.setattr(media_journey, "visual_results", results)
-    db = SimpleNamespace(get=get, refresh=absent, scalar=absent, commit=commit)
+    db = SimpleNamespace(get=get, refresh=absent, scalar=newer, commit=commit)
     await continue_media_journey(db, project, conversation, run)
     await continue_media_journey(db, project, conversation, run)
     assert run.context["media_continuation_finished"] is True
     assert commits == [True]
-    assert resumed == ([] if blocked else [True])
+    assert resumed == ([] if stop_reason else [True])
+    state = "stopped" if stop_reason in {"stop", "newer"} else "blocked"
+    assert blockers == ([{"opening_id": str(opening.id), "state": state}] if stop_reason else [])
 
 
 @pytest.mark.asyncio

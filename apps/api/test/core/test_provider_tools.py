@@ -177,7 +177,8 @@ async def test_stream_done_finishes_without_waiting_for_connection_close(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch):
+@pytest.mark.parametrize("model", ["minimax-m3", "MiniMax-M3.1-Flash"])
+async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch, model):
     import json
     from contextlib import asynccontextmanager
 
@@ -206,6 +207,7 @@ async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch):
             yield client
 
         monkeypatch.setattr(minimax, "_pooled_client", pool)
+        monkeypatch.setattr(minimax.settings, "minimax_model", model)
         monkeypatch.setattr(minimax.settings, "llm_trace_path", "")
         llm = minimax.MiniMaxClient(api_key="test", base_url="https://test.invalid")
         await llm.generate_with_tools(messages=[], tools=[], thinking=False)
@@ -213,6 +215,11 @@ async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch):
         await llm.generate_stream_with_tools(messages=[], tools=[], thinking=False)
         await llm.generate_stream_with_tools(messages=[], tools=[])
 
+    if model == "MiniMax-M3.1-Flash":
+        assert all(payload["model"] == model and "temperature" not in payload for payload in payloads)
+        assert all(payload["thinking"] == {"type": "adaptive"} for payload in payloads)
+        assert [payload.get("reasoning_effort") for payload in payloads] == ["low", None, "low", None]
+        return
     assert payloads[0]["thinking"] == {"type": "disabled"}
     assert "thinking" not in payloads[1]
     assert payloads[2]["thinking"] == {"type": "disabled"}
@@ -311,7 +318,7 @@ async def test_repair_observation_leaves_speech_to_the_current_stage(monkeypatch
     result = await agent.call_loop(execute)
     repair_messages = json.dumps(calls[-1]["messages"], ensure_ascii=False)
     assert result.prose == "Production starts now."
-    assert "previous tool call was rejected" in repair_messages
+    assert "上次工具调用被拒绝" in repair_messages
     assert "Speak to the user" not in repair_messages
 
 
@@ -446,6 +453,7 @@ async def test_structured_thinking_opt_out_uses_provider_config(monkeypatch):
             yield client
 
         monkeypatch.setattr(minimax, "_pooled_client", pool)
+        monkeypatch.setattr(minimax.settings, "minimax_model", "minimax-m3")
         monkeypatch.setattr(minimax.settings, "llm_trace_path", "")
         llm = minimax.MiniMaxClient(api_key="test", base_url="https://test.invalid")
         assert (await llm.generate(messages=[], response_model=Result)).ok
@@ -811,8 +819,8 @@ async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_pro
     properties = tool_spec(design)["function"]["parameters"]["properties"]
     assert {"draft_ref", "scene"} <= set(properties)
     assert not {"scenes", "clips", "tracks", "settings", "sources", "scene_id"} & set(properties)
-    assert "high-level scene object" in round.system
-    assert "DEFAULT SOUNDTRACK" in round.system
+    assert "高层 scene 对象" in round.system
+    assert "默认声音" in round.system
 
     args = CompositionDesignVideoArgs.model_validate({
         "draft_ref": {"draft_id": draft.candidate_id, "draft_digest": draft.candidate_digest},
@@ -1056,20 +1064,20 @@ def test_video_modes_use_the_shared_pending_question_rule():
 
     plan = chat_system("plan", available_tools=intent_router.tools)
     conversation = chat_system("conversation", available_tools=chat_intent_agent.tools)
-    assert plan.count("PENDING QUESTION:") == 1
-    assert conversation.count("PENDING QUESTION:") == 1
-    assert plan.count("SPEECH LANGUAGE:") == 1
-    assert conversation.count("SPEECH LANGUAGE:") == 1
+    assert plan.count("待回答的问题：") == 1
+    assert conversation.count("待回答的问题：") == 1
+    assert plan.count("交流语言：") == 1
+    assert conversation.count("交流语言：") == 1
     assert "pending_disposition" in plan and "pending_disposition" in conversation
 
     video = chat_system(
         "plan", available_tools=intent_router.tools,
         video_stage="draft_build", video_speech="opening", scene_authoring=True,
     )
-    assert video.count("SPEECH LANGUAGE:") == 1
+    assert video.count("交流语言：") == 1
     ordered_rules = (
-        "SPEECH LANGUAGE:", "READ TOOLS:", "REJECTIONS:", "Video works",
-        "- answer:", "- ask_user:", "PENDING QUESTION:",
+        "交流语言：", "只读工具的名称", "调用被拒绝时", "视频创作（网站演示",
+        "- answer：", "- ask_user：", "待回答的问题：",
     )
     assert [video.index(rule) for rule in ordered_rules] == sorted(
         video.index(rule) for rule in ordered_rules
@@ -1079,12 +1087,12 @@ def test_video_modes_use_the_shared_pending_question_rule():
         mode="plan", recent=["- user: earlier"], message="latest answer",
         asset_lines=["- page (web_page)"], understanding_lines=["- Summary: evidence"],
         persona_lines=["- tone: rational"], brief_lines=["- target_seconds: 30 (user-stated)"],
-        confirmation_line="Confirmation settings: execution=auto, spending=auto.",
+        confirmation_line="确认设置： execution=auto, spending=auto.",
         pending_lines=["- question: specs?"],
     )
     opening_order = (
-        "Recent conversation:", "Uploaded files", "The system's read", "The user's persona",
-        "The brief so far", "Confirmation settings:", "A question of yours", "User message:",
+        "最近的对话：", "上传的文件", "系统对本组素材的理解", "用户人设",
+        "目前的 Brief", "确认设置：", "你之前的问题仍待回答", "用户消息：",
     )
     assert [opening.index(block) for block in opening_order] == sorted(
         opening.index(block) for block in opening_order
@@ -1108,7 +1116,7 @@ def test_missing_package_session_keeps_generic_high_level_protocol(installed_pro
     design = next(tool for tool in projected.tools if tool.name == "design_video")
     properties = tool_spec(design)["function"]["parameters"]["properties"]
     assert "scene_plan" in properties and "tracks" not in properties
-    assert "high-level scene object" in projected.system
+    assert "高层 scene 对象" in projected.system
 
 
 def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
@@ -1133,7 +1141,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     assert {"design_video", "review_working_draft", "ask_user", "answer"} <= {
         tool.name for tool in review.tools
     }
-    assert "Default to saving and presenting the storyboard" in review.system
+    assert "默认保存并展示分镜" in review.system
     sequential = _video_round(
         intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"),
         user_text="请按播放顺序审查当前工作草稿。",
@@ -1183,7 +1191,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     assert "complete project and an unrelated asset" not in edited.context
     assert "title-second" in edited.context
     assert edited.include_observation_media is False
-    assert "TARGETED REVISION: edit only" in edited.system
+    assert "定向修订：只编辑" in edited.system
     presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True)
     assert presenting.stage == "draft_present"
     assert {tool.name for tool in presenting.tools} == {"answer"}
@@ -1518,7 +1526,7 @@ async def test_review_result_identity_survives_stale_history_restore(monkeypatch
     final_fact = json.loads(next(
         message["content"].split("\n", 1)[1]
         for message in requests[-1]["messages"]
-        if isinstance(message.get("content"), str) and "CURRENT VIDEO ROUND" in message["content"]
+        if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
     ))
     assert final_fact["draft"]["unjudged_evidence_ids"] == []
     assert final_fact["draft"]["next_review_target"]["scene_id"] == "review"
@@ -1732,7 +1740,7 @@ async def test_high_level_provider_requests_fold_prior_scene_writes_and_projecti
                 ])
             current = next(
                 message["content"] for message in reversed(requests[-1]["messages"])
-                if isinstance(message.get("content"), str) and "CURRENT VIDEO ROUND" in message["content"]
+                if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
             )
             facts = json.loads(current.rsplit("\n", 1)[-1])
             if count == 2:
@@ -1814,7 +1822,7 @@ async def test_high_level_provider_requests_fold_prior_scene_writes_and_projecti
     for request in requests:
         current = next(
             message["content"] for message in reversed(request["messages"])
-            if isinstance(message.get("content"), str) and "CURRENT VIDEO ROUND" in message["content"]
+            if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
         )
         stages.append(json.loads(current.rsplit("\n", 1)[-1])["video_stage"])
         assert "DISCOVERY GOALS" not in request["messages"][0]["content"]
@@ -2000,4 +2008,4 @@ def test_complete_draft_repair_only_saves_the_existing_draft(installed_promo):
     assert set(properties) == {"draft_ref", "save", "pending_disposition"}
     assert not {"scene_plan", "scene", "aspect_ratio"} & set(properties)
     assert "Extra inputs are not permitted" in round.context
-    assert "Every planned Scene is already present" in spec["description"]
+    assert "计划中的 Scene 均已在当前草稿内" in spec["description"]

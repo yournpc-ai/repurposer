@@ -52,13 +52,13 @@ class NativeTextSceneAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     intent: str = Field(default="", max_length=120)
-    visual_description: str | None = Field(default=None, description="A short sentence describing the actual saved picture and motion.")
+    visual_description: str | None = Field(default=None, description="用一个短句描述已保存的实际画面及运动。")
     duration_seconds: float = Field(gt=0, le=30)
     lines: list[str] = Field(default=[], max_length=3)
     narration: str | None = Field(
         default=None,
         max_length=9000,
-        description="Exact spoken copy for this scene; null only when narration is off.",
+        description="本场确切的口播原文。只有旁白关闭时才填 null。",
     )
     size: Literal["medium", "large", "hero"] = "large"
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
@@ -235,8 +235,8 @@ class MixedDirection(BaseModel):
     source_start_seconds: float = Field(ge=0)
     source_end_seconds: float = Field(gt=0)
     title: str = Field(min_length=1, max_length=100)
-    intent: str = Field(min_length=1, description="The scene's purpose, in plain language.")
-    visual_description: str | None = Field(default=None, description="A short sentence describing the actual saved picture and motion.")
+    intent: str = Field(min_length=1, description="用平实的语言说明本场目的。")
+    visual_description: str | None = Field(default=None, description="用一个短句描述已保存的实际画面及运动。")
     captions: list[MixedCaptionAnswer] = Field(default=[], max_length=16)
     include_original_audio: bool = True
 

@@ -42,8 +42,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
     for entry in [
         ToolEntry(
             name="produce_video",
-            description="Render an existing, fully presented and approved video version. "
-            "Use design_video first; never design or change content during production.",
+            description="渲染已完整展示并获批准的现有视频版本。先用 design_video 完成设计，制作期间不得重新设计或修改内容。",
             behavior="deterministic",
             params_model=ProduceVideoParams,
             summary_templates={"en": "Prepared video · {total_seconds:g}s",
@@ -51,9 +50,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="prepare_narration",
-            description="Prepare one exact final script as a speed-1.0 narration original, "
-            "freeze its real AUDIO snapshot and request NarrationAlignment. "
-            "Runs as the only task in its Run; it creates no video or Composition.",
+            description="用确切的定稿文本准备一份 1.0 倍速的旁白原声，固定其真实 AUDIO 快照并请求 NarrationAlignment。该 Run 仅含此任务，不会创建视频或 Composition。",
             behavior="deterministic",
             params_model=PrepareNarrationParams,
             summary_templates={"en": "Prepared narration · {duration_seconds:g}s",
@@ -61,9 +58,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="prepare_visual_assets",
-            description="Prepare one bounded batch of images selected by draft_ref and scene_ids, "
-            "or use review_existing to retry an unavailable review on fixed PNGs. "
-            "Runs as the only task in its Run; it creates no Composition version or Output.",
+            description="根据 draft_ref 和 scene_ids 准备一批限定范围的图片，或用 review_existing 对审阅不可用的固定 PNG 重试审阅。该 Run 仅含此任务，不会创建 Composition 版本或 Output。",
             behavior="deterministic",
             params_model=PrepareVisualAssetsParams,
             summary_templates={"en": "Prepared scene images · {total_assets}",
@@ -71,9 +66,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
         ),
         ToolEntry(
             name="prepare_music",
-            description="Synthesize one authorized deterministic electronic ScoreSpec for the current draft, "
-            "freeze private Music and its audio Snapshot, and retain an authored BeatGrid and audio analysis. "
-            "Runs as the only task in its Run; it creates no Composition version or Output.",
+            description="为当前草稿合成已授权且确定性的电子配乐 ScoreSpec，固定私有 Music 及其音频 Snapshot，保留编排好的 BeatGrid 和音频分析。该 Run 仅含此任务，不会创建 Composition 版本或 Output。",
             behavior="deterministic",
             params_model=PrepareMusicParams,
             summary_templates={"en": "Prepared electronic score · {duration_seconds:g}s",
@@ -118,7 +111,12 @@ def strip_null_params(params: dict | None) -> dict:
 
 def validate_task_list(tasks: list[Any]) -> list[ToolEntry]:
     if len(tasks) > 1:
-        raise ToolRejected("One saved Composition production takes exactly one task", suggestions=[])
+        scenes = [(t.params or {}).get("scene_id") for t in tasks]
+        ref = (tasks[0].params or {}).get("draft_ref")
+        if (not ref or not all(isinstance(scene, str) and scene for scene in scenes)
+                or len(set(scenes)) != len(scenes)
+                or any(t.tool != "prepare_narration" or (t.params or {}).get("draft_ref") != ref for t in tasks)):
+            raise ToolRejected("A batch must contain distinct scene narrations from the same draft", suggestions=[])
     dispatchable = {entry.name: entry for entry in dispatchable_tools()}
     entries: list[ToolEntry] = []
     for task in tasks:

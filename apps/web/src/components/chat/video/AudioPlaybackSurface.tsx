@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiGet } from "@/lib/api"
@@ -13,50 +13,57 @@ function AudioPlaybackItem({
   item: AudioPlaybackBlock["items"][number]
 }) {
   const { t } = useTranslation()
-  const [src, setSrc] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setSrc(null)
-    setFailed(false)
-    void apiGet(
+  const signed = useRef<{ url: string; expiresAt: number } | null>(null)
+  const resolvePlaybackUrl = async (retry: boolean) => {
+    if (!retry && signed.current && Date.now() < signed.current.expiresAt) {
+      return signed.current.url
+    }
+    const requestedAt = Date.now()
+    const response = await apiGet(
       `/api/v1/projects/${projectId}/audio/${item.snapshot_id}/playback`,
-      { toast: false, signal: controller.signal },
-    ).then(async (response) => {
-      if (!response.ok) throw new Error("playback unavailable")
-      const payload = await response.json() as { url?: string; digest?: string }
-      if (!payload.url || payload.digest !== item.digest) throw new Error("stale audio")
-      if (!controller.signal.aborted) setSrc(payload.url)
-    }).catch(() => {
-      if (!controller.signal.aborted) setFailed(true)
-    })
-    return () => controller.abort()
-  }, [projectId, item.snapshot_id, item.digest])
+      { toast: false },
+    )
+    if (!response.ok) throw new Error("playback unavailable")
+    const payload = await response.json()
+    if (typeof payload.url !== "string" || !payload.url ||
+        payload.snapshot_id !== item.snapshot_id || payload.digest !== item.digest) {
+      throw new Error("stale audio")
+    }
+    signed.current = {
+      url: payload.url,
+      expiresAt: requestedAt + Math.max(0, Number(payload.expires_in) - 5) * 1000,
+    }
+    return payload.url
+  }
 
+  const hasMeasurements = Number.isFinite(item.duration_seconds) && item.duration_seconds > 0 &&
+    Array.isArray(item.peaks) && item.peaks.length > 0 &&
+    item.peaks.every((peak) => Number.isFinite(peak) && peak >= 0)
   return (
     <div className="rounded-lg bg-card px-3 py-2.5">
       <div className="mb-1.5 flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-xs text-muted-foreground">
           {t(item.role === "music" ? "chat.audio.music" : "chat.audio.narration")}
         </span>
+        {item.role === "narration" && (item.scene_label || item.scene_id) ? (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {item.scene_label || item.scene_id}
+          </span>
+        ) : null}
         {item.title ? (
           <span className="min-w-0 truncate text-sm text-foreground" title={item.title}>
             {item.title}
           </span>
         ) : null}
       </div>
-      {src ? (
+      {hasMeasurements ? (
         <WaveformPlayer
-          src={src}
+          resolvePlaybackUrl={resolvePlaybackUrl}
           durationSeconds={item.duration_seconds}
-          waveformKey={`${item.snapshot_id}:${item.digest}`}
           measuredPeaks={item.peaks}
         />
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {t(failed ? "chat.audio.unavailable" : "chat.audio.loading")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("chat.audio.unavailable")}</p>
       )}
     </div>
   )
@@ -67,7 +74,7 @@ export function AudioPlaybackSurface({ block }: { block: AudioPlaybackBlock }) {
     <div className="flex w-full max-w-2xl flex-col gap-2">
       {block.items.map((item) => (
         <AudioPlaybackItem
-          key={`${item.snapshot_id}:${item.digest}`}
+          key={JSON.stringify([block.project_id, item.role, item.scene_id, item.snapshot_id, item.digest])}
           projectId={block.project_id}
           item={item}
         />

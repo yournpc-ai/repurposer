@@ -1,13 +1,13 @@
-{# Shared draw-2d producer law for draw_2d_director.j2 and aligned_narration_director.j2. Field names and bounds mirror tools/video/programs.py and program_runner.mjs. #}
-Write real JavaScript for the `draw-2d` producer. Define exactly this entry point:
+{# draw_2d_director.j2 与 aligned_narration_director.j2 共用的 draw-2d 规则。字段和边界与 tools/video/programs.py 及 program_runner.mjs 一致。 #}
+为 `draw-2d` 生成器编写真正可运行的 JavaScript。入口签名必须完全如下：
 
-function render(ctx) { /* return drawing commands for this frame */ }
+function render(ctx) { /* 返回本帧的绘图指令 */ }
 
-`ctx` is a frozen plain object with exactly `{ frame, time, durationFrames, fps, width, height, parameters }`. `frame` is the zero-based integer frame index; `time = frame / fps` in seconds; `durationFrames`, `fps`, `width` and `height` describe the server-supplied output; `parameters` is the same declared scalar-parameters object you output. Compute deterministic motion from `time`/`frame`; a result with identical pixels on every frame is rejected. Use ordinary arithmetic, loops and `Math`, and return plain JSON data only. The producer supplies no imports, filesystem, network, timers, DOM, random source or external resources. Do not use pseudocode or comments instead of implementation.
+ctx 是冻结的普通对象，恰含 { frame, time, durationFrames, fps, width, height, parameters }。frame 为从 0 起的整数帧号，time = frame / fps，单位为秒。durationFrames、fps、width、height 描述服务端给定的输出。parameters 就是你在输出中声明的标量参数对象。根据 time/frame 计算确定性的运动，每帧像素都一样会被拒绝。可用普通算术、循环和 Math，只返回普通 JSON 数据。环境不提供导入、文件系统、网络、计时器、DOM、随机源或外部资源。不要用伪代码或注释代替实现。
 
-Return an array of at most 512 commands per frame, painted in array order. Each command accepts exactly its listed required fields plus its listed optional fields; unknown fields are rejected:
-- `{ kind: "rect", x, y, width, height, fill, opacity? }` — rect does NOT support `stroke`, `stroke_width`, `corner`, or `corner_radius`.
-- `{ kind: "ellipse", x, y, width, height, fill, stroke?, stroke_width?, opacity? }`
-- `{ kind: "polygon", points: [[x,y], ...], fill, stroke?, stroke_width?, opacity? }` — 3–128 points.
-- `{ kind: "line", points: [[x,y], ...], stroke, stroke_width, opacity? }` — 2–128 points.
-All coordinates use program-canvas pixels; use `ctx.width` and `ctx.height` rather than assuming an aspect ratio. Every number must be finite. `x` and `y` are in [-1000000, 1000000]; rect/ellipse `width` and `height` and line `stroke_width` are in (0, 1000000]; ellipse/polygon `stroke_width` is in [0, 1000]. Every color is `#RRGGBB`; `opacity` is in [0, 1]. `fill` is required for rect/ellipse/polygon and is not a line field; `stroke` and positive `stroke_width` are required for line. Draw a deliberate moving composition, not a generic loader or static logo.
+每帧返回最多 512 条指令组成的数组，按数组顺序绘制。每条指令只接受列出的必填和可选字段，未知字段会被拒绝：
+- `{ kind: "rect", x, y, width, height, fill, opacity? }`。矩形不支持 stroke、stroke_width、corner 或 corner_radius。
+- `{ kind: "ellipse", x, y, width, height, fill, stroke?, stroke_width?, opacity? }`。
+- `{ kind: "polygon", points: [[x,y], ...], fill, stroke?, stroke_width?, opacity? }`。3–128 个点。
+- `{ kind: "line", points: [[x,y], ...], stroke, stroke_width, opacity? }`。2–128 个点。
+坐标以程序画布像素为单位，用 ctx.width 和 ctx.height 取尺寸，不要假定宽高比。所有数字都须有限。x 和 y 均在 [-1000000, 1000000] 内。矩形和椭圆的 width、height 及线条的 stroke_width 在 (0, 1000000] 内。椭圆和多边形的 stroke_width 在 [0, 1000] 内。颜色为 #RRGGBB，opacity 在 [0, 1] 内。矩形、椭圆和多边形必须有 fill；线条没有 fill，必须有 stroke 和正值 stroke_width。根据内容设计运动构图，不要交付通用加载动画或静态标志。

@@ -10,6 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+MINIMAX_FLASH_MODEL = "MiniMax-M3.1-Flash"
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
@@ -24,7 +27,7 @@ class Settings(BaseSettings):
 
     # Minimax
     minimax_api_key: str = ""
-    minimax_model: str = "minimax-m3"
+    minimax_model: str = MINIMAX_FLASH_MODEL
     minimax_base_url: str = "https://api.minimax.io/v1"
     # Startup prefix-cache warmup (批3): one throwaway call per chat agent at
     # API boot seeds the passive prefix cache on one backend pod (forensics

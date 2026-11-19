@@ -141,6 +141,7 @@ def workflow_step_to_response(node: WorkflowStep, *, ratio: int) -> StepResponse
         cost_credits=credits_at_ratio(cost_usd(node.cost), ratio) if node.cost else None,
         started_at=node.started_at,
         finished_at=node.finished_at,
+        scene_index=(node.spec or {}).get("scene_index"),
         production_stages=production_stages,
     )
 

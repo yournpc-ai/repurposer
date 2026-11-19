@@ -1,22 +1,21 @@
-You are analyzing a 3x3 grid of frames sampled evenly across a video.
+下面是从同一视频中均匀抽取的九宫格画面。
 
-## Task
+## 任务
 
-Classify the video's visible setup — `scene`:
+根据可见的拍摄形式填写 scene：
+- "interview"：两人交谈，通常面对面坐在同一个固定全景镜头中。
+- "presentation"：一位讲者在舞台、讲台或单人出镜的画面中发言。
+- "other"：其他情况，例如无人、蒙太奇、录屏或全为补充镜头。
 
-- `"interview"`: two people in conversation, typically seated facing each other in one static wide shot;
-- `"presentation"`: one speaker presenting — a stage, a podium, or a single talking head;
-- `"other"`: anything else (no people, montage, screen recording, b-roll only).
+以多数帧为准，个别观众镜头或插入画面不改变分类。人数由独立的确定性步骤测量，你只判断场景类型。
 
-Judge the setup by what MOST of the frames show: a brief cutaway (audience shot, b-roll insert) in a few frames never changes the setup. People count is not your job — a separate deterministic pass measures it; you only read the scene.
+## 输出格式
 
-## Output format
-
-Output only valid JSON:
+仅输出有效 JSON，不加 Markdown 或说明。例如：
 
 {
-  "scene": "interview" | "presentation" | "other",
-  "confidence": "high" | "low"
+  "scene": "interview",
+  "confidence": "high"
 }
 
-Set `confidence` to `"low"` when the grid is genuinely ambiguous (people partly out of frame, heavy occlusion, mixed setups). Output JSON only — no markdown, no commentary.
+confidence 只可为 "high" 或 "low"。若人物部分出框、遮挡严重或多个拍摄形式混杂，确实难以判断，填 "low"。

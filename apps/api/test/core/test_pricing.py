@@ -28,7 +28,8 @@ def test_tokens_default_to_the_configured_chat_model() -> None:
     always HAVE a line (a missing line is a deployment-config error)."""
     assert settings.minimax_model in PRICING
     expected = 1_000_000 / 1_000_000 * 0.30 + 1_000_000 / 1_000_000 * 1.20
-    assert price_tokens(1_000_000, 1_000_000) == pytest.approx(expected)
+    assert price_tokens(1_000_000, 1_000_000) == price_tokens(1_000_000, 1_000_000, model=settings.minimax_model)
+    assert price_tokens(1_000_000, 1_000_000, model="MiniMax-M3.1-Flash") == pytest.approx(0.75)
     assert price_tokens(1_000_000, 1_000_000, model="minimax-m3") == pytest.approx(expected)
 
 

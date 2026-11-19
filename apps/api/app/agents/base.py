@@ -170,8 +170,7 @@ def _repair_echo(feedback: str) -> str:
     message, so the model SEES what it broke — a retry without feedback is
     just rolling the dice twice (blind retries are retired, ADR-039 P3)."""
     return (
-        f"\n\nYour previous proposal was rejected: {feedback}. "
-        "Fix it and return a valid proposal."
+        f"\n\n上次提案被拒绝：{feedback}。请修正并返回有效提案。"
     )
 
 
@@ -532,8 +531,7 @@ class Agent(Generic[OutT]):
         submit = ChatTool(
             name="submit_direction",
             description=(
-                "Return the completed direction after reading the package evidence "
-                "needed for this work. Its arguments are the full typed direction."
+                "读取本作品所需的包内证据后，提交完整设计。参数须为符合类型要求的完整设计结果。"
             ),
             params_model=self.schema,
         )
@@ -553,9 +551,9 @@ class Agent(Generic[OutT]):
                 wire.append({
                     "role": "user",
                     "content": (
-                        "The previous Director step was rejected: " + feedback
-                        + (". Use submit_direction now; no additional package research." if force_submit
-                           else ". Continue with valid package reads or submit_direction.")
+                        "上一步设计被拒绝：" + feedback
+                        + ("。现在调用 submit_direction，不再检索包内资料。" if force_submit
+                           else "。继续进行有效的包内读取，或调用 submit_direction。")
                     ),
                 })
             feedback = None
@@ -590,7 +588,7 @@ class Agent(Generic[OutT]):
                 correction_fields = set(fields)
                 available = [ChatTool(
                     name=submit.name,
-                    description='Return only the rejected fields. All other direction fields are retained by the server and the assembled direction is validated in full.',
+                    description="只返回被拒绝的字段。服务端保留其他字段，合并后会校验完整设计。",
                     params_model=correction,
                 )]
             available_names = {tool.name for tool in available}
@@ -646,7 +644,7 @@ class Agent(Generic[OutT]):
                 tool = by_name.get(call.name)
                 observation = None
                 if tool is None or call.name not in available_names:
-                    observation = ToolObservation("Tool unavailable in this phase; submit the complete direction.", ok=False)
+                    observation = ToolObservation("当前阶段不可用此工具，请提交完整设计。", ok=False)
                 else:
                     raw = _unwrap_item_dialect(dict(call.arguments))
                     for key in ("type", "kind", "prose"):
@@ -660,7 +658,7 @@ class Agent(Generic[OutT]):
                         raw = preserve_valid_candidate(previous_candidate, raw, candidate_errors, schema=self.schema.model_json_schema())
                     if call.name == submit.name:
                         if len(result.tool_calls) != 1:
-                            observation = ToolObservation("Submit separately after consuming the read results; no direction accepted.", ok=False)
+                            observation = ToolObservation("请先读取结果，再单独提交设计。本次未接受任何设计。", ok=False)
                         else:
                             try:
                                 candidate = self.schema.model_validate(raw)
@@ -676,7 +674,7 @@ class Agent(Generic[OutT]):
                                 previous_candidate = raw
                                 candidate_errors = exc.errors(include_input=False, include_url=False)
                                 force_submit = True
-                                feedback = json.dumps(exc.errors(include_input=False, include_url=False), ensure_ascii=False, default=str) + ". Correct and immediately resubmit only the fields declared by the correction tool. All valid fields are retained by the server; do not resubmit scenes unless they are declared invalid; do not restart package research."
+                                feedback = json.dumps(exc.errors(include_input=False, include_url=False), ensure_ascii=False, default=str) + "。立即修正并重新提交纠错工具声明的字段。服务端保留全部有效字段，未被判为无效的场景无需重发，不要重新开始查阅包内资料。"
                                 observation = ToolObservation(feedback, ok=False)
                     else:
                         try:
@@ -690,7 +688,7 @@ class Agent(Generic[OutT]):
                                 # Preserve all call IDs, including remaining batch items.
                                 # The next generation has only the submit tool available.
                                 force_submit = True
-                                observation = ToolObservation(str(exc) + "; use existing evidence and submit_direction.", ok=False)
+                                observation = ToolObservation(str(exc) + "。请使用已有证据并调用 submit_direction。", ok=False)
                             if not isinstance(observation, ToolObservation):
                                 raise RuntimeError("a Director read must return ToolObservation")
                 call_results.append({

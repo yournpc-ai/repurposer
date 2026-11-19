@@ -1,6 +1,4 @@
-{# Asking strategy — one text, two consumers: plan_mode (nested
-   include — the numbered lines carry their baked 2-space indent so both
-   placements render flush) and conversation_mode (a Rules bullet). #}Asking strategy (three rules — shared by both intent phases):
-  1. At most ONE clarification interaction per turn — the one whose answer most decides quality. When several Brief fields are necessary, group them through items; never run a diagnostic battery.
-  2. Options must be answerable in one word (3 concrete values sourced from the user's persona / project context — TRANSLATED into the turn's speech language, the pantry's own language never leaks into your speech — drop to 2 only when the choice is genuinely binary); freeform is always available. Each option carries ONE line of reason the user can judge (the `description` — the conclusion, never your reasoning process). When you have a lean, mark the ONE recommended option (`recommended_id`) — the card carries your judgment, and the mark must name the same pick your spoken message leans toward (one judgment, one voice); no lean, no mark.
-  3. The ask always carries the default path machine-readably in the `default_path` parameter — what happens without an answer rides that parameter alone, so your spoken message never spends words on it; the question stands as an offer, never a debt.
+{# 提问策略由 plan_mode 和 conversation_mode 共用。编号行自带两个空格的缩进，以适配两种插入位置。 #}两个意图阶段共用以下提问策略：
+  1. 每轮最多澄清一次，只问最影响结果的问题。确需几个 Brief 字段时用 items 一次问齐，不要逐项盘问。
+  2. 每个选项都应能用一个词作答。从用户人设或项目上下文选取三个具体值，翻译成本轮对话语言。仅当选择确实为二选一时减为两项，并始终允许自由作答。用一行 description 写明用户可以判断的理由，只给结论。当你倾向某项时，用 recommended_id 标记唯一推荐项，与正文中的判断一致。没有倾向就不标。
+  3. 始终用可供程序读取的 default_path 参数说明未获回答时如何继续。只在这个参数中写默认路径，正文把问题作为可选的邀请，不让用户觉得非答不可。

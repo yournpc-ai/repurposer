@@ -1,0 +1,549 @@
+[
+  {
+    "round": "00",
+    "model_call_id": "225c5665-4bc3-41a5-9abf-fc6c07c172fb",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:15:29.981806+00:00",
+    "model": "minimax-m3",
+    "messages": 4,
+    "offer": [
+      "answer",
+      "prepare_video_materials"
+    ],
+    "selected": [
+      "prepare_video_materials"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "01",
+    "model_call_id": "7620bc04-9732-4615-b614-38a553f24643",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:16:25.095494+00:00",
+    "model": "minimax-m3",
+    "messages": 6,
+    "offer": [
+      "answer",
+      "analyze_brand"
+    ],
+    "selected": [
+      "analyze_brand"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "brand",
+    "model_call_id": "c4713509-0c54-45ca-b352-209cc8b18f4d",
+    "agent": "website_brand_profile",
+    "time": "2026-11-19T09:16:32.692671+00:00",
+    "model": "minimax-m3",
+    "messages": 2,
+    "offer": [],
+    "selected": [],
+    "sources": [
+      {
+        "file": "templates/video/brand_profile.j2",
+        "sha256": "54999c5209aae6c274b922a27f5ce9d39a804f51ae286883cf9b40a39dd6d262"
+      }
+    ]
+  },
+  {
+    "round": "02",
+    "model_call_id": "2c419069-dabd-4a47-beb2-448f7fc6604a",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:16:43.515362+00:00",
+    "model": "minimax-m3",
+    "messages": 8,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "03",
+    "model_call_id": "4b9d016a-965d-4171-a239-fa2fbe391cbd",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:16:52.081959+00:00",
+    "model": "minimax-m3",
+    "messages": 11,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "04",
+    "model_call_id": "4be832cf-4310-4975-a02f-67e37cb32192",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:16:57.926426+00:00",
+    "model": "minimax-m3",
+    "messages": 13,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "05",
+    "model_call_id": "94b6c841-6137-48db-a832-780de2183b4e",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:03.124898+00:00",
+    "model": "minimax-m3",
+    "messages": 15,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "06",
+    "model_call_id": "b899239d-eb04-4bd2-b4fa-b58708f8da28",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:09.648951+00:00",
+    "model": "minimax-m3",
+    "messages": 17,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "07",
+    "model_call_id": "10ed3933-c77a-486e-b381-8eea3183c7cc",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:29.058495+00:00",
+    "model": "minimax-m3",
+    "messages": 19,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "ask_user"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "08",
+    "model_call_id": "1980edda-8076-46ad-9768-bb62c49b6412",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:36.997031+00:00",
+    "model": "minimax-m3",
+    "messages": 21,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "answer"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "09",
+    "model_call_id": "e5f0980f-b20b-426e-93bb-0f8649c9f25b",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:45.664525+00:00",
+    "model": "minimax-m3",
+    "messages": 23,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "answer"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  },
+  {
+    "round": "10",
+    "model_call_id": "d37ed1b4-5a1f-4aa4-84b2-bb5a36246bbb",
+    "agent": "intent_router",
+    "time": "2026-11-19T09:17:50.607717+00:00",
+    "model": "minimax-m3",
+    "messages": 25,
+    "offer": [
+      "ask_user",
+      "answer"
+    ],
+    "selected": [
+      "answer"
+    ],
+    "sources": [
+      {
+        "file": "templates/chat/system.j2",
+        "sha256": "bd17fc328430b21462da00ff080133908670acb6c93a415745a35a185614a8b1"
+      },
+      {
+        "file": "templates/chat/_read_tools.j2",
+        "sha256": "574496dcc19488d8f639d019f1d93199bfc3abc39259edf6cb2f74d0b907a1db"
+      },
+      {
+        "file": "templates/chat/_markdown_speech.j2",
+        "sha256": "24caae8494947da3162c0c9cc81e6891d61ecb063dc7cd01324a6589f0b2cf1a"
+      },
+      {
+        "file": "templates/chat/_video_project.j2",
+        "sha256": "527bd2ebad38d48e02033e49f592758cd3caa3b8469ec6b20ef667c5fe3c104d"
+      },
+      {
+        "file": "templates/chat/_pending_question.j2",
+        "sha256": "65de63c83ee6193bb131be71c3217e19243182dae038435d69ec9d3e43c1db29"
+      },
+      {
+        "file": "templates/chat/_tool_service.j2",
+        "sha256": "4d14925536d775f498874d62fd49ea1ec35ca19be0a61ff05ac52e1d3c8cbc88"
+      },
+      {
+        "file": "templates/chat/_conversation_language.j2",
+        "sha256": "3a5ac044c11bdc5c2aa1430ebc1ec928edc8796566709de9792af960bfb2269c"
+      },
+      {
+        "file": "templates/chat/user.j2",
+        "sha256": "f7e080edcca0daff643fbed32688314f6f651bfd92596fcb9f48b983d452d44f"
+      }
+    ]
+  }
+]

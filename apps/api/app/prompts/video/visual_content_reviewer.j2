@@ -1,15 +1,22 @@
-Inspect this exact fixed PNG against its scene specification.
+对照场景规格，检查所附的这张固定 PNG。
 
-- SceneAssetSpec: {{ scene_asset_json }}
-- Deterministic MediaAnalysisReport: {{ analysis_json }}
-- Attachment: the PNG identified by source_ref in the report.
+- SceneAssetSpec：{{ scene_asset_json }}
+- 确定性媒体分析 MediaAnalysisReport：{{ analysis_json }}
+- 附件：报告中 source_ref 指向的 PNG。
+{% if existing_image %}
+这是对选定源图适配尺寸后的图片。检查画面是否确实包含本场需要的主体、页面区段和来源证据。优先使用 source.visible_evidence；旧规格可根据场景意图确定应呈现的证据。页面区段错误、缺少要求的来源主张或所需证据不可读，应判失败。除非明确要求单独成句，引文可出现在更长的句子中。先比较实际文字，再报告差异。
 
-Judge this image at its current role. A background or illustration may intentionally leave text, brand elements or captions to later native layers. Require exact wording only for copy the scene assigns to this image. Check that the primary subject or evidence is visible, required copy is legible, explicit safe areas work, and the intended visual structure survived rendering. Do not infer facts from absent source material or assume missing assets or layers will appear later.
+场景意图或 on_screen_copy 描述的新标题、字幕、品牌署名、强调标记及其位置由后续剪辑负责。只有要求原图自带的文案才按来源证据核查。检查对原图本身的明确约束，包括需要为后续叠放保留的净空区域。尺寸采用分析中准备好的 PNG 尺寸。
+{% endif %}
 
-Use fail for a visible, material defect that prevents this image from serving its specified purpose. Examples include an absent citation diagram, illegible required copy, overlapping content that obscures evidence, or a missing primary object. Each observed_issue needs a specific requirement and distinct evidence describing what and where the PNG actually shows. When svg_text_geometry is present, use the reported pixel coordinates. Text outside a caption safe area can still be fully visible on the canvas. Report a safe-area violation only for text assigned to that area, and report clipping only when the pixels show truncation. Do not recalculate supplied bounds. A preferred line position, decorative color, or typography choice is advisory unless it breaks a clear delivery requirement. Do not fail an image solely for a stylistic difference.
+按这张图当前的用途评判。背景图或插画可以有意把文字、品牌元素或字幕留给后续原生图层。只有明确分配给本图的文案才须逐字核对。检查主体或证据是否可见、必要文案是否可读、明确的安全区是否有效，以及设计的视觉结构在渲染后是否保留。所有关于源图的判断均须由所附像素支持。{% if not existing_image %} 不要假定缺失的必需素材或图层稍后会出现。{% endif %}
 
-Use pass when the required observable checks are satisfied and there are no findings. Use advisory for optional aesthetic improvements only. Use needs_human when judgment genuinely requires evidence or a person beyond the supplied image. The server assigns unavailable if no usable review completes.
+发现足以妨碍图片实现指定用途的可见缺陷时，用 fail。例如缺少要求的引用示意图、必要文案不可读、内容重叠遮挡证据或缺少主要对象。每条 observed_issue 均需具体指出要求，并用与要求有别的证据描述 PNG 哪个位置实际显示了什么。若提供 svg_text_geometry，采用报告中的像素坐标。位于字幕安全区之外的文字仍可能完整可见。仅对分配到该区域的文字报告越界，仅在像素显示截断时报告裁切。不重新计算已提供的边界。行位置、装饰色或字体选择上的偏好属于建议，除非违反明确交付要求。风格差异本身不构成失败。
 
-Return a single JSON object with exactly status, summary and findings. The findings array contains objects with kind, observed, requirement, evidence and suggestion. Use kind "observed_issue" or "aesthetic_suggestion". Put optional values that are absent as null. A pass has findings: []. Do not use observed_issue or aesthetic_suggestions as top-level keys.
+规格要求展示确切标识符时，对比完整可见字符串，包括换到下一行的后缀。即便显示部分适配画布，标识被裁切、缩短或替换也是实质问题。建议重新排布引用或周围布局。只要求通用来源标签的图解可直接使用该标签。
 
-Limit conclusions to the attached still. This review does not assess the factual accuracy of external claims, the finished film's creative quality, motion, audio or editability.
+所有必要且可观察的检查都通过且没有发现时用 pass。仅有可选的审美改进时用 advisory。判断确实需要图外证据或人工时用 needs_human。未完成可用审阅则由服务端标记 unavailable。
+
+只返回一个 JSON 对象，顶层字段严格为 status、summary、findings。findings 为数组，每项包含 kind、observed、requirement、evidence、suggestion。kind 只能为 "observed_issue" 或 "aesthetic_suggestion"。缺失的可选值填 null。通过时为 "findings": []。不要将 observed_issue 或 aesthetic_suggestions 用作顶层键。
+
+结论仅适用于所附静帧。本次检查不评判外部主张的事实准确度、成片创意质量、运动、音频或可编辑性。

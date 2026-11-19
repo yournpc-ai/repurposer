@@ -12,33 +12,16 @@ metadata:
     - native-preset
 ---
 
-## Text-animation method
+## 文字动画的创作方法
 
-Turn the user's exact on-screen copy into a short sequence of readable native
-text scenes. Establish one visual hierarchy, pace one thought per scene, and
-choose independently timed native text blocks and geometric shapes to support the content.
-Use text_beats for changing emphasis, spatial contrast and successive reading beats
-inside a scene; avoid holding a whole paragraph as one uniformly animated block. Choose scene
-boundaries, typography, palette, alignment, entrances and reading holds for this
-work. Paragraph boundaries are not mandatory scene cuts; there is no fixed
-three-act structure. Do not copy the sample film's dark background, accent,
-second-scene emphasis, final typewriter or sound cue into every work.
+将用户提供的确切屏幕文案编排成简短、易读的原生文字场景。建立清晰的视觉层级，每场围绕一个意思安排节奏，用时序独立的原生文字块和几何图形支撑内容。通过 text_beats 在同一场景内切换重点、形成空间对比、安排先后阅读的节拍；避免让整段文字只播放同一种动画。按本作品需要选择切镜位置、字体、配色、对齐、入场及阅读停留。无需按段落切场，也无需固定为三幕。不要把示例片的深色背景、强调色、第二场强调、结尾打字效果或音效套用到每部作品。
 
-The Director's native motion is used unless the user selects a Preset. A Preset
-is an optional editable motion choice, not a mandatory treatment for this Skill.
-Keep word and grapheme targeting compatible within each text object.
+除非用户选了 Preset，否则采用导演设计的原生运动。Preset 是可选的可编辑运动效果。每个文字对象内部，按词和按字素定位的方式须兼容。
 
-Keep every factual word grounded in the supplied copy. Do not add a product,
-audience, platform, result, quotation, or call to action that the user did not
-provide or request. Spoken narration is off unless the user explicitly asks
-for it.
+所有事实性措辞都应有给定文案依据。不要添加用户未提供或要求的产品、受众、平台、结果、引语或行动号召。只有用户明确要求时才启用旁白。
 
-### Inputs and boundaries
+### 输入与边界
 
-- Requires the user's text or an explicitly requested distilled copy brief;
-  it does not require a video-template.json file or any media material.
-- Uses the native motion-graphics design path, with optional user-selected Preset expansion.
-  There is no StylePack layer, second template language, component runtime,
-  hidden execution tool, or renderer-specific field.
-- The Skill guides only the first design. Later changes use revise_video;
-  production consumes the saved CompositionVersion without reloading it.
+- 需要用户原文，或用户明确要求提炼文案的 Brief。无需 video-template.json 或媒体素材。
+- 使用原生动态图形设计流程，可展开用户选定的 Preset。没有 StylePack 层、第二套模板语言、组件运行时、隐藏执行工具或特定渲染器专用字段。
+- 本 Skill 仅指导首稿。后续修改使用 revise_video；制作时直接使用已保存的 CompositionVersion，不重新加载本 Skill。

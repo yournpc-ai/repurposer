@@ -71,10 +71,10 @@ describe("conversation channel", () => {
     ).toEqual({ kind: "candidates", event: musicSet })
   })
 
-  it("question.preview → the pill payload", () => {
+  it("ignores speculative question frames from an older server", () => {
     const payload = { question: "which?", options: [{ id: "a", label: "A" }] }
     expect(routeStreamFrame("question.preview", JSON.stringify(payload), CHAT_TERMINAL))
-      .toEqual({ kind: "question_preview", payload })
+      .toEqual({ kind: "ignored" })
   })
 })
 

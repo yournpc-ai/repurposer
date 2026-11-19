@@ -1,0 +1,253 @@
+{
+  "type": "function",
+  "function": {
+    "name": "ask_user",
+    "description": "用对话语言展示一份澄清表单。每个待决定的事项各有问题和选项，用户一次提交整份表单。",
+    "parameters": {
+      "additionalProperties": false,
+      "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+      "properties": {
+        "question": {
+          "description": "用对话语言写简短的表单标题。",
+          "title": "Question",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "按以下顺序，为每个尚未确定的事项各设一问：production_direction, target_seconds, narration_language, subtitle_languages, aspect。问题和用户可见的所有选项文字均使用对话语言。",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "production_direction"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "请用用户的语言询问：这支片会在哪里播放？你希望我们怎样讲这个故事？ 每个选项都应保留用户已说明的场合或叙事方式。受众信息放在 Brief 中，来源 URL 用于指明调研素材。"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "use_case": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "成片实际播放的场合，例如发布会或品牌官网首页。"
+                        },
+                        "treatment": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "根据网站证据，具体说明在该场合如何讲述产品故事。"
+                        }
+                      },
+                      "required": [
+                        "use_case",
+                        "treatment"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "question_language": {
+                    "type": "string",
+                    "description": "本问题使用的 BCP 47 语言代码，如 zh-CN 或 en。"
+                  }
+                },
+                "required": [
+                  "slot",
+                  "question",
+                  "options",
+                  "question_language"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "target_seconds"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "询问期望片长，问题中注明单位为秒。"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "required": [
+                  "slot",
+                  "question",
+                  "options"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "narration_language"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "询问旁白要说哪种语言。每个选项标签只写一种语言。"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "string",
+                          "description": "BCP 47 语言代码。"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "slot",
+                  "question",
+                  "options"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "subtitle_languages"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "询问字幕需要哪些语言。每个选项标签写明其覆盖的语言。"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "value": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "description": "BCP 47 语言代码。"
+                          },
+                          "minItems": 1
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "slot",
+                  "question",
+                  "options"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "aspect"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "询问用户需要什么画幅。"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "16:9",
+                        "9:16",
+                        "1:1"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "slot",
+                  "question",
+                  "options"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "default_path": {
+          "default": "",
+          "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+          "title": "Default Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question",
+        "items",
+        "default_path"
+      ],
+      "title": "PlanAskArgs",
+      "type": "object"
+    }
+  }
+}

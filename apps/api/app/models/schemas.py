@@ -18,8 +18,10 @@ from pydantic import (
     ValidationInfo,
     computed_field,
     field_validator,
+    model_serializer,
     model_validator,
 )
+from pydantic.json_schema import SkipJsonSchema
 import structlog
 
 from app.editing.edits import ClipEntityWrite
@@ -437,7 +439,7 @@ class FocusRef(BaseModel):
 
 
 class Option(BaseModel):
-    """One option on a structured question."""
+    """结构化问题中的一个选项。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -453,7 +455,7 @@ class Option(BaseModel):
         return data
 
     id: str = Field(
-        description="Option id within this question. Fixed choices use the active wire's numeric syntax; server-owned entity targets retain their stable ids."
+        description="本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。"
     )
     label: str
     # 一问拍一体化 (2026-09-27, Claude-Card parity): the option's one-line
@@ -462,7 +464,7 @@ class Option(BaseModel):
     # code-built options (asset_role) — 读容忍.
     description: str = Field(
         default="",
-        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
+        description="用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
     )
 
 
@@ -480,10 +482,18 @@ def resolve_recommended_id(
 
 
 BriefQuestionSlot = Literal[
-    "topic", "audience", "tone", "purpose", "target_seconds", "narrative_mode",
+    "topic", "audience", "tone", "production_direction", "purpose", "target_seconds", "narrative_mode",
     "narration_language", "subtitle_languages", "aspect", "voice_requirements",
     "must_include", "avoid", "success_criteria",
 ]
+
+
+class BriefDecisionPage(BaseModel):
+    """由服务端固定并展示的一组相关 Brief 字段。"""
+
+    slots: list[BriefQuestionSlot]
+    title: str
+    choices: list[dict[str, str]]  # atom slot -> frozen option id
 
 
 class BriefQuestionItem(BaseModel):
@@ -493,17 +503,39 @@ class BriefQuestionItem(BaseModel):
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
         if isinstance(data, dict) and isinstance(data.get("options"), list):
-            data = {
-                **data,
-                "options": [
-                    {"id": str(index), "label": option}
-                    if isinstance(option, str) else option
-                    for index, option in enumerate(data["options"], start=1)
-                ],
-            }
+            options = []
+            values = {}
+            for index, raw in enumerate(data["options"], start=1):
+                # Website briefing authors a display setting and an editorial
+                # treatment together, but the dock and the Brief own one answer.
+                if data.get("slot") == "production_direction" and (
+                    data.get("question_language") or isinstance(raw, dict) and ("use_case" in raw or "treatment" in raw)
+                ):
+                    parts = (raw.get("use_case"), raw.get("treatment")) if isinstance(raw, dict) else (None, None)
+                    if not all(isinstance(part, str) and part.strip() for part in parts):
+                        raise ValueError("Each direction needs a release setting and a storytelling treatment")
+                    direction = " · ".join(part.strip() for part in parts)
+                    raw = {"label": direction, "value": direction}
+                elif data.get("slot") == "target_seconds" and type(raw) is int:
+                    raw = str(raw)
+                option = raw
+                if isinstance(raw, str):
+                    option = {"id": str(index), "label": raw}
+                elif isinstance(raw, dict) and "value" in raw:
+                    option = {**raw, "id": str(raw.get("id", index))}
+                    values[option["id"]] = option.pop("value")
+                options.append(option)
+            data = {**data, "options": options}
+            if values:
+                data["option_values"] = values
         return tolerate_null_keys(data, "options", "recommended_id", "default_path")
 
     slot: BriefQuestionSlot
+    # Used when freezing a localized website form. Stored questions carry
+    # the resulting display text, including their BriefDecisionPage title.
+    question_language: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
+    decision_page: BriefDecisionPage | None = None
+    option_values: dict[str, str | int | list[str]] | None = None
     question: str
     options: list[Option] = Field(default_factory=list)
     recommended_id: str | None = None
@@ -515,7 +547,9 @@ class BriefQuestionItem(BaseModel):
 class BriefAnswerItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    slot: BriefQuestionSlot
+    page_slots: list[BriefQuestionSlot] | None = None
+
+    slot: BriefQuestionSlot | Literal["constraints"]
     kind: Literal["option", "freeform"]
     option_id: str | None = None
     text: str | None = None
@@ -709,6 +743,23 @@ class ChatMessageResponse(BaseModel):
     seq: int | None = None
     created_at: datetime
     updated_at: datetime | None = None
+
+
+    @model_validator(mode="after")
+    def _automatic_audio_progress(self):
+        """Project old automatic playback receipts as progress on history and SSE."""
+        if not (self.intent or {}).get("media_journey"):
+            return self
+        playback = next((block for block in self.blocks if block.get("kind") == "audio_playback"), None)
+        if playback is not None:
+            items = playback.get("items") or []
+            if items and isinstance(items[0], dict) and "prepared_audio" not in self.intent:
+                item = items[0]
+                self.intent = {**self.intent, "prepared_audio": {
+                    key: item.get(key) for key in ("role", "scene_id", "duration_seconds", "snapshot_id", "digest")
+                }}
+            self.blocks = [block for block in self.blocks if block.get("kind") != "audio_playback"]
+        return self
 
 
 class MessageListResponse(BaseModel):
@@ -955,13 +1006,7 @@ def _drop_bad_brief(data: Any) -> Any:
 
 
 class PlanAskArgs(BaseModel):
-    """``ask_user`` params, plan path — the ask_user machinery's clarification-interaction
-    shape (QuestionProposal minus the prose, which is the content channel
-    now).
-    ``slot`` names the brief slot the question fills (plan-path only
-    — post-run questions never backfill a brief). The envelope seats ride
-    the same call so the turn's brief proposal and material promotion
-    arrive with the call, exactly once."""
+    """方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -973,52 +1018,51 @@ class PlanAskArgs(BaseModel):
         )
 
     question: str = Field(
-        description="The bare question or clarification-group title, in the interface language — no framing, no default-path tail (those live in your spoken message)."
+        description="仅用界面语言写问题或问题组标题，不附引言或默认路径说明。"
     )
     options: list[Option] = Field(
         default_factory=list,
-        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only when no sensible options exist (a freeform ask). Freeform input always stays available alongside.",
+        description="从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
     )
     items: list[BriefQuestionItem] = Field(
         default_factory=list,
         max_length=13,
-        description="Optional single clarification group. Include only missing Brief slots, each once; the server de-duplicates known values and issues group_digest.",
+        description="可选，提供一组澄清问题。仅含缺失的 Brief 字段，每项一次。服务端会滤除已知值并签发 group_digest。",
     )
     allow_freeform: bool = True
     recommended_id: str | None = Field(
         default=None,
-        description="The ONE option id you recommend (at most one) — your judgment rides the card, and your spoken message leans toward the same pick (one judgment, one voice). Null = no recommendation.",
+        description="唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
     )
     default_path: str = Field(
         default="",
-        description="One short clause: what you will do if the user skips. The skip must be safe.",
+        description="用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
     )
     slot: BriefQuestionSlot | Literal["asset_role"] | None = Field(
         default=None,
-        description="The brief slot this question fills (the pre-run router's seat). 'asset_role' is NOT a brief slot: the 资产角色 disambiguation (ADR-078 判词④) — ask it when ≥2 videos are attached and which is the user's own material vs the reference exemplar is undecidable from the message. Its options are code-built from the videos at the dock seat (never write option ids yourself); the answer settles the source/exemplar pins by code.",
+        description="本题填充的 Brief 字段，用于运行前的意图路由。asset_role 不属于 Brief：至少附有两个视频且无法从消息区分用户原素材与参考样片时，才询问素材角色。"
+                    "选项由服务端根据视频生成，不自行写选项 ID。系统根据回答绑定原素材与样片。",
     )
     brief: Brief | None = Field(
         default=None,
-        description="Brief updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value). Slots you leave out keep their stored value.",
+        description="本轮 Brief 更新。只填你有依据的字段，并标明各自来源。仅当用户原话明确陈述了该值时可用 user-stated。省略的字段保留已存值。",
     )
     material_text: str | None = Field(
         default=None,
-        description="Verbatim source text the user explicitly declared as their own material this turn ('this is my transcript: …'). Null otherwise — a bare request is never material.",
+        description="用户本轮明确声明为自有素材的逐字原文（如“这是我的逐字稿……”）。其他情况为 null，单纯请求不属于素材。",
     )
     material_urls: list[str] | None = Field(
         default=None,
-        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
+        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
 
 
 class PresentPlanArgs(BaseModel):
-    """``present_plan`` params, plan path — the draft call's payload (the
-    plan docks for confirmation; it never starts a run by itself). The
-    plan-introducing echo is your spoken message, never a param."""
+    """方案阶段的 present_plan 参数。展示草案并等待确认，此调用本身不会启动 Run。引出方案的说明写在消息正文中，不放入参数。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1033,51 +1077,41 @@ class PresentPlanArgs(BaseModel):
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
-        description="The authorized chain: produce_video, prepare_narration, prepare_visual_assets or prepare_music.",
+        description="已获授权的任务链：produce_video、prepare_narration、prepare_visual_assets 或 prepare_music。",
     )
     specific_instruction: str | None = Field(
         default=None,
-        description="Free-form instruction distilled from the prompt.",
+        description="从提示中提炼的自由文本指令。",
     )
     tasks_explicit: bool = Field(
         default=False,
-        description="True when the user explicitly named the work themselves; False when the chain is the default proposal.",
+        description="用户自己明确点名作品时为 true。任务链源于默认提案时为 false。",
     )
     name: str = Field(
         default="",
-        description="A compact noun phrase (2-6 words, interface language) naming the plan's deliverable — it titles the run's receipt. Name the work, never the tools.",
+        description="用界面语言以 2–6 个词组成简短名词短语，命名方案交付的作品。它会作为 Run 回执标题，不使用工具名。",
     )
     brief: Brief | None = Field(
         default=None,
-        description="Brief updates this turn: only the slots you have a view on, each with its source (user-stated ONLY when the user's own words literally state the value).",
+        description="本轮 Brief 更新。仅填写有依据的字段并注明来源，只有用户原话明确陈述了该值时才用 user-stated。",
     )
     material_text: str | None = Field(
         default=None,
-        description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+        description="用户本轮明确声明为自有素材的逐字原文。其他情况填 null。",
     )
     material_urls: list[str] | None = Field(
         default=None,
-        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
+        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
     production_intent: bool | None = Field(
         default=None,
         description=(
-            "Does the user's message ask for this work to be MADE now? "
-            "True only for an explicit production request or delegation "
-            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
-            "pure modification, a review-only ask ('先给我看方案'), or a "
-            "discussion. The user's auto/ask settings only waive approval "
-            "beats — they never turn a message without a production "
-            "request into one: a plan docked without it waits for the "
-            "user's word (the card keeps its start button). A film "
-            "storyboard design/revision is the family exception: without "
-            "current production intent it closes through answer after the "
-            "full presentation, not through a production dock. Never omit "
-            "this judgment."
+            "用户是否要求现在制作该作品？只有明确请求或委托制作时才填 true，例如“按这版制作”“go ahead”“直接做，细节你决定”。纯修改、仅审阅（如“先给我看方案”）或讨论均填 false。"
+            "auto/ask 设置只影响是否需要单独批准，不会产生制作意图。没有制作请求时，已展示的方案等待用户表态，保留开始按钮。视频分镜设计或修订若无当前制作意图，完整展示后用 answer 结束，不展示制作方案。必须填写此判断。"
         ),
     )
 
@@ -1095,9 +1129,7 @@ class PresentPlanArgs(BaseModel):
 
 
 class VideoVersionRef(BaseModel):
-    """The explicit revision base (§2.2): which work, which version, and the
-    content identity read at design time. Echoed verbatim from the version's
-    own presentation line or a get_video_version read."""
+    """明确的修订基准（§2.2），包括作品、版本及设计时读到的内容标识。从该版本自身的展示记录或 get_video_version 结果中原样复制。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1107,7 +1139,7 @@ class VideoVersionRef(BaseModel):
 
 
 class VideoSegmentScrubTarget(BaseModel):
-    """One explicit Scene/Clip time window; never the complete timeline."""
+    """一个明确的 Scene/Clip 时间窗，不可指定整条时间线。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1127,7 +1159,7 @@ class VideoSegmentScrubTarget(BaseModel):
 
 
 class VideoObjectScrubTarget(BaseModel):
-    """One authored Object isolated from the scene's other tracks."""
+    """单独查看一个已编排对象，与场景的其他轨道隔离。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1142,7 +1174,7 @@ VideoScrubTarget = Annotated[
 
 
 class VideoDraftRef(BaseModel):
-    """An uncommitted working Composition retained in ConversationContext."""
+    """保留在 ConversationContext 中、尚未提交的 Composition 工作草稿。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1162,7 +1194,7 @@ class VideoPresetChoice(BaseModel):
 
 
 class AnalyzeBrandArgs(BaseModel):
-    """Prepare a sourced BrandProfile; evidence and PNG inputs are server-read."""
+    """准备有来源佐证的 BrandProfile。证据和 PNG 由服务端读取。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1171,14 +1203,29 @@ class AnalyzeBrandArgs(BaseModel):
     def _read_tolerance(cls, data: Any) -> Any:
         return _drop_bad_brief(tolerate_null_keys(data, "brief"))
 
+    @field_validator("brief")
+    @classmethod
+    def _keep_stated_direction(cls, brief: Brief | None) -> Brief | None:
+        if brief is None:
+            return None
+        # The user's decision and the brand agent's creative recommendation
+        # have separate homes. Never use a recommendation to satisfy the form.
+        unstated = {
+            name: BriefSlot() for name in ("purpose", "narrative_mode", "production_direction")
+            if (slot := getattr(brief, name)).value and slot.source != BriefSlotSource.USER_STATED
+        }
+        return brief.model_copy(update=unstated) if unstated else brief
+
     brief: Brief | None = Field(
         default=None,
-        description="Current literal Brief slots. Use user-stated only for values explicitly present in the user's own words; omit unknown slots.",
+        description=(
+            "记录用户明确提出的制作约束。网站和受众是品牌证据。用户点名发布场合后才设 purpose；同时说明叙事方式时才设 production_direction。"
+        ),
     )
 
 
 class PrepareVideoMaterialTarget(BaseModel):
-    """One already-projected source whose exact facts/media are now needed."""
+    """需要获取确切事实或媒体的一个已列出来源。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1188,39 +1235,39 @@ class PrepareVideoMaterialTarget(BaseModel):
 
 
 class PrepareVideoMaterialsArgs(BaseModel):
-    """Freeze explicitly selected material before incremental Composition authoring."""
+    """在分步编排 Composition 前，固定明确选定的素材。"""
 
     model_config = ConfigDict(extra="forbid")
 
     material_urls: list[str] | None = Field(
         default=None,
         max_length=4,
-        description="New page URLs copied verbatim from the user. Existing frozen pages need no recapture.",
+        description="逐字复制用户提供的新网页 URL，已固定的网页无需重新采集。",
     )
     material_asset_ids: list[UUID] | None = Field(
         default=None,
         max_length=12,
-        description="Owned assets explicitly selected by the user or current work.",
+        description="用户或当前作品明确选中的、归当前用户所有的素材。",
     )
     material_output_ids: list[UUID] | None = Field(
         default=None,
         max_length=12,
-        description="Owned delivered video Outputs explicitly reused as new material.",
+        description="明确用作新素材、归当前用户所有的已交付视频 Output。",
     )
 
     material_music_ids: list[UUID] | None = Field(
         default=None,
         max_length=12,
-        description="Music-library ids returned by search_music, not Asset ids. Import existing public or user-owned library audio for editing; returns exact SourceSnapshot identifiers, without synthesis or render.",
+        description="search_music 返回的曲库音乐 ID，不填 Asset ID。导入公开或用户自有曲库的已有音频，以供剪辑；返回确切的 SourceSnapshot 标识，不合成或渲染。",
     )
     material_targets: list[PrepareVideoMaterialTarget] | None = Field(
         default=None,
         max_length=4,
-        description="Attach and return exact facts for selected existing snapshot/view/element targets. Omit view_id/element_id for ordinary image/video snapshots.",
+        description="附上并返回选定的现有快照、视图或元素的确切事实。普通图片或视频快照省略 view_id 和 element_id。",
     )
     video_observation: Literal["representative_frames", "continuous"] = Field(
         default="representative_frames",
-        description="Default representative_frames attaches at most three actual source frames per video, not a continuous review. Use continuous only when the user explicitly asks to inspect continuous playback or motion in an eligible short source; delivered Outputs use review_video instead.",
+        description="默认 representative_frames 为每段视频附最多三张真实源帧。仅当用户明确要求连续检查符合条件的短源视频播放或运动时，才用 continuous。已交付的 Output 用 review_video。",
     )
 
     @model_validator(mode="before")
@@ -1238,36 +1285,36 @@ class PrepareVideoMaterialsArgs(BaseModel):
 
 
 class ReviewVideoArgs(BaseModel):
-    """Review one exact delivered Output against the user's stated requirements."""
+    """对照用户明确的要求审阅一个确切的已交付 Output。"""
 
     model_config = ConfigDict(extra="forbid")
 
     output_id: UUID = Field(
-        description="Exact delivered video Output id from its card or @output mention; never the composition's latest Output by implication."
+        description="从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。"
     )
     requirements: str = Field(
         min_length=1,
         max_length=4000,
-        description="The relevant user requirements, copied faithfully from the current request and conversation; never a prewritten review conclusion.",
+        description="忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
     )
     at_seconds: list[float] | None = Field(
         default=None,
         max_length=4,
-        description="Specific actual Output times to inspect; when present these times define the sample, especially for rechecking an earlier finding."
+        description="需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。"
     )
     motion_scene_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=100,
-        description="Exact scene id in this Output's executed render_spec for a bounded ordered motion-frame review; never a scene from the Composition's current head. Mutually exclusive with at_seconds.",
+        description="此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
     )
     refresh: bool = Field(
         default=False,
-        description="True to decode and review again; false reuses this exact Output's saved report when one exists. A new Output always needs its own review."
+        description="true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。"
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+        description="有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
     )
 
     @model_validator(mode="before")
@@ -1296,16 +1343,16 @@ class ReviseVideoOpsArgs(BaseModel):
 
     base_ref: VideoVersionRef | None = Field(
         default=None,
-        description="Server-bound from the resolved current work; omit from Chat calls.",
+        description="服务端根据已解析的当前作品绑定，Chat 调用省略。",
     )
     ops: list[RevisionOp] = Field(min_length=1, max_length=32)
     scrub: VideoScrubTarget | None = Field(
         default=None,
-        description="Optionally inspect one affected Scene/Clip window or isolated Object after saving. Omit for static-only edits; never target the complete video.",
+        description="保存后可检查一个受影响的 Scene/Clip 时间窗或一个独立对象。仅有静态修改时省略，不指定整片。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+        description="有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
     )
     _request_context: dict[str, Any] | None = PrivateAttr(default=None)
 
@@ -1319,11 +1366,7 @@ class ReviseVideoOpsArgs(BaseModel):
 
 
 class ReviseVideoArgs(BaseModel):
-    """Complete-entity writes against one exact saved version.
-
-    Every write is the complete final entity; the server applies the batch
-    atomically and validates the complete resulting Composition before saving.
-    """
+    """对一个确切的保存版本提交完整实体。每项写入都是实体的完整最终值，服务端原子应用整批改动，验证整个 Composition 后保存。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1345,11 +1388,11 @@ class ReviseVideoArgs(BaseModel):
         return data
 
     base_ref: VideoVersionRef = Field(
-        description="Exact current saved-version reference, echoed verbatim from a version read.",
+        description="已保存版本的确切当前引用，从版本读取结果中原样复制。",
     )
     scrub: VideoScrubTarget | None = Field(
         default=None,
-        description="Optionally inspect one affected Scene/Clip window or isolated Object after saving. Omit for static-only edits; never target the complete video.",
+        description="保存后可检查一个受影响的 Scene/Clip 时间窗或一个独立对象。仅有静态修改时省略，不指定整片。",
     )
 
     scenes: list[Scene] = Field(default_factory=list, max_length=64)
@@ -1362,7 +1405,7 @@ class ReviseVideoArgs(BaseModel):
     remove_transition_ids: list[str] = Field(default_factory=list, max_length=64)
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+        description="有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
     )
 
     @model_validator(mode="after")
@@ -1391,7 +1434,7 @@ class ReviseVideoTextArgs(BaseModel):
 
 
 class ShowVideoPresetsArgs(BaseModel):
-    """Show 2–4 registered native Presets; the server owns every member fact."""
+    """展示 2–4 个已注册的原生 Preset，各候选的事实由服务端提供。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1405,7 +1448,7 @@ class ShowVideoPresetsArgs(BaseModel):
 
 
 class SelectVideoPresetArgs(BaseModel):
-    """Repaint one shown Preset as selected; never edits a version or starts a Run."""
+    """将一个已展示的 Preset 标记为选中，不改版本或启动 Run。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1420,7 +1463,7 @@ class SelectVideoPresetArgs(BaseModel):
 
 
 class SearchSfxArgs(BaseModel):
-    """Search real Freesound CC0 candidates; candidates persist only at turn settle."""
+    """搜索真实的 Freesound CC0 音效，候选仅在本轮结束时持久化。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1434,7 +1477,7 @@ class SearchSfxArgs(BaseModel):
 
 
 class ImportSfxArgs(BaseModel):
-    """Import one settled candidate by identity only, never by URL or provider metadata."""
+    """只按已保存候选的标识导入，不使用 URL 或供应商元数据。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1449,7 +1492,7 @@ class ImportSfxArgs(BaseModel):
 
 
 class ShowMusicCandidatesArgs(BaseModel):
-    """Show playable local-library Music candidates; never create an Asset/version."""
+    """展示本地曲库的可播放候选，不创建 Asset 或版本。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1463,7 +1506,7 @@ class ShowMusicCandidatesArgs(BaseModel):
 
 
 class SelectMusicArgs(BaseModel):
-    """Select one previously settled Music candidate by its server-owned identity."""
+    """用服务端标识选择之前已保存的一个 Music 候选。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1478,20 +1521,20 @@ class SelectMusicArgs(BaseModel):
 
 
 class PrepareNarrationArgs(BaseModel):
-    """Freeze final audio and exact script, then enqueue deterministic alignment."""
+    """固定最终音频和确切文稿，然后将确定性对齐任务加入队列。"""
 
     model_config = ConfigDict(extra="forbid")
 
     text: str | None = Field(default=None, min_length=1, max_length=9000)
     audio_asset_id: UUID | None = Field(
         default=None,
-        description="The exact AUDIO asset the user explicitly @referenced for this recording.",
+        description="用户为本次录音显式 @ 引用的确切 AUDIO 素材。",
     )
     voice_id: str | None = Field(default=None, min_length=1, max_length=255)
     language: str | None = Field(default=None, min_length=2, max_length=16)
     draft_ref: VideoDraftRef | None = Field(
         default=None,
-        description="Current working draft; pair with scene_id to resolve its exact pending narration in code.",
+        description="当前工作草稿，配合 scene_id 由代码解析其确切的待准备旁白。",
     )
     scene_id: str | None = Field(default=None, min_length=1, max_length=64)
     pending_disposition: Literal["answer", "skip", "none"] = "none"
@@ -1553,7 +1596,7 @@ class NarrationSentenceSemanticsArgs(BaseModel):
     entities: list[str] = Field(default=[], max_length=12)
     needs: list[Literal["native_text", "diagram", "real_media", "data", "generator"]] = Field(
         default=[], max_length=5,
-        description="JSON array of media/capability strings, e.g. ['native_text'].",
+        description="媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
     )
 
     @field_validator("needs", mode="before")
@@ -1567,7 +1610,7 @@ class NarrationSentenceSemanticsArgs(BaseModel):
 
 
 class AnnotateNarrationArgs(BaseModel):
-    """Complete sentence semantics only; text and ticks have no tool fields."""
+    """只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1583,7 +1626,7 @@ class AnnotateNarrationArgs(BaseModel):
 
 
 class GetVideoVersionParams(BaseModel):
-    """``get_video_version`` params — the explicit version read (§2.2)."""
+    """get_video_version 的参数，用来读取明确指定的版本（§2.2）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1596,23 +1639,23 @@ class GetVideoVersionParams(BaseModel):
         )
 
     version_id: UUID | None = Field(
-        default=None, description="Read this exact version (from a storyboard card or a previous read)."
+        default=None, description="读取分镜卡或先前读取结果指向的确切版本。"
     )
     composition_id: UUID | None = Field(
-        default=None, description="Read the CURRENT version of this work."
+        default=None, description="读取此作品的当前版本。"
     )
     output_id: UUID | None = Field(
-        default=None, description="Resolve an owned @output to the EXACT version it delivered, across Chats."
+        default=None, description="将用户拥有的 @output 解析为它实际交付的确切版本，支持跨 Chat。"
     )
     purpose: Literal["read", "edit"] = Field(
-        default="read", description="edit reads only the current head's base_ref and relevant Scene/Clip values."
+        default="read", description="edit 只读取当前最新版本的 base_ref 及相关 Scene/Clip 的值。"
     )
-    scene_id: str | None = Field(default=None, description="With purpose=edit, limit current values to this Scene.")
-    clip_id: str | None = Field(default=None, description="With purpose=edit, limit current values to this Clip.")
-    present: bool = Field(default=False, description="Show this saved version's canonical storyboard card again for review/recovery.")
+    scene_id: str | None = Field(default=None, description="purpose=edit 时，将现值限定到此 Scene。")
+    clip_id: str | None = Field(default=None, description="purpose=edit 时，将现值限定到此 Clip。")
+    present: bool = Field(default=False, description="再次展示该保存版本的标准分镜卡，供审阅或恢复。")
     scrub: VideoScrubTarget | None = Field(
         default=None,
-        description="With present=true, optionally show one bounded Scene/Clip window or one isolated Object. Never request the complete video.",
+        description="present=true 时可选一个限定的 Scene/Clip 时间窗或一个独立对象，不得请求整片。",
     )
 
     @model_validator(mode="after")
@@ -1659,15 +1702,15 @@ class SuggestionItem(BaseModel):
         return data
 
     label: str = Field(
-        description="The option row's text — user-voice, a complete short instruction they would plausibly type, interface language, ≤40 chars.",
+        description="选项行的文字。以用户口吻和界面语言写成对方可能输入的完整短指令，最多 40 个字符。",
     )
     description: str = Field(
         default="",
-        description="One short line: why this option — the conclusion the user can judge, never your reasoning process.",
+        description="用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
     )
     recommended: bool = Field(
         default=False,
-        description="True on the ONE option you recommend (at most one across the list) — the same lean your speech's verdict named (one judgment, one voice).",
+        description="仅对唯一推荐项填 true（全表最多一项），与正文表达的倾向一致。",
     )
 
 
@@ -1694,12 +1737,11 @@ def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]
 
 
 class StartRunArgs(BaseModel):
-    """``start_run`` params, plan path — start the confirmed plan's run."""
+    """方案阶段的 start_run 参数，用于启动已确认方案的 Run。"""
 
     model_config = ConfigDict(extra="forbid")
 class PlanAnswerArgs(BaseModel):
-    """``answer`` params, plan path — a purely informational reply. The
-    answer text itself is your spoken message; the envelope seats ride here."""
+    """方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1710,26 +1752,24 @@ class PlanAnswerArgs(BaseModel):
 
     brief: Brief | None = Field(
         default=None,
-        description="Brief updates this turn, if any (same rules as the other tools).",
+        description="本轮 Brief 更新（如有），规则与其他工具一致。",
     )
     material_text: str | None = Field(
         default=None,
-        description="Verbatim source text the user explicitly declared as their own material this turn. Null otherwise.",
+        description="用户本轮明确声明为自有素材的逐字原文，其他情况填 null。",
     )
     material_urls: list[str] | None = Field(
         default=None,
-        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion ('what do you think of this site?') is NOT material — leave it out. Null otherwise.",
+        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — the question settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
 
 
 class ProposeTasksArgs(BaseModel):
-    """``propose_tasks`` params, chat path (TaskListProposal minus summary —
-    the proposal's summary is your spoken message). Empty tasks = the legal
-    ask-back read, but prefer ask_user when one question decides it."""
+    """对话阶段的 propose_tasks 参数，采用 TaskListProposal 的结构，摘要写入消息正文。可用空 tasks 表示回问；一个问题就能作出判断时优先用 ask_user。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1740,44 +1780,31 @@ class ProposeTasksArgs(BaseModel):
 
     tasks: list[TaskItem] = Field(
         default_factory=list,
-        description="The proposed tool chain — one task per piece of work, in execution order.",
+        description="按执行顺序排列的提案工具链，每个作品对应一个任务。",
     )
     material_urls: list[str] | None = Field(
         default=None,
-        description="URLs the user's own message offers as MATERIAL to work from (a page they paste so you can make something of it — 'make a short film of https://…'). Copy each URL verbatim; the system captures the page into a project asset itself. A link shared only for discussion is NOT material — leave it out. Null otherwise.",
+        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
     )
     specific_instruction: str | None = Field(
         default=None,
         description=(
-            "A short distilled EXTRA instruction for the generator — only "
-            "constraints or focus NOT already expressed by the task params; "
-            "never restate the requested work itself. Omit when nothing "
-            "extra remains."
+            "为生成器提炼的简短额外指令。只写任务参数尚未表达的约束或重点，不复述请求本身。没有额外内容时省略。"
         ),
     )
     name: str = Field(
         default="",
-        description="A compact noun phrase (2-6 words, interface language) naming the run's deliverable. Name the work, never the tools.",
+        description="用界面语言以 2–6 个词组成简短名词短语，命名这次运行交付的作品，不用工具名。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
     production_intent: bool | None = Field(
         default=None,
         description=(
-            "Does the user's message ask for this work to be MADE now? "
-            "True only for an explicit production request or delegation "
-            "('按这版制作' / 'go ahead' / '直接做，细节你决定'); false for a "
-            "pure modification, a review-only ask ('先给我看方案'), or a "
-            "discussion. The user's auto/ask settings only waive approval "
-            "beats — they never turn a message without a production "
-            "request into one: a plan docked without it waits for the "
-            "user's word (the card keeps its start button). A film "
-            "storyboard design/revision is the family exception: without "
-            "current production intent it closes through answer after the "
-            "full presentation, not through a production dock. Never omit "
-            "this judgment."
+            "用户是否要求现在制作该作品？只有明确请求或委托制作时才填 true，例如“按这版制作”“go ahead”“直接做，细节你决定”。纯修改、仅审阅（如“先给我看方案”）或讨论均填 false。"
+            "auto/ask 设置只影响是否需要单独批准，不会产生制作意图。没有制作请求时，已展示的方案等待用户表态，保留开始按钮。视频分镜设计或修订若无当前制作意图，完整展示后用 answer 结束，不展示制作方案。必须填写此判断。"
         ),
     )
 
@@ -1800,7 +1827,7 @@ class AddManualNodeArgs(BaseModel):
     spec: ManualNodeSpec
     after: list[UUID] = Field(
         default_factory=list,
-        description="Parent node ids for this node's incoming edges. Include every required connection in this same edit_graph call.",
+        description="本节点入边的父节点 ID。在本次 edit_graph 调用中一并提交所需的全部连接。",
     )
     layout: dict[str, Any] | None = None
 
@@ -1845,7 +1872,7 @@ ManualGraphOp = Annotated[
 
 
 class EditGraphArgs(BaseModel):
-    """CRUD for ordinary manual Graph nodes and their typed connections."""
+    """对普通手动画布节点及其有类型的连接进行增删改查。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1860,7 +1887,7 @@ class EditGraphArgs(BaseModel):
 
     ops: list[ManualGraphOp] = Field(
         default_factory=list,
-        description="add_node takes type and spec.prototype='manual'; connections take from_node/to_node.",
+        description="add_node 需要 type 和 spec.prototype='manual'；连接需要 from_node/to_node。",
     )
 
     @field_validator("ops")
@@ -1876,9 +1903,7 @@ class EditGraphArgs(BaseModel):
 
 
 class ChatAskArgs(BaseModel):
-    """``ask_user`` params, chat path — the same clarification-interaction shape as the
-    plan path minus the brief slot (post-run questions never backfill a
-    brief)."""
+    """对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1888,35 +1913,34 @@ class ChatAskArgs(BaseModel):
         return tolerate_null_keys(data, "options", "items", "default_path", "recommended_id", "pending_disposition")
 
     question: str = Field(
-        description="The bare question or clarification-group title, in the interface language — no framing, no default-path tail."
+        description="仅用界面语言写问题或问题组标题，不加引言或默认路径说明。"
     )
     options: list[Option] = Field(
         default_factory=list,
-        description="3 concrete one-word values (2 only for a genuinely binary choice) sourced from the user's persona/context, translated into the interface language. Each carries its one-line reason (description). Empty only for a freeform ask.",
+        description="从用户人设或上下文提取三个能用一个词回答的具体值，翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。仅自由作答时才留空。",
     )
     items: list[BriefQuestionItem] = Field(
         default_factory=list,
         max_length=13,
-        description="Optional single clarification group containing only missing Brief slots.",
+        description="可选，提供一组澄清问题，只含缺失的 Brief 字段。",
     )
     allow_freeform: bool = True
     recommended_id: str | None = Field(
         default=None,
-        description="The ONE option id you recommend (at most one) — your judgment rides the card, and your spoken message leans toward the same pick (one judgment, one voice). Null = no recommendation.",
+        description="唯一推荐的选项 ID，最多一个，与正文倾向一致。没有推荐时填 null。",
     )
     default_path: str = Field(
         default="",
-        description="One short clause: what you will do if the user skips. The skip must be safe.",
+        description="用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="When the context shows a pending question: 'answer' = this message ENGAGES it (answers it, hands the choice back to you, or discusses its options) — it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection (the question stays pending).",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
 
 
 class ChatAnswerArgs(BaseModel):
-    """``answer`` params, chat path (AnswerProposal minus text — the answer
-    IS your spoken message). The pending-question disposition rides here."""
+    """对话阶段的 answer 参数，采用 AnswerProposal 的结构，回答文本写进消息正文。若有待回答的问题，其处理方式也随本调用提交。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1927,12 +1951,12 @@ class ChatAnswerArgs(BaseModel):
 
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES the question (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
 
 
 class RetryUploadArgs(BaseModel):
-    """``retry_upload`` params: recover a finished render whose upload failed."""
+    """retry_upload 参数，用于重传已渲染完成但上传失败的成片。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1943,11 +1967,11 @@ class RetryUploadArgs(BaseModel):
 
     output_id: UUID | None = Field(
         default=None,
-        description="The @output pin's definite id. Omit it when the latest failed run has exactly one upload failure; the system resolves that output. Never invent an id.",
+        description="@output 指向的确切 ID。最近失败的 Run 只有一个上传失败项时可省略，由系统解析。不得编造 ID。",
     )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
-        description="Pending-question settlement for this turn: 'answer' = the message ENGAGES it (answers it, hands the choice back to you, or discusses its options) and it settles with the user's own words verbatim; 'skip' = an explicit decline; 'none' = a clearly unrelated interjection.",
+        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
 
 
@@ -1978,7 +2002,7 @@ class WrapUpArgs(BaseModel):
     suggestions: list[SuggestionItem] = Field(
         default_factory=list,
         max_length=3,
-        description="0-3 next-step options grounded in what you actually read — each a user-voice label (≤40 chars) with its one-line reason, the ONE you recommend marked. Never a generic checklist.",
+        description="提供 0–3 个有实际阅读依据的下一步选项。每项用用户口吻写不超过 40 字符的标签，附一行理由，只标记唯一推荐项。不要套用通用清单。",
     )
 
 
@@ -2015,6 +2039,7 @@ class ChatTurnStopRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    scope: Literal["turn", "media_preparation"] = "turn"
     prose: list[VisibleProseFrontier] = Field(default_factory=list, max_length=128)
     activity_ids: list[UUID] = Field(default_factory=list, max_length=128)
     structure_ids: list[UUID] = Field(default_factory=list, max_length=128)
@@ -2094,11 +2119,7 @@ class ChatRequest(BaseModel):
 
 
 class TaskItem(BaseModel):
-    """One LLM-proposed task: a registry tool plus its params (CHAT_ARCH §3).
-
-    The LLM proposes; ``compile_graph`` adjudicates existence, params and
-    topology against ``app/tools/__init__.py`` — the LLM never writes node specs.
-    """
+    """模型提出的一个任务，由注册工具及其参数组成（CHAT_ARCH §3）。compile_graph 根据 app/tools/__init__.py 检查工具是否存在、参数和拓扑是否有效。模型不写节点规格。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -2304,7 +2325,7 @@ class IntentSlot(BaseModel):
 
 
 class BriefSlotSource(StrEnum):
-    """Provenance of one brief slot's value (merge precedence: stated > inferred > default)."""
+    """单个 Brief 字段值的来源。合并优先级依次为用户陈述、推断和默认值。"""
 
     USER_STATED = "user-stated"
     INFERRED = "inferred"
@@ -2332,12 +2353,7 @@ MaterialState = Literal["none", "pasted", "attached"]
 
 
 class Brief(BaseModel):
-    """Structured dialog needs with code-owned merge and provenance.
-
-    Each slot carries its value and source: user-stated > inferred > default.
-    ``constraints`` is an array of sourced entries. ``material_state`` and
-    ``asked`` are maintained from world facts and question history by code.
-    """
+    """结构化的对话需求，合并与来源由代码管理。每个字段都有值及来源，优先级为 user-stated > inferred > default。constraints 是带来源的约束数组。material_state 和 asked 由代码根据实际状态及提问记录维护。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -2356,7 +2372,7 @@ class Brief(BaseModel):
         if not isinstance(data, dict):
             return data
         optional_slots = (
-            "purpose", "target_seconds", "narrative_mode", "narration_language",
+            "production_direction", "purpose", "target_seconds", "narrative_mode", "narration_language",
             "subtitle_languages", "aspect", "voice_requirements", "must_include",
             "avoid", "success_criteria",
         )
@@ -2410,6 +2426,12 @@ class Brief(BaseModel):
     topic: BriefSlot[str] = Field(default_factory=BriefSlot)
     audience: BriefSlot[str] = Field(default_factory=BriefSlot)
     tone: BriefSlot[str] = Field(default_factory=BriefSlot)
+    production_direction: BriefSlot[str] = Field(
+        default_factory=BriefSlot,
+        description=(
+            "将视频用途与叙事方式结合为一个创作方向。两者已知时才设此字段。如果只确定一项，先用 purpose 或 narrative_mode 保留该信息。时长、旁白语言、字幕语言和画幅各用独立字段。"
+        ),
+    )
     purpose: BriefSlot[str] = Field(default_factory=BriefSlot)
     target_seconds: BriefSlot[int] = Field(default_factory=BriefSlot)
     narrative_mode: BriefSlot[str] = Field(default_factory=BriefSlot)
@@ -2428,6 +2450,15 @@ class Brief(BaseModel):
     # reads it from the LLM's proposal (禁 LLM 簿记); code stamps it when the
     # question docks.
     asked: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _preserve_legacy_shape(self, handler):
+        # An untouched old Brief must still produce its original question,
+        # CreativeState and composition hashes, including in nested dumps.
+        payload = handler(self)
+        if self.production_direction.value is None:
+            payload.pop("production_direction", None)
+        return payload
 
 
 class BrandSourceRef(BaseModel):
@@ -2568,55 +2599,41 @@ class InferredIntent(BaseModel):
     action: Literal["ask", "draft", "answer", "start"] = Field(
         default="draft",
         description=(
-            "Whether the user wants content drafted ('draft' — build/refine "
-            "the plan), is asking a question about the tool's "
-            "capabilities ('answer'), is confirming the proposed plan "
-            "('start' — a prose 'looks good, go ahead' in the confirm "
-            "phase, not a revision), or one missing answer most decides "
-            "quality and you must ask first ('ask')."
+            "判断用户是在要求创作或完善方案（draft）、询问工具能力（answer）、在确认阶段明确同意执行所提方案（start，修改要求不算确认），还是必须先澄清一个最影响质量的问题（ask）。"
         ),
     )
     ask: QuestionProposal | None = Field(
         default=None,
         description=(
-            "The clarification interaction when action is 'ask', including "
-            "the active contract's grouped form. Null for every other action."
+            "action 为 ask 时的澄清交互，包括当前规范规定的分组表单。其他操作均填 null。"
         ),
     )
     answer: str | None = Field(
         default=None,
         description=(
-            "The user-facing reply: the direct answer when action is "
-            "'answer'; the plan-introducing echo prose when action is "
-            "'draft'. Null for 'start' and 'ask'."
+            "面向用户的回复。action 为 answer 时直接回答；为 draft 时用正文引出并复述方案；为 start 或 ask 时填 null。"
         ),
     )
     material_text: str | None = Field(
         default=None,
         description=(
-            "Verbatim source text the user explicitly declared as their own "
-            "material ('this is my transcript: …', '这是我的文字稿：…'). Null "
-            "when the user did not declare pasted text as source material — "
-            "a bare request is never material. Null for action='start'/'ask'."
+            "用户明确声明为自有素材的逐字原文，例如“这是我的文字稿……”。未明确将粘贴文本作为素材时填 null，单纯请求不属于素材。action 为 start 或 ask 时填 null。"
         ),
     )
     tasks: list[TaskItem] = Field(
         default_factory=list,
         description=(
-            "The authorized chain: produce_video, prepare_narration or "
-            "prepare_visual_assets, in execution order. Empty for "
-            "start/answer/ask calls."
+            "已授权的任务链，按执行顺序列出 produce_video、prepare_narration 或 prepare_visual_assets。start、answer、ask 调用留空。"
         ),
     )
     specific_instruction: str | None = Field(
         default=None,
-        description="Free-form instruction distilled from the prompt. Null for 'answer'/'start'/'ask'.",
+        description="从提示中提炼的自由文本指令。answer、start、ask 时填 null。",
     )
     tasks_explicit: bool = Field(
         default=False,
         description=(
-            "True when the user explicitly named the work themselves. "
-            "False when the chain is the default proposal."
+            "用户自己明确点名作品时为 true，任务链源于默认提案时为 false。"
         ),
     )
     # Advisory brief slots preserve user-stated and inferred source facts.
@@ -2778,7 +2795,8 @@ def missing_brief_question_items(
         if item.required and not item.options and not item.allow_freeform:
             raise ValueError(f"required slot {item.slot} needs options or freeform")
         missing.append(item.model_copy(update={
-            "recommended_id": resolve_recommended_id(item.recommended_id, item.options)
+            "recommended_id": resolve_recommended_id(item.recommended_id, item.options),
+            "decision_page": None,
         }))
     return missing
 
@@ -3037,11 +3055,11 @@ class RenderStatus(StrEnum):
 
 
 class KeyArgument(BaseModel):
-    """One key argument of the talk, with its transcript location."""
+    """演讲的一个关键论点及其在逐字稿中的位置。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(description="Stable id within the understanding (a1, a2, …)")
+    id: str = Field(description="素材分析内稳定的 ID（a1、a2 等）")
     text: str
     # Display alternates (interrupt options render in the UI language,
     # never the material's): faithful English / Simplified-Chinese
@@ -3054,7 +3072,7 @@ class KeyArgument(BaseModel):
     position: str = ""
 
 class QuotableLine(BaseModel):
-    """A verbatim quotable line with a code-checked self-containment flag."""
+    """逐字引用的原句，其能否独立成句由代码检查并标记。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3068,11 +3086,11 @@ class QuotableLine(BaseModel):
     self_contained: bool = True
 
 class TopicBoundary(BaseModel):
-    """One topic segment of the talk (semantic segmentation)."""
+    """根据语义划分的一个演讲主题段。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(description="Stable id within the understanding (t1, t2, …)")
+    id: str = Field(description="素材分析内稳定的 ID（t1、t2 等）")
     label: str = ""
     # The LLM's evidence: the verbatim first words of the segment — the
     # snapping anchor. ``approx_start`` is an optional coarse cue-second hint.
@@ -3084,7 +3102,7 @@ class TopicBoundary(BaseModel):
     end: float | None = None
 
 class ClimaxSpan(BaseModel):
-    """A semantic climax span — the semantic half of the climax channel."""
+    """一段在语义上达到高潮的内容，为高潮判断提供语义依据。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3096,11 +3114,7 @@ class ClimaxSpan(BaseModel):
     end: float | None = None
 
 class EmphasisWord(BaseModel):
-    """A word the LLM judges semantically emphasized (semantic half).
-
-    The weight here is the LLM's; the acoustic F0/energy z-scores stay on
-    asset.meta["prosody"]["words"] — never merged.
-    """
+    """模型根据语义判断应重读的词，weight 为模型给出的权重。实测的基频 F0 和能量 z 分数保存在 asset.meta["prosody"]["words"]，不与语义权重合并。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3111,7 +3125,7 @@ class EmphasisWord(BaseModel):
     start: float | None = None
 
 class NarrativeRoleHint(BaseModel):
-    """The global-arc role of a span (setup/payoff/example/transition)."""
+    """片段在整体叙事中的作用，可为 setup、payoff、example 或 transition。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3124,11 +3138,7 @@ class NarrativeRoleHint(BaseModel):
     end: float | None = None
 
 class VisualAnchor(BaseModel):
-    """The LLM's semantic half of a visual anchor for one image asset.
-
-    The deterministic half (faces / subject box / safe area) lives on the
-    asset's meta["visual_anchors"]; this row joins them by ``asset_id``.
-    """
+    """模型为一张图片提取的视觉锚点语义信息。人脸、主体框和安全区等测量结果保存在素材 meta["visual_anchors"]，通过 asset_id 关联。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3253,6 +3263,7 @@ class ProductionStage(BaseModel):
     reused: bool | None = None
     item_count: int | None = Field(default=None, ge=0)
     reused_count: int | None = Field(default=None, ge=0)
+    scene_id: str | None = None
 
 
 class StepResponse(BaseModel):
@@ -3295,6 +3306,7 @@ class StepResponse(BaseModel):
     cost_credits: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    scene_index: int | None = Field(default=None, ge=1)
     production_stages: list[ProductionStage] = Field(default_factory=list)
 
 
@@ -3413,13 +3425,7 @@ class OutputPosterResponse(BaseModel):
 
 
 class ExtractedPersonaMemory(BaseModel):
-    """LLM persona-extraction result; maps directly to Persona DB columns.
-
-    ``name`` is the LLM-synthesized persona label (e.g. "Pragmatic AI
-    evangelist") — used as the Persona.name when the pipeline auto-creates a
-    persona, so the row is never named after an uploaded file. Ignored on
-    manual regenerate, where the user owns the name.
-    """
+    """模型提取的人设信息，直接对应 Persona 数据库字段。name 是提炼出的人设标签，如“务实的 AI 推广者”。自动创建时用作 Persona.name，不以文件名命名。手动重新生成时保留用户自己选的名称。"""
 
     name: str = ""
     core_values: list[str] = Field(default_factory=list)

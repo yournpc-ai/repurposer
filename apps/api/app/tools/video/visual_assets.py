@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Annotated, Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 from xml.etree import ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from app.editing.schemas import (
@@ -31,10 +32,10 @@ from app.models.schemas import VideoDraftRef, canonical_json_hash
 from app.models.tables import SourceSnapshot
 from app.providers import storage
 from app.tools.video.media_analysis import (
-    IMAGE_REVIEWER_VERSION,
     MediaAnalysisReport,
     analyze_image_bytes,
     image_media_input,
+    image_reviewer_version,
     read_report,
     review_image_content,
     store_content_review,
@@ -126,8 +127,16 @@ class ExistingImageSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["existing_image"] = "existing_image"
-    snapshot_id: UUID
-    snapshot_digest: str = Field(min_length=64, max_length=64)
+    snapshot_id: UUID = Field(
+        description="使用图片资源的 snapshot_id，已采集的网页视图同样如此。",
+    )
+    snapshot_digest: str = Field(
+        min_length=64, max_length=64, description="同一图片资源的确切摘要。",
+    )
+    visible_evidence: str | None = Field(
+        default=None, min_length=1, max_length=2000, exclude_if=lambda value: value is None,
+        description="描述源图中必须已经可见的主体、页面区段和原文。后续剪辑叠加的标题放入 on_screen_copy。",
+    )
 
 
 VisualAssetSource = Annotated[
@@ -137,7 +146,7 @@ VisualAssetSource = Annotated[
 
 
 class SceneAssetSpec(BaseModel):
-    """Creative requirements from the main model; execution identity is derived."""
+    """主模型给出的场景创意要求。执行标识由系统推导。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -145,7 +154,10 @@ class SceneAssetSpec(BaseModel):
     scene_id: str = Field(min_length=1, max_length=64)
     intent: str = Field(min_length=1, max_length=2000)
     source: VisualAssetSource
-    on_screen_copy: str | None = Field(default=None, max_length=4000)
+    on_screen_copy: str | None = Field(
+        default=None, max_length=4000,
+        description="场景计划中的屏幕文案。使用现有图片时，新标题作为原生图层叠加。",
+    )
     narration_direction: str | None = Field(default=None, max_length=4000)
     subject_region: NormalizedRegion | None = None
     title_safe_area: NormalizedRegion | None = None
@@ -455,13 +467,22 @@ async def rasterize_svg(
     return png, diagnostics
 
 
-def _fixed_png(data: bytes) -> tuple[bytes, int, int, str]:
+def _fixed_png(
+    data: bytes, *, fit: VisualOutputConstraints | None = None,
+) -> tuple[bytes, int, int, str]:
+    """Return the prepared PNG together with the input dimensions and digest."""
     try:
         with Image.open(io.BytesIO(data)) as source:
             source.load()
             width, height = source.size
             source_digest = hashlib.sha256(data).hexdigest()
-            image = source.convert("RGBA") if "A" in source.getbands() else source.convert("RGB")
+            transparent = "A" in source.getbands() or (fit is not None and "transparency" in source.info)
+            image = source.convert("RGBA" if transparent else "RGB")
+            if fit is not None and source.size != (fit.width, fit.height):
+                image = ImageOps.pad(
+                    image.convert("RGBA"), (fit.width, fit.height),
+                    method=Image.Resampling.LANCZOS, color=(0, 0, 0, 0),
+                )
         target = io.BytesIO()
         image.save(target, format="PNG")
         return target.getvalue(), width, height, source_digest
@@ -504,7 +525,7 @@ async def _save_manifest(key: str, value: dict[str, Any]) -> None:
 
 
 def versioned_request_key(owner_id: UUID, project_id: UUID, spec: SceneAssetSpec) -> str:
-    version = IMAGE_REVIEWER_VERSION
+    version = image_reviewer_version(spec.source.kind)
     if isinstance(spec.source, ControlledSVGSource):
         version = f"{VISUAL_ASSET_RUNNER_VERSION}/{version}"
     return (
@@ -555,6 +576,10 @@ async def fixed_visual_asset_manifest(
         and (manifest.get("provenance") or {}).get("runner_version") != VISUAL_ASSET_RUNNER_VERSION
     ):
         return None
+    if isinstance(spec.source, ExistingImageSource):
+        media = manifest.get("media") or {}
+        if (media.get("width"), media.get("height")) != (spec.output.width, spec.output.height):
+            return None
     return manifest
 
 
@@ -572,7 +597,7 @@ async def cached_visual_asset(
         raise VisualAssetError("fixed visual asset bytes do not match their digest")
     analysis = await read_report(manifest["analysis_ref"])
     review = await read_report(manifest["content_review_ref"])
-    if review.get("reviewer_version") != IMAGE_REVIEWER_VERSION:
+    if review.get("reviewer_version") != image_reviewer_version(spec.source.kind):
         return None
     result = {**manifest, "cache_hit": True, "analysis": analysis, "content_review": review}
     if review["status"] == "unavailable":
@@ -787,8 +812,11 @@ async def prepare_visual_asset(
         }
     elif isinstance(spec.source, ExistingImageSource):
         png, provenance = await _existing_image(spec, owner_id)
-        png, width, height, _ = _fixed_png(png)
-        diagnostics = {"source": "existing_fixed_image"}
+        png, width, height, _ = _fixed_png(png, fit=spec.output)
+        diagnostics = {
+            "source": "existing_fixed_image", "fit": "contain",
+            "source_dimensions": {"width": width, "height": height},
+        }
     elif isinstance(spec.source, ControlledSVGSource):
         svg, program_digest, svg_digest = sanitize_svg_program(spec.source.program, spec.output)
         await _save_immutable(
@@ -847,7 +875,7 @@ async def prepare_visual_asset(
                 "filter": "Pillow.LANCZOS",
             }
     media_key, media_digest = await store_source_bytes(png, ".png", "image/png")
-    revision = IMAGE_REVIEWER_VERSION
+    revision = image_reviewer_version(spec.source.kind)
     if isinstance(spec.source, ControlledSVGSource):
         revision = f"{VISUAL_ASSET_RUNNER_VERSION}:{revision}"
     identity = uuid5(NAMESPACE_URL, f"visual-asset:{spec.request_digest()}:{revision}")
@@ -924,7 +952,7 @@ async def prepare_visual_asset(
         "diagnostics": diagnostics,
         "analysis_ref": analysis_ref,
         "content_review_ref": review_ref,
-        "reviewer_version": IMAGE_REVIEWER_VERSION,
+        "reviewer_version": review.reviewer_version,
         "usage": usage,
     }
     await _save_immutable(
@@ -953,29 +981,48 @@ async def prepare_visual_assets(
     review_existing: bool = False,
     rasterizer: Any = None,
     reviewer: Any = None,
+    on_prepared: Callable[[int], Awaitable[None]] | None = None,
+    on_active_scene: Callable[[int, str | None], Awaitable[None]] | None = None,
 ) -> VisualAssetBatch:
     results = VisualAssetBatch()
+    prepared_count = 0
+
+    async def prepare_scene(spec: SceneAssetSpec) -> dict[str, Any]:
+        nonlocal prepared_count
+        if review_existing:
+            asset = await review_fixed_visual_asset(
+                owner_id=owner_id, project_id=project_id, spec=spec, reviewer=reviewer
+            )
+        else:
+            asset = await prepare_visual_asset(
+                owner_id=owner_id, project_id=project_id, spec=spec, draft_ref=draft_ref,
+                execution_id=execution_id, content_attempt=(content_attempts or {}).get(spec.scene_id, 1),
+                step_attempt=step_attempt, rasterizer=rasterizer, reviewer=reviewer,
+            )
+        prepared_count += 1
+        if on_prepared is not None:
+            await on_prepared(prepared_count)
+        return asset
+
+    completed = 0
+    progress_lock = asyncio.Lock()
+
+    async def track_scene(spec: SceneAssetSpec, active: list[str]) -> dict[str, Any]:
+        nonlocal completed
+        try:
+            return await prepare_scene(spec)
+        finally:
+            async with progress_lock:
+                active.remove(spec.scene_id)
+                completed += 1
+                if on_active_scene is not None:
+                    await on_active_scene(completed, next(iter(active), None))
+
     for batch in batched_scene_assets(specs):
-        settled = await asyncio.gather(
-            *(
-                review_fixed_visual_asset(
-                    owner_id=owner_id, project_id=project_id, spec=spec, reviewer=reviewer
-                )
-                if review_existing else prepare_visual_asset(
-                    owner_id=owner_id,
-                    project_id=project_id,
-                    spec=spec,
-                    draft_ref=draft_ref,
-                    execution_id=execution_id,
-                    content_attempt=(content_attempts or {}).get(spec.scene_id, 1),
-                    step_attempt=step_attempt,
-                    rasterizer=rasterizer,
-                    reviewer=reviewer,
-                )
-                for spec in batch
-            ),
-            return_exceptions=True,
-        )
+        active = [spec.scene_id for spec in batch]
+        if on_active_scene is not None:
+            await on_active_scene(completed, active[0])
+        settled = await asyncio.gather(*(track_scene(spec, active) for spec in batch), return_exceptions=True)
         for spec, item in zip(batch, settled, strict=True):
             if isinstance(item, dict):
                 results.assets.append(item)

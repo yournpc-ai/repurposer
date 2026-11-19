@@ -154,7 +154,7 @@ async def build_context(
         # system template (一法一座; the static prompt's prefix cache
         # survives per-user settings).
         lines.append(
-            "Confirmation settings: execution="
+            "确认设置：execution="
             f"{confirmation[0]}, spending={confirmation[1]}."
         )
 
@@ -162,7 +162,7 @@ async def build_context(
     # by tools.project_context; don't freeze a duplicate asset roster here.
     outputs = await list_visible_outputs(db, project.id)
     if outputs:
-        lines.append("Current outputs:")
+        lines.append("当前输出：")
         for o in outputs:
             one_liner = output_one_liner(o)
             lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
@@ -201,7 +201,7 @@ async def build_context(
         children: dict[str, list[str]] = {}
         for e in graph_edges:
             children.setdefault(str(e.from_node), []).append(str(e.to_node))
-        lines.append("Graph (the persistent canvas — wiring ops edit THIS):")
+        lines.append("当前持久化画布图（连接编辑作用于此图）：")
         for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
             spec = n.spec or {}
             label = spec.get("summary") or n.type
@@ -251,7 +251,7 @@ async def build_context(
         # the framing prose that content may carry is noise for this block.
         bare = (pending.question or {}).get("question") or pending.content
         lines.append(
-            f"Pending question awaiting the user's answer: {bare}"
+            f"待用户回答的问题：{bare}"
         )
         options = (pending.question or {}).get("options") or []
         if options:
@@ -263,14 +263,14 @@ async def build_context(
             )
 
     if mentions:
-        lines.append("Mentions (definite references):")
+        lines.append("用户明确引用的对象：")
         for m in mentions:
             line = f"- {m.type} id={m.id} label={m.label}"
             if m.quote:
                 # 段落级指认 (2026-09-11 — 选区引用): the pinned passage rides
                 # the mention line verbatim (capped — the card selection is
                 # user truth, the context budget is not).
-                line += f' — the user pinned this exact passage: "{m.quote[:500]}"'
+                line += f' — 用户指定了这段原文："{m.quote[:500]}"'
             if m.region:
                 region = m.region
                 rect = region.sourceRect

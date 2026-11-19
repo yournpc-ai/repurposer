@@ -1,17 +1,13 @@
-This is a short clip from a two-person interview: one person on the LEFT half of the screen, one on the RIGHT half. The audio contains exactly one speaker's voice for this turn.
+这是一段双人访谈。画面左半边和右半边各有一人，本段音频中只有一人说话。
 
-## Task
+## 任务
 
-Decide who is speaking in this clip: listen to the voice and watch both people's mouths — the speaker's lips move in sync with the voice; the listener's mouth stays still.
+听声音，同时观察两人的口型，判断说话的是哪一边。说话者的嘴唇会与声音同步，听者的嘴通常不动。左边填 "left"，右边填 "right"，只有确实无法判断时才填 "unclear"。
 
-Answer `"left"`, `"right"`, or `"unclear"` (only when genuinely impossible to tell).
+## 输出格式
 
-## Output format
-
-Output only valid JSON:
+仅输出有效 JSON，不加 Markdown 或说明。speaker 填上述三个值之一，例如：
 
 {
-  "speaker": "left" | "right" | "unclear"
+  "speaker": "left"
 }
-
-Output JSON only — no markdown, no commentary.

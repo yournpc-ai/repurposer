@@ -177,8 +177,10 @@ class PrepareNarration(NodeBase):
         from app.tools.video.preparation import snapshot_narration_original
 
         preparation = (run.context or {}).get("narration_preparation") or {}
-        params = PrepareNarrationParams.model_validate(preparation.get("request"))
-        policy = NarrationPolicy.model_validate(preparation.get("narration_policy"))
+        parts = preparation.get("scenes")
+        part = next(p for p in parts if p["request"]["scene_id"] == node.spec["scene_id"]) if parts else preparation
+        params = PrepareNarrationParams.model_validate(part.get("request"))
+        policy = NarrationPolicy.model_validate(part.get("narration_policy"))
         expected = params.model_dump(mode="json", exclude_none=True)
         if any(node.spec.get(key) != value for key, value in expected.items()):
             raise ValueError("The narration step does not match its authorized request")
@@ -224,7 +226,7 @@ class PrepareNarration(NodeBase):
             prepared = await prepare_speech_media(
                 content,
                 user_id=project.user_id,
-                execution_id=str(run.id),
+                execution_id=str(node.id if parts else run.id),
                 policy=policy,
                 on_reuse=reuse.append,
             )
@@ -268,7 +270,10 @@ class PrepareNarration(NodeBase):
         }
         run.context = {
             **(run.context or {}),
-            "narration_preparation": {**preparation, "result": result},
+            "narration_preparation": (
+                {**preparation, "scenes": [{**p, "result": result} if p is part else p for p in parts]}
+                if parts else {**part, "result": result}
+            ),
         }
         await set_spec_field(node.id, "narration_preparation", result)
         await fill_summary(
@@ -333,6 +338,7 @@ class PrepareVisualAssets(NodeBase):
                 review_existing=params.review_existing,
                 draft_ref=params.draft_ref,
                 execution_id=str(run.id),
+                on_active_scene=lambda count, scene: stages.progress("visual_assets", count, scene),
                 content_attempts={str(key): int(value) for key, value in attempts.items()},
                 step_attempt=node.attempt + 1,
             )

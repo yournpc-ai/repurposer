@@ -97,13 +97,11 @@ class PrepareMusicParams(BaseModel):
 class ProduceVideoParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version_ref: VideoVersionRef = Field(
-        description="Exact base_ref from get_video_version; renders this saved version without redesign."
+        description="复制 get_video_version 返回的确切 base_ref，直接渲染该保存版本，不重新设计。"
     )
     regenerate_media: bool = Field(
         default=False,
         description=(
-            "True ONLY when the user explicitly asks to generate the model image again. "
-            "A new Run generates fresh media; retries of that Run still reuse its fixed result. "
-            "Ordinary production, recovery and native-content edits keep this false."
+            "仅当用户明确要求重新生成模型图片时设为 true。新 Run 会生成新媒体，该 Run 重试仍复用其固定结果。常规制作、恢复和原生内容编辑均保持 false。"
         ),
     )

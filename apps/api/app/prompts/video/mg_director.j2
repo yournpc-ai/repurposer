@@ -1,33 +1,29 @@
-{# mg_director.j2 — the no-skill motion-graphics design contract. Input is
-   the exact on-screen copy (the user's own or the chat model's distilled
-   text); the director paces it into one or more text scenes. Mirror contract:
-   field bounds are editing/director.py's MgDirection; presets are
-   tools/video/design.py's MG entrance vocabulary. #}
-You are designing a short motion-graphics video: editable typography, spatial relationships and native vector graphics. The on-screen words come from the copy below — quote it exactly; you may split it across scenes and choose which lines land together, but never rewrite, translate, or invent content.
+{# 未选 Skill 时的动态图形设计规则。导演将用户提供或聊天模型提炼的确切屏幕文字编排成一个或多个场景。字段约束见 editing/director.py 的 MgDirection；入场预设词汇见 tools/video/design.py。 #}
+设计一支由可编辑文字、空间关系和原生矢量图形构成的短动画。屏幕文字必须逐字引用下方文案。可以跨场拆分并决定哪些句子同时出现，不得改写、翻译或添加内容。
 
-THE COPY:
+画面文案：
 {{ text }}
 
-{% if narration %}SPOKEN COPY:
+{% if narration %}口播原文：
 {{ narration }}
-Narration is enabled. Allocate this spoken copy across the same scenes in exact order, preserving every character; each scene's `narration` is its exact spoken segment. Do not rewrite, translate, or invent narration.{% else %}Narration is off; every scene's `narration` is null.{% endif %}
-{% if language %}The video's language: {{ language }}.{% endif %}
-{% if focus %}The agreed direction: {{ focus }}{% endif %}
-{% if scene_count %}The user requires exactly {{ scene_count }} scenes.{% endif %}
-{% if target_seconds %}The exact total duration is {{ target_seconds }} seconds. Allocate it across the scenes; short scenes are allowed.{% endif %}
-{% if instruction %}DESIGN REQUIREMENTS:
+旁白已启用。按原顺序将口播分配给相应场景，保留每个字符。每场的 narration 为该场确切的原文片段，不得改写、翻译或另编。{% else %}旁白已关闭，每场的 narration 均为 null。{% endif %}
+{% if language %}视频语言：{{ language }}。{% endif %}
+{% if focus %}已确定的创作方向：{{ focus }}{% endif %}
+{% if scene_count %}用户要求恰好 {{ scene_count }} 个场景。{% endif %}
+{% if target_seconds %}总时长须恰好为 {{ target_seconds }} 秒。将其分配给各场，场景可以很短。{% endif %}
+{% if instruction %}设计要求：
 {{ instruction }}
-{% if current %}CURRENT DESIGN:
+{% if current %}当前设计：
 {{ current }}{% endif %}{% endif %}
 
-Paragraph breaks are not mandatory scene cuts. Choose scenes and reading beats from the content, with enough time for entrances and a static reading hold; do not default to three scenes.
+不必在段落分隔处切镜。根据内容选择场景和阅读节拍，给入场及静止阅读留足时间，不默认分三场。
 
-Design one or more scenes, honoring the exact count and total duration above when supplied. For each: `lines` (legacy simple text block, or [] when using text_beats), `duration_seconds` (positive, up to 30; the whole piece stays within 118s), `enter` (fade | rise | lines | words | graphemes — how the text enters), `size` (medium | large | hero), `align`, an optional `color` (hex), a short `intent` (what this beat is for), and `visual_description` (one plain sentence naming the real elements and their motion — never elements that do not exist). Keep the reviewed scene durations fixed for production: narration must be paced to fit its own scene rather than relying on extra time. When the request benefits from native graphics, add up to four `shapes`: each has a `shape` field (`rect` or `ellipse`), normalized canvas `x/y/width/height`, an exact hex `fill`, `opacity`, `corner_radius` for rects, and `motion` (fade | rise | scale | rotate). Shapes are independently editable visual elements; use them to express relationships, contrast or accumulation when useful, rather than adding arbitrary decoration. Omit `shapes` when the copy alone is stronger. Pace for reading within the user's duration.
+设计一个或多个场景，若上方指定了数量或总时长，须精确遵循。每场提供 lines（旧式简单文字块，使用 text_beats 时为 []）、duration_seconds（正数，单场最多 30 秒，全片不超过 118 秒）、enter（文字入场方式：fade | rise | lines | words | graphemes）、size（medium | large | hero）、align、可选的十六进制 color、简短的 intent（该拍的目的）和 visual_description（一个平实的句子，只描述真实元素及运动）。制作时保持已审阅的场景时长，旁白节奏须适配本场，不靠加时。需要原生图形时，最多添加四个 shapes，每个含 shape（rect 或 ellipse）、归一化画布坐标 x/y/width/height、确切的十六进制 fill、opacity、矩形的 corner_radius，以及 motion（fade | rise | scale | rotate）。图形可独立编辑，用于表达关系、对比或累积，不随意装饰。文案本身更有力时可省略 shapes。在用户要求的时长内安排阅读节奏。
 
-For expressive text animation, use `text_beats` instead of a paragraph-sized `lines` block. Each beat is an independently editable TextObject with `lines` (1–3 exact source fragments, each <=40 characters), `start_seconds`, `end_seconds` (scene-local), normalized `x`, `y`, `width`, `height` within the canvas, `font_size` (24–200 canvas pixels), `weight` (400/500/600/700/800/900), optional hex `color`, `align`, `enter`, and `drift`. Use 1–12 beats per scene, list them in source reading order with nondecreasing starts, and include every source character exactly once across the work. Set scene `lines=[]` when beats are used. Beats may coexist on separate layers or replace each other in the same space. Their windows must fit the scene and allow both entrance and a readable hold (at least max(1.2 seconds, character count / 8)). Use meaningful hierarchy: a short premise, a visual contrast, a supporting phrase, a conclusion. Do not leave three long paragraphs on screen for 30 seconds each. Derive total duration from reading and movement, not from the per-scene maximum. Choose a palette and composition for this content; dark backgrounds and centered white text are options, not defaults. Do not repeat words just to create emphasis. Fill visual_description with 2–3 concrete clauses: the main subject and its position/scale/hierarchy, the real entrance or movement sequence, and the final reading hold. Describe only effects expressed by the returned objects and their available motion fields; avoid null or generic adjectives.
+富有表现力的文字动画用 text_beats，不要把整段塞进一个 lines 块。每拍为独立可编辑的 TextObject，含 lines（1–3 段逐字源文，每段最多 40 字符）、场内 start_seconds 和 end_seconds、归一化 x、y、width、height、font_size（24–200 画布像素）、weight（400/500/600/700/800/900）、可选的十六进制 color、align、enter 和 drift。每场 1–12 拍，按原文阅读顺序排列，起点不递减；全片原文每个字符恰好出现一次。使用节拍时设场景 lines=[]。各拍可分层同时出现，也可在同一位置接替。时间窗须在场景内，为入场和静止阅读留足时间，阅读停留至少 max(1.2 秒, 字符数 / 8)。根据内容组织前提、对比、佐证或结论等层次。不要让三大段文字各在屏幕上停 30 秒。按阅读和运动需要推导总时长，不套用单场上限。结合内容设计配色与构图，深底白字居中只是可选方案。不要重复原词来制造强调。visual_description 用两三个具体分句说明主体的位置、大小和层级，实际的入场或运动顺序，以及最后如何停留供阅读。只描述返回对象和动效字段确实表达的效果，不填 null 或空泛形容词。
 
-Return exactly the root fields `name`, `language`, `background`, and `scenes`. The solid field color is `background` (hex), not background_color; there is no root duration field. {% if background %}The user has fixed background={{ background }}; choose text and shapes against that field.{% else %}Choose background and text colors together as a readable palette. Omitting background uses the dark field #0B1020, so dark text needs an explicit light background.{% endif %}
+根对象只含 name、language、background、scenes。纯色背景字段为 background（十六进制），不得写成 background_color；根对象没有时长字段。 {% if background %}用户已固定 background={{ background }}，据此选取文字和图形颜色。{% else %}同时选择背景与文字颜色，确保可读。省略 background 会使用深色 #0B1020，因此使用深色文字时请显式指定浅色背景。{% endif %}
 
-Each scene may also set `drift`: none | push_in | pull_out (default none). push_in/pull_out continuously scales the text plane by 3.5% across the scene, independently of its entrance. Use this for a requested subtle push or pull in a text short. `enter=words` is staggered word opacity, not word rise; `enter=rise` moves the whole text block. Describe only these actual selected motions, without invented camera paths or invented word timings.
+每场可设 drift 为 none | push_in | pull_out，默认 none。push_in/pull_out 在整个场景中连续将文字平面放大或缩小 3.5%，独立于入场效果。用户要求文字短片轻微推近或拉远时可用。enter=words 使各词的透明度依次变化，enter=rise 则让整个文字块上移。只描述实际选中的运动，不编造镜头路径或词级时间。
 
-Answer with the JSON object only.
+仅返回 JSON 对象。

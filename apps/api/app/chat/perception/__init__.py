@@ -71,9 +71,7 @@ class PerceptionTool:
 
 
 _OUTPUT_SPEC_DESCRIPTION = (
-    "Read one output's current state (caption style, music, aspect, the text "
-    "body) — ALWAYS before a relative edit ('smaller', 'quieter', 'like "
-    "before'): compose the change from the current settings, never invent them."
+    "读取一个输出当前的字幕样式、音乐、画幅或正文。相对修改（“缩小”“轻一点”“像之前一样”）前必须先读，再根据现值修改，不得猜测。"
 )
 
 
@@ -83,11 +81,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_node",
             description=(
-                "Read one graph node's FULL current program, state, "
-                "products and downstream (the context's Graph section "
-                "truncates long programs) — ALWAYS before an edit_graph "
-                "revision of that node: compose the new program from the "
-                "full current one, never from the truncated line."
+                "读取一个图节点当前的完整程序、状态、产物和下游节点。上下文的 Graph 部分会截断长程序，通过 edit_graph 修订节点前一定先读全文。"
             ),
             params_model=GetNodeParams,
             execute=executes.get_node,
@@ -96,12 +90,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_understanding",
             description=(
-                "Read the material understanding of the project's assets "
-                "(summary, thesis, themes, audience, quotable lines) — before "
-                "summarizing the material or matching a recommendation to it. "
-                "While assets are still processing this read WAITS until the "
-                "understanding lands (it never returns mid-processing), so a "
-                "content-dependent answer can ground itself in the same turn."
+                "读取项目素材分析（概述、论旨、主题、受众、可引用原话），再总结素材或根据素材推荐。若素材仍在处理中，会等到分析就绪才返回，本轮即可据此作答。"
             ),
             params_model=None,
             execute=executes.get_understanding,
@@ -110,11 +99,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_music",
             description=(
-                "Look up Music library ids by mood/keyword (empty = the full "
-                "catalog) for direct application of a named track/mood or a "
-                "restrained default music bed. This metadata read has no "
-                "playback cards or listening evidence; hear/compare requests "
-                "use show_music_candidates."
+                "按情绪或关键词查询 Music 曲库 ID，留空则列出全库。用于直接应用点名的曲目、情绪或克制的默认配乐。元数据查询没有播放卡，也不构成试听证据。需要试听或比较时用 show_music_candidates。"
             ),
             params_model=SearchMusicParams,
             execute=executes.search_music,
@@ -123,8 +108,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_run_status",
             description=(
-                "Read the latest run's live status and per-step progress — "
-                "for 'how far along / 还要多久' questions; never guess."
+                "读取最近 Run 的实时状态及各步骤进度，回答“做得怎么样了”“还要多久”等问题，不要猜测。"
             ),
             params_model=None,
             execute=executes.get_run_status,
@@ -133,9 +117,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="list_runs",
             description=(
-                "List the project's recent run history (newest first) — "
-                "for 'what did we already run / 之前跑过什么' questions; the "
-                "latest run's live detail stays get_run_status's seat."
+                "列出项目近期 Run，最新在前，用于回答之前运行过什么。最近一次的实时详情用 get_run_status。"
             ),
             params_model=None,
             execute=executes.list_runs,
@@ -144,9 +126,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_pending_plan",
             description=(
-                "Read the plan currently docked for the user's confirmation "
-                "(its task chain, name, extra instruction) — for 'what was "
-                "the plan again / 计划是什么' questions on the chat path."
+                "读取当前展示并等待用户确认的方案（任务链、名称、额外要求），用于回答“刚才的计划是什么”。"
             ),
             params_model=None,
             execute=executes.get_pending_plan,
@@ -155,10 +135,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_graph",
             description=(
-                "Read the canvas's current face — every node's state and "
-                "label in visual order — when you need to speak about what "
-                "the user is seeing (the workspace is visible to them once "
-                "a plan is docked, before any run)."
+                "需要谈论用户当前所见时，按画布视觉顺序读取各节点状态和标签。方案展示后、运行前用户已可见工作区。"
             ),
             params_model=None,
             execute=executes.get_graph,
@@ -167,10 +144,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_transcript",
             description=(
-                "Search the project's transcripts for a topic (deterministic "
-                "keyword retrieval) — the discovery read: hits come back as "
-                "[start–end] sections with their verbatim cue text, ready "
-                "to evaluate as candidate members."
+                "按主题检索项目转写文本（确定性关键词检索），返回带起止时间和逐字原文的候选段落，供判断选用。"
             ),
             params_model=SearchTranscriptParams,
             execute=executes.search_transcript,
@@ -182,9 +156,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_segment",
             description=(
-                "Read one timeline range's verbatim speech ([start–end] in "
-                "seconds) — read THIS before proposing a range as evidence: "
-                "the excerpt must be what is actually said here."
+                "逐字读取指定时间线区段的口播（起止以秒计）。将某段作为证据提出前必须先读，引用这里实际说过的话。"
             ),
             params_model=GetSegmentParams,
             execute=executes.get_segment,
@@ -193,10 +165,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_asset",
             description=(
-                "Read one asset's detail (processing status, language, "
-                "duration, opening text). Omit the id for the project's "
-                "only file asset — with several, the call returns the "
-                "roster with their ids."
+                "读取素材的处理状态、语言、时长和开头文本。项目只有一个文件素材时可省略 ID；有多个时返回带 ID 的清单。"
             ),
             params_model=GetAssetParams,
             execute=executes.get_asset,
@@ -205,14 +174,8 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="list_project_media",
             description=(
-                "List the project's video/image assets a film may compose "
-                "with — stable ids, kind, duration (known or unknown), "
-                "dimensions, usability — BEFORE designing a film over "
-                "uploaded footage or images: cite only ids from this "
-                "project, never invent one. Pages newest-first (40 per "
-                "page — the note names the offset for older rows); pass "
-                "ids to read exact assets (the user's picks, past the "
-                "page cap or not)."
+                "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。"
+                "按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。"
             ),
             params_model=ListProjectMediaParams,
             execute=executes.list_project_media,
@@ -221,12 +184,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_web_page",
             description=(
-                "Read one web page's readable text — when the user shares a "
-                "link to discuss or evaluate, or an answer depends on a "
-                "page's current content. A stored reading answers when one "
-                "exists (the same page is never re-fetched unless the user "
-                "says it changed). An empty read means the page could "
-                "not be read — say so, never invent its content."
+                "读取网页正文。用户分享链接供讨论或评估，或答案依赖当前网页内容时使用。有已存记录则复用，除非用户说明网页有变化。读取为空时告知无法读取，不编造内容。"
             ),
             params_model=GetWebPageParams,
             execute=executes.get_web_page,
@@ -236,15 +194,8 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_video_version",
             description=(
-                "Read one video work's saved version with its canonical "
-                "storyboard (per-scene window, exact on-screen text, "
-                "camera/animation ids) — ALWAYS re-read through this before "
-                "a revise_video patch, and never guess a work: name the "
-                "composition_id (its CURRENT version) or an exact "
-                "version_id from a storyboard card or a previous read. "
-                "present=true re-shows the canonical card; with an explicit "
-                "bounded scrub target it shows only that local Scene/Clip "
-                "window or isolated Object, never the complete video."
+                "读取视频作品已保存的确切版本及标准分镜（逐场时间窗、准确屏幕文字和摄像机/动画 ID）。revise_video 修订前必须重读。"
+                "以 composition_id 指定当前版本，或用分镜卡或已有读取返回的确切 version_id，不能猜测。present=true 再次展示标准卡片；显式指定局部 scrub 时仅展示对应 Scene/Clip 时间窗或独立对象。"
             ),
             params_model=GetVideoVersionParams,
             execute=executes.get_video_version,
@@ -253,9 +204,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_web",
             description=(
-                "Search the web for fresh facts on a topic — when the answer "
-                "or the planned copy depends on current / time-sensitive "
-                "information."
+                "当答复或计划中的文案需要最新事实时，按主题搜索网页。"
             ),
             params_model=SearchWebParams,
             execute=executes.search_web,

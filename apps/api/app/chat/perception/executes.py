@@ -72,9 +72,7 @@ class GetAssetParams(BaseModel):
     asset_id: UUID | None = Field(
         default=None,
         description=(
-            "The asset's id (from an @-mention or a previous get_asset "
-            "roster reply); null = the project's only file asset — with "
-            "several, the call returns the roster with their ids."
+            "素材 ID，来自 @ 引用或先前 get_asset 返回的清单。若为 null 且项目只有一个文件素材，读取该素材；若有多个，返回带 ID 的清单。"
         ),
     )
 
@@ -83,18 +81,13 @@ class ListProjectMediaParams(BaseModel):
     ids: list[str] | None = Field(
         default=None,
         description=(
-            "Read only these assets by id (the user's explicit picks — "
-            "from @-mentions or an earlier listing; an id past the printed "
-            "listing's cap is still readable here); null = the paged "
-            "listing, newest first."
+            "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。"
         ),
     )
     offset: int = Field(
         default=0,
         description=(
-            "Skip this many assets (newest first) — page to older rows "
-            "when the listing says more exist (e.g. offset=40 for the "
-            "second page of 40)."
+            "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。"
         ),
         ge=0,
     )
@@ -103,30 +96,23 @@ class ListProjectMediaParams(BaseModel):
 class SearchMusicParams(BaseModel):
     query: str | None = Field(
         default=None,
-        description="A mood or keyword to match against track mood/title (e.g. 'calm', 'upbeat'); null/empty = the full catalog.",
+        description="用于匹配曲目情绪或标题的关键词，例如 calm 或 upbeat。null 或空字符串表示整个曲库。",
     )
 
 
 class GetWebPageParams(BaseModel):
     url: str = Field(
-        description="The page's full URL, verbatim from the conversation "
-        "(this turn or an earlier one). "
-        "The readable text comes back capped; an empty read means the page "
-        "could not be read (unreachable / refused / no readable text)."
+        description="从本轮或此前对话中逐字复制的完整网页 URL。返回的可读正文有长度上限。空结果表示无法访问、被拒绝或没有可读内容。"
     )
     refresh: bool = Field(
         default=False,
-        description="False = answer from the project's stored reading when "
-        "one exists (the same page is never re-fetched). True ONLY when the "
-        "user says the page has changed — it fetches fresh and replaces the "
-        "stored reading.",
+        description="false 表示有已存的页面读取结果时复用。仅当用户说页面已变更时才设为 true，重新抓取并替换原记录。",
     )
 
 
 class SearchWebParams(BaseModel):
     query: str = Field(
-        description="The web search question — specific and self-contained "
-        "(names the topic, never 'the above')."
+        description="具体且独立完整的网页搜索问题。点明主题，不使用“上面的内容”等指代。"
     )
 
 
@@ -552,9 +538,10 @@ async def get_run_status(db: AsyncSession, project: Project, params) -> str:
         lines.append("Steps:")
         lines.extend(progress)
     preparation = (latest_run.context or {}).get("narration_preparation") or {}
-    result = preparation.get("result") or {}
-    alignment_id = result.get("alignment_id")
-    if alignment_id:
+    for part in preparation.get("scenes") or [preparation]:
+        alignment_id = (part.get("result") or {}).get("alignment_id")
+        if not alignment_id:
+            continue
         alignment = await db.get(NarrationAlignment, UUID(str(alignment_id)))
         if alignment is not None and alignment.owner_id == project.user_id:
             lines.append(
@@ -741,18 +728,18 @@ _SEARCH_PER_ASSET_LIMIT = 10
 
 class SearchTranscriptParams(BaseModel):
     query: str = Field(
-        description="What to find in the talk — a topic word or phrase (e.g. 'pricing', '定价')."
+        description="希望在演讲中查找的主题词或短语，例如 pricing 或“定价”。"
     )
     asset_id: UUID | None = Field(
         default=None,
-        description="The asset to search (from the roster or an @-mention). Omit to search every timeline-ready asset in the project.",
+        description="要搜索的素材，取自清单或 @ 引用。省略则搜索本项目中所有时间线已就绪的素材。",
     )
 
 
 class GetSegmentParams(BaseModel):
-    asset_id: UUID = Field(description="The asset whose timeline to read.")
-    start: float = Field(description="Range start, in seconds.")
-    end: float = Field(description="Range end, in seconds.")
+    asset_id: UUID = Field(description="要读取时间线的素材。")
+    start: float = Field(description="区段起始秒数。")
+    end: float = Field(description="区段结束秒数。")
 
 
 def _cue_match_lines(matches: list[dict], speaker_map: dict | None) -> list[str]:

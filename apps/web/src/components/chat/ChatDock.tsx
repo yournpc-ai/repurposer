@@ -59,7 +59,6 @@ import {
   releaseSettledCandidateRows,
   type ActivityRowFramePayload,
   type CandidateEventPayload,
-  type QuestionPreviewPayload,
   type RowAppendPayload,
 } from "@/lib/chatStreamFrames"
 import { buildConversationUnits, closeWorkSegment } from "./timeline/project"
@@ -67,6 +66,7 @@ import { foldActivityUnits } from "./timeline/activity"
 import {
   nextRunWorkSeal,
   runStepEndMs,
+  visibleProductionStages,
   sameRunAttempt,
   isHistoricalRunTerminal,
   type RunAttemptKey,
@@ -127,7 +127,7 @@ import {
   triggerSuggestions,
   questionEcho,
   bareQuestion,
-  groupAnswerDisplayItems,
+  groupAnswerDisplay,
   type HistoryRow,
 } from "./timeline/history"
 import type {
@@ -169,6 +169,7 @@ import {
   stampServerMessageId,
   stampMessagePresentation,
 } from "./liveMessageReconcile"
+import { belongsToServerRow, chineseSceneNumber, continuationTurnId, mediaProgress, sceneOrder, preparationActivity, preparationTool, journeyMark, journeyTranscriptRow, latestJourneyMark, type JourneyMark } from "./mediaJourneyMessages"
 import { matchOptionByText } from "./optionMatch"
 import { loadQuestionGroupDrafts, saveQuestionGroupDrafts } from "./questionGroupDrafts"
 import {
@@ -830,6 +831,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
+  const [journey, setJourney] = useState<JourneyMark | null>(null)
+  const [journeyReadSeq, setJourneyReadSeq] = useState(-1)
+  const journeyOpeningId = journey && (journey.state === "active" || journey.seq > journeyReadSeq)
+    ? journey.openingId : null
+  const observeJourney = useCallback((rows: Pick<QuestionMessage, "intent" | "seq">[]) => {
+    setJourney((current) => latestJourneyMark(rows, current))
+  }, [])
   const interimActivityGatesRef = useRef<Set<string>>(new Set())
   const [interimActivityGateCount, setInterimActivityGateCount] = useState(0)
   const releaseHeldActivityRows = useCallback(() => {
@@ -890,12 +898,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   // the design beat's published storyboard (ADR-129) is code-composed
   // markdown, so it lands atomically (never through the typewriter — the
   // law's atomic-landing twin), after its design activity's settle row.
-  const handleRowAppend = useCallback((row: RowAppendPayload) => {
+  const handleRowAppend = useCallback((wire: RowAppendPayload) => {
+    const row = journeyTranscriptRow(wire)
+    observeJourney([row])
     noteObservedSeq(row.seq)
     const turnId = row.turn_id ? adoptCurrentTurnId(row.turn_id) : undefined
     const frame = activityRowFrame(row.intent)
     if (!frame) {
-      if (row.role !== "assistant" || !row.content) return
+      if (row.role !== "assistant" || (!row.content && !row.blocks?.length)) return
       setMessages((prev) => {
         const reconciled = reconcileCurrentTurnRows(prev)
         if (reconciled.some((m) => m.id === row.id)) return reconciled
@@ -905,8 +915,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             id: row.id,
             serverMessageId: row.id,
             role: "assistant" as const,
-            content: row.content,
-            clientVisibleAtMs: row.content.trim() ? Date.now() : undefined,
+            content: row.content ?? "",
+            clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
+            proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback") ? Date.now() : undefined,
             turnId,
             seq: row.seq ?? undefined,
             at: row.created_at ?? undefined,
@@ -935,7 +946,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         },
       ]
     })
-  }, [adoptCurrentTurnId, noteObservedSeq, reconcileCurrentTurnRows])
+  }, [adoptCurrentTurnId, noteObservedSeq, observeJourney, reconcileCurrentTurnRows])
   const handleRowUpdate = useCallback(
     (id: string, frame: ActivityRowFramePayload) => {
       currentActivityRowKeysRef.current.add(id)
@@ -1131,19 +1142,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const reconcileGenRef = useRef(0)
   const reconcileRunningRef = useRef<number | null>(null)
   const reconciledIdsRef = useRef<Set<string>>(new Set())
-  /** A click on the ask PREVIEW pill, stashed until the envelope docks the
-   * persisted row (2026-09-09 用户拍板「选项该和这句话一起来」): the
-   * preview's id doesn't exist server-side yet, so the choice registers
-   * optimistically here and fires for real at the envelope's dock. A
-   * pencil-row freeform text stashes the same way (one register, two
-   * payloads — exactly one of optionId / freeformText is set). */
-  const stashedAnswerRef = useRef<{
-    optionId?: string
-    freeformText?: string
-    groupAnswers?: BriefAnswerItem[]
-    groupDigest?: string
-    optimisticId: string
-  } | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
   const onRunStartedRef = useRef(onRunStarted)
@@ -1231,7 +1229,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * fragments and unrelated assistant rows never close it. */
   const pacePersistedMessage = useCallback(
     async (
-      row: {
+      wire: {
         id: string
         content?: string | null
         created_at?: string
@@ -1244,33 +1242,36 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       {
         suggestions,
         sealRunId = null,
+        workerOpeningId,
         fresh = true,
       }: {
         suggestions?: SuggestionPill[]
         sealRunId?: string | null
+        workerOpeningId?: string | null
         fresh?: boolean
       } = {},
     ) => {
+      const row = journeyTranscriptRow(wire, workerOpeningId)
       noteObservedSeq(row.seq)
       const runDelivery = triggerSuggestions(row.intent) !== undefined
       const runDeliveryRef = triggerDeliveryRef(row.intent)
-      setMessages((prev) =>
-        insertRecoveredMessage(
-          prev,
-          buildRecoveredProseMessage({
-            id: row.id,
-            seq: row.seq,
-            createdAt: row.created_at,
-            turnId: row.turn_id,
-            runId: row.workflow_run_id,
-            blocks: row.blocks,
-            runDelivery,
-            runDeliveryRef,
-            outputRefs: triggerOutputRefs(row.intent),
-          }),
-          { fresh },
-        ),
-      )
+      const message = buildRecoveredProseMessage({
+        id: row.id,
+        seq: row.seq,
+        createdAt: row.created_at,
+        turnId: row.turn_id,
+        runId: row.workflow_run_id,
+        blocks: row.blocks,
+        runDelivery,
+        runDeliveryRef,
+        outputRefs: triggerOutputRefs(row.intent),
+      })
+      message.mediaProgress = mediaProgress(wire, workerOpeningId)
+      message.mediaOpeningId = journeyMark(wire)?.openingId
+      message.sceneOrder = sceneOrder(wire)
+      message.activity = preparationActivity(wire)
+      message.continuationTurnId = continuationTurnId(wire, workerOpeningId)
+      setMessages((prev) => insertRecoveredMessage(prev, message, { fresh }))
       let sawVisible = false
       const tw = createTypewriter((fragment) => {
         if (!sawVisible && fragment.trim().length > 0) {
@@ -1278,7 +1279,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           const atMs = Date.now()
           noteSpeechVisible(row.id, atMs)
           if (
-            sealRunId &&
+            runDelivery && sealRunId &&
             terminalRef.current &&
             isCurrentRunAttemptDelivery(
               { runId: sealRunId, runDelivery: true, runDeliveryRef },
@@ -1298,6 +1299,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // Server-born prose still paces out; never flush the whole row.
       tw.push((row.content ?? "").trim())
       await tw.drain()
+      tw.flush()
       setMessages((prev) =>
         prev.map((m) =>
           m.id === row.id
@@ -1405,6 +1407,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // rows keep their identity and typing state; a recovered live tail
         // cannot pull the final archive reply ahead of its own activities.
         if (!cancelled) {
+          const loaded = latestJourneyMark(data.items ?? [], null)
+          if (loaded) setJourneyReadSeq((seq) => Math.max(seq, loaded.seq))
+          observeJourney(data.items ?? [])
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
             setMessages((prev) => prependMissingHistory(prev, history))
@@ -1483,25 +1488,33 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const pollTriggerMessages = useCallback(async ({
     includeActivityRows = true,
     reviewRunId = null,
+    openingId = null,
+    onJourneyRun,
+    signal,
   }: {
+    openingId?: string | null
+    onJourneyRun?: (runId: string, rowSeq: number) => void
+    signal?: AbortSignal
     includeActivityRows?: boolean
     reviewRunId?: string | null
   } = {}): Promise<void> => {
     try {
       const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
-        toast: false,
+        toast: false, signal,
       })
       if (!convRes.ok) return
       const conv = (await convRes.json()) as { id?: string }
       if (!conv.id) return
       const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
-        toast: false,
+        toast: false, signal,
       })
       if (!res.ok) return
       const data = (await res.json()) as {
         items?: (QuestionMessage & { role: "user" | "assistant" | "system" })[]
       }
+      if (signal?.aborted) return
       const rows = data.items ?? []
+      let latestStart: { runId: string; seq: number } | undefined
       const observedBefore = observedMessageSeq(
         observedSeqRef.current,
         messagesRef.current,
@@ -1510,15 +1523,27 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // admission decision below still compares with the PRE-response tail.
       for (const row of rows) noteObservedSeq(row.seq)
       for (const row of rows) {
+        if (signal?.aborted) return
         if (row.role !== "assistant") continue
+        const mark = journeyMark(row)
+        const sameTurnActivity = row.turn_id === openingId &&
+          (activityRowFrame(row.intent) !== undefined || (row.intent as { type?: string } | null)?.type === "interim_prose")
+        if (openingId && !(mark ? mark.openingId === openingId : sameTurnActivity)) continue
         // 永不渲染行 (ADR-108): the rejection forensics ledger / legacy
         // aggregate logs never enter the flow.
         if (isNonRenderIntent(row.intent)) continue
         const fresh = isFreshPolledRow(row.seq, observedBefore)
         const beat = includeActivityRows ? activityRowFrame(row.intent) : undefined
         if (beat !== undefined) {
-          if (!fresh) continue
-          if (messagesRef.current.some((m) => m.id === row.id)) continue
+          const existing = messagesRef.current.find((m) => m.id === row.id)
+          if (existing?.activity?.status === "active" && (
+            beat.status !== "active" || existing.activity.key !== beat.key ||
+            existing.activity.count !== beat.count || existing.activity.total !== beat.total
+          )) {
+            setMessages((previous) => previous.map((m) => m.id === row.id
+              ? { ...m, activity: { ...m.activity, ...beat } } : m))
+          }
+          if (existing || !fresh) continue
           const recovered = buildRecoveredActivityRow({
             id: row.id,
             seq: row.seq,
@@ -1537,11 +1562,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // it with read tolerance.
         if (row.seq == null) continue
         const suggestions = triggerSuggestions(row.intent)
-        if (suggestions === undefined) continue
+        if (openingId && row.workflow_run_id && mark?.state === "active" && suggestions === undefined) {
+          latestStart = { runId: row.workflow_run_id, seq: row.seq }
+        }
+        if (!openingId && suggestions === undefined) continue
         // A generic watch never backfills old speech. Run review admits only
         // its own delivery/failure row; an unrelated trigger is not this
         // window's to recover, even when it is new to this client.
-        if (!shouldAdmitPolledTrigger({
+        if (!openingId && !shouldAdmitPolledTrigger({
           fresh,
           reviewRunId,
           rowRunId: row.workflow_run_id,
@@ -1554,12 +1582,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // replays as its echo row (`${id}-echo`, 形态律 replay), so that
         // alias counts as known too — without it a refresh inside a watch
         // window re-types the review under the bare id.
-        if (
-          triggerInFlight.current.has(row.id) ||
-          messagesRef.current.some(
-            (m) => m.id === row.id || m.id === `${row.id}-echo`
-          )
-        ) {
+        if (triggerInFlight.current.has(row.id)) continue
+        const existing = messagesRef.current.find((message) => belongsToServerRow(message, row.id))
+        if (existing) {
+          // A restarted worker can settle the same receipt in place.
+          const settled = journeyTranscriptRow(row)
+          if (mark && mark.state !== "active" && !existing.streaming &&
+              (existing.content !== (settled.content ?? "") || (!!existing.mediaProgress !== mediaProgress(row, openingId)))) {
+            setMessages((previous) => previous.map((message) => message.id === existing.id
+              ? { ...message, content: settled.content ?? "", blocks: settled.blocks,
+                  mediaProgress: mediaProgress(row, openingId), continuationTurnId: continuationTurnId(row, openingId) }
+              : message))
+          }
           continue
         }
         triggerInFlight.current.add(row.id)
@@ -1567,6 +1601,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           await pacePersistedMessage(row, {
             suggestions,
             sealRunId: row.workflow_run_id,
+            workerOpeningId: openingId,
             fresh,
           })
           // 选项语法统一律 (ADR-081): a NEW-shape trigger row carries its
@@ -1582,10 +1617,22 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           triggerInFlight.current.delete(row.id)
         }
       }
+      if (signal?.aborted) return
+      const markedRows = openingId ? rows.filter((row) => journeyMark(row)?.openingId === openingId) : rows
+      if (latestStart && latestJourneyMark(markedRows, null)?.state === "active") {
+        onJourneyRun?.(latestStart.runId, latestStart.seq)
+      }
+      // A run-scoped poll may discover the first mark. Only a journey-scoped
+      // read can finish the watch, after admitting all its rows through the terminal one.
+      if (openingId) {
+        const latest = latestJourneyMark(markedRows, null)
+        if (latest) setJourneyReadSeq((seq) => Math.max(seq, latest.seq))
+      }
+      if (openingId || !journeyOpeningId) observeJourney(markedRows)
     } catch {
       /* server-born speech is best-effort — the replay rebuilds on refresh */
     }
-  }, [projectId, fetchPendingQuestion, pacePersistedMessage, noteObservedSeq])
+  }, [projectId, fetchPendingQuestion, pacePersistedMessage, noteObservedSeq, journeyOpeningId, observeJourney])
 
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan
@@ -1816,7 +1863,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         a.processing_status === "processing"),
   )
   useEffect(() => {
-    if (!assetsProcessing) return
+    if (!assetsProcessing || journeyOpeningId) return
     // Open the observation baseline before the first tick; beats already in
     // this snapshot are archive, beats extending it afterwards are live.
     void pollTriggerMessages()
@@ -1825,7 +1872,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       void pollTriggerMessages()
     }, 3000)
     return () => clearInterval(id)
-  }, [assetsProcessing, fetchAssets, pollTriggerMessages])
+  }, [assetsProcessing, journeyOpeningId, fetchAssets, pollTriggerMessages])
 
   // Watch window (run terminal → current-attempt delivery reply). Historical
   // hydration settles from real rows; only an explicit live attachment uses
@@ -1849,7 +1896,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     ? runWorkSeal.endedAtMs
     : null
   useEffect(() => {
-    if (!terminal || !runId || reviewerLanded || status === "cancelled" || !historySettled) return
+    if (journeyOpeningId || !terminal || !runId || reviewerLanded || status === "cancelled" || !historySettled) return
     const attemptKey = { runId, attempt: runAttempt }
     if (historicalReviewSettled) {
       if (!reviewExpired) {
@@ -1885,6 +1932,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     reviewExpired,
     historicalReviewSettled,
     historySettled,
+    journeyOpeningId,
     pollTriggerMessages,
     runCreatedAt,
     steps,
@@ -2119,6 +2167,32 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     setRunId(startedRunId)
     void onRunStartedRef.current?.(startedRunId)
   }, [])
+
+  // Worker continuations have no browser request or uploaded asset to keep
+  // their message watch alive. Follow the original request through its final row.
+  const lastJourneyStart = useRef(-1)
+  useEffect(() => {
+    if (!historySettled || !journeyOpeningId || chatBusy) return
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      await pollTriggerMessages({
+        openingId: journeyOpeningId,
+        signal: controller.signal,
+        onJourneyRun: (nextRunId, seq) => {
+          if (seq <= lastJourneyStart.current) return
+          lastJourneyStart.current = seq
+          if (runIdRef.current !== nextRunId) landOnStartedRun(nextRunId)
+        },
+      })
+      if (!controller.signal.aborted) timer = setTimeout(() => { void poll() }, 3000)
+    }
+    void poll()
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [journeyOpeningId, historySettled, chatBusy, pollTriggerMessages, landOnStartedRun])
 
   const taskLabel = useCallback(
     (task: TaskItem) => {
@@ -2361,14 +2435,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     message: QuestionMessage,
     answer: string,
     muted: boolean,
-    items?: { question: string; answer: string }[],
+    group?: ReturnType<typeof groupAnswerDisplay>,
   ): NonNullable<OverlayMessage["qa"]> => ({
     question: bareQuestion(message),
     answer,
     muted,
     questionId: message.id,
-    answerKind: message.answer?.kind ?? (items ? "group" : undefined),
-    items,
+    answerKind: message.answer?.kind ?? (group ? "group" : undefined),
+    ...group,
   })
 
   const buildAnsweredQuestionRow = (
@@ -2397,8 +2471,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         message,
         display.text,
         display.muted,
-        (message.answer.answers?.length ?? 0) > 0
-          ? groupAnswerDisplayItems(message, message.answer.answers ?? [])
+        message.answer.answers?.length
+          ? groupAnswerDisplay(message, message.answer.answers)
           : undefined,
       ),
     }
@@ -2425,9 +2499,15 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * replay. The plan card's own echo line dedupes against the pushed
    * message by content. */
   const handleAssistantMessage = async (
-    message: QuestionMessage,
+    wire: QuestionMessage,
     opts?: { echoCarried?: boolean }
   ) => {
+    const message = journeyTranscriptRow(wire)
+    observeJourney([message])
+    if (preparationTool(message)) {
+      await pacePersistedMessage(message)
+      return
+    }
     if (message.question && !message.answer) {
       if (
         message.question.kind === "task_book" &&
@@ -2520,6 +2600,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     if (!opts?.echoCarried) {
       pushMessage({
         role: "assistant",
+        serverMessageId: message.id,
+        seq: message.seq ?? undefined,
+        turnId: message.turn_id ?? undefined,
         outputRefs: triggerOutputRefs(message.intent),
         proseDrainedAtMs: Date.now(),
         content: message.content ?? "",
@@ -2541,65 +2624,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * keeps the "written live" feel); the terminal turn.completed envelope is
    * authoritative and FINALIZES THE PREVIEW IN PLACE — same React key, no
    * remount — so a docking task plan never makes the text flicker. */
-  /** Roll the ask-preview artifacts back (a flipped call / turn.failed /
-   * abort): the preview pill and any stashed click's optimistic block never
-   * existed server-side, so they simply disappear. The envelope's happy
-   * paths either REPLACE the preview pill with the persisted row (zero
-   * visual change) or CONSUME the stash at the fire site. */
-  const discardPreviewArtifacts = () => {
-    const stashed = stashedAnswerRef.current
-    const rejectedDigest = stashed?.groupDigest ?? (pendingQuestion?.preview ? pendingQuestion.question?.group_digest : null)
-    if (stashed) {
-      stashedAnswerRef.current = null
-      setAnswering(false)
-      setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
-    }
-    if (rejectedDigest) {
-      setQuestionGroupDrafts((previous) => Object.fromEntries(
-        Object.entries(previous).filter(([key]) => !key.endsWith(`:${rejectedDigest}`))
-      ))
-    }
-    setPendingQuestion((prev) => (prev?.preview ? null : prev))
-  }
-
-  /** Preview-dock the pill the moment the ask object closes stream-side —
-   * its prose already typed above, the pill's whole payload exists, and the
-   * rest of the turn is still generating (2026-09-09 用户拍板「选项该
-   * 和这句话一起来」). The envelope re-docks the persisted row
-   * authoritatively (identical payload in the happy path → zero visual
-   * change); a flip / turn.failed rolls the preview back (the discard
-   * sites). Both streams dock through here (chat turn / answer
-   * continuation — questions 2..N ride the answer wire). The options-empty
-   * guard mirrors 形态律 R1: a text question never docks — the envelope
-   * settles it as plain prose, and an undocked preview leaves no stuck pill
-   * behind (a preview pill has no ×). */
-  const dockQuestionPreview = (
-    id: string,
-    payload: QuestionPreviewPayload,
-  ) => {
-    if (!payload.question) return
-    if ((payload.options ?? []).length === 0 && (payload.items ?? []).length === 0) return
-    setPendingQuestion({
-      id,
-      content: "",
-      question: {
-        kind: "question",
-        question: payload.question,
-        options: payload.options ?? [],
-        items: payload.items ?? [],
-        group_digest: payload.group_digest ?? null,
-        allow_freeform: payload.allow_freeform ?? true,
-        slot: payload.slot ?? null,
-        default_path: payload.default_path ?? "",
-        recommended_id: payload.recommended_id ?? null,
-      },
-      answer: null,
-      workflow_run_id: null,
-      created_at: new Date().toISOString(),
-      preview: true,
-    })
-  }
-
   const sendChat = async (
     text: string,
     opts?: {
@@ -2879,9 +2903,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               setThinkingPhase(payload.phase ?? null)
             }
           }),
-          onQuestionPreview: ownFrame((payload) => {
-            dockQuestionPreview(`preview-${streamId}`, payload)
-          }),
           onInterimProse: ownFrame((text, at, turnId, messageId, seq) => {
             if (text.trim()) speechStarted = true
             segments.onInterimProse(text, at, turnId, messageId, seq)
@@ -2969,6 +2990,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ),
       )
       if (data.assistant_message != null) {
+        observeJourney([data.assistant_message])
         reconciledIdsRef.current.add(data.assistant_message.id)
       }
       if (data.answered_question != null) {
@@ -2989,13 +3011,18 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // the prompt attachments after a turn.
       void fetchAssets()
       if (data.run_id && data.assistant_message != null) {
+        if (preparationTool(data.assistant_message)) {
+          setMessages((prev) => prev.filter((m) => m.id !== streamId))
+          await pacePersistedMessage(data.assistant_message)
+          if (ownsTurn()) landOnStartedRun(data.run_id)
+          return
+        }
         // G-1: the prose confirmation answered the docked task plan
         // server-side (kind=start) and the run is live. NO QA archive on
         // ANY start path (2026-09-05 用户拍板): the AnsweredQuestion block
         // is the option-choice UI — a task_book start (chat text or pill)
         // is a gesture, not a Q&A. The record = echo 散文 + this user
         // message + the run receipt line.
-        discardPreviewArtifacts()
         //
         // The runId stamp is the run↔message association (ADR-058): the
         // birthing echo carries it so the detached-run archive (inline
@@ -3069,17 +3096,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // world-fired review turn is the answer and arrives on its own
         // channel. Drop the preview bubble (nothing was ever streamed into
         // it) and wait for the review.
-        discardPreviewArtifacts()
         setMessages((prev) => prev.filter((m) => m.id !== streamId))
         return
       }
       const message = data.assistant_message
-      const isTextQuestion =
-        message.question &&
-        !message.answer &&
-        message.question.kind === "question" &&
-        (message.question.options?.length ?? 0) === 0
-      if (message.question && !message.answer && !isTextQuestion) {
+      if (message.question && !message.answer && dockWorthyQuestion(message)) {
         // An OPTIONS question / task plan docks (a TEXT question IS the
         // prose reply and lands below like one — 形态律 ADR-053 R1). The
         // streamed echo bubble
@@ -3129,31 +3150,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // funnel whose append flips streamedAny, so at this point the var IS
         // the flag ("the preview bubble carries the echo"). The old
         // `streamedAny || !!questionEcho(message)` recomputed the same fact.
-        // The envelope retires the preview pill first: the real row
-        // REPLACES it inside (happy path) — on a flip to a text question
-        // (R1 early return, never docks) the preview must not linger.
-        setPendingQuestion((prev) => (prev?.preview ? null : prev))
         await handleAssistantMessage(message, {
           echoCarried: segments.streamedAny,
         })
         if (!ownsTurn()) return
-        // A click stashed on the PREVIEW pill fires NOW on the persisted row
-        // (2026-09-09 用户拍板「选项该和这句话一起来」): the optimistic QA
-        // block's id is reused inside (no remount), and a flipped option set
-        // retires the stash cleanly instead. A task_book dock carries no
-        // matching option — the override path retires it the same way.
-        const stashed = stashedAnswerRef.current
-        if (stashed) {
-          // A re-entrant answer owns a NEW key set. Seal this turn first so
-          // its prose-less tail cannot leak into the next turn's clock.
-          sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
-          await fireStashedAnswer(stashed, message)
-        }
       } else if (segments.streamedAny) {
         // Prose reply: the preview bubble IS the settled message (same key;
         // the envelope content + run id are authoritative). A read-tool
         // turn's unstreamed tail paces out first (打字机律·工具线重述).
-        discardPreviewArtifacts()
         await paceUnstreamedTail(message.content ?? "")
         if (!ownsTurn()) return
         finalizePreview(
@@ -3165,7 +3169,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         stampEnvelopeBlocks(message)
       } else {
         // Zero-delta prose reply: same last-gate pacing as the dock branch.
-        discardPreviewArtifacts()
         const settled = (message.content ?? "").trim()
         if (settled) {
           await paceSettledProse(
@@ -3207,7 +3210,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (stopped) segments.halt()
       else await segments.drain()
       if (!ownsTurn()) return
-      discardPreviewArtifacts()
       rollbackCandidateRows()
       // 终帧律 (同上): a failed/aborted turn closes every phase too.
       setThinkingPhase(null)
@@ -3474,66 +3476,20 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** A preview-stashed answer's clean retirement (the envelope's re-dock
-   * flipped away from what the user answered — a rewritten option set, or
-   * a follow-up that is no longer a question): drop the optimistic block,
-   * release the answering gate, nothing fires. Shared by the option path's
-   * not-found seat and the freeform path's kind guard. */
-  const retireStashedAnswer = () => {
-    const stashed = stashedAnswerRef.current
-    if (stashed) {
-      stashedAnswerRef.current = null
-      setAnswering(false)
-      setMessages((prev) => prev.filter((m) => m.id !== stashed.optimisticId))
-      if (stashed.groupDigest) {
-        setQuestionGroupDrafts((previous) => Object.fromEntries(
-          Object.entries(previous).filter(([key]) => !key.endsWith(`:${stashed.groupDigest}`)),
-        ))
-      }
-    }
-  }
-
   const handleGroupSubmit = async (
     answers: BriefAnswerItem[],
-    questionOverride?: QuestionMessage,
   ) => {
-    const question = questionOverride ?? pendingQuestion
+    const question = pendingQuestion
     const digest = question?.question?.group_digest
     if (!question || !digest || !(question.question?.items?.length)) return
-    const displayItems = groupAnswerDisplayItems(question, answers)
-    const displayText = displayItems.map((item) => item.answer).filter(Boolean).join(" · ")
-    if (question.preview && !questionOverride) {
-      const optimisticId = crypto.randomUUID()
-      stashedAnswerRef.current = { groupAnswers: answers, groupDigest: digest, optimisticId }
-      setAnswering(true)
-      setPendingQuestion(null)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: optimisticId,
-          role: "assistant",
-          content: "",
-          turnId: question.turn_id ?? adoptCurrentTurnId(),
-          independentKind: "qa",
-          qa: buildQaBlock(question, displayText, false, displayItems),
-          at: new Date().toISOString(),
-          clientVisibleAtMs: Date.now(),
-        },
-      ])
-      recallDock()
-      scrollerSendRef.current?.()
-      return
-    }
-    if (!questionOverride && answering) return
-    if (questionOverride && stashedAnswerRef.current?.groupDigest !== digest) {
-      retireStashedAnswer()
-      return
-    }
+    const group = groupAnswerDisplay(question, answers)
+    const displayText = [...group.items.map((item) => item.answer), group.productionNote].filter(Boolean).join(" · ")
+    if (answering) return
     await settleAnswerTurn(
       question,
       { kind: "group", group_digest: digest, answers },
       displayText,
-      displayItems,
+      group,
     )
   }
 
@@ -3551,55 +3507,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * the question (the server settled nothing). */
   const handleOptionAnswer = async (
     optionId: string,
-    questionOverride?: QuestionMessage,
   ) => {
-    const question = questionOverride ?? pendingQuestion
+    const question = pendingQuestion
     if (!question) return
     const option = question.question?.options?.find((o) => o.id === optionId)
-    // A click on the PREVIEW pill (the ask object closed but the turn's
-    // tail — and with it the row's server-side birth — is still generating,
-    // so the row's id doesn't exist yet): register the choice NOW with the
-    // same optimistic anatomy, and the envelope's dock fires the real
-    // answer on the persisted row (the fire sites: sendChat's dock branch
-    // for Q1, handleOptionAnswer's follow_up branch for Q2..N). The
-    // optimistic block's id is REUSED at fire time so its DOM node never
-    // remounts (the 2026-09-08 flicker lesson). This branch sits ABOVE the
-    // answering guard (2026-09-09 对称拍板): on the answer wire the preview
-    // arrives while the CURRENT answer is still streaming (answering=true)
-    // — the stash starts no stream, it waits for the envelope's fire site,
-    // and the pill's own disappearance at stash time is the double-click
-    // guard.
-    if (question.preview && !questionOverride) {
-      if (!option) return // a preview pill click always names a known option
-      const optimisticId = crypto.randomUUID()
-      stashedAnswerRef.current = { optionId, optimisticId }
-      setAnswering(true)
-      setPendingQuestion(null)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: optimisticId,
-          role: "assistant",
-          content: "",
-          turnId: question.turn_id ?? adoptCurrentTurnId(),
-          independentKind: "qa",
-          qa: buildQaBlock(question, option.label, false),
-          at: new Date().toISOString(),
-          clientVisibleAtMs: Date.now(),
-        },
-      ])
-      recallDock()
-      scrollerSendRef.current?.() // an option click is the same live-edge intent
-      return
-    }
-    if (!questionOverride && answering) return
-    if (!option) {
-      // The envelope's re-docked row may carry a DIFFERENT option set than
-      // the preview the user clicked (a repair flip rewrote the question) —
-      // retire the stashed optimistic block, nothing fires.
-      if (questionOverride) retireStashedAnswer()
-      return
-    }
+    if (answering || !option) return
     await settleAnswerTurn(question, { kind: "option", option_id: optionId }, option.label)
   }
 
@@ -3619,7 +3531,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       | { kind: "freeform"; text: string }
       | { kind: "group"; group_digest: string; answers: BriefAnswerItem[] },
     displayText: string,
-    displayItems?: { question: string; answer: string }[],
+    group?: ReturnType<typeof groupAnswerDisplay>,
   ) => {
     // C8-c: same rollback-scope handover as sendChat's turn start.
     liveCandidateRowsRef.current.clear()
@@ -3629,8 +3541,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         ? [[message.candidates.candidateSetId, [...message.candidates.selected]] as [string, number[]]]
         : [],
     ))
-    const optimisticId = stashedAnswerRef.current?.optimisticId ?? crypto.randomUUID()
-    stashedAnswerRef.current = null
+    const optimisticId = crypto.randomUUID()
     const previewId = `answer-preview-${optimisticId}`
     const turnOwner = {
       localId: optimisticId,
@@ -3653,23 +3564,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const workRowKeys = currentActivityRowKeysRef.current
     let terminalAtMs: number | null = null
     setPendingQuestion(null)
-    setMessages((prev) =>
-      prev.some((m) => m.id === optimisticId)
-        ? prev // the preview-stash's block already carries the QA anatomy
-        : [
-            ...prev,
-            {
-              id: optimisticId,
-              role: "assistant",
-              content: "",
-              turnId: question.turn_id ?? undefined,
-              independentKind: "qa",
-              qa: buildQaBlock(question, displayText, false, displayItems),
-              at: new Date().toISOString(),
-              clientVisibleAtMs: Date.now(),
-            },
-          ],
-    )
+    setMessages((prev) => [...prev, {
+      id: optimisticId,
+      role: "assistant",
+      content: "",
+      turnId: question.turn_id ?? undefined,
+      independentKind: "qa",
+      qa: buildQaBlock(question, displayText, false, group),
+      at: new Date().toISOString(),
+      clientVisibleAtMs: Date.now(),
+    }])
     recallDock()
     scrollerSendRef.current?.() // an option click is the same live-edge intent
     // Typewriter pacing (same reason as sendChat — 2026-08-05 fix): the
@@ -3740,12 +3644,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         onInterimProse: ownFrame((text, at, turnId, messageId, seq) => {
           segments.onInterimProse(text, at, turnId, messageId, seq)
         }),
-        // Q2..N 对称 (2026-09-09): the continuation's follow-up ask closes
-        // its object mid-stream just like the chat turn's first ask — dock
-        // its pill NOW; the envelope re-docks authoritatively below.
-        onQuestionPreview: ownFrame((payload) => {
-          dockQuestionPreview(`preview-answer-${optimisticId}`, payload)
-        }),
         onActivity: ownFrame((frame) => {
           handleActivityFrame(frame)
         }),
@@ -3788,7 +3686,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       adoptTurnId(data.follow_up?.turn_id ?? data.answered_question.turn_id)
       setMessages((prev) => (ownsTurn() ? reconcileTurnRows(prev) : prev))
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
-      const followUp = data.follow_up
+      const followUp = data.follow_up ? journeyTranscriptRow(data.follow_up) : null
       // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the
       // funnel's repair round never streams) paces its prose through the
       // preview bubble BEFORE the archive splice — the echo visibly leads,
@@ -3824,12 +3722,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           : prev,
       )
       if (followUp) {
-        // The envelope retires the preview pill: the real row REPLACES it
-        // inside handleAssistantMessage (identical payload, zero visual
-        // change) — and on a flip (the follow-up lands as a text question /
-        // plain prose and never docks) the preview must not linger (it has
-        // no ×).
-        setPendingQuestion((prev) => (prev?.preview ? null : prev))
+        if (preparationTool(followUp)) setMessages((prev) => prev.filter((m) => m.id !== previewId))
         // echoCarried ≡ the settled bubble carries streamed prose
         // (2026-09-09 单派生): a paced zero-delta follow-up rides the same
         // typewriter, whose callback flips the flag — `streamedAny ||
@@ -3847,29 +3740,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // this the run only appears after a manual refresh and the page
         // stays stuck in the full (centered-chat) form.
         if (followUp.workflow_run_id) landOnStartedRun(followUp.workflow_run_id)
-        // A click stashed on the follow-up's PREVIEW pill fires NOW on the
-        // persisted row (sendChat's dock branch 同款): the optimistic
-        // block's id is reused inside; a flipped option set / a non-question
-        // follow-up retires the stash cleanly at the override's
-        // option-not-found seat. (The cast defeats the `= null` narrowing
-        // above: the stash lands RE-ENTRANTLY via the preview pill's click
-        // while this frame awaits the stream — the shared ref is live
-        // across the await even when TS's control flow can't see it.)
-        const stashed = stashedAnswerRef.current as {
-          optionId?: string
-          freeformText?: string
-          groupAnswers?: BriefAnswerItem[]
-          groupDigest?: string
-          optimisticId: string
-        } | null
-        if (stashed) {
-          sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
-          await fireStashedAnswer(stashed, followUp)
-        }
-      } else {
-        // No follow-up at all — a pre-clicked preview never got its row:
-        // retire the stash (and any lingering preview pill).
-        discardPreviewArtifacts()
       }
     } catch (e) {
       terminalAtMs ??= Date.now()
@@ -3889,10 +3759,6 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       if (!ownsTurn()) return
       setThinkingPhase(null)
       settleActivities(aborted ? "cancelled" : "failed") // T16-B: the failed answer leaves nothing spinning
-      // A failed turn retires every ask-preview artifact too — a stashed
-      // next-click's optimistic block and the preview pill never existed
-      // server-side (the original question restores just below).
-      discardPreviewArtifacts()
       rollbackCandidateRows()
       setMessages((prev) =>
         prev.filter(
@@ -4024,87 +3890,45 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
    * replays byte-identical. */
   const handleFreeformAnswer = async (
     text: string,
-    questionOverride?: QuestionMessage,
   ) => {
-    const question = questionOverride ?? pendingQuestion
+    const question = pendingQuestion
     if (!question) return
-    if (question.question?.kind !== "question") {
-      // A stashed freeform text firing on a FLIPPED follow-up (the envelope
-      // docked a task_book / plain prose where the preview promised a
-      // question) retires exactly like the option path's not-found seat —
-      // without this the optimistic block and the answering gate leak.
-      if (questionOverride) retireStashedAnswer()
+    if (question.question?.kind !== "question" || answering) return
+    const matched = matchOptionByText(text, question.question.options ?? [])
+    if (matched) {
+      await handleOptionAnswer(matched.id)
       return
     }
-    // A letter/number/label hit IS the option pick (保回归: typing "2"
-    // settles exactly like clicking row 2). Skipped on the fire path — a
-    // stashed freeform text already missed this mapping at stash time, and
-    // it stays the user's verbatim words.
-    if (!questionOverride) {
-      const matched = matchOptionByText(text, question.question.options ?? [])
-      if (matched) {
-        await handleOptionAnswer(matched.id)
-        return
-      }
-    }
-    // Preview-pill 寄存 (点选同款对称): the preview row has no server id yet
-    // — register the text with the same optimistic anatomy; the envelope's
-    // dock fires it for real (fireStashedAnswer). This branch sits ABOVE
-    // the answering guard — on the answer wire the next preview arrives
-    // while the CURRENT answer is still streaming.
-    if (question.preview && !questionOverride) {
-      const optimisticId = crypto.randomUUID()
-      stashedAnswerRef.current = { freeformText: text, optimisticId }
-      setAnswering(true)
-      setPendingQuestion(null)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: optimisticId,
-          role: "assistant",
-          content: "",
-          turnId: question.turn_id ?? adoptCurrentTurnId(),
-          independentKind: "qa",
-          qa: buildQaBlock(question, text, false),
-          at: new Date().toISOString(),
-        },
-      ])
-      recallDock()
-      scrollerSendRef.current?.() // a freeform answer is the same live-edge intent
-      return
-    }
-    if (!questionOverride && answering) return
     await settleAnswerTurn(question, { kind: "freeform", text }, text)
-  }
-
-  /** The envelope's dock fires a preview-stashed answer on the persisted
-   * row (the fire sites: sendChat's dock branch for Q1, settleAnswerTurn's
-   * follow_up branch for Q2..N) — option click or freeform text, one
-   * register. */
-  const fireStashedAnswer = async (
-    stashed: {
-      optionId?: string
-      freeformText?: string
-      groupAnswers?: BriefAnswerItem[]
-      groupDigest?: string
-      optimisticId: string
-    },
-    row: QuestionMessage,
-  ) => {
-    if (stashed.groupAnswers !== undefined) {
-      await handleGroupSubmit(stashed.groupAnswers, row)
-    } else if (stashed.optionId !== undefined) {
-      await handleOptionAnswer(stashed.optionId, row)
-    } else if (stashed.freeformText !== undefined) {
-      await handleFreeformAnswer(stashed.freeformText, row)
-    }
   }
 
   /** Stop either the attached active Run or the current assistant Turn. A
    * failed control request leaves the real work running and never fakes a stop. */
+  const latestUser = messages.slice().reverse().find((m) => m.role === "user")
+  const journeyActive = journey?.state === "active" && !pendingQuestion && (!latestUser ||
+    latestUser.id === journey.openingId || latestUser.serverMessageId === journey.openingId ||
+    latestUser.turnId === journey.openingId)
+
   const handleStop = async () => {
     if (stopPending || runCancelPending) return
     const controller = abortRef.current
+    if (!chatBusy && journeyActive && journey) {
+      setStopPending(true)
+      try {
+        const res = await apiFetch(`/api/v1/chat/turns/${journey.openingId}/stop`, {
+          method: "POST", body: { scope: "media_preparation" },
+        })
+        if (res.ok) {
+          const { journey_message } = await res.json() as { journey_message?: Pick<QuestionMessage, "seq" | "intent"> }
+          if (journey_message) observeJourney([journey_message])
+        }
+      } catch {
+        // apiFetch reports the error. Keep following the worker until it settles.
+      } finally {
+        setStopPending(false)
+      }
+      return
+    }
     if (runAttached && runId) {
       setRunCancelPending(true)
       let requested = false
@@ -4375,6 +4199,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     [messages],
   )
 
+  const openFold = conversationUnits.slice().reverse().find((unit) =>
+    unit.kind === "activityFold" && unit.openTail,
+  )
+  const workFold = openFold?.kind === "activityFold" ? openFold : undefined
+  const preparationRunId = workFold?.workRunIds?.at(-1)
+  const preparationStart = preparationRunId
+    ? messages.find((m) => m.runId === preparationRunId && m.activity?.kind === "run")
+    : undefined
+  const followingJourney = journeyActive && workFold?.turnId === journey?.openingId
+  const attachedPreparation = !!preparationRunId && runId === preparationRunId
+  const livePreparation = !!preparationStart && preparationStart.activity?.status !== "cancelled" &&
+    !(journey?.openingId === workFold?.turnId && journey?.state === "stopped") && (attachedPreparation
+    ? status !== "cancelled" && (!terminal || reviewPending || followingJourney)
+    : followingJourney)
+  // Worker continuations have no browser Chat request. Their persisted tool
+  // callbacks still update the same open activity fold during the journey poll.
+  const workerContinuing = !chatBusy && followingJourney && !preparationRunId && !pendingQuestion
+
   // The now label is shared by the bottom seat (no current activity host
   // yet) and the current open fold (from its FIRST active host onward).
   // Thus previous-prose typing can hide the bottom Thinking seat, but it can
@@ -4413,6 +4255,28 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       name,
       count,
     })
+    if (livePreparation && preparationStart) {
+      if (messages.some((m) => m.mediaProgress && m.runId === preparationRunId)) {
+        return workFold?.liveActivity ?? think(null)
+      }
+      if (attachedPreparation && terminal) return think("chat.closingReview")
+      const step = attachedPreparation ? steps.find((item) => item.status === "running") : undefined
+      const stage = step && visibleProductionStages(step).reverse().find((item) => item.status === "running")
+      const index = stage?.scene_id && preparationStart.sceneOrder
+        ? preparationStart.sceneOrder.indexOf(stage.scene_id) + 1 : step?.scene_index
+      if (index && (stage?.kind === "visual_assets" || stage?.kind === "speech_media")) {
+        const key = stage.kind === "visual_assets" ? "pictureScene" : "voiceScene"
+        return think(`chat.preparationProgress.${key}`, chineseSceneNumber(index), index)
+      }
+      if (stage && stage.kind !== "validate") {
+        if (stage.kind === "visual_assets" && stage.item_count) {
+          return think("chat.preparationProgress.imagesProcessed", undefined, stage.item_count)
+        }
+        return think(`chat.preparationProgress.${stage.kind}`)
+      }
+      return think(preparationStart.activity?.key ?? null)
+    }
+    if (workerContinuing) return workFold?.liveActivity ?? think(null)
     if (chatBusy) {
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
     }
@@ -4464,6 +4328,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       }
     }
   }
+  if (workFold && (livePreparation || workerContinuing)) liveWorkFoldKey = workFold.rowKey
   const bottomNowRow =
     liveWorkFoldKey == null && !visibleProseTyping && interimActivityGateCount === 0
       ? nowRow
@@ -4498,7 +4363,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
-  const canStop = (chatBusy && abortRef.current !== null) || runAttached
+  const canStop = (chatBusy && abortRef.current !== null) || runAttached || journeyActive
   const chatScroller = (
     <ChatConversation
       messages={messages}
@@ -4522,7 +4387,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       chatOutputs={chatOutputs}
       skillOptions={skillOptions}
       openOutputViewer={openOutputViewer}
-      runId={runId}
+      runId={historySettled || runStartedExplicitly ? runId : null}
       chatBusy={chatBusy}
       onSuggestionClick={handleSuggestionClick}
       onRunStarted={landOnStartedRun}
@@ -4584,7 +4449,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         recommendedId={pillQuestion.question?.recommended_id ?? null}
         onAnswer={handleOptionAnswer}
         answering={answering}
-        onBail={pillQuestion.preview ? undefined : handleBailQuestion}
+        onBail={handleBailQuestion}
         bailLabel={
           pillQuestion.workflow_run_id
             ? t("questionDock.bail")

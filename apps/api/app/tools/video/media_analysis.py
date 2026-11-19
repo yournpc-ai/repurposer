@@ -8,7 +8,6 @@ import io
 import json
 import math
 import re
-import shutil
 import subprocess
 from typing import Any, Literal
 
@@ -22,8 +21,8 @@ from app.providers import storage
 from app.providers.llm.base import LLMError, LLMSchemaError
 
 IMAGE_ANALYZER_SET_VERSION = "image-pillow-v1"
-AUDIO_ANALYZER_SET_VERSION = "audio-pyav-numpy-ffmpeg-v1"
-IMAGE_REVIEWER_VERSION = "scene-image-review-v5"
+AUDIO_ANALYZER_SET_VERSION = "audio-pyav-numpy-ffmpeg-v2"
+IMAGE_REVIEWER_VERSION = "scene-image-review-v6"
 _ANALYSIS_PREFIX = "visual-media-analysis"
 _AUDIO_ANALYSIS_PREFIX = "audio-media-analysis"
 _REVIEW_PREFIX = "visual-content-reviews"
@@ -33,6 +32,16 @@ _MAX_AUDIO_BYTES = 256 * 1024 * 1024
 
 class MediaAnalysisError(ValueError):
     pass
+
+
+def image_reviewer_version(source_kind: str) -> str:
+    if source_kind == "existing_image":
+        return f"{IMAGE_REVIEWER_VERSION}-source-evidence-v1"
+    return IMAGE_REVIEWER_VERSION
+
+
+class LoudnessAnalysisError(MediaAnalysisError):
+    user_key = "audio_loudness_failed"
 
 
 class MediaSourceRef(BaseModel):
@@ -256,29 +265,29 @@ def analyze_image_bytes(
     return MediaAnalysisReport(report_digest=canonical_json_hash(payload), **payload)
 
 
-def _ffmpeg_audio_facts(data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
-    executable = shutil.which("ffmpeg")
-    if executable is None:
-        raise MediaAnalysisError("FFmpeg is required for the requested loudness probe")
+def _ffmpeg_audio_facts(data: bytes, demuxer: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    from imageio_ffmpeg import get_ffmpeg_exe
+
     try:
+        executable = get_ffmpeg_exe()
         version = subprocess.run(
             [executable, "-version"], capture_output=True, text=True, timeout=10, check=True
         ).stdout.splitlines()[0].strip()
         command = [
-            executable, "-hide_banner", "-nostdin", "-i", "pipe:0",
-            "-map", "0:a:0", "-af", "ebur128=peak:true", "-f", "null", "-",
+            executable, "-hide_banner", "-nostdin", "-f", demuxer, "-i", "pipe:0",
+            "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-",
         ]
         completed = subprocess.run(command, input=data, capture_output=True, timeout=120)
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise MediaAnalysisError(f"FFmpeg loudness analysis failed: {exc}") from exc
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        raise LoudnessAnalysisError(f"FFmpeg loudness analysis failed: {exc}") from exc
     output = completed.stderr.decode("utf-8", errors="replace")
     if completed.returncode != 0:
-        raise MediaAnalysisError("FFmpeg could not fully decode the audio for loudness analysis")
+        raise LoudnessAnalysisError("FFmpeg could not fully decode the audio for loudness analysis")
 
     def metric(pattern: str) -> float | None:
         matches = re.findall(pattern, output, flags=re.MULTILINE)
         if not matches:
-            raise MediaAnalysisError("FFmpeg did not return the requested loudness metric")
+            raise LoudnessAnalysisError("FFmpeg did not return the requested loudness metric")
         value = float(matches[-1])
         return value if math.isfinite(value) else None
 
@@ -286,7 +295,7 @@ def _ffmpeg_audio_facts(data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
         "integrated_lufs": metric(r"^\s*I:\s*(-?\d+(?:\.\d+)?|-inf)\s+LUFS\s*$"),
         "true_peak_dbtp": metric(r"^\s*Peak:\s*(-?\d+(?:\.\d+)?|-inf)\s+dBFS\s*$"),
     }
-    return {"path": executable, "version": version}, loudness
+    return {"version": version}, loudness
 
 
 def analyze_audio_bytes(
@@ -408,7 +417,9 @@ def analyze_audio_bytes(
                 "source": "full_decoded_pcm",
             }
     if "loudness" in probes:
-        ffmpeg, loudness = _ffmpeg_audio_facts(data)
+        # stdin has no filename and format probing can misidentify even a PCM WAV.
+        # Use the demuxer that just decoded these exact bytes.
+        ffmpeg, loudness = _ffmpeg_audio_facts(data, container_fact["format"].split(",")[0])
         analyzer_facts["ffmpeg"] = ffmpeg
         facts["loudness"] = loudness
     limitations = ["Signal analysis is not human listening or a subjective quality judgment"]
@@ -447,6 +458,7 @@ def _assemble_image_review(
     return {
         "scene_asset_json": scene_asset_json,
         "analysis_json": analysis_json,
+        "existing_image": json.loads(scene_asset_json)["source"]["kind"] == "existing_image",
     }, [image]
 
 
@@ -455,10 +467,8 @@ image_content_reviewer: Agent[ContentReviewAnswer] = Agent(
     prompt="video/visual_content_reviewer.j2",
     schema=ContentReviewAnswer,
     system=(
-        "Review only the attached PNG against its SceneAssetSpec and deterministic "
-        "image analysis. Separate observable delivery problems from aesthetic advice. "
-        "Never claim motion, audio, editability or unchecked dimensions were reviewed. "
-        "Output valid JSON and no commentary."
+        "只对照 SceneAssetSpec 和确定性图像分析审阅所附 PNG。区分可观察的交付问题及审美建议。"
+        "不要声称已审核运动、音频、可编辑性或未检查的维度。只输出有效 JSON。"
     ),
     temperature=0.2,
     assemble=_assemble_image_review,
@@ -490,7 +500,7 @@ async def review_image_content(
         "scene_id": scene_asset.scene_id,
         "request_digest": scene_asset.request_digest(),
         "analysis_report_ref": analysis_ref,
-        "reviewer_version": IMAGE_REVIEWER_VERSION,
+        "reviewer_version": image_reviewer_version(scene_asset.source.kind),
         "review_scope": "full_static_image",
     }
     try:
@@ -575,6 +585,7 @@ __all__ = [
     "analyze_image_bytes",
     "image_content_reviewer",
     "image_media_input",
+    "image_reviewer_version",
     "read_report",
     "review_image_content",
     "store_content_review",

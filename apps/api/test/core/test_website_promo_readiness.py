@@ -20,6 +20,24 @@ from app.models.schemas import (
 URL = "https://www.legitevi.com/en"
 
 
+def website_question_arguments():
+    return {
+        "question": "宣传片制作偏好",
+        "items": [
+            {"slot": "production_direction", "question": "主要讲给谁听？", "question_language": "zh-CN",
+             "options": [{"use_case": "官网推广", "treatment": "用真实案例演示产品"},
+                         {"use_case": "发布会开场", "treatment": "用品牌使命串起故事"}]},
+            {"slot": "target_seconds", "question": "希望片长是多少秒？", "options": ["30", 60]},
+            {"slot": "narration_language", "question": "旁白用哪种语言？",
+             "options": [{"label": "英文", "value": "en"}, {"label": "中文", "value": "zh"}]},
+            {"slot": "subtitle_languages", "question": "字幕需要哪些语言？",
+             "options": [{"label": "英文", "value": ["en"]}, {"label": "中文", "value": ["zh"]}]},
+            {"slot": "aspect", "question": "画面比例选哪种？", "options": ["16:9", "9:16"]},
+        ],
+        "default_path": "按推荐设置制作",
+    }
+
+
 def asset(status="pending", *, shots=True):
     return {
         "kind": "asset",
@@ -133,7 +151,7 @@ def test_ready_evidence_requires_brand_then_missing_brief_slots():
         creative_state=CreativeState(brand_profile=profile()),
     )
     assert with_brand.brand_profile_ready
-    assert with_brand.required_next_action == "ask_user"
+    assert with_brand.required_next_action == "design_video"
 
 
 def test_full_literal_input_does_not_reask_existing_fields():
@@ -144,6 +162,8 @@ def test_full_literal_input_does_not_reask_existing_fields():
     assert brief.purpose.value == "website"
     assert brief.target_seconds.value == 60
     assert brief.narrative_mode.value == "mission_tech"
+    assert "website" in brief.production_direction.value
+    assert "mission_tech" in brief.production_direction.value
     assert brief.narration_language.value == "en"
     assert brief.subtitle_languages.value == ["en"]
     assert brief.aspect.value == "16:9"
@@ -156,6 +176,39 @@ def test_full_literal_input_does_not_reask_existing_fields():
     )
     assert readiness.brief_ready
     assert readiness.required_next_action == "design_video"
+
+
+def test_brand_analysis_cannot_choose_the_release_setting_for_the_user():
+    from app.models.schemas import AnalyzeBrandArgs
+
+    args = AnalyzeBrandArgs(brief=Brief(
+        production_direction=BriefSlot(value="Promote it on the homepage", source=BriefSlotSource.INFERRED),
+        purpose=BriefSlot(value="website", source=BriefSlotSource.DEFAULT),
+        narrative_mode=BriefSlot(value="Customer story", source=BriefSlotSource.USER_STATED),
+    ))
+    assert args.brief.production_direction.value is None
+    assert args.brief.purpose.value is None
+    assert args.brief.narrative_mode.value == "Customer story"
+
+
+@pytest.mark.parametrize("known_slot, known_value", [
+    ("purpose", "conference opener"), ("narrative_mode", "customer story"),
+])
+def test_partial_legacy_direction_only_asks_for_the_unsettled_choice(known_slot, known_value):
+    import json
+
+    brief = complete_brief().model_copy(update={
+        "purpose": BriefSlot(), "narrative_mode": BriefSlot(),
+        known_slot: BriefSlot(value=known_value, source=BriefSlotSource.USER_STATED),
+    })
+    state = CreativeState(brief=brief, brand_profile=profile())
+    text = f"给 {URL} 做一只宣传片"
+    readiness = compute_source_readiness(user_text=text, snapshots=[snapshot()], creative_state=state)
+    assert readiness.brief_missing_slots == ["production_direction"]
+    assert readiness.required_next_action == "design_video"
+    assembly = round_assembly(text, assets=[asset("completed")], snapshots=[snapshot()], state=state)
+    round_facts = json.loads(assembly.context.rsplit("\n", 1)[-1])
+    assert round_facts["known_direction_inputs"] == {known_slot: known_value}
 
 
 def test_failed_capture_never_becomes_brand_ready():
@@ -218,23 +271,23 @@ def test_round_projection_uses_readiness_before_tools():
     pending = round_assembly(vague, assets=[asset()])
     assert pending.stage == "source_preparing"
     assert {tool.name for tool in pending.tools} == {"prepare_video_materials", "answer"}
-    assert "CURRENT ROUTE: website_promo" in pending.context
-    assert "Has URL: true" in pending.context
-    assert "Capture pending: true" in pending.context
-    assert "Capture failed: false" in pending.context
-    assert "Capture ready: false" in pending.context
-    assert "Text ready: false" in pending.context
-    assert "Required views ready: false" in pending.context
-    assert "Brief ready: false" in pending.context
-    assert "Draft present: false" in pending.context
+    assert "当前路径：website_promo" in pending.context
+    assert "含 URL：true" in pending.context
+    assert "等待采集：true" in pending.context
+    assert "采集失败：false" in pending.context
+    assert "采集已就绪：false" in pending.context
+    assert "正文已就绪：false" in pending.context
+    assert "所需视图已就绪：false" in pending.context
+    assert "Brief 已就绪：false" in pending.context
+    assert "已有草稿：false" in pending.context
     assert '"required_next_action": "prepare_video_materials"' in pending.context
     assert pending.context.count('"required_next_action":') == 1
     assert '"source_readiness"' not in pending.context
-    assert pending.context.index("CURRENT READINESS:") < pending.context.index(
-        "CURRENT VIDEO ROUND"
+    assert pending.context.index("当前准备状态：") < pending.context.index(
+        "当前视频轮次"
     )
     assert pending.context.rstrip().endswith('"required_next_action": "prepare_video_materials"}')
-    assert "WEBSITE PROMO EVIDENCE" in pending.system
+    assert "官网宣传片取证" in pending.system
 
     failed = round_assembly(vague, assets=[asset("failed")])
     assert failed.stage == "source_preparing"
@@ -249,7 +302,7 @@ def test_round_projection_uses_readiness_before_tools():
     assert briefing.stage == "briefing"
     assert {tool.name for tool in briefing.tools} == {"analyze_brand", "answer"}
     assert '"required_next_action": "analyze_brand"' in briefing.context
-    assert "WEBSITE PROMO BRIEFING" in briefing.system
+    assert "官网宣传片需求梳理" in briefing.system
 
 
 def test_round_projection_restores_design_only_after_brief_and_brand():

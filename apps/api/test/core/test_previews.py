@@ -705,7 +705,7 @@ def test_valid_focus_repair_enters_review_and_save_waits_for_pass():
     })
     assert assembled.stage == "draft_review"
     assert "design_video" not in {tool.name for tool in assembled.tools}
-    dynamic = json.loads(assembled.context.split("CURRENT VIDEO ROUND (server-derived target and state; not model claims):\n", 1)[1])
+    dynamic = json.loads(assembled.context.split("当前视频轮次（目标和状态由服务端提供）：\n", 1)[1])
     assert dynamic["draft"]["next_review_target"]["scene_id"] == "scn_open"
 
     from app.editing.schemas import CompositionContent

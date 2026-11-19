@@ -61,8 +61,7 @@ class SetTextOp(BaseModel):
         min_length=1,
         max_length=64,
         description=(
-            "Exact current Text Clip id; omit when the user's target is ambiguous "
-            "so the server can return candidates."
+            "当前文字 Clip 的确切 ID。若用户指向不明确则省略，以便服务端返回候选。"
         ),
     )
     text: str = Field(min_length=1, max_length=9000)
@@ -84,7 +83,7 @@ class AddMediaOverlayOp(BaseModel):
     scene_id: str | None = Field(default=None, min_length=1, max_length=64)
     scope: Literal["window", "whole_scene"] = Field(
         default="window",
-        description="whole_scene uses the saved Scene's exact range and needs no seconds.",
+        description="whole_scene 采用已保存 Scene 的确切范围，无需填写秒数。",
     )
     start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -114,11 +113,11 @@ class AddNarrationOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     op: Literal["add_narration"]
-    source_id: UUID = Field(description="Frozen audio SourceSnapshot from prepare_narration")
-    alignment_id: UUID = Field(description="READY NarrationAlignment for this exact audio")
+    source_id: UUID = Field(description="来自 prepare_narration 的固定音频 SourceSnapshot。")
+    alignment_id: UUID = Field(description="与该音频精确对应且状态为 READY 的 NarrationAlignment。")
     scene_id: str | None = Field(
         default=None,
-        description="Scene receiving the narration and aligned captions; omit only when one Scene exists",
+        description="接收旁白和对齐字幕的 Scene，仅在作品只有一个场景时可省略。",
     )
 
 
@@ -126,27 +125,27 @@ class AddAudioEffectOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     op: Literal["add_audio_effect"]
-    source_id: UUID = Field(description="Prepared audio SourceSnapshot, such as an imported CC0 effect")
+    source_id: UUID = Field(description="已准备的音频 SourceSnapshot，例如已导入的 CC0 音效。")
     scene_id: str | None = Field(
         default=None,
-        description="Scene receiving the effect; omit only when one Scene exists",
+        description="接收音效的 Scene，仅在作品只有一个场景时可省略。",
     )
     start_seconds: float = Field(
         ge=0,
         allow_inf_nan=False,
-        description="Absolute output start second inside the target Scene",
+        description="目标 Scene 内的绝对成片起始秒数。",
     )
     source_start_seconds: float = Field(
         default=0,
         ge=0,
         allow_inf_nan=False,
-        description="Optional trim start inside the source audio",
+        description="可选，在源音频内开始裁切的秒数。",
     )
     duration_seconds: float | None = Field(
         default=None,
         gt=0,
         allow_inf_nan=False,
-        description="Optional source/output duration at 1x; omit to use the remaining source audio",
+        description="可选，按 1 倍速计算的源/成片时长。省略则使用余下的源音频。",
     )
     gain_db: float = Field(default=0.0, ge=-60, le=12)
 
@@ -157,7 +156,7 @@ class SetNarrationOp(BaseModel):
     op: Literal["set_narration"]
     clip_id: str | None = Field(
         default=None,
-        description="Exact pending Speech Clip id; omit only when one pending Speech Clip exists",
+        description="待处理 Speech Clip 的确切 ID。仅有一个待处理语音片段时可省略。",
     )
     text: str = Field(min_length=1, max_length=9000)
 

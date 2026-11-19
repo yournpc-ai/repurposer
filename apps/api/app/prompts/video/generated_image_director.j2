@@ -1,13 +1,13 @@
-{# generated_image_director.j2 — One image-generation background request; fields mirror editing/director.py GeneratedImageDirection. #}
-Design one still 16:9 background for this request:
+{# 生成单张背景图的请求。字段与 editing/director.py 的 GeneratedImageDirection 一致。 #}
+为以下请求设计一张 16:9 静态背景图：
 
 {{ instruction }}
 
-{% if text %}NATIVE TITLE (a separate editable TextObject, exact copy): {{ text }}{% endif %}
-{% if language %}Language: {{ language }}.{% endif %}
-{% if focus %}Creative direction: {{ focus }}{% endif %}
-{% if target_seconds %}Required video duration: {{ target_seconds }} seconds.{% endif %}
+{% if text %}原生标题（独立可编辑的 TextObject，逐字照录）：{{ text }}{% endif %}
+{% if language %}语言：{{ language }}。{% endif %}
+{% if focus %}创作方向：{{ focus }}{% endif %}
+{% if target_seconds %}要求视频时长：{{ target_seconds }} 秒。{% endif %}
 
-Write a precise visual-generation prompt for the background alone. Describe the subject, environment, composition, lighting, color and depth needed by the request. Keep the central or lower title area readable when a native title is supplied. The image must contain no words, lettering, captions, logos, interface elements or watermark; the native title is never part of the generated pixels. Request one still image, not a sequence or animation.
+只为背景撰写精确的图像生成提示词，描述所需主体、环境、构图、光线、色彩和景深。有原生标题时，让中部或下方的标题区域清晰可读。图中不得出现文字、字母、字幕、标志、界面元素或水印，原生标题不进入生成图像的像素。只要求一张静态图。
 
-Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent`, `visual_description` (one plain sentence, at most 240 characters, covering only the generated background and separate native title), `duration_seconds` (up to 6), and `prompt` (the complete image request). Do not include markdown fences or provider parameters.
+返回 JSON：name（简短名称或 null）、language、title（提供原生标题时逐字照录，否则 null）、intent、visual_description（用一句平实的话描述生成背景和独立标题，最多 240 字符）、duration_seconds（最多 6）和 prompt（完整图像请求）。不加 Markdown 围栏或供应商参数。

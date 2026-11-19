@@ -32,6 +32,7 @@ def production_stage_record(
     status: str,
     started_at: datetime,
     finished_at: datetime | None = None,
+    scene_id: str | None = None,
     facts: StageFacts | None = None,
 ) -> dict[str, Any]:
     """Build only the safe stage facts; seq is assigned by the persistent fold."""
@@ -44,7 +45,7 @@ def production_stage_record(
         attempt=attempt,
         seq=0,
         status=status,
-        started_at=started_at,
+        started_at=started_at, scene_id=scene_id,
         finished_at=finished_at,
         reused=values.get("reused") if isinstance(values.get("reused"), bool) else None,
         item_count=values.get("item_count") if isinstance(values.get("item_count"), int) else None,
@@ -89,7 +90,14 @@ def apply_production_stage(
         if existing.attempt != incoming.attempt or existing.status != "running":
             return spec
         if incoming.status == "running":
-            return spec
+            # Scene callbacks may arrive out of order. Update the same stage,
+            # retaining the identity and start time of its first snapshot.
+            if incoming.item_count is None or incoming.item_count < (existing.item_count or 0):
+                return spec
+            if incoming.item_count == existing.item_count and incoming.scene_id == existing.scene_id:
+                return spec
+            records[index] = {**raw, "item_count": incoming.item_count, "scene_id": incoming.scene_id}
+            return {**spec, "production_stages": records}
         settled = incoming.model_dump(mode="json")
         settled["seq"] = existing.seq
         settled["started_at"] = existing.started_at
@@ -157,6 +165,12 @@ class ProductionStages:
             started_at=started_at,
         ))
         return started_at
+
+    async def progress(self, kind: str, item_count: int, scene_id: str | None = None) -> None:
+        await self._write(production_stage_record(
+            kind=kind, run_id=self.run_id, step_id=self.step_id, attempt=self.attempt,
+            status="running", started_at=datetime.now(UTC), scene_id=scene_id, facts={"item_count": item_count},
+        ))
 
     async def settle(
         self,

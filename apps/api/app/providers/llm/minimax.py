@@ -18,7 +18,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.config import settings
+from app.config import MINIMAX_FLASH_MODEL, settings
 from app.providers.llm.base import (
     LLMError,
     LLMSchemaError,
@@ -65,6 +65,7 @@ T = TypeVar("T", bound=BaseModel)
 # USD, snapshot 2026-08 (platform.minimax.io pay-go): adjust to contract
 # pricing when it differs.
 PRICING = {
+    MINIMAX_FLASH_MODEL: {"prompt_per_mtoken": 0.15, "completion_per_mtoken": 0.60},
     # minimax-m3 standard tier (≤512K input): $0.30 / $1.20 per 1M tokens.
     "minimax-m3": {
         "prompt_per_mtoken": 0.30,
@@ -268,6 +269,19 @@ class _MiniMaxToolMarkupStripper:
         return tail
 
 
+def _generation_options(temperature: float, thinking: bool | None) -> dict:
+    if settings.minimax_model.casefold() == MINIMAX_FLASH_MODEL.casefold():
+        # Flash always thinks. Fast routing requests use its lowest supported effort.
+        options = {"thinking": {"type": "adaptive"}}
+        if thinking is False:
+            options["reasoning_effort"] = "low"
+        return options
+    options = {"temperature": temperature}
+    if thinking is not None:
+        options["thinking"] = {"type": "adaptive" if thinking else "disabled"}
+    return options
+
+
 class MiniMaxClient:
     """MiniMax M3 API client with structured output."""
 
@@ -337,11 +351,10 @@ class MiniMaxClient:
             "model": settings.minimax_model,
             "messages": messages,
             "response_format": {"type": "json_object"},
-            "temperature": temperature,
+            **_generation_options(temperature, thinking),
             # Thinking out of the content channel (see capabilities note).
             "reasoning_split": True,
         }
-        payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
         trace_id = trace_start(payload, "generate", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
@@ -447,12 +460,11 @@ class MiniMaxClient:
             "model": settings.minimax_model,
             "messages": messages,
             "response_format": {"type": "json_object"},
-            "temperature": temperature,
+            **_generation_options(temperature, thinking),
             "stream": True,
             "stream_options": {"include_usage": True},
             "reasoning_split": True,
         }
-        payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
         trace_id = trace_start(payload, "generate_stream", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
@@ -645,11 +657,9 @@ class MiniMaxClient:
             "messages": messages,
             "tools": tools,
             "tool_choice": tool_choice,
-            "temperature": temperature,
+            **_generation_options(temperature, thinking),
             "reasoning_split": True,
         }
-        if thinking is not None:
-            payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
         trace_id = trace_start(payload, "generate_with_tools", provider="minimax", model=settings.minimax_model)
         try:
@@ -704,7 +714,7 @@ class MiniMaxClient:
                 finish_reason=finish_reason,
                 usage=data.get("usage"),
             )
-        return ToolGeneration(content=content, tool_calls=calls)
+        return ToolGeneration(content=content, tool_calls=calls, assistant_message=message)
 
     async def generate_stream_with_tools(
         self,
@@ -743,13 +753,11 @@ class MiniMaxClient:
             "messages": messages,
             "tools": tools,
             "tool_choice": tool_choice,
-            "temperature": temperature,
+            **_generation_options(temperature, thinking),
             "stream": True,
             "stream_options": {"include_usage": True},
             "reasoning_split": True,
         }
-        if thinking is not None:
-            payload["thinking"] = {"type": "adaptive" if thinking else "disabled"}
 
         trace_id = trace_start(payload, "generate_stream_with_tools", provider="minimax", model=settings.minimax_model)
         t0 = time.monotonic()
@@ -773,6 +781,8 @@ class MiniMaxClient:
                 )
                 await asyncio.sleep(min(2**attempt, 10))
             accumulated = ""
+            reasoning_parts = []
+            assistant_message = {"role": "assistant"}
             stripper = _ThinkStripper()
             tool_markup_stripper = _MiniMaxToolMarkupStripper()
             accumulator = _ToolCallAccumulator()
@@ -821,9 +831,14 @@ class MiniMaxClient:
                                 finish_reason = choice["finish_reason"]
                             delta = choice.get("delta") or {}
                             reasoning = delta.get("reasoning_content")
+                            if "reasoning_content" in delta and reasoning is not None:
+                                reasoning_parts.append(reasoning)
+                            if delta.get("name"):
+                                assistant_message["name"] = delta["name"]
+                            if "content" in delta:
+                                assistant_message["content"] = delta["content"]
                             if reasoning and on_reasoning is not None:
-                                # Reasoning fragments are a liveness signal
-                                # only — never accumulated, never shown.
+                                # UI receives a liveness callback, not chat prose.
                                 result = on_reasoning(reasoning)
                                 if result is not None:
                                     await result
@@ -927,7 +942,17 @@ class MiniMaxClient:
                 finish_reason=finish_reason,
                 usage=usage,
             )
-        return ToolGeneration(content=content, tool_calls=calls)
+        if accumulated:
+            assistant_message["content"] = accumulated
+        if reasoning_parts:
+            assistant_message["reasoning_content"] = "".join(reasoning_parts)
+        if calls:
+            assistant_message["tool_calls"] = [
+                {"id": item["id"], "type": "function",
+                 "function": {"name": item["name"], "arguments": item["arguments"]}}
+                for item in accumulator.raw_calls()
+            ]
+        return ToolGeneration(content=content, tool_calls=calls, assistant_message=assistant_message)
 
     def _clean_json(self, raw: str) -> str:
         """Strip reasoning blocks and markdown fences from JSON payload."""

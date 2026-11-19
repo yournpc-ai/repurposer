@@ -40,7 +40,7 @@ class CandidateCorrection(BaseModel):
     error_id: str = Field(min_length=1, max_length=80)
     value: JsonValue = Field(
         default=None,
-        description="The JSON replacement for this diagnostic. Null is a real value. For operation=remove pass null or omit it; for operation=move pass the exact declared target token."
+        description="对应该诊断的新 JSON 值。null 是有效值。operation=remove 时传 null 或省略，operation=move 时传入确切的已声明目标标记。"
     )
 
 
@@ -52,7 +52,7 @@ class PatchCandidate(BaseModel):
     mode: Literal["patch"]
     corrections: list[CandidateCorrection] = Field(
         min_length=1,
-        description="Only current error_ids. Every unmentioned field and array position is retained by the server.",
+        description="只提交当前的 error_id。服务端保留其他字段和数组位置。",
     )
 
 
@@ -64,7 +64,7 @@ class ReplaceCandidate(BaseModel):
     mode: Literal["replace"]
     reason: str = Field(min_length=1, max_length=1000)
     arguments: dict[str, JsonValue] = Field(
-        description="Complete NEW arguments for the original target tool. No old fields are merged into this replacement."
+        description="原目标工具的完整新参数。旧字段不会合入此次替换。"
     )
 
 
@@ -343,13 +343,13 @@ def _diagnostic_errors(record: "CandidateRecord") -> list[dict]:
                         "value": token,
                     }
                 else:
-                    correction["reason"] = "This structured value has no authorized local destination. Preserve it through an explicit replace; the server will not discard it."
+                    correction["reason"] = "此结构化值没有获准的局部写入位置。通过显式 replace 保留它，服务端不会丢弃。"
             else:
                 correction = {"operation": "remove", "path": list(path), "value": None}
         elif path:
-            correction = {"operation": "set", "path": list(path), "value": "any JSON value valid at this exact path, including null when the schema permits it"}
+            correction = {"operation": "set", "path": list(path), "value": "此确切路径允许的任意 JSON 值；结构允许时可为 null"}
         else:
-            correction["reason"] = "The diagnostic has no single authorized value path. Use explicit replace with complete new arguments, preserving unrelated content yourself."
+            correction["reason"] = "此诊断没有唯一获准的局部路径。使用显式 replace 和完整新参数，自行保留无关内容。"
         diagnostics.append({
             "error_id": f"error_{index + 1}",
             "type": error.get("type", "value_error"),
@@ -422,15 +422,15 @@ class CandidateRecord:
             "candidate_digest": self.candidate_digest,
             "target_tool": self.tool_name,
             "candidate_location": "this tool result's candidate field" if include_candidate else f"retained assistant tool_call {self.call_id} arguments",
-            "candidate_authority": "Only this candidate_id + candidate_digest is current; older digests are expired.",
+            "candidate_authority": "只有此组 candidate_id 和 candidate_digest 有效，旧摘要已过期。",
             "correction_tool": CORRECTION_TOOL_NAME,
             "correction_contract": {
-                "patch": "Return only current error_id/value corrections. Unaffected content is retained by the server; do not repeat the candidate or target tool name.",
-                "replace": "Explicitly choose mode=replace, give a reason and complete new arguments. Structural changes never imply replace.",
-                "result": "A merged candidate is validated in full and is saved only if the original target tool returns a saved result.",
+                "patch": "只返回当前的 error_id/value 修正。服务端保留未涉及的内容，不要重复候选或目标工具名。",
+                "replace": "显式选择 mode=replace，并提供原因和完整新参数。结构修改不会自动触发 replace。",
+                "result": "合并后会校验完整候选，只有原目标工具返回保存成功时才算已保存。",
             },
             "target_parameters_schema": deepcopy(self.schema),
-            "path_contract": "model_path, server_path and json_pointer are real JSON paths. original_loc is validator provenance; union tags in it are not JSON keys.",
+            "path_contract": "model_path、server_path、json_pointer 是实际 JSON 路径。original_loc 表明校验错误位置，其中的联合类型标记不是 JSON 键。",
             "errors": _diagnostic_errors(self),
         }
         if include_candidate:
@@ -568,10 +568,8 @@ def correction_tool():
         presentation=NATIVE_PRESENTATION,
         terminal=False,
         description=(
-            "Correct the server-retained, NOT-EXECUTED candidate named by the latest validation diagnostic. "
-            "Use mode=patch with only current error_id/value pairs when the design stays intact; the server retains everything else. "
-            "Use mode=replace with a reason and complete new original-tool arguments only for an intentional redesign. "
-            "Never mix the two forms. A successful correction executes the original target tool once; it is not a second write door."
+            "根据最新校验诊断修正服务端保留且尚未执行的候选。设计不变时用 mode=patch，仅传当前的 error_id/value 对，服务端保留其余内容。"
+            "只有有意重新设计时才用 mode=replace，提供原因和完整的新原工具参数。不可混用。修正成功只执行一次原目标工具，不另设写入口。"
         ),
         params_model=CandidateCorrectionArgs,
     )

@@ -130,9 +130,12 @@ def _assemble_plan_turn(
     brief_lines: list[str] | None = None
     if brief is not None:
         lines = []
+        direction_fields = (
+            ("production_direction",) if brief.production_direction.value else ("purpose", "narrative_mode")
+        )
         for name in (
-            "topic", "audience", "tone", "purpose", "target_seconds",
-            "narrative_mode", "narration_language", "subtitle_languages", "aspect",
+            "topic", "audience", "tone", *direction_fields,
+            "target_seconds", "narration_language", "subtitle_languages", "aspect",
             "voice_requirements", "must_include", "avoid", "success_criteria",
         ):
             slot = getattr(brief, name)
@@ -149,7 +152,7 @@ def _assemble_plan_turn(
         # The material line always renders — the root judgment reads it.
         lines.append(f"- material: {brief.material_state.value or 'none'}")
         if brief.asked:
-            lines.append(f"- already asked: {', '.join(brief.asked)}")
+            lines.append(f"- 已问字段：{', '.join(brief.asked)}")
         brief_lines = lines
     # Persona block (Memory 单向注入 — the consumer pulls): restrained on
     # purpose — enough for strategy ② to pick concrete one-word options
@@ -165,7 +168,7 @@ def _assemble_plan_turn(
             lines.append(f"- audience: {persona.audience}")
         values = [str(v) for v in (persona.core_values or []) if v][:6]
         if values:
-            lines.append(f"- core values: {', '.join(values)}")
+            lines.append(f"- 核心价值观：{', '.join(values)}")
         if persona.emotional_tone:
             lines.append(f"- tone: {persona.emotional_tone}")
         persona_lines = lines or None
@@ -195,7 +198,7 @@ def _assemble_plan_turn(
         if payload.get("slot"):
             lines.append(f"- slot: {payload['slot']}")
         if payload.get("default_path"):
-            lines.append(f"- fallback if unanswered: {payload['default_path']}")
+            lines.append(f"- 未答时的默认路径：{payload['default_path']}")
         pending_lines = lines
     return (
         {
@@ -222,11 +225,7 @@ def _assemble_plan_turn(
             # chat-surface turn's prompt contains zero workspace tokens and
             # the model cannot point at a home it never saw.
             "surface_line": (
-                "The user's surface: this conversation sits beside the "
-                "plan's workspace — the presented plan is ALSO laid out "
-                "there as an inspectable graph. You may name that home "
-                "('工作空间' in Chinese, 'the workspace' in English — the "
-                "user's language), never a position word."
+                "当前对话与方案工作空间并列，展示的方案也以可检查的图显示在那里。可按用户的语言称“工作空间”或“the workspace”，不用方位词。"
                 if surface == "canvas"
                 else None
             ),
@@ -234,8 +233,7 @@ def _assemble_plan_turn(
             # template carries the mode-conditional close law (one law,
             # one seat); this line is only the world fact it keys on.
             "confirmation_line": (
-                "Confirmation settings: execution="
-                f"{confirmation[0]}, spending={confirmation[1]}."
+                f"确认设置：execution={confirmation[0]}, spending={confirmation[1]}。"
                 if confirmation is not None
                 else None
             ),

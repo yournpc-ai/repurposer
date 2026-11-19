@@ -27,25 +27,25 @@ from app.tools.video.review import ContentReviewAnswer
 SKILL_READ_TOOLS = [
     ChatTool(
         name="list_skill_shots",
-        description="List the bound package's compact shot index, sequence and template identities. Read only; filter or page large indexes.",
+        description="列出绑定包的精简镜头索引、序列及模板标识。只读；大型索引可筛选或分页。",
         params_model=ListSkillShotsArgs,
         terminal=False,
     ),
     ChatTool(
         name="read_skill_reference",
-        description="Read one bounded slice of SKILL.md, a shot card, sequence, or template inside the bound package.",
+        description="从绑定包中的 SKILL.md、镜头卡、序列或模板读取一个限定范围的片段。",
         params_model=ReadSkillReferenceArgs,
         terminal=False,
     ),
     ChatTool(
         name="read_skill_demo",
-        description="Read one bounded slice of a selected demo source or declared demos/lib dependency. Source is reference only, never executable input.",
+        description="从选定的演示源码或已声明的 demos/lib 依赖读取一个限定片段。源码只供参考，不执行。",
         params_model=ReadSkillDemoArgs,
         terminal=False,
     ),
     ChatTool(
         name="get_skill_preview",
-        description="Read a selected shot's real preview, preferring its declared timeline image over MP4 by default; return an honest available=false when none exists.",
+        description="读取所选镜头的真实预览。默认优先使用声明的时间线图片，其次为 MP4。没有预览时如实返回 available=false。",
         params_model=GetSkillPreviewArgs,
         terminal=False,
     ),
@@ -84,9 +84,7 @@ mg_director: Agent[MgDirection] = Agent(
     prompt="video/mg_director.j2",
     schema=MgDirection,
     system=(
-        "You are a motion-graphics designer. You choreograph independently timed text blocks, visual hierarchy and "
-        "native graphics — every line on screen is exact copy, never invented "
-        "facts. Output valid JSON, no commentary."
+        "你是动态图形设计师，负责有独立时序的文字块、视觉层级与原生图形。所有屏幕文案都逐字照录，不编造事实。只输出有效 JSON。"
     ),
     temperature=0.5,
     assemble=_assemble_mg,
@@ -125,9 +123,7 @@ aligned_narration_director: Agent[AlignedNarrationDirection] = Agent(
     prompt="video/aligned_narration_director.j2",
     schema=AlignedNarrationDirection,
     system=(
-        "You are a motion-graphics director working from a READY narration "
-        "alignment. Select real sentences and exact source fragments; the "
-        "system owns every audio and word time. Output valid JSON, no commentary."
+        "你是动态图形导演，根据 READY 状态的旁白对齐结果创作。选择真实存在的句子和逐字原文片段。音频及各词的时间由系统负责。只输出有效 JSON。"
     ),
     temperature=0.5,
     assemble=_assemble_aligned_narration,
@@ -165,10 +161,7 @@ mixed_director: Agent[MixedDirection] = Agent(
     prompt="video/mixed_director.j2",
     schema=MixedDirection,
     system=(
-        "You are a video compositor working only from frozen real recordings. "
-        "Select an honest source window and write exact native title/caption "
-        "slots. Structure, layout, rendering and music are the system's. "
-        "Output valid JSON, no commentary."
+        "你是视频合成师，只使用已固定的真实录像。选取有依据的源片段，准确填写原生标题和字幕。结构、布局、渲染和音乐由系统负责。只输出有效 JSON。"
     ),
     temperature=0.4,
     assemble=_assemble_mixed,
@@ -189,7 +182,7 @@ source_selector: Agent[SourceSelectionAnswer] = Agent(
     name="source_selector",
     prompt="video/source_selection.j2",
     schema=SourceSelectionAnswer,
-    system="Return only the structured contiguous sentence selection.",
+    system="只返回结构化的连续句子选段结果。",
     temperature=0.0,
     assemble=_assemble_source_selection,
     timeout_s=120,
@@ -231,9 +224,7 @@ program_director: Agent[ProgramDirection] = Agent(
     prompt="video/draw_2d_director.j2",
     schema=ProgramDirection,
     system=(
-        "You are a creative graphics programmer. Author an original deterministic "
-        "draw-2d visual program for the user's requested moving picture; never "
-        "substitute a preset name or pseudocode. Output valid JSON, no commentary."
+        "你是动态图形程序员。按用户的动态画面要求编写原创、确定性的 draw-2d 程序，不用预设名或伪代码代替实现。只输出有效 JSON。"
     ),
     temperature=0.6,
     assemble=_assemble_visual_request,
@@ -248,11 +239,7 @@ component_director: Agent[ComponentVideoDirection] = Agent(
     prompt="video/remotion_project_director.j2",
     schema=ComponentVideoDirection,
     system=(
-        "You are a creative visual-program author. Write original deterministic "
-        "multi-file Remotion scenes for the user's requested moving picture; organize "
-        "a complete work into coherent shots when that fits the content. Never "
-        "substitute a preset, undeclared imports, arbitrary dependencies or pseudocode. "
-        "Output valid JSON, no commentary."
+        "你负责创作程序化画面。按用户要求编写原创、确定性的多文件 Remotion 场景，内容适合时用连贯镜头组织全片。不要用预设替代实现，不使用未声明的导入、任意依赖或伪代码。只输出有效 JSON。"
     ),
     temperature=0.6,
     assemble=_assemble_visual_request,
@@ -267,9 +254,7 @@ image_director: Agent[GeneratedImageDirection] = Agent(
     prompt="video/generated_image_director.j2",
     schema=GeneratedImageDirection,
     system=(
-        "You are an image art director. Author one precise text-to-image request "
-        "for a background with no lettering; native copy stays a separate editable "
-        "object. Output valid JSON, no commentary."
+        "你是图像美术指导。撰写一条精确的文生图请求来生成没有文字的背景。原生文案保留为独立可编辑对象。只输出有效 JSON。"
     ),
     temperature=0.5,
     assemble=_assemble_visual_request,
@@ -309,11 +294,7 @@ video_reviewer: Agent[ContentReviewAnswer] = Agent(
     prompt="video/reviewer.j2",
     schema=ContentReviewAnswer,
     system=(
-        "You are a video content reviewer. Base new visual findings only on "
-        "the actual decoded frames attached to the request; use the supplied "
-        "deterministic media checks for audio facts, and treat earlier review "
-        "facts as historical scope rather than new frames. Output valid JSON, "
-        "no commentary."
+        "你是视频内容审阅员。新的视觉发现只能依据本次所附的实际解码帧。音频事实使用确定性媒体检查，先前审阅的事实只说明历史检查范围。只输出有效 JSON。"
     ),
     temperature=0.2,
     assemble=_assemble_review,

@@ -188,7 +188,13 @@ class _NodeSpec:
 def compile_graph(task: TaskSpec) -> list[_NodeSpec]:
     """Compile the one authorized action into the existing DAG kernel."""
     entries = validate_task_list(task.tasks or [])
-    if len(entries) != 1:
+    if len(entries) > 1:
+        return [
+            _NodeSpec(entry.name, 10 + index, inputs=[index - 1] if index else [],
+                      spec=entry.params_model.model_validate(strip_null_params(item.params)).model_dump(mode="json", exclude_none=True))
+            for index, (entry, item) in enumerate(zip(entries, task.tasks, strict=True))
+        ]
+    if not entries:
         raise ValueError("One saved Composition production takes exactly one task")
     entry = entries[0]
     params = entry.params_model.model_validate(strip_null_params(task.tasks[0].params))
@@ -406,13 +412,17 @@ async def create_run(
     from app.tools.video.production import video_quote_facts
     facts.update(await video_quote_facts(db, project, task.tasks))
     nodes: list[WorkflowStep] = []
-    for ns in node_specs:
+    for index, ns in enumerate(node_specs):
         spec = dict(ns.spec or {})
         if ns.kind == "produce_video":
             spec["narration_policy"] = video_context["narration_policy"]
             spec["aspect"] = video_context["aspect"]
         elif ns.kind == "prepare_narration":
-            spec["narration_policy"] = narration_context["narration_preparation"]["narration_policy"]
+            prep = narration_context["narration_preparation"]
+            part = prep["scenes"][index] if "scenes" in prep else prep
+            spec["narration_policy"] = part["narration_policy"]
+            if part.get("scene_index"):
+                spec["scene_index"] = part["scene_index"]
         elif ns.kind == "prepare_music":
             spec["score_spec"] = music_context["music_preparation"]["score_spec"]
             spec["score_digest"] = music_context["music_preparation"]["score_digest"]
@@ -1146,6 +1156,19 @@ async def cancel_run(
             kind="bail", text="cancelled", answered_at=now
         ).model_dump(mode="json")
 
+    journey = (run.context or {}).get("media_journey")
+    if journey:
+        # The active plan and its Run were persisted together. Settle that
+        # same transcript marker atomically with cancellation for live/replay.
+        plan = await db.scalar(select(Message).where(
+            Message.workflow_run_id == run.id,
+            Message.intent["media_journey"]["opening_id"].as_string() == journey["opening_id"],
+            Message.intent["media_journey"]["state"].as_string() == "active",
+        ).order_by(Message.seq.desc()).limit(1))
+        if plan is not None:
+            plan.intent = {**plan.intent, "media_journey": {**journey, "state": "stopped"}}
+        run.context = {**run.context, "media_continuation_finished": True}
+
     run.status = WorkflowStatus.CANCELLED
     run.error = None
     run.updated_at = now
@@ -1271,7 +1294,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
         if not failed_verdict:
             from app.tools.video.production.narration import (
                 has_narration_preparation_scope,
-                narration_preparation_fact,
+                narration_preparation_facts,
             )
             from app.tools.video.production.visual_assets import (
                 has_visual_asset_preparation_scope,
@@ -1284,7 +1307,7 @@ async def maybe_finalize_run(run_id: UUID) -> None:
 
             try:
                 if has_narration_preparation_scope(run):
-                    await narration_preparation_fact(db, run, nodes)
+                    await narration_preparation_facts(db, run, nodes)
                 if has_visual_asset_preparation_scope(run):
                     await visual_asset_preparation_fact(db, run, nodes)
                 if has_music_preparation_scope(run):

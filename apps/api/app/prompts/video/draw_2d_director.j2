@@ -1,18 +1,18 @@
-{# draw_2d_director.j2 — Agent-authored draw-2d source; fields mirror editing/director.py ProgramDirection. #}
-Create an original animated 2D picture for this request:
+{# 由模型编写 draw-2d 源码。字段与 editing/director.py 的 ProgramDirection 一致。 #}
+为以下请求创作一幅原创二维动画：
 
 {{ instruction }}
 
-{% if repair_feedback %}SOURCE / VALIDATION REPAIR FEEDBACK (world facts, not a new creative request):
+{% if repair_feedback %}来源或校验的修复反馈（已有事实，不构成新创意要求）：
 {{ repair_feedback }}
 {% endif %}
-{% if text %}NATIVE TITLE (kept as a separate editable TextObject, exact copy): {{ text }}{% endif %}
-{% if language %}Language: {{ language }}.{% endif %}
-{% if focus %}Creative direction: {{ focus }}{% endif %}
-{% if target_seconds %}Required duration: {{ target_seconds }} seconds.{% endif %}
-The server supplies the full Composition raster at 30fps and the same source/output contract for preview and production. Choose a continuous duration up to 30 seconds when the requested motion needs it; do not loop a shorter result merely to fill time.
+{% if text %}原生标题（独立保留为可编辑的 TextObject，逐字照录）：{{ text }}{% endif %}
+{% if language %}语言：{{ language }}。{% endif %}
+{% if focus %}创作方向：{{ focus }}{% endif %}
+{% if target_seconds %}要求时长：{{ target_seconds }} 秒。{% endif %}
+服务端提供完整 Composition 画幅及 30fps，预览与制作沿用相同的源和输出契约。按运动需要选择连续时长，最长 30 秒，不要循环短片段来凑时长。
 
 {% include "video/_draw_2d_contract.j2" %}
-Do not substitute a preset identifier. Keep important standalone text in the native title. Use this bounded path for pictures its four drawing primitives can express well; do not approximate websites, arbitrary media, complex interface states or intricate multi-stage motion that needs the controlled component path.
+不要用预设标识代替实现。重要的独立文字留在原生标题里。选择四种图元能清楚表达的画面。网站、任意媒体、复杂界面状态或精细的多阶段运动需要受控组件，不要在这里勉强仿造。
 
-Answer JSON with: `name` (short or null), `language`, `title` (the native title exactly when supplied, otherwise null), `intent` (at most 120 characters), `visual_description` (at most 240 characters; only what the program and native title actually show), `duration_seconds` (up to 30), `background` (hex), `parameters` (meaningful scalar knobs the program reads), and `code` (the complete function source). Do not include markdown fences. If the harness returns an execution diagnostic, preserve the valid design and repair the concrete source failure rather than starting an unrelated drawing.
+仅返回 JSON：name（简短名称或 null）、language、title（提供标题时逐字照录，否则 null）、intent（最多 120 字符）、visual_description（最多 240 字符，仅描述程序画面和原生标题实际呈现的内容）、duration_seconds（最多 30）、background（十六进制颜色）、parameters（程序实际读取且有意义的标量参数）、code（完整函数源码）。不加 Markdown 围栏。若执行环境返回诊断，保留有效设计，针对具体的源码错误修复，不要另起一幅无关的画面。

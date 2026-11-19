@@ -127,72 +127,6 @@ def _sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
-def _question_preview_frame(payload: dict) -> str:
-    """The ``question.preview`` frame for one validated ask_user call
-    (2026-09-09 用户拍板——「选项该和这句话一起来」; 2026-09-14 the tool-loop
-    seat): the pill's whole payload (question/options/allow_freeform/slot/
-    default_path) has VALIDATED the moment the call's arguments complete —
-    the loop may still reject it, so the client rolls the preview back on a
-    flip or turn.failed; the terminal envelope stays authoritative."""
-    return _sse(
-        "question.preview",
-        json.dumps(
-            {
-                "question": payload.get("question"),
-                "options": payload.get("options") or [],
-                "items": payload.get("items") or [],
-                "group_digest": payload.get("group_digest"),
-                "allow_freeform": payload.get("allow_freeform", True),
-                "slot": payload.get("slot"),
-                "default_path": payload.get("default_path"),
-            },
-            ensure_ascii=False,
-        ),
-    )
-
-
-def _group_digest_resolver(conversation_id: UUID, user_text: str = ""):
-    async def resolve(items, proposed_brief):
-        from app.chat.readiness import (
-            brief_with_user_constraints,
-            creative_state_for_pending,
-            infer_task_kind,
-        )
-        from app.chat.service import merge_brief
-        from app.models.database import AsyncSessionLocal
-        from app.models.schemas import (
-            Brief,
-            PendingPlan,
-            missing_brief_question_items,
-            question_group_digest,
-        )
-
-        async with AsyncSessionLocal() as db:
-            conversation = await db.get(Conversation, conversation_id)
-            project = (
-                await db.get(Project, conversation.project_id)
-                if conversation is not None else None
-            )
-            stored = (
-                PendingPlan.model_validate(project.pending_brief or {})
-                if project is not None else PendingPlan()
-            )
-            state = creative_state_for_pending(stored)
-            baseline = state.brief if state is not None else stored.brief or Brief()
-            brief = merge_brief(proposed_brief, baseline)
-            if infer_task_kind(user_text) == "website_promo":
-                brief = brief_with_user_constraints(user_text, brief)
-            try:
-                missing = missing_brief_question_items(items, brief)
-            except ValueError:
-                return None
-            if not missing:
-                return None
-            return missing, question_group_digest(missing, brief)
-
-    return resolve
-
-
 _HEARTBEAT_SECONDS = 15
 
 
@@ -212,29 +146,8 @@ def _make_delta_hook(queue: asyncio.Queue, persist=None):
     return make_tool_echo_delta_filter(on_delta)
 
 
-def _make_tool_hooks(
-    queue: asyncio.Queue,
-    projector: ActivityProjector | None = None,
-    group_digest=None,
-):
-    """The structure frames (both turn pumps share the shape):
-
-    - ``on_tool_call``: a call's NAME became known — one fact, ONE
-      projection (Phase 3 Batch B ③): the Activity projector's
-      ``name_known`` (the user-safe work evidence, ADR-087 §3). The retired
-      parallel-render System Status labels (drafting / inspecting+key /
-      repairing) are gone — the Activity frames speak for the work now
-      (三通道分家). Every name-known moment ALSO emits the explicit phase
-      clear ``{"phase": null}`` (I-PFA-06 清除协议, 2026-09-18 定型):
-      a System Status label (the film design span's — the only surviving
-      labels) never outlives its activity by inheritance; a no-op when no
-      label is set.
-      The terminal envelope closes whatever remains (终帧律, client-side).
-    - ``on_tool_ready``: an ask_user call's arguments completed and validated
-      (pre-execution) — preview-dock the pill NOW instead of waiting out the
-      loop. Fires on every iteration; a rejected ask's preview rolls back
-      with the turn's other previews.
-    """
+def _make_tool_call_hook(queue: asyncio.Queue, projector: ActivityProjector | None = None):
+    """Stream activity immediately. A blocking question is delivered after its row commits."""
     async def on_tool_call(name: str) -> None:
         if projector is not None:
             for frame in projector.name_known(name):
@@ -243,38 +156,7 @@ def _make_tool_hooks(
             _sse("assistant.thinking", json.dumps({"phase": None}))
         )
 
-    async def on_tool_ready(name: str, params) -> None:
-        if name == "ask_user" and params is not None:
-            items = list(getattr(params, "items", None) or [])
-            digest = None
-            if items:
-                if group_digest is None:
-                    return
-                resolved = await group_digest(items, getattr(params, "brief", None))
-                if resolved is None:
-                    return
-                items, digest = resolved
-            await queue.put(
-                _question_preview_frame(
-                    {
-                        "question": params.question,
-                        "options": [
-                            o.model_dump(mode="json") for o in params.options
-                        ],
-                        "items": [item.model_dump(mode="json") for item in items],
-                        "group_digest": digest,
-                        "allow_freeform": params.allow_freeform,
-                        "slot": getattr(params, "slot", None),
-                        "default_path": params.default_path,
-                        # 推荐标记 (一问拍一体化 2026-09-27): rides the preview
-                        # too — the optimistic dock marks the lean from the
-                        # first frame, the envelope re-docks authoritatively.
-                        "recommended_id": getattr(params, "recommended_id", None),
-                    }
-                )
-            )
-
-    return on_tool_call, on_tool_ready
+    return on_tool_call
 
 
 def _new_activity_projector() -> ActivityProjector:
@@ -751,10 +633,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     return str(partial_message_id) if partial_message_id else None
 
                 on_delta = _make_delta_hook(queue, persist_delta)
-                on_tool_call, on_tool_ready = _make_tool_hooks(
-                    queue, projector,
-                    group_digest=_group_digest_resolver(turn_conversation_id, data.message),
-                )
+                on_tool_call = _make_tool_call_hook(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(
@@ -809,7 +688,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                 response = await execute_chat_turn(
                     db, prepared, data, on_delta=on_delta, on_reasoning=on_reasoning,
                     on_phase=on_phase,
-                    on_tool_call=on_tool_call, on_tool_ready=on_tool_ready,
+                    on_tool_call=on_tool_call,
                     on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
@@ -956,10 +835,7 @@ async def _answer_stream(
                     answer_turn_id,
                 )
                 on_delta = _make_delta_hook(queue)
-                on_tool_call, on_tool_ready = _make_tool_hooks(
-                    queue, projector,
-                    group_digest=_group_digest_resolver(UUID(str(conversation_id))),
-                )
+                on_tool_call = _make_tool_call_hook(queue, projector)
                 on_loop_event = _make_loop_event_hook(queue, projector, append_open_read, mirror)
                 on_activity = _make_activity_hook(queue, projector, mirror)
                 on_candidates = _make_candidates_hook(
@@ -1000,7 +876,6 @@ async def _answer_stream(
                     on_delta=on_delta,
                     on_phase=on_phase,
                     on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
                     on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event,
                     on_activity=on_activity,
@@ -1126,6 +1001,11 @@ async def stop_chat_turn(
         or conversation.user_id != current_user.id
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Turn not found")
+    if data.scope == "media_preparation":
+        from app.chat.media_journey import stop_media_journey
+
+        mark = await stop_media_journey(db, message, conversation)
+        return {"accepted": mark is not None, "journey_message": mark}
     state = await stop_turn_at_visible_frontier(db, turn_id, data)
     return {"accepted": True, "turn_state": state}
 

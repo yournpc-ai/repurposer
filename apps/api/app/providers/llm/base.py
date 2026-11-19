@@ -24,7 +24,7 @@ degradation is automatic.
 """
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Protocol, TypeVar
 
@@ -143,6 +143,7 @@ class ToolGeneration:
 
     content: str
     tool_calls: list[ToolCall]
+    assistant_message: dict | None = field(default=None, repr=False, compare=False)
 
 
 T = TypeVar("T", bound=BaseModel)

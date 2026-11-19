@@ -1,0 +1,341 @@
+{
+  "02": {
+    "body_nonempty": true,
+    "number_of_calls": 1,
+    "parameter_errors": [
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          0,
+          "question"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          0,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          1,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          2,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          4,
+          "options",
+          0,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          4,
+          "options",
+          1,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          4,
+          "options",
+          2,
+          "label"
+        ],
+        "msg": "Field required"
+      }
+    ]
+  },
+  "03": {
+    "body_nonempty": false,
+    "number_of_calls": 1,
+    "parameter_shape": "accepted",
+    "website_group_after_validation": [
+      "production_direction",
+      "target_seconds",
+      "narration_language",
+      "subtitle_languages",
+      "aspect"
+    ]
+  },
+  "04": {
+    "body_nonempty": false,
+    "number_of_calls": 1,
+    "parameter_errors": [
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          0,
+          "question"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          0,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          1,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          2,
+          "label"
+        ],
+        "msg": "Field required"
+      }
+    ]
+  },
+  "05": {
+    "body_nonempty": false,
+    "number_of_calls": 1,
+    "parameter_errors": [
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          0,
+          "question"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          0,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          1,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          2,
+          "label"
+        ],
+        "msg": "Field required"
+      }
+    ]
+  },
+  "06": {
+    "body_nonempty": true,
+    "number_of_calls": 1,
+    "parameter_errors": [
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          0,
+          "question"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          0,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          1,
+          "label"
+        ],
+        "msg": "Field required"
+      },
+      {
+        "type": "missing",
+        "loc": [
+          "items",
+          1,
+          "options",
+          2,
+          "label"
+        ],
+        "msg": "Field required"
+      }
+    ]
+  },
+  "07": {
+    "body_nonempty": false,
+    "number_of_calls": 1,
+    "parameter_shape": "accepted",
+    "website_group_after_validation": [
+      "production_direction",
+      "target_seconds",
+      "narration_language",
+      "subtitle_languages",
+      "aspect"
+    ]
+  },
+  "08": {
+    "body_nonempty": true,
+    "number_of_calls": 1,
+    "brief_errors": [
+      {
+        "type": "model_type",
+        "loc": [
+          "avoid"
+        ],
+        "msg": "Input should be a valid dictionary or instance of BriefSlot[list[str]]",
+        "ctx": {
+          "class_name": "BriefSlot[list[str]]"
+        }
+      }
+    ],
+    "answer_errors": [
+      {
+        "type": "extra_forbidden",
+        "loc": [
+          "source"
+        ],
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "type": "extra_forbidden",
+        "loc": [
+          "success_criteria"
+        ],
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "type": "extra_forbidden",
+        "loc": [
+          "material_state"
+        ],
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "type": "extra_forbidden",
+        "loc": [
+          "asked"
+        ],
+        "msg": "Extra inputs are not permitted"
+      }
+    ]
+  },
+  "09": {
+    "body_nonempty": false,
+    "number_of_calls": 1,
+    "brief_errors": [
+      {
+        "type": "model_type",
+        "loc": [
+          "avoid"
+        ],
+        "msg": "Input should be a valid dictionary or instance of BriefSlot[list[str]]",
+        "ctx": {
+          "class_name": "BriefSlot[list[str]]"
+        }
+      }
+    ],
+    "validated_answer_brief": null
+  },
+  "10": {
+    "body_nonempty": true,
+    "number_of_calls": 1,
+    "brief_errors": [
+      {
+        "type": "model_type",
+        "loc": [
+          "must_include"
+        ],
+        "msg": "Input should be a valid dictionary or instance of BriefSlot[list[str]]",
+        "ctx": {
+          "class_name": "BriefSlot[list[str]]"
+        }
+      },
+      {
+        "type": "model_type",
+        "loc": [
+          "avoid"
+        ],
+        "msg": "Input should be a valid dictionary or instance of BriefSlot[list[str]]",
+        "ctx": {
+          "class_name": "BriefSlot[list[str]]"
+        }
+      }
+    ],
+    "validated_answer_brief": null
+  }
+}

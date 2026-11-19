@@ -184,6 +184,43 @@ async def _open_turn(database, uid):
         return conversation.id, turn.id, project.id
 
 
+@pytest.mark.parametrize("next_run_started", [False, True])
+async def test_stop_during_media_handoff_keeps_delivered_answer_and_fences_the_next_start(database, next_run_started):
+    from app.chat.routes import stop_chat_turn
+    from app.chat.service import TurnStopped, _lock_turn_for_transcript_write
+    from app.models.schemas import ChatTurnStopRequest
+
+    uid = await owner(database)
+    conversation_id, turn_id, project_id = await _open_turn(database, uid)
+    journey = {"opening_id": str(turn_id)}
+    async with database() as db:
+        opening = await db.get(Message, turn_id)
+        opening.turn_state = "settled"
+        delivered = Message(
+            conversation_id=conversation_id, role="assistant", content="Images ready", seq=11,
+            intent={"type": "trigger_review", "media_journey": {**journey, "state": "active"}},
+        )
+        db.add(delivered)
+        if next_run_started:
+            run = WorkflowRun(project_id=project_id, status=WorkflowStatus.RUNNING, context={"media_journey": journey})
+            db.add(run)
+            await db.flush()
+            db.add(Message(conversation_id=conversation_id, role="assistant", content="Recording", seq=12,
+                           workflow_run_id=run.id, intent={"media_journey": {**journey, "state": "active"}}))
+        await db.commit()
+        user = await db.get(User, uid)
+        request = ChatTurnStopRequest(scope="media_preparation")
+        result = await stop_chat_turn(turn_id, request, db, user)
+        assert result["accepted"] and result["journey_message"]["intent"]["media_journey"]["state"] == "stopped"
+        assert result["journey_message"]["seq"] == (12 if next_run_started else 11)
+        assert await stop_chat_turn(turn_id, request, db, user) == result
+        assert opening.turn_state == "settled" and delivered.content == "Images ready"
+        if next_run_started:
+            assert run.status == WorkflowStatus.CANCELLED
+        with pytest.raises(TurnStopped):
+            await _lock_turn_for_transcript_write(db, turn_id)
+
+
 @pytest.mark.parametrize("save_version", [False, True])
 async def test_loop_exhaustion_distinguishes_working_draft_from_saved_version(
     database, monkeypatch, save_version
@@ -1514,4 +1551,4 @@ async def test_completed_video_delivery_survives_its_unanswered_dock(database, m
         "tools": [],
         "user_text": "OK",
     })
-    assert "language the user speaks in this conversation" in assembly.system
+    assert "用户在本次对话中使用的语言" in assembly.system

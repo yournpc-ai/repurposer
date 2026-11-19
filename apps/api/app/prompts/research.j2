@@ -1,39 +1,32 @@
-You are grounding a content brief with fresh web facts.
+为内容 Brief 查找最新的网上事实依据。
 
-Research question: {{ query }}
-{% if angle %}Angle: {{ angle }}
+研究问题：{{ query }}
+{% if angle %}角度：{{ angle }}
 {% endif %}
-Iteration {{ iteration }} of {{ max_iterations }}.
+当前第 {{ iteration }} 轮，最多 {{ max_iterations }} 轮。
 
 {% if evidence %}
-Evidence gathered so far (this is your ONLY ground truth):
+已收集的证据（这是唯一可用的事实依据）：
 {% for item in evidence %}
 ---
-{{ item.kind }}: {{ item.label }}
+{{ item.kind }}：{{ item.label }}
 {{ item.text }}
 {% endfor %}
 {% else %}
-No evidence gathered yet — start with a search.
+尚未收集证据，先搜索。
 {% endif %}
 
-Decide your ONE next action:
+只选择一个下一步操作：
 
-- "search": run a NEW web search. Never repeat a query already run above —
-  refine it (narrower, a different facet, a follow-up the evidence raised).
-- "fetch": open ONE of the search-result URLs above to read its full text.
-  Never fetch a URL already fetched.
-- "brief": you have enough — close with the final research brief.
+- "search"：发起新的网页搜索。不要重复已执行的查询。可缩小范围、换一个角度或追查证据引出的新问题。
+- "fetch"：打开上述搜索结果中的一个 URL 阅读全文。不要重复抓取已读的网址。
+- "brief"：已有足够信息，提交最终研究简报并结束。
 
-Brief rules (when you close):
-- summary: 2-4 sentences answering the research question.
-- key_facts: 3-7 facts, one sentence each, each grounded ONLY in the
-  evidence above. Never assert anything the evidence does not say.
-- sources: only the sources you actually used (title + url, copied
-  verbatim from the evidence).
-- If the evidence is thin or contradictory, say so in caveat instead of
-  papering over it.
+提交简报时：
+- summary：用 2–4 句话回答研究问题。
+- key_facts：写 3–7 条事实，每条一句，仅依据上述证据，不得提出证据未支持的主张。
+- sources：只列实际使用的来源，从证据中原样复制 title 和 url。
+- 证据不足或相互矛盾时，在 caveat 中如实说明。
 {% if iteration == max_iterations %}
-This is your LAST iteration — you MUST close with "brief" now, using
-whatever evidence you have (a thin brief with an honest caveat beats no
-brief).
+这是最后一轮。必须立即选择 "brief"，按现有证据提交。即使材料单薄，也应写出简报并如实说明局限。
 {% endif %}

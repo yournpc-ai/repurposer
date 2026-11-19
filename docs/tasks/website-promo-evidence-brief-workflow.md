@@ -39,7 +39,7 @@
 参考记录展示的顺序是：
 
 1. 先查看官网定位、品牌视觉和核心卖点；
-2. 集中询问用途/时长、表达方式、配音与字幕语言、画幅；
+2. 一次收集创作方向（用途与表达方式）、时长、配音语言、字幕语言和画幅；
 3. 获取并实际查看多张 PNG，向用户反馈品牌理解；
 4. 按分镜生成视觉素材并再次查看；
 5. 生成和测量配音，制作字幕、音乐和音效；
@@ -109,9 +109,8 @@
 保留现有字段及合并规则，新增宣传片所需的一等槽位：
 
 ```text
-purpose                 官网首页 / 品牌介绍 / 会议 / 社媒等
+production_direction    一项完整的创作方向，例如「在官网首页用产品演示说明工作原理」
 target_seconds          目标秒数，整数
-narrative_mode          使命叙事 / 产品证据 / 知识讲解 / 混合
 narration_language      每个 Scene 的单一配音语言
 subtitle_languages      字幕语言数组
 aspect                  16:9 / 9:16 / 1:1
@@ -124,6 +123,7 @@ success_criteria        本片的验收重点
 要求：
 
 - 新槽位继续使用 `BriefSlot` 和来源优先级，不从 LLM 文本反向覆盖 `user-stated`。
+- 新问卷将方向保存为单个字符串，时长、配音语言、字幕语言、画幅各有自己的题目和答案。旧 Brief 中的 `purpose` 和 `narrative_mode` 继续可读，只给出其中一项时，提问沿用该信息。
 - `target_seconds / aspect` 与 `design.py` 已有显式约束使用同一映射，不能形成正则解析与 Brief 两套真相。
 - `subtitle_languages` 是值数组；集中回答的 `answers[]` 是另一层协议，不要混为一谈。
 - `asked` 由代码按槽位维护，支持一组问题，不把“组数”当成已经问过哪些槽位。
@@ -242,7 +242,7 @@ LLM 负责判断哪些字段缺失、为什么值得问；代码负责已知字�
 
 ```text
 BriefQuestionItem
-├── slot                 purpose / target_seconds / narrative_mode / ...
+├── slot                 production_direction / target_seconds / narration_language / subtitle_languages / aspect
 ├── question             用户可读问题
 ├── options[]            与当前单问相同的 Option
 ├── recommended_id       可选推荐项
@@ -267,12 +267,11 @@ group_digest: str | None
   "kind": "group",
   "group_digest": "server-issued-digest",
   "answers": [
-    {"slot": "purpose", "kind": "option", "option_id": "website"},
-    {"slot": "target_seconds", "kind": "option", "option_id": "60"},
-    {"slot": "narrative_mode", "kind": "option", "option_id": "mission_tech"},
-    {"slot": "narration_language", "kind": "option", "option_id": "en"},
-    {"slot": "subtitle_languages", "kind": "option", "option_id": "en"},
-    {"slot": "aspect", "kind": "option", "option_id": "16:9"}
+    {"slot": "production_direction", "kind": "freeform", "text": "官网首页，用产品演示说明工作原理"},
+    {"slot": "target_seconds", "kind": "freeform", "text": "45"},
+    {"slot": "narration_language", "kind": "option", "option_id": "1"},
+    {"slot": "subtitle_languages", "kind": "option", "option_id": "2"},
+    {"slot": "aspect", "kind": "option", "option_id": "1"}
   ]
 }
 ```
@@ -455,7 +454,7 @@ facts = 官网正文、PNG、已有 Brief 槽位、缺失槽位、当前 Creativ
 tools = analyze_brand / answer（无当前 BrandProfile）
 ```
 
-BrandProfile 落库后的下一次调用只投 `ask_user / answer`，由模型一次集中问用途、时长、表达方式、配音/字幕语言和画幅。两个 briefing 读面都不暴露 `design_video`。
+BrandProfile 落库后的下一次调用只投 `ask_user / answer`，由模型生成简短邀请并一次收集缺失项。用途与表达方式共同决定创作方向，时长、配音语言、字幕语言和画幅各自独立。两个 briefing 读面都不暴露 `design_video`。
 
 如果用户最初已经给全参数，就不调用 ask_user，直接确认 Brief 后进入下一步。
 
@@ -616,7 +615,7 @@ CURRENT READINESS:
 - Text ready: true
 - Required views ready: true
 - Brand profile ready: false
-- Brief missing slots: [purpose, target_seconds, narrative_mode, narration_language, subtitle_languages, aspect]
+- Brief missing slots: [production_direction, target_seconds, narration_language, subtitle_languages, aspect]
 REQUIRED NEXT ACTION: analyze_brand
 ```
 
@@ -662,12 +661,11 @@ LLM 判断缺失字段，服务端去重后一次返回多个 `BriefQuestionItem
   "kind": "group",
   "group_digest": "server-issued-digest",
   "answers": [
-    {"slot": "purpose", "kind": "option", "option_id": "website"},
-    {"slot": "target_seconds", "kind": "option", "option_id": "60"},
-    {"slot": "narrative_mode", "kind": "option", "option_id": "mission_tech"},
-    {"slot": "narration_language", "kind": "option", "option_id": "en"},
-    {"slot": "subtitle_languages", "kind": "option", "option_id": "en"},
-    {"slot": "aspect", "kind": "option", "option_id": "16:9"}
+    {"slot": "production_direction", "kind": "freeform", "text": "官网首页，用产品演示说明工作原理"},
+    {"slot": "target_seconds", "kind": "freeform", "text": "45"},
+    {"slot": "narration_language", "kind": "option", "option_id": "1"},
+    {"slot": "subtitle_languages", "kind": "option", "option_id": "2"},
+    {"slot": "aspect", "kind": "option", "option_id": "1"}
   ]
 }
 ```

@@ -36,7 +36,6 @@ import type { ChatMention } from "@/lib/mentions"
 // The frame vocabulary's single seat is chatStreamFrames.ts (Phase 3 Batch
 // A test seam) — re-exported here so existing import sites stay put.
 export type {
-  QuestionPreviewPayload,
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
 export type { ActivityFramePayload } from "@/components/chat/timeline/types"
@@ -44,7 +43,6 @@ import type { ActivityFramePayload, BriefAnswerItem } from "@/components/chat/ti
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityRowFramePayload,
-  QuestionPreviewPayload,
   RowAppendPayload,
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
@@ -97,14 +95,6 @@ export interface StreamChatOptions {
    * the previous label — reset to the base label. The
    * `"phase" in payload` check separates the clear from a bare keepalive. */
   onThinking?: (payload: ThinkingPayload) => void
-  /** The ask verdict's pill payload the moment its object closes in the
-   * stream (2026-09-09 用户拍板——「选项该和这句话一起来」; object-level
-   * trust: the ask object's prose key streams first, so question/options/
-   * default_path are complete when the echo ends — the verdict's brief tail
-   * is still generating). Preview-dock the pill from this frame; the
-   * terminal envelope stays authoritative (envelope always wins), and a
-   * flipped / failed turn rolls the preview back. */
-  onQuestionPreview?: (payload: QuestionPreviewPayload) => void
   /** A user-facing interim_prose (ADR-109 言语座位通用化): prose riding ANY
    * non-terminal call — a phase-turn expectation sentence or a grounded
    * result statement — the FULL text in one frame (quiet iterations stream
@@ -219,7 +209,6 @@ function streamTurn<T>(
     onTurnStarted,
     onDelta,
     onThinking,
-    onQuestionPreview,
     onInterimProse,
     onActivity,
     onCandidates,
@@ -230,7 +219,6 @@ function streamTurn<T>(
     onTurnStarted?: (turnId: string) => void
     onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
-    onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     onInterimProse?: StreamChatOptions["onInterimProse"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
@@ -309,9 +297,6 @@ function streamTurn<T>(
             break
           case "thinking":
             onThinking?.(frame.payload)
-            break
-          case "question_preview":
-            onQuestionPreview?.(frame.payload)
             break
           case "interim_prose":
             onInterimProse?.(frame.text, frame.at, frame.turnId, frame.messageId, frame.seq)
@@ -402,7 +387,6 @@ export function streamAnswer<T>(
     signal?: AbortSignal
     onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
-    onQuestionPreview?: StreamChatOptions["onQuestionPreview"]
     /** The answer continuation CAN carry interim_prose prose (a pick that
      * resumes into a design beat speaks its expectation sentence first) —
      * the chat turn's segmentation law applies verbatim. */
@@ -428,12 +412,12 @@ export function streamAnswer<T>(
  * `e.name === "AbortError"`). */
 export function streamChat<T>(
   body: ChatTurnBody,
-  { signal, onTurnStarted, onDelta, onThinking, onQuestionPreview, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
+  { signal, onTurnStarted, onDelta, onThinking, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate }: StreamChatOptions,
 ): Promise<T> {
   return streamTurn(
     `${API_URL}/api/v1/chat`,
     body,
     { completed: "turn.completed", failed: "turn.failed" },
-    { signal, onTurnStarted, onDelta, onThinking, onQuestionPreview, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate },
+    { signal, onTurnStarted, onDelta, onThinking, onInterimProse, onActivity, onCandidates, onRowAppend, onRowUpdate },
   )
 }

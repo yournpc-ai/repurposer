@@ -28,7 +28,7 @@ class NarrationDraftError(ValueError):
 
 
 class SceneNarrationUpdate(BaseModel):
-    """One model decision about one Scene; mechanical facts stay server-owned."""
+    """模型针对一个场景作出的一项决定。时序等实测事实由服务端负责。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -174,6 +174,44 @@ def _analysis_fact(snapshot) -> dict[str, Any]:
     return reference
 
 
+def _project_cues(fact, scene, timebase: int) -> list[dict[str, int]]:
+    duration = fact.get("source_duration_ticks")
+    if fact.get("source_timebase") != SOURCE_TIMEBASE or not isinstance(duration, int) or duration <= 0:
+        raise NarrationDraftError(f"Scene {scene.scene_id} has invalid original audio timing")
+    if source_ticks_to_output_ticks(duration, timebase) > scene.range.duration:
+        raise NarrationDraftError(f"Scene {scene.scene_id} would truncate narration")
+    outputs = []
+    previous_end = 0
+    for cue in fact.get("cues") or []:
+        source = cue.get("source_range") or {}
+        start, end = source.get("start"), source.get("end")
+        if not isinstance(start, int) or not isinstance(end, int) or not previous_end <= start < end <= duration:
+            raise NarrationDraftError(f"Scene {scene.scene_id} has invalid or overlapping source cues")
+        previous_end = end
+        start = scene.range.start + source_ticks_to_output_ticks(start, timebase)
+        end = scene.range.start + source_ticks_to_output_ticks(end, timebase)
+        if end <= start or end > scene.range.end:
+            raise NarrationDraftError(f"Scene {scene.scene_id} has a cue outside its timeline window")
+        outputs.append({"start": start, "end": end})
+    if not outputs:
+        raise NarrationDraftError(f"Scene {scene.scene_id} has no complete narration cues")
+    return outputs
+
+
+def reproject_narration_timing(draft: dict[str, Any]) -> None:
+    """Rebase derived positions from immutable source ticks after a draft edit."""
+    content = CompositionContent.model_validate(draft["content"])
+    scenes = {scene.scene_id: scene for scene in content.scenes}
+    facts = current_narration_facts(draft)
+    for fact in facts:
+        scene = scenes[fact["scene_id"]]
+        for cue, output in zip(fact["cues"], _project_cues(fact, scene, content.settings.timebase), strict=True):
+            cue["output_range"] = output
+        fact["scene_range"] = scene.range.model_dump(mode="json")
+        fact["target_duration_seconds"] = scene.range.duration / content.settings.timebase
+    draft["design"]["narrations"] = facts
+
+
 async def update_scene_narration(
     db,
     *,
@@ -257,24 +295,16 @@ async def update_scene_narration(
         )
     _retime_scene(content, update.scene_id, target_ticks)
     scene = next(scene for scene in content.scenes if scene.scene_id == update.scene_id)
-    cues = []
-    for sentence in payload.sentences:
-        start = scene.range.start + source_ticks_to_output_ticks(
-            sentence.start_tick, content.settings.timebase
-        )
-        end = scene.range.start + source_ticks_to_output_ticks(
-            sentence.end_tick, content.settings.timebase
-        )
-        if end <= start or end > scene.range.end:
-            raise NarrationDraftError("a narration cue escapes its real audio window")
-        cues.append({
+    cues = [
+        {
             "cue_id": f"cue_{update.scene_id}_{sentence.sentence_id}",
             "sentence_id": sentence.sentence_id,
             "text": sentence.text,
             "text_range": {"start": sentence.text_start, "end": sentence.text_end},
             "source_range": {"start": sentence.start_tick, "end": sentence.end_tick},
-            "output_range": {"start": start, "end": end},
-        })
+        }
+        for sentence in payload.sentences
+    ]
     fact = {
         "scene_id": update.scene_id,
         "text_digest": speech_text_digest(speech.text),
@@ -293,6 +323,8 @@ async def update_scene_narration(
         "analysis_ref": analysis_ref,
         "analysis": analysis,
     }
+    for cue, output in zip(cues, _project_cues(fact, scene, content.settings.timebase), strict=True):
+        cue["output_range"] = output
     return content.model_dump(mode="json"), fact
 
 
@@ -315,13 +347,30 @@ def assert_narration_ready_for_score(draft: dict[str, Any]) -> None:
         fact = facts.get(scene.scene_id)
         if fact is None or (fact.get("alignment") or {}).get("status") != "READY":
             raise NarrationDraftError(f"Scene {scene.scene_id} has no READY narration fact")
-        if int(fact["source_duration_ticks"]) <= 0 or not fact.get("cues"):
-            raise NarrationDraftError(f"Scene {scene.scene_id} has no complete narration cues")
-        required = source_ticks_to_output_ticks(
-            int(fact["source_duration_ticks"]), content.settings.timebase
+        expected = _project_cues(fact, scene, content.settings.timebase)
+        if fact.get("scene_range") != scene.range.model_dump(mode="json") or expected != [
+            cue.get("output_range") for cue in fact["cues"]
+        ]:
+            raise NarrationDraftError(f"Scene {scene.scene_id} has stale narration timing; confirm its Scene timing")
+
+    constraints = (draft.get("design") or {}).get("user_constraints") or {}
+    target_seconds = constraints.get("target_seconds")
+    if target_seconds is not None:
+        settings = content.settings
+        actual_frames = ticks_to_frames(
+            max((scene.range.end for scene in content.scenes), default=0),
+            settings.timebase, settings.fps.num, settings.fps.den,
         )
-        if scene.range.duration < required:
-            raise NarrationDraftError(f"Scene {scene.scene_id} would truncate narration")
+        expected_frames = ticks_to_frames(
+            seconds_to_ticks(float(target_seconds), settings.timebase),
+            settings.timebase, settings.fps.num, settings.fps.den,
+        )
+        if actual_frames != expected_frames:
+            actual = max(scene.range.end for scene in content.scenes) / settings.timebase
+            raise NarrationDraftError(
+                f"the retimed draft is {actual:g}s but the user fixed {float(target_seconds):g}s; "
+                "finish model-directed Scene retiming before scoring"
+            )
 
 
 __all__ = [

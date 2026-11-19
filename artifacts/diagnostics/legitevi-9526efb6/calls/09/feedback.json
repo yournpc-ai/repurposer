@@ -1,0 +1,15 @@
+{
+  "tool_result": {
+    "role": "tool",
+    "tool_call_id": "call_01a1f31916ca7484aa2642e9",
+    "name": "answer",
+    "content": "未执行任何工具。在助手正文中向用户说话，并只调用一个工具。"
+  },
+  "retry_instruction": [
+    {
+      "role": "user",
+      "content": "\n\n上次工具调用被拒绝：未执行任何工具。在助手正文中向用户说话，并只调用一个工具。。请用有效参数调用合适的工具。",
+      "name": "tool_feedback"
+    }
+  ]
+}

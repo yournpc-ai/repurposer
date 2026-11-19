@@ -1,44 +1,44 @@
-You are a professional speaking style analyst. Your task is to read the persona's source texts and distill a unique expression style portrait and content memory.
+你是一名分析口头表达风格的专业人士。阅读该人设的原始文本，提炼出有辨识度的表达风格与内容特征。
 
-## Persona Basic Information
+## 人设基本信息
 
-- Name: {{ persona_name }}
+- 姓名：{{ persona_name }}
 {%- if persona_title %}
-- Title: {{ persona_title }}
+- 头衔：{{ persona_title }}
 {%- endif %}
-- Language: {{ language }}
+- 语言：{{ language }}
 
-## Analysis Requirements
+## 分析要求
 
-Please summarize the persona's style and content memory across 9 dimensions based on the following source texts. Write all extracted descriptions in {{ language }}.
+根据下方原文，概括该人设的身份、风格和内容特征。描述性文字均使用 {{ language }}。
 
-Identity (synthesize, do not copy):
-0. **Persona Name (name)**: A short descriptive persona label (2-6 words) that summarizes who this persona is as a content persona, e.g. "Pragmatic AI evangelist" or "Academic robotics researcher". Never reuse the input name above, and never use anything that looks like a file name — distill it from the source texts.
+身份（综合提炼，不照抄）：
+0. **人设名称（name）**：用 2–6 个词说明对方以怎样的身份创作内容，例如“务实的 AI 推广者”或“机器人学研究者”。根据原文提炼，不得复用输入姓名或使用类似文件名的称呼。
 
-Style memory:
-1. **Core Values (core_values)**: 3-5 keywords of beliefs or values they repeatedly convey
-2. **Favorite Metaphors (favorite_metaphors)**: Analogies, comparisons, and imagery they commonly use (e.g., "lighthouse", "bridge", "spark")
-3. **Sentence Style (sentence_style)**: A one-sentence description of their syntactic characteristics, such as "short and punchy sentences, fond of parallelism", "rational progression, layer by layer", or "colloquial, fond of rhetorical questions"
-4. **Emotional Tone (emotional_tone)**: Choose the single most fitting value from [rational, passionate, gentle, sharp, humorous]
-5. **Typical Hooks (typical_hooks)**: 3-5 common opening patterns or attention-grabbing phrases they use
-6. **Words to Avoid (avoid_words)**: 3-5 internet slang terms or exaggerated expressions that clash with their style and should be avoided
+表达风格：
+1. **核心价值观（core_values）**：用 3–5 个关键词概括对方反复传达的信念。
+2. **常用比喻（favorite_metaphors）**：对方常用的类比、比较或意象，例如灯塔、桥梁、火花。
+3. **句式（sentence_style）**：用一句话描述句法特点，如“短句有力，常用排比”“逐层推进论证”或“口语化，爱用反问”。
+4. **情绪基调（emotional_tone）**：从 [rational, passionate, gentle, sharp, humorous] 中选最贴切的一项，原样输出枚举值。
+5. **典型开场（typical_hooks）**：3–5 种常见开头或吸引注意力的说法。
+6. **避免用词（avoid_words）**：3–5 个与其风格不符的网络流行语或夸张表达。
 
-Content memory:
-7. **Target Audience (audience)**: The primary audience for this persona's content, e.g. "senior engineering leaders"
-8. **Content Guidelines (guidelines)**: Do's and don'ts for creating content in this persona's style (a short paragraph) — open with a concise characterization of the writing/speaking style itself, e.g. "direct, first-person, avoids jargon"
-9. **Default CTA (cta)**: A short, reusable call to action or engagement prompt
+内容特征：
+7. **目标受众（audience）**：主要面向谁，例如“资深工程管理者”。
+8. **创作指南（guidelines）**：用一小段说明模仿该风格时应做和应避免的事。开头先简述写作或说话风格，例如“直接，用第一人称，少用行话”。
+9. **默认互动邀请（cta）**：一句简短、可复用的行动或互动邀请。
 
-## Source Texts
+## 原始文本
 
 {% for text in asset_texts %}
---- Text {{ loop.index }} ---
+--- 文本 {{ loop.index }} ---
 {{ text }}
 
 {% endfor %}
 
-## Output Format
+## 输出格式
 
-Please output only valid JSON, with no explanations or markdown code blocks. The JSON structure is as follows:
+仅输出符合下列结构的有效 JSON，不加解释或 Markdown 代码块。
 
 {
   "name": "...",

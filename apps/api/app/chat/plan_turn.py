@@ -47,8 +47,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from app.tools.video.design import CompositionDesignVideoArgs
 
-from app.agents.candidate_correction import CandidateRejected, CandidateScope
+from app.agents.candidate_correction import CandidateRejected, CandidateScope, RestoredCandidate
 from app.agents.tool_loop import (
+    RoundAssembly,
     TerminalRefusal,
     ToolObservation,
 )
@@ -60,6 +61,7 @@ from app.agents.tool_loop import (
 from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.intent import intent_router
+from app.providers.llm.base import LLMError
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
 from app.chat.service import (
@@ -176,10 +178,12 @@ class PlanTurn:
         self.turn_id = turn_id
         self.media_journey: dict | None = None
         self.media_state: dict | None = None
+        self.media_score_delivered = False
         self.media_visual_results: list[dict] = []
         self.media_resume_pending: PendingPlan | None = None
         self.media_start_blocker: str | None = None
         self.media_start_rejections = 0
+        self.media_image_blocked_scene: int | None = None
         self.conversation_id = UUID(str(conversation.id))
         self.project = project
         self.request = request
@@ -439,40 +443,27 @@ class PlanTurn:
             # plan talk comes after the read, never before. (The line lands
             # as its own interim_prose segment — tool_loop's iteration-0 seat.)
             material_pending_line = (
-                f"Material status: {processing_count} uploaded file(s) are "
-                "STILL PROCESSING — their content is not readable yet. If "
-                "this turn's answer depends on their content, call "
-                "get_understanding: the read waits until the content lands "
-                "(it never returns while the material is still processing), "
-                "so the answer can ground itself this turn. Before that call, "
-                "say ONLY a short waiter line in the user's language — you "
-                "have their file, you're going to look at it, the first look "
-                "takes a few minutes. You haven't seen the content, so the "
-                "line carries NO proposals, NO direction suggestions, NO "
-                "question — the plan talk comes after the read, never before."
+                f"素材状态：{processing_count} 个上传文件仍在处理，暂时无法读取内容。若本轮答复取决于文件内容，调用 get_understanding，它会等到素材处理完才返回，本轮即可据此回答。"
+                f"调用前只用用户的语言简短说明已收到文件，将先查看，首次查看需要几分钟。尚未看到内容时不提方案、不推荐方向、不提问，读完再讨论方案。"
             )
         elif failed_count:
             material_pending_line = (
-                f"Material status: {failed_count} uploaded file(s) FAILED "
-                "processing — their content will not become readable."
+                f"素材状态：{failed_count} 个上传文件处理失败，内容将无法读取。"
             )
         from app.chat.readiness import infer_task_kind
         if material_pending_line is None and infer_task_kind(text) == "website_promo":
             web_assets = [asset for asset in assets if asset.type == AssetType.WEB_PAGE]
             if any(asset.processing_status == AssetStatus.FAILED for asset in web_assets):
                 material_pending_line = (
-                    "Website capture failed for this URL. The page is not readable evidence yet; "
-                    "do not infer a brand direction or ask creative questions."
+                    "此 URL 的网站采集失败。页面尚不能用作可读证据，不要推断品牌方向或询问创意偏好。"
                 )
             elif any(asset.processing_status in {AssetStatus.PENDING, AssetStatus.PROCESSING} for asset in web_assets):
                 material_pending_line = (
-                    "Website capture is pending for this URL. "
-                    "The page is not readable evidence yet."
+                    "此 URL 的网站采集仍在等待，页面尚不能用作可读证据。"
                 )
             else:
                 material_pending_line = (
-                    "Website capture exists for this URL. Prepare and verify its frozen body text "
-                    "and required PNG views before treating them as readable evidence."
+                    "此 URL 已有网站采集结果。请先准备并核实已固定的正文和所需 PNG 视图，再作为可读证据使用。"
                 )
 
         recent_lines: list[str] = []
@@ -716,6 +707,11 @@ class PlanTurn:
         PERCEPTION call short-circuits the seats above: reads are dispatched
         to the family registry and ride back as a ToolObservation (the loop
         iterates — 终态工具一调即停 covers the terminal tools only)."""
+        if self.media_score_delivered:
+            if name != "answer":
+                return "The score was delivered. Close this preparation with answer."
+            await self._resolve_deferred()
+            return None
         if self.media_journey is not None and name == "design_video" and getattr(params, "save", False):
             return "This staged preparation cannot save a Composition."
         if self.media_state is not None:
@@ -784,7 +780,9 @@ class PlanTurn:
         if self.media_state is not None and isinstance(result, ToolObservation):
             from app.chat.media_journey import dock_media_observation
 
-            result = await dock_media_observation(self, name, result)
+            result = await dock_media_observation(
+                self, name, result, working_draft=getattr(params, "_working_draft", None),
+            )
             if result.stop_after_observation:
                 await self._resolve_deferred()
         if result is None:
@@ -1000,6 +998,8 @@ class PlanTurn:
         if stopped is not None:
             return stopped
         self._video_call_counter += 1
+        if self.media_state is not None and self.media_state["phase"] == "audio" and params.scene:
+            params._reviewed_scene_images = self.media_state["approved_images"]
         read, feedback = await design_video_seat(
             project=self.project,
             args=params,
@@ -1013,6 +1013,19 @@ class PlanTurn:
                 if self.media_resume_pending is not None else None
             ),
         )
+        if self.media_state is not None and self.media_state["phase"] == "audio":
+            # Keep the scene from the actual failed write. A successful retry clears it.
+            self.media_image_blocked_scene = None
+            if isinstance(feedback, WorkingDraftRejected) and params.scene and any(
+                issue.get("loc") == ["scene", "snapshot_id"]
+                for issue in feedback.errors
+            ):
+                scenes = (feedback.arguments.get("content") or {}).get("scenes") or []
+                ordered = sorted(scenes, key=lambda scene: scene.get("range", {}).get("start", 0))
+                self.media_image_blocked_scene = next((
+                    index for index, scene in enumerate(ordered, start=1)
+                    if scene["scene_id"] == params.scene.scene_id
+                ), None)
         if read is None:
             if isinstance(feedback, ToolObservation) and not feedback.ok:
                 self._video_design_stopped = feedback
@@ -1385,7 +1398,7 @@ class PlanTurn:
             try:
                 group_items = website_promo_question_items(params.items, merged_brief)
             except ValueError as exc:
-                return str(exc)
+                return f"{exc}. Correct the form data privately and keep the invitation to the user."
             group_digest = question_group_digest(group_items, merged_brief)
         elif params.items:
             try:
@@ -1395,16 +1408,6 @@ class PlanTurn:
             if not group_items:
                 return "every requested Brief field is already present; do not re-ask it"
             group_digest = question_group_digest(group_items, merged_brief)
-        # 空散文护栏 (answer 裸调用护栏的对称座): an LLM ask without its
-        # framing speech is NEVER legitimate (schema's empty-prose tolerance
-        # exists for code-composed questions only) — reject it into the
-        # repair iteration instead of docking a silent blocking card.
-        if not prose.strip():
-            return (
-                "an ask never docks without its framing speech — speak what "
-                "you understood and your lean as your message text, then "
-                "call ask_user."
-            )
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
@@ -1644,7 +1647,8 @@ class PlanTurn:
         user's declared material)."""
         if self.media_state is not None:
             message = await _create_message(
-                self.db, self.conversation_id, "assistant", self._media_stop_text()
+                self.db, self.conversation_id, "assistant", self._media_stop_text(),
+                intent={"media_journey": {**self.media_journey, "state": "blocked"}},
             )
             self.outcome = (message, None, self.settled_pending, [])
             return None
@@ -1685,6 +1689,12 @@ class PlanTurn:
     def _media_stop_text(self) -> str:
         zh = str(self.project.language or "").startswith("zh")
         phase = self.media_state["phase"]
+        if self.media_image_blocked_scene is not None and not self.media_start_blocker:
+            scene = self.media_image_blocked_scene
+            return (
+                f"第 {scene} 幕的画面未能写入时间线，制作已停在这一步。"
+                if zh else f"The image for scene {scene} could not be added to the timeline. Preparation stopped there."
+            )
         if phase in {"images", "images_blocked"}:
             content = "分镜图片尚未全部准备并通过审阅，本次停在图片阶段。" if zh else (
                 "Some scene images are still missing or unapproved. Preparation stopped at images."
@@ -1721,7 +1731,10 @@ class PlanTurn:
             or self.media_start_blocker is not None
         ):
             content = self._media_stop_text()
-            message = await _create_message(self.db, self.conversation_id, "assistant", content)
+            message = await _create_message(
+                self.db, self.conversation_id, "assistant", content,
+                intent={"media_journey": {**self.media_journey, "state": "blocked"}},
+            )
             return message, None, self.settled_pending, []
         if result.no_progress_tool is not None:
             video_read = self._video_presentation_pending
@@ -1878,6 +1891,8 @@ async def run_plan_turn(
     turn_id: UUID | None = None,
     media_journey: dict | None = None,
     media_resume_pending: PendingPlan | None = None,
+    media_resume_draft: RestoredCandidate | None = None,
+    media_resume_narration: list[dict] | None = None,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1899,6 +1914,7 @@ async def run_plan_turn(
     )
     from app.chat.context import conversation_messages
     from app.chat.prompts import assemble_video_round
+    from app.chat.speech_language import conversation_speech_language
     from app.chat.video_turn_seats import (
         prepare_bound_skill_context,
         requested_video_production,
@@ -1916,7 +1932,10 @@ async def run_plan_turn(
 
     turn.media_journey = media_journey or initial_media_journey(opening)
     if turn.media_journey is not None:
-        turn.media_visual_results = await visual_results(db, project.id)
+        turn.media_visual_results = await visual_results(
+            db, project.id, opening_id=turn.media_journey["opening_id"],
+            draft_id=media_resume_draft.candidate_id if media_resume_draft else None,
+        )
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path
@@ -1964,7 +1983,8 @@ async def run_plan_turn(
     conversation_context = (
         ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
                             turn_id=turn_id, skill=getattr(turn, "skill", None),
-                            resume_turn=media_resume_pending is not None)
+                            resume_turn=media_resume_pending is not None,
+                            resume_draft=media_resume_draft)
         if turn_id is not None else None
     )
     turn._conversation_context = conversation_context
@@ -1975,6 +1995,20 @@ async def run_plan_turn(
     turn.infer_kwargs["pending_question"] = None
 
     def assemble_round(**facts):
+        if turn.media_score_delivered:
+            return RoundAssembly(
+                tools=[tool for tool in facts["tools"] if tool.name == "answer"],
+                system="阅读已固定的电子配乐及实测音频数据。音频已在 Chat 中，用 answer 结束本轮。尚未渲染视频。",
+                include_project_context=False, allow_interim_prose=False,
+                observation_tools=frozenset({"prepare_music"}),
+            )
+        target_hint = mention_target or turn._video_target_ambiguity
+        if media_resume_draft is not None:
+            from app.chat.media_journey import MediaDraftUnavailable
+
+            if not any(draft.candidate_id == media_resume_draft.candidate_id for draft in facts["drafts"]):
+                raise MediaDraftUnavailable("The settled Run's current draft failed identity verification")
+            target_hint = {"draft_id": media_resume_draft.candidate_id}
         current_pending = turn._current_pending()
         source_text = (
             request.message if infer_task_kind(request.message) == "website_promo"
@@ -1986,15 +2020,15 @@ async def run_plan_turn(
             **facts,
             "media_journey": turn.media_journey,
             "media_visual_results": turn.media_visual_results,
+            "settled_narration": media_resume_narration,
             "mode": "plan",
             "skill": turn.skill,
             "user_text": request.message,
             "source_text": source_text,
             "video_confirmation": confirmation,
-            "ui_language": getattr(conversation, "ui_language", None) or getattr(project, "language", None) or "en",
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,
-            "target_hint": mention_target or turn._video_target_ambiguity,
+            "target_hint": target_hint,
             "material_pending": bool(urls_in_text(request.message) or request.attachments or request.mentions),
             "creative_state": creative_state_for_pending(current_pending),
             "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
@@ -2003,31 +2037,63 @@ async def run_plan_turn(
             (assembly.caller_state or {}).get("video_target") or {}
         ).get("base_ref")
         turn.media_state = (assembly.caller_state or {}).get("media_state")
+        if turn.media_state and turn.media_state["phase"] == "audio":
+            from dataclasses import replace
+            from app.chat.media_journey import finish_narration_batch
+            async def finish(observations):
+                result = await finish_narration_batch(turn, observations)
+                if result and result.stop_after_observation:
+                    await turn._resolve_deferred()
+                return result
+            assembly = replace(assembly, tools=[
+                replace(tool, batchable=True, finish_batch=finish) if tool.name == "prepare_narration" else tool
+                for tool in assembly.tools
+            ])
         return assembly
 
-    result = await intent_router.call_loop(
-        turn.execute,
-        dialogue=conversation_messages(recent or []),
-        tools=[*tools_for_bound_skill(intent_router.tools, turn.skill), *context_tools],
-        round_assembler=assemble_round,
-        on_delta=on_delta,
-        on_reasoning=on_reasoning,
-        on_tool_call=on_tool_call,
-        on_tool_ready=on_tool_ready,
-        on_interim_prose=interim_prose_hook,
-        on_loop_event=on_loop_event,
-        should_stop_rejection=video_rejection_stop,
-        bare_rejection_feedback=lambda: (
-            str(turn._video_target_ambiguity)
-            if turn._video_target_ambiguity is not None else None
-        ),
-        refresh_context=context_reader,
-        restore_context=conversation_context.restore if conversation_context else None,
-        on_context_event=conversation_context.record if conversation_context else None,
-        candidate_scope=CandidateScope(owner_id=str(user_id), conversation_id=str(turn.conversation_id)),
-        **turn.infer_kwargs,
-    )
-    outcome = await turn.finish(result)
+    speech_language = conversation_speech_language(recent or [])
+    try:
+        result = await intent_router.call_loop(
+            turn.execute,
+            dialogue=conversation_messages(recent or []),
+            speech_language_hint=speech_language,
+            tools=[*tools_for_bound_skill(intent_router.tools, turn.skill), *context_tools],
+            round_assembler=assemble_round,
+            on_delta=on_delta,
+            on_reasoning=on_reasoning,
+            on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready,
+            on_interim_prose=interim_prose_hook,
+            on_loop_event=on_loop_event,
+            should_stop_rejection=video_rejection_stop,
+            bare_rejection_feedback=lambda: (
+                str(turn._video_target_ambiguity)
+                if turn._video_target_ambiguity is not None else None
+            ),
+            refresh_context=context_reader,
+            restore_context=conversation_context.restore if conversation_context else None,
+            on_context_event=conversation_context.record if conversation_context else None,
+            candidate_scope=CandidateScope(owner_id=str(user_id), conversation_id=str(turn.conversation_id)),
+            **turn.infer_kwargs,
+        )
+    except LLMError:
+        if turn.media_state is None:
+            raise
+        await turn._resolve_deferred()
+        if turn.media_score_delivered and turn.outcome is not None:
+            # A closing model call cannot undo a measured and delivered score.
+            outcome = turn.outcome
+        else:
+            zh = (speech_language or getattr(conversation, "ui_language", None) or "").startswith("zh")
+            text = ("制作助手暂时无法继续，素材准备已暂停。" if zh else
+                    "Media preparation paused because the editing assistant is unavailable.")
+            message = await _create_message(
+                db, conversation.id, "assistant", text,
+                intent={"media_journey": {**turn.media_journey, "state": "blocked"}},
+            )
+            outcome = (message, None, turn.settled_pending, [])
+    else:
+        outcome = await turn.finish(result)
     if (
         outcome[0] is not None
         and turn_id is not None

@@ -1011,7 +1011,7 @@ _CAPTURE_ISSUE_ERROR_CAP = 300
 
 
 class CaptureTarget(BaseModel):
-    """A request-local element or bounded collection bound to real DOM evidence."""
+    """单次请求中的元素或限定集合，须有真实 DOM 证据。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1043,7 +1043,7 @@ class CaptureTarget(BaseModel):
 
 
 class CaptureAction(BaseModel):
-    """One fixed server-implemented action; all fields are data, never code."""
+    """服务端提供的固定操作。所有字段都只传数据，不传代码。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1120,7 +1120,7 @@ class CaptureOutput(BaseModel):
 
 
 class CaptureRequest(BaseModel):
-    """The only model-facing final webpage capture request."""
+    """提交给模型的最终网页采集请求，只使用这一种结构。"""
 
     model_config = ConfigDict(extra="forbid")
 

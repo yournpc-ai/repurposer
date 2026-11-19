@@ -12,27 +12,15 @@ metadata:
     - captions
 ---
 
-## Talking-head motion-video method
+## 竖屏口播视频的创作方法
 
-Build the first version from the user's real VIDEO recording. The canvas is
-9:16. Preserve the speaker and the recording's original sound unless the user
-explicitly changes either. Use the available source windows, one concise
-native title, and timed native captions to make the spoken content readable;
-graphic accents support the speaker rather than replacing the footage.
+用用户的真实 VIDEO 录像设计首版，画幅为 9:16。除非用户明确要求变更，否则保留讲者画面及录音原声。根据可用的源片段，使用一个简洁的原生标题及定时原生字幕，让口播内容易于阅读。图形强调应辅助讲者，保留原始录像。
 
-Choose a clear opening beat, a small number of readable caption phrases, and
-restrained emphasis that follows the actual material. Keep on-screen copy
-faithful to the recording and the user's instruction. Do not invent a quote,
-timecode, person, result, or claim.
+选择明确的开场节拍，将字幕分成少量易读短语，并依据实际素材克制地安排强调。画面文案应忠实于录音和用户要求。不要编造引语、时间码、人物、结果或主张。
 
-### Inputs and boundaries
+### 输入与边界
 
-- Requires at least one accessible, processed real VIDEO asset, or an existing
-  mixed video work being redrafted through the ordinary design contract.
-- Does not require remotion-project, draw-2d, a website capture, generated
-  images, or a READY source-aligned NarrationAlignment.
-- The first version is native video/text composition data. It does not start a
-  Run, synthesize narration, generate media, or load this Skill during later
-  revisions or production.
-- If no real recording is available, report that input requirement instead of
-  substituting an avatar, generated footage, or a website film.
+- 至少需要一份处理完成且可读取的真实 VIDEO 素材，或一部正通过常规设计流程重写的已有混剪作品。
+- 无需 remotion-project、draw-2d、网页采集、生成图片或 READY 状态的源音频 NarrationAlignment。
+- 首版为原生视频和文字合成数据，不启动 Run、合成旁白或生成媒体。后续修订和制作不加载本 Skill。
+- 没有真实录像时，说明需要这项输入，不得改用虚拟人、生成视频或网站宣传片代替。

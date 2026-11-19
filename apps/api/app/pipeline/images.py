@@ -26,13 +26,10 @@ logger = structlog.get_logger()
 def _quote_image_prompt(quote: str, attribution: str, event_name: str | None = None) -> str:
     """Build a visual prompt for MiniMax image-01 to illustrate a quote card."""
     base = (
-        "A minimalist, elegant quote card design for social media. "
-        "Clean typography centered on a subtle gradient background. "
-        "The card prominently displays an inspiring quote. "
-        "Modern, professional, no clutter, high contrast readable text. "
+        "为社交媒体设计一张简洁雅致的引言卡。使用柔和的渐变背景，将引语以清晰的字体居中突出展示。画面现代、专业、简洁，文字与背景对比鲜明。"
     )
-    quote_ctx = f'Quote: "{quote}" — {attribution}'
-    event_ctx = f" Event context: {event_name}." if event_name else ""
+    quote_ctx = f"引语：“{quote}”　署名：{attribution}"
+    event_ctx = f" 活动背景：{event_name}。" if event_name else ""
     return base + quote_ctx + event_ctx
 
 
@@ -110,15 +107,13 @@ async def generate_clip_cover_image(
     costs for every clip. (Public helper — the outputs router calls it.)
     """
     prompt = (
-        "A minimalist, elegant vertical cover image for a short knowledge video. "
-        "Clean composition with subtle depth, professional typography-ready background, "
-        "no text, no UI, no clutter. Suitable as a 9:16 video thumbnail. "
+        "为知识短视频设计一张简洁雅致的竖版封面。构图干净，层次细腻，背景适合专业排版，不含文字、界面或多余元素。适合作为 9:16 视频缩略图。"
     )
     context_parts = []
     if topic:
-        context_parts.append(f"Topic: {topic}")
+        context_parts.append(f"主题：{topic}")
     if title:
-        context_parts.append(f"Title: {title}")
+        context_parts.append(f"标题：{title}")
     if context_parts:
         prompt += " ".join(context_parts)
 

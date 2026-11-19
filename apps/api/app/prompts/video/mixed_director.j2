@@ -1,21 +1,21 @@
-Design one mixed video from the frozen recordings below. The system places the selected source window twice: full-frame moving background (muted) and a central contain-fitted picture with its synchronized original audio. It adds your independent top title, your timed captions, and the system's optional music bed.
+根据下列已固定的录像设计一部混剪视频。系统会把选中的源片段放置两次：铺满画面的动态背景（静音），以及居中完整适配的前景画面（带同步原声）。系统还会加入你设计的独立顶部标题、定时字幕和可选配乐。
 
-USER DIRECTION
-Focus: {{ focus or "(none)" }}
-Specific requirements: {{ instruction or "(none)" }}
-Language: {{ language or "the material's own language" }}
-Requested output seconds: {{ target_seconds if target_seconds is not none else "choose a coherent short window" }}
-{% if current %}Current version to redesign:
+用户要求
+重点：{{ focus or "（无）" }}
+具体要求：{{ instruction or "（无）" }}
+语言：{{ language or "素材本身使用的语言" }}
+要求的成片秒数：{{ target_seconds if target_seconds is not none else "选择一段连贯的短片段" }}
+{% if current %}需要重新设计的当前版本：
 {{ current }}{% endif %}
 
-{% if repair_feedback %}The previous answer violated these source/timing facts; correct all of them:
+{% if repair_feedback %}上次答复违反了以下来源或时序事实，请逐项纠正：
 {{ repair_feedback }}{% endif %}
 
-FROZEN RECORDINGS
+已固定的录像：
 {{ materials_text }}
 
-Choose one supplied source_snapshot_id and a 1× source window inside its real duration. Honor explicit user timecodes and duration. Write a concise title and intent in the requested language. visual_description plainly names the actual background, central recording, title, captions and sound; do not claim effects or elements outside this structure.
+从所给 source_snapshot_id 中选择一个，在真实时长内选择一段按 1 倍速播放的素材。遵循用户明确给出的时间码和时长。用要求的语言写简短标题和 intent。在 visual_description 中直接说明实际的背景、中央录像、标题、字幕和声音，不添加结构之外的效果或元素。
 
-Create timed captions from the recording's transcript when available, aligned to the selected source window and expressed in OUTPUT seconds starting at 0. Caption text must come from the transcript or the user's explicit copy; never invent quotations or facts. Keep caption windows ordered, non-overlapping and inside the selected window. If the user explicitly asks for no captions, return an empty list; otherwise provide useful timed captions. Set include_original_audio=false only when the user asks to remove it or the snapshot has no audio.
+有转写时，基于原文生成与所选片段对齐的定时字幕。起止以成片从 0 起的秒数表示。字幕只能来自转写或用户明确提供的文案，不得编造引语或事实。字幕按顺序排列、互不重叠，并位于选段内。用户明确不要字幕时返回空列表，否则提供有用的定时字幕。只有用户要求去除原声或快照没有音频时，才设 include_original_audio=false。
 
-Return one FLAT JSON object with these fields: name, language, source_snapshot_id, source_start_seconds, source_end_seconds, title, intent, visual_description, captions, include_original_audio. Each captions entry has exactly text, start_seconds, end_seconds. The source window determines duration. Layout, canvas, music selection and gains belong to the system or subsequent targeted edits; they are not additional answer fields. No scenes wrapper or commentary.
+返回单层 JSON 对象，字段为 name、language、source_snapshot_id、source_start_seconds、source_end_seconds、title、intent、visual_description、captions、include_original_audio。每条 captions 只含 text、start_seconds、end_seconds。时长由选段决定。布局、画布、音乐选择和增益由系统或后续定向编辑负责，不加相应字段。不套 scenes，不附说明。
