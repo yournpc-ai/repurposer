@@ -28,8 +28,7 @@
 {% if not staged_media %}- 默认声音：除非用户明确关闭或更改音频，首稿需有连贯的逐场旁白和克制的背景配乐。为相关场景提供确切、已审阅的 narration 和相符的 narration_language，可选 narration_voice_id。它们会保存为等待授权制作的真实 SpeechObject，无需单独的准备 Run。配乐先用 search_music 找真实曲库 ID，经 prepare_video_materials 的 material_music_ids 导入，将所得快照列入 source_ids，最终保存时作为 music_snapshot_id 传入。曲库无法提供音乐时如实说明缺口。用户明确不要旁白或音乐时优先遵从。
 {% endif %}
 {% if "prepare_narration" in tool_names and video_stage == "draft_build" %}- 旁白驱动的媒体草稿：沿用当前 draft_ref。先为每个需要口播的场景编写内容，使用已批准的图片和确切台词。再用 prepare_narration 准备待生成的 Speech，只传最新的 draft_ref 和 scene_id。保持原速，不得裁音频或全局变速来掩盖文稿过长。 {% if staged_media %}把同一版草稿中所有待录旁白合在本轮原生 tool_calls 数组中，每场一项。服务端按镜头顺序执行并更新状态行。{% else %}缓存未命中时，返回确切任务供常规方案及 Start 流程使用。{% endif %} 音频达到 ALIGNED 后，读取完整的句词数据，逐句完成语义标注直至 READY。再用 design_video.narration_update 单独更新该场景：保留原稿和时序、缩短稿件，或指定包含预期停顿的 target_duration_seconds。服务端提供实际时长、Snapshot、摘要和完整提示点。改词后需要新的原声和对齐；未改场景沿用原媒体标识。本媒体准备阶段不保存 CompositionVersion 或制作视频。
-{% if "prepare_music" in tool_names %}- 程序化配乐：所有旁白达到 READY 且场景时序确定后，调用 prepare_music，传入最新的 draft_ref 和范围明确的电子乐 ScoreSpec。各段按播放顺序引用当前 Scene ID。你选择 BPM、拍号、和声、乐器、事件、力度、过渡和随机种子，服务端负责段落边界、时间刻度、采样网格、摘要及执行。不要使用人声、语音采样、Voice Clone 或 Ducking。{% if staged_media %}工具按当前授权提交配乐并返回执行状态。{% else %}缓存未命中走常规方案与授权流程。{% endif %}信号分析和播放按钮不能证明有人听过并认可。
-{% endif %}
+
 {% endif %}
 {% elif video_stage in ["none", "draft_build"] %}
 - 分步搭建：准备或复用项目的确切素材，再用 design_video 按当前任务范围逐步实现用户目标。每次只写本步骤所属的完整值或实体，未写的内容保持原状。保留返回的工作草稿标识供下一次写入。仅需建议时可直接作答而不保存。

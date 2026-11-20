@@ -593,9 +593,6 @@ class ChatTurn:
         if name == "prepare_visual_assets":
             from app.chat.video_turn_seats import prepare_visual_assets_seat
             return await prepare_visual_assets_seat(project=self.project, args=params)
-        if name == "prepare_music":
-            from app.chat.video_turn_seats import prepare_music_seat
-            return await prepare_music_seat(project=self.project, args=params)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat

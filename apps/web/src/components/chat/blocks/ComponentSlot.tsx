@@ -2,6 +2,7 @@ import { useCallback, useState } from "react"
 
 import { Message, MessageContent } from "@/components/ui/message"
 import { AnchorCards } from "../AnchorCards"
+import { ImagePreview } from "../video/ImagePreview"
 import { AudioPlaybackSurface } from "../video/AudioPlaybackSurface"
 import { StoryboardCard } from "../video/StoryboardCard"
 import type { ComponentSlot as ComponentSlotFact } from "../timeline/types"
@@ -68,19 +69,19 @@ export function ComponentSlot({
       </Message>
     )
   }
-  if (slot.kind === "audioPlayback") {
+  if (slot.kind === "mediaPreview") {
     return (
       <Message align="start">
         <MessageContent>
           <RevealSlot
-            ready={slot.block.items.length > 0}
+            ready={slot.block.kind === "image_preview" || slot.block.items.length > 0}
             priorDrained={slot.priorDrained}
             history={slot.history}
             structureId={structureId}
             structureTurnId={structureTurnId}
             onStructureVisible={onStructureVisible}
           >
-            <AudioPlaybackSurface block={slot.block} />
+            {slot.block.kind === "image_preview" ? <ImagePreview block={slot.block} /> : <AudioPlaybackSurface block={slot.block} />}
           </RevealSlot>
         </MessageContent>
       </Message>

@@ -103,6 +103,7 @@ def media_session(monkeypatch, ids, *, target_seconds=None):
     async def assemble(turn, recent):
         turn.infer_kwargs = {"message": turn.request.message}
 
+    monkeypatch.setattr(plan_turn, "_create_message", AsyncMock(return_value=SimpleNamespace(turn_id=None)))
     monkeypatch.setattr(plan_turn.PlanTurn, "assemble", assemble)
     monkeypatch.setattr("app.tools.video.narration_store.peek_original", AsyncMock(return_value=None))
     scheduled = []
@@ -113,12 +114,6 @@ def media_session(monkeypatch, ids, *, target_seconds=None):
         runs[next_run.id] = next_run
         turn.outcome = (None, next_run.id, None, [])
 
-    async def submit_score(turn, task, observation):
-        scheduled.append([task])
-        turn.outcome = (None, uuid4(), None, [])
-        return ToolObservation('{"status":"pending"}', stop_after_observation=True)
-
-    monkeypatch.setattr(media_journey, "_submit_music_observation", submit_score)
     monkeypatch.setattr(plan_turn.PlanTurn, "_present_plan", present)
     async def get(model, identity, **kwargs):
         if model is WorkflowRun:
@@ -278,7 +273,7 @@ async def test_measured_narrations_only_trigger_a_rewrite_when_they_overrun(monk
             rounds.append((reference, state))
             self.content = creative_update if overrun and len(rounds) == 2 else ""
             assert len(rounds) <= 6, messages[-1]
-            assert ("prepare_music" in tool_names({"tools": tools})) == media["audio_timing_ready"]
+            assert "prepare_music" not in tool_names({"tools": tools})
             if overrun and len(rounds) == 1:
                 assert dynamic["required_next_action"] == "design_video" and state["remaining_seconds"] == -1
                 call = ("design_video", {"narration_update": {
@@ -299,11 +294,8 @@ async def test_measured_narrations_only_trigger_a_rewrite_when_they_overrun(monk
                     update["target_duration_seconds"] = 10
                 call = ("design_video", {"narration_update": update})
             else:
-                call = ("prepare_music", {"name": "Electronic theme", "score": {
-                    "bpm": {"num": 96}, "sections": [{"scene_id": s, "intent": "build"} for s in ("a", "b")],
-                    "instruments": [{"instrument_id": "lead", "kind": "pad"}], "seed": 42,
-                    "events": [{"scene_id": "a", "instrument_id": "lead", "start_beat": "0", "duration_beats": "1", "midi": 60}],
-                }})
+                self.calls_to_make.append(("answer", {}))
+                return await super().generate_with_tools(messages=messages, tools=tools, **kwargs)
             self.calls_to_make.append((call[0], {"draft_ref": reference, **call[1]}))
             return await super().generate_with_tools(messages=messages, tools=tools, **kwargs)
 
@@ -312,7 +304,7 @@ async def test_measured_narrations_only_trigger_a_rewrite_when_they_overrun(monk
     await media_journey.continue_media_journey(db, project, conversation, first_run)
     if not overrun:
         service.persist_interim_prose.assert_not_awaited()
-        assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_music"]]
+        assert [[t.tool for t in tasks] for tasks in scheduled] == []
         assert rounds[-1][1]["draft_seconds"] == rounds[-1][1]["target_seconds"] == 15
         assert all(scene["timing_confirmed"] for scene in rounds[-1][1]["scenes"])
         return
@@ -331,9 +323,8 @@ async def test_measured_narrations_only_trigger_a_rewrite_when_they_overrun(monk
     assert len(rounds) == 6
     service.persist_interim_prose.assert_awaited_once()
     assert service.persist_interim_prose.await_args.args[-1] == creative_update
-    assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_narration"], ["prepare_music"]]
+    assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_narration"]]
     final_ref, final = rounds[-1]
-    assert scheduled[-1][0].params["draft_ref"] == final_ref
     assert final["draft_seconds"] == final["target_seconds"] == 10
     assert [s["alignment_id"] for s in final["scenes"]] == [p["result"]["alignment_id"] for p in (original[0], new_recording)]
     assert all(s["timing_confirmed"] for s in final["scenes"])

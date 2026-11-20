@@ -10,11 +10,12 @@ from pydantic import BaseModel
 import app.pipeline.node_runners  # noqa: F401
 from app.tools.video.production.node import ProduceVideo  # noqa: F401
 from app.tools.video.params import (
-    PrepareMusicParams,
+
     PrepareNarrationParams,
     PrepareVisualAssetsParams,
     ProduceVideoParams,
 )
+from app.tools.music.score import GenerateMusicArgs
 from app.pipeline.graph import NODE_KINDS
 
 
@@ -68,7 +69,8 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
             name="prepare_music",
             description="为当前草稿合成已授权且确定性的电子配乐 ScoreSpec，固定私有 Music 及其音频 Snapshot，保留编排好的 BeatGrid 和音频分析。该 Run 仅含此任务，不会创建 Composition 版本或 Output。",
             behavior="deterministic",
-            params_model=PrepareMusicParams,
+            params_model=GenerateMusicArgs,
+            llm_visible=False,
             summary_templates={"en": "Prepared electronic score · {duration_seconds:g}s",
                                "zh": "已准备电子配乐 · {duration_seconds:g} 秒"},
         ),

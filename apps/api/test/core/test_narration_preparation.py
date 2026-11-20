@@ -201,12 +201,13 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
         "cues": [{"source_range": {"start": 0, "end": ticks}}],
     } for sid in ids])
     reproject_narration_timing(draft)
-    score = music.score_for_current_draft(draft, ScoreSpecDraft.model_validate({
+    from app.tools.music.score import build_score_spec
+    score = build_score_spec(ScoreSpecDraft.model_validate({
         "bpm": {"num": 96}, "sections": [{"scene_id": sid, "intent": "build"} for sid in ids],
         "instruments": [{"instrument_id": "lead", "kind": "pad"}], "seed": 42,
         "events": [{"scene_id": sid, "instrument_id": "lead", "start_beat": "0",
                     "duration_beats": "4", "midi": 60} for sid in ids],
-    }))
+    }), draft)
     result = await music.prepare_programmatic_music(project=project, name="Evidence", score=score, execution_id="test")
     cached = await music.cached_music_preparation(owner_id=project.user_id, project_id=project.id, score=score)
     reference = {"draft_id": "storyboard", "draft_digest": canonical_json_hash(draft)}
@@ -225,11 +226,6 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
         journey = {"opening_id": str(opening.id)}
         first = await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)
         assert first.content == "配乐已准备好，可以试听了。"
-        turn = PlanTurn(db, project.user_id, conversation, project, ChatRequest(project_id=project.id, message="试听"))
-        turn.media_score_delivered = True
-        turn.outcome = (first, None, None, [])
-        closing = "这段配乐有 15 秒，点下面可以听。"
-        await turn.execute("answer", None, closing)
         receipt = await record_run_audio(db, project, conversation.id, journey, "music",
                                          {"request": request, "result": result},
                                          trigger_intent={"trigger": "run_completed"}, run_id=run.id)
@@ -238,7 +234,7 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
     async with database() as db:
         row = await db.get(Message, receipt.id)
         wire = ChatMessageResponse.model_validate(row)
-        assert wire.content == closing
+        assert wire.content == first.content
         assert wire.intent["media_journey"]["state"] == "complete"
         block, = wire.blocks
         item, = block["items"]

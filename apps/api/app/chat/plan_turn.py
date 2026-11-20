@@ -176,7 +176,6 @@ class PlanTurn:
         self.turn_id = turn_id
         self.media_journey: dict | None = None
         self.media_state: dict | None = None
-        self.media_score_delivered = False
         self.media_visual_results: list[dict] = []
         self.media_resume_pending: PendingPlan | None = None
         self.media_resume_narration: list[dict] | None = None
@@ -705,14 +704,6 @@ class PlanTurn:
         PERCEPTION call short-circuits the seats above: reads are dispatched
         to the family registry and ride back as a ToolObservation (the loop
         iterates — 终态工具一调即停 covers the terminal tools only)."""
-        if self.media_score_delivered:
-            if name != "answer":
-                return "The score was delivered. Close this preparation with answer."
-            assert self.outcome is not None and self.outcome[0] is not None
-            if prose.strip():
-                self.outcome[0].content = prose.strip()
-            await self._resolve_deferred()
-            return None
         if self.media_journey is not None and name == "design_video" and getattr(params, "save", False):
             return "This staged preparation cannot save a Composition."
         if self.media_state is not None:
@@ -773,7 +764,6 @@ class PlanTurn:
 
             result = await dock_media_observation(
                 self, name, result, working_draft=getattr(params, "_working_draft", None),
-                music_args=params if name == "prepare_music" else None,
             )
             if result.stop_after_observation:
                 await self._resolve_deferred()
@@ -884,9 +874,6 @@ class PlanTurn:
         if name == "prepare_visual_assets":
             from app.chat.video_turn_seats import prepare_visual_assets_seat
             return await prepare_visual_assets_seat(project=self.project, args=params)
-        if name == "prepare_music":
-            from app.chat.video_turn_seats import prepare_music_seat
-            return await prepare_music_seat(project=self.project, args=params, managed=self.media_state is not None)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat
@@ -1607,9 +1594,10 @@ class PlanTurn:
         untouched. The envelope seats still absorb (an answer can carry the
         user's declared material)."""
         if self.media_state is not None:
+            ready = self.media_state.get("audio_timing_ready")
             message = await _create_message(
-                self.db, self.conversation_id, "assistant", self._media_stop_text(),
-                intent={"media_journey": {**self.media_journey, "state": "blocked"}},
+                self.db, self.conversation_id, "assistant", prose.strip() if ready else self._media_stop_text(),
+                intent={"media_journey": {**self.media_journey, "state": "complete" if ready else "blocked"}},
             )
             self.outcome = (message, None, self.settled_pending, [])
             return None
@@ -1900,20 +1888,6 @@ async def run_plan_turn(
             db, project.id, opening_id=turn.media_journey["opening_id"],
             draft_id=media_resume_draft.candidate_id if media_resume_draft else None,
         )
-        remembered = ((getattr(conversation, "context", None) or {}).get("music_requests") or {}).get(str(turn_id))
-        if remembered:
-            from app.chat.media_journey import _submit_music_observation
-            from app.models.schemas import TaskItem
-            task = TaskItem.model_validate(remembered["task"])
-            receipt = ToolObservation(json.dumps({"cache": "miss", "plan_task": remembered["task"]}))
-            result = await _submit_music_observation(turn, task, receipt)
-            if turn.outcome:
-                return turn.outcome
-            message = await _create_message(
-                db, conversation.id, "assistant", result.text, turn_id=turn_id,
-                intent={"media_journey": {**turn.media_journey, "state": "blocked"}},
-            )
-            return message, None, turn.settled_pending, []
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path
@@ -1974,13 +1948,6 @@ async def run_plan_turn(
     website_question_settled = settled_website_question(recent, turn_id)
 
     def assemble_round(**facts):
-        if turn.media_score_delivered:
-            return RoundAssembly(
-                tools=[tool for tool in facts["tools"] if tool.name == "answer"],
-                system="配乐的试听播放器已附在本条消息。用对话语言简短交付这段配乐，根据实测结果发言，然后调用 answer。当前交付物只有音频。",
-                include_project_context=False,
-                observation_tools=frozenset({"prepare_music"}),
-            )
         target_hint = mention_target
         if media_resume_draft is not None:
             from app.chat.media_journey import MediaDraftUnavailable
@@ -2061,18 +2028,14 @@ async def run_plan_turn(
         if turn.media_state is None:
             raise
         await turn._resolve_deferred()
-        if turn.media_score_delivered and turn.outcome is not None:
-            # A closing model call cannot undo a measured and delivered score.
-            outcome = turn.outcome
-        else:
-            zh = (speech_language or getattr(conversation, "ui_language", None) or "").startswith("zh")
-            text = ("制作助手暂时无法继续，素材准备已暂停。" if zh else
-                    "Media preparation paused because the editing assistant is unavailable.")
-            message = await _create_message(
-                db, conversation.id, "assistant", text,
-                intent={"media_journey": {**turn.media_journey, "state": "blocked"}},
-            )
-            outcome = (message, None, turn.settled_pending, [])
+        zh = (speech_language or getattr(conversation, "ui_language", None) or "").startswith("zh")
+        text = ("制作助手暂时无法继续，素材准备已暂停。" if zh else
+                "Media preparation paused because the editing assistant is unavailable.")
+        message = await _create_message(
+            db, conversation.id, "assistant", text,
+            intent={"media_journey": {**turn.media_journey, "state": "blocked"}},
+        )
+        outcome = (message, None, turn.settled_pending, [])
     else:
         outcome = await turn.finish(result)
     if (

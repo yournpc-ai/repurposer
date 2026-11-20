@@ -80,6 +80,7 @@ def source_context(snapshot: Any) -> dict[str, Any]:
     else:
         media = meta.get("media") or meta
         resource.update({
+            "title": (meta.get("music") or {}).get("title"),
             "width": media.get("width"),
             "height": media.get("height"),
             "origin": meta.get("origin"),

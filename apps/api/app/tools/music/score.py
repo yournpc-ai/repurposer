@@ -207,6 +207,52 @@ def build_score_spec(creative: ScoreSpecDraft, draft: dict[str, Any]) -> ScoreSp
             start_sample=start_sample,
             end_sample=end_sample,
         ))
+    return _resolve_sections(creative, sections)
+
+
+class GenerateMusicArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duration_seconds: float = Field(ge=0.25, le=MAX_SCORE_SECONDS, multiple_of=0.001)
+    style: Literal["light_electronic", "ambient", "driving_electronic"]
+    bpm: int = Field(default=100, ge=40, le=200)
+    name: str = Field(default="Electronic instrumental", min_length=1, max_length=120)
+
+
+def instrumental_score(request: GenerateMusicArgs) -> ScoreSpec:
+    """Arrange a bounded cue on its own sample grid, including a partial last beat."""
+    seconds = Fraction(str(request.duration_seconds))
+    beats = seconds * request.bpm / 60
+    section = ScoreSectionDraft(scene_id="cue", intent=request.style)
+    instruments = [Instrument(instrument_id="pad", kind="pad", gain_db=-16,
+                              attack_seconds=0.08, release_seconds=0.24)]
+    harmony, events = [], []
+    driving = request.style == "driving_electronic"
+    if request.style != "ambient":
+        instruments.extend([Instrument(instrument_id="pulse", kind="pluck", wave="triangle"),
+                            Instrument(instrument_id="kick", kind="kick", gain_db=-14)])
+    for beat in range(math.ceil(beats)):
+        root = (57, 53, 60, 55)[beat // 4 % 4]
+        notes = [root, root + (3 if root == 57 else 4), root + 7]
+        if beat % 4 == 0:
+            harmony.append(HarmonyEvent(scene_id="cue", start_beat=str(beat),
+                                        duration_beats=str(min(4, beats - beat)), midi_notes=notes))
+        if request.style != "ambient":
+            duration = str(min(Fraction(1, 2), beats - beat))
+            events.append(ScoreEvent(scene_id="cue", instrument_id="pulse", start_beat=str(beat),
+                                     duration_beats=duration, midi=notes[beat % 3] + 12))
+            if driving or beat % 2 == 0:
+                events.append(ScoreEvent(scene_id="cue", instrument_id="kick", start_beat=str(beat),
+                                         duration_beats=duration))
+    creative = ScoreSpecDraft(bpm=Rational(num=request.bpm), sections=[section], harmony=harmony,
+                              instruments=instruments, events=events, seed=0,
+                              transitions=[ScoreTransition(scene_id="cue", fade_out_beats="1/2")])
+    resolved = ScoreSection(**section.model_dump(), section_id="cue", start_tick=0,
+                            end_tick=quantize_ticks(seconds * SOURCE_TIMEBASE), start_sample=0,
+                            end_sample=quantize_ticks(seconds * creative.sample_rate))
+    return _resolve_sections(creative, [resolved])
+
+
+def _resolve_sections(creative: ScoreSpecDraft, sections: list[ScoreSection]) -> ScoreSpec:
     if sections[-1].end_sample > MAX_SCORE_SECONDS * creative.sample_rate:
         raise ScoreError("the score exceeds the 120-second synthesis resource budget")
     section_ids = {section.scene_id for section in sections}

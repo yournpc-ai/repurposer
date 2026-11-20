@@ -176,6 +176,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                              for _, r in resources if r.get("kind") == "project"), None),
             "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")} for _, r in resources if r.get("kind") == "asset"][:24],
         }
+        context["fixed_media"] = [
+            {k: r[k] for k in ("snapshot_id", "kind", "duration_ticks", "title") if r.get(k) is not None}
+            for _, r in resources if r.get("snapshot_id") and r.get("kind") in ("audio", "image")
+        ][-24:]
         if selected:
             context.update(clip_count=selected.get("clip_count"), scene_count=selected.get("scene_count"),
                            timebase=selected.get("timebase"), duration_ticks=selected.get("duration_ticks"),
@@ -206,9 +210,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["pending_question"] = getattr(pending, "question", None)
         return RoundAssembly(
             tools=tools,
-            system="你是视频剪辑师。先读取当前时间线定位用户描述的片段。目标不明确时询问。"
+            system="你是视频剪辑师。修改片段前，按需读取时间线定位目标。目标不明确时询问。"
                    "按本轮已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。按帧上的作品时间说明实际画面。"
-                   "对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答。",
+                   "素材生成结果中的 delivered_to_chat 表示试听或图片卡已经交付。按请求决定是否插入；试听素材无需预览影片。对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答。",
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=facts.get("user_text") or "", enforce_offered_tools=True,
             stream_prose=False,
@@ -272,8 +276,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 media_state["narration_resume"] = resume
                 if any(not scene.get("timing_confirmed") for scene in resume["scenes"]):
                     media_state["audio_timing_ready"] = False
-            if not media_state["audio_timing_ready"]:
-                permitted = permitted - {"prepare_music"}
     tools = video_round_tools(
         facts["tools"],
         resolution=resolution,
@@ -474,9 +476,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if media_state["phase"] == "audio":
             dynamic["media_instruction"] = (
                 "approved_images 中的每项对应相应场景已准备好的图片。在 design_video.scene 中直接使用它的 snapshot_id，传入相符的 scene_id 和确切的口播原文。"
-                "先写完所有需要旁白的场景，再把同一最新 draft_ref 的各场 prepare_narration 调用组成一个 tool_calls 数组。录制完成后逐场读取实际对齐结果，标注至 READY，按实测时长和提示点确认时序，再准备配乐。"
+                "先写完所有需要旁白的场景，再把同一最新 draft_ref 的各场 prepare_narration 调用组成一个 tool_calls 数组。录制完成后逐场读取实际对齐结果，标注至 READY，按实测时长和提示点确认时序。"
             )
-            required_next = "prepare_music" if media_state["audio_timing_ready"] else None
+            required_next = "answer" if media_state["audio_timing_ready"] else None
             resume = media_state.get("narration_resume")
             if resume is None and resolution["scenes_filled"] and not media_state["audio_timing_ready"]:
                 dynamic["media_instruction"] = "各幕已填入画面和旁白。以当前 draft_ref 将待录场景一并提交 prepare_narration。"
@@ -489,7 +491,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                     "用 design_video.narration_update 改稿时传 scene_id、text，可带 target_duration_seconds，省略 alignment_id。"
                     "改完后用最新 draft_ref，将 pending_scene_ids 的 prepare_narration 一次并行提交。"
                     "保留录音时读取它的对齐，按需标注至 READY。确认时仅传 scene_id、alignment_id 和可选的 target_duration_seconds。"
-                    "每次写入后用下一轮的新 draft_ref。所有幕的原音、提示点和目标总长核实后准备配乐。"
+                    "每次写入后用下一轮的新 draft_ref。所有幕的原音、提示点和目标总长核实后说明结果。"
                 )
                 if not media_state["audio_timing_ready"]:
                     remaining = resume["remaining_seconds"]
@@ -552,7 +554,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         observation_tools=(
             frozenset({
                 "design_video", "prepare_visual_assets", "prepare_video_materials", "capture_web",
-                "prepare_narration", "get_narration_alignment", "annotate_narration", "prepare_music",
+                "prepare_narration", "get_narration_alignment", "annotate_narration",
             })
             if draft is not None and stage in {"draft_build", "draft_finalize", "draft_hold"}
             else None

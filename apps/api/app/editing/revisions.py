@@ -601,9 +601,6 @@ def _add_audio_effect(
             kind="time_out_of_bounds",
         )
     track_id = "trk_audio_effect"
-    existing_track = next(
-        (track for track in content.timeline.tracks if track.track_id == track_id), None
-    )
     digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
     clip_id = f"clp_audio_effect_{digest}"
     if _clip_locations(content, clip_id):
@@ -611,16 +608,27 @@ def _add_audio_effect(
             "this exact audio effect already exists in the base version",
             kind="duplicate_audio_effect",
         )
+    return fixed_audio_ops(
+        content, source_id=action.source_id, source_digest=fact["digest"], track_id=track_id,
+        role="effect", clip_id=clip_id, object_id=f"obj_audio_effect_{digest}", scene_id=scene.scene_id,
+        start=start, end=end, source_start=source_start,
+        source_end=source_start + output_ticks_to_source_ticks(duration, content.settings.timebase),
+        gain_db=action.gain_db,
+    )
+
+
+def fixed_audio_ops(content, *, source_id, source_digest, track_id, role, clip_id, object_id,
+                    scene_id, start, end, source_start, source_end, gain_db):
     ops: list[Op] = []
-    if action.source_id not in {binding.snapshot_id for binding in content.sources}:
-        ops.append(BindSource(op="bind_source", snapshot_id=action.source_id))
-    if existing_track is None:
+    if source_id not in {binding.snapshot_id for binding in content.sources}:
+        ops.append(BindSource(op="bind_source", snapshot_id=source_id))
+    if not any(track.track_id == track_id for track in content.timeline.tracks):
         ops.append(AddTrack(
             op="add_track",
             track={
                 "track_id": track_id,
                 "kind": "audio",
-                "role": "effect",
+                "role": role,
                 "order": max(
                     (track.order for track in content.timeline.tracks if track.kind == "audio"),
                     default=-1,
@@ -634,21 +642,19 @@ def _add_audio_effect(
         clip={
             "clip_id": clip_id,
             "range": {"start": start, "end": end},
-            "scene_id": scene.scene_id,
+            "scene_id": scene_id,
             "source": {
-                "snapshot_id": str(action.source_id),
-                "snapshot_digest": fact["digest"],
+                "snapshot_id": str(source_id),
+                "snapshot_digest": source_digest,
                 "source_range": {
                     "start": source_start,
-                    "end": source_start + output_ticks_to_source_ticks(
-                        duration, content.settings.timebase,
-                    ),
+                    "end": source_end,
                 },
             },
             "object": AudioObject(
                 kind="audio",
-                object_id=f"obj_audio_effect_{digest}",
-                gain_db=action.gain_db,
+                object_id=object_id,
+                gain_db=gain_db,
             ).model_dump(mode="json"),
             "animations": [],
         },

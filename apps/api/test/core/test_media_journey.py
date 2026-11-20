@@ -336,22 +336,8 @@ async def test_visual_settlement_continues_at_most_once_in_original_chat(monkeyp
     assert blockers == ([{"opening_id": str(opening.id), "state": state}] if stop_reason else [])
 
 
-@pytest.mark.asyncio
-async def test_audio_preparation_blocks_music_before_timing_and_blocks_formal_work(monkeypatch):
-    from app.chat.media_journey import dock_media_observation, media_write_rejection
-
-    turn = SimpleNamespace(media_state={"phase": "audio", "audio_timing_ready": False})
-    candidate = ToolObservation(json.dumps({
-        "cache": "miss",
-        "plan_task": {"tool": "prepare_music", "params": {}},
-    }))
-
-    async def no_start(*args):
-        pytest.fail("Music cannot start before actual narration timing is ready")
-
-    monkeypatch.setattr(turn, "_present_plan", no_start, raising=False)
-    held = await dock_media_observation(turn, "prepare_music", candidate)
-    assert not held.ok and "READY" in held.text
+def test_audio_preparation_blocks_formal_work():
+    from app.chat.media_journey import media_write_rejection
     assert media_write_rejection("audio", "design_video", SimpleNamespace(save=True))
     assert media_write_rejection("audio", "review_working_draft", None)
     assert media_write_rejection("audio", "produce_video", None)

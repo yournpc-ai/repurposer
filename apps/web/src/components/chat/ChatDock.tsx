@@ -920,7 +920,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             role: "assistant" as const,
             content: row.content ?? "",
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
-            proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback") ? Date.now() : undefined,
+            proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview") ? Date.now() : undefined,
             turnId,
             seq: row.seq ?? undefined,
             at: row.created_at ?? undefined,

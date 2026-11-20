@@ -3,6 +3,7 @@
 import json
 import re
 from fractions import Fraction
+from typing import Literal
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -21,7 +22,32 @@ from app.editing.store import (
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import VideoRangeScrubTarget, canonical_json_hash
+from app.tools.music.score import GenerateMusicArgs
 from app.models.tables import CompositionVersion, Message
+
+
+class InsertAudioArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: UUID = Field(description="Owned fixed audio snapshot from the project or a generation result.")
+    start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Start on the composition timeline.")
+    duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
+                                           description="Use the full recording when omitted.")
+    gain_db: float = Field(default=0, ge=-60, le=12, description="Clip gain in decibels.")
+
+
+class GenerateImageArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    prompt: str = Field(min_length=1, max_length=2000, description="Describe the image and its narrative purpose.")
+    svg: str | None = Field(default=None, min_length=1, max_length=20000,
+                            description="For vector artwork only, an original self-contained SVG.")
+    evidence_snapshot_id: UUID | None = Field(default=None, description="Verified project webpage for brand facts.")
+
+
+class GenerateVoiceArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    text: str = Field(min_length=1, max_length=9000)
+    language: Literal["en", "zh", "fr", "de", "es", "it"]
+    voice_id: Literal["presenter_male", "English_Graceful_Lady"] = "presenter_male"
 
 
 class InspectTimelineArgs(BaseModel):
@@ -111,6 +137,26 @@ def _editor_tool(name, description, args, key):
 
 EDITOR_TOOLS = (
     _editor_tool(
+        "insert_audio", "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+        InsertAudioArgs, "insertAudio",
+    ),
+    _editor_tool(
+        "generate_image", "Create and review one image. Returns the actual pixels and a fixed project source.",
+        GenerateImageArgs, "visualAssets",
+    ),
+    _editor_tool(
+        "generate_voice",
+        "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        GenerateVoiceArgs,
+        "recordVoice",
+    ),
+    _editor_tool(
+        "generate_music",
+        "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        GenerateMusicArgs,
+        "musicPrepare",
+    ),
+    _editor_tool(
         "inspect_timeline",
         "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
         InspectTimelineArgs,
@@ -163,7 +209,7 @@ EDITOR_NAMES = frozenset(tool.name for tool in EDITOR_TOOLS)
 WRITE_TOOLS = {
     t.name: t
     for t in EDITOR_TOOLS
-    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs)
+    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs)
 }
 
 
@@ -196,6 +242,7 @@ def _clip_facts(track, clip, content):
         "layout": obj.layout.model_dump() if getattr(obj, "layout", None) else None,
         "transform": transform.model_dump() if transform else None,
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
+        **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
         **({"text": obj.text[:160]} if obj.kind == "text" else {}),
     }
 
@@ -248,7 +295,35 @@ async def edit_clip(
         raise RequestMismatch("This native call already committed different parameters.")
     rate = content.settings.timebase
     extra = {}
-    if isinstance(args, ObjectArgs):
+    target = None
+    if isinstance(args, InsertAudioArgs):
+        from app.editing.revisions import fixed_audio_ops
+        from app.editing.timing import output_ticks_to_source_ticks, source_ticks_to_output_ticks
+        from app.models.tables import SourceSnapshot
+
+        snapshot = await db.get(SourceSnapshot, args.source_id)
+        if (snapshot is None or snapshot.owner_id != project.user_id or snapshot.origin_project_id != project.id
+                or snapshot.kind != "audio" or not snapshot.duration_ticks):
+            raise ValueError("Select a fixed audio source from the current project.")
+        start = _ticks(args.start_seconds, rate)
+        source_end = (snapshot.duration_ticks if args.duration_seconds is None else
+                      output_ticks_to_source_ticks(_ticks(args.duration_seconds, rate), rate))
+        end = start + source_ticks_to_output_ticks(source_end, rate)
+        limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
+        if not 0 < source_end <= snapshot.duration_ticks or end > limit or end <= start:
+            raise ValueError("The audio must fit the source and the current composition duration.")
+        origin = (snapshot.meta or {}).get("origin") or {}
+        role = "music" if origin.get("kind") == "programmatic_score" else (
+            "dialogue" if origin.get("video_narration_hash") else "effect")
+        track_id = f"trk_editor_{role}"
+        track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
+        if track and (track.kind != "audio" or track.role != role):
+            raise ValueError("The destination track has a different role.")
+        ops = fixed_audio_ops(content, source_id=snapshot.id, source_digest=snapshot.digest,
+                              track_id=track_id, role=role, clip_id=f"clp_{identity.hex}",
+                              object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
+                              source_start=0, source_end=source_end, gain_db=args.gain_db)
+    elif isinstance(args, ObjectArgs):
         target = next((clip for _, clip in entries if clip.object.object_id == args.id), None)
         if target is None or not getattr(target.object, "transform", None):
             raise ValueError("Select a visual object with an editable transform.")
@@ -347,7 +422,7 @@ async def edit_clip(
         base_digest=version.content_digest,
         request_id=str(identity),
         skill_provenance=version.skill_provenance,
-        ops=[op],
+        ops=ops if isinstance(args, InsertAudioArgs) else [op],
     )
     saved_content = content_of(saved)
     changed = [
@@ -364,7 +439,7 @@ async def edit_clip(
         "version": saved.version,
         "content_digest": saved.content_digest,
         **extra,
-        "target_before_seconds": [target.range.start / rate, target.range.end / rate],
+        "target_before_seconds": [target.range.start / rate, target.range.end / rate] if target else None,
         "replayed": replayed,
         "changed_clips": changed,
         "added_clips": [c["clip_id"] for c in changed if c["clip_id"] not in clips],
@@ -448,7 +523,7 @@ async def execute_editor(turn, name, args):
                     receipt = {
                         "version": result["version"],
                         "tool": name,
-                        "arguments": args.model_dump(exclude_none=True),
+                        "arguments": args.model_dump(mode="json", exclude_none=True),
                     }
                     if name in {"split_clip", "trim_clip", "move_clip"}:
                         receipt["target_before_seconds"] = result["target_before_seconds"]
@@ -525,6 +600,10 @@ async def execute_editor(turn, name, args):
                     ),
                     valid_for_key=version_key,
                 )
+            if name in {"generate_music", "generate_voice", "generate_image"}:
+                from app.chat.editor_media import generate_media
+
+                return await generate_media(turn, name, args, composition, version)
             if name != "preview_range":
                 raise ValueError("Unknown editor operation.")
             from app.editing.service import storyboard_block, video_version_read

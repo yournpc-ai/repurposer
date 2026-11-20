@@ -601,6 +601,13 @@ async def saved_preview_media(preview: dict, version_id: UUID):
             item.type == MediaInputType.VIDEO for item in media
         ),
     }
+    if any(track["kind"] == "audio" and track["clips"] for track in spec["tracks"]):
+        import asyncio
+        from app.tools.video.media_analysis import analyze_audio_bytes
+
+        measured = await asyncio.to_thread(analyze_audio_bytes, video, snapshot_id=str(version_id),
+                                           requested_probes=["decode", "pcm_stats", "loudness"])
+        evidence["mixed_audio"] = {k: measured.media_facts[k] for k in ("decode", "pcm_stats", "loudness")}
     return tuple(media), evidence
 
 

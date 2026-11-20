@@ -671,6 +671,12 @@ async def delete_persona_asset(
     await db.commit()
 
 
+@router.get("/{project_id}/image/{snapshot_id}/preview")
+async def get_image_preview(project_id: UUID, snapshot_id: UUID, db: DBDep,
+                            current_user: User = Depends(get_current_user_required)):
+    return await _snapshot_playback(db, project_id, current_user.id, snapshot_id, "image")
+
+
 @router.get("/{project_id}/audio/{snapshot_id}/playback")
 async def get_audio_playback(
     project_id: UUID,
@@ -679,15 +685,19 @@ async def get_audio_playback(
     current_user: User = Depends(get_current_user_required),
 ):
     """Issue a short-lived read URL for an owned, fixed project audio Snapshot."""
-    await _get_user_project(project_id, current_user.id, db)
+    return await _snapshot_playback(db, project_id, current_user.id, snapshot_id, "audio")
+
+
+async def _snapshot_playback(db, project_id, owner_id, snapshot_id, kind):
+    await _get_user_project(project_id, owner_id, db)
     snapshot = await db.get(SourceSnapshot, snapshot_id)
     if (
         snapshot is None
-        or snapshot.owner_id != current_user.id
+        or snapshot.owner_id != owner_id
         or snapshot.origin_project_id != project_id
-        or snapshot.kind != "audio"
+        or snapshot.kind != kind
     ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
     return {
         "url": await presign_download(snapshot.storage_key),
         "snapshot_id": str(snapshot.id),

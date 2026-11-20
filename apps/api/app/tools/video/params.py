@@ -1,9 +1,11 @@
 """Authorized production and preparation inputs, never creative instructions."""
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from uuid import UUID
+
+from pydantic import RootModel, BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from app.models.schemas import VideoDraftRef, VideoVersionRef
-from app.tools.music.score import ScoreSpecDraft
+from app.tools.music.score import GenerateMusicArgs, ScoreSpecDraft
 from app.tools.video.visual_assets import (
     VISUAL_ASSET_MAX_PER_CALL,
     SceneAssetSpec,
@@ -55,6 +57,11 @@ class PrepareNarrationParams(BaseModel):
 class PrepareVisualAssetsParams(VisualAssetSelection):
     """One bounded batch from an authenticated working draft."""
 
+    draft_ref: VideoDraftRef | None = None
+    version_ref: VideoVersionRef | None = None
+    opening_id: UUID | None = None
+    evidence_snapshot_id: UUID | None = None
+
     # Persisted plans and Runs may still contain the old full-spec request.
     scene_assets: SkipJsonSchema[list[SceneAssetSpec] | None] = Field(
         default=None, min_length=1, max_length=VISUAL_ASSET_MAX_PER_CALL
@@ -65,6 +72,11 @@ class PrepareVisualAssetsParams(VisualAssetSelection):
 
     @model_validator(mode="after")
     def _request_shape(self):
+        if self.version_ref is not None:
+            if self.draft_ref or not self.opening_id or len(self.scene_assets or []) != 1:
+                raise ValueError("Select one image for the current saved work.")
+        elif self.draft_ref is None or self.opening_id or self.evidence_snapshot_id:
+            raise ValueError("A valid image source reference is required.")
         if (self.scene_ids is None) == (self.scene_assets is None):
             raise ValueError("provide scene_ids to select scenes from the current draft")
         if self.review_existing and self.scene_ids is None:
@@ -92,6 +104,10 @@ class PrepareMusicParams(BaseModel):
     draft_ref: VideoDraftRef
     name: str = Field(min_length=1, max_length=255)
     score: ScoreSpecDraft
+
+
+class MusicRequest(RootModel[GenerateMusicArgs | PrepareMusicParams]):
+    pass
 
 
 class ProduceVideoParams(BaseModel):

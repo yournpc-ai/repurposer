@@ -275,7 +275,15 @@ export interface AudioPlaybackBlock {
   }[]
 }
 
-export type MessageBlock = VideoStoryboardBlock | SystemNoticeBlock | AudioPlaybackBlock
+export interface ImagePreviewBlock {
+  kind: "image_preview"
+  project_id: string
+  snapshot_id: string
+  digest: string
+  description: string
+}
+
+export type MessageBlock = ImagePreviewBlock | VideoStoryboardBlock | SystemNoticeBlock | AudioPlaybackBlock
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
@@ -636,9 +644,9 @@ export type ComponentSlot =
       history?: boolean
     }
   | {
-      kind: "audioPlayback"
+      kind: "mediaPreview"
       key: string
-      block: AudioPlaybackBlock
+      block: ImagePreviewBlock | AudioPlaybackBlock
       priorDrained: boolean
       history?: boolean
     }

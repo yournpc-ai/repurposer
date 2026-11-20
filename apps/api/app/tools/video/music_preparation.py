@@ -1,4 +1,4 @@
-"""Draft-bound programmatic Music preparation on the existing Run machinery."""
+"""Programmatic music preparation on the existing Run machinery."""
 
 from __future__ import annotations
 
@@ -36,26 +36,6 @@ _MUSIC_MANIFEST_PREFIX = "programmatic-music"
 
 class MusicPreparationError(ValueError):
     pass
-
-
-class PrepareMusicArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    draft_ref: VideoDraftRef
-    name: str = Field(min_length=1, max_length=255)
-    score: ScoreSpecDraft
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
-
-    def bind_working_draft(self, value: dict[str, Any]) -> None:
-        from copy import deepcopy
-
-        self._working_draft = deepcopy(value)
-
-
-def score_for_current_draft(draft: dict[str, Any], creative: ScoreSpecDraft) -> ScoreSpec:
-    assert_narration_ready_for_score(draft)
-    return build_score_spec(creative, draft)
 
 
 def _manifest_key(owner_id: UUID, project_id: UUID, score_digest: str) -> str:
@@ -339,10 +319,8 @@ async def music_preparation_fact(db, run, steps) -> dict[str, Any]:
 
 __all__ = [
     "MusicPreparationError",
-    "PrepareMusicArgs",
     "cached_music_preparation",
     "has_music_preparation_scope",
     "music_preparation_fact",
     "prepare_programmatic_music",
-    "score_for_current_draft",
 ]

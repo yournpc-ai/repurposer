@@ -508,6 +508,8 @@ async def review_image_content(
     roles = basis.get("scene_roles") or {scene_id: scene_asset.intent}
     requirements = {"narrative": roles.get(scene_id) or scene_asset.intent,
                     "technical": "Image is decodable and essential picture content is visible and legible."}
+    if basis.get("source_evidence"):
+        requirements["source_evidence"] = basis["source_evidence"]
     for index, words in enumerate(basis.get("user_words", [])):
         requirements[f"user_{index}"] = words
     if scene_asset.source.kind == "existing_image" and scene_asset.source.visible_evidence:

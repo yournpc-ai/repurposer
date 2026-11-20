@@ -8,7 +8,7 @@ from app.pipeline.render_ownership import pend_outputs_for_render
 from app.pipeline.step_display import fill_summary, set_spec_field, set_stage, ui_lang_of
 from app.tools.video.params import (
     NarrationPolicy,
-    PrepareMusicParams,
+    MusicRequest,
     PrepareNarrationParams,
     PrepareVisualAssetsParams,
     ProduceVideoParams,
@@ -349,7 +349,7 @@ class PrepareVisualAssets(NodeBase):
             facts["failed_count"] = len(settled.failures)
             facts["reused_count"] = sum(bool(item.get("cache_hit")) for item in results)
         result = {
-            "draft_ref": params.draft_ref.model_dump(mode="json"),
+            "draft_ref": params.draft_ref.model_dump(mode="json") if params.draft_ref else None,
             "assets": results,
             "failures": settled.failures,
             "usage": {
@@ -392,7 +392,7 @@ class PrepareMusic(NodeBase):
         from app.tools.video.music_preparation import prepare_programmatic_music
 
         preparation = (run.context or {}).get("music_preparation") or {}
-        params = PrepareMusicParams.model_validate(preparation.get("request"))
+        params = MusicRequest.model_validate(preparation.get("request")).root
         expected = params.model_dump(mode="json", exclude_none=True)
         if any(node.spec.get(key) != value for key, value in expected.items()):
             raise ValueError("The music step does not match its authorized creative request")

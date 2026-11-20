@@ -333,8 +333,8 @@ export function ChatConversation({
                 ? { kind: "storyboard" as const, key, message: m, block }
                 : block.kind === "system_notice"
                   ? { kind: "systemNotice" as const, key, block, priorDrained, history: m.hydrated }
-                  : block.kind === "audio_playback"
-                    ? { kind: "audioPlayback" as const, key, block, priorDrained, history: m.hydrated }
+                  : block.kind === "audio_playback" || block.kind === "image_preview"
+                    ? { kind: "mediaPreview" as const, key, block, priorDrained, history: m.hydrated }
                     : null
               return slot ? (
                 <ComponentSlot

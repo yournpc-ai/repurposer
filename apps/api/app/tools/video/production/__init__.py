@@ -13,7 +13,6 @@ from app.editing.store import content_of, get_video_version
 from app.models.schemas import PendingPlan, WorkflowStatus
 from app.models.tables import Composition, Conversation, Message, SourceSnapshot, WorkflowRun
 from app.tools.video.params import (
-    PrepareMusicParams,
     PrepareNarrationParams,
     PrepareVisualAssetsParams,
     ProduceVideoParams,
@@ -345,6 +344,33 @@ async def pin_video_production(db, project, tasks, approved_by):
 
 async def resolve_visual_asset_selection(db, project, params: PrepareVisualAssetsParams):
     """Resolve the same current draft at planning, quotation and authorization."""
+    if params.version_ref is not None:
+        ref = params.version_ref
+        comp, version = await get_video_version(db, owner_id=project.user_id, version_id=ref.composition_version_id)
+        if (comp.origin_project_id != project.id or comp.id != ref.composition_id
+                or version.content_digest != ref.content_digest or comp.current_version_id != version.id):
+            raise ValueError("The selected work has changed.")
+        words = await db.scalar(select(Message.content).join(Conversation).where(
+            Message.id == params.opening_id, Message.role == "user",
+            Conversation.project_id == project.id, Conversation.user_id == project.user_id,
+        ))
+        if words is None:
+            raise ValueError("The image request is unavailable.")
+        basis = {"user_words": [words]}
+        if params.evidence_snapshot_id:
+            from app.tools.video.preparation import frozen_source_lines
+
+            source = await db.get(SourceSnapshot, params.evidence_snapshot_id)
+            if (source is None or source.kind != "web" or source.owner_id != project.user_id
+                    or source.origin_project_id != project.id):
+                raise ValueError("Select a verified webpage from this project.")
+            lines = frozen_source_lines(source)
+            if not lines:
+                raise ValueError("The selected webpage has no verifiable text.")
+            basis["source_evidence"] = "\n".join(line["text"] for line in lines)[:4000]
+        spec = params.scene_assets[0]
+        spec._review_basis = basis
+        return [spec]
     reference = params.draft_ref.model_dump(mode="json")
     from app.chat.conversation_context import context_items
 
@@ -442,12 +468,10 @@ async def pin_music_preparation(db, project, tasks):
         return {}
     if len(music_tasks) != 1 or len(tasks or []) != 1:
         raise ValueError("Prepare music runs as one score-only task")
-    from app.tools.video.music_preparation import score_for_current_draft
-    from app.tools.video.narration_draft import recover_current_draft
+    from app.tools.music.score import GenerateMusicArgs, instrumental_score
 
-    params = PrepareMusicParams.model_validate(music_tasks[0].params)
-    draft = await recover_current_draft(db, project, params.draft_ref)
-    score = score_for_current_draft(draft, params.score)
+    params = GenerateMusicArgs.model_validate(music_tasks[0].params)
+    score = instrumental_score(params)
     return {
         "music_preparation": {
             "request": params.model_dump(mode="json"),

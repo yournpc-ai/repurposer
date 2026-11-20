@@ -2228,6 +2228,10 @@ async def answer_question(
                 _TURN_ROW_LOCKS_HELD.get() | {start_turn_id}
             )
 
+    media_receipt = await db.get(Message, message_id)
+    if media_receipt is not None and (media_receipt.intent or {}).get("media_permission"):
+        await _lock_turn_for_transcript_write(db, media_receipt.turn_id)
+
     # Row lock to the request boundary: a double-clicked Start (or retry)
     # otherwise passes the answer-is-None check concurrently and births two
     # paid runs off one plan. The second waiter re-reads post-commit and
@@ -2335,7 +2339,16 @@ async def answer_question(
         else None
     )
 
-    if question.kind == "task_book":
+    if (message.intent or {}).get("media_permission"):
+        from app.chat.editor_media import answer_media_permission
+        if data.kind not in ("option", "bail"):
+            raise HTTPException(422, "Select Allow or Decline.")
+        try:
+            project = await db.get(Project, conversation.project_id)
+            await answer_media_permission(db, project, message, data.option_id == "approve" and data.kind == "option")
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    elif question.kind == "task_book":
         # Project row lock (并发护栏, Message → Project order — the message
         # lock above lands first): a storyboard redesign's BEGIN commits its
         # in-flight marker in its own mini-transaction; without this lock a
@@ -2421,9 +2434,6 @@ async def answer_question(
                     confirmation_id=message.id, confirmed_via=confirmed_via,
                     quote=(message.question or {}).get("estimate_credits"),
                 )
-                journey = (message.intent or {}).get("media_journey")
-                if journey and [task.tool for task in tasks] == ["prepare_music"]:
-                    run.context = {**run.context, "media_journey": {"opening_id": journey["opening_id"]}}
             except ToolRejected as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
@@ -3381,7 +3391,19 @@ async def stop_turn_at_visible_frontier(
     from app.chat.conversation_context import discard_turn_context
     await discard_turn_context(db, row.conversation_id, user_message_id)
 
-    committed = bool((row.intent or {}).get("editor_commits"))
+    media_rows = {m.id for m in assistant_rows if (m.intent or {}).get("editor_media")
+                 and (m.workflow_run_id or (m.intent or {}).get("media_result"))}
+    if media_rows:
+        from app.pipeline.orchestrator import cancel_run
+        project_id = await db.scalar(select(Conversation.project_id).where(Conversation.id == row.conversation_id))
+        project = await db.get(Project, project_id, with_for_update=True)
+        for message_id in media_rows:
+            run_id = by_id[message_id].workflow_run_id
+            if run_id is not None:
+                run = await db.get(WorkflowRun, run_id, with_for_update=True, populate_existing=True)
+                if run and run.project_id == project.id:
+                    await cancel_run(db, run, project)
+    committed = bool((row.intent or {}).get("editor_commits")) or bool(media_rows)
     if not committed and not visible_prose and not visible_activity and not visible_structure:
         await db.execute(
             delete(Message)
@@ -3392,7 +3414,7 @@ async def stop_turn_at_visible_frontier(
         return "retracted"
 
     now = datetime.now(UTC).isoformat()
-    keep_ids = visible_prose | visible_activity | visible_structure
+    keep_ids = visible_prose | visible_activity | visible_structure | media_rows
     delete_ids = [message.id for message in assistant_rows if message.id not in keep_ids]
     if delete_ids:
         await db.execute(
@@ -3400,7 +3422,7 @@ async def stop_turn_at_visible_frontier(
             .where(Message.id.in_(delete_ids))
             .execution_options(synchronize_session=False)
         )
-    for message_id in keep_ids:
+    for message_id in keep_ids - media_rows:
         message = by_id[message_id]
         prefix = visible_prefix.get(message_id, 0)
         if message.content is not None:

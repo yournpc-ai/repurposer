@@ -3,7 +3,7 @@
 import json
 from dataclasses import replace
 from math import isfinite
-from uuid import UUID, uuid5
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -21,9 +21,9 @@ IMAGE_TOOLS = {
     "design_video", "prepare_visual_assets",
 }
 AUDIO_TOOLS = (IMAGE_TOOLS - {"prepare_visual_assets"}) | {
-    "prepare_narration", "get_narration_alignment", "annotate_narration", "prepare_music",
+    "prepare_narration", "get_narration_alignment", "annotate_narration",
 }
-PREPARATION_TOOLS = {"prepare_visual_assets", "prepare_narration", "prepare_music"}
+PREPARATION_TOOLS = {"prepare_visual_assets", "prepare_narration"}
 
 
 class MediaDraftUnavailable(ValueError):
@@ -391,49 +391,25 @@ def media_task_from_observation(name: str, observation: ToolObservation) -> Task
 
 
 async def dock_media_observation(
-    turn, name: str, observation: ToolObservation, *, working_draft=None, music_args=None
+    turn, name: str, observation: ToolObservation, *, working_draft=None
 ) -> ToolObservation:
-    if name in {"prepare_narration", "prepare_music"} and observation.ok:
+    if name == "prepare_narration" and observation.ok:
         cached = json.loads(observation.text)
-        if name == "prepare_music":
-            if not turn.media_state.get("audio_timing_ready"):
-                return replace(
-                    observation, ok=False,
-                    text="Finish the draft scenes and confirm READY narration timing before music.",
-                )
-            task = TaskItem(tool=name, params=music_args.model_dump(
-                mode="json", exclude={"pending_disposition"}))
-            if cached.get("cache") == "miss":
-                return await _submit_music_observation(turn, task, observation)
-            if cached.get("cache") == "hit":
-                remembered = await turn.db.scalar(select(Conversation.context["music_requests"][
-                    str(turn.turn_id)]).where(Conversation.id == turn.conversation_id,
-                                              Conversation.user_id == turn.user_id,
-                                              Conversation.project_id == turn.project.id))
-                if remembered and remembered["task"] != task.model_dump(mode="json"):
-                    return replace(observation, ok=False, stop_after_observation=True,
-                                   text="Music request identity already belongs to different parameters")
         if cached.get("cache") == "hit":
             from app.tools.video.audio_playback import record_prepared_audio
 
-            role = "music" if name == "prepare_music" else "narration"
+            role = "narration"
             message = await record_prepared_audio(
                 turn.db, turn.project, turn.conversation_id, turn.media_journey, role,
                 cached.get("result") or cached, cached, working_draft=working_draft,
             )
             state = message.intent["media_journey"]["state"]
-            if role == "narration" and state == "active" and turn.media_state.get("narration_resume") is not None:
+            if state == "active" and turn.media_state.get("narration_resume") is not None:
                 part = cached_recording(working_draft, cached)
                 if part:
                     turn.media_resume_narration.append(part)
             if state in {"complete", "blocked"}:
                 turn.outcome = (message, None, turn.settled_pending, [])
-                # The score's full measured result reaches the next model call
-                # before folding. Only its closing answer is allowed after this.
-                if state == "complete":
-                    turn.media_score_delivered = True
-                    cached.update({"execution": "artifact_ready", "playback_message_id": str(message.id)})
-                    return replace(observation, text=json.dumps(cached, ensure_ascii=False))
                 return replace(observation, ok=False, text=message.content, stop_after_observation=True)
     if name == "prepare_visual_assets" and observation.ok:
         result = json.loads(observation.text)
@@ -470,104 +446,6 @@ async def dock_media_observation(
         # The loop validates every call in this provider response before starting any recording.
         return observation
     return await _dock_tasks(turn, [task], observation, working_draft)
-
-
-async def _remember_music_request(project, conversation_id, opening_id, task):
-    """Persist one terminal score request per original website-promo turn before enqueue."""
-    from app.models.database import AsyncSessionLocal
-    from app.models.schemas import canonical_json_hash
-    from app.chat.service import TurnStopped
-
-    params = task.model_dump(mode="json")
-    request = {"id": str(uuid5(opening_id, "prepare_music")), "digest": canonical_json_hash(params),
-               "task": params}
-    async with AsyncSessionLocal() as db:
-        opening = await db.scalar(select(Message).where(
-            Message.id == opening_id, Message.conversation_id == conversation_id,
-        ).with_for_update(read=True, key_share=True))
-        if not initial_media_journey(opening) or opening.turn_state not in {"in_flight", "settled"} or (
-            opening.intent or {}
-        ).get("stop_requested_at"):
-            raise TurnStopped(str(opening_id))
-        conversation = await db.scalar(select(Conversation).where(
-            Conversation.id == conversation_id, Conversation.project_id == project.id,
-            Conversation.user_id == project.user_id,
-        ).with_for_update(key_share=True))
-        if conversation is None:
-            raise PermissionError("Inaccessible music request")
-        context = conversation.context or {}
-        requests = context.get("music_requests") or {}
-        previous = requests.get(str(opening_id))
-        if previous is not None:
-            if previous != request:
-                raise ValueError("Music request identity already belongs to different parameters")
-            return previous
-        conversation.context = {**context, "music_requests": {**requests, str(opening_id): request}}
-        await db.commit()
-    return request
-
-
-async def _submit_music_observation(turn, task, observation):
-    from app.chat.service import (
-        _TURN_ROW_LOCKS_HELD, _create_message, _lock_turn_for_transcript_write,
-        _safe_task_estimate, latest_pending_question, resolve_confirmation_need, submit_confirmed_tasks,
-    )
-    from app.pipeline.lifecycle import evaluate_start_gate, project_lifecycle
-
-    db, project = turn.db, turn.project
-    try:
-        opening = await _lock_turn_for_transcript_write(db, turn.turn_id)
-        if (str(opening.id) != turn.media_journey["opening_id"] or opening.conversation_id != turn.conversation_id
-                or turn.user_id != project.user_id
-                or not initial_media_journey(opening)):
-            raise ValueError("The original request does not authorize music production")
-        _TURN_ROW_LOCKS_HELD.set(_TURN_ROW_LOCKS_HELD.get() | {turn.turn_id})
-        await db.execute(select(Project.id).where(Project.id == project.id).with_for_update())
-        identity = str(uuid5(opening.id, "prepare_music"))
-        run = await db.scalar(select(WorkflowRun).where(
-            WorkflowRun.project_id == project.id,
-            WorkflowRun.context["confirmed_scope"]["confirmation_id"].as_string() == identity,
-        ))
-        if run is not None:
-            if run.context["confirmed_scope"]["compiled_scope"] != [task.model_dump(mode="json")]:
-                raise ValueError("Music request identity already belongs to different parameters")
-            message = await db.scalar(select(Message).where(
-                Message.workflow_run_id == run.id, Message.turn_id == opening.id,
-            ).order_by(Message.seq))
-        else:
-            estimate = await _safe_task_estimate(db, project, [task])
-            need = await resolve_confirmation_need(db, turn.user_id, estimate, production_intent=True, require_quote=True)
-            if await latest_pending_question(db, turn.conversation_id) is not None:
-                raise ValueError("A pending question must be answered first")
-            if need.requires_confirmation:
-                return await _dock_tasks(turn, [task], observation, None)
-            stamp = await project_lifecycle(db, project, pending_question=None, pending_plan=True,
-                                           requested_tasks=(task.model_dump(mode="json"),))
-            gate = evaluate_start_gate(has_pending_plan=True, effective_tasks_nonempty=True,
-                                       stamp=stamp, confirmation=need, docked_this_turn=True)
-            if gate:
-                raise ValueError(gate.code)
-            request = await _remember_music_request(project, turn.conversation_id, opening.id, task)
-            # The caller owns the final Stop fence. Roll back a partial materialization
-            # (including a failed hold) before returning a tool rejection.
-            async with db.begin_nested():
-                run = await submit_confirmed_tasks(
-                    db, project, turn._current_pending(), [task], name=task.params["name"],
-                    instruction=opening.content, confirmation_id=request["id"], confirmed_via="auto",
-                    quote=estimate.model_dump(mode="json"),
-                )
-                run.context = {**run.context, "media_journey": turn.media_journey}
-                message = await _create_message(
-                    db, turn.conversation_id, "assistant", "", workflow_run_id=run.id, turn_id=opening.id,
-                    intent={"presentation": "media_progress",
-                            "media_journey": {**turn.media_journey, "state": "active"}},
-                )
-    except ValueError as exc:
-        turn.media_start_blocker = str(exc)
-        return replace(observation, text=str(exc), ok=False, stop_after_observation=True)
-    turn.outcome = (message, run.id, turn.settled_pending, [])
-    return replace(observation, text=json.dumps({"status": run.status.value, "task_id": identity}),
-                   stop_after_observation=True, persist=False)
 
 
 async def finish_narration_batch(turn, observations):
@@ -628,7 +506,6 @@ async def _dock_tasks(turn, tasks, observation, draft):
     labels = {
         "prepare_visual_assets": ("分镜图片准备", "Scene image preparation"),
         "prepare_narration": ("分镜旁白准备", "Scene narration preparation"),
-        "prepare_music": ("电子配乐准备", "Electronic music preparation"),
     }
     label = labels[name][0 if zh else 1]
     rejection = await turn._present_plan(
@@ -808,9 +685,6 @@ async def continue_media_journey(db, project, conversation, run) -> None:
     )
     parts = preparation.get("scenes") or [preparation]
     reference = (parts[0].get("request") or {}).get("draft_ref") or {}
-    remembered = ((conversation.context or {}).get("music_requests") or {}).get(journey["opening_id"])
-    if remembered:
-        reference = remembered["task"]["params"]["draft_ref"]
     draft_id = reference.get("draft_id")
     current = next((
         item for item in reversed(context_items(conversation.context))

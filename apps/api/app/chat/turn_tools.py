@@ -278,26 +278,6 @@ def _prepare_visual_assets_tool() -> ChatTool:
     )
 
 
-def _prepare_music_tool() -> ChatTool:
-    from app.tools.video.music_preparation import PrepareMusicArgs
-
-    return ChatTool(
-        name="prepare_music",
-        terminal=False,
-        draft_reader=True,
-        description=(
-            "检查或准备一首用于当前已调整时序草稿的纯电子器乐曲。传入最新 draft_ref、曲名，以及按播放顺序覆盖所有当前 Scene 的限定 ScoreSpec 段落。"
-            "服务端负责段落范围、整数刻度、采样网格、ScoreSpec 摘要和编排好的 BeatGrid。禁用人声、音频采样、任意代码或命令。"
-            "命中缓存返回固定私有 Music、Snapshot 和完整分析。官网制作已授权时系统直接提交缺失配乐，需要确认时呈现报价。其他上下文沿用方案授权。"
-        ),
-        params_model=PrepareMusicArgs,
-        presentation=ToolPresentation(
-            kind="read", active_key="chat.activity.musicPrepare",
-            done_key="chat.activity.musicPrepareDone",
-        ),
-    )
-
-
 _GET_NARRATION_ALIGNMENT_TOOL = ChatTool(
     name="get_narration_alignment",
     terminal=False,
@@ -695,7 +675,7 @@ def video_round_tools(
             "get_graph", "get_node", "edit_graph",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
             "prepare_video_materials", "capture_web", "design_video", "prepare_visual_assets", "review_working_draft",
-            "prepare_narration", "get_narration_alignment", "annotate_narration", "prepare_music",
+            "prepare_narration", "get_narration_alignment", "annotate_narration",
             "search_music", "show_music_candidates", "select_music",
             "show_video_presets", "select_video_preset", "search_sfx", "import_sfx",
         },
@@ -763,10 +743,6 @@ def video_round_tools(
             projected.append(tool)
             continue
         if stage in stage_tools and tool.name not in stage_tools[stage]:
-            continue
-        if tool.name == "prepare_music" and not (
-            active_draft and (draft_arguments or {}).get("design", {}).get("scene_assets")
-        ):
             continue
         if resolution.get("media_phase") == "audio" and tool.name == "prepare_narration":
             def scene_narration_wire(_description, parameters):
@@ -981,7 +957,6 @@ def _video_project_tools() -> list[ChatTool]:
         _SELECT_MUSIC_TOOL,
         _PREPARE_NARRATION_TOOL,
         _prepare_visual_assets_tool(),
-        _prepare_music_tool(),
         _GET_NARRATION_ALIGNMENT_TOOL,
         _ANNOTATE_NARRATION_TOOL,
         *perception_chat_tools("get_video_version"),

@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
-from app.models.tables import Composition, CompositionVersion, Conversation, Message
+from app.models.tables import Composition, CompositionVersion, Conversation, Message, Project, WorkflowRun
 
 
 def editor_lock_key(turn_id):
@@ -32,6 +32,7 @@ async def report_committed_edits(db, opening):
     )
     versions = {v.request_id: v for v in rows}
     labels = {
+        "insert_audio": ("插入音频", "insert audio"),
         "split_clip": ("分割", "split"),
         "trim_clip": ("裁剪", "trim"),
         "move_clip": ("移动片段", "move"),
@@ -89,16 +90,30 @@ async def report_committed_edits(db, opening):
 async def recover_interrupted_edits(db, conversation_id):
     """Called on history load and next submission. A live writer owns the
     advisory lock until its outer Chat transaction commits or rolls back."""
+    from app.chat.editor_media import settle_media_receipt
+    from app.models.schemas import WorkflowStatus
+
+    receipts = (await db.execute(select(WorkflowRun, Project)
+        .join(Project, Project.id == WorkflowRun.project_id)
+        .join(Message, Message.workflow_run_id == WorkflowRun.id)
+        .where(Message.conversation_id == conversation_id, Message.intent.has_key("editor_media"),
+               ~Message.intent.has_key("media_result"), WorkflowRun.status.in_([
+                   WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED,
+               ])))).all()
+    for run, project in receipts:
+        await settle_media_receipt(db, project, run)
+    media_turns = select(Message.turn_id).where(
+        Message.conversation_id == conversation_id, Message.intent.has_key("editor_media"))
     ids = list(
         await db.scalars(
             select(Message.id).where(
                 Message.conversation_id == conversation_id,
                 Message.turn_state == "in_flight",
-                Message.intent.has_key("editor_commits"),
+                or_(Message.intent.has_key("editor_commits"), Message.id.in_(media_turns)),
             )
         )
     )
-    recovered = False
+    recovered = bool(receipts)
     for turn_id in ids:
         if not await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
             continue

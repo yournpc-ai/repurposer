@@ -305,6 +305,8 @@ async def review_video_seat(
 
 async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
     for task in tasks:
+        if task.tool == "prepare_music":
+            return "Generate music directly in the selected saved work."
         if task.tool != "prepare_visual_assets":
             continue
         from app.tools.video.params import PrepareVisualAssetsParams
@@ -1570,47 +1572,3 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
         return {"action": "stale", **target}
     return {"action": "produce" if receipt.get("presentation_complete") else "wait", **target}
 
-
-async def prepare_music_seat(*, project: Project | None, args: Any, managed: bool = False) -> ToolObservation:
-    if project is None:
-        return ToolObservation("music preparation needs a project context", ok=False)
-    from app.tools.video.music_preparation import cached_music_preparation, score_for_current_draft
-
-    try:
-        if not isinstance(args._working_draft, dict):
-            return ToolObservation("the current music draft could not be restored", ok=False)
-        score = score_for_current_draft(args._working_draft, args.score)
-        cached = await cached_music_preparation(
-            owner_id=project.user_id, project_id=project.id, score=score
-        )
-    except (ValueError, PermissionError) as exc:
-        return ToolObservation(f"prepare_music rejected: {exc}", ok=False)
-    except (BotoCoreError, ClientError, OSError):
-        return ToolObservation("The fixed score or its measured analysis is unavailable.", ok=False)
-    if cached is None:
-        if managed:
-            return ToolObservation(json.dumps({"cache": "miss"}))
-        return ToolObservation(json.dumps({
-            "ok": True,
-            "cache": "miss",
-            "execution": "not executed",
-            "draft_ref": args.draft_ref.model_dump(mode="json"),
-            "score_digest": score.score_digest,
-            "score_spec": score.model_dump(mode="json"),
-            "next": "仅用常规方案工具展示这一个任务，按用户实际意图填写 production_intent，由方案及 Start 流程负责授权和资源。展示方案或启动 Run 后结束，不在此合成或轮询。",
-            "plan_task": {
-                "tool": "prepare_music",
-                "params": {
-                    "draft_ref": args.draft_ref.model_dump(mode="json"),
-                    "name": args.name,
-                    "score": args.score.model_dump(mode="json"),
-                },
-            },
-        }, ensure_ascii=False), fold_after_delivery=True)
-    return ToolObservation(json.dumps({
-        "ok": True,
-        "cache": "hit",
-        "draft_ref": args.draft_ref.model_dump(mode="json"),
-        "result": cached,
-        "scope": "结果仅含固定的私有电子配乐 Music、音频 Snapshot、ScoreSpec、编排的 BeatGrid 和完整信号分析。未创建 CompositionVersion 或视频 Output，也未进行人工试听。",
-    }, ensure_ascii=False), fold_after_delivery=True)
