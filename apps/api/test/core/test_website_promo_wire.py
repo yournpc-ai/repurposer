@@ -45,8 +45,9 @@ def wire_copy(value):
 class FakeToolProvider:
     capabilities = ProviderCapabilities(supports_native_tools=True)
 
-    def __init__(self, calls):
+    def __init__(self, calls, *, content="我来处理这一步。"):
         self.calls_to_make = list(calls)
+        self.content = content
         self.wires = []
 
     async def generate_with_tools(self, *, messages, tools, **kwargs):
@@ -54,7 +55,7 @@ class FakeToolProvider:
         batch = self.calls_to_make.pop(0)
         calls = batch if isinstance(batch, list) else [batch]
         return ToolGeneration(
-            content="我来处理这一步。",
+            content=self.content,
             tool_calls=[ToolCall(id=f"call-{len(self.wires)}-{index}", name=name, arguments=arguments)
                         for index, (name, arguments) in enumerate(calls)],
         )
@@ -110,12 +111,18 @@ class BrandFakeClient:
         )
 
 
-async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch):
+async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatch):
+    form = website_question_arguments()
+    subtitles = next(item for item in form["items"] if item["slot"] == "subtitle_languages")
+    subtitles["options"] = [
+        {"label": "简体中文", "value": {"item": "zh-CN"}},
+        {"label": "英文", "value": {"item": "en-US"}},
+    ]
     provider = FakeToolProvider(
         [
             ("prepare_video_materials", {"material_urls": [URL]}),
             ("analyze_brand", {}),
-            ("ask_user", website_question_arguments()),
+            ("ask_user", form),
         ]
     )
     monkeypatch.setattr(intent_router, "client", provider)
@@ -198,7 +205,7 @@ async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch)
     assert len(provider.wires) == 3
     assert tool_names(provider.wires[0]) == {"prepare_video_materials", "answer"}
     assert tool_names(provider.wires[1]) == {"analyze_brand", "answer"}
-    assert {"ask_user", "design_video"} <= tool_names(provider.wires[2])
+    assert tool_names(provider.wires[2]) == {"ask_user"}
     for wire in provider.wires:
         assert wire["messages"].count({"role": "user", "content": text}) == 1
         assert [message["role"] for message in wire["messages"][:2]] == ["system", "user"]
@@ -228,10 +235,10 @@ async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch)
     assert "Citations should be as universal as hashtags." in brand_parts[-1]["text"]
 
     ask_arguments = provider.wires[2]["messages"][0]
-    assert "用户要求做宣传片时直接搭建" in ask_arguments["content"]
+    assert "原生 ask_user" in ask_arguments["content"]
     ask_system = ask_arguments["content"]
-    assert ask_system.index("视频创作（网站演示") < ask_system.index("- answer：")
-    assert ask_system.index("用户要求做宣传片时直接搭建") < ask_system.index("待回答的问题：")
+    assert "- answer：" not in ask_system
+    assert ask_system.index("原生 ask_user") < ask_system.index("待回答的问题：")
     current_wire = json.dumps(provider.wires[2]["messages"], ensure_ascii=False)
     assert "creative_state" in current_wire, current_wire
     assert '"source_refs"' not in provider.wires[2]["messages"][-2]["content"]
@@ -244,28 +251,24 @@ async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch)
     )
     assert set(ask_schema["properties"]) == {"question", "items", "default_path"}
     assert set(ask_schema["required"]) == {"question", "items", "default_path"}
-    assert ask_schema["properties"]["items"]["minItems"] == 1
+    assert ask_schema["properties"]["items"]["minItems"] == 5
     assert "Brief" not in ask_schema.get("$defs", {})
     questions = ask_schema["properties"]["items"]["items"]["anyOf"]
     assert [q["properties"]["slot"]["enum"][0] for q in questions] == [
         "production_direction", "target_seconds", "narration_language", "subtitle_languages", "aspect",
     ]
     assert "Option" not in ask_schema.get("$defs", {})
-    assert questions[0]["properties"]["options"]["items"]["required"] == ["use_case", "treatment"]
-    assert questions[1]["properties"]["options"]["items"]["type"] == "integer"
-    assert questions[4]["properties"]["options"]["items"]["enum"] == ["16:9", "9:16", "1:1"]
-    assert [option.id for option in result.params.items[0].options] == ["1", "2"]
+    for question in questions:
+        assert question["properties"]["options"]["items"]["required"] == ["label", "value"]
+    assert questions[1]["properties"]["options"]["items"]["properties"]["value"]["type"] == "integer"
+    assert questions[3]["properties"]["options"]["minItems"] == 1
+    assert questions[4]["properties"]["options"]["items"]["properties"]["value"]["enum"] == ["16:9", "9:16", "1:1"]
     asked = result.params
     asked.items = website_promo_question_items(asked.items, state.brief)
-    assert [item.decision_page.slots for item in asked.items if item.decision_page] == [
-        ["production_direction"], ["target_seconds"], ["narration_language"],
-        ["subtitle_languages"], ["aspect"],
-    ]
-    assert len(asked.items) == 5
-    assert asked.items[0].question == asked.items[0].decision_page.title == "这支片子主要用在哪里，你希望怎么讲？"
-    assert asked.items[1].option_values == {"1": 30, "2": 60}
-    for item in asked.items:
-        assert item.decision_page.choices == [{item.slot: option.id} for option in item.options]
+    assert [item.question for item in asked.items] == [item["question"] for item in form["items"]]
+    assert [option.id for option in asked.items[0].options] == ["1", "2"]
+    assert [option.value for option in asked.items[1].options] == [30, 60]
+    assert [(o.label, o.value) for o in asked.items[3].options] == [("简体中文", ["zh-CN"]), ("英文", ["en-US"])]
     payload = QuestionPayload(
         kind="question",
         question=asked.question,
@@ -292,7 +295,7 @@ async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch)
     assert state.brief.production_direction.value == "官网推广 · 用真实案例演示产品"
     assert state.brief.target_seconds.value == 60
     assert state.brief.narration_language.value == "en"
-    assert state.brief.subtitle_languages.value == ["zh"]
+    assert state.brief.subtitle_languages.value == ["en-US"]
     assert state.brief.aspect.value == "16:9"
 
     resumed_provider = FakeToolProvider([("answer", {})])
@@ -336,7 +339,77 @@ async def test_legitevi_wire_offers_design_and_optional_preferences(monkeypatch)
     assert f"对话语言：{resumed_language}" in messages[0]["content"]
     assert state.brief.production_direction.value in str(messages)
     assert "design_video" in tool_names(resumed_provider.wires[0])
+    assert "ask_user" not in tool_names(resumed_provider.wires[0])
     assert '"required_next_action": "design_video"' in str(resumed_provider.wires[0]["messages"])
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_question_written_in_prose_then_unoffered_design_retries_the_form(monkeypatch, streaming):
+    from unittest.mock import AsyncMock
+
+    from test.core.test_website_promo_readiness import profile, round_assembly
+
+    text = f"{URL} 给我的产品做一只宣传片"
+    assembly = round_assembly(text, assets=[asset("completed")], snapshots=[snapshot()],
+                              state=CreativeState(brand_profile=profile()))
+    assert {t.name for t in assembly.tools} == {"ask_user"}
+    replies = [
+        ToolGeneration('想先跟你确认。]<]minimax[>[<tool_call><invoke name="ask_user">', []),
+        ToolGeneration("我先按默认设定搭首稿。", [ToolCall(id="design", name="design_video", arguments={})]),
+        ToolGeneration("想听听你打算怎样用这支片。", [
+            ToolCall(id="ask", name="ask_user", arguments=website_question_arguments()),
+        ]),
+    ]
+    provider = FakeToolProvider([])
+    send = AsyncMock(side_effect=replies)
+    monkeypatch.setattr(provider, "generate_stream_with_tools", send)
+    monkeypatch.setattr(provider, "generate_with_tools", send)
+    monkeypatch.setattr(intent_router, "client", provider)
+    execute = AsyncMock(return_value=None)
+    result = await intent_router.call_loop(
+        execute, round_assembler=lambda **_: assembly, message=text,
+        on_delta=(lambda _: None) if streaming else None,
+    )
+    assert all(tool_names(call.kwargs) == {"ask_user"} for call in send.await_args_list)
+    assert "原生 tool_calls" in str(send.await_args_list[1].kwargs["messages"])
+    assert execute.await_count == 1 and execute.await_args.args[0] == result.tool_name == "ask_user"
+    assert "minimax" not in execute.await_args.args[2]
+    assert len(result.params.items) == 5
+
+
+@pytest.mark.parametrize("submitted", [True, False])
+async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire_submit(monkeypatch, submitted):
+    from app.chat.prompts import assemble_video_round
+    from test.core.test_website_promo_readiness import profile
+
+    text = f"给 {URL} 做一只 30 秒、16:9、使命叙事、英文配音和英文字幕的品牌官网宣传片。"
+    state = CreativeState(brief=brief_with_user_constraints(text), brand_profile=profile())
+    resources = (("asset:1", asset("completed")), ("snapshot:1", snapshot()))
+    world = ContextSnapshot("evidence", frozenset(key for key, _ in resources), resources=resources)
+    plan = {"scene_plan": [{"scene_id": "intro", "intent": "用证据说明产品机制"}]}
+    provider = FakeToolProvider([("design_video", plan)])
+    monkeypatch.setattr(intent_router, "client", provider)
+    events = []
+
+    def assemble(**facts):
+        return assemble_video_round({
+            **facts, "mode": "plan", "user_text": text, "creative_state": state, "snapshot": world,
+            "media_journey": {"opening_id": "opening"}, "group_answer_submitted": submitted,
+        })
+
+    async def execute(name, params, prose):
+        events.append(name)
+        return ToolObservation("draft prepared", stop_after_observation=True)
+
+    await intent_router.call_loop(
+        execute, round_assembler=assemble, message=text,
+        on_delta=lambda _: None, on_interim_prose=events.append,
+    )
+    assert events == ["我来处理这一步。", "design_video"]
+    assert ("用户刚提交制作偏好" in str(provider.wires[0]["messages"])) == submitted
+    following = assemble(tools=intent_router.tools, interim_prose_count=1)
+    assert following.stream_prose
+    assert "用户刚提交制作偏好" not in following.context
 
 
 async def test_url_and_suggestion_preserve_speech_language_until_user_writes_in_english():

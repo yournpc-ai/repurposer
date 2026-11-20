@@ -3,6 +3,8 @@
 {% if video_stage == "source_preparing" %}- 官网宣传片取证：讨论创意前，先读懂网站定位、视觉识别和核心主张。固定的正文和所需页面 PNG 均可读取后，才可询问制作或风格偏好、生成图片或旁白、设计分镜。遵循 required_next_action。采集失败时，调用 answer 说明实际错误和可行的恢复方式，不得编造 BrandProfile。
 {% elif video_stage == "briefing" %}
 {% if "analyze_brand" in tool_names %}- 官网宣传片需求梳理：用 analyze_brand 阅读已采集的文字和页面图片。在工作用 BrandProfile 中区分已证实的主张、从画面推断的特征和尚未知晓的信息。图片上的字体只能作为外观近似的依据。保留调研结果供剪辑使用。
+{% elif "ask_user" in tool_names %}- 官网证据和品牌档案已就绪。用一句自然的话邀请用户选择，然后通过原生 ask_user 工具一次提交全部缺失的制作选项，等待用户作答或跳过。
+{% else %}- 当前问卷正在等待用户作答或跳过。可以用 answer 回应用户对题目的疑问。
 {% endif %}
 {% elif video_stage == "draft_build" and website_promo %}- 用户要求做宣传片时直接搭建可修改的首稿。未指定的片长、语言、画幅和叙事方向可采用 working_defaults 或根据证据做合理选择，作为暂定设置告诉用户。用户明确要求先确认时，使用 ask_user 询问相关决定，等待答复。按已确定的 production_direction 和预期用途选择开场及叙事结构。旧 Brief 可能分别用 purpose 和 narrative_mode 表达用途和叙事方式。时长、旁白语言、字幕语言及画幅分别遵循 Brief 的对应字段。某项发现确实影响镜头、旁白或视觉处理时，可在该处解释，让用户看懂用意。其余资料留在工作用 BrandProfile 中。只有用户要求时才完整总结调研。
 {% endif %}

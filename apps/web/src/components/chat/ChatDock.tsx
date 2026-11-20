@@ -731,6 +731,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const groupDraftsHydrationRef = useRef({ projectId: "", skipSave: true })
   const groupDraftKey = (question: QuestionMessage) =>
     `${question.id}:${question.question?.group_digest ?? ""}`
+  const groupDraftAnswers = (question: QuestionMessage) =>
+    (questionGroupDrafts[groupDraftKey(question)] ?? []).filter((answer) =>
+      question.question?.items?.some((item) => item.slot === answer.slot))
   useEffect(() => {
     groupDraftsHydrationRef.current = { projectId, skipSave: true }
     setQuestionGroupDrafts(loadQuestionGroupDrafts(projectId))
@@ -1251,7 +1254,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         fresh?: boolean
       } = {},
     ) => {
-      const row = journeyTranscriptRow(wire, workerOpeningId)
+      const row = journeyTranscriptRow(wire)
       noteObservedSeq(row.seq)
       const runDelivery = triggerSuggestions(row.intent) !== undefined
       const runDeliveryRef = triggerDeliveryRef(row.intent)
@@ -1266,12 +1269,14 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         runDeliveryRef,
         outputRefs: triggerOutputRefs(row.intent),
       })
-      message.mediaProgress = mediaProgress(wire, workerOpeningId)
+      message.mediaProgress = mediaProgress(wire)
       message.mediaOpeningId = journeyMark(wire)?.openingId
       message.sceneOrder = sceneOrder(wire)
       message.activity = preparationActivity(wire)
       message.continuationTurnId = continuationTurnId(wire, workerOpeningId)
       setMessages((prev) => insertRecoveredMessage(prev, message, { fresh }))
+      const text = (row.content ?? "").trim()
+      let visibleLength = 0
       let sawVisible = false
       const tw = createTypewriter((fragment) => {
         if (!sawVisible && fragment.trim().length > 0) {
@@ -1290,14 +1295,16 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
             sealRunWorkSegment(sealRunId, atMs)
           }
         }
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === row.id ? { ...m, content: m.content + fragment } : m,
-          ),
-        )
+        // Two reads can observe this server row before React commits the first.
+        visibleLength += fragment.length
+        const visibleText = text.slice(0, visibleLength)
+        setMessages((prev) => prev.map((m) =>
+          m.id === row.id && m.streaming && m.content.length < visibleText.length
+            ? { ...m, content: visibleText } : m,
+        ))
       }, setProseActive)
       // Server-born prose still paces out; never flush the whole row.
-      tw.push((row.content ?? "").trim())
+      tw.push(text)
       await tw.drain()
       tw.flush()
       setMessages((prev) =>
@@ -1588,10 +1595,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // A restarted worker can settle the same receipt in place.
           const settled = journeyTranscriptRow(row)
           if (mark && mark.state !== "active" && !existing.streaming &&
-              (existing.content !== (settled.content ?? "") || (!!existing.mediaProgress !== mediaProgress(row, openingId)))) {
+              (existing.content !== (settled.content ?? "") || (!!existing.mediaProgress !== mediaProgress(row)))) {
             setMessages((previous) => previous.map((message) => message.id === existing.id
               ? { ...message, content: settled.content ?? "", blocks: settled.blocks,
-                  mediaProgress: mediaProgress(row, openingId), continuationTurnId: continuationTurnId(row, openingId) }
+                  mediaProgress: mediaProgress(row), continuationTurnId: continuationTurnId(row, openingId) }
               : message))
           }
           continue
@@ -3483,7 +3490,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     const digest = question?.question?.group_digest
     if (!question || !digest || !(question.question?.items?.length)) return
     const group = groupAnswerDisplay(question, answers)
-    const displayText = [...group.items.map((item) => item.answer), group.productionNote].filter(Boolean).join(" · ")
+    const displayText = group.items.map((item) => item.answer).filter(Boolean).join(" · ")
     if (answering) return
     await settleAnswerTurn(
       question,
@@ -3829,7 +3836,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       ? {
           kind: "bail" as const,
           group_digest: groupDigest,
-          answers: questionGroupDrafts[groupDraftKey(pendingQuestion)] ?? [],
+          answers: groupDraftAnswers(pendingQuestion),
         }
       : { kind: "bail" as const }
     try {
@@ -4440,7 +4447,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         options={pillQuestion.question?.options ?? []}
         items={pillQuestion.question?.items ?? []}
         groupDigest={pillQuestion.question?.group_digest ?? null}
-        groupAnswers={questionGroupDrafts[groupDraftKey(pillQuestion)] ?? []}
+        groupAnswers={groupDraftAnswers(pillQuestion)}
         onGroupAnswersChange={(answers) => {
           const key = groupDraftKey(pillQuestion)
           setQuestionGroupDrafts((previous) => ({ ...previous, [key]: answers }))

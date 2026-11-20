@@ -124,7 +124,7 @@ it("continues automatic recording without player controls or user input, includi
   expect(screen.queryByText("narration5")).toBeNull()
 })
 
-it("keeps one work row through numbered scenes, worker handoffs and the first visible answer", async () => {
+it("updates tool status in place and shows each worker reply once, live and on reopen", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] })
   const start = "2026-11-18T12:00:00Z"
   const rows: HistoryRow[] = [{
@@ -175,11 +175,10 @@ it("keeps one work row through numbered scenes, worker handoffs and the first vi
       presentation: "stage_summary", media_journey: { opening_id: "opening", state: "active" } },
   })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
-  expect(screen.getByText("chat.thinking")).toBe(line)
   expect(screen.queryByText(reply.hold)).toBeNull()
-  await act(async () => { await vi.advanceTimersByTimeAsync(49000) })
-  expect(screen.getByText("chat.thinking")).toBe(line)
-  expect(screen.queryByText("chat.activityFold.worked")).toBeNull()
+  await act(async () => reply.first())
+  await act(async () => reply.rest())
+  expect(screen.getAllByText(reply.hold)).toHaveLength(1)
   expect(screen.getByRole("button", { name: "chat.stop" })).toBeDefined()
   rows.push({
     ...rows[1], id: "m4", seq: 4, workflow_run_id: "voice-run", content: "分镜旁白准备",
@@ -188,7 +187,7 @@ it("keeps one work row through numbered scenes, worker handoffs and the first vi
   })
   Object.assign(runState, { terminal: false, status: "running", steps: [] })
   await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
-  expect(screen.getByText("chat.stepKinds.prepare_narration")).toBe(line)
+  const recordingLine = screen.getByText("chat.stepKinds.prepare_narration")
   expect(screen.queryByText("分镜旁白准备")).toBeNull()
   expect(screen.queryByText("估价 8–8 积分")).toBeNull()
   expect(document.querySelector('[data-slot="run-response"]')).toBeNull()
@@ -201,16 +200,15 @@ it("keeps one work row through numbered scenes, worker handoffs and the first vi
   }]
   view.rerender(dock("voice"))
   await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
-  expect(screen.getByText("正在录制第二条旁白…")).toBe(line)
+  expect(screen.getByText("正在录制第二条旁白…")).toBe(recordingLine)
   expect(screen.queryByText("audio_snapshot")).toBeNull()
   rows.push({ ...mark(5, "voice-run", "active", "narration"), content: "分镜旁白已录制。" })
   rows.push({ ...mark(6, null, "active"), intent: { type: "interim_prose" }, content: "继续准备 s3。" })
   Object.assign(runState, { terminal: true, status: "completed" })
   view.rerender(dock("handoff"))
   await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
-  expect(screen.getByText("chat.thinking")).toBe(line)
-  expect(screen.queryByText("分镜旁白已录制。")).toBeNull()
-  expect(screen.queryByText("继续准备 s3。")).toBeNull()
+  expect(screen.getAllByText("分镜旁白已录制。")).toHaveLength(1)
+  expect(screen.getAllByText("继续准备 s3。")).toHaveLength(1)
   reply.hold = "本次制作已完成。"
   rows.push({ ...mark(7, null, "complete"), content: reply.hold })
   await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
@@ -224,10 +222,9 @@ it("keeps one work row through numbered scenes, worker handoffs and the first vi
   view.unmount()
   render(dock(""))
   await act(async () => {})
-  expect(screen.getAllByText(/^chat.activityFold.worked/)).toHaveLength(1)
-  expect(screen.queryByText("五个分镜已准备好。")).toBeNull()
-  expect(screen.queryByText("分镜旁白已录制。")).toBeNull()
-  expect(screen.queryByText("继续准备 s3。")).toBeNull()
+  expect(screen.getAllByText("五个分镜已准备好。")).toHaveLength(1)
+  expect(screen.getAllByText("分镜旁白已录制。")).toHaveLength(1)
+  expect(screen.getAllByText("继续准备 s3。")).toHaveLength(1)
   expect(screen.getAllByText(reply.hold)).toHaveLength(1)
   expect(screen.queryByText("分镜图片准备")).toBeNull()
   expect(screen.queryByText("分镜旁白准备")).toBeNull()

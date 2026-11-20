@@ -21,7 +21,6 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from pydantic.json_schema import SkipJsonSchema
 import structlog
 
 from app.editing.edits import ClipEntityWrite
@@ -488,68 +487,37 @@ BriefQuestionSlot = Literal[
 ]
 
 
-class BriefDecisionPage(BaseModel):
-    """由服务端固定并展示的一组相关 Brief 字段。"""
-
-    slots: list[BriefQuestionSlot]
-    title: str
-    choices: list[dict[str, str]]  # atom slot -> frozen option id
+class BriefQuestionOption(Option):
+    label: str = Field(min_length=1)
+    value: str | int | list[str]
 
 
 class BriefQuestionItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        if isinstance(data, dict) and isinstance(data.get("options"), list):
-            options = []
-            values = {}
-            for index, raw in enumerate(data["options"], start=1):
-                # Website briefing authors a display setting and an editorial
-                # treatment together, but the dock and the Brief own one answer.
-                if data.get("slot") == "production_direction" and (
-                    data.get("question_language") or isinstance(raw, dict) and ("use_case" in raw or "treatment" in raw)
-                ):
-                    parts = (raw.get("use_case"), raw.get("treatment")) if isinstance(raw, dict) else (None, None)
-                    if not all(isinstance(part, str) and part.strip() for part in parts):
-                        raise ValueError("Each direction needs a release setting and a storytelling treatment")
-                    direction = " · ".join(part.strip() for part in parts)
-                    raw = {"label": direction, "value": direction}
-                elif data.get("slot") == "target_seconds" and type(raw) is int:
-                    raw = str(raw)
-                option = raw
-                if isinstance(raw, str):
-                    option = {"id": str(index), "label": raw}
-                elif isinstance(raw, dict) and "value" in raw:
-                    option = {**raw, "id": str(raw.get("id", index))}
-                    values[option["id"]] = option.pop("value")
-                options.append(option)
-            data = {**data, "options": options}
-            if values:
-                data["option_values"] = values
-        return tolerate_null_keys(data, "options", "recommended_id", "default_path")
-
     slot: BriefQuestionSlot
-    # Used when freezing a localized website form. Stored questions carry
-    # the resulting display text, including their BriefDecisionPage title.
-    question_language: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
-    decision_page: BriefDecisionPage | None = None
-    option_values: dict[str, str | int | list[str]] | None = None
-    question: str
-    options: list[Option] = Field(default_factory=list)
+    question: str = Field(min_length=1)
+    options: list[BriefQuestionOption] = Field(default_factory=list)
     recommended_id: str | None = None
     allow_freeform: bool = True
     required: bool = True
     default_path: str = ""
 
+    @field_validator("options", mode="before")
+    @classmethod
+    def _number_authored_options(cls, options: Any) -> Any:
+        if not isinstance(options, list):
+            return options
+        return [
+            {"id": str(index), **option} if isinstance(option, dict) else option
+            for index, option in enumerate(options, start=1)
+        ]
+
 
 class BriefAnswerItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    page_slots: list[BriefQuestionSlot] | None = None
-
-    slot: BriefQuestionSlot | Literal["constraints"]
+    slot: BriefQuestionSlot
     kind: Literal["option", "freeform"]
     option_id: str | None = None
     text: str | None = None
@@ -1205,13 +1173,16 @@ class AnalyzeBrandArgs(BaseModel):
 
     @field_validator("brief")
     @classmethod
-    def _keep_stated_direction(cls, brief: Brief | None) -> Brief | None:
+    def _keep_stated_promo_choices(cls, brief: Brief | None) -> Brief | None:
         if brief is None:
             return None
         # The user's decision and the brand agent's creative recommendation
         # have separate homes. Never use a recommendation to satisfy the form.
         unstated = {
-            name: BriefSlot() for name in ("purpose", "narrative_mode", "production_direction")
+            name: BriefSlot() for name in (
+                "purpose", "narrative_mode", "production_direction", "target_seconds",
+                "narration_language", "subtitle_languages", "aspect",
+            )
             if (slot := getattr(brief, name)).value and slot.source != BriefSlotSource.USER_STATED
         }
         return brief.model_copy(update=unstated) if unstated else brief
@@ -2792,11 +2763,25 @@ def missing_brief_question_items(
     for item in items:
         if getattr(brief, item.slot).value:
             continue
+        if len({option.id for option in item.options}) != len(item.options):
+            raise ValueError(f"{item.slot} needs unique option ids")
         if item.required and not item.options and not item.allow_freeform:
             raise ValueError(f"required slot {item.slot} needs options or freeform")
+        # Use the destination Brief field's type before issuing any selectable value.
+        slot_type = Brief.model_fields[item.slot].annotation
+        options = []
+        for option in item.options:
+            value = option.value
+            if item.slot in {"subtitle_languages", "must_include", "avoid", "success_criteria"} and isinstance(value, str):
+                value = [value]
+            try:
+                typed = slot_type(value=value)
+            except ValueError as exc:
+                raise ValueError(f"{item.slot} has an invalid option value: {value!r}") from exc
+            options.append(option.model_copy(update={"value": typed.value}))
         missing.append(item.model_copy(update={
+            "options": options,
             "recommended_id": resolve_recommended_id(item.recommended_id, item.options),
-            "decision_page": None,
         }))
     return missing
 

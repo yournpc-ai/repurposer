@@ -1653,8 +1653,6 @@ const zh: Resources = {
   },
   questionDock: {
     customize: "自定义这组设置",
-    notes: "其他制作要求（可选）",
-    productionInstructions: "其他制作要求",
     bail: "停止生成",
     skip: "跳过问题",
     recommended: "推荐",

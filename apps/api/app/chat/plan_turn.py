@@ -181,6 +181,7 @@ class PlanTurn:
         self.media_score_delivered = False
         self.media_visual_results: list[dict] = []
         self.media_resume_pending: PendingPlan | None = None
+        self.media_resume_narration: list[dict] | None = None
         self.media_start_blocker: str | None = None
         self.media_start_rejections = 0
         self.media_image_blocked_scene: int | None = None
@@ -717,7 +718,9 @@ class PlanTurn:
         if self.media_state is not None:
             from app.chat.media_journey import media_write_rejection
 
-            rejection = media_write_rejection(self.media_state["phase"], name, params)
+            rejection = media_write_rejection(
+                self.media_state["phase"], name, params, self.media_state.get("narration_resume"),
+            )
             if rejection:
                 return rejection
         if name == "read_conversation_context":
@@ -1370,11 +1373,6 @@ class PlanTurn:
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """Dock one clarification interaction through the ask_user machinery."""
         stored = self._current_pending()
-        merged_brief = await self._absorb(
-            params.brief,
-            params.material_text,
-            getattr(params, "material_urls", None),
-        )
         from app.chat.readiness import (
             brief_with_user_constraints,
             creative_state_for_pending,
@@ -1387,6 +1385,11 @@ class PlanTurn:
             else stored.prompt or self.text
         )
         website_promo = infer_task_kind(source_text) == "website_promo"
+        if website_promo and params.brief is not None:
+            return "Submit the questionnaire against the current Brief. Only the user's answers settle its missing fields."
+        merged_brief = await self._absorb(
+            params.brief, params.material_text, getattr(params, "material_urls", None),
+        )
         if website_promo:
             merged_brief = brief_with_user_constraints(self.text, merged_brief)
             current_state = creative_state_for_pending(stored)
@@ -1893,6 +1896,7 @@ async def run_plan_turn(
     media_resume_pending: PendingPlan | None = None,
     media_resume_draft: RestoredCandidate | None = None,
     media_resume_narration: list[dict] | None = None,
+    group_answer_submitted: bool = False,
 ) -> PlanTurnOutcome:
     """The plan path's turn: assemble → the bounded tool loop → the outcome
     mapping. ``intent_router`` provider failures propagate as LLMError — no
@@ -1925,6 +1929,7 @@ async def run_plan_turn(
         package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}),
     )
     turn.media_resume_pending = media_resume_pending
+    turn.media_resume_narration = media_resume_narration
     await turn.assemble(recent)
     mention_target = await video_target_hint(db, project, request.mentions)
     opening = await db.get(Message, turn_id) if turn_id is not None else None
@@ -1990,16 +1995,17 @@ async def run_plan_turn(
     turn._conversation_context = conversation_context
     context_tools = [conversation_context_tool()] if conversation_context is not None else []
 
-    from app.chat.readiness import creative_state_for_pending, infer_task_kind
+    from app.chat.readiness import creative_state_for_pending, infer_task_kind, settled_website_question
     from app.pipeline.assets import urls_in_text
     turn.infer_kwargs["pending_question"] = None
+    website_question_settled = settled_website_question(recent, turn_id)
 
     def assemble_round(**facts):
         if turn.media_score_delivered:
             return RoundAssembly(
                 tools=[tool for tool in facts["tools"] if tool.name == "answer"],
                 system="阅读已固定的电子配乐及实测音频数据。音频已在 Chat 中，用 answer 结束本轮。尚未渲染视频。",
-                include_project_context=False, allow_interim_prose=False,
+                include_project_context=False,
                 observation_tools=frozenset({"prepare_music"}),
             )
         target_hint = mention_target or turn._video_target_ambiguity
@@ -2020,7 +2026,9 @@ async def run_plan_turn(
             **facts,
             "media_journey": turn.media_journey,
             "media_visual_results": turn.media_visual_results,
-            "settled_narration": media_resume_narration,
+            "website_question_settled": website_question_settled,
+            "group_answer_submitted": group_answer_submitted,
+            "settled_narration": turn.media_resume_narration,
             "mode": "plan",
             "skill": turn.skill,
             "user_text": request.message,

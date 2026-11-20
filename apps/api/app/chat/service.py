@@ -721,12 +721,9 @@ def _group_slot_value(item, answer) -> Any:
     from app.models.schemas import BriefAnswerItem
 
     assert isinstance(answer, BriefAnswerItem)
-    if answer.kind == "option" and item.option_values is not None:
-        return item.option_values[answer.option_id]
-    display = (answer.text or "").strip() or next(
-        (option.label for option in item.options if option.id == answer.option_id),
-        "",
-    )
+    if answer.kind == "option":
+        return next(option.value for option in item.options if option.id == answer.option_id)
+    display = (answer.text or "").strip()
     if item.slot == "target_seconds":
         match = re.search(r"\d+", display)
         if match is None:
@@ -740,7 +737,7 @@ def _group_slot_value(item, answer) -> Any:
     if item.slot == "narration_language":
         return _language_code(display)
     if item.slot == "subtitle_languages":
-        values = re.split(r"[+,，、/\s]+", display) if answer.kind == "freeform" else display.split("+")
+        values = re.split(r"[+,，、/\s]+", display)
         languages = [_language_code(value) for value in values if value.strip()]
         if not languages or any(not value for value in languages):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "subtitle_languages needs at least one language")
@@ -763,29 +760,9 @@ def _validate_group_answers(
     seen: set[str] = set()
     normalized: list[BriefAnswerItem] = []
     for answer in data.answers:
-        if answer.page_slots is not None:
-            item = by_slot.get(answer.slot)
-            page = item.decision_page if item else None
-            if (answer.kind != "freeform" or page is None
-                or answer.page_slots != page.slots or answer.slot != page.slots[0]
-                or any(not by_slot[slot].allow_freeform for slot in page.slots)
-                or seen.intersection(page.slots)):
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid decision-page answer")
-            text = (answer.text or "").strip()
-            if not 0 < len(text) <= 4000:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid decision-page answer length")
-            seen.update(page.slots)
-            normalized.append(answer.model_copy(update={"text": text}))
-            continue
         if answer.slot in seen:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Duplicate answer slot '{answer.slot}'")
         seen.add(answer.slot)
-        if answer.slot == "constraints" and any(item.decision_page for item in question.items):
-            text = (answer.text or "").strip()
-            if answer.kind != "freeform" or not 0 < len(text) <= 4000:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid production notes")
-            normalized.append(answer.model_copy(update={"text": text}))
-            continue
         item = by_slot.get(answer.slot)
         if item is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unexpected answer slot '{answer.slot}'")
@@ -813,33 +790,16 @@ def _backfill_brief_group(project: Project, question: QuestionPayload, answers: 
     by_slot = {item.slot: item for item in question.items}
     for answer in answers:
         update = Brief()
-        if answer.page_slots and len(answer.page_slots) > 1:
-            # A historical paired page's sentence answers the page as a whole. Preserve it
-            # without pretending it is a typed value for every covered field.
-            from app.chat.readiness import brief_with_user_constraints
+        item = by_slot[answer.slot]
+        value = _group_slot_value(item, answer)
+        if item.slot == "production_direction" and answer.kind == "freeform":
+            from app.chat.readiness import direction_with_known_details
 
-            page = by_slot[answer.slot].decision_page
-            update.constraints = [BriefSlot(
-                value=f"{page.title} {answer.text}", source=BriefSlotSource.USER_STATED,
-            )]
-            stored.brief = merge_brief(update, stored.brief)
-            stored.brief = brief_with_user_constraints(
-                f"{stored.prompt}\n{answer.text}", stored.brief,
-            )
-            continue
-        if answer.slot == "constraints":
-            update.constraints = [BriefSlot(value=answer.text, source=BriefSlotSource.USER_STATED)]
-        else:
-            item = by_slot[answer.slot]
-            value = _group_slot_value(item, answer)
-            if item.slot == "production_direction" and answer.kind == "freeform":
-                from app.chat.readiness import direction_with_known_details
-
-                value = direction_with_known_details(stored.brief, value)
-            setattr(update, item.slot, BriefSlot(
-                value=value,
-                source=BriefSlotSource.USER_STATED,
-            ))
+            value = direction_with_known_details(stored.brief, value)
+        setattr(update, item.slot, BriefSlot(
+            value=value,
+            source=BriefSlotSource.USER_STATED,
+        ))
         stored.brief = merge_brief(update, stored.brief)
     from app.chat.readiness import (
         creative_state_for_pending, creative_state_with_brief, infer_task_kind, resolve_legacy_direction,
@@ -854,9 +814,7 @@ def _backfill_brief_group(project: Project, question: QuestionPayload, answers: 
     project.pending_brief = stored.model_dump(mode="json")
 
 
-async def _apply_website_promo_group_defaults(
-    db: AsyncSession, project: Project, question: QuestionPayload,
-) -> None:
+async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project) -> None:
     from app.chat.readiness import (
         creative_state_for_pending,
         creative_state_with_brief,
@@ -889,7 +847,6 @@ async def _apply_website_promo_group_defaults(
         stored.brief,
         snapshots,
         fallback_language="zh" if _prefers_zh(stored.prompt) else "en",
-        legacy_split_direction=any(item.slot in {"purpose", "narrative_mode"} for item in question.items),
     )
     stored.creative_state = creative_state_with_brief(state, stored.brief)
     project.pending_brief = stored.model_dump(mode="json")
@@ -2042,6 +1999,7 @@ async def _continue_chat_answer(
             conversation,
             project,
             ChatRequest(project_id=project.id, message=say),
+            group_answer_submitted=data.kind == "group",
             recent=recent,
             on_delta=on_delta,
             on_phase=on_phase,
@@ -2591,7 +2549,7 @@ async def answer_question(
         if project is not None:
             if question.items:
                 _backfill_brief_group(project, question, group_answers)
-                await _apply_website_promo_group_defaults(db, project, question)
+                await _apply_website_promo_group_defaults(db, project)
             if question.slot == "asset_role":
                 # 判词④'s promised default, kept by code: skip = upload
                 # order — first video the material, the next the exemplar
@@ -2701,6 +2659,7 @@ async def _plan_turn(
     on_candidates=None,
     on_row_append=None,
     turn_id: UUID | None = None,
+    group_answer_submitted: bool = False,
 ) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -2732,6 +2691,7 @@ async def _plan_turn(
         skill=skill,
         skill_ambiguity=skill_ambiguity,
         recent=recent,
+        group_answer_submitted=group_answer_submitted,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,

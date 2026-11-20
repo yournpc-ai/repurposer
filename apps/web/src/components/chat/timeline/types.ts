@@ -184,14 +184,9 @@ export interface CandidateMemberPayload {
 }
 
 export interface BriefQuestionItem {
-  decision_page?: {
-    slots: string[]
-    title: string
-    choices: Record<string, string>[]
-  } | null
   slot: string
   question: string
-  options?: { id: string; label: string; description?: string }[]
+  options?: { id: string; label: string; value: string | number | string[]; description?: string }[]
   recommended_id?: string | null
   allow_freeform?: boolean
   required?: boolean
@@ -199,7 +194,6 @@ export interface BriefQuestionItem {
 }
 
 export interface BriefAnswerItem {
-  page_slots?: string[] | null
   slot: string
   kind: "option" | "freeform"
   option_id?: string | null
@@ -368,7 +362,6 @@ export interface OverlayMessage {
     questionId?: string
     answerKind?: QuestionAnswer["kind"]
     items?: { question: string; answer: string; muted?: boolean }[]
-    productionNote?: string
   }
   /** The canvas product this turn was pointed at (ADR-041 D8, WRITE-RETIRED
    * ADR-058 — pointing is an @mention chip now): old server rows still carry

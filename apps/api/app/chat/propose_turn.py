@@ -1370,9 +1370,11 @@ async def run_propose_turn(
     try:
         from app.chat.context import conversation_messages
         from app.chat.prompts import assemble_video_round
-        from app.chat.readiness import creative_state_for_pending, infer_task_kind
+        from app.chat.readiness import creative_state_for_pending, infer_task_kind, settled_website_question
         from app.chat.speech_language import conversation_speech_language
         from app.pipeline.assets import urls_in_text
+
+        website_question_settled = settled_website_question(recent, turn_id)
 
         def assemble_round(**facts):
             current_pending = (
@@ -1386,6 +1388,7 @@ async def run_propose_turn(
             assembly = assemble_video_round({
                 **facts,
                 "mode": "conversation",
+                "website_question_settled": website_question_settled,
                 "skill": getattr(turn, "skill", None),
                 "user_text": text,
                 "source_text": source_text,

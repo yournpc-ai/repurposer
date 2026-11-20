@@ -2,23 +2,24 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 
 from app.chat.context import conversation_messages
 from app.chat.service import _ask_content, _validate_group_answers, answer_question
 from app.models.schemas import (
     AnswerPayload,
+    AnswerRequest,
     BrandProfile,
     BrandSourceRef,
     Brief,
     BriefAnswerItem,
-    BriefDecisionPage,
+    BriefQuestionOption,
     BriefQuestionItem,
     BriefSlot,
     BriefSlotSource,
     CreativeState,
     GroupAnswerRequest,
-    Option,
     PendingPlan,
     QuestionPayload,
     question_group_digest,
@@ -27,31 +28,10 @@ from app.models.schemas import (
 from app.models.tables import Conversation, Message, Project, SourceSnapshot, User, WorkflowRun
 from test.core.test_website_promo_readiness import website_question_arguments
 
-SLOTS = (
-    ("purpose", "website"),
-    ("target_seconds", "60"),
-    ("narrative_mode", "mission_tech"),
-    ("narration_language", "en"),
-    ("subtitle_languages", "en"),
-    ("aspect", "16:9"),
-)
-
-
-def group_payload(*, allow_freeform=True, numeric_ids=False):
-    items = [
-        BriefQuestionItem(
-            slot=slot,
-            question=f"Choose {slot}",
-            options=[Option(
-                id=str(index) if numeric_ids else option_id,
-                label=option_id,
-            )],
-            allow_freeform=allow_freeform,
-            required=True,
-            default_path=f"Use a safe {slot} default",
-        )
-        for index, (slot, option_id) in enumerate(SLOTS, start=1)
-    ]
+def group_payload(*, allow_freeform=True):
+    items = website_items()
+    for item in items:
+        item.allow_freeform = allow_freeform
     return QuestionPayload(
         kind="question",
         question="Confirm the production setup",
@@ -61,49 +41,19 @@ def group_payload(*, allow_freeform=True, numeric_ids=False):
     )
 
 
-def group_request(payload, *, numeric_ids=False):
+def group_request(payload):
     return GroupAnswerRequest(
         kind="group",
         group_digest=payload.group_digest,
         answers=[
-            BriefAnswerItem(
-                slot=slot,
-                kind="option",
-                option_id=str(index) if numeric_ids else option_id,
-            )
-            for index, (slot, option_id) in enumerate(SLOTS, start=1)
+            BriefAnswerItem(slot=item.slot, kind="option", option_id=item.options[0].id)
+            for item in payload.items
         ],
     )
 
 
 def website_items():
     return [BriefQuestionItem.model_validate(item) for item in website_question_arguments()["items"]]
-
-
-def issued_four_page_payload():
-    payload = group_payload()
-    for item in payload.items:
-        value = item.options[0].label
-        if item.slot == "target_seconds":
-            value = int(value)
-        elif item.slot == "subtitle_languages":
-            value = [value]
-        item.options[0].id = "1"
-        item.option_values = {"1": value}
-    pages = [
-        (["purpose", "target_seconds"], "宣传片主要用在哪里、希望多长？"),
-        (["narrative_mode"], "希望采用哪种表达方式？"),
-        (["narration_language", "subtitle_languages"], "语言和字幕怎么配置？"),
-        (["aspect"], "画面比例需要哪一种？"),
-    ]
-    by_slot = {item.slot: item for item in payload.items}
-    for slots, title in pages:
-        by_slot[slots[0]].decision_page = BriefDecisionPage(
-            slots=slots, title=title, choices=[{slot: "1" for slot in slots}],
-        )
-    # An issued question keeps its original token across changes to the Brief schema.
-    payload.group_digest = "ab" * 32
-    return payload
 
 
 URL = "https://www.legitevi.com/en"
@@ -174,7 +124,7 @@ def test_group_validation_rejects_bad_membership_duplicates_required_and_freefor
             request.model_copy(
                 update={
                     "answers": [
-                        BriefAnswerItem(slot="purpose", kind="option", option_id="other"),
+                        BriefAnswerItem(slot="production_direction", kind="option", option_id="other"),
                         *request.answers[1:],
                     ],
                 }
@@ -188,7 +138,7 @@ def test_group_validation_rejects_bad_membership_duplicates_required_and_freefor
             request.model_copy(
                 update={
                     "answers": [
-                        BriefAnswerItem(slot="purpose", kind="freeform", text="conference"),
+                        BriefAnswerItem(slot="production_direction", kind="freeform", text="conference"),
                         *request.answers[1:],
                     ],
                 }
@@ -201,10 +151,20 @@ def test_group_validation_rejects_bad_membership_duplicates_required_and_freefor
     assert stale.value.status_code == 409
 
 
+@pytest.mark.parametrize("kind", ["group", "bail"])
+def test_questionnaire_rejects_removed_notes_on_submit_and_skip(kind):
+    with pytest.raises(ValidationError) as error:
+        TypeAdapter(AnswerRequest).validate_python({
+            "kind": kind,
+            "group_digest": "0" * 64,
+            "answers": [{"slot": "constraints", "kind": "freeform", "text": "24 fps"}],
+        })
+    assert error.value.errors()[0]["loc"][-1] == "slot"
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("four_pages", [False, True])
 async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
-    database, monkeypatch, four_pages
+    database, monkeypatch
 ):
     async with database() as db:
         user = User(id=uuid4(), email=f"{uuid4().hex}@example.com")
@@ -215,12 +175,8 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
             pending_brief=PendingPlan().model_dump(mode="json"),
         )
         conversation = Conversation(id=uuid4(), user_id=user.id, project_id=project.id)
-        payload = issued_four_page_payload() if four_pages else group_payload(numeric_ids=True)
-        request = group_request(payload, numeric_ids=True)
-        if four_pages:
-            for answer in request.answers:
-                answer.option_id = "1"
-            request.answers.append(BriefAnswerItem(slot="constraints", kind="freeform", text="两幕、24 fps、纯电子 BGM"))
+        payload = group_payload()
+        request = group_request(payload)
         question = Message(
             id=uuid4(),
             conversation_id=conversation.id,
@@ -249,6 +205,7 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
     continuations = []
 
     async def no_model_follow_up(*args, **kwargs):
+        assert kwargs["group_answer_submitted"]
         continuations.append(conversation_messages(kwargs["recent"]))
         return None, None, None, []
 
@@ -262,23 +219,17 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
         assert len(answered.answer["answers"]) == len(request.answers)
         assert [m["role"] for m in continuations[0]] == ["user", "assistant", "user"]
         assert continuations[0][0]["content"] == "给官网做一支宣传片"
-        for item, (_, value) in zip(payload.items, SLOTS, strict=True):
-            assert f"{item.question} {value}" in continuations[0][-1]["content"]
+        for item in payload.items:
+            assert f"{item.question} {item.options[0].label}" in continuations[0][-1]["content"]
         stored = PendingPlan.model_validate((await db.get(Project, project_id)).pending_brief)
-        assert stored.brief.purpose.value == "website"
-        assert stored.brief.target_seconds.value == 60
-        assert stored.brief.narrative_mode.value == "mission_tech"
+        assert stored.brief.production_direction.value == "官网推广 · 用真实案例演示产品"
+        assert stored.brief.target_seconds.value == 30
         assert stored.brief.narration_language.value == "en"
         assert stored.brief.subtitle_languages.value == ["en"]
         assert stored.brief.aspect.value == "16:9"
-        if four_pages:
-            from app.tools.video.design import explicit_design_constraints
-
-            assert stored.brief.constraints[0].value == "两幕、24 fps、纯电子 BGM"
-            constraints = explicit_design_constraints(brief=stored.brief)
-            assert (constraints["scene_count"], constraints["fps"]) == (2, 24)
+        assert stored.brief.constraints == []
         assert stored.creative_state is not None
-        assert stored.creative_state.brief.target_seconds.value == 60
+        assert stored.creative_state.brief.target_seconds.value == 30
         assert stored.creative_state.content_digest
         assert (
             await db.scalar(
@@ -326,6 +277,7 @@ async def _answer_group_bail(database, monkeypatch, answers):
         user_id = user.id
 
     async def no_model_follow_up(*args, **kwargs):
+        assert not kwargs.get("group_answer_submitted")
         return None, None, None, []
 
     monkeypatch.setattr("app.chat.service._plan_turn", no_model_follow_up)
@@ -365,13 +317,13 @@ async def test_group_bail_uses_defaults_without_user_stated(database, monkeypatc
     assert answered.answer["kind"] == "bail"
     assert answered.answer["answers"] == []
     assert stored.brief.target_seconds.value == 30
-    assert stored.brief.narrative_mode.value == "product_evidence"
+    assert stored.brief.production_direction.value == "website · product_evidence"
     assert stored.brief.narration_language.value == "en"
     assert stored.brief.subtitle_languages.value == ["en"]
     assert stored.brief.aspect.value == "16:9"
     assert stored.brief.tone.value == "minimal_tech"
     for slot in (
-        "purpose", "target_seconds", "narrative_mode", "narration_language",
+        "production_direction", "target_seconds", "narration_language",
         "subtitle_languages", "aspect", "tone",
     ):
         assert getattr(stored.brief, slot).source == BriefSlotSource.DEFAULT
@@ -384,16 +336,15 @@ async def test_group_bail_preserves_answers_and_defaults_the_rest(database, monk
     answered, stored = await _answer_group_bail(
         database,
         monkeypatch,
-        [BriefAnswerItem(slot="target_seconds", kind="option", option_id="60")],
+        [BriefAnswerItem(slot="target_seconds", kind="option", option_id="2")],
     )
     assert answered.answer["kind"] == "bail"
     assert len(answered.answer["answers"]) == 1
     assert stored.brief.target_seconds.value == 60
     assert stored.brief.target_seconds.source == BriefSlotSource.USER_STATED
-    assert stored.brief.purpose.value == "website"
-    assert stored.brief.purpose.source == BriefSlotSource.DEFAULT
+    assert stored.brief.production_direction.source == BriefSlotSource.DEFAULT
     assert stored.brief.narration_language.value == "en"
-    assert stored.brief.narrative_mode.value == "product_evidence"
+    assert stored.brief.production_direction.value == "website · product_evidence"
     assert stored.brief.aspect.value == "16:9"
     assert _ready_after_bail(stored).required_next_action == "design_video"
 
@@ -462,99 +413,23 @@ def test_website_promo_question_items_reject_more_than_three_options():
 
     items = website_items()
     items[0].options = [
-        Option(id=str(index), label=f"Option {index}") for index in range(1, 5)
+        BriefQuestionOption(id=str(index), label=f"Option {index}", value=f"Option {index}") for index in range(1, 5)
     ]
     with pytest.raises(ValueError, match="1-3"):
         website_promo_question_items(items, Brief())
 
 
-@pytest.mark.parametrize("label", [
-    "中文 + 英文双语",
-    "英文配音 + 中文字幕",
-    "English and Chinese",
-    "English / Chinese",
+@pytest.mark.parametrize(("slot", "invalid"), [
+    ("narration_language", ["zh", "en"]), ("target_seconds", "30–45"),
+    ("subtitle_languages", ["英文"]), ("aspect", "4:3"),
 ])
-def test_website_promo_rejects_packaged_narration_options(label):
+def test_website_question_requires_usable_production_values(slot, invalid):
     from app.chat.readiness import website_promo_question_items
 
     items = website_items()
-    narration = next(item for item in items if item.slot == "narration_language")
-    narration.options = [
-        Option(id="1", label="中文"),
-        Option(id="2", label=label),
-        Option(id="3", label="English (US)"),
-    ]
-    narration.option_values = {"1": "zh", "2": "en", "3": "en-US"}
-    with pytest.raises(ValueError, match="exactly one spoken language"):
+    next(item for item in items if item.slot == slot).options[0].value = invalid
+    with pytest.raises(ValueError, match=slot):
         website_promo_question_items(items, Brief())
-
-
-def test_website_promo_accepts_single_language_narration_options():
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    narration = next(item for item in items if item.slot == "narration_language")
-    narration.options = [
-        Option(id="1", label="中文"),
-        Option(id="2", label="英文"),
-        Option(id="3", label="English (US)"),
-    ]
-    narration.option_values = {"1": "zh", "2": "en", "3": "en-US"}
-    assert len(website_promo_question_items(items, Brief())) == 5
-
-
-def test_website_promo_freezes_clean_choices_from_legacy_model_values():
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    items[1].options = [Option(id="1", label="30 秒（网站首屏投放）")]
-    items[1].option_values = {"1": "30"}
-    items[4].options = [Option(id="1", label="16:9，官网横幅与展会大屏")]
-    items[4].option_values = {"1": "16:9"}
-    projected = website_promo_question_items(items, Brief())
-    assert projected[1].option_values == {"1": 30}
-    assert projected[1].options[0].label == "30 秒"
-    assert projected[4].options[0].label == "16:9"
-    for invalid in ("30–45", "30 秒", "0", "1.5"):
-        items[1].option_values = {"1": invalid}
-        with pytest.raises(ValueError, match="target_seconds"):
-            website_promo_question_items(items, Brief())
-
-
-def test_new_direction_cannot_offer_an_audience_only_option():
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError, match="release setting and a storytelling treatment"):
-        BriefQuestionItem.model_validate({
-            "slot": "production_direction", "question": "Who is it for?", "question_language": "en",
-            "options": [{"label": "Researchers", "value": "Researchers"}],
-        })
-
-
-@pytest.mark.parametrize(("known_slot", "expected"), [
-    ("purpose", "How would you like us to tell the story?"),
-    ("narrative_mode", "Where do you plan to show the film?"),
-])
-def test_website_direction_keeps_only_the_unsettled_part_in_its_question(known_slot, expected):
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    items[0].question_language = "en-US"
-    brief = Brief(**{known_slot: BriefSlot(value="previous choice", source=BriefSlotSource.USER_STATED)})
-    result = website_promo_question_items(items, brief)[0]
-    assert result.question == result.decision_page.title == expected
-    assert "question_language" not in result.model_dump(mode="json")
-
-
-def test_question_item_normalizes_option_labels_to_numeric_ids():
-    item = BriefQuestionItem.model_validate({
-        "slot": "purpose",
-        "question": "Choose a purpose",
-        "options": ["Website", "Brand"],
-    })
-    assert [(option.id, option.label) for option in item.options] == [
-        ("1", "Website"), ("2", "Brand"),
-    ]
 
 
 def test_group_digest_ignores_code_owned_material_bookkeeping():
@@ -570,7 +445,7 @@ def test_group_digest_ignores_code_owned_material_bookkeeping():
     )
 
 
-def test_website_promo_group_requires_current_missing_fields_and_numeric_options():
+def test_website_promo_group_requires_current_missing_fields_and_unique_options():
     from app.chat.readiness import website_promo_question_items
 
     items = website_items()
@@ -578,16 +453,12 @@ def test_website_promo_group_requires_current_missing_fields_and_numeric_options
 
     with pytest.raises(ValueError, match="one items group"):
         website_promo_question_items([], Brief())
-    assert [item.slot for item in website_promo_question_items(items[:1], Brief())] == [items[0].slot]
+    with pytest.raises(ValueError, match="include every missing field"):
+        website_promo_question_items(items[:1], Brief())
 
-    invalid = [
-        items[0].model_copy(update={
-            "options": [Option(id="website", label="Website")],
-        }),
-        *items[1:],
-    ]
-    with pytest.raises(ValueError, match="numeric ids"):
-        website_promo_question_items(invalid, Brief())
+    items[0].options[1].id = items[0].options[0].id
+    with pytest.raises(ValueError, match="unique option ids"):
+        website_promo_question_items(items, Brief())
 
 
 def test_group_title_stays_out_of_the_message_prose():
@@ -596,6 +467,25 @@ def test_group_title_stays_out_of_the_message_prose():
     ask = QuestionProposal(prose="Brand evidence is ready.", question="Production setup")
     assert _ask_content(ask, has_dock_options=True) == "Brand evidence is ready."
     assert _ask_content(ask) == "Brand evidence is ready.\n\nProduction setup"
+
+
+@pytest.mark.parametrize("values", [
+    [["zh-CN", "en-US"]],
+    [["zh-CN", "en-US"], "zh-CN"],
+    ["zh-CN", "en-US"],
+])
+def test_subtitle_choices_preserve_authored_labels_order_and_language_sets(values):
+    from app.chat.readiness import website_promo_question_items
+
+    form = website_question_arguments()
+    subtitles = next(item for item in form["items"] if item["slot"] == "subtitle_languages")
+    options = [{"label": f"Choice {i}", "value": value} for i, value in enumerate(values)]
+    subtitles["options"] = options
+    items = [BriefQuestionItem.model_validate(item) for item in form["items"]]
+    result = next(i for i in website_promo_question_items(items, Brief()) if i.slot == "subtitle_languages")
+    assert [(o.label, o.value) for o in result.options] == [
+        (o["label"], [o["value"]] if isinstance(o["value"], str) else o["value"]) for o in options
+    ]
 
 
 @pytest.mark.asyncio
@@ -672,37 +562,3 @@ def test_native_history_includes_intervening_dialogue_and_places_dock_pick_at_su
                            intent={"answered_question_id": str(rows[1].id)},
                            created_at=start + timedelta(seconds=4)))
     assert conversation_messages(rows) == dialogue
-
-
-def test_decision_page_freeform_preserves_one_sentence_and_validates_coverage():
-    from app.chat.service import _backfill_brief_group
-
-    payload = group_payload()
-    slots = ['purpose', 'target_seconds']
-    payload.items[0].decision_page = BriefDecisionPage(
-        slots=slots, title='用途和时长', choices=[],
-    )
-    payload.group_digest = question_group_digest(payload.items, Brief())
-    request = group_request(payload)
-    request.group_digest = payload.group_digest
-    sentence = '面向科研人员，45 秒'
-    request.answers = [
-        BriefAnswerItem(slot='purpose', kind='freeform', text=sentence, page_slots=slots),
-        *[answer for answer in request.answers if answer.slot not in slots],
-    ]
-    normalized = _validate_group_answers(payload, request)
-    assert normalized[0].text == sentence
-    project = Project(pending_brief=PendingPlan(prompt='给官网做一支宣传片').model_dump(mode='json'))
-    _backfill_brief_group(project, payload, normalized)
-    brief = PendingPlan.model_validate(project.pending_brief).brief
-    assert brief.target_seconds.value == 45
-    assert any(sentence in constraint.value for constraint in brief.constraints)
-    assert brief.target_seconds.value != sentence
-    bad = request.model_copy(deep=True)
-    bad.answers[0].page_slots = ['purpose', 'aspect']
-    with pytest.raises(HTTPException):
-        _validate_group_answers(payload, bad)
-    duplicate = request.model_copy(deep=True)
-    duplicate.answers.append(BriefAnswerItem(slot='target_seconds', kind='freeform', text='60'))
-    with pytest.raises(HTTPException):
-        _validate_group_answers(payload, duplicate)

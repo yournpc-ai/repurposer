@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from math import isfinite
 from uuid import UUID
 
 from sqlalchemy import select
@@ -187,7 +188,135 @@ def allowed_media_tools(phase: str) -> set[str]:
     return AUDIO_TOOLS if phase == "audio" else IMAGE_TOOLS
 
 
-def media_write_rejection(phase: str, name: str, params) -> str | None:
+async def settled_recordings(db, project_id: UUID, opening_id: str, draft_id: str) -> list[dict]:
+    from app.models.schemas import WorkflowStatus
+
+    prep = WorkflowRun.context["narration_preparation"]
+    rows = await db.scalars(select(prep).where(
+        WorkflowRun.project_id == project_id,
+        WorkflowRun.status == WorkflowStatus.COMPLETED,
+        WorkflowRun.context["media_journey"]["opening_id"].as_string() == opening_id,
+        prep.as_string().is_not(None),
+    ).order_by(WorkflowRun.created_at, WorkflowRun.id))
+    return [
+        part for preparation in rows.all() for part in preparation.get("scenes") or [preparation]
+        if ((part.get("request") or {}).get("draft_ref") or {}).get("draft_id") == draft_id
+        and part.get("result")
+    ]
+
+
+def cached_recording(draft: dict, result: dict) -> dict | None:
+    from app.tools.video.narration_draft import scene_narration_request
+
+    scene_id = result.get("scene_id")
+    try:
+        speech = scene_narration_request(draft, scene_id)
+    except ValueError:
+        return None
+    if result.get("text") != speech["text"]:
+        return None
+    decode = ((result.get("analysis") or {}).get("media_facts") or {}).get("decode") or {}
+    return {
+        "request": {"scene_id": scene_id, **speech},
+        "result": {
+            "scene_id": scene_id,
+            "alignment_id": result.get("alignment_id"),
+            "audio_snapshot_id": result.get("audio_snapshot_id"),
+            "duration_seconds": result.get("actual_duration_seconds") or decode.get("duration_seconds"),
+        },
+    }
+
+
+def cached_recordings_for_draft(items: list[dict], opening_id: str, draft_id: str) -> list[dict]:
+    """Cache hits have a successful tool receipt instead of a WorkflowRun."""
+    drafts = {}
+    recordings = []
+    for item in items:
+        if item.get("turn_id") != opening_id or not item.get("ok"):
+            continue
+        candidate = item.get("candidate") or {}
+        if item.get("tool") == "design_video" and candidate.get("candidate_id") == draft_id:
+            drafts[candidate["candidate_digest"]] = item.get("executed_arguments")
+        if item.get("tool") != "prepare_narration":
+            continue
+        reference = (item.get("arguments") or {}).get("draft_ref") or {}
+        draft = drafts.get(reference.get("draft_digest"))
+        if reference.get("draft_id") != draft_id or not draft:
+            continue
+        try:
+            result = json.loads(item["text"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if (
+            not isinstance(result, dict) or result.get("cache") != "hit"
+            or result.get("draft_ref") != reference
+            or result.get("scene_id") != item["arguments"].get("scene_id")
+        ):
+            continue
+        part = cached_recording(draft, result)
+        if part:
+            recordings.append(part)
+    return recordings
+
+
+def narration_resume_state(draft: dict, recordings: list[dict]) -> dict:
+    """Project measured originals onto the speech in this exact working revision."""
+    from app.editing.timing import DEFAULT_TIMEBASE
+
+    confirmed = {
+        f["scene_id"]: (f.get("alignment") or {}).get("alignment_id")
+        for f in draft["design"].get("narrations") or []
+        if (f.get("alignment") or {}).get("status") == "READY"
+    }
+    by_script = {}
+    for part in recordings:
+        request, result = part["request"], part["result"]
+        duration = result.get("duration_seconds")
+        key = tuple(request.get(k) for k in ("scene_id", "text", "voice_id", "language"))
+        if (all(key) and request["scene_id"] == result.get("scene_id")
+                and result.get("alignment_id") and result.get("audio_snapshot_id")
+                and isinstance(duration, (float, int)) and isfinite(duration) and duration > 0):
+            previous = by_script.get(key)
+            if previous is None or previous["alignment_id"] != confirmed.get(request["scene_id"]):
+                by_script[key] = result
+
+    content = draft["content"]
+    timebase = (content.get("settings") or {}).get("timebase", DEFAULT_TIMEBASE)
+    speech = {
+        clip["scene_id"]: clip["object"]
+        for track in content["timeline"]["tracks"] for clip in track["clips"]
+        if (clip.get("object") or {}).get("kind") == "speech" and not clip["object"].get("alignment")
+    }
+    scenes, pending = [], []
+    measured = 0.0
+    for scene in content["scenes"]:
+        scene_id = scene["scene_id"]
+        if scene_id not in speech:
+            continue
+        obj = speech[scene_id]
+        window = scene["range"]
+        row = {
+            "scene_id": scene_id, "text": obj["text"],
+            "window_seconds": (window["end"] - window["start"]) / timebase,
+        }
+        result = by_script.get((scene_id, obj["text"], obj.get("voice_id"), obj.get("language")))
+        if result:
+            row.update({k: result[k] for k in ("alignment_id", "audio_snapshot_id", "duration_seconds")})
+            row["timing_confirmed"] = confirmed.get(scene_id) == result["alignment_id"]
+            measured += result["duration_seconds"]
+        else:
+            pending.append(scene_id)
+        scenes.append(row)
+    target = (draft["design"].get("user_constraints") or {}).get("target_seconds")
+    return {
+        "scenes": scenes, "pending_scene_ids": pending,
+        "draft_seconds": max((s["range"]["end"] for s in content["scenes"]), default=0) / timebase,
+        "target_seconds": target, "matched_audio_seconds": round(measured, 3),
+        "remaining_seconds": round(target - measured, 3) if target is not None else None,
+    }
+
+
+def media_write_rejection(phase: str, name: str, params, narration_resume=None) -> str | None:
     if name not in allowed_media_tools(phase):
         return f"This preparation is at {phase}. Use only the available actions for that phase."
     if name == "prepare_narration" and (
@@ -198,6 +327,23 @@ def media_write_rejection(phase: str, name: str, params) -> str | None:
         getattr(params, field, None) for field in ("scene_plan", "scene_assets")
     ):
         return "Continue the existing storyboard from its draft_ref and approved pictures."
+    if narration_resume is not None:
+        if name == "prepare_narration" and params.scene_id not in narration_resume["pending_scene_ids"]:
+            return "This scene is not pending. Use the matching recording in narration_resume.scenes."
+        if name in {"get_narration_alignment", "annotate_narration"} and not any(
+            row.get("alignment_id") == str(params.alignment_id) for row in narration_resume["scenes"]
+        ):
+            return "Use an alignment from the current narration_resume.scenes."
+        update = getattr(params, "narration_update", None)
+        if update and all(
+            getattr(update, field, None) is None for field in ("text", "voice_id", "language")
+        ):
+            scene = next((s for s in narration_resume["scenes"] if s["scene_id"] == update.scene_id), {})
+            if update.alignment_id:
+                if scene.get("alignment_id") != str(update.alignment_id):
+                    return "This alignment does not match the scene's current text, voice and language. Check narration_resume."
+            elif not scene.get("timing_confirmed"):
+                return "Read the current scene's recording and supply its READY alignment_id before retiming."
     if name == "design_video" and (
         getattr(params, "save", False)
         or (phase == "images" and any(
@@ -245,6 +391,10 @@ async def dock_media_observation(
                 cached.get("result") or cached, cached, working_draft=working_draft,
             )
             state = message.intent["media_journey"]["state"]
+            if role == "narration" and state == "active" and turn.media_state.get("narration_resume") is not None:
+                part = cached_recording(working_draft, cached)
+                if part:
+                    turn.media_resume_narration.append(part)
             if state in {"complete", "blocked"}:
                 turn.outcome = (message, None, turn.settled_pending, [])
                 # The score's full measured result reaches the next model call
@@ -307,12 +457,16 @@ async def finish_narration_batch(turn, observations):
     unfilled = [s["scene_id"] for s in scenes if not s["clip_ids"]]
     if unfilled:
         return ToolObservation(f"Finish authoring the planned scenes before recording: {', '.join(unfilled)}.", ok=False)
-    ready = {fact["scene_id"] for fact in current_narration_facts(draft)}
-    required = {
-        clip["scene_id"] for track in draft["content"]["timeline"]["tracks"] for clip in track["clips"]
-        if (clip.get("object") or {}).get("kind") == "speech" and not clip["object"].get("alignment")
-    }
-    missing = required.difference(scene_ids, ready)
+    resume = turn.media_state.get("narration_resume")
+    if resume is None:
+        ready = {fact["scene_id"] for fact in current_narration_facts(draft)}
+        required = {
+            clip["scene_id"] for track in draft["content"]["timeline"]["tracks"] for clip in track["clips"]
+            if (clip.get("object") or {}).get("kind") == "speech" and not clip["object"].get("alignment")
+        }
+        missing = required.difference(scene_ids, ready)
+    else:
+        missing = set(resume["pending_scene_ids"]).difference(scene_ids)
     if missing:
         return ToolObservation(
             f"Include all pending narrations in one tool_calls array. Missing: {', '.join(sorted(missing))}.",
@@ -546,6 +700,12 @@ async def continue_media_journey(db, project, conversation, run) -> None:
         prompt=opening.content, brief=creative.brief, creative_state=creative,
     )
     recent = await list_conversation_messages(db, conversation.id)
+    recordings = None
+    if context.get("narration_preparation"):
+        recordings = await settled_recordings(db, project.id, journey["opening_id"], draft_id)
+        recordings.extend(cached_recordings_for_draft(
+            context_items(conversation.context), journey["opening_id"], draft_id,
+        ))
     user_id = UUID(str(project.user_id))
     with bind_conversation_turn(
         conversation_id=conversation.id, turn_id=str(run.id), project_id=project.id
@@ -561,7 +721,7 @@ async def continue_media_journey(db, project, conversation, run) -> None:
                 turn_id=opening.id,
                 media_journey=journey,
                 media_resume_pending=pending,
-                media_resume_narration=[p["result"] for p in parts if p.get("result")] if context.get("narration_preparation") else None,
+                media_resume_narration=recordings,
                 media_resume_draft=RestoredCandidate(
                     candidate_id=draft_id, candidate_digest=reference["draft_digest"],
                     tool_name="design_video", arguments=draft, errors=[],

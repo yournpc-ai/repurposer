@@ -24,7 +24,7 @@ const values = [
 const items: BriefQuestionItem[] = values.map(([slot, optionId], index) => ({
   slot,
   question: `Question ${index}`,
-  options: [{ id: optionId, label: `Choose ${optionId}` }],
+  options: [{ id: optionId, label: `Choose ${optionId}`, value: optionId }],
   required: true,
   allow_freeform: true,
 }))
@@ -134,50 +134,18 @@ it("keeps legacy option docking and rejects options-empty plain text", () => {
 })
 
 
-it("keeps the preset pairs and page-wide freeform answers of a saved four-page questionnaire", () => {
-  const fields = items.map((item) => ({ ...item }))
-  const pages = [[0, 1], [2], [3, 4], [5]]
-  pages.forEach((indexes, index) => {
-    const members = indexes.map((i) => fields[i])
-    members[0].decision_page = {
-      title: "Decision " + (index + 1), slots: members.map((field) => field.slot),
-      choices: [Object.fromEntries(members.map((field) => [field.slot, field.options![0].id]))],
-    }
-  })
-  const onSubmit = vi.fn()
-  render(<Harness fields={fields} onSubmit={onSubmit} />)
-  fireEvent.click(screen.getByRole("button", { name: /Choose website · Choose 60/ }))
-  expect(screen.getByText("Decision 2")).toBeTruthy()
-  fireEvent.click(screen.getByText("Choose mission_tech"))
-  expect(screen.queryByText("questionDock.customize")).toBeNull()
-  expect(screen.getAllByRole("textbox")).toHaveLength(1)
-  fireEvent.change(screen.getByRole("textbox", { name: "Decision 3" }), { target: { value: "中文旁白，英文字幕" } })
-  expect(screen.getByText("Decision 3")).toBeTruthy()
-  fireEvent.click(screen.getByText("questionDock.next"))
-  fireEvent.click(screen.getByText("questionDock.previous"))
-  expect((screen.getByRole("textbox", { name: "Decision 3" }) as HTMLInputElement).value).toBe("中文旁白，英文字幕")
-  fireEvent.click(screen.getByText("questionDock.next"))
-  fireEvent.click(screen.getByText("Choose 16:9"))
-  fireEvent.change(screen.getByLabelText("questionDock.notes"), { target: { value: "两幕、24 fps、纯电子 BGM" } })
-  fireEvent.click(screen.getByText("questionDock.submit"))
-  expect(onSubmit).toHaveBeenCalledTimes(1)
-  expect(onSubmit.mock.calls[0][0]).toHaveLength(6)
-  expect(onSubmit.mock.calls[0][0]).toEqual(expect.arrayContaining([
-    { slot: "narration_language", kind: "freeform", text: "中文旁白，英文字幕", page_slots: ["narration_language", "subtitle_languages"] },
-    { slot: "constraints", kind: "freeform", text: "两幕、24 fps、纯电子 BGM" },
-  ]))
-})
-
-it("submits five independent production decisions and optional instructions together", () => {
+it("submits just the five questions, including a custom answer on the last page", () => {
   const fields = [
     { slot: "production_direction", title: "用途和表达方向", label: "面向创作者的产品演示" },
     { slot: "target_seconds", title: "希望多长？", label: "15 秒" },
     { slot: "narration_language", title: "旁白语言", label: "英文旁白" },
-    { slot: "subtitle_languages", title: "字幕语言", label: "中文字幕" },
+    { slot: "subtitle_languages", title: "字幕语言", label: "简体中文" },
     { slot: "aspect", title: "画面比例", label: "16:9 横版" },
   ].map(({ slot, title, label }) => ({
-    slot, question: title, options: [{ id: "1", label }],
-    decision_page: { title, slots: [slot], choices: [] },
+    slot, question: title,
+    options: slot === "subtitle_languages"
+      ? [{ id: "1", label, value: ["zh-CN"] }, { id: "2", label: "英文", value: ["en-US"] }]
+      : [{ id: "1", label, value: label }],
   }))
   const onSubmit = vi.fn()
   render(<Harness fields={fields} onSubmit={onSubmit} />)
@@ -188,9 +156,10 @@ it("submits five independent production decisions and optional instructions toge
   fireEvent.click(screen.getByText("questionDock.next"))
   fireEvent.click(screen.getByText("15 秒"))
   fireEvent.click(screen.getByText("英文旁白"))
-  fireEvent.click(screen.getByText("中文字幕"))
-  fireEvent.click(screen.getByText("16:9 横版"))
-  fireEvent.change(screen.getByLabelText("questionDock.notes"), { target: { value: "两幕，24 fps" } })
+  expect(screen.getByRole("button", { name: /简体中文/ })).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: /英文/ }))
+  expect(screen.getAllByRole("textbox")).toHaveLength(1)
+  fireEvent.change(screen.getByRole("textbox", { name: "画面比例" }), { target: { value: "9:16" } })
   expect(onSubmit).not.toHaveBeenCalled()
   fireEvent.click(screen.getByText("questionDock.submit"))
 
@@ -199,8 +168,7 @@ it("submits five independent production decisions and optional instructions toge
     { slot: "production_direction", kind: "freeform", text: "官网首屏，用案例说明证据如何追溯" },
     { slot: "target_seconds", kind: "option", option_id: "1" },
     { slot: "narration_language", kind: "option", option_id: "1" },
-    { slot: "subtitle_languages", kind: "option", option_id: "1" },
-    { slot: "aspect", kind: "option", option_id: "1" },
-    { slot: "constraints", kind: "freeform", text: "两幕，24 fps" },
+    { slot: "subtitle_languages", kind: "option", option_id: "2" },
+    { slot: "aspect", kind: "freeform", text: "9:16" },
   ])
 })

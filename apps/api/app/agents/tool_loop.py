@@ -361,12 +361,13 @@ class RoundAssembly:
     include_project_context: bool = True
     include_observation_media: bool = True
     observation_tools: frozenset[str] | None = None
-    allow_interim_prose: bool = True
+    stream_prose: bool = True
     missing_tool_feedback: str | None = None
     opening_text: str | None = None
     caller_state: dict | None = None
     # Keep this form's opening invitation across consecutive argument repairs.
     invitation_tool: str | None = None
+    enforce_offered_tools: bool = False
 
 
 @dataclass(frozen=True)
@@ -1105,6 +1106,8 @@ class ToolLoopAgent:
             }
             execution_by_name = by_name
             execution_parameter_schemas = parameter_schemas
+            if assembled.enforce_offered_tools:
+                by_name = {tool.name: tool for tool in round_tools}
             round_specs = specs if round_tools == active_tools else [tool_spec(t) for t in round_tools]
             # Keep refreshed evidence outside the stable history/observation prefix.
             if dialogue is not None:
@@ -1184,7 +1187,7 @@ class ToolLoopAgent:
                             tools=round_specs,
                             temperature=self.temperature,
                             thinking=False,
-                            on_delta=on_delta if assembled.allow_interim_prose else None,
+                            on_delta=on_delta if assembled.stream_prose else None,
                             on_reasoning=on_reasoning,
                             on_tool_call=None if self.service_per_call else on_tool_call,
                         )
@@ -1481,7 +1484,7 @@ class ToolLoopAgent:
                         ),
                         feedback=(
                             f"未知工具 {call.name!r}。请从以下工具中选一个："
-                            + ", ".join(t.name for t in active_tools)
+                            + ", ".join(t.name for t in (round_tools if assembled.enforce_offered_tools else active_tools))
                         ),
                         iteration=iteration,
                     )
@@ -1684,9 +1687,9 @@ class ToolLoopAgent:
                 # answer/card. With no delivery hook, the ledger keeps both.
                 prose_handled = True
                 # Draft judgments speak only from their accepted observation.
-                if not tool.terminal and (
-                    not assembled.allow_interim_prose
-                    or (not self.service_per_call and tool.draft_reader and getattr(params, "judgment", None) is not None)
+                if (
+                    not tool.terminal and not self.service_per_call
+                    and tool.draft_reader and getattr(params, "judgment", None) is not None
                 ):
                     prose = ""
                 interim_prose_route = (

@@ -1368,7 +1368,7 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
 
     for iteration in (0, 1, 6):
         projected = _video_round(intent_router.tools, snapshot=ContextSnapshot("empty"), iteration=iteration)
-        assert projected.allow_interim_prose
+        assert projected.stream_prose
         assert "speech_rule" not in projected.context
 
     saved = _composition_resource()
@@ -1380,7 +1380,7 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
         user_text="Change the title", iteration=0, new_result=True,
     )
     assert edit.stage == "version_edit"
-    assert edit.allow_interim_prose
+    assert edit.stream_prose
 
 
 def test_draft_repair_focus_schema_uses_real_clip_and_element_ids():

@@ -1039,8 +1039,8 @@ describe("question groups", () => {
           kind: "question",
           question: "Production setup",
           items: [
-            { slot: "purpose", question: "Where will it run?", options: [{ id: "1", label: "Website" }] },
-            { slot: "target_seconds", question: "How long?", options: [{ id: "2", label: "60 seconds" }] },
+            { slot: "purpose", question: "Where will it run?", options: [{ id: "1", label: "Website", value: "website" }] },
+            { slot: "target_seconds", question: "How long?", options: [{ id: "2", label: "60 seconds", value: 60 }] },
           ],
           group_digest: "digest-1",
         },

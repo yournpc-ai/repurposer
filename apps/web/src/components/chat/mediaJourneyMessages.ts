@@ -70,9 +70,9 @@ export function continuationTurnId(row: JourneyMessage, workerOpeningId?: string
   return type === "trigger_review" && mark?.state === "active" ? mark.openingId : undefined
 }
 
-export function mediaProgress(row: JourneyMessage, workerOpeningId?: string | null): boolean {
-  const data = row.intent as { type?: string; presentation?: string; prepared_audio?: { role?: string } } | null
-  if (workerOpeningId && row.turn_id === workerOpeningId && data?.type === "interim_prose") return true
+export function mediaProgress(row: JourneyMessage): boolean {
+  if (row.content?.trim()) return false
+  const data = row.intent as { presentation?: string; prepared_audio?: { role?: string } } | null
   const state = journeyMark(row)?.state
   if ((state !== "active" && state !== "stopped") || row.question) return false
   return data?.presentation === "media_progress" || data?.presentation === "stage_summary" ||
@@ -93,7 +93,7 @@ export function sceneOrder(row: JourneyMessage): string[] | undefined {
   return Array.isArray(order) && order.every((id) => typeof id === "string") ? order : undefined
 }
 
-export function journeyTranscriptRow<T extends JourneyMessage>(row: T, workerOpeningId?: string | null): T {
+export function journeyTranscriptRow<T extends JourneyMessage>(row: T): T {
   const mark = journeyMark(row)
   const blocks = row.blocks?.flatMap<MessageBlock>((block) => {
     if (mark && block.kind === "audio_playback") return []
@@ -109,7 +109,7 @@ export function journeyTranscriptRow<T extends JourneyMessage>(row: T, workerOpe
     }
     return [block]
   })
-  const quiet = preparationTool(row) || mediaProgress(row, workerOpeningId)
-  if (!quiet && blocks?.length === row.blocks?.length && !blocks?.some((block, i) => block !== row.blocks?.[i])) return row
-  return { ...row, blocks, ...(quiet ? { content: "", turn_id: row.turn_id ?? mark?.openingId } : {}) }
+  const task = preparationTool(row)
+  if (!task && blocks?.length === row.blocks?.length && !blocks?.some((block, i) => block !== row.blocks?.[i])) return row
+  return { ...row, blocks, ...(task ? { content: "", turn_id: row.turn_id ?? mark?.openingId } : {}) }
 }

@@ -82,6 +82,17 @@ def infer_task_kind(user_text: str) -> str:
     )
 
 
+def settled_website_question(messages, turn_id) -> bool:
+    """Both submitting and skipping settle the questionnaire for this turn."""
+    return turn_id is not None and any(
+        message.turn_id == turn_id and (message.question or {}).get("group_digest")
+        and (message.answer or {}).get("kind") in {"group", "bail"}
+        and any(item.get("slot") in WEBSITE_PROMO_REQUIRED_SLOTS
+                for item in message.question.get("items") or [])
+        for message in messages or ()
+    )
+
+
 def _put(brief: Brief, slot: str, value: Any) -> None:
     setattr(brief, slot, BriefSlot(value=value, source=BriefSlotSource.USER_STATED))
 
@@ -256,7 +267,6 @@ def website_promo_default_brief(
     snapshots: list[Any] | tuple[Any, ...] = (),
     *,
     fallback_language: str = "en",
-    legacy_split_direction: bool = False,
 ) -> Brief:
     """Fill only missing fields after a group skip; user answers keep precedence."""
     brief = stored.model_copy(deep=True)
@@ -267,8 +277,6 @@ def website_promo_default_brief(
         "subtitle_languages": [language],
         "aspect": "16:9",
     }
-    if legacy_split_direction:
-        values.update(purpose="website", narrative_mode="product_evidence")
     for slot, value in values.items():
         if not getattr(brief, slot).value:
             setattr(brief, slot, BriefSlot(value=value, source=BriefSlotSource.DEFAULT))
@@ -291,6 +299,7 @@ def compute_source_readiness(
     snapshots: list[Any] | tuple[Any, ...] = (),
     creative_state: CreativeState | None = None,
     draft_present: bool = False,
+    question_settled: bool = False,
     task_kind: str | None = None,
 ) -> SourceReadiness:
     """Read current facts only; no status is persisted and no IO is performed."""
@@ -380,6 +389,10 @@ def compute_source_readiness(
         required_next = "prepare_video_materials"
     elif not brand_profile_ready:
         required_next = "analyze_brand"
+    elif missing and not question_settled and (
+        not draft_present or infer_task_kind(user_text) == "website_promo"
+    ):
+        required_next = "ask_user"
     else:
         required_next = "design_video"
     return SourceReadiness(
@@ -418,17 +431,10 @@ def render_readiness_context(readiness: SourceReadiness) -> str:
     return "\n".join(lines)
 
 
-def _narration_option_is_packaged(label: str) -> bool:
-    normalized = label.casefold()
-    return any(marker in normalized for marker in (
-        "+", "双语", "bilingual", "字幕", "subtitle", "/", "、", "&", " and ",
-    ))
-
-
 def _valid_option_value(slot: str, value: Any) -> bool:
     language = r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*"
     if slot == "target_seconds":
-        return type(value) is int and value > 0
+        return value > 0
     if slot == "aspect":
         return value in ("16:9", "9:16", "1:1")
     if slot == "narration_language":
@@ -440,73 +446,7 @@ def _valid_option_value(slot: str, value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _website_direction_title(item: BriefQuestionItem, brief: Brief) -> str:
-    locale = item.question_language or ""
-    if not locale:  # Older tool clients supplied only the localized question.
-        if re.search(r"宣传片|这支|在哪里|怎么|讲给谁", item.question):
-            locale = "zh"
-        elif re.search(r"宣傳片|這支|在哪裡|怎麼|講給誰", item.question):
-            locale = "zh-Hant"
-        elif re.match(r"\s*(where|who|how|what|which)\b", item.question, re.I):
-            locale = "en"
-    language = locale.lower().split("-")
-    if language[0] not in {"zh", "en"}:
-        return item.question
-    traditional = bool(set(language) & {"hant", "tw", "hk", "mo"})
-    known = stated_direction_inputs(brief)
-    if "purpose" in known:
-        titles = ("希望用怎样的方式来讲这个故事？", "希望用怎樣的方式來講這個故事？",
-                  "How would you like us to tell the story?")
-    elif "narrative_mode" in known:
-        titles = ("这支片子主要准备在哪里播放？", "這支片子主要準備在哪裡播放？",
-                  "Where do you plan to show the film?")
-    else:
-        titles = ("这支片子主要用在哪里，你希望怎么讲？", "這支片子主要用在哪裡，你希望怎麼講？",
-                  "Where will you show the film, and how would you like us to tell the story?")
-    zh, zh_hant, en = titles
-    if language[0] == "en":
-        return en
-    return zh_hant if traditional else zh
-
-
-def project_website_question_pages(items: list[BriefQuestionItem], brief: Brief) -> list[BriefQuestionItem]:
-    from app.models.schemas import BriefDecisionPage
-
-    by_slot = {item.slot: item for item in items}
-    ordered = []
-    for slot in WEBSITE_PROMO_REQUIRED_SLOTS:
-        item = by_slot.get(slot)
-        if item is None:
-            continue
-        title = _website_direction_title(item, brief) if slot == "production_direction" else item.question
-        page = BriefDecisionPage(
-            slots=[slot], title=title, choices=[{slot: option.id} for option in item.options],
-        )
-        ordered.append(item.model_copy(update={"question": title, "decision_page": page}))
-    return ordered
-
-
-def _website_measure_options(item: BriefQuestionItem) -> BriefQuestionItem:
-    """Freeze factual choices from their values before preview, digest and settlement."""
-    values = dict(item.option_values or {option.id: option.label for option in item.options})
-    options = []
-    for option in item.options:
-        value = values.get(option.id)
-        if item.slot == "target_seconds" and isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
-            value = int(value)
-            values[option.id] = value
-        if not _valid_option_value(item.slot, value):
-            raise ValueError(f"{item.slot} options need valid typed values for every label")
-        if item.slot == "target_seconds":
-            unit = "秒" if "秒" in item.question or "秒" in option.label else "s"
-            label = f"{value} {unit}"
-        else:
-            label = value
-        options.append(option.model_copy(update={"label": label, "description": ""}))
-    return item.model_copy(update={"options": options, "option_values": values})
-
-
-def website_promo_question_items(items: list[Any], brief: Brief) -> list[Any]:
+def website_promo_question_items(items: list[BriefQuestionItem], brief: Brief) -> list[BriefQuestionItem]:
     """Validate the selected clarification fields against the current Brief."""
     from app.models.schemas import missing_brief_question_items
 
@@ -524,32 +464,18 @@ def website_promo_question_items(items: list[Any], brief: Brief) -> list[Any]:
         )
     group = missing_brief_question_items(items, brief)
     actual = [item.slot for item in group]
-    if not actual or len(set(actual)) != len(actual) or not set(actual) <= set(expected):
+    if set(actual) != set(expected):
         raise ValueError(
-            "ask only about unsettled fields from: "
+            "include every missing field once in the same questionnaire: "
             + ", ".join(expected)
         )
-    for index, item in enumerate(group):
-        option_ids = [option.id for option in item.options]
-        if len(option_ids) > 3 or len(option_ids) != len(set(option_ids)):
-            raise ValueError(f"{item.slot} needs unique options within the 1-3 bound")
-        if any(option_id not in {"1", "2", "3"} for option_id in option_ids):
-            raise ValueError(f"{item.slot} options use numeric ids 1-3")
-        if item.slot in {"target_seconds", "aspect"}:
-            item = group[index] = _website_measure_options(item)
-        if item.option_values is not None and (
-            set(item.option_values) != set(option_ids)
-            or not all(_valid_option_value(item.slot, value) for value in item.option_values.values())
-        ):
-            raise ValueError(f"{item.slot} options need valid typed values for every label")
-        if item.slot == "narration_language" and any(
-            _narration_option_is_packaged(option.label) for option in item.options
-        ):
-            raise ValueError(
-                "narration_language accepts exactly one spoken language per Scene; "
-                "do not offer bilingual or subtitle-packaged options"
-            )
-    return project_website_question_pages(group, brief)
+    for item in group:
+        if not 1 <= len(item.options) <= 3:
+            raise ValueError(f"{item.slot} needs 1-3 options")
+        for option in item.options:
+            if not _valid_option_value(item.slot, option.value):
+                raise ValueError(f"{item.slot} needs a valid value for each option")
+    return group
 
 
 def creative_state_for_pending(pending: Any) -> CreativeState | None:

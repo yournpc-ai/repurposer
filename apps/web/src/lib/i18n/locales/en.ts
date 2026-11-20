@@ -1742,8 +1742,6 @@ const en = {
   },
   questionDock: {
     customize: "Customize this combination",
-    notes: "Additional production instructions (optional)",
-    productionInstructions: "Additional production instructions",
     bail: "Stop generation",
     skip: "Skip question",
     recommended: "Recommended",

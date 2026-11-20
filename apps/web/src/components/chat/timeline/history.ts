@@ -13,7 +13,6 @@
 
 import { messageAssetsFromAttachments, type MessageAttachment } from "@/lib/chatAttachments"
 import { continuationTurnId, journeyMark, journeyTranscriptRow, mediaProgress, preparationActivity, sceneOrder } from "../mediaJourneyMessages"
-import { questionPages } from "../questionGroupDrafts"
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityReceipt,
@@ -66,18 +65,14 @@ export function groupAnswerDisplay(
   question: QuestionMessage,
   answers: BriefAnswerItem[],
 ) {
-  const items = questionPages(question.question?.items ?? []).map((page) => ({
-    question: page.title,
-    answer: answers.find((answer) => answer.page_slots?.includes(page.fields[0]?.slot))?.text || page.fields.map((item) => {
-      const answer = answers.find((candidate) => candidate.slot === item.slot)
-      const selected = answer?.kind === "option"
-        ? item.options?.find((option) => option.id === answer.option_id)
-        : undefined
-      return selected?.label || answer?.text || answer?.option_id || ""
-    }).filter(Boolean).join(" · "),
-  }))
-  const productionNote = answers.find((answer) => answer.slot === "constraints")?.text || undefined
-  return { items, productionNote }
+  const items = (question.question?.items ?? []).map((item) => {
+    const answer = answers.find((candidate) => candidate.slot === item.slot)
+    const selected = answer?.kind === "option"
+      ? item.options?.find((option) => option.id === answer.option_id)
+      : undefined
+    return { question: item.question, answer: selected?.label || answer?.text || "" }
+  })
+  return { items }
 }
 
 /** The explicit deterministic-option association persisted on the real user row. */
@@ -750,9 +745,9 @@ export function mapHistoryRows(
   const cardBySetId = new Map<string, OverlayMessage>()
   let workerOpeningId: string | undefined
   for (const raw of rows) {
-    const progress = mediaProgress(raw, workerOpeningId)
+    const progress = mediaProgress(raw)
     const mark = journeyMark(raw)
-    const m = journeyTranscriptRow(raw, workerOpeningId)
+    const m = journeyTranscriptRow(raw)
     // Every projection of one persisted row carries its transcript position,
     // including an echo + QA pair. Recovered live rows can therefore find
     // their existing successor without re-deriving order from timestamps.
@@ -763,7 +758,7 @@ export function mapHistoryRows(
         ...row,
         ...(progress ? { mediaProgress: true } : {}),
         ...(mark ? { mediaOpeningId: mark.openingId, sceneOrder: sceneOrder(raw) } : {}),
-        ...(continuation && !progress ? { continuationTurnId: continuation } : {}),
+        ...(continuation ? { continuationTurnId: continuation } : {}),
         turnId: m.turn_id ?? undefined,
         hydrated: true,
       }

@@ -246,7 +246,6 @@ export function ChatConversation({
               questionDetail={m.qa.detail}
               answer={m.qa.answer}
               items={m.qa.items}
-              productionNote={m.qa.productionNote}
               muted={m.qa.muted}
               hydrated={m.hydrated}
             />

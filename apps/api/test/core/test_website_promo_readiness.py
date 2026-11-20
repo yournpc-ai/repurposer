@@ -24,15 +24,16 @@ def website_question_arguments():
     return {
         "question": "宣传片制作偏好",
         "items": [
-            {"slot": "production_direction", "question": "主要讲给谁听？", "question_language": "zh-CN",
-             "options": [{"use_case": "官网推广", "treatment": "用真实案例演示产品"},
-                         {"use_case": "发布会开场", "treatment": "用品牌使命串起故事"}]},
-            {"slot": "target_seconds", "question": "希望片长是多少秒？", "options": ["30", 60]},
+            {"slot": "production_direction", "question": "这支片子打算在哪里播、怎么讲？",
+             "options": [{"label": "官网推广 · 用真实案例演示产品", "value": "官网推广 · 用真实案例演示产品"},
+                         {"label": "发布会开场 · 用品牌使命串起故事", "value": "发布会开场 · 用品牌使命串起故事"}]},
+            {"slot": "target_seconds", "question": "希望片长是多少秒？",
+             "options": [{"label": "30 秒", "value": 30}, {"label": "60 秒", "value": 60}]},
             {"slot": "narration_language", "question": "旁白用哪种语言？",
              "options": [{"label": "英文", "value": "en"}, {"label": "中文", "value": "zh"}]},
             {"slot": "subtitle_languages", "question": "字幕需要哪些语言？",
              "options": [{"label": "英文", "value": ["en"]}, {"label": "中文", "value": ["zh"]}]},
-            {"slot": "aspect", "question": "画面比例选哪种？", "options": ["16:9", "9:16"]},
+            {"slot": "aspect", "question": "画面比例选哪种？", "options": [{"label": "16:9", "value": "16:9"}, {"label": "9:16", "value": "9:16"}]},
         ],
         "default_path": "按推荐设置制作",
     }
@@ -151,7 +152,7 @@ def test_ready_evidence_requires_brand_then_missing_brief_slots():
         creative_state=CreativeState(brand_profile=profile()),
     )
     assert with_brand.brand_profile_ready
-    assert with_brand.required_next_action == "design_video"
+    assert with_brand.required_next_action == "ask_user"
 
 
 def test_full_literal_input_does_not_reask_existing_fields():
@@ -178,6 +179,27 @@ def test_full_literal_input_does_not_reask_existing_fields():
     assert readiness.required_next_action == "design_video"
 
 
+@pytest.mark.parametrize("kind", ["group", "bail"])
+def test_a_settled_legacy_questionnaire_applies_only_to_its_opening(kind):
+    from app.chat.readiness import settled_website_question
+    from app.models.tables import Message
+
+    opening = uuid4()
+    receipt = Message(turn_id=opening, question={"kind": "question", "group_digest": "a" * 64,
+                      "items": [{"slot": "target_seconds"}]}, answer={"kind": kind})
+    def next_action(turn_id):
+        return compute_source_readiness(
+            user_text=f"给 {URL} 做一只宣传片", snapshots=[snapshot()],
+            creative_state=CreativeState(brand_profile=profile()), draft_present=True,
+            question_settled=settled_website_question([receipt], turn_id),
+        ).required_next_action
+
+    assert next_action(opening) == "design_video"
+    assert next_action(uuid4()) == "ask_user"
+    receipt.answer = None
+    assert next_action(opening) == "ask_user"
+
+
 def test_brand_analysis_cannot_choose_the_release_setting_for_the_user():
     from app.models.schemas import AnalyzeBrandArgs
 
@@ -185,8 +207,11 @@ def test_brand_analysis_cannot_choose_the_release_setting_for_the_user():
         production_direction=BriefSlot(value="Promote it on the homepage", source=BriefSlotSource.INFERRED),
         purpose=BriefSlot(value="website", source=BriefSlotSource.DEFAULT),
         narrative_mode=BriefSlot(value="Customer story", source=BriefSlotSource.USER_STATED),
+        target_seconds=BriefSlot(value=30, source=BriefSlotSource.DEFAULT),
+        narration_language=BriefSlot(value="zh", source=BriefSlotSource.INFERRED),
     ))
     assert args.brief.production_direction.value is None
+    assert args.brief.target_seconds.value is None and args.brief.narration_language.value is None
     assert args.brief.purpose.value is None
     assert args.brief.narrative_mode.value == "Customer story"
 
@@ -205,7 +230,7 @@ def test_partial_legacy_direction_only_asks_for_the_unsettled_choice(known_slot,
     text = f"给 {URL} 做一只宣传片"
     readiness = compute_source_readiness(user_text=text, snapshots=[snapshot()], creative_state=state)
     assert readiness.brief_missing_slots == ["production_direction"]
-    assert readiness.required_next_action == "design_video"
+    assert readiness.required_next_action == "ask_user"
     assembly = round_assembly(text, assets=[asset("completed")], snapshots=[snapshot()], state=state)
     round_facts = json.loads(assembly.context.rsplit("\n", 1)[-1])
     assert round_facts["known_direction_inputs"] == {known_slot: known_value}
@@ -244,7 +269,7 @@ def test_old_rows_tolerate_null_optional_brief_fields():
     assert brief.subtitle_languages.value is None
 
 
-def round_assembly(text, *, assets, snapshots=(), state=None):
+def round_assembly(text, *, assets, snapshots=(), state=None, pending=None):
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.prompts import assemble_video_round
     from app.chat.turn_tools import PLAN_TOOLS, _design_video_tool, _video_material_tools
@@ -262,6 +287,7 @@ def round_assembly(text, *, assets, snapshots=(), state=None):
             "mode": "plan",
             "user_text": text,
             "creative_state": state,
+            "pending_question": pending,
         }
     )
 
@@ -326,6 +352,23 @@ def test_round_projection_restores_design_only_after_brief_and_brand():
     assert "website-brand-v1" in ready.context
     assert "AVAILABLE VIDEO ROUTES" not in ready.system
     assert "promo-video" not in ready.system
+
+
+def test_open_website_question_stays_pending_across_a_new_round():
+    import json
+
+    from app.models.tables import Message
+
+    question = Message(id=uuid4(), role="assistant", content="请选择制作要求。",
+                       question={"kind": "question", "items": [{"slot": "aspect"}]})
+    waiting = round_assembly(
+        f"给 {URL} 做一只宣传片", assets=[asset("completed")], snapshots=[snapshot()],
+        state=CreativeState(brand_profile=profile()), pending=question,
+    )
+    assert {tool.name for tool in waiting.tools} == {"answer"}
+    context = json.loads(waiting.context.rsplit("\n", 1)[-1])
+    assert context["pending_question"]["message_id"] == str(question.id)
+    assert context["required_next_action"] == "answer" and waiting.enforce_offered_tools
 
 
 def test_non_website_round_keeps_existing_path():
