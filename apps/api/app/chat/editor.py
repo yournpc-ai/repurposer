@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
-from app.editing.edits import SplitClip, TemporalEdit, UpdateClip
-from app.editing.schemas import EditTarget
+from app.editing.edits import SplitClip, TemporalEdit, UpdateClip, UpdateScene
+from app.editing.schemas import EditTarget, TimeRange
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -63,6 +63,15 @@ class InspectTimelineArgs(BaseModel):
 class ClipArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     clip_id: str = Field(min_length=1, max_length=64)
+
+
+class ExtendStillArgs(ClipArgs):
+    seconds: float = Field(gt=0, allow_inf_nan=False, description="Additional seconds of the final still.")
+
+
+class DeliverVideoArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    output_id: UUID = Field(description="Exact MP4 Output inspected and chosen for delivery.")
 
 
 class SplitClipArgs(ClipArgs):
@@ -144,6 +153,14 @@ def _editor_tool(name, description, args, key):
 
 EDITOR_TOOLS = (
     _editor_tool(
+        "deliver_video", "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
+        DeliverVideoArgs, "deliverVideo",
+    ),
+    _editor_tool(
+        "extend_still", "Extend the closing static image, shape or title by additional seconds. Other tracks retain their duration.",
+        ExtendStillArgs, "extendStill",
+    ),
+    _editor_tool(
         "export_video", "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
         ExportVideoArgs, "exportVideo",
     ),
@@ -220,7 +237,7 @@ EDITOR_NAMES = frozenset(tool.name for tool in EDITOR_TOOLS)
 WRITE_TOOLS = {
     t.name: t
     for t in EDITOR_TOOLS
-    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs)
+    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs)
 }
 
 
@@ -310,6 +327,7 @@ async def edit_clip(
         raise RequestMismatch("This native call already committed different parameters.")
     rate = content.settings.timebase
     extra = {}
+    ops = []
     target = None
     if isinstance(args, InsertAudioArgs):
         from app.editing.revisions import fixed_audio_ops
@@ -360,7 +378,20 @@ async def edit_clip(
         target = clips.get(args.clip_id)
         if target is None:
             raise ValueError("The selected clip does not exist in this version.")
-        if name == "split_clip":
+        if isinstance(args, ExtendStillArgs):
+            if (target.object.kind not in {"text", "image", "shape"} or target.animations
+                    or target.linked_group_id or getattr(target.object, "caption", None)
+                    or (target.source and target.source.source_range)
+                    or target.range.end != max(c.range.end for _, c in entries)):
+                raise ValueError("Select an unanimated, unlinked closing still or title at the end of this work.")
+            end = target.range.end + _ticks(args.seconds, rate)
+            scene = next((s for s in content.scenes if s.scene_id == target.scene_id), None)
+            if scene:
+                ops.append(UpdateScene(op="update_scene", scene_id=scene.scene_id,
+                                       range=TimeRange(start=scene.range.start, end=end)))
+            ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id,
+                                  range=TimeRange(start=target.range.start, end=end)))
+        elif name == "split_clip":
             cut = target.range.start + _ticks(args.time, rate)
             if not target.range.start < cut < target.range.end:
                 raise ValueError("The cut must be strictly inside the selected clip.")
@@ -436,7 +467,7 @@ async def edit_clip(
         base_digest=version.content_digest,
         request_id=str(identity),
         skill_provenance=version.skill_provenance,
-        ops=ops if isinstance(args, InsertAudioArgs) else [op],
+        ops=ops or [op],
     )
     saved_content = content_of(saved)
     changed = [
@@ -557,7 +588,7 @@ async def execute_editor(turn, name, args):
                         "tool": name,
                         "arguments": args.model_dump(mode="json", exclude_none=True),
                     }
-                    if name in {"split_clip", "trim_clip", "move_clip"}:
+                    if name in {"split_clip", "trim_clip", "move_clip", "extend_still"}:
                         receipt["target_before_seconds"] = result["target_before_seconds"]
                         receipt["target_after_seconds"] = {
                             c["clip_id"]: [c["start_seconds"], c["end_seconds"]]
@@ -641,6 +672,10 @@ async def execute_editor(turn, name, args):
                     ),
                     valid_for_key=version_key,
                 )
+            if name == "deliver_video":
+                from app.chat.editor_media import deliver_video
+
+                return await deliver_video(db, turn, args.output_id, base)
             if name in {"export_video", "generate_music", "generate_voice", "generate_image"}:
                 from app.chat.editor_media import generate_media
 

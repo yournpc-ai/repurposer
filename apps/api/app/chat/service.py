@@ -2344,7 +2344,6 @@ async def answer_question(
         from sqlalchemy import func
         from app.chat.editor_media import answer_media_permission, wait_for_media_result, continue_media_turn
         from app.chat.editor_recovery import editor_lock_key
-        from app.models.database import AsyncSessionLocal
 
         if data.kind not in ("option", "bail"):
             raise HTTPException(422, "Select Allow or Decline.")
@@ -2357,25 +2356,22 @@ async def answer_question(
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         if execution is not None:
-            # The answer row and submission commit together. Keep Stop and history recovery
-            # fenced through the wait, without retaining the submission's row locks.
-            async with AsyncSessionLocal() as continuation:
-                if not await continuation.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
-                    raise HTTPException(409, "The original question is still being saved.")
-                opening = await db.get(Message, turn_id)
-                opening.turn_state = "in_flight"
-                await db.commit()
-                execution = await wait_for_media_result(project, execution)
-                if on_row_append:
-                    await on_row_append(execution)
+            opening = await db.get(Message, turn_id)
+            opening.turn_state = "in_flight"
+            await db.commit()
+            # Use the SSE activity writer's transaction throughout the continuation.
+            # A worker that already claimed this opening will finish it for history.
+            owns_continuation = await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id))))
+            execution = await wait_for_media_result(project, execution)
+            if on_row_append:
+                await on_row_append(execution)
+            if owns_continuation:
                 follow_up = await continue_media_turn(
-                    continuation, project, execution, on_delta=on_delta, on_phase=on_phase,
+                    db, project, execution, on_delta=on_delta, on_phase=on_phase,
                     on_tool_call=on_tool_call, on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
                     on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
                     on_row_append=on_row_append,
                 )
-                if follow_up is not None:
-                    follow_up = await db.get(Message, follow_up.id, populate_existing=True)
     elif question.kind == "task_book":
         # Project row lock (并发护栏, Message → Project order — the message
         # lock above lands first): a storyboard redesign's BEGIN commits its
@@ -3441,6 +3437,7 @@ async def stop_turn_at_visible_frontier(
 
     media_rows = {m.id for m in assistant_rows if (m.intent or {}).get("editor_media")
                  and (m.workflow_run_id or (m.intent or {}).get("media_result"))}
+    deliveries = {m.id for m in assistant_rows if (m.intent or {}).get("reviewed_version") and (m.intent or {}).get("output_refs")}
     if media_rows:
         from app.pipeline.orchestrator import cancel_run
         project_id = await db.scalar(select(Conversation.project_id).where(Conversation.id == row.conversation_id))
@@ -3452,7 +3449,7 @@ async def stop_turn_at_visible_frontier(
                 if run and run.project_id == project.id:
                     await cancel_run(db, run, project)
     members = {m.id for m in assistant_rows if ((m.intent or {}).get("frame") or {}).get("group_id")}
-    committed = bool(members) or bool((row.intent or {}).get("editor_commits")) or bool(media_rows)
+    committed = bool(members) or bool((row.intent or {}).get("editor_commits")) or bool(media_rows or deliveries)
     if not committed and not visible_prose and not visible_activity and not visible_structure:
         await db.execute(
             delete(Message)
@@ -3463,7 +3460,7 @@ async def stop_turn_at_visible_frontier(
         return "retracted"
 
     now = datetime.now(UTC).isoformat()
-    keep_ids = visible_prose | visible_activity | visible_structure | media_rows | members
+    keep_ids = visible_prose | visible_activity | visible_structure | media_rows | members | deliveries
     delete_ids = [message.id for message in assistant_rows if message.id not in keep_ids]
     if delete_ids:
         await db.execute(
@@ -3471,7 +3468,7 @@ async def stop_turn_at_visible_frontier(
             .where(Message.id.in_(delete_ids))
             .execution_options(synchronize_session=False)
         )
-    for message_id in keep_ids - media_rows:
+    for message_id in keep_ids - media_rows - deliveries:
         message = by_id[message_id]
         prefix = visible_prefix.get(message_id, 0)
         if message.content is not None:

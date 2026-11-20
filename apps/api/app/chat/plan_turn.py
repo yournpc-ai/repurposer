@@ -1760,6 +1760,9 @@ async def run_plan_turn(
     if authorized_media is not None:
         mention_target = {"composition_id": authorized_media.intent["composition_id"]}
         turn._inspected_version = authorized_media.intent["version_id"]
+        if authorized_media.intent["media_result"].get("role") == "export":
+            turn._editor_export = authorized_media.intent["media_result"]
+            mention_target["version_id"] = authorized_media.intent["version_id"]
     turn._editor_output_pin = mention_target
     opening = await db.get(Message, turn_id) if turn_id is not None else None
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")

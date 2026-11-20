@@ -501,7 +501,10 @@ def resolve_video_stage(
             user_text, re.IGNORECASE,
         ))
         website_draft = readiness is not None and readiness.task_kind == "website_promo"
-        if website_draft and not review_requested:
+        empty_timeline = not any(scene["clip_ids"] for scene in facts["scenes"])
+        if empty_timeline and not facts["awaiting_judgment"] and not selected_draft.errors:
+            stage = "draft_build"
+        elif website_draft and not review_requested:
             stage = "draft_build"
         elif selected_draft.errors:
             stage = "draft_repair"
@@ -511,11 +514,11 @@ def resolve_video_stage(
             stage = "draft_build"
         elif facts["open_issues"] and not facts["unreviewed_ranges_seconds"] and not facts["awaiting_judgment"]:
             stage = "draft_repair"
-        elif facts["save_ready"]:
+        elif facts["save_ready"] and facts["review_started"]:
             stage = "draft_finalize"
         else:
             stage = "draft_review"
-        return {"stage": stage, "draft": selected_draft, "target": None, "pending": pending}
+        return {"stage": stage, "draft": selected_draft, "target": None, "pending": pending, "empty_timeline": empty_timeline}
     if resources or drafts:
         return {"stage": "resolve_target", "draft": None, "target": None, "candidates": resources, "pending": pending}
     return {
@@ -654,6 +657,8 @@ def video_round_tools(
         "draft_finalize": {"design_video", "answer", "read_conversation_context"},
         "draft_hold": {"answer", "read_conversation_context"},
     }
+    if resolution.get("empty_timeline"):
+        stage_tools["draft_build"].discard("review_working_draft")
     if stage == "briefing" and readiness.brand_profile_ready:
         stage_tools["briefing"] = {"answer"} if resolution.get("pending") else {"ask_user"}
     if stage == "draft_build" and not active_draft and readiness and readiness.task_kind == "website_promo":
@@ -708,7 +713,8 @@ def video_round_tools(
         if tool.name in {"get_graph", "get_node", "edit_graph"}:
             continue
         if tool.name in EDITOR_NAMES:
-            projected.append(tool)
+            if has_saved_version or tool.name.startswith("generate_"):
+                projected.append(tool)
             continue
         if stage in stage_tools and tool.name not in stage_tools[stage]:
             continue
@@ -906,15 +912,10 @@ def _video_project_tools() -> list[ChatTool]:
         *perception_chat_tools("get_video_version"),
     ]
 
-_PRODUCTION_PLAN_DESCRIPTION = (
-    "展示包含已注册制作任务的可执行方案。用 design_video 直接创作视频内容。展示其保存版本且用户要求制作后，用本工具提交 produce_video。此调用不编写视频内容。"
-)
-
-
 PLAN_TOOLS = [
     ChatTool(
         name="present_plan",
-        description=_PRODUCTION_PLAN_DESCRIPTION,
+        description="展示需要用户确认的已注册后台任务及费用。",
         params_model=PresentPlanArgs,
         presentation=ToolPresentation(
             kind="draft", active_key="chat.activity.draft", done_key="chat.activity.draftDone",
@@ -963,7 +964,7 @@ PLAN_TOOLS = [
 CHAT_TOOLS = [
     ChatTool(
         name="propose_tasks",
-        description=_PRODUCTION_PLAN_DESCRIPTION,
+        description="展示需要用户确认的已注册后台任务及费用。",
         params_model=ProposeTasksArgs,
         presentation=ToolPresentation(
             kind="draft", active_key="chat.activity.draft", done_key="chat.activity.draftDone",

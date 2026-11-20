@@ -1139,16 +1139,17 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     )
     review = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"))
     assert review.stage == "draft_build"
-    assert {"design_video", "review_working_draft", "ask_user", "answer"} <= {
+    assert "review_working_draft" not in {tool.name for tool in review.tools}
+    assert {"design_video", "ask_user", "answer"} <= {
         tool.name for tool in review.tools
     }
-    assert "默认保存并展示分镜" in review.system
+    assert "design_video" in review.system
     sequential = _video_round(
         intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"),
         user_text="请按播放顺序审查当前工作草稿。",
     )
-    assert sequential.stage == "draft_review"
-    assert "design_video" not in {tool.name for tool in sequential.tools}
+    assert sequential.stage == "draft_build"
+    assert "review_working_draft" not in {tool.name for tool in sequential.tools}
     negated = _video_round(
         intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"),
         user_text="不要按播放顺序检查，直接保存草稿。",
@@ -1157,8 +1158,6 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     from app.agents.tool_loop import tool_spec
     from app.agents.working_drafts import record_working_draft_review
 
-    review_tool = next(tool for tool in review.tools if tool.name == "review_working_draft")
-    assert "judgment" not in tool_spec(review_tool)["function"]["parameters"]["properties"]
     with_evidence = draft.updated(record_working_draft_review(draft.arguments, {
         "content_digest": "c" * 64,
         "scope": {"source_range_seconds": {"start": 0.0, "end": 1.0}, "scene_ids": ["first"], "clip_ids": []},
@@ -1170,7 +1169,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     ),))
     judging = _video_round(intent_router.tools, drafts=(with_evidence,), snapshot=web_snapshot)
     assert judging.stage == "draft_review"
-    assert {tool.name for tool in judging.tools} == {"review_working_draft", "ask_user", "answer", *EDITOR_NAMES}
+    assert {tool.name for tool in judging.tools} == {"review_working_draft", "ask_user", "answer", "generate_image", "generate_music", "generate_voice"}
     judging_tool = next(tool for tool in judging.tools if tool.name == "review_working_draft")
     assert "judgment" in tool_spec(judging_tool)["function"]["parameters"]["required"]
     assert "frozen source page only" not in judging.context
@@ -1193,8 +1192,8 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     assert "title-second" not in edited.context
     assert edited.include_observation_media
     presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True)
-    assert presenting.stage == "draft_present"
-    assert {tool.name for tool in presenting.tools} == {"answer"}
+    assert presenting.caller_state["video_target"] == saved
+    assert EDITOR_NAMES <= {tool.name for tool in presenting.tools}
 
     other = _composition_resource(suffix="two")
     ambiguous = _video_round(
@@ -1404,7 +1403,10 @@ async def test_review_result_identity_survives_stale_history_restore(monkeypatch
             {"scene_id": "input", "range": {"start": 0, "end": 360000}},
             {"scene_id": "review", "range": {"start": 360000, "end": 720000}},
         ],
-        "timeline": {"tracks": []},
+        "timeline": {"tracks": [{"track_id": "visual", "clips": [
+            {"clip_id": "intro", "scene_id": "input", "range": {"start": 0, "end": 360000}},
+            {"clip_id": "ending", "scene_id": "review", "range": {"start": 360000, "end": 720000}},
+        ]}]},
     }
     initial = CandidateRecord.create(
         tool_name="design_video", arguments={"content": content, "design": {}}, errors=[],
@@ -1414,7 +1416,7 @@ async def test_review_result_identity_survives_stale_history_restore(monkeypatch
     )
     evidence = {
         "content_digest": canonical_json_hash(content),
-        "scope": {"source_range_seconds": {"start": 0.0, "end": 4.0}, "scene_ids": ["input"], "clip_ids": []},
+        "scope": {"source_range_seconds": {"start": 0.0, "end": 4.0}, "scene_ids": ["input"], "clip_ids": ["intro"]},
         "observation": {"media_digest": "e" * 64},
     }
     reviewed_arguments = record_working_draft_review(initial.arguments, evidence)
@@ -1476,7 +1478,7 @@ async def test_review_result_identity_survives_stale_history_restore(monkeypatch
     def assemble(**facts):
         from app.chat.prompts import assemble_video_round
 
-        return assemble_video_round({**facts, "mode": "plan", "user_text": "Review both Scenes"})
+        return assemble_video_round({**facts, "mode": "plan", "user_text": "Review both Scenes in playback order"})
 
     result = await agent.call_loop(
         execute, refresh_context=lambda: _immediate(tool_loop.ContextSnapshot("")),
@@ -1652,7 +1654,7 @@ def test_copy_only_draft_hold_projects_skill_receipt_without_media():
     assert round.stage == "draft_hold"
     assert "a" * 64 in round.context and "receipt_contains_media" in round.context
     assert round.include_observation_media is False
-    assert {tool.name for tool in round.tools} == {"answer", *EDITOR_NAMES}
+    assert {tool.name for tool in round.tools} == {"answer", "generate_image", "generate_music", "generate_voice"}
 
 
 @pytest.mark.asyncio
@@ -1817,7 +1819,7 @@ async def test_high_level_provider_requests_fold_prior_scene_writes_and_projecti
     finalizing_text = json.dumps(requests[4]["messages"], ensure_ascii=False)
     assert "Exact headline first" not in finalizing_text
     assert "Exact headline second" in finalizing_text
-    assert {item["function"]["name"] for item in requests[4]["tools"]} == {"design_video", "answer", "read_conversation_context", *EDITOR_NAMES}
+    assert {item["function"]["name"] for item in requests[4]["tools"]} == {"design_video", "answer", "read_conversation_context", "generate_image", "generate_music", "generate_voice"}
     assert {item["function"]["name"] for item in requests[5]["tools"]} == {"answer"}
     presented_text = json.dumps(requests[5]["messages"], ensure_ascii=False)
     assert "SAVED VERSION with presentation_rows and no music track" in presented_text

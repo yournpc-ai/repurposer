@@ -35,6 +35,7 @@ async def report_committed_edits(db, opening):
         "insert_audio": ("插入音频", "insert audio"),
         "split_clip": ("分割", "split"),
         "trim_clip": ("裁剪", "trim"),
+        "extend_still": ("延长片尾画面", "extend closing still"),
         "move_clip": ("移动片段", "move"),
         "translate": ("平移画面", "translation"),
         "scale": ("缩放", "scale"),

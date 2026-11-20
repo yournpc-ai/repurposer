@@ -739,6 +739,7 @@ export function AgentThread({
             serverMessageId: row.id,
             role: "assistant" as const,
             content: row.content ?? "",
+            outputRefs: triggerOutputRefs(row.intent),
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
             proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview") ? Date.now() : undefined,
             turnId,

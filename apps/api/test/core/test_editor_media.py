@@ -208,3 +208,66 @@ async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(datab
         charged = await capture_step(db, user_id=owner, node=step)
         assert charged.amount == hold
         assert await capture_step(db, user_id=owner, node=step) is None
+
+
+@pytest.mark.asyncio
+async def test_export_quote_replay_competing_openings_and_stop(database, monkeypatch):
+    from app.chat.editor import ExportVideoArgs
+    from app.editing.store import apply_composition_edits
+    from test.core.test_compositions import set_intent
+
+    monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    owner = await _user(database)
+    pid = await _project(database, owner)
+    await _snapshots(database, owner)
+    comp, version, _ = await _create(database, owner, pid)
+    ref = {"composition_id": str(comp.id), "composition_version_id": str(version.id),
+           "content_digest": version.content_digest}
+    async with database() as db:
+        project = await db.get(Project, pid)
+        user = await db.get(User, owner)
+        user.settings = {"confirm_execution": "ask"}
+        convo = Conversation(user_id=owner, project_id=pid)
+        db.add(convo)
+        await db.commit()
+
+        async def opening():
+            row = await service._create_message(db, convo.id, "user", "Export this version.")
+            row.turn_state = "in_flight"
+            await db.commit()
+            return SimpleNamespace(project=project, user_id=owner, turn_id=row.id, conversation_id=convo.id,
+                _video_base_ref=ref, _editor_last_preview={**ref, "model_media": ["video"], "mp4_sha256": "a"*64})
+
+        def submit(turn):
+            return editor_media.submit_editor_media(turn, "export_video", ExportVideoArgs(), comp, version, "export1")
+
+        early = await opening()
+        await service.stop_turn_at_visible_frontier(db, early.turn_id, ChatTurnStopRequest())
+        with pytest.raises(service.TurnStopped):
+            await submit(early)
+        turn = await opening()
+        first, duplicate = await asyncio.gather(submit(turn), submit(turn))
+        assert first.id == duplicate.id and "MP4" in first.content
+        assert not await db.scalar(select(WorkflowRun.id))
+        assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))
+        execution = await editor_media.answer_media_permission(db, project, await db.get(Message, first.id), True)
+        await db.commit()
+        replay = await submit(turn)
+        assert replay.workflow_run_id == execution.workflow_run_id
+        user.settings = {"confirm_execution": "auto"}
+        competing = await opening()
+        with pytest.raises(ValueError):
+            await submit(competing)
+        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 1
+        assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(CreditTransaction.kind == "hold")) == 1
+        _, newer, _ = await apply_composition_edits(db, owner_id=owner, composition_id=comp.id,
+            base_version_id=version.id, ops=[set_intent("Updated while exporting")])
+        assert newer.id != version.id
+        run = await db.get(WorkflowRun, execution.workflow_run_id)
+        assert run.context["version_ref"] == ref
+        replay_on_new_head = await editor_media.submit_editor_media(
+            turn, "export_video", ExportVideoArgs(), comp, newer, "export1")
+        assert replay_on_new_head.id == execution.id
+        assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
+        assert (await db.get(WorkflowRun, run.id, populate_existing=True)).status.value == "cancelled"

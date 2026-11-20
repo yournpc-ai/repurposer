@@ -96,7 +96,10 @@ export function ChatOutputViewer({
   return (
     <MediaLightbox
       data={data}
-      onOpenChange={onOpenChange}
+      onOpenChange={(open) => {
+        if (!open && selectedOutput) onMention(selectedOutput)
+        else onOpenChange(open)
+      }}
       getSlot={getOutputSlot}
       actions={selectedOutput ? (
         <>

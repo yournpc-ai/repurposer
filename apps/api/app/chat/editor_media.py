@@ -67,7 +67,7 @@ async def _record_image(db, project, receipt, asset):
     return receipt
 
 
-async def _record_export(db, project, receipt, run):
+async def _record_export(db, project, receipt, run, *, recheck=False):
     from app.pipeline.run_review import output_is_delivered
 
     output = (await db.scalars(select(Output).join(WorkflowStep, Output.workflow_step_id == WorkflowStep.id)
@@ -81,12 +81,52 @@ async def _record_export(db, project, receipt, run):
             or output.render_spec.get("provenance") != ref
             or (output.payload or {}).get("composition_digest") != ref["content_digest"]):
         raise ValueError("The renderer has no verified MP4 for the authorized version.")
+    if recheck:
+        from app.pipeline.rendering import _probe_artifacts
+
+        if await _probe_artifacts(output.render_spec, output.files["video"]):
+            raise ValueError("The stored MP4 for this version is unavailable or failed media checks.")
     facts = {"role": "export", "status": "available", **ref, "output_id": str(output.id),
              "duration_seconds": output.payload["duration_seconds"], "review_pending": True}
     receipt.intent = {**receipt.intent, "media_result": facts}
     receipt.content = ("正式 MP4 已导出，待审片。" if (project.language or "").startswith("zh")
                        else "MP4 export complete. Output review is pending.")
     return receipt
+
+
+async def deliver_video(db, turn, output_id, base):
+    import hashlib
+    from app.tools.video.review import read_output_video
+    from app.pipeline.run_review import output_is_delivered
+
+    group = current_group_id()
+    if group and group == getattr(turn, "_video_review_group", None):
+        raise ValueError("Read the Output review before deciding whether to deliver.")
+    report = getattr(turn, "_video_review_report", None) or {}
+    if (report.get("output_id") != str(output_id) or not report.get("frames")
+            or any(report.get(k) != v for k, v in base.items())):
+        raise ValueError("Delivery requires a review of this exact Output and selected version.")
+    output = await db.scalar(select(Output).where(Output.id == output_id, Output.project_id == turn.project.id))
+    if output is None or not output_is_delivered(output) or output.render_spec.get("provenance") != base:
+        raise ValueError("The reviewed Output is unavailable.")
+    data = await read_output_video(output.files["video"])
+    if hashlib.sha256(data).hexdigest() != report["video_sha256"]:
+        raise ValueError("The MP4 has changed since review. Review the actual file again.")
+    opening = await _lock_turn_for_transcript_write(db, turn.turn_id, require_in_flight=True)
+    if opening.conversation_id != turn.conversation_id:
+        raise ValueError("The delivery does not belong to this Chat.")
+    existing = await db.scalar(select(Message.id).where(
+        Message.turn_id == opening.id, Message.intent["output_refs"].contains([str(output_id)]),
+    ).limit(1))
+    if existing is None:
+        text = "正式成片已交付。" if (turn.project.language or "").startswith("zh") else "Your reviewed MP4 is ready."
+        message = await _create_message(db, turn.conversation_id, "assistant", text, turn_id=opening.id,
+            intent={"output_refs": [str(output_id)], "reviewed_version": base,
+                    "reviewed_at": report["reviewed_at"], "video_sha256": report["video_sha256"]})
+        await db.commit()
+        if turn.on_row_append:
+            await turn.on_row_append(message)
+    return ToolObservation(json.dumps({"output_id": str(output_id), **base, "delivered_to_chat": True}))
 
 
 async def settle_media_receipt(db, project, run):
@@ -138,7 +178,7 @@ async def _submit(db, project, receipt, task, quote, via):
             WorkflowRun.context["version_ref"]["composition_version_id"].as_string() == receipt.intent["version_id"],
         ).order_by(WorkflowRun.created_at.desc()).limit(1))
         if existing is not None:
-            await _record_export(db, project, receipt, existing)
+            await _record_export(db, project, receipt, existing, recheck=True)
             return existing.id
     run = await submit_confirmed_tasks(
         db, project, None, [task], name=task.params.get("name", task.tool), instruction=None,
@@ -229,6 +269,9 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
         receipt = await db.scalar(select(Message).where(
             Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
         ))
+        if receipt and name == "export_video" and receipt.intent.get("composition_id") == composition_id:
+            # The native call keeps its original export pin when a retry sees a newer head.
+            fingerprint = canonical_json_hash({"tool": name, "version": receipt.intent["version_id"], "params": params})
         if not receipt and (opening.intent or {}).get("resumed_media"):
             # A resumed model can repeat the exact request with a fresh native
             # id. Return the existing receipt without acquiring another hold.
@@ -376,7 +419,7 @@ async def generate_media(turn, name, args, composition, version):
             }])
     if current_group_id() and facts.get("snapshot_id") and not facts.get("cache_hit"):
         turn.__dict__.setdefault("_generated_in_response", {})[facts["snapshot_id"]] = current_group_id()
-    facts["delivered_to_chat"] = facts.get("role") != "export"
+    facts["delivered_to_chat"] = facts.get("status") == "available" and facts.get("role") != "export"
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest", "output_id"):
         if facts.get(key):
@@ -436,8 +479,9 @@ async def continue_media_turn(db, project, receipt, **hooks):
         intent = opening.intent or {}
         # Once a continuation has begun, its own version receipts are authoritative.
         # An interrupted edit with committed writes is reported, never applied a second time.
+        exported = receipt.intent["media_result"].get("role") == "export"
         if (not comp_id or str(head) != receipt.intent["version_id"] or latest != turn_id or
-                intent.get("editor_commits") or intent.get("resumed_media") == identity or
+                (intent.get("editor_commits") and not exported) or intent.get("resumed_media") == identity or
                 receipt.intent["media_result"]["status"] != "available"):
             await report_committed_edits(state, opening)
             available = receipt.intent["media_result"]["status"] == "available"
@@ -445,6 +489,9 @@ async def continue_media_turn(db, project, receipt, **hooks):
                 notice = ("素材已保存。生成期间影片已有新版本，请在当前版本选择插入位置。"
                           if _prefers_zh(opening.content) else
                           "The media is saved. The film changed during generation. Select a position in the current version.")
+                if exported:
+                    notice = ("原版本已导出，待检查正式成片。" if _prefers_zh(opening.content)
+                              else "The previous version was exported and awaits Output review.")
                 await _create_message(state, opening.conversation_id, "assistant", notice, turn_id=turn_id)
             opening.turn_state = "settled" if available and not comp_id else "failed"
             await state.commit()

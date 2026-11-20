@@ -157,7 +157,7 @@ async def video_target_hint(db, project, mentions=()):
         row = await _owned_video_output(db, project, pins[0]) if len(pins) == 1 else None
         if row is None or not row.composition_id or not row.composition_version_id:
             return {"unavailable": True}
-        return {"output_id": str(row.id), "composition_id": str(row.composition_id), "version_id": str(row.composition_version_id),
+        return {"output_id": str(row.id), "output_version_id": str(row.composition_version_id), "composition_id": str(row.composition_id), "version_id": str(row.composition_version_id),
                 **({"selected_region": pins[0].region.model_dump(mode="json")} if pins[0].region else {})}
     return None
 
@@ -293,7 +293,10 @@ async def review_video_seat(
         )
     except (ReviewError, ValueError) as exc:
         return ToolObservation(str(exc), ok=False, user_error=str(exc))
+    from app.agents.tool_progress import current_group_id
+
     turn._video_review_report = report
+    turn._video_review_group = current_group_id()
     from app.chat.activity_receipts import video_review_receipt
 
     return ToolObservation(
@@ -1304,16 +1307,6 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
                 "presented_message_id": receipt.get("presented_message_id"),
             })
     if not receipt.get("production_invited"):
-        if pending is not None:
-            return None
-        last_run = await db.scalar(
-            select(WorkflowRun).where(
-                WorkflowRun.project_id == project.id, WorkflowRun.context["editor_media"].as_string().is_(None),
-                WorkflowRun.context["version_ref"]["composition_version_id"].as_string().is_not(None),
-            ).order_by(WorkflowRun.created_at.desc()).limit(1)
-        )
-        if last_run is not None:
-            return await already_started(last_run, {"base_ref": last_run.context["version_ref"]})
         return None
     presented = await db.get(Message, UUID(receipt["presented_message_id"]))
     if presented is None or presented.conversation_id != conversation_id:

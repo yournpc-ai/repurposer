@@ -534,6 +534,10 @@ async def saved_preview_media(preview: dict, version_id: UUID):
     from app.providers.llm import get_llm_client
 
     bounds = preview["scope"]["source_range_seconds"]
+    if preview["video_spec"].get("fonts"):
+        from app.tools.video.preparation import ensure_font_resources
+
+        await ensure_font_resources()
     video = await render_preview(preview["video_spec"])
     from app.tools.video.review import ReviewError, _decode_frame, _jpeg
 

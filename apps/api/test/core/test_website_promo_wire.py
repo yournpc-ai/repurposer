@@ -2,8 +2,6 @@ import json
 from copy import deepcopy
 from uuid import uuid4
 
-from app.chat.editor import EDITOR_NAMES
-
 import pytest
 
 from app.agents.tool_loop import ContextSnapshot, ToolObservation
@@ -32,6 +30,7 @@ from app.tools.video.brand_agent import BrandProfileExtraction, brand_profile_ag
 from test.core.test_website_promo_readiness import URL, asset, snapshot, website_question_arguments
 
 pytestmark = pytest.mark.asyncio
+_UNBOUND_MEDIA = {"generate_music", "generate_voice", "generate_image"}
 
 
 def wire_copy(value):
@@ -205,9 +204,9 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
     )
     assert result.tool_name == "ask_user"
     assert len(provider.wires) == 3
-    assert tool_names(provider.wires[0]) == {"prepare_video_materials", "answer", *EDITOR_NAMES}
-    assert tool_names(provider.wires[1]) == {"analyze_brand", "answer", *EDITOR_NAMES}
-    assert tool_names(provider.wires[2]) == {"ask_user", *EDITOR_NAMES}
+    assert tool_names(provider.wires[0]) == {"prepare_video_materials", "answer", *_UNBOUND_MEDIA}
+    assert tool_names(provider.wires[1]) == {"analyze_brand", "answer", *_UNBOUND_MEDIA}
+    assert tool_names(provider.wires[2]) == {"ask_user", *_UNBOUND_MEDIA}
     for wire in provider.wires:
         assert wire["messages"].count({"role": "user", "content": text}) == 1
         assert [message["role"] for message in wire["messages"][:2]] == ["system", "user"]
@@ -538,7 +537,7 @@ async def test_failed_capture_and_non_website_paths(monkeypatch):
     await intent_router.call_loop(
         execute, round_assembler=assemble_failed, refresh_context=refresh_failed, message=text
     )
-    assert tool_names(failed_provider.wires[0]) == {"answer", *EDITOR_NAMES}
+    assert tool_names(failed_provider.wires[0]) == {"answer", *_UNBOUND_MEDIA}
 
     generic_provider = FakeToolProvider([("answer", {})])
     monkeypatch.setattr(intent_router, "client", generic_provider)

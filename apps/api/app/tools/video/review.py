@@ -40,7 +40,7 @@ from app.tools.video.output_checks import (
 _MAX_SCENE_FRAMES = 16
 _MOTION_SAMPLES_PER_SECOND = 2
 _FRAME_LONG_EDGE = 1280
-_REVIEW_SCHEMA_VERSION = 3
+_REVIEW_SCHEMA_VERSION = 4
 
 
 class ReviewError(ValueError):
@@ -129,29 +129,23 @@ def _fps(spec: dict[str, Any]) -> Fraction:
     return fps
 
 
-def _scene_targets(spec: dict[str, Any]) -> list[tuple[Fraction, str]]:
-    """One settled-in frame per executed scene, using the spec's frame windows."""
-    windows: dict[str, tuple[int, int]] = {}
-    for track in spec.get("tracks") or []:
-        for clip in track.get("clips") or []:
-            scene_id = clip.get("scene_id")
-            start, end = clip.get("start_frame"), clip.get("end_frame")
-            if not scene_id or not isinstance(start, int) or not isinstance(end, int) or end <= start:
-                continue
-            previous = windows.get(str(scene_id))
-            windows[str(scene_id)] = (
-                min(previous[0], start) if previous else start,
-                max(previous[1], end) if previous else end,
-            )
-    ordered = sorted(windows.items(), key=lambda item: item[1][0])
-    if len(ordered) > _MAX_SCENE_FRAMES:
-        # Bounded whole-film coverage without privileging only the opening.
-        indexes = {round(i * (len(ordered) - 1) / (_MAX_SCENE_FRAMES - 1)) for i in range(_MAX_SCENE_FRAMES)}
-        ordered = [ordered[i] for i in sorted(indexes)]
-    return [
-        (Fraction(start * 2 + (end - start), 2), scene_id)
-        for scene_id, (start, end) in ordered
-    ]
+def _visual_targets(spec: dict[str, Any]) -> list[tuple[Fraction, str | None]]:
+    """Sample each distinct visual interval, including empty gaps, within the frame budget."""
+    end = int(spec["duration_frames"])
+    clips = [clip for track in spec.get("tracks", []) if track.get("kind") == "visual"
+             for clip in track.get("clips", [])]
+    cuts = sorted({0, end, *(clip[key] for clip in clips for key in ("start_frame", "end_frame")
+                             if 0 < clip[key] < end)})
+    intervals = list(zip(cuts, cuts[1:]))
+    if len(intervals) > _MAX_SCENE_FRAMES:
+        intervals = [intervals[round(i * (len(intervals) - 1) / (_MAX_SCENE_FRAMES - 1))]
+                     for i in range(_MAX_SCENE_FRAMES)]
+    targets = []
+    for start, stop in intervals:
+        frame = Fraction(start + stop, 2)
+        scenes = {c.get("scene_id") for c in clips if c["start_frame"] <= frame < c["end_frame"]}
+        targets.append((frame, scenes.pop() if len(scenes) == 1 else None))
+    return targets
 
 
 def _scene_window(spec: dict[str, Any], scene_id: str) -> tuple[int, int]:
@@ -339,7 +333,7 @@ async def _extract_frames(
                 raise ReviewError(f"requested review time {seconds:g}s is outside this Output")
             targets.append((Fraction(str(seconds)) * fps, None))
     else:
-        targets.extend(_scene_targets(spec))
+        targets.extend(_visual_targets(spec))
 
     # Exact requested times take priority; duplicate targets decode only once.
     unique: dict[int, tuple[Fraction, str | None]] = {}
@@ -619,6 +613,15 @@ def _previous_review_facts(report: dict[str, Any] | None) -> dict[str, Any] | No
     }
 
 
+async def read_output_video(key: str) -> bytes:
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    try:
+        return await storage.read(key)
+    except (BotoCoreError, ClientError, OSError) as exc:
+        raise ReviewError("The delivered MP4 cannot be read from storage.") from exc
+
+
 async def review_video(
     db: AsyncSession,
     *,
@@ -651,7 +654,7 @@ async def review_video(
         raise ReviewError("the Output's executed spec does not match its pinned content version")
 
     # Cache identity includes the actual delivered bytes, not just the Output id.
-    video = await storage.read(video_key)
+    video = await read_output_video(video_key)
     video_sha256 = hashlib.sha256(video).hexdigest()
     saved = _reusable_report(output.quality, output.id, video_sha256, args)
     if (saved is not None and saved.get("file") and
