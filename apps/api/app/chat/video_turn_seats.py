@@ -1409,7 +1409,7 @@ async def annotate_narration_seat(
 
 def stamp_video_presentation(
     project: Project, message: Message | None, read: dict[str, Any] | None,
-    *, production_requested: bool = False,
+    *, production_requested: bool = False, observed_ranges: list[dict] | None = None,
 ) -> PendingPlan | None:
     """The presentation association (ADR-145 phase B; the film stamp's
     sibling): fires from a runner's finish when a video design/revision
@@ -1423,18 +1423,23 @@ def stamp_video_presentation(
 
     The first design records whether the user requested production.
     """
-    if read is None or message is None:
+    if message is None or (read is None and not observed_ranges):
         return None
     from app.editing.service import (  # deferred: editing seam
         storyboard_block,
         video_presentation_receipt,
     )
 
+    blocks = list(observed_ranges or [])
+    if read is not None:
+        final_block = storyboard_block(read)
+        if final_block not in blocks:
+            blocks.append(final_block)
     message.blocks = [
         *(block for block in message.blocks or [] if block.get("kind") != "video_storyboard"),
-        {**storyboard_block(read), "presented_message_id": str(message.id)},
+        *({**block, "presented_message_id": str(message.id)} for block in blocks),
     ]
-    if (read.get("scrub") or {}).get("kind") == "range":
+    if read is None or (read.get("scrub") or {}).get("kind") == "range":
         return None
 
     receipt = video_presentation_receipt(read, review_hold=True)

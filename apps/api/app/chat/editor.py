@@ -364,6 +364,7 @@ async def edit_clip(
         "version": saved.version,
         "content_digest": saved.content_digest,
         **extra,
+        "target_before_seconds": [target.range.start / rate, target.range.end / rate],
         "replayed": replayed,
         "changed_clips": changed,
         "added_clips": [c["clip_id"] for c in changed if c["clip_id"] not in clips],
@@ -449,6 +450,12 @@ async def execute_editor(turn, name, args):
                         "tool": name,
                         "arguments": args.model_dump(exclude_none=True),
                     }
+                    if name in {"split_clip", "trim_clip", "move_clip"}:
+                        receipt["target_before_seconds"] = result["target_before_seconds"]
+                        receipt["target_after_seconds"] = {
+                            c["clip_id"]: [c["start_seconds"], c["end_seconds"]]
+                            for c in result["changed_clips"]
+                        }
                     if name == "split_clip":
                         receipt["right_clip_id"] = result["right_clip_id"]
                     before = getattr(turn, "_editor_last_preview", None)
@@ -520,7 +527,7 @@ async def execute_editor(turn, name, args):
                 )
             if name != "preview_range":
                 raise ValueError("Unknown editor operation.")
-            from app.editing.service import video_version_read
+            from app.editing.service import storyboard_block, video_version_read
             from app.tools.video.preview import prepare_saved_video_scrub, saved_preview_media
 
             read = await video_version_read(
@@ -538,6 +545,10 @@ async def execute_editor(turn, name, args):
                 "window_seconds": preview["scope"]["source_range_seconds"],
                 "model_media": evidence["model_media"],
             }
+            block = storyboard_block(read)
+            blocks = turn.__dict__.setdefault("_editor_preview_blocks", [])
+            if block not in blocks:
+                blocks.append(block)
             turn._video_presentation_pending = read
             evidence["coverage"] = (
                 "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."

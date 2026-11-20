@@ -964,6 +964,7 @@ class PlanTurn:
 
         updated = stamp_video_presentation(
             self.project, message, pending,
+            observed_ranges=self.__dict__.pop("_editor_preview_blocks", []),
             production_requested=bool(pending and pending.get("fresh_design"))
             and requested_video_production(self.text),
         )
