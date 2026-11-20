@@ -1058,7 +1058,7 @@ async def test_upload_tool_preserves_original_failed_run(database, monkeypatch, 
     async def presign(*args, **kwargs):
         return "https://storage.test/put"
     async def probe(*args):
-        return []
+        return [], "verified"
     monkeypatch.setattr(rendering, "get_output_path", path)
     monkeypatch.setattr(rendering, "presign_upload", presign)
     monkeypatch.setattr(rendering, "_probe_artifacts", probe)

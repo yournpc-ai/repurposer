@@ -44,7 +44,7 @@ export function uploadRetryDelay(attempt: number, retryAfter: string | null,
 /** Idempotent PUTs reuse the finished bytes, but never a failed connection
  * pool. Four attempts share a 12-minute budget (including backoff); auth,
  * certificate/configuration failures and unknown errors fail immediately. */
-export async function uploadFile(url: string, filePath: string, contentType?: string) {
+export async function uploadFile(url: string, filePath: string, contentType?: string, createOnly = false) {
   const buffer = await fs.readFile(filePath);
   const deadline = performance.now() + TOTAL_TIMEOUT_MS;
   let lastError: UploadError | undefined;
@@ -57,13 +57,16 @@ export async function uploadFile(url: string, filePath: string, contentType?: st
     try {
       const resp = await fetch(url, {
         method: "PUT", body: buffer,
-        headers: contentType ? { "Content-Type": contentType } : {},
+        headers: { ...(contentType ? { "Content-Type": contentType } : {}),
+          ...(createOnly ? { "If-None-Match": "*" } : {}) },
         dispatcher,
         signal: AbortSignal.timeout(Math.min(ATTEMPT_TIMEOUT_MS, remaining)),
       });
       retryAfter = resp.headers.get("retry-after");
       await resp.body?.cancel().catch(() => {});
-      if (resp.ok) return;
+      // A competing claim or lost response may have already placed the
+      // write-once object. The worker independently downloads and probes it.
+      if (resp.ok || (createOnly && resp.status === 412)) return;
       retryable = resp.status >= 500 || resp.status === 408 || resp.status === 429;
       throw new UploadError(`HTTP_${resp.status}`);
     } catch (error) {

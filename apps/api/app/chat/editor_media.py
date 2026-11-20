@@ -84,7 +84,8 @@ async def _record_export(db, project, receipt, run, *, recheck=False):
     if recheck:
         from app.pipeline.rendering import _probe_artifacts
 
-        if await _probe_artifacts(output.render_spec, output.files["video"]):
+        violations, digest = await _probe_artifacts(output.render_spec, output.files["video"])
+        if violations or (output.files.get("video_sha256") and digest != output.files["video_sha256"]):
             raise ValueError("The stored MP4 for this version is unavailable or failed media checks.")
     facts = {"role": "export", "status": "available", **ref, "output_id": str(output.id),
              "duration_seconds": output.payload["duration_seconds"], "review_pending": True}

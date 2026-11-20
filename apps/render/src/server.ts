@@ -144,7 +144,7 @@ app.post(["/render", "/upload"], async (req, res) => {
     render_id?: string;
     upload_only?: boolean;
     spec?: VideoSpec;
-    outputs?: { video?: { key: string; put_url: string; content_type?: string } };
+    outputs?: { video?: { key: string; put_url: string; content_type?: string; create_only?: boolean } };
   };
   const parsed = videoSpecSchema.safeParse(spec);
   if (!parsed.success || parsed.data.family !== "video") {
@@ -165,7 +165,7 @@ app.post(["/render", "/upload"], async (req, res) => {
       upload_only === true,
       (outDir) => renderVideo(parsed.data, outDir, "video"),
     );
-    await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type);
+    await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type, outputs.video.create_only);
     res.json({ ok: true, video: outputs.video.key });
   } catch (err) {
     console.error("video_render_failed", { render_id, error: err });

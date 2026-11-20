@@ -13,9 +13,8 @@ Two spec families dispatch only on ``spec.family``:
   carries storage keys, never absolute URLs, off the compiler); the render
   yields video alone.
 
-Output keys carry a per-render timestamp suffix (``<output_id>-<ts>.mp4``) so a
-re-render never overwrites the object a browser may have cached under the same
-URL. The previous render's objects are deleted once the new one succeeds.
+A queued render owns one immutable upload key for its Output, render step and
+pinned spec. Reclaimed workers probe that object before committing delivery.
 
 Render node mirror (RunPlan Phase 1, D2): if the output has a render workflow step
 (run-scoped renders), its status mirrors the render lifecycle — the node is
@@ -25,8 +24,8 @@ run-less re-renders (manual render / dub / translate) keep working unchanged.
 
 import asyncio
 import copy
+import hashlib
 import json
-import time
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
@@ -48,7 +47,7 @@ from app.pipeline.render_probe import (
     probe_rendered_video,
 )
 from app.providers.storage import (
-    delete,
+    exists,
     download_to_temp,
     get_output_path,
     output_url,
@@ -128,7 +127,7 @@ async def _stamp_render_failure(output_id: UUID, failure: dict[str, Any]) -> Non
         )
 
 
-async def _probe_artifacts(spec: dict[str, Any], video_key: str) -> list[ProbeViolation]:
+async def _probe_artifacts(spec: dict[str, Any], video_key: str) -> tuple[list[ProbeViolation], str | None]:
     """放行闸③ (MG D4 / 禁止事项 10 — 禁无文件校验的成功态): download the fresh
     artifacts and probe them BEFORE the row may settle COMPLETED. ONE seat for
     both spec families; the check items dispatch on ``spec.family``
@@ -153,9 +152,13 @@ async def _probe_artifacts(spec: dict[str, Any], video_key: str) -> list[ProbeVi
                     PROBE_OUTPUT_MISSING,
                     f"video object unreadable from storage: {type(e).__name__}: {e}",
                 )
-            ]
-        violations = await asyncio.to_thread(probe_rendered_video, video_path, expect)
-        return violations
+            ], None
+        def inspect():
+            with video_path.open("rb") as media:
+                digest = hashlib.file_digest(media, "sha256").hexdigest()
+            return probe_rendered_video(video_path, expect), digest
+
+        return await asyncio.to_thread(inspect)
     finally:
         for p in (video_path,):
             if p is not None:
@@ -533,52 +536,58 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         {"stage": "upload", "codes": ["UPLOAD_FAILED"]}
         if upload_only_recovery else {"stage": "render", "codes": ["RENDER_FAILED"]}
     )
-    old_video_key = files.get("video")
     try:
-        render_ts = int(time.time())
-        video_key = await get_output_path(
-            project_id, user_id, f"{output_id}-{render_ts}.mp4"
-        )
-        video_put_url = await presign_upload(
-            video_key, content_type="video/mp4", ttl=max(3600, settings.render_timeout_seconds + 600)
-        )
-        payload = {
-            "spec": spec,
-            "render_id": str(output_id),
-            **({"upload_only": True} if upload_only else {}),
-            "outputs": {
-                "video": {
-                    "key": video_key,
-                    "put_url": video_put_url,
-                    "content_type": "video/mp4",
-                },
-            },
-        }
-        # trust_env=False: httpx otherwise adopts the macOS SYSTEM proxy
-        # (getproxies) even with no shell env, and the local proxy kills the
-        # long-lived render request mid-render ("Server disconnected"). The
-        # render service is a local loopback peer by construction.
-        async with httpx.AsyncClient(
-            timeout=settings.render_timeout_seconds, trust_env=False
-        ) as client:
-            resp = await client.post(
-                settings.render_url.removesuffix("/render") + "/upload"
-                if upload_only_recovery else settings.render_url,
-                json=payload,
+        # The same workflow step survives a crash/reclaim. A new manual
+        # render without a step gets a new generation and its own object.
+        from app.models.schemas import canonical_json_hash
+
+        generation = request_step.id if request_step is not None else mine
+        identity = canonical_json_hash({"generation": str(generation), "spec": output.render_spec,
+                                        "version": str(output.composition_version_id)})
+        video_key = await get_output_path(project_id, user_id, f"{output_id}-{identity}.mp4")
+        reusable = request_step is not None and await exists(video_key)
+        if not reusable:
+            video_put_url = await presign_upload(
+                video_key, content_type="video/mp4", ttl=max(3600, settings.render_timeout_seconds + 600), create_only=True
             )
-            if resp.is_error:
-                try:
-                    error_data = resp.json()
-                    stage = error_data.get("stage")
-                    if stage in ("render", "upload", "recovery"):
-                        failure = {
-                            "stage": stage,
-                            "codes": [str(error_data.get("code") or "RENDER_FAILED")[:80]],
-                        }
-                except (ValueError, AttributeError):
-                    pass
-            resp.raise_for_status()
-            data = resp.json()
+            payload = {
+                "spec": spec,
+                "render_id": str(output_id),
+                **({"upload_only": True} if upload_only else {}),
+                "outputs": {
+                    "video": {
+                        "key": video_key,
+                        "put_url": video_put_url,
+                        "content_type": "video/mp4", "create_only": True,
+                    },
+                },
+            }
+            # trust_env=False: httpx otherwise adopts the macOS SYSTEM proxy
+            # (getproxies) even with no shell env, and the local proxy kills the
+            # long-lived render request mid-render ("Server disconnected"). The
+            # render service is a local loopback peer by construction.
+            async with httpx.AsyncClient(
+                timeout=settings.render_timeout_seconds, trust_env=False
+            ) as client:
+                resp = await client.post(
+                    settings.render_url.removesuffix("/render") + "/upload"
+                    if upload_only_recovery else settings.render_url,
+                    json=payload,
+                )
+                if resp.is_error:
+                    try:
+                        error_data = resp.json()
+                        stage = error_data.get("stage")
+                        if stage in ("render", "upload", "recovery"):
+                            failure = {
+                                "stage": stage,
+                                "codes": [str(error_data.get("code") or "RENDER_FAILED")[:80]],
+                            }
+                    except (ValueError, AttributeError):
+                        pass
+                resp.raise_for_status()
+                if resp.json().get("video") != video_key:
+                    raise ValueError("Renderer acknowledged an unexpected object key.")
 
         # 放行闸③ (MG D4 / 禁止事项 10): the artifact must pass the probe gate
         # before the row may settle COMPLETED — a success without a file check
@@ -587,9 +596,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         # with the structured failure on the render mirror step; the rejected
         # object stays in storage as the forensic record (its key rides the
         # failure detail and the structlog event).
-        violations = await _probe_artifacts(
-            spec, data["video"]
-        )
+        violations, file_digest = await _probe_artifacts(spec, video_key)
         if violations:
             codes = sorted({v.code for v in violations})
             detail = "; ".join(v.detail for v in violations[:6])[:500]
@@ -623,21 +630,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
                 )
                 await recovery_aware(_finalize_owning_run, output_id)
             else:
-                # Fenced (a morph re-pended mid-render): this render's product
-                # is stale regardless of probe outcome — discard the object
-                # exactly like the superseded path.
-                logger.warning(
-                    "render_fenced", output_id=str(output_id), tail="probe"
-                )
-                for orphan_key in (k for k in (video_key,) if k):
-                    try:
-                        await delete(orphan_key)
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "render_superseded_delete_failed",
-                            key=orphan_key,
-                            error=str(e),
-                        )
+                logger.warning("render_fenced", output_id=str(output_id), tail="probe")
             return
 
         # Guarded write (ADR-079): the predicate is the claim TOKEN, not the
@@ -663,7 +656,7 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
                 .values(
                     files={
                         **files,
-                        "video": data["video"],
+                        "video": video_key, "video_sha256": file_digest,
                     },
                     render_status=RenderStatus.COMPLETED,
                     render_error=None,
@@ -675,15 +668,6 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
             await db.commit()
         if claimed.rowcount == 0:
             logger.info("render_superseded", output_id=str(output_id))
-            for orphan_key in (k for k in (video_key,) if k):
-                try:
-                    await delete(orphan_key)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "render_superseded_delete_failed",
-                        key=orphan_key,
-                        error=str(e),
-                    )
             await recovery_aware(_mirror_superseded_node, output_id, lang)
             return
         # The fresh artifacts passed the probe and the fenced Output write
@@ -694,24 +678,10 @@ async def render_output(output_id: UUID, *, upload_only_recovery: bool = False) 
         await recovery_aware(_mirror_render_node, output_id, "done")
         await recovery_aware(_finalize_owning_run, output_id)
 
-        # Best-effort cleanup of the previous render's objects. Only bare
-        # keys are deletable; legacy /api/v1 paths and absolute URLs are
-        # skipped (deleting them would be a no-op anyway).
-        for old_key in (old_video_key,):
-            if old_key and not old_key.startswith(("http://", "https://", "/")):
-                try:
-                    await delete(old_key)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "render_old_output_delete_failed",
-                        key=old_key,
-                        error=str(e),
-                    )
-
         logger.info(
             "output_rendered",
             output_id=str(output_id),
-            video=output_url(data["video"]),
+            video=output_url(video_key), reused_upload=reusable,
         )
     except Exception as e:  # noqa: BLE001 — record any failure on the row
         error_line = user_line(

@@ -255,6 +255,7 @@ async def presign_upload(
     content_type: str | None = None,
     *,
     ttl: int | None = None,
+    create_only: bool = False,
 ) -> str:
     """Generate a presigned PUT URL for direct upload to object storage."""
     client = _get_s3_client()
@@ -262,6 +263,8 @@ async def presign_upload(
         "Bucket": settings.s3_bucket_name,
         "Key": _normalize_key(key),
     }
+    if create_only:
+        params["IfNoneMatch"] = "*"
     if content_type:
         params["ContentType"] = content_type
     expires_in = ttl if ttl is not None else settings.s3_presign_upload_ttl
