@@ -1,0 +1,27 @@
+{
+  "python -m pytest -q test/core": {
+    "exit": 0,
+    "from_log": [
+      "511 passed, 4 warnings in 53.85s"
+    ]
+  },
+  "pnpm test": {
+    "exit": 0,
+    "from_log": [
+      "Test Files  44 passed (44)",
+      "Tests  411 passed (411)"
+    ]
+  },
+  "pnpm build": {
+    "exit": 0,
+    "from_log": [
+      "Some chunks are larger than 500 kB after minification. Consider:",
+      "✓ built in 1.05s",
+      "✓ built in 534ms"
+    ]
+  },
+  "pnpm exec tsc --noEmit": {
+    "exit": 0,
+    "diagnostics": []
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "transport": "Authenticated affectUI MCP tools/list and Pro Registry source fetched locally",
+  "mcp_tools": [
+    "search_components",
+    "list_components",
+    "get_component",
+    "get_source"
+  ],
+  "registry": {
+    "app-shell": "427ad6c412ff6d35f40959fd8a67e3f494f3209e167d675a7637a844f3e0bc70",
+    "assistant-home": "35dfed67d6f3f71e76cba39cac318de1622f8824676962a33a41ffda10ce93a3",
+    "files": "64a480b0d59f24ec1878221d2f4d3df7f77589d1e27276361cd06026060b8ec5",
+    "agent-thread": "43a3884044d6bb943619078b1c93a8738ac2e80657de91d76f5a209b5e150997",
+    "tool-call-card-clean": "cc8f4c7a581e0c7fd7d05faa63122d06d01542e71c4df75dd0a88f1365c839ff",
+    "chat-composer-clean": "b263cdeedc21999aa4f1445ff59866100f331a08eaf4f98bee81caa427d24ee2",
+    "ai-answer-clean": "f658160c5d00f637fc67ad013e39285af2b75e1c0ce22ec57360054013bf4367",
+    "thinking-state-clean": "672131054415a6206e0c8ff30fdfbd5b7f612bee357e8b6e38fa90030cca1350"
+  },
+  "hash": "sha256 of fetched TSX",
+  "added_runtime_dependencies": [],
+  "removed_runtime_dependencies": [
+    "@xyflow/react"
+  ]
+}

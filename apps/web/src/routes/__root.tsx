@@ -77,10 +77,6 @@ function RootComponent() {
       <I18nProvider lang={lang}>
         <TooltipProvider>
           <AuthProvider>
-            {/* Settings = a shared dialog, summonable from ANYWHERE via
-                useSettingsDialog — the seat is the root: both the _app
-                studio (account console) and root-level routes (the project
-                page's CreditsPill deep-links into the credits section). */}
             <SettingsDialogProvider>
               <Outlet />
             </SettingsDialogProvider>
@@ -103,7 +99,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        {import.meta.env.DEV && (
+        {import.meta.env.DEV && import.meta.env.VITE_ROUTER_DEVTOOLS === "1" && (
           <TanStackDevtools
             config={{ position: "bottom-right" }}
             plugins={[{ name: "Tanstack Router", render: <TanStackRouterDevtoolsPanel /> }]}

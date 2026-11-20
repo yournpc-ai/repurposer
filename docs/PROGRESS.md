@@ -6,7 +6,7 @@
 
 ### 0.1 里程碑状态
 
-- **当前产品主线 — Agent Editor v1**。Iteration 1–3 已按各轮出口验收。下一批为 Iteration 4 的 Studio 与原生多调用；随后必须完成 Iteration 5 的自主审片、正式 MP4 导出与实际 Output 交付。Iteration 6+ 的专业视觉工具按需独立排期。后续批次均待验收。[主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) · [Iteration 1](tasks/agent-editor-evidence/iteration-1.md) · [Iteration 2](tasks/agent-editor-evidence/iteration-2.md) · [Iteration 3](tasks/agent-editor-evidence/iteration-3.md)
+- **当前产品主线 — Agent Editor v1**。Iteration 1–4 已按各轮出口验收。Studio 首发、Agent Thread、一次响应多调用与恢复已在隔离服务上跑通。下一批为 Iteration 5 的自主审片、固定版本导出与正式 MP4 交付。专业视觉工具在 Iteration 6+ 独立排期。[主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) · [Iteration 4 五面证据](tasks/agent-editor-evidence/iteration-4/README.md)
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
 - **既有 Chat-only Video Project 验收范围**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
@@ -18,7 +18,7 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Agent Editor · Iteration 4** | 从 4A 共享 Shell、Home 首发与 Projects 开始，接续 4B 真实 Agent Thread、4C 多 Tool Calls 与分组恢复、4D 旧路径退役。保留当前产物 Inbox、详情弹窗与播放器。此次仅修订合同，四片均待实施与实测。 | [主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) |
+| **当前** | **Agent Editor · Iteration 5** | 待施工。沿现有 CompositionVersion、局部预览和固定 Output 引用完成自主审片、修订、正式 MP4 回读及对话交付。Iteration 4 实测包括真实多调用、外部抢写、回执前强杀、Worker 晚到、费用拒绝和归档媒体播放。 | [主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) · [已验证的边界](tasks/agent-editor-evidence/iteration-4/README.md) |
 | 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **官网品牌宣传片批 1A：装配修复、集中澄清、品牌档案与创作状态继承** | Readiness 三阶段、真实 PNG analyze_brand、扩展 Brief/CreativeState、集中问题组前后端和版本/Run 继承已落码；fake provider golden wire 通过，`test/core` 437 项与 Web 410 项通过，TypeScript 通过。真实 LegitEvi BrandProfile 含实测 `#DC0000`、“接近 Inter”和原始宣言；数字 option_id 整组提交已验证标签回填、六项 user-stated、preview/正式 digest 一致、过期/重复 409 与刷新恢复，最终 readiness=design_video。批 1 验收止于集中作答与本批状态恢复；首稿写作/修复和后续媒体迭代尚未开始，不纳入本批测试、通过结论或阻塞项。开发库已确认 h8e5a2c4d7f1，生产 migration/恢复和本批真实浏览器问题组仍未验证 | [任务合同](tasks/website-promo-evidence-brief-workflow.md) / [验证登记](VERIFICATION.md#411-官网品牌宣传片基础链iteration-1a) |
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |

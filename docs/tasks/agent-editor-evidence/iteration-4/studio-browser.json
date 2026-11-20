@@ -1,0 +1,305 @@
+{
+  "viewports": {
+    "1360": {
+      "theme": null,
+      "lang": "zh",
+      "width": 1360,
+      "groups": 3,
+      "headers": 1,
+      "ordering": [
+        [
+          "call_8b521012132743ef87064e7c",
+          "completed"
+        ],
+        [
+          "call_05ccb71f499542268b24e5d2",
+          "completed"
+        ]
+      ],
+      "errors": []
+    },
+    "390": {
+      "theme": "dark",
+      "lang": "en",
+      "width": 390,
+      "groups": 3,
+      "headers": 1,
+      "ordering": [
+        [
+          "call_8b521012132743ef87064e7c",
+          "completed"
+        ],
+        [
+          "call_05ccb71f499542268b24e5d2",
+          "completed"
+        ]
+      ],
+      "back_home": "http://localhost:3026/home",
+      "errors": []
+    },
+    "768": {
+      "theme": "dark",
+      "lang": "zh",
+      "width": 768,
+      "groups": 3,
+      "headers": 1,
+      "ordering": [
+        [
+          "call_8b521012132743ef87064e7c",
+          "completed"
+        ],
+        [
+          "call_05ccb71f499542268b24e5d2",
+          "completed"
+        ]
+      ],
+      "errors": []
+    }
+  },
+  "live": {
+    "project": "02176623-2893-437a-9d00-5e8bd3e50272",
+    "opening": "e4fb8ac6-6ae2-4bf2-a28b-9afbd99e3b13",
+    "group": "ada45839-f126-457a-9f63-0ffb233cc2e9",
+    "wallet_reads_after_turn": [
+      200
+    ],
+    "live": [
+      {
+        "id": "call_01a1fa0609a1701d88a7cff9",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 236 ms"
+      },
+      {
+        "id": "call_01a1fa0609e3713cb48d379a",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 235 ms"
+      },
+      {
+        "id": "call_01a1fa060a157571b8fe8662",
+        "state": "failed",
+        "label": "查看片段\nThe selected clip does not exist in this version.\n失败 · 235 ms"
+      },
+      {
+        "id": "call_01a1fa060a4677dd9960afb3",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 234 ms"
+      }
+    ],
+    "restored": [
+      {
+        "id": "call_01a1fa0609a1701d88a7cff9",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 236 ms"
+      },
+      {
+        "id": "call_01a1fa0609e3713cb48d379a",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 235 ms"
+      },
+      {
+        "id": "call_01a1fa060a157571b8fe8662",
+        "state": "failed",
+        "label": "查看片段\nThe selected clip does not exist in this version.\n失败 · 235 ms"
+      },
+      {
+        "id": "call_01a1fa060a4677dd9960afb3",
+        "state": "completed",
+        "label": "查看片段\n已完成 · 234 ms"
+      }
+    ],
+    "headers": [
+      {
+        "parent": "MAIN",
+        "classes": "sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between px-4 border-b border-border md:h-12 md:justify-end md:border-0",
+        "text": "1,000"
+      }
+    ]
+  },
+  "structured_opening": {
+    "project": "e3f82bfc-3ede-4782-b3fe-21663da034c3",
+    "request": {
+      "project_id": "e3f82bfc-3ede-4782-b3fe-21663da034c3",
+      "message": "Use this Skill to help me animate this copy:\n\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\n\nMaking complex ideas clear takes more than cutting words.\n 只核对下面的素材名称，不执行制作。 @pricing-talk-source.mp4 It takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
+      "first_message": true,
+      "mentions": [
+        {
+          "type": "asset",
+          "id": "pricing-talk-source.mp4",
+          "label": "pricing-talk-source.mp4"
+        }
+      ],
+      "skill": {
+        "kind": "builtin",
+        "skill_id": "text-animation",
+        "version": "1.0.0"
+      },
+      "attachments": [
+        {
+          "id": "54222535-ec19-441b-8556-c12e7adcbe31",
+          "name": "pricing-talk-source.mp4",
+          "type": "video",
+          "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/91c1876c-873c-4948-9f2e-4e947b061704/pricing-talk-source-1795194521-xZKTyQ.mp4",
+          "size": 2477261,
+          "status": "uploaded"
+        }
+      ],
+      "surface": "chat",
+      "canvas_available": false
+    },
+    "status": 200
+  },
+  "json_chat": {
+    "project": "02176623-2893-437a-9d00-5e8bd3e50272",
+    "status": 201,
+    "opening": "2d706322-f6ca-41a0-bc63-5a3451770267",
+    "rows": [
+      {
+        "at": "2026-11-20T17:12:19.351399+00:00",
+        "key": "chat.activity.inspectClipDone",
+        "kind": "read",
+        "status": "completed",
+        "call_id": "call_39e9a299dbc04069a4ba1c8a",
+        "group_id": "cedb74b9-a958-4209-9aa2-03718f56a9c6",
+        "tool_name": "inspect_clip",
+        "call_count": 2,
+        "call_index": 0,
+        "call_state": "completed",
+        "settled_at": "2026-11-20T17:12:19.456138+00:00",
+        "started_at": "2026-11-20T17:12:19.416108+00:00",
+        "activity_id": "call_39e9a299dbc04069a4ba1c8a",
+        "duration_ms": 10
+      },
+      {
+        "at": "2026-11-20T17:12:19.406693+00:00",
+        "key": "chat.activity.inspectClipDone",
+        "kind": "read",
+        "status": "completed",
+        "call_id": "call_716d30ec098644a4bcc71528",
+        "group_id": "cedb74b9-a958-4209-9aa2-03718f56a9c6",
+        "tool_name": "inspect_clip",
+        "call_count": 2,
+        "call_index": 1,
+        "call_state": "completed",
+        "settled_at": "2026-11-20T17:12:19.449615+00:00",
+        "started_at": "2026-11-20T17:12:19.430490+00:00",
+        "activity_id": "call_716d30ec098644a4bcc71528",
+        "duration_ms": 9
+      }
+    ],
+    "reply": "读取结果（版本 v1）：\n\n- **15–18 秒的片段**：15.0s – 18.0s，共 **3 秒**（场景 interview，主视频轨）\n- **3–11 秒的片段**：3.0s – 11.0s，共 **8 秒**（场景 scene，与 0–3 秒的片段 同一素材快照的不同时段）\n\n两者之间 11–13 秒为空档，13–15 秒为图形片段 13–15 秒的片段。"
+  },
+  "image": {
+    "block": {
+      "kind": "image_preview",
+      "digest": "02c02ab008b9a146b349d13b748203b3fdadb0dc5654ec164020bbeacc1df874",
+      "project_id": "9c1b7f63-75b3-4267-b86f-6e28cf0976f0",
+      "description": "所附 PNG 可正常解码，画面清晰呈现白色背景及居中的蓝色圆形图标，主体完整可见，并保留白色加号图形，符合本幕对图标类背景素材的可观察用途。",
+      "snapshot_id": "84af99d1-b620-595c-8589-8af6d48b8c27"
+    },
+    "views": [
+      {
+        "w": 1920,
+        "h": 1080,
+        "source": "/editor-i4/source-snapshots/02c02ab008b9a146b349d13b748203b3fdadb0dc5654ec164020bbeacc1df874.png"
+      },
+      {
+        "w": 1920,
+        "h": 1080,
+        "source": "/editor-i4/source-snapshots/02c02ab008b9a146b349d13b748203b3fdadb0dc5654ec164020bbeacc1df874.png"
+      }
+    ]
+  },
+  "archive": {
+    "output": "e1c46d82-6720-4e94-9184-714a6c9aaec1",
+    "video": {
+      "duration": 18.048,
+      "time": 0.421601,
+      "ready": 4,
+      "paused": false
+    }
+  },
+  "chinese": {
+    "project": "4d4f4157-91a5-4f6f-813e-b7c9358dfd1b",
+    "posts": [
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "4d4f4157-91a5-4f6f-813e-b7c9358dfd1b",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "D\n992\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\nWorked for 1s\n\n项目素材列表是空的：目前没有任何素材，0 个。\n\n上传的录像或图片会出现在这里，并可以用 ID 引用到时间线上。本轮我只做了读取，没有生成任何内容。\n\nScroll to end",
+    "width": 1360,
+    "url": "http://localhost:3026/projects/4d4f4157-91a5-4f6f-813e-b7c9358dfd1b"
+  },
+  "touch": {
+    "touch_target": {
+      "x": 326,
+      "y": 777,
+      "width": 36,
+      "height": 36
+    },
+    "project": "40dce79e-9f58-42ba-9ccc-3c4d496e3835",
+    "posts": [
+      {
+        "path": "uploads/staging/upload-url",
+        "body": null
+      },
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "projects/40dce79e-9f58-42ba-9ccc-3c4d496e3835/assets/from-staging",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "40dce79e-9f58-42ba-9ccc-3c4d496e3835",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [
+            {
+              "id": "81fb32a4-56fd-4c6b-9b58-14c9c6b0434d",
+              "name": "pricing-talk-source.mp4",
+              "type": "video",
+              "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/7d871abc-4e40-4501-8d48-f119bbc3a14a/pricing-talk-source-1795196059-aabCvg.mp4",
+              "size": 2477261,
+              "status": "uploaded"
+            }
+          ],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "40dce79e-9f58-42ba-9ccc-3c4d496e3835",
+          "message": "请查看刚才上传素材的时长，然后告诉我。",
+          "mentions": [],
+          "attachments": [],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "992\nD\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\nWorked for 1s\n\n项目素材列表里目前只有 1 个素材：\n\npricing-talk-source.mp4 · 视频 · 1280×720 · 时长暂未确认\n\n它是刚上传、还在处理中的文件，所以我这边暂时还读不到画面内容。需要我先看一下文件讲了什么的话，得等它处理完成，首次查看大概要几分钟。\n\n请查看刚才上传素材的时长，然后告诉我。\n\n我先读取这个文件的时长信息。\n\nWorked for 2s\n\n文件仍在处理中，我等它分析完成再确认时长。\n\nWorked for 1m 10s\nScroll to end",
+    "width": 390,
+    "url": "http://localhost:3026/projects/40dce79e-9f58-42ba-9ccc-3c4d496e3835"
+  }
+}

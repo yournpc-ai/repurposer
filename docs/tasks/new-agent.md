@@ -1,9 +1,9 @@
 # Repurposer · Agent Editor v1
 ## 破坏性架构重构与五面一体施工总合同
 
-**状态：Iteration 1–3 已按各轮出口验收。下一项为 Iteration 4 的 Slice 4A。**
+**状态：Iteration 1–4 已在隔离环境按各轮出口验收。下一项为 Iteration 5 的自主审片与正式 MP4 交付。**
 
-**修订基准：2026-11-21，main @ a0005e76。**
+**施工基准：2026-11-21，Iteration 4 从 main @ 32f04518 开工。**
 
 **目标：2027 年具有专业剪辑能力的无工作台 AI 剪辑师**
 
@@ -642,7 +642,9 @@ Recovery：
 
 不得要求用户再输入 Start。
 
-## Iteration 4｜Studio UI 与多 Tool Calls（下一轮，待施工与验收）
+## Iteration 4｜Studio UI 与多 Tool Calls（4A–4D 已实测）
+
+统一 Studio 经真实 Home 首发、历史深链、编辑、音视频播放和硬刷新验收。同一模型响应的独立读取可并发，媒体和作品写入逐项受费用、Stop 与版本校验约束。外部抢写和提交后回执前强杀均已复现。付费供应商结果未知仅有受控故障注入覆盖。逐项结果、失败样本、调用身份、费用与浏览器证据见 [Iteration 4 验收](agent-editor-evidence/iteration-4/README.md)。
 
 一个登录后 Studio 承载 Home、Projects 和项目 Agent Thread。用户能从素材和一句要求开始，在同一作品上连续对话、查看修改结果，并在刷新后接着工作。全站采用 affectUI Clean 的字体、颜色、圆角、间距与导航层级，共用现有主题偏好，覆盖浅色、深色、跟随系统及移动端。
 
@@ -670,7 +672,7 @@ Recovery：
 | Prompt / Context | 原文与结构化引用随 `firstMessage` 交接，保留选区与来源归属。精选示例仅预填，登录返回继续原草稿。 |
 | Chat Message | 一个开场用户消息。Home 保留输入、添加素材、发送；移除重复分类、空货架与吸底变形。Projects 从项目 API 展示名称、实际封面或可靠占位、更新时间，按名称搜索、基本排序并打开原项目。 |
 | Execution / State | `_app.tsx` 现持 Sidebar 与 MobileHeader，Home、Projects 列表在其下；`_app.projects.$id.tsx` 只有 Outlet，实际 `projects.$id.index.tsx` 在生成树里直属 root，独挂 ProjectHeader、ChatDock。调整文件路由父子关系，由共享布局持唯一导航和 Outlet，保留项目 URL、鉴权、账户、设置、积分和通知。按路由源重新生成 `routeTree.gen.ts`。 |
-| Recovery / Replay | 沿 `HomeComposer → useProjectLaunch → assets/from-staging → location.state.firstMessage → ChatDock` 核对交接：Home 建项目并关联已上传素材，只有项目 Chat 发首条 POST。保留历史加载屏障、results 与持久用户行核对。现状中挂载 ref 不能跨刷新去重，历史读取异常仍可能落入发送分支。提交结果未知先回读，禁止因重挂、慢历史或读失败自动重复发送。 |
+| Recovery / Replay | 沿 `HomeComposer → useProjectLaunch → assets/from-staging → location.state.firstMessage → AgentThread` 核对交接：Home 建项目并关联已上传素材，只有项目 Chat 发首条 POST。保留历史加载屏障、results 与持久用户行核对。施工前只有挂载 ref，历史读取异常曾放行发送。现由持久 opening 和历史加载屏障共同保护首发。提交结果未知先回读，禁止因重挂、慢历史或读失败自动重复发送。 |
 
 **出口。** 用桌面和移动端实走登录 → 上传并带引用发送 → 项目 Chat，核对请求数、开场行、附件与 ToolLoop 回合各自身份；双击、刷新、返回再进均只留下同一次提交。深链、Projects 搜索排序及历史项目打开正确，导航和账户可用。首页不建设运营系统，作品库不增加团队、文件夹管理或工作台。
 
@@ -688,7 +690,7 @@ Recovery：
 
 ### Slice 4C｜一次模型决策中的多调用、分组与恢复
 
-两个前台 Chat 入口启用了 `service_per_call`。当前 `tool_loop.py` 的批次预检会检查 terminal / `batchable`，同名组才可能使用 `finish_batch`；前台缺少该收尾时会在执行前拒绝整批，允许的批次仍按循环逐项执行。Iteration 3 的 mix 样本中，合法的旁白和配乐被整批拒绝后再逐个调用。目标是在既有 ToolLoop 内按下表处理同一原生响应的多个调用，不能仅因数量大于一而拒绝。[实际调用](agent-editor-evidence/iteration-3/native-calls.json) · [每轮输入及观察](agent-editor-evidence/iteration-3/provider-wire.json.gz)
+施工前的两个前台 Chat 入口已启用 `service_per_call`。当时 `tool_loop.py` 的批次预检会检查 terminal / `batchable`，同名组才可能使用 `finish_batch`；前台缺少该收尾时会在执行前拒绝整批，允许的批次仍按循环逐项执行。Iteration 3 的 mix 样本中，合法的旁白和配乐被整批拒绝后再逐个调用。目标是在既有 ToolLoop 内按下表处理同一原生响应的多个调用，不能仅因数量大于一而拒绝。[实际调用](agent-editor-evidence/iteration-3/native-calls.json) · [每轮输入及观察](agent-editor-evidence/iteration-3/provider-wire.json.gz)
 
 | 调用关系 | 执行与失败语义 |
 |---|---|
@@ -872,4 +874,4 @@ Canvas 不再承担创作规划或执行身份。
 
 # 12. 下一批施工入口
 
-核对 §1 的现场基准后，从 §8 的 Slice 4A 开工。保留现有发送与播放路径，先以带素材的 Home 首发、项目深链和刷新证明共享 Shell 交接正确，再依次完成 4B、4C、4D。每片按 §9 留存五面证据，遇到 §10 的停止条件先报告。随后实施必做的 Iteration 5；Iteration 6+ 依独立需求立项。
+核对最新 main 和 §8 验收记录后，从 Iteration 5 开工。沿同一 Agent Thread 观察并修订当前 Composition，固定审阅通过的版本，渲染正式 MP4，再审阅该 Output 的实际字节并交付。沿用 §9 的五面凭据与 §10 的停止条件。Iteration 6+ 依独立需求立项。
