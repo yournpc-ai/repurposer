@@ -71,6 +71,19 @@ test("socket reset then service failure recover with fresh connections and ident
   });
 });
 
+test("a concurrent create-only upload keeps the first object", async () => {
+  let attempts = 0;
+  await uploadServer((req, res) => {
+    req.resume();
+    attempts++;
+    assert.equal(req.headers["if-none-match"], "*");
+    res.writeHead(412).end();
+  }, async (url, file) => {
+    await uploadFile(url, file, "video/mp4", true);
+    assert.equal(attempts, 1);
+  });
+});
+
 test("persistent service failures stop after four attempts and preserve the file", async () => {
   let attempts = 0;
   await uploadServer((req, res) => {
