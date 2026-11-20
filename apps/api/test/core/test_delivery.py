@@ -1290,39 +1290,6 @@ async def test_video_edit_read_returns_current_base_and_only_requested_clip(data
         assert "storyboard" not in payload
 
 
-@pytest.mark.parametrize("verdict", ["partial", "failed", "invalid"])
-async def test_reviewed_image_settlement_leaves_the_creative_response_to_the_continuation(database, monkeypatch, verdict):
-    from unittest.mock import AsyncMock
-
-    from app.chat import media_journey, trigger_turn
-
-    uid = await owner(database)
-    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
-    async with database() as db:
-        project = Project(user_id=uid, title="promo")
-        db.add(project)
-        await db.flush()
-        run = WorkflowRun(project_id=project.id, status=WorkflowStatus.COMPLETED, context={
-            "media_journey": {"opening_id": str(uuid4())}, "visual_asset_preparation": {},
-        })
-        db.add(run)
-        await db.commit()
-    facts = ["delivery=failed", "GAP visual_asset_preparation_invalid"] if verdict == "invalid" else [
-        f"delivery={verdict}", "stage=scene_images",
-    ]
-    monkeypatch.setattr(trigger_turn, "_run_review_snapshot", AsyncMock(return_value=(facts, [])))
-    reviewer, resume = AsyncMock(return_value=None), AsyncMock()
-    monkeypatch.setattr(trigger_turn, "_call_trigger_reviewer", reviewer)
-    monkeypatch.setattr(media_journey, "continue_media_journey", resume)
-    message = await trigger_turn.run_trigger_turn(project.id, "run_completed", str(run.id))
-    resume.assert_awaited_once()
-    if verdict == "invalid":
-        assert message.content and message.intent["media_journey"]["state"] == "blocked"
-        assert resume.await_args.args[-1].context["media_continuation_finished"]
-    else:
-        assert message.content == "" and message.intent["presentation"] == "media_progress"
-        assert message.intent["media_journey"]["state"] == "active"
-        reviewer.assert_not_awaited()
 
 
 async def test_completed_video_delivery_survives_its_unanswered_dock(database, monkeypatch):

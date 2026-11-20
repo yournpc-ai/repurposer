@@ -2340,14 +2340,41 @@ async def answer_question(
     )
 
     if (message.intent or {}).get("media_permission"):
-        from app.chat.editor_media import answer_media_permission
+        from sqlalchemy import func
+        from app.chat.editor_media import answer_media_permission, wait_for_media_result, continue_media_turn
+        from app.chat.editor_recovery import editor_lock_key
+        from app.models.database import AsyncSessionLocal
+
         if data.kind not in ("option", "bail"):
             raise HTTPException(422, "Select Allow or Decline.")
+        project = await db.get(Project, conversation.project_id)
         try:
-            project = await db.get(Project, conversation.project_id)
-            await answer_media_permission(db, project, message, data.option_id == "approve" and data.kind == "option")
+            execution = await answer_media_permission(db, project, message, data.option_id == "approve" and data.kind == "option")
+        except CreditsInsufficientError as exc:
+            raise HTTPException(422, {"code": "credits.insufficient", "balance": exc.balance,
+                                      "required": exc.required}) from exc
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+        if execution is not None:
+            # The answer row and submission commit together. Keep Stop and history recovery
+            # fenced through the wait, without retaining the submission's row locks.
+            async with AsyncSessionLocal() as continuation:
+                if not await continuation.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
+                    raise HTTPException(409, "The original question is still being saved.")
+                opening = await db.get(Message, turn_id)
+                opening.turn_state = "in_flight"
+                await db.commit()
+                execution = await wait_for_media_result(project, execution)
+                if on_row_append:
+                    await on_row_append(execution)
+                follow_up = await continue_media_turn(
+                    continuation, project, execution, on_delta=on_delta, on_phase=on_phase,
+                    on_tool_call=on_tool_call, on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
+                    on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
+                    on_row_append=on_row_append,
+                )
+                if follow_up is not None:
+                    follow_up = await db.get(Message, follow_up.id, populate_existing=True)
     elif question.kind == "task_book":
         # Project row lock (并发护栏, Message → Project order — the message
         # lock above lands first): a storyboard redesign's BEGIN commits its
@@ -2669,6 +2696,7 @@ async def _plan_turn(
     on_row_append=None,
     turn_id: UUID | None = None,
     group_answer_submitted: bool = False,
+    authorized_media: Message | None = None,
 ) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
@@ -2701,6 +2729,7 @@ async def _plan_turn(
         skill_ambiguity=skill_ambiguity,
         recent=recent,
         group_answer_submitted=group_answer_submitted,
+        authorized_media=authorized_media,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,

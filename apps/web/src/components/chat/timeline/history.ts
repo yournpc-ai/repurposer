@@ -681,6 +681,7 @@ export function bareQuestion(m: QuestionMessage): string {
 /** One archive row as the messages endpoint returns it (the mapper's input
  * wire — QuestionMessage plus the user-row extras). */
 export interface HistoryRow extends QuestionMessage {
+  turn_state?: string | null
   role: "user" | "assistant"
   focus_output?: { id: string; label: string } | null
   attachments?: MessageAttachment[]
@@ -908,6 +909,7 @@ export function mapHistoryRows(
       // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
       // aggregate logs skip silently — never an empty bubble.
       if (isNonRenderIntent(m.intent)) continue
+      if ((m.intent as { media_status?: string } | null)?.media_status === "accepted") continue
       const intentType = ((m.intent ?? {}) as Record<string, unknown>).type
       // 退役分镜块 (dock echo 形态): legacy storyboard block rows (usually
       // empty content) skip silently — an old project shows only the old

@@ -191,7 +191,8 @@ def _row_payload(message: Message) -> dict:
         "content": message.content or "",
         "turn_id": str(message.turn_id) if message.turn_id else None,
         "seq": message.seq,
-        "intent": message.intent,
+        "intent": (ChatMessageResponse.model_validate(message).intent
+                   if "editor_media" in (message.intent or {}) else message.intent),
         "blocks": message.blocks or [],
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }

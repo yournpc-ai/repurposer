@@ -9,6 +9,7 @@ import json
 import math
 import re
 import subprocess
+import tempfile
 from typing import Any, Literal
 
 import PIL
@@ -273,15 +274,20 @@ def _ffmpeg_audio_facts(data: bytes, demuxer: str) -> tuple[dict[str, Any], dict
         version = subprocess.run(
             [executable, "-version"], capture_output=True, text=True, timeout=10, check=True
         ).stdout.splitlines()[0].strip()
-        command = [
-            executable, "-hide_banner", "-nostdin", "-f", demuxer, "-i", "pipe:0",
-            "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-",
-        ]
-        completed = subprocess.run(command, input=data, capture_output=True, timeout=120)
+        # Remotion MP4s can place the sample index after the media. A pipe
+        # lets FFmpeg exit successfully with an empty ebur128 summary.
+        with tempfile.NamedTemporaryFile() as source:
+            source.write(data)
+            source.flush()
+            command = [
+                executable, "-hide_banner", "-nostdin", "-f", demuxer, "-i", source.name,
+                "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-",
+            ]
+            completed = subprocess.run(command, capture_output=True, timeout=120)
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         raise LoudnessAnalysisError(f"FFmpeg loudness analysis failed: {exc}") from exc
     output = completed.stderr.decode("utf-8", errors="replace")
-    if completed.returncode != 0:
+    if completed.returncode != 0 or "Output file is empty" in output:
         raise LoudnessAnalysisError("FFmpeg could not fully decode the audio for loudness analysis")
 
     def metric(pattern: str) -> float | None:
@@ -417,7 +423,6 @@ def analyze_audio_bytes(
                 "source": "full_decoded_pcm",
             }
     if "loudness" in probes:
-        # stdin has no filename and format probing can misidentify even a PCM WAV.
         # Use the demuxer that just decoded these exact bytes.
         ffmpeg, loudness = _ffmpeg_audio_facts(data, container_fact["format"].split(",")[0])
         analyzer_facts["ffmpeg"] = ffmpeg

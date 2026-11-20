@@ -119,7 +119,7 @@ from app.models.schemas import (
     InferredIntent,
     PendingPlan,
     PlanEstimate,
-    PrepareNarrationArgs,
+    AlignRecordingArgs,
     ProposeTasksArgs,
     QuestionPayload,
     QuestionProposal,
@@ -584,15 +584,12 @@ class ChatTurn:
             return await select_music_seat(
                 project=self.project, args=params, on_candidates=self._emit_candidates
             )
-        if name == "prepare_narration":
-            assert isinstance(params, PrepareNarrationArgs)
-            from app.chat.video_turn_seats import prepare_narration_seat
-            return await prepare_narration_seat(
+        if name == "align_recording":
+            assert isinstance(params, AlignRecordingArgs)
+            from app.chat.video_turn_seats import align_recording_seat
+            return await align_recording_seat(
                 project=self.project, args=params, mentions=self.mentions
             )
-        if name == "prepare_visual_assets":
-            from app.chat.video_turn_seats import prepare_visual_assets_seat
-            return await prepare_visual_assets_seat(project=self.project, args=params)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat

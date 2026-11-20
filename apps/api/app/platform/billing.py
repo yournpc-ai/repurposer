@@ -465,6 +465,15 @@ async def capture_step(
         else f"step:{node.id}:capture:{node.attempt or 0}"
     )
     held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=node.run_id)
+    if node.kind in {"prepare_music", "prepare_visual_assets", "prepare_narration"}:
+        from app.models.tables import WorkflowRun
+
+        context = await db.scalar(select(WorkflowRun.context).where(WorkflowRun.id == node.run_id))
+        if (context or {}).get("editor_media"):
+            # A direct generation authorizes one step. Provider overages remain in node.cost.
+            amount = min(amount, max(0, held_amount - released))
+            if amount == 0:
+                return None
     covered = min(amount, max(0, held_amount - released))
     if covered:
         await _mutate(

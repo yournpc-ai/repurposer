@@ -62,8 +62,7 @@ def context_items(context):
     return [item for item in context.get("items", []) if isinstance(item, dict)]
 
 
-def select_items(items, *, current_turn, valid_turns, keys, skill_reference, budget,
-                 resumed_item_ids=frozenset()):
+def select_items(items, *, current_turn, valid_turns, keys, skill_reference, budget):
     """Newest complete records win; every omitted item gets an exact reason."""
     chosen, omitted, seen = [], [], set()
     seen_candidates = set()
@@ -82,7 +81,7 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
         elif candidate_id:
             seen_candidates.add(candidate_id)
         write_key = (target_tool, effective_args.get("composition_id"), json.dumps(effective_args.get("base_ref"), sort_keys=True))
-        if item["turn_id"] == str(current_turn) and identity not in resumed_item_ids:
+        if item["turn_id"] == str(current_turn):
             # The current ToolLoop owns these protocol pairs already.
             continue
         if item["turn_id"] not in valid_turns:
@@ -150,23 +149,16 @@ async def discard_turn_context(db, conversation_id, turn_id):
                 # world fact even though this turn's own exchanges retract.
                 item = {**item, "candidate": {**candidate, "active": False}}
             retained.append(item)
-        requests = dict((conversation.context or {}).get("music_requests", {}))
-        requests.pop(str(turn_id), None)
-        conversation.context = {**(conversation.context or {}), "schema_version": 1, "items": retained,
-                                "music_requests": requests}
+        conversation.context = {**(conversation.context or {}), "schema_version": 1, "items": retained}
 
 
 class ConversationContext:
-    def __init__(self, *, conversation_id, owner_id, turn_id, skill=None, resume_turn=False,
-                 resume_draft: RestoredCandidate | None = None):
+    def __init__(self, *, conversation_id, owner_id, turn_id, skill=None):
         self.conversation_id = conversation_id
         self.owner_id = owner_id
         self.turn_id = turn_id
         self.skill_reference = skill.model_dump(mode="json") if skill is not None else None
         self._media_cache = {}
-        self._resume_turn = resume_turn
-        self._resume_draft = resume_draft
-        self._resumed_item_ids = None
 
     async def _load(self):
         async with AsyncSessionLocal() as db:
@@ -279,23 +271,16 @@ class ConversationContext:
         return tuple(images), notes
 
     async def restore(self, snapshot, assembled_messages):
-        if not self._resume_turn and any(
+        if any(
             resource.get("kind") == "composition" for _, resource in getattr(snapshot, "resources", ())
         ):
             return ConversationHistory()
 
         items, valid_turns, budget = await self._load()
-        if self._resumed_item_ids is None:
-            # A resumed loop has no protocol pairs from its previous execution.
-            # Capture only the existing records, so new pairs stay loop-owned.
-            self._resumed_item_ids = frozenset(
-                item["id"] for item in items
-                if self._resume_turn and item["turn_id"] == str(self.turn_id)
-            )
         used = text_cost(assembled_messages)
         selected, omitted = select_items(items, current_turn=self.turn_id, valid_turns=valid_turns,
             keys=snapshot.keys if snapshot else frozenset(), skill_reference=self.skill_reference,
-            budget=max(0, budget - used - 3000), resumed_item_ids=self._resumed_item_ids)
+            budget=max(0, budget - used - 3000))
         images, media_notes = await self._media(selected)
         # Reuse the single wire projection for actual media content parts.
         from app.agents.tool_loop import observation_wire_content
@@ -352,11 +337,6 @@ class ConversationContext:
                                      "item_id": item["id"], "ok": item["ok"]}, ensure_ascii=False)
             messages.append({"role": "tool", "name": item["tool"], "tool_call_id": wire_id,
                 "content": observation_wire_content(ToolObservation(provenance + "\n" + item["text"], images=item_images))})
-        if self._resume_draft is not None:
-            # The Run owns its draft reference. History budget limits model input,
-            # while the tool loop separately verifies this server-side candidate's
-            # owner, conversation, digest and base keys before binding it.
-            restored_candidates = [self._resume_draft]
         audit = {"retained_ids": [item["id"] for item in selected], "omitted": omitted,
                  "media": media_notes, "budget_tokens": budget, "available_tokens": max(0, budget - used),
                  "restored_candidate_ids": [item.candidate_id for item in restored_candidates],

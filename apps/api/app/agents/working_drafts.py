@@ -32,17 +32,7 @@ class WorkingDraftUpdated:
     """A save=false call merged into the working draft without saving a version."""
 
     arguments: dict[str, Any]
-    visual_results: list[dict] | None = None
 
-    def receipt(self, record: CandidateRecord, previous: dict) -> dict:
-        receipt = working_draft_observation(record)
-        if self.visual_results is not None:
-            from app.chat.media_journey import scene_asset_changes
-
-            receipt["scene_asset_changes"] = scene_asset_changes(
-                previous, record.arguments, self.visual_results,
-            )
-        return receipt
 
 
 @dataclass(frozen=True)

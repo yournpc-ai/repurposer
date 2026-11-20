@@ -1433,6 +1433,7 @@ const en = {
       musicSearchDone: "Found background music",
       musicSelection: "Selecting the chosen music…",
       musicSelectionDone: "Selected the music",
+      mediaPermission: "Requested permission to generate media",
       musicPrepare: "Preparing the electronic score…",
       musicPrepareDone: "Prepared the electronic score",
       upload: "Uploading video…",

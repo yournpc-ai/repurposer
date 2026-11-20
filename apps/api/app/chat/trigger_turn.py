@@ -280,7 +280,7 @@ trigger_agent = ToolLoopAgent(
             "design_video", "search_sfx", "import_sfx",
             "show_video_presets", "select_video_preset",
             "show_music_candidates", "select_music",
-            "prepare_narration", "prepare_music", "get_narration_alignment", "annotate_narration",
+            "align_recording", "get_narration_alignment", "annotate_narration",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
             "prepare_video_materials", "capture_web",
         }),
@@ -678,10 +678,13 @@ async def run_trigger_turn(
             async with AsyncSessionLocal() as db:
                 run = await db.get(WorkflowRun, run_id_from_trigger_ref(ref))
                 if run and run.project_id == project_id and (run.context or {}).get("editor_media"):
-                    from app.chat.editor_media import settle_media_receipt
+                    from app.chat.editor_media import continue_media_turn, settle_media_receipt
 
-                    await settle_media_receipt(db, await db.get(Project, project_id), run)
+                    project = await db.get(Project, project_id)
+                    receipt = await settle_media_receipt(db, project, run)
                     await db.commit()
+                    if receipt is not None:
+                        return await continue_media_turn(db, project, receipt)
                     return None
         # The admission gate (交互完整性批 B): never overtake an in-flight
         # user turn — defer in bounded cycles, drop into silence at the
@@ -728,10 +731,6 @@ async def run_trigger_turn(
                 logger.info(
                     "trigger_turn_deduped", trigger=trigger, ref=ref
                 )
-                if trigger == TRIGGER_RUN_COMPLETED and run is not None:
-                    from app.chat.media_journey import continue_media_journey
-
-                    await continue_media_journey(db, project, conversation, run)
                 return None
             # Terminal run facts must reach the Chat even when an earlier Start
             # left a confirmation Dock behind. The Run and its Output are already
@@ -776,16 +775,7 @@ async def run_trigger_turn(
                 )
                 from app.tools.video.production.visual_assets import has_visual_asset_preparation_scope
 
-                if managed_media and "stage=scene_images" in review_lines:
-                    # The continuation reads per-scene reviews and owns both repair and the final stop.
-                    intent = _trigger_dump(trigger, ref, [], [])
-                    intent.update(presentation="media_progress", media_journey={**run.context["media_journey"], "state": "active"})
-                    message = await _create_message(db, conversation_id, "assistant", "", workflow_run_id=run.id, intent=intent)
-                    await db.commit()
-                    from app.chat.media_journey import continue_media_journey
-                    await continue_media_journey(db, project, conversation, run)
-                    return message
-                if not managed_media and has_visual_asset_preparation_scope(run):
+                if has_visual_asset_preparation_scope(run):
                     from app.tools.video.visual_assets import visual_asset_result_images
 
                     preparation = (run.context or {}).get("visual_asset_preparation") or {}
@@ -794,40 +784,11 @@ async def run_trigger_turn(
                     )
                 from app.tools.video.audio_playback import audio_playback_blocks
 
-                if managed_media and "delivery=delivered" in review_lines:
-                    from app.tools.video.audio_playback import audio_preparation, record_run_audio
-                    audio = audio_preparation(run)
-                    if audio:
-                        role, preparation = audio
-                        message = await record_run_audio(
-                            db, project, conversation_id, run.context["media_journey"], role,
-                            preparation, trigger_intent=_trigger_dump(trigger, ref, [], delivery_output_refs), run_id=run.id,
-                        )
-                        await db.commit()
-                        from app.chat.media_journey import continue_media_journey
-                        await continue_media_journey(db, project, conversation, run)
-                        return message
-                if not managed_media:
-                    delivery_blocks = await audio_playback_blocks(db, run, project)
+                delivery_blocks = await audio_playback_blocks(db, run, project)
                 event_line = _delivery_event_line(str(run_id), review_lines)
-                if (run.context or {}).get("media_journey"):
-                    event_line += (
-                        "\n根据本次交付事实，告诉用户哪段素材无法使用、已知原因及其对制作的影响。"
-                    )
             elif trigger == TRIGGER_RUN_FAILED:
                 assert run is not None
-                if managed_media:
-                    narration = (run.context or {}).get("narration_preparation") or {}
-                    scene_id = (narration.get("request") or {}).get("scene_id")
-                    event_line = (
-                        f"媒体准备 Run {run_id} 已停止。根据失败事实说明所处阶段和原因。在原 Chat 中保留已完成的工作，不要求用户再次发出制作指令或承诺重试。"
-                    )
-                    if scene_id:
-                        event_line += f"本次 Run 只准备场景 {scene_id} 的旁白。"
-                else:
-                    event_line = (
-                        f"Run {run_id} 失败，用户没有收到结果。先查明情况，再如实告知原因并给出一个下一步。"
-                    )
+                event_line = f"Run {run_id} 失败，用户没有收到结果。请根据实际错误说明原因。"
                 # 失败事实注入 (ADR-135): the failed verdict steps' baked
                 # user-facing lines ride the event line — deterministic,
                 # narrate-never-contradict, same doctrine as DELIVERY FACTS.
@@ -982,18 +943,6 @@ async def run_trigger_turn(
                     await finalize_bailed_runs(bailed_run_ids)
             else:
                 intent = _trigger_dump(trigger, ref, suggestions, delivery_output_refs)
-                journey = (run.context or {}).get("media_journey") if run is not None else None
-                if journey:
-                    if "delivery=partial" in review_lines or "delivery=failed" in review_lines:
-                        intent["presentation"] = "preparation_issue"
-                    blocked = trigger == TRIGGER_RUN_FAILED or (
-                        "delivery=partial" in review_lines and bool(run.context.get("narration_preparation"))
-                    ) or "delivery=failed" in review_lines
-                    if blocked:
-                        run.context = {**run.context, "media_continuation_finished": True}
-                    intent["media_journey"] = {
-                        "opening_id": journey["opening_id"], "state": "blocked" if blocked else "active",
-                    }
                 message = await _create_message(
                     db, conversation_id, "assistant", speech,
                     workflow_run_id=run_id, intent=intent, blocks=delivery_blocks,
@@ -1006,10 +955,6 @@ async def run_trigger_turn(
                 project_id=str(project_id),
                 suggestions=len(suggestions),
             )
-            if trigger == TRIGGER_RUN_COMPLETED and run is not None:
-                from app.chat.media_journey import continue_media_journey
-
-                await continue_media_journey(db, project, conversation, run)
             return message
     except IntegrityError:
         # 唯一索引收口 (migration n4d7e0a3b6c9, 2026-09-28): a cross-process

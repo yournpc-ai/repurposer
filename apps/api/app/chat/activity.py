@@ -577,6 +577,8 @@ class ActivityProjector:
                             _INSPECTING_FAILED_PREFIX + key[len(_INSPECTING_PREFIX):],
                         )
                     )
+                elif isinstance(event, ReadAccepted) and event.awaiting_authorization:
+                    frames.append(self._settle(activity_id, STATUS_COMPLETED, "chat.activity.mediaPermission"))
                 elif isinstance(event, ReadAccepted) and not event.ok and kind == KIND_READ:
                     frames.append(self._settle(activity_id, STATUS_FAILED, key))
                 else:

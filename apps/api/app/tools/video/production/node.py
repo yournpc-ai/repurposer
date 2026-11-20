@@ -299,6 +299,8 @@ class PrepareVisualAssets(NodeBase):
     def estimate(self, ctx):
         images = int(ctx.get("visual_images") or 0)
         units = {"images": images} if images else {}
+        if (ctx.get("spec") or {}).get("opening_id"):
+            return {"prompt_tokens": [0, 8192], "completion_tokens": [0, 2048], "units": units}
         return {"prompt_tokens": [0, 0], "completion_tokens": [0, 0], "units": units}
 
     async def run(self, db, run, node, project):
@@ -323,6 +325,13 @@ class PrepareVisualAssets(NodeBase):
             raise ValueError("The visual asset step has no matching pinned scene specifications")
         for spec in specs:
             spec._review_basis = (preparation.get("review_basis") or {}).get(spec.scene_id)
+        if (run.context or {}).get("editor_media"):
+            from sqlalchemy import func, select
+
+            # Concurrent editor requests for one PNG share the durable manifest and its provider marker.
+            digest = specs[0].request_digest()
+            await db.execute(select(func.pg_advisory_xact_lock(int.from_bytes(bytes.fromhex(digest)[:8],
+                                                                             "big", signed=True))))
         attempts = preparation.get("content_attempts") or {}
         stages = ProductionStages(
             run_id=run.id,

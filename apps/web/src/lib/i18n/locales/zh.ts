@@ -1361,6 +1361,7 @@ const zh: Resources = {
       musicSearchDone: "已找到配乐",
       musicSelection: "正在选择配乐…",
       musicSelectionDone: "已选择配乐",
+      mediaPermission: "已请求素材生成授权",
       musicPrepare: "正在准备电子配乐…",
       musicPrepareDone: "已准备电子配乐",
       upload: "正在上传视频…",

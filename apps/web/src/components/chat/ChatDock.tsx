@@ -1392,8 +1392,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [historySettled, setHistorySettled] = useState(false)
   useEffect(() => {
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let watchingMedia = false
     setHistorySettled(false)
-    void (async () => {
+    const load = async () => {
       try {
         const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
           toast: false,
@@ -1409,7 +1411,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // The row→flow mapping is the extracted PURE seam (timeline/history.ts,
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
-        const history = mapHistoryRows(data.items ?? [], { t })
+        const rows = data.items ?? []
+        const active = new Set(rows.filter((r) => r.turn_state === "in_flight").map((r) => r.id))
+        watchingMedia = rows.some((r) => {
+          const intent = r.intent as { media_status?: string; media_result?: unknown } | null
+          return r.turn_id && active.has(r.turn_id) && (intent?.media_status === "accepted" || intent?.media_result)
+        })
+        const history = mapHistoryRows(rows, { t })
         // Fill missing archive rows at their persisted seq positions. Live
         // rows keep their identity and typing state; a recovered live tail
         // cannot pull the final archive reply ahead of its own activities.
@@ -1419,7 +1427,11 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           observeJourney(data.items ?? [])
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
-            setMessages((prev) => prependMissingHistory(prev, history))
+            const settled = new Map(history.filter((m) => m.activity && m.activity.status !== "active")
+              .map((m) => [m.id, m.activity]))
+            setMessages((prev) => prependMissingHistory(prev.map((m) =>
+              m.activity?.status === "active" && settled.has(m.id)
+                ? { ...m, activity: settled.get(m.id) } : m), history))
           }
         }
       } catch {
@@ -1430,10 +1442,13 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         // handoff waits on this pass before its optimistic push, never on
         // the fetch succeeding.
         historyReady.resolve()
+        if (!cancelled && watchingMedia) timer = setTimeout(load, 2500)
       }
-    })()
+    }
+    void load()
     return () => {
       cancelled = true
+      clearTimeout(timer)
       // An unmount also settles the gate (idempotent resolve) — a pending
       // firstMessage handoff must never hang on a torn-down replay.
       historyReady.resolve()

@@ -9,8 +9,8 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
-from app.chat.video_turn_seats import prepare_narration_seat
-from app.models.schemas import AssetType, PrepareNarrationArgs
+from app.chat.video_turn_seats import align_recording_seat
+from app.models.schemas import AssetType, AlignRecordingArgs
 from app.models.tables import Asset, Project, User
 from app.pipeline.errors import user_error_line
 from app.tools.video.media_analysis import LoudnessAnalysisError, analyze_audio_bytes, read_report
@@ -62,31 +62,28 @@ async def test_generated_narration_reuses_owned_source_without_mention(database,
     monkeypatch.setattr("app.tools.video.alignment_store.request_alignment", fake_request)
     monkeypatch.setattr("app.tools.video.alignment_store.wait_for_alignment", fake_wait)
 
-    read = await prepare_narration_seat(
+    read = await align_recording_seat(
         project=project,
-        args=PrepareNarrationArgs(
+        args=AlignRecordingArgs(
             text="Exact narration",
             audio_asset_id=asset.id,
-            language="en",
         ),
         mentions=[],
     )
     assert read.ok
     facts = json.loads(read.text)
     assert facts["alignment_id"] == str(alignment_id) and facts["status"] == "ALIGNED"
-    assert facts["cache"] == "hit" and facts["scene_id"] is None
 
 
 @pytest.mark.asyncio
 async def test_existing_upload_still_requires_explicit_mention(database, monkeypatch):
     project, asset = await _project(database, generated=False)
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
-    read = await prepare_narration_seat(
+    read = await align_recording_seat(
         project=project,
-        args=PrepareNarrationArgs(
+        args=AlignRecordingArgs(
             text="Exact narration",
             audio_asset_id=asset.id,
-            language="en",
         ),
         mentions=[],
     )
@@ -109,10 +106,7 @@ async def test_scene_audio_freezes_and_yields_measured_playback_without_system_f
     database, monkeypatch,
 ):
     from app.providers import storage
-    from app.tools.video.audio_playback import playback_item, record_prepared_audio
-    from app.chat.service import _create_message
-    from app.models.schemas import ChatMessageResponse
-    from app.models.tables import Conversation
+    from app.tools.video.audio_playback import playback_item
     from app.tools.video.preparation import snapshot_narration_original
 
     monkeypatch.setenv("PATH", "")
@@ -139,26 +133,6 @@ async def test_scene_audio_freezes_and_yields_measured_playback_without_system_f
     async with database() as db:
         result = {"audio_snapshot_id": str(snapshot.id), "audio_digest": digest}
         item = await playback_item(db, project, "narration", result, {"scene_id": "opening"})
-        conversation = Conversation(user_id=project.user_id, project_id=project.id)
-        db.add(conversation)
-        await db.commit()
-        monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
-        opening = await _create_message(db, conversation.id, "user", "Make a promo")
-        journey = {"opening_id": str(opening.id)}
-        request = {"scene_id": "opening", "draft_ref": {"draft_id": "draft"}}
-        receipt = await record_prepared_audio(db, project, conversation.id, journey, "narration", result, request)
-        assert receipt.blocks == []
-        assert receipt.intent["media_journey"]["state"] == "active"
-        assert receipt.intent["prepared_audio"]["duration_seconds"] == 1.0
-        repeated = await record_prepared_audio(db, project, conversation.id, journey, "narration", result, request)
-        assert repeated.id == receipt.id
-        # Previously persisted players are read as measurements in both transports.
-        archived = ChatMessageResponse.model_validate(receipt).model_dump()
-        archived["blocks"] = [{"kind": "audio_playback", "items": [item]}]
-        archived["intent"] = {"media_journey": journey}
-        wire = ChatMessageResponse.model_validate(archived)
-        assert wire.blocks == [] and wire.intent["prepared_audio"]["role"] == "narration"
-        assert ChatMessageResponse.model_validate({**archived, "intent": {}}).blocks == archived["blocks"]
     assert item["duration_seconds"] == 1.0
     assert max(item["peaks"]) == pytest.approx(0.25, abs=0.001)
     report = await read_report(snapshot.meta["analysis_ref"])
@@ -171,18 +145,18 @@ async def test_scene_audio_freezes_and_yields_measured_playback_without_system_f
 async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_history(database, monkeypatch):
     from importlib import import_module
 
-    from app.chat.plan_turn import PlanTurn
     from app.chat.service import _create_message
     from app.editing.schemas import speech_text_digest
     from app.editing.timing import SOURCE_TIMEBASE as ticks
-    from app.models.schemas import ChatMessageResponse, ChatRequest, canonical_json_hash
+    from app.models.schemas import ChatMessageResponse, canonical_json_hash
     from app.models.tables import Conversation, Message, WorkflowRun
     from app.providers import storage
     from app.tools.music.score import ScoreSpecDraft
     from app.tools.video import music_preparation as music
-    from app.tools.video.audio_playback import record_prepared_audio, record_run_audio
+    from app.chat.editor_media import settle_media_receipt
+    from app.models.schemas import WorkflowStatus
     from app.tools.video.narration_draft import reproject_narration_timing
-    from test.core.test_media_audio_continuation import spoken_draft
+    from test.core.test_narration_timing import spoken_draft
 
     project, _ = await _project(database, generated=True)
     files = {}
@@ -210,6 +184,7 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
     }), draft)
     result = await music.prepare_programmatic_music(project=project, name="Evidence", score=score, execution_id="test")
     cached = await music.cached_music_preparation(owner_id=project.user_id, project_id=project.id, score=score)
+    assert cached["snapshot"] == result["snapshot"] and cached["cache_hit"]
     reference = {"draft_id": "storyboard", "draft_digest": canonical_json_hash(draft)}
     request = {"draft_ref": reference, "name": "Evidence"}
     async with database() as db:
@@ -223,19 +198,19 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
         db.add_all([conversation, run])
         await db.commit()
         opening = await _create_message(db, conversation.id, "user", "帮我做一支宣传片")
-        journey = {"opening_id": str(opening.id)}
-        first = await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)
-        assert first.content == "配乐已准备好，可以试听了。"
-        receipt = await record_run_audio(db, project, conversation.id, journey, "music",
-                                         {"request": request, "result": result},
-                                         trigger_intent={"trigger": "run_completed"}, run_id=run.id)
+        receipt = await _create_message(db, conversation.id, "assistant", "", turn_id=opening.id,
+                                        intent={"editor_media": str(uuid4())}, workflow_run_id=run.id)
+        run.status = WorkflowStatus.COMPLETED
+        run.context = {"music_preparation": {"request": request, "result": result}}
         await db.commit()
-        assert receipt.id == first.id and receipt.workflow_run_id == run.id
+        first = await settle_media_receipt(db, project, run)
+        assert (await settle_media_receipt(db, project, run)).id == first.id
+        await db.commit()
     async with database() as db:
         row = await db.get(Message, receipt.id)
         wire = ChatMessageResponse.model_validate(row)
         assert wire.content == first.content
-        assert wire.intent["media_journey"]["state"] == "complete"
+        assert wire.intent["media_result"]["status"] == "available"
         block, = wire.blocks
         item, = block["items"]
         assert block["kind"] == "audio_playback" and block["project_id"] == str(project.id)
@@ -248,10 +223,6 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
         playback = await assets_routes.get_audio_playback(project.id, UUID(item["snapshot_id"]), db, await db.get(User, project.user_id))
         signed.assert_awaited_once_with(result["media"]["storage_key"])
         assert playback["digest"] == item["digest"] and playback["url"] == signed.return_value
-        assert (await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)).id == row.id
-        files[result["media"]["storage_key"]] = b"unreadable score"
-        failed = await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)
-        assert failed.intent["media_journey"]["state"] == "blocked" and not failed.blocks
 
 
 def test_loudness_failure_reports_the_audio_stage(monkeypatch, tmp_path):
@@ -265,3 +236,19 @@ def test_loudness_failure_reports_the_audio_stage(monkeypatch, tmp_path):
     assert _run_failed_fallback_speech(
         [f"FAILED STEP: prepare_narration — {reason}"], "zh", managed_media=True,
     ) == reason
+
+def test_mixed_mp4_with_trailing_index_has_measured_loudness(tmp_path):
+    import subprocess
+    from imageio_ffmpeg import get_ffmpeg_exe
+
+    path = tmp_path / "mixed.mp4"
+    subprocess.run(
+        [get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0",
+         "-c:a", "aac", str(path)],
+        input=_tone_wav(), check=True, capture_output=True,
+    )
+    data = path.read_bytes()
+    assert data.index(b"mdat") < data.index(b"moov")
+    measured = analyze_audio_bytes(data, snapshot_id=str(uuid4())).media_facts["loudness"]
+    assert measured["integrated_lufs"] == pytest.approx(-15, abs=1)
+    assert measured["true_peak_dbtp"] == pytest.approx(-12, abs=2)

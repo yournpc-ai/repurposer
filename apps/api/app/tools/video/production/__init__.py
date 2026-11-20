@@ -343,20 +343,22 @@ async def pin_video_production(db, project, tasks, approved_by):
 
 
 async def resolve_visual_asset_selection(db, project, params: PrepareVisualAssetsParams):
-    """Resolve the same current draft at planning, quotation and authorization."""
-    if params.version_ref is not None:
+    """Resolve the owned editor request, or verify the draft pinned by an existing run."""
+    if params.opening_id is not None:
         ref = params.version_ref
-        comp, version = await get_video_version(db, owner_id=project.user_id, version_id=ref.composition_version_id)
-        if (comp.origin_project_id != project.id or comp.id != ref.composition_id
-                or version.content_digest != ref.content_digest or comp.current_version_id != version.id):
-            raise ValueError("The selected work has changed.")
+        if ref:
+            comp, version = await get_video_version(db, owner_id=project.user_id, version_id=ref.composition_version_id)
+            if (comp.origin_project_id != project.id or comp.id != ref.composition_id
+                    or version.content_digest != ref.content_digest or comp.current_version_id != version.id):
+                raise ValueError("The selected work has changed.")
         words = await db.scalar(select(Message.content).join(Conversation).where(
             Message.id == params.opening_id, Message.role == "user",
             Conversation.project_id == project.id, Conversation.user_id == project.user_id,
         ))
         if words is None:
             raise ValueError("The image request is unavailable.")
-        basis = {"user_words": [words]}
+        spec = params.scene_assets[0]
+        basis = {"user_words": [words], "scene_roles": {spec.scene_id: words}}
         if params.evidence_snapshot_id:
             from app.tools.video.preparation import frozen_source_lines
 
@@ -368,7 +370,6 @@ async def resolve_visual_asset_selection(db, project, params: PrepareVisualAsset
             if not lines:
                 raise ValueError("The selected webpage has no verifiable text.")
             basis["source_evidence"] = "\n".join(line["text"] for line in lines)[:4000]
-        spec = params.scene_assets[0]
         spec._review_basis = basis
         return [spec]
     reference = params.draft_ref.model_dump(mode="json")
@@ -432,6 +433,8 @@ async def pin_visual_asset_preparation(db, project, tasks):
     for run in runs:
         preparation = (run.context or {}).get("visual_asset_preparation") or {}
         previous_request = preparation.get("request") or {}
+        if params.opening_id and previous_request.get("opening_id") != str(params.opening_id):
+            continue
         if previous_request.get("review_existing"):
             continue
         previous = preparation.get("scene_assets") or previous_request.get("scene_assets") or []

@@ -7,10 +7,9 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from fractions import Fraction
-from typing import Any, Literal
+from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from app.editing.timing import (
     SOURCE_TIMEBASE,
@@ -18,17 +17,13 @@ from app.editing.timing import (
 )
 from app.models.database import AsyncSessionLocal
 from app.models.ids import source_snapshot_id
-from app.models.schemas import VideoDraftRef
 from app.models.tables import Music, SourceSnapshot
 from app.providers import storage
 from app.tools.music.score import (
     ScoreSpec,
-    ScoreSpecDraft,
     authored_beat_grid,
-    build_score_spec,
     synthesize_score,
 )
-from app.tools.video.narration_draft import assert_narration_ready_for_score
 from app.tools.video.preparation import store_source_bytes
 
 _MUSIC_MANIFEST_PREFIX = "programmatic-music"

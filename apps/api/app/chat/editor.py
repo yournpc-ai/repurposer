@@ -258,6 +258,10 @@ async def edit_clip(
     if name not in WRITE_TOOLS or not isinstance(args, WRITE_TOOLS[name].params_model):
         raise ValueError("Arguments do not match this editor operation.")
     identity = uuid5(opening_id, call_id)
+    if await db.scalar(select(Message.id).where(
+        Message.turn_id == opening_id, Message.intent["editor_media"].astext == str(identity),
+    )):
+        raise RequestMismatch("This call already belongs to a media request.")
     # A replay can arrive after the round reader has already observed our new
     # head. Reconstruct the original request against its immutable base and
     # let the store compare its digest before returning the committed row.
@@ -471,6 +475,13 @@ def _remember_labels(turn, facts, version_id, digest, number):
 
 async def execute_editor(turn, name, args):
     base = getattr(turn, "_video_base_ref", None)
+    if not base and turn.project is not None and name in {"generate_music", "generate_voice", "generate_image"}:
+        from app.chat.editor_media import generate_media
+
+        try:
+            return await generate_media(turn, name, args, None, None)
+        except (ValueError, PermissionError) as exc:
+            return ToolObservation(str(exc), ok=False)
     if not base or turn.project is None:
         return ToolObservation(
             "Select one accessible, current saved work before editing.", ok=False

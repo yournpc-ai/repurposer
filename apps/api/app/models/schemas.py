@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from copy import deepcopy
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -714,20 +713,14 @@ class ChatMessageResponse(BaseModel):
 
 
     @model_validator(mode="after")
-    def _automatic_audio_progress(self):
-        """Keep intermediate recordings in progress and the delivered score playable."""
-        journey = (self.intent or {}).get("media_journey")
-        if not journey or journey.get("state") == "complete":
-            return self
-        playback = next((block for block in self.blocks if block.get("kind") == "audio_playback"), None)
-        if playback is not None:
-            items = playback.get("items") or []
-            if items and isinstance(items[0], dict) and "prepared_audio" not in self.intent:
-                item = items[0]
-                self.intent = {**self.intent, "prepared_audio": {
-                    key: item.get(key) for key in ("role", "scene_id", "duration_seconds", "snapshot_id", "digest")
-                }}
-            self.blocks = [block for block in self.blocks if block.get("kind") != "audio_playback"]
+    def _editor_media_projection(self):
+        intent = self.intent or {}
+        if "editor_media" in intent or "media_permission" in intent:
+            accepted = self.workflow_run_id is not None and "media_result" not in intent
+            self.workflow_run_id = None
+            self.intent = {key: intent[key] for key in ("media_result",) if key in intent}
+            if accepted:
+                self.intent = {"media_status": "accepted", "operation": intent["tool"]}
         return self
 
 
@@ -1491,59 +1484,11 @@ class SelectMusicArgs(BaseModel):
         return tolerate_null_keys(data, "pending_disposition")
 
 
-class PrepareNarrationArgs(BaseModel):
-    """固定最终音频和确切文稿，然后将确定性对齐任务加入队列。"""
-
+class AlignRecordingArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text: str | None = Field(default=None, min_length=1, max_length=9000)
-    audio_asset_id: UUID | None = Field(
-        default=None,
-        description="用户为本次录音显式 @ 引用的确切 AUDIO 素材。",
-    )
-    voice_id: str | None = Field(default=None, min_length=1, max_length=255)
-    language: str | None = Field(default=None, min_length=2, max_length=16)
-    draft_ref: VideoDraftRef | None = Field(
-        default=None,
-        description="当前工作草稿，配合 scene_id 由代码解析其确切的待准备旁白。",
-    )
-    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(
-            data, "text", "audio_asset_id", "voice_id", "language",
-            "draft_ref", "scene_id", "pending_disposition",
-        )
-
-    @model_validator(mode="after")
-    def _source(self) -> "PrepareNarrationArgs":
-        scene_form = self.draft_ref is not None or self.scene_id is not None
-        if scene_form:
-            if self.draft_ref is None or self.scene_id is None:
-                raise ValueError("scene narration needs both draft_ref and scene_id")
-            if any((
-                self.text is not None,
-                self.audio_asset_id is not None,
-                self.voice_id is not None,
-                self.language is not None,
-            )):
-                raise ValueError("scene narration resolves text, voice and language from its draft")
-            return self
-        if self.text is None or not self.text.strip():
-            raise ValueError("the final narration script must not be blank")
-        if self.audio_asset_id is not None:
-            if self.voice_id is not None:
-                raise ValueError("an existing recording does not take a TTS voice")
-        elif self.voice_id is None or self.language is None:
-            raise ValueError("TTS preparation needs voice_id and language, or name an AUDIO asset")
-        return self
-
-    def bind_working_draft(self, value: dict[str, Any]) -> None:
-        self._working_draft = deepcopy(value)
+    text: str = Field(min_length=1, max_length=9000)
+    audio_asset_id: UUID
 
 
 class GetNarrationAlignmentArgs(BaseModel):

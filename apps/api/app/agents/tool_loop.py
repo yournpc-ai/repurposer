@@ -424,6 +424,7 @@ class ToolObservation:
     accepted_interim_prose: str | None = None
     # A caller-owned handoff settled the observation and can finish this turn.
     stop_after_observation: bool = False
+    awaiting_authorization: bool = False
     # A version-scoped observation expires when the snapshot no longer has its key.
     valid_for_key: str | None = None
 
@@ -522,6 +523,7 @@ class ReadAccepted:
 
     tool_name: str
     ok: bool = True
+    awaiting_authorization: bool = False
     # Opaque sideband from ToolObservation; not part of the model wire.
     receipt: BaseModel | None = None
 
@@ -1770,7 +1772,6 @@ class ToolLoopAgent:
                     outcome = replace(observation, text=json.dumps(payload, ensure_ascii=False))
                     is_draft_update = True
                 if isinstance(outcome, WorkingDraftUpdated):
-                    previous_arguments = candidate_record.arguments if candidate_record else {}
                     if not tool.draftable:
                         raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
                     if candidate_record is None:
@@ -1783,7 +1784,7 @@ class ToolLoopAgent:
                         candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
                     drafts[candidate_record.candidate_id] = candidate_record
                     latest_draft_id = candidate_record.candidate_id
-                    receipt = outcome.receipt(candidate_record, previous_arguments)
+                    receipt = working_draft_observation(candidate_record)
                     outcome = ToolObservation(
                         json.dumps(receipt, ensure_ascii=False),
                         ok=True,
@@ -1890,6 +1891,7 @@ class ToolLoopAgent:
                             tool_name=dispatch_name,
                             ok=outcome.ok,
                             receipt=outcome.receipt,
+                            awaiting_authorization=outcome.awaiting_authorization,
                         ),
                     )
                     if (

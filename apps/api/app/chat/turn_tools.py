@@ -39,7 +39,7 @@ from app.models.schemas import (
     ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
-    PrepareNarrationArgs,
+    AlignRecordingArgs,
     PresentPlanArgs,
     ProposeTasksArgs,
     RetryUploadArgs,
@@ -240,42 +240,12 @@ _SELECT_MUSIC_TOOL = ChatTool(
         done_key="chat.activity.musicSelectionDone", receipt_kind="music_selection",
     ),
 )
-_PREPARE_NARRATION_TOOL = ChatTool(
-    name="prepare_narration",
+_ALIGN_RECORDING_TOOL = ChatTool(
+    name="align_recording", description="Align the exact transcript with an explicitly referenced recording.",
+    params_model=AlignRecordingArgs,
     terminal=False,
-    draft_reader=True,
-    description=(
-        "以固定的原速音频准备旁白定稿。对当前 Scene 只传最新 draft_ref 和 scene_id，服务端解析待处理 Speech 的确切文本、音色及语言。"
-        "缓存命中则返回固定 Snapshot、实测时长、分析及当前对齐，不再次合成。未命中时，按常规方案及 Start 授权流程准确展示返回的 prepare_narration 任务，不在 Chat 调供应商。"
-        "PENDING 和 PROCESSING 均未对齐。读取 ALIGNED 音频，标注至 READY，再仅对该场执行 design_video.narration_update。使用用户已有录音时，须有明确的 @asset 引用和确切定稿。"
-    ),
-    params_model=PrepareNarrationArgs,
-    presentation=ToolPresentation(
-        kind="read", active_key="chat.activity.narrationPrepare",
-        done_key="chat.activity.narrationPrepareDone",
-    ),
+    presentation=ToolPresentation("read", "chat.activity.narrationRead", "chat.activity.narrationReadDone"),
 )
-
-
-def _prepare_visual_assets_tool() -> ChatTool:
-    from app.tools.video.visual_assets import PrepareVisualAssetsArgs
-
-    return ChatTool(
-        name="prepare_visual_assets",
-        presentation=ToolPresentation(
-            kind="read", active_key="chat.activity.visualAssets", done_key="chat.activity.visualAssetsDone",
-            steps=(("check_fixed_images", "chat.activity.checkFixedImages"),
-                   ("read_fixed_images", "chat.activity.readFixedImages")),
-        ),
-        terminal=False,
-        draft_reader=True,
-        description=(
-            "检查并恢复一批当前 SceneAssetSpec 图片。传最新 draft_ref 和 scene_ids，服务端解析当前规格。命中缓存则返回固定 PNG、完整 MediaAnalysisReport 和独立 ContentReview，不再生成。"
-            "未命中时仅通过常规方案及 Start 授权流程展示一个 prepare_visual_assets 任务。此 Chat 工具不执行 SVG 或调用 MiniMax。"
-            "审查不可用的固定 PNG 可用 review_existing=true 申请一次复审，不会生成图片。fail 或 advisory 不会自动触发再生成；只修改受影响的 SceneAssetSpec 来源以获得新摘要。"
-        ),
-        params_model=PrepareVisualAssetsArgs,
-    )
 
 
 _GET_NARRATION_ALIGNMENT_TOOL = ChatTool(
@@ -674,8 +644,8 @@ def video_round_tools(
             "get_understanding", "get_web_page", "get_asset", "list_project_media",
             "get_graph", "get_node", "edit_graph",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
-            "prepare_video_materials", "capture_web", "design_video", "prepare_visual_assets", "review_working_draft",
-            "prepare_narration", "get_narration_alignment", "annotate_narration",
+            "prepare_video_materials", "capture_web", "design_video", "review_working_draft",
+            "align_recording", "get_narration_alignment", "annotate_narration",
             "search_music", "show_music_candidates", "select_music",
             "show_video_presets", "select_video_preset", "search_sfx", "import_sfx",
         },
@@ -743,17 +713,6 @@ def video_round_tools(
             projected.append(tool)
             continue
         if stage in stage_tools and tool.name not in stage_tools[stage]:
-            continue
-        if resolution.get("media_phase") == "audio" and tool.name == "prepare_narration":
-            def scene_narration_wire(_description, parameters):
-                allowed = {"draft_ref", "scene_id"}
-                parameters = prune_wire_parameters(parameters, set(parameters["properties"]) - allowed)
-                parameters["required"] = ["draft_ref", "scene_id"]
-                return (
-                    "在一轮 tool_calls 中提交所有待录旁白，每项使用同一最新 draft_ref 和一个 scene_id。服务端解析稿件，缓存未命中时按既有授权处理。",
-                    parameters,
-                )
-            projected.append(replace(tool, wire_view=scene_narration_wire))
             continue
         if (
             stage == "draft_build"
@@ -847,18 +806,6 @@ def video_round_tools(
                         parameters, set(parameters.get("properties") or {}) - allowed
                     )
                     return "用 save=true 仅保存已审阅的现有 draft_ref，不再写入内容。", parameters
-                if resolution.get("media_phase") == "audio":
-                    allowed = {"draft_ref", "scene", "narration_update"}
-                    if resolution.get("scenes_filled"):
-                        allowed.remove("scene")
-                        return (
-                            "更新已有场景的旁白或确认实测时序。",
-                            prune_wire_parameters(parameters, set(parameters["properties"]) - allowed),
-                        )
-                    return (
-                        "根据已批准的图片和确切旁白续写已有 Scene，或基于 READY 对齐结果用 narration_update 确认或调整旁白时序。",
-                        prune_wire_parameters(parameters, set(parameters["properties"]) - allowed),
-                    )
                 if current_stage == "draft_repair":
                     if focus_clip_ids and focus_element_ids:
                         allowed = {"draft_ref", "focus_clip_id", "focus_element_id", "pending_disposition"}
@@ -955,8 +902,7 @@ def _video_project_tools() -> list[ChatTool]:
         _IMPORT_SFX_TOOL,
         _SHOW_MUSIC_CANDIDATES_TOOL,
         _SELECT_MUSIC_TOOL,
-        _PREPARE_NARRATION_TOOL,
-        _prepare_visual_assets_tool(),
+        _ALIGN_RECORDING_TOOL,
         _GET_NARRATION_ALIGNMENT_TOOL,
         _ANNOTATE_NARRATION_TOOL,
         *perception_chat_tools("get_video_version"),

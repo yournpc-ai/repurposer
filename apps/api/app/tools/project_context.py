@@ -14,7 +14,7 @@ from collections import Counter
 import structlog
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.agents.tool_loop import ContextSnapshot
 from app.models.database import AsyncSessionLocal
@@ -284,8 +284,20 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
     snapshot_by_asset: dict[UUID, UUID] = {}
     snapshot_by_url: dict[str, UUID] = {}
     from app.tools.video.preparation import frozen_source_lines
+    from app.models.tables import NarrationAlignment
+    audio_ids = [s.id for s in snapshots if s.kind == "audio" and s.origin_project_id == project_id]
+    alignments = {}
+    if audio_ids:
+        for key, identity, status, text_prefix in await db.execute(select(
+            NarrationAlignment.audio_snapshot_id, NarrationAlignment.id, NarrationAlignment.status,
+            func.left(NarrationAlignment.text, 160),
+        ).where(NarrationAlignment.owner_id == owner_id, NarrationAlignment.audio_snapshot_id.in_(audio_ids))
+         .order_by(NarrationAlignment.created_at)):
+            alignments[key] = {"alignment_id": str(identity), "status": status, "text": text_prefix}
     for snapshot in snapshots:
         resource = source_context(snapshot)
+        if snapshot.id in alignments:
+            resource["alignment"] = alignments[snapshot.id]
         resources.append((f"snapshot:{snapshot.id}:{snapshot.digest}", resource))
         if snapshot.kind == "web":
             lines = frozen_source_lines(snapshot)

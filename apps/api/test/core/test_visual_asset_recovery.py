@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 from app.agents.base import jinja_env
-from app.chat.video_turn_seats import prepare_visual_assets_seat, video_proposal_guard
+from app.chat.video_turn_seats import video_proposal_guard
 from app.models.schemas import TaskItem, VideoDraftRef
 from app.models.tables import Project, SourceSnapshot
 from app.pipeline.orchestrator import TaskSpec, compile_graph
@@ -38,10 +38,8 @@ def image_draft():
         )
         for scene_id in ("s1", "s2")
     ]
-    draft = {
-        "content": {"scenes": [{"scene_id": spec.scene_id} for spec in specs]},
-        "design": {"scene_assets": [spec.model_dump(mode="json") for spec in specs]},
-    }
+    draft = {"content": {"scenes": [{"scene_id": spec.scene_id} for spec in specs]},
+             "design": {"scene_assets": [spec.model_dump(mode="json") for spec in specs]}}
     return draft, specs
 
 
@@ -221,13 +219,6 @@ async def test_website_design_from_selected_view_reaches_image_plan(database, mo
     assert first.source.program == specs[0]["source"]["program"]
     assert second.on_screen_copy == "Open the paper"
     assert str(second.source.snapshot_id) == image["snapshot_id"]
-    probe = visual_assets.PrepareVisualAssetsArgs(
-        draft_ref=reference, scene_ids=["citation", "demo"],
-    )
-    probe.bind_working_draft(updated.arguments)
-    monkeypatch.setattr(visual_assets, "cached_visual_asset", AsyncMock(return_value=None))
-    result = await prepare_visual_assets_seat(project=project, args=probe)
-    assert json.loads(result.text)["plan_task"]["params"]["scene_ids"] == ["citation", "demo"]
 
 
 @pytest.mark.asyncio
@@ -289,17 +280,8 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
 
     monkeypatch.setattr(visual_assets, "fixed_visual_asset_manifest", cache_miss)
     monkeypatch.setattr(generated_images, "find_fixed_generated_image", lambda *a: cache_miss())
-    args = visual_assets.PrepareVisualAssetsArgs(draft_ref=reference, scene_ids=["s2"])
-    args.bind_working_draft(draft)
-    observation = await prepare_visual_assets_seat(project=project, args=args)
-    task = TaskItem.model_validate(json.loads(observation.text)["plan_task"])
-    assert task.params == {
-        "draft_ref": reference.model_dump(mode="json"),
-        "scene_ids": ["s2"],
-        "review_existing": False,
-    }
-    assert await video_proposal_guard(db, project, [task]) is None
-
+    task = TaskItem(tool="prepare_visual_assets", params={"draft_ref": reference.model_dump(mode="json"), "scene_ids": ["s2"], "review_existing": False})
+    assert "directly" in await video_proposal_guard(db, project, [task])
     assert (await video_quote_facts(db, project, [task]))["visual_images"] == 1
     node = compile_graph(TaskSpec(tasks=[task]))[0]
     pinned = (await pin_visual_asset_preparation(db, project, [task]))["visual_asset_preparation"]
@@ -309,13 +291,14 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
         "draft_ref": reference.model_dump(mode="json"),
         "scene_assets": pinned["scene_assets"],
     }})
-    assert "Use draft_ref and scene_ids" in await video_proposal_guard(db, project, [legacy])
+    assert "directly" in await video_proposal_guard(db, project, [legacy])
     assert (await pin_visual_asset_preparation(db, project, [legacy]))[
         "visual_asset_preparation"
     ]["scene_assets"] == pinned["scene_assets"]
 
     bad_scene = task.model_copy(update={"params": {**task.params, "scene_ids": ["unknown"]}})
-    assert "No current SceneAssetSpec" in await video_proposal_guard(db, project, [bad_scene])
+    with pytest.raises(ValueError, match="No current SceneAssetSpec"):
+        await pin_visual_asset_preparation(db, project, [bad_scene])
     candidate["candidate_digest"] = "b" * 64
     with pytest.raises(ValueError, match="stale or inactive"):
         await pin_visual_asset_preparation(db, project, [task])
@@ -384,12 +367,6 @@ async def test_review_recovery_reuses_snapshot_and_is_bounded(monkeypatch, retry
     reference = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
     project = SimpleNamespace(id=project_id, user_id=owner_id)
     draft, _ = image_draft()
-    args = visual_assets.PrepareVisualAssetsArgs(
-        draft_ref=reference, scene_ids=["s1"], review_existing=True,
-    )
-    args.bind_working_draft(draft)
-    observation = await prepare_visual_assets_seat(project=project, args=args)
-    assert json.loads(observation.text)["plan_task"]["params"]["review_existing"] is True
     kwargs = {
         "owner_id": owner_id,
         "project_id": project_id,
@@ -410,9 +387,6 @@ async def test_review_recovery_reuses_snapshot_and_is_bounded(monkeypatch, retry
     assert cached["snapshot"] == manifest["snapshot"]
     assert cached["review_retry_of"] == initial_ref
     assert cached["content_review"]["status"] == ("unavailable" if retry_fails else "pass")
-    after = await prepare_visual_assets_seat(project=project, args=args)
-    assert json.loads(after.text)["cache"] == "hit"
-
     snapshot = SimpleNamespace(
         id=snapshot_id,
         owner_id=owner_id, origin_project_id=project_id, kind="image", digest=digest,
@@ -546,24 +520,8 @@ async def test_bad_svg_is_reported_before_quote_and_later_batches_still_settle(m
     ]
     with pytest.raises(ValueError, match=r"Scene scene-2: SVG is not well formed"):
         visual_assets.preflight_scene_svgs(specs)
-    draft = {
-        "content": {"scenes": [{"scene_id": spec.scene_id} for spec in specs]},
-        "design": {"scene_assets": [spec.model_dump(mode="json") for spec in specs]},
-    }
     draft_ref = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
-    args = visual_assets.PrepareVisualAssetsArgs(
-        draft_ref=draft_ref, scene_ids=[spec.scene_id for spec in specs],
-    )
-    args.bind_working_draft(draft)
-
-    async def must_not_probe(**kwargs):
-        pytest.fail("Invalid SVG should be reported before the cache and quote path")
-
-    monkeypatch.setattr(visual_assets, "cached_visual_asset", must_not_probe)
     project = SimpleNamespace(id=uuid4(), user_id=uuid4())
-    observation = await prepare_visual_assets_seat(project=project, args=args)
-    assert not observation.ok and "Scene scene-2" in observation.text
-
     async def worker_item(*, spec, **kwargs):
         visual_assets.preflight_scene_svgs([spec])
         return {"scene_id": spec.scene_id}
@@ -639,7 +597,6 @@ async def test_submitted_provider_image_reuses_only_verified_fixed_media(monkeyp
 
 @pytest.mark.asyncio
 async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
-    from app.chat.media_journey import media_actions
 
     draft, _ = image_draft()
     draft["content"]["scenes"][0]["intent"] = "Show the link to a source paper."
@@ -663,8 +620,7 @@ async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
     assert "vertically" not in str(projection)
     assert projection["requirements"]["narrative"] == draft["content"]["scenes"][1]["intent"]
     assert projection["other_scene_roles"] == {"s1": "Show the link to a source paper."}
-    result = {"scene_id": "s2", "request_digest": pixel_identity, "content_review": first.model_dump()}
-    assert "s2" not in media_actions(draft, [result])["repair_scene_ids"]
+    assert first.status == "pass"
 
     draft["design"]["review_user_words"].append("Use a vertically mounted phone.")
     spec = visual_assets.current_scene_assets(draft)[1]
@@ -677,4 +633,3 @@ async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
     assert second.status == "fail"
     assert json.loads(reviewer.await_args.kwargs["scene_asset_json"])["requirements"]["user_1"] == (
         "Use a vertically mounted phone.")
-    assert media_actions(draft, [{**result, "content_review": second.model_dump()}])["repair_scene_ids"] == ["s2"]

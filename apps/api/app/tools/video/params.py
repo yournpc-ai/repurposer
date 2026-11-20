@@ -55,7 +55,7 @@ class PrepareNarrationParams(BaseModel):
 
 
 class PrepareVisualAssetsParams(VisualAssetSelection):
-    """One bounded batch from an authenticated working draft."""
+    """Pinned inputs for an editor image or a previously submitted draft batch."""
 
     draft_ref: VideoDraftRef | None = None
     version_ref: VideoVersionRef | None = None
@@ -72,10 +72,10 @@ class PrepareVisualAssetsParams(VisualAssetSelection):
 
     @model_validator(mode="after")
     def _request_shape(self):
-        if self.version_ref is not None:
-            if self.draft_ref or not self.opening_id or len(self.scene_assets or []) != 1:
+        if self.opening_id is not None:
+            if self.draft_ref or len(self.scene_assets or []) != 1:
                 raise ValueError("Select one image for the current saved work.")
-        elif self.draft_ref is None or self.opening_id or self.evidence_snapshot_id:
+        elif self.draft_ref is None or self.version_ref or self.evidence_snapshot_id:
             raise ValueError("A valid image source reference is required.")
         if (self.scene_ids is None) == (self.scene_assets is None):
             raise ValueError("provide scene_ids to select scenes from the current draft")

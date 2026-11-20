@@ -208,14 +208,6 @@ class VisualAssetSelection(BaseModel):
         return self
 
 
-class PrepareVisualAssetsArgs(VisualAssetSelection):
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
-
-    def bind_working_draft(self, value: dict[str, Any]) -> None:
-        self._working_draft = value
-
-
 def _validated_spec(spec: SceneAssetSpec) -> SceneAssetSpec:
     for color in spec.palette:
         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
@@ -1087,7 +1079,6 @@ __all__ = [
     "ExistingImageSource",
     "MiniMaxImageSource",
     "NormalizedRegion",
-    "PrepareVisualAssetsArgs",
     "SceneAssetSpec",
     "VISUAL_ASSET_BATCH_SIZE",
     "VISUAL_ASSET_MAX_PER_CALL",

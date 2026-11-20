@@ -20,7 +20,6 @@ import structlog
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.agents.tool_loop import TerminalRefusal, ToolObservation
-from app.agents.tool_progress import report_progress
 from app.agents.working_drafts import (
     WorkingDraftRejected,
     WorkingDraftReviewed,
@@ -47,7 +46,7 @@ from app.models.schemas import (
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PendingPlan,
-    PrepareNarrationArgs,
+    AlignRecordingArgs,
     ReviewVideoArgs,
     SearchSfxArgs,
     SelectMusicArgs,
@@ -304,23 +303,8 @@ async def review_video_seat(
 
 
 async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
-    for task in tasks:
-        if task.tool == "prepare_music":
-            return "Generate music directly in the selected saved work."
-        if task.tool != "prepare_visual_assets":
-            continue
-        from app.tools.video.params import PrepareVisualAssetsParams
-        from app.tools.video.production import resolve_visual_asset_selection
-        from app.tools.video.visual_assets import preflight_scene_svgs
-
-        try:
-            selection = PrepareVisualAssetsParams.model_validate(task.params)
-            if selection.scene_ids is None:
-                return "Use draft_ref and scene_ids for image preparation. Do not copy scene_assets into a plan."
-            specs = await resolve_visual_asset_selection(db, project, selection)
-            preflight_scene_svgs(specs)
-        except ValueError as exc:
-            return f"Image preparation plan rejected: {exc}"
+    if any(t.tool in {"prepare_music", "prepare_narration", "prepare_visual_assets"} for t in tasks):
+        return "Generate media directly using the available media tools."
     if not any(t.tool == "produce_video" for t in tasks):
         return None
     # Native tool loops occasionally serialize a nested object as JSON text.
@@ -1147,157 +1131,39 @@ async def select_music_seat(
     )
 
 
-async def prepare_visual_assets_seat(*, project: Project | None, args: Any) -> ToolObservation:
-    if project is None:
-        return ToolObservation("visual asset preparation needs a project context", ok=False)
-    from app.tools.video.visual_assets import (
-        cached_visual_asset,
-        preflight_scene_svgs,
-        select_scene_assets,
-        visual_asset_result_images,
-    )
-
-    try:
-        if not isinstance(args._working_draft, dict):
-            return ToolObservation("the current visual asset draft could not be restored", ok=False)
-        specs = select_scene_assets(args._working_draft, args.scene_ids)
-        preflight_scene_svgs(specs)
-        await report_progress("check_fixed_images")
-        results = []
-        pending = []
-        for spec in specs:
-            cached = await cached_visual_asset(
-                owner_id=project.user_id, project_id=project.id, spec=spec
-            )
-            if cached is None:
-                if args.review_existing:
-                    raise ValueError(f"scene {spec.scene_id} has no fixed PNG to review")
-                pending.append(spec.scene_id)
-            elif (
-                args.review_existing
-                and cached["content_review"]["status"] == "unavailable"
-                and not cached.get("review_retry_of")
-            ):
-                pending.append(spec.scene_id)
-            else:
-                results.append(cached)
-    except (ValueError, PermissionError) as exc:
-        return ToolObservation(f"prepare_visual_assets rejected: {exc}", ok=False)
-    if pending:
-        task = {
-            "tool": "prepare_visual_assets",
-            "params": {
-                "draft_ref": args.draft_ref.model_dump(mode="json"),
-                "scene_ids": pending,
-                "review_existing": args.review_existing,
-            },
-        }
-        return ToolObservation(json.dumps({
-            "ok": True,
-            "cache": "miss",
-            "cached_scene_ids": [item["scene_id"] for item in results],
-            "pending_scene_ids": pending,
-            "execution": "not executed",
-            "next": "仅用常规方案工具展示这一个任务，按用户实际意图填写 production_intent，由方案及 Start 流程负责授权和报价。展示方案或启动 Run 后结束，不在此执行或轮询供应商。",
-            "plan_task": task,
-        }, ensure_ascii=False), fold_after_delivery=True)
-    payload = {
-        "ok": True,
-        "cache": "hit",
-        "draft_ref": args.draft_ref.model_dump(mode="json"),
-        "assets": results,
-        "scope": "仅返回这些当前 SceneAssetSpec 图片及其实际报告。未创建 Composition 版本或视频 Output。",
-    }
-    await report_progress("read_fixed_images")
-    images = await visual_asset_result_images(results)
-    return ToolObservation(
-        json.dumps(payload, ensure_ascii=False),
-        images=tuple(images),
-        fold_after_delivery=True,
-    )
-
-
-async def prepare_narration_seat(
-    *, project: Project | None, args: PrepareNarrationArgs, mentions=()
+async def align_recording_seat(
+    *, project: Project | None, args: AlignRecordingArgs, mentions=()
 ) -> str | ToolObservation:
     if project is None:
         return "narration preparation needs a project context"
-    from app.editing.schemas import SpeechObject
     from app.editing.timing import SOURCE_TIMEBASE
     from app.models.database import AsyncSessionLocal
     from app.tools.video.alignment_store import request_alignment, wait_for_alignment
-    from app.tools.video.params import PrepareNarrationParams
-
+    request_text = args.text
     try:
-        if args.draft_ref is not None:
-            if not isinstance(args._working_draft, dict):
-                return ToolObservation("the current narration draft could not be restored", ok=False)
-            from app.tools.video.narration_draft import scene_narration_request
+        async with AsyncSessionLocal() as db:
+            from app.models.tables import Asset
+            from app.tools.video.preparation import snapshot_audio_asset
 
-            request = scene_narration_request(args._working_draft, args.scene_id or "")
-            params = PrepareNarrationParams(
-                **request, draft_ref=args.draft_ref, scene_id=args.scene_id
+            asset = await db.get(Asset, args.audio_asset_id)
+            if asset is None or asset.user_id != project.user_id:
+                return "the referenced AUDIO asset is not accessible"
+            generated = isinstance((asset.meta or {}).get("origin"), dict) and bool(
+                asset.meta["origin"].get("video_narration_hash")
             )
-        elif args.audio_asset_id is None:
-            params = PrepareNarrationParams(
-                text=args.text or "", voice_id=args.voice_id or "", language=args.language or ""
-            )
-        else:
-            params = None
-        request_text = params.text if params is not None else args.text or ""
-        mentions = mentions or ()
-        if args.audio_asset_id is not None:
-            async with AsyncSessionLocal() as db:
-                from app.models.tables import Asset
-                from app.tools.video.preparation import snapshot_audio_asset
-
-                asset = await db.get(Asset, args.audio_asset_id)
-                if asset is None or asset.user_id != project.user_id:
-                    return "the referenced AUDIO asset is not accessible"
-                generated = isinstance((asset.meta or {}).get("origin"), dict) and bool(
-                    asset.meta["origin"].get("video_narration_hash")
+            mentioned = {
+                str(getattr(mention, "id", ""))
+                for mention in mentions
+                if getattr(mention, "type", None) == "asset"
+            }
+            if not generated and str(args.audio_asset_id) not in mentioned:
+                return (
+                    "align_recording requires the user's explicit @asset reference for "
+                    "this AUDIO recording; no alignment was requested"
                 )
-                mentioned = {
-                    str(getattr(mention, "id", ""))
-                    for mention in mentions
-                    if getattr(mention, "type", None) == "asset"
-                }
-                if not generated and str(args.audio_asset_id) not in mentioned:
-                    return (
-                        "prepare_narration requires the user's explicit @asset reference for "
-                        "this AUDIO recording; no alignment was requested"
-                    )
-                snapshot = await snapshot_audio_asset(db, asset, owner_id=project.user_id)
-                await db.commit()
-                snapshot_id = snapshot.id
-        else:
-            from app.tools.video.narration_store import peek_original
-            from app.tools.video.preparation import snapshot_narration_original
-
-            speech = SpeechObject(
-                kind="speech",
-                object_id="obj_prepare_narration",
-                text=request_text,
-                voice_id=params.voice_id,
-                language=params.language,
-            )
-            original = await peek_original(project.user_id, speech)
-            if original is None:
-                return ToolObservation(json.dumps({
-                    "ok": True,
-                    "cache": "miss",
-                    "execution": "not executed",
-                    "draft_ref": params.draft_ref.model_dump(mode="json") if params.draft_ref else None,
-                    "scene_id": args.scene_id,
-                    "next": "自动分镜准备由服务端汇总本轮所有待录场景并启动；其他场合使用常规方案和 Start 流程。",
-                    "plan_task": {"tool": "prepare_narration", "params": params.model_dump(mode="json")},
-                }, ensure_ascii=False), fold_after_delivery=True)
-            async with AsyncSessionLocal() as db:
-                _, snapshot = await snapshot_narration_original(
-                    db, project, text=request_text, original=original, scene_id=args.scene_id
-                )
-                await db.commit()
-                snapshot_id = snapshot.id
+            snapshot = await snapshot_audio_asset(db, asset, owner_id=project.user_id)
+            await db.commit()
+            snapshot_id = snapshot.id
         requested = await request_alignment(
             owner_id=project.user_id, audio_snapshot_id=snapshot_id, text=request_text
         )
@@ -1315,18 +1181,12 @@ async def prepare_narration_seat(
 
             analysis = await read_report(analysis_ref)
     except (ValueError, PermissionError) as exc:
-        return ToolObservation(f"prepare_narration rejected: {exc}", ok=False)
+        return ToolObservation(f"align_recording rejected: {exc}", ok=False)
     except (BotoCoreError, ClientError, OSError):
         return ToolObservation("Narration audio or its measured analysis is unavailable.", ok=False)
     payload = (read.get("payload") or {})
     duration_ticks = payload.get("duration_ticks")
     read.update({
-        "cache": "hit",
-        "draft_ref": (
-            params.draft_ref.model_dump(mode="json")
-            if params is not None and params.draft_ref else None
-        ),
-        "scene_id": args.scene_id,
         "actual_duration_seconds": (
             duration_ticks / (payload.get("source_timebase") or SOURCE_TIMEBASE)
             if duration_ticks is not None else None

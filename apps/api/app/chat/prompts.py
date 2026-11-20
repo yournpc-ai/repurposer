@@ -20,7 +20,6 @@ def chat_system(
     video_stage: str = "none",
     video_speech: str | None = None,
     scene_authoring: bool = False,
-    staged_media: bool = False,
     website_promo: bool = False,
 ) -> str:
     from app.config import settings
@@ -38,7 +37,6 @@ def chat_system(
         video_stage=video_stage,
         video_speech=video_speech,
         scene_authoring=scene_authoring,
-        staged_media=staged_media,
         website_promo=website_promo,
     )
 
@@ -177,7 +175,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")} for _, r in resources if r.get("kind") == "asset"][:24],
         }
         context["fixed_media"] = [
-            {k: r[k] for k in ("snapshot_id", "kind", "duration_ticks", "title") if r.get(k) is not None}
+            {k: r[k] for k in ("snapshot_id", "kind", "duration_ticks", "title", "alignment") if r.get(k) is not None}
             for _, r in resources if r.get("snapshot_id") and r.get("kind") in ("audio", "image")
         ][-24:]
         if selected:
@@ -194,7 +192,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         last_preview = facts.get("last_preview") or {}
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
-        names = EDITOR_NAMES | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video"}
+        names = EDITOR_NAMES | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video", "align_recording", "get_narration_alignment", "annotate_narration"}
 
         def dialogue_wire(description, parameters):
             return description, prune_wire_parameters(parameters, {
@@ -206,13 +204,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "根据实际结果结束本轮；也可以直接在消息正文答复。" if t.name == "answer" else
             "询问一个确定目标所需的问题。"
         )) if t.name in {"answer", "ask_user"} else t for t in tools]
+        if facts.get("authorized_media"):
+            context["completed_media_this_turn"] = {**facts["authorized_media"], "delivered_to_chat": True}
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
         return RoundAssembly(
             tools=tools,
-            system="你是视频剪辑师。修改片段前，按需读取时间线定位目标。目标不明确时询问。"
-                   "按本轮已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。按帧上的作品时间说明实际画面。"
-                   "素材生成结果中的 delivered_to_chat 表示试听或图片卡已经交付。按请求决定是否插入；试听素材无需预览影片。对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答。",
+            system="你是视频剪辑师。用本轮用户提问的语言回答。修改片段前，按需读取时间线定位目标。目标不明确时询问。"
+                   "依次执行一个操作。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。按帧上的作品时间说明实际画面。混合波形只说明整体电平，声部重叠时间以各轨片段为准。"
+                   "生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。delivered_to_chat 表示素材卡已交付。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。",
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=facts.get("user_text") or "", enforce_offered_tools=True,
             stream_prose=False,
@@ -239,43 +239,13 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     )
     if (
         readiness.task_kind == "website_promo"
-        and facts.get("new_result_tool") in {"design_video", "prepare_visual_assets"}
+        and facts.get("new_result_tool") in {"design_video"}
         and resolution.get("draft") is not None
         and resolution.get("stage") != "draft_build"
     ):
         resolution["stage"] = "draft_build"
     resolution.setdefault("readiness", readiness)
     resolution["selected_region"] = (facts.get("target_hint") or {}).get("selected_region")
-    media_state = None
-    if facts.get("media_journey") and resolution["stage"] in {
-        "draft_build", "draft_review", "draft_repair", "draft_finalize", "draft_hold",
-    }:
-        from app.chat.media_journey import allowed_media_tools, audio_timing_issue, media_actions
-
-        resolution["stage"] = "draft_build"
-        current = resolution.get("draft")
-        media_state = media_actions(
-            current.arguments if current is not None else None,
-            facts.get("media_visual_results") or [],
-        )
-        resolution["media_phase"] = media_state["phase"]
-        permitted = allowed_media_tools(media_state["phase"])
-        if media_state["phase"] == "audio":
-            from app.agents.working_drafts import working_draft_review_facts
-
-            scenes = working_draft_review_facts(current.arguments)["scenes"]
-            resolution["scenes_filled"] = bool(scenes) and all(scene["clip_ids"] for scene in scenes)
-            timing_issue = audio_timing_issue(current.arguments)
-            media_state["audio_timing_ready"] = timing_issue is None
-            media_state["timing_issue"] = timing_issue
-            settled = facts.get("settled_narration")
-            if settled is not None:
-                from app.chat.media_journey import narration_resume_state
-
-                resume = narration_resume_state(current.arguments, settled)
-                media_state["narration_resume"] = resume
-                if any(not scene.get("timing_confirmed") for scene in resume["scenes"]):
-                    media_state["audio_timing_ready"] = False
     tools = video_round_tools(
         facts["tools"],
         resolution=resolution,
@@ -285,8 +255,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         package_sessions=facts.get("package_sessions"),
         user_text=facts.get("user_text") or "",
     )
-    if media_state is not None:
-        tools = [tool for tool in tools if tool.name in permitted or tool.name in EDITOR_NAMES]
     stage = resolution["stage"]
     draft = resolution.get("draft")
     draft_facts = {}
@@ -408,15 +376,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             from app.tools.video.narration_draft import current_narration_facts
 
             dynamic["narrations"] = current_narration_facts(draft.arguments)
-            if media_state is not None and "narration_resume" in media_state:
-                bound = {
-                    (row["scene_id"], row["alignment_id"]) for row in media_state["narration_resume"]["scenes"]
-                    if row.get("timing_confirmed")
-                }
-                dynamic["narrations"] = [
-                    fact for fact in dynamic["narrations"]
-                    if (fact["scene_id"], (fact.get("alignment") or {}).get("alignment_id")) in bound
-                ]
             dynamic["next_unfilled_scene"] = next(
                 (scene for scene in draft_facts["scenes"] if not scene["clip_ids"]), None,
             )
@@ -457,7 +416,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     acknowledge_brief = (
         facts.get("group_answer_submitted", False)
         and readiness.task_kind == "website_promo"
-        and media_state is not None and media_state["phase"] == "images"
+        and stage == "draft_build"
         and not facts.get("interim_prose_count")
     )
     acknowledgment = None
@@ -471,53 +430,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             acknowledgment = f"Got it. I’ll shape the {length}storyboard around your choices, starting with the opening."
     if awaiting_brief and pending is not None:
         required_next = "answer"
-    if media_state is not None:
-        dynamic["media_preparation"] = media_state
-        if media_state["phase"] == "audio":
-            dynamic["media_instruction"] = (
-                "approved_images 中的每项对应相应场景已准备好的图片。在 design_video.scene 中直接使用它的 snapshot_id，传入相符的 scene_id 和确切的口播原文。"
-                "先写完所有需要旁白的场景，再把同一最新 draft_ref 的各场 prepare_narration 调用组成一个 tool_calls 数组。录制完成后逐场读取实际对齐结果，标注至 READY，按实测时长和提示点确认时序。"
-            )
-            required_next = "answer" if media_state["audio_timing_ready"] else None
-            resume = media_state.get("narration_resume")
-            if resume is None and resolution["scenes_filled"] and not media_state["audio_timing_ready"]:
-                dynamic["media_instruction"] = "各幕已填入画面和旁白。以当前 draft_ref 将待录场景一并提交 prepare_narration。"
-                required_next = "prepare_narration"
-            if resume is not None:
-                dynamic["media_instruction"] = (
-                    "旁白已录制。以本轮 draft_ref 和 narration_resume 为准。scenes 只列与当前原文、声音和语言一致的录音引用。"
-                    "matched_audio_seconds 是已匹配的实测总长，remaining_seconds 是目标总长扣除这些录音后留给其余旁白和停顿的时间。"
-                    "若剩余时间为负，或不足以容纳待录旁白，请先逐幕精简文案，给所有待录幕留足空间，由你决定各幕取舍和时长。"
-                    "用 design_video.narration_update 改稿时传 scene_id、text，可带 target_duration_seconds，省略 alignment_id。"
-                    "改完后用最新 draft_ref，将 pending_scene_ids 的 prepare_narration 一次并行提交。"
-                    "保留录音时读取它的对齐，按需标注至 READY。确认时仅传 scene_id、alignment_id 和可选的 target_duration_seconds。"
-                    "每次写入后用下一轮的新 draft_ref。所有幕的原音、提示点和目标总长核实后说明结果。"
-                )
-                if not media_state["audio_timing_ready"]:
-                    remaining = resume["remaining_seconds"]
-                    if remaining is not None and (remaining < 0 or remaining == 0 and resume["pending_scene_ids"]):
-                        required_next = "design_video"
-                        if not facts.get("interim_prose_count"):
-                            dynamic["media_instruction"] += (
-                                "这次实测牵涉剪辑取舍。改稿时在同一响应的正文中，用对话语言告诉用户"
-                                "录音和目标时长差多少、你会精简哪部分来保住哪句重点，然后动手。"
-                            )
-                    elif not resume["pending_scene_ids"]:
-                        if all(s["timing_confirmed"] for s in resume["scenes"]):
-                            required_next = "design_video"
-                        elif facts.get("iteration") == 0:
-                            required_next = "get_narration_alignment"
-        elif media_state["phase"] == "images_blocked":
-            dynamic["media_instruction"] = "说明哪些场景遇到阻碍，然后停止。"
-            required_next = "answer"
-        else:
-            dynamic["media_instruction"] = (
-                "只写入 scene_plan 和 scene_assets，再准备当前图片。使用现有图片时，对照页面、视图标题和像素，确认与目标场景相符。"
-                "将源图必须显示的证据放在 source.visible_evidence，剪辑时叠加的内容放在 on_screen_copy。来源不对时，改选正确的固定图片或换用其他来源方式。"
-                "对列入重试的场景使用 review_existing。局部修复失败内容，按 scene_failures 修正无效 SVG。如果供应商执行结果未知，选择本地来源。保留已批准场景。"
-            )
-            if media_state["missing_scene_ids"] or media_state["review_retry_scene_ids"]:
-                required_next = "prepare_visual_assets"
     if readiness.task_kind == "website_promo":
         if required_next is not None:
             dynamic["required_next_action"] = required_next
@@ -545,7 +457,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             video_stage=stage,
             video_speech="brief_answer" if acknowledge_brief else None,
             scene_authoring=scene_authoring,
-            staged_media=media_state is not None,
             website_promo=readiness.task_kind == "website_promo",
         ),
         context="\n\n".join(context_parts),
@@ -553,8 +464,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         include_project_context=include_project_context,
         observation_tools=(
             frozenset({
-                "design_video", "prepare_visual_assets", "prepare_video_materials", "capture_web",
-                "prepare_narration", "get_narration_alignment", "annotate_narration",
+                "design_video", "generate_image", "prepare_video_materials", "capture_web",
+                "generate_voice", "get_narration_alignment", "annotate_narration",
             })
             if draft is not None and stage in {"draft_build", "draft_finalize", "draft_hold"}
             else None
@@ -570,11 +481,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         missing_tool_feedback=(
             "请通过原生 tool_calls 调用 ask_user，把全部缺失选项放进同一份问卷。正文只写给用户的邀请。"
             if awaiting_brief and pending is None else
-            "使用可用工具继续准备当前媒体，或调用 answer 说明确切阻碍。"
-            if media_state is not None and media_state["phase"] in {"images", "audio"} else
             "用户请求的视频仍是未保存的草稿。可以继续时，调用 design_video 完成下一步写入或保存。需要用户决定时调用 ask_user。"
             "确有已核实的阻碍而无法完成时，说明情况并调用 answer。"
-            if media_state is None and stage == "draft_build" and draft is not None and not facts.get("version_saved")
+            if stage == "draft_build" and draft is not None and not facts.get("version_saved")
             and facts.get("production_requested")
             else None
         ),
@@ -582,7 +491,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             stage in {"none", "briefing", "draft_build"}
             or (stage == "draft_review" and bool(draft_facts.get("awaiting_judgment")))
         ),
-        caller_state={"media_state": media_state},
     )
 
 

@@ -105,6 +105,12 @@ async def _submit(db, project, receipt, task, quote, via):
         db, project, None, [task], name=task.params.get("name", task.tool), instruction=None,
         confirmation_id=receipt.intent["editor_media"], confirmed_via=via, quote=quote,
     )
+    from app.models.tables import CreditTransaction
+
+    hold = await db.scalar(select(CreditTransaction.amount).where(
+        CreditTransaction.idempotency_key == f"run:{run.id}:hold"))
+    if -(hold or 0) > quote["total"][1]:
+        raise ValueError("The media price changed before submission.")
     run.context = {**run.context, "editor_media": receipt.intent["editor_media"]}
     receipt.workflow_run_id = run.id
     return run.id
@@ -116,17 +122,22 @@ async def answer_media_permission(db, project, receipt, approved):
     if not approved:
         receipt.intent = {**receipt.intent, "media_result": {"status": "declined"}}
         return
-    head = await db.scalar(select(Composition.current_version_id).where(
-        Composition.id == UUID(receipt.intent["composition_id"]), Composition.owner_id == project.user_id,
-        Composition.origin_project_id == project.id,
-    ))
-    if str(head) != receipt.intent["version_id"]:
-        raise ValueError("The work changed before authorization.")
+    if receipt.intent.get("composition_id"):
+        head = await db.scalar(select(Composition.current_version_id).where(
+            Composition.id == UUID(receipt.intent["composition_id"]), Composition.owner_id == project.user_id,
+            Composition.origin_project_id == project.id,
+        ))
+        if str(head) != receipt.intent["version_id"]:
+            raise ValueError("The work changed before authorization.")
     task = TaskItem.model_validate(auth["task"])
     estimate = await derive_task_estimates(db, project, [task])
     if estimate is None or estimate.total[1] > auth["quote"]["total"][1]:
         raise ValueError("The media quote has changed.")
-    await _submit(db, project, receipt, task, estimate.model_dump(mode="json"), "user_option")
+    execution = await _create_message(db, receipt.conversation_id, "assistant", "", turn_id=receipt.turn_id,
+                                      intent={k: v for k, v in receipt.intent.items() if k != "media_permission"})
+    await _submit(db, project, execution, task, estimate.model_dump(mode="json"), "user_option")
+    receipt.intent = {"media_permission": {"quote": auth["quote"]}, "media_receipt_id": str(execution.id)}
+    return execution
 
 
 async def _cached_voice(project, args):
@@ -148,9 +159,15 @@ async def _cached_voice(project, args):
 
 
 async def submit_editor_media(turn, name, args, composition, version, call_id):
+    from app.chat.service import _TURN_ROW_LOCKS_HELD
+
+    if turn.turn_id in _TURN_ROW_LOCKS_HELD.get():
+        raise ValueError("This request is already settling another authorization.")
     identity = str(uuid5(turn.turn_id, call_id))
     params = args.model_dump(mode="json")
-    fingerprint = canonical_json_hash({"tool": name, "composition": str(composition.id), "params": params})
+    composition_id = str(composition.id) if composition else None
+    version_id = str(version.id) if version else None
+    fingerprint = canonical_json_hash({"tool": name, "composition": composition_id, "params": params})
     async with AsyncSessionLocal() as db:
         opening = await _lock_turn_for_transcript_write(db, turn.turn_id)
         project = await db.scalar(select(Project).join(Conversation, Conversation.project_id == Project.id).where(
@@ -159,6 +176,8 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
         ))
         if project is None or opening.role != "user":
             raise ValueError("Media request is outside the current project.")
+        if any(edit["request"] == identity for edit in (opening.intent or {}).get("editor_commits", [])):
+            raise ValueError("This call already belongs to a different operation.")
         receipt = await db.scalar(select(Message).where(
             Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
         ))
@@ -170,9 +189,13 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
         else:
             if opening.turn_state != "in_flight":
                 raise ValueError("This media request has ended.")
-            head = await db.scalar(select(Composition.current_version_id).where(Composition.id == composition.id))
-            if head != version.id or turn._video_base_ref["content_digest"] != version.content_digest:
-                raise ValueError("The work has changed. Inspect its current version.")
+            if composition:
+                head = await db.scalar(select(Composition.current_version_id).where(
+                    Composition.id == composition.id, Composition.origin_project_id == project.id,
+                    Composition.owner_id == turn.user_id,
+                ))
+                if head != version.id or turn._video_base_ref["content_digest"] != version.content_digest:
+                    raise ValueError("The work has changed. Inspect its current version.")
             pending = await latest_pending_question(db, turn.conversation_id)
             if pending and ((pending.question or {}).get("kind") == "task_book" or
                             (pending.intent or {}).get("media_permission")):
@@ -186,7 +209,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                           {"kind": "minimax_image", "prompt": args.prompt})
                 spec = SceneAssetSpec(scene_id="editor_image", intent=args.prompt, source=source)
                 request = PrepareVisualAssetsParams(
-                    scene_assets=[spec], version_ref=turn._video_base_ref, opening_id=opening.id,
+                    scene_assets=[spec], version_ref=getattr(turn, "_video_base_ref", None), opening_id=opening.id,
                     evidence_snapshot_id=args.evidence_snapshot_id,
                 )
                 specs = await resolve_visual_asset_selection(db, project, request)
@@ -200,14 +223,22 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             else:
                 task = TaskItem(tool="prepare_narration", params=params)
                 cached = await _cached_voice(project, args)
+            from app.chat.editor import EDITOR_TOOLS
+
+            active_key = next(t.presentation.active_key for t in EDITOR_TOOLS if t.name == name)
+            activity_id = await db.scalar(select(Message.id).where(
+                Message.turn_id == opening.id, Message.intent["frame"]["status"].astext == "active",
+                Message.intent["frame"]["key"].astext == active_key,
+            ).order_by(Message.seq.desc()).limit(1))
             receipt = await _create_message(
                 db, turn.conversation_id, "assistant", "", turn_id=opening.id,
                 intent={"editor_media": identity, "fingerprint": fingerprint,
-                        "composition_id": str(composition.id), "version_id": str(version.id)},
+                        "composition_id": composition_id, "version_id": version_id, "tool": name,
+                        "activity_id": str(activity_id) if activity_id else None},
             )
             if cached is not None:
                 if name == "generate_image":
-                    await _record_image(db, project, receipt, cached)
+                    await _record_image(db, project, receipt, {**cached, "cache_hit": True})
                 else:
                     await _record_audio(db, project, receipt, cached, params)
                 await db.commit()
@@ -246,23 +277,14 @@ async def generate_media(turn, name, args, composition, version):
             turn.outcome = (receipt, None, turn.settled_pending, [])
         else:
             turn.outcome = (receipt, None, [], turn.settled_question)
-        return ToolObservation("Awaiting authorization.", stop_after_observation=True)
-    run_id = receipt.workflow_run_id
-    # No open submission transaction while a worker owns the operation.
-    while not receipt.intent.get("media_result"):
-        await asyncio.sleep(0.5)
-        async with AsyncSessionLocal() as db:
-            run = await db.get(WorkflowRun, run_id)
-            if run is None:
-                raise ValueError("The submitted audio request is unavailable.")
-            if run.status not in (WorkflowStatus.PENDING, WorkflowStatus.RUNNING):
-                settled = await settle_media_receipt(db, turn.project, run)
-                if settled is not None:
-                    receipt = settled
-                await db.commit()
+        return ToolObservation("Awaiting authorization.", stop_after_observation=True, awaiting_authorization=True)
+    if turn.on_row_append and receipt.workflow_run_id and not receipt.intent.get("media_result"):
+        await turn.on_row_append(receipt)
+    receipt = await wait_for_media_result(turn.project, receipt)
     if turn.on_row_append:
         await turn.on_row_append(receipt)
-    turn._inspected_version = str(version.id)
+    if version is not None:
+        turn._inspected_version = str(version.id)
     facts = dict(receipt.intent["media_result"])
     if facts.get("alignment_id"):
         from app.tools.video.alignment_store import wait_for_alignment
@@ -288,5 +310,85 @@ async def generate_media(turn, name, args, composition, version):
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest"):
         if facts.get(key):
-            labels[facts[key]] = ("这份素材", "this media")
+            for token in (facts[key], facts[key][:8], facts[key][:12]):
+                labels[token] = ("这份素材", "this media")
     return ToolObservation(json.dumps(facts), images=images, ok=facts["status"] == "available")
+
+
+async def wait_for_media_result(project, receipt):
+    run_id = receipt.workflow_run_id
+    # No open submission transaction while a worker owns the operation.
+    while not receipt.intent.get("media_result"):
+        await asyncio.sleep(0.5)
+        async with AsyncSessionLocal() as db:
+            run = await db.get(WorkflowRun, run_id)
+            if run is None:
+                raise ValueError("The submitted media request is unavailable.")
+            if run.status not in (WorkflowStatus.PENDING, WorkflowStatus.RUNNING):
+                settled = await settle_media_receipt(db, project, run)
+                if settled is not None:
+                    receipt = settled
+                await db.commit()
+    return receipt
+
+
+async def continue_media_turn(db, project, receipt, **hooks):
+    """Continue the original user request after an answered quote or a lost API process."""
+    from app.chat.editor_recovery import editor_lock_key, report_committed_edits, settle_media_activity
+    from app.chat.service import _plan_turn, _prefers_zh, list_conversation_messages
+    from app.metering import bind_conversation_turn, fold_conversation_usage
+    from app.models.schemas import ChatRequest
+
+    turn_id = receipt.turn_id
+    if not await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
+        return None
+    async with AsyncSessionLocal() as state:
+        opening = await state.get(Message, turn_id, with_for_update=True, populate_existing=True)
+        if not opening or opening.turn_state != "in_flight":
+            return None
+        newest = await state.scalar(select(Message.id).where(
+            Message.turn_id == turn_id, Message.intent.has_key("editor_media"),
+        ).order_by(Message.seq.desc()).limit(1))
+        if newest != receipt.id:
+            return None
+        await settle_media_activity(state, receipt)
+        identity = receipt.intent["editor_media"]
+        latest = await state.scalar(select(Message.id).where(
+            Message.conversation_id == opening.conversation_id, Message.role == "user",
+        ).order_by(Message.seq.desc()).limit(1))
+        comp_id = receipt.intent.get("composition_id")
+        head = await state.scalar(select(Composition.current_version_id).where(
+            Composition.id == UUID(comp_id), Composition.owner_id == project.user_id,
+            Composition.origin_project_id == project.id,
+        )) if comp_id else None
+        intent = opening.intent or {}
+        # Once a continuation has begun, its own version receipts are authoritative.
+        # An interrupted edit with committed writes is reported, never applied a second time.
+        if (not comp_id or str(head) != receipt.intent["version_id"] or latest != turn_id or
+                intent.get("editor_commits") or intent.get("resumed_media") == identity or
+                receipt.intent["media_result"]["status"] != "available"):
+            await report_committed_edits(state, opening)
+            available = receipt.intent["media_result"]["status"] == "available"
+            if comp_id and str(head) != receipt.intent["version_id"] and available and not intent.get("editor_commits"):
+                notice = ("素材已保存。生成期间影片已有新版本，请在当前版本选择插入位置。"
+                          if _prefers_zh(opening.content) else
+                          "The media is saved. The film changed during generation. Select a position in the current version.")
+                await _create_message(state, opening.conversation_id, "assistant", notice, turn_id=turn_id)
+            opening.turn_state = "settled" if available and not comp_id else "failed"
+            await state.commit()
+            return None
+        opening.intent = {**intent, "resumed_media": identity}
+        await state.commit()
+    conversation = await db.get(Conversation, opening.conversation_id)
+    with bind_conversation_turn(conversation_id=conversation.id, turn_id=turn_id, project_id=project.id) as usage:
+        follow_up, _, _, _ = await _plan_turn(
+            db, project.user_id, conversation, project,
+            ChatRequest(project_id=project.id, message=opening.content, mentions=opening.mentions or []),
+            recent=await list_conversation_messages(db, conversation.id), turn_id=turn_id,
+            authorized_media=receipt, **hooks,
+        )
+    await fold_conversation_usage(db, user_id=project.user_id, project_id=project.id, accrued=usage.accrued)
+    finished = await _lock_turn_for_transcript_write(db, turn_id, require_in_flight=True)
+    finished.turn_state = "settled"
+    await db.commit()
+    return follow_up
