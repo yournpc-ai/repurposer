@@ -279,8 +279,17 @@ def _clip_facts(track, clip, content):
     }
 
 
+def requests_observation_first(text: str) -> bool:
+    """Honor an explicit watch-then-decide request before its first edit."""
+    return bool(re.search(
+        r"(?:实际|先).{0,8}(?:看片|看一下|预览|播放).{0,65}(?:问题|不合适|发现).{0,20}(?:改|调)|"
+        r"\b(?:watch|preview|review)\b.{0,100}\b(?:if|before)\b.{0,65}\b(?:fix|edit|adjust|change)\w*",
+        text, re.I | re.S,
+    ))
+
+
 async def edit_clip(
-    db, *, name, project, opening_id, conversation_id, call_id, base, args, inspected_version=None
+    db, *, name, project, opening_id, conversation_id, call_id, base, args, inspected_version=None, observed_preview=None
 ):
     from app.chat.service import TurnStopped, _lock_turn_for_transcript_write
 
@@ -325,6 +334,11 @@ async def edit_clip(
     entries = [(track, clip) for track in content.timeline.tracks for clip in track.clips]
     clips = {clip.clip_id: clip for _, clip in entries}
     commits = (opening.intent or {}).get("editor_commits", [])
+    if not previous and not commits and requests_observation_first(opening.content or ""):
+        preview = observed_preview or {}
+        if (preview.get("version_id") != str(version.id) or preview.get("content_digest") != version.content_digest
+                or not preview.get("mp4_sha256") or current_group_id() and preview.get("decision") == current_group_id()):
+            raise ValueError("The user asked to see the footage before deciding on an edit. Preview the affected window of this version and inspect the returned frames first.")
     prior = next((c for c in commits if c["request"] == str(identity)), None)
     fingerprint = canonical_json_hash({"tool": name, "args": args.model_dump(mode="json")})
     if prior and prior["fingerprint"] != fingerprint:
@@ -532,7 +546,7 @@ async def execute_editor(turn, name, args):
         async with AsyncSessionLocal() as db:
             try:
                 result = await create_video(db, turn, args)
-                return ToolObservation(json.dumps(result), valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}")
+                return ToolObservation(json.dumps(result), version_saved=True, valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}")
             except ValueError as exc:
                 return ToolObservation(str(exc), ok=False, user_error=str(exc))
     if not base and turn.project is not None and name in {"generate_music", "generate_voice", "generate_image"}:
@@ -575,6 +589,7 @@ async def execute_editor(turn, name, args):
                     call_id=current_call_id(),
                     base=base,
                     args=args,
+                    observed_preview=getattr(turn, "_editor_last_preview", None),
                     inspected_version=(base["composition_version_id"] if group and previous_write and previous_write[0] == group
                                        else getattr(turn, "_inspected_version", None)),
                 )
@@ -639,7 +654,7 @@ async def execute_editor(turn, name, args):
                     turn._editor_output_pin["version_id"] = result["version_id"]
                 turn._video_presentation_pending = None
                 return ToolObservation(
-                    json.dumps(result),
+                    json.dumps(result), version_saved=True,
                     valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}",
                 )
             composition, version = await get_video_version(
@@ -756,6 +771,7 @@ async def execute_editor(turn, name, args):
                     evidence["source_framing"] = framing
                 if source_frame:
                     media = (*media, source_frame)
+            evidence["model_media"] = [item.type for item in media]
             turn._editor_last_preview = {
                 **base, "version_id": str(version.id), "mp4_sha256": evidence["mp4_sha256"],
                 "decision": current_group_id(), "window_seconds": window, "windows": windows,

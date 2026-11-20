@@ -645,7 +645,6 @@ def video_round_tools(
         "draft_build": {
             "ask_user", "answer", "read_conversation_context",
             "get_understanding", "get_web_page", "get_asset", "list_project_media",
-            "get_graph", "get_node", "edit_graph",
             "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
             "prepare_video_materials", "capture_web", "design_video", "review_working_draft",
             "align_recording", "get_narration_alignment", "annotate_narration",

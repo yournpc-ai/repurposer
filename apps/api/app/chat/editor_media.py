@@ -127,7 +127,8 @@ async def deliver_video(db, turn, output_id, base):
         await db.commit()
         if turn.on_row_append:
             await turn.on_row_append(message)
-    return ToolObservation(json.dumps({"output_id": str(output_id), **base, "delivered_to_chat": True}))
+    turn._editor_delivery = {"output_id": str(output_id), **base, "delivered_to_chat": True}
+    return ToolObservation(json.dumps(turn._editor_delivery))
 
 
 async def settle_media_receipt(db, project, run):
@@ -301,10 +302,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 raise ValueError("Resolve the outstanding authorization before generating more media.")
             preview = None
             if name == "export_video":
-                from app.chat.video_turn_seats import draft_only_request
+                from app.chat.video_turn_seats import asks_for_export, draft_only_request
 
                 if draft_only_request(opening.content or ""):
-                    raise ValueError("The current request is limited to an editable draft.")
+                    raise ValueError("The current request is limited to the editable work and its preview.")
                 preview = getattr(turn, "_editor_last_preview", None) or {}
                 if (preview.get("composition_version_id") != version_id
                         or preview.get("content_digest") != version.content_digest
@@ -359,7 +360,19 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             quote = estimate.model_dump(mode="json") if estimate else None
             if not quote:
                 raise ValueError("A bounded media quote is unavailable.")
-            if need.requires_confirmation:
+            # Account auto-approval covers requested production. A model's
+            # export call alone does not establish a user request to spend.
+            export_needs_consent = False
+            if name == "export_video" and not asks_for_export(opening.content or ""):
+                selected_output = getattr(turn, "_editor_output_pin", None) or {}
+                prior = getattr(turn, "preceding_delivery", None) or {}
+                confirmed = (opening.intent or {}).get("video_confirmation") or {}
+                export_needs_consent = not (
+                    selected_output.get("output_id")
+                    or (prior.get("composition_id") == composition_id and (opening.intent or {}).get("editor_commits"))
+                    or confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
+                )
+            if need.requires_confirmation or export_needs_consent:
                 zh = (project.language or "").startswith("zh")
                 text = (f"允许这次素材生成吗？最多使用 {need.quote_high} 积分。" if zh else
                         f"Authorize this media generation for up to {need.quote_high} credits?")
@@ -387,6 +400,8 @@ async def generate_media(turn, name, args, composition, version):
     await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
     receipt = await submit_editor_media(turn, name, args, composition, version, call_id)
     if receipt.question and not receipt.answer:
+        # The committed question belongs to a separate submission session.
+        receipt = await turn.db.get(Message, receipt.id, populate_existing=True)
         if hasattr(turn, "settled_pending"):
             turn.outcome = (receipt, None, turn.settled_pending, [])
         else:

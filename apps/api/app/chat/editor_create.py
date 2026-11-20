@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import select
 
 from app.agents.tool_progress import current_call_id
@@ -16,7 +17,7 @@ from app.tools.video.design import (
 
 
 class FirstShot(CompositionSceneAuthoring):
-    scene_id: str = Field(default="", exclude=True, description="Assigned by the editor; omit.")
+    scene_id: SkipJsonSchema[Literal[""]] = Field(default="", exclude=True)
     duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
                                            description="Exact duration of a still or title.")
     text_color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")

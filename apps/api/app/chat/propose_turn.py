@@ -54,14 +54,11 @@ in ``app/chat/exploration_compile.py`` (ONE seat shared with the plan path
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-
-if TYPE_CHECKING:
-    from app.tools.video.design import CompositionDesignVideoArgs
 
 from app.agents.candidate_correction import CandidateRejected, CandidateScope
 from app.agents.tool_loop import (
@@ -530,9 +527,8 @@ class ChatTurn:
             from app.chat.video_turn_seats import capture_web_seat
             return await capture_web_seat(project=self.project, args=params)
         if name == "design_video":
-            from app.tools.video.design import CompositionDesignVideoArgs
-            assert isinstance(params, CompositionDesignVideoArgs)
-            return await self._design_video(params)
+            from app.chat.video_turn_seats import author_specialized_draft
+            return await author_specialized_draft(self, params, self._settle_by_disposition)
         if name == "review_working_draft":
             from app.chat.video_turn_seats import review_working_draft_seat
             return await review_working_draft_seat(project=self.project, args=params)
@@ -730,40 +726,6 @@ class ChatTurn:
             production_requested=bool(pending and pending.get("fresh_design"))
             and requested_video_production(self.text),
         )
-
-    async def _design_video(self, params: "CompositionDesignVideoArgs") -> str | ToolObservation | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        """design_video → the video family's design beat (ADR-145 phase B,
-        the plan path's mirror): the shared seat saves the version through
-        the write door on its OWN session; the model's ONE next message
-        presents the saved facts. NO plan docks, NO run starts."""
-        if self.project is None:
-            return "a video work lives in a project — there is no project context here."
-        from app.chat.video_turn_seats import (  # deferred: same layer
-            design_video_seat,
-            video_request_id,
-        )
-
-        stopped = getattr(self, "_video_design_stopped", None)
-        if stopped is not None:
-            return stopped
-        self._video_call_counter += 1
-        read, feedback = await design_video_seat(
-            project=self.project,
-            args=params,
-            request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
-            skill=self.skill,
-            skill_ambiguity=self.skill_ambiguity,
-            package_sessions=self.__dict__.setdefault("_skill_package_sessions", {}),
-            user_text=self.text,
-        )
-        if read is None:
-            if isinstance(feedback, ToolObservation) and not feedback.ok:
-                self._video_design_stopped = feedback
-            return feedback
-        await self._settle_by_disposition(params.pending_disposition)
-        read["fresh_design"] = True
-        self._video_presentation_pending = read
-        return feedback
 
     async def _dock_plan_as_question(
         self,
@@ -1224,6 +1186,9 @@ async def run_propose_turn(
     turn._editor_output_pin = mention_target
     opening = await db.get(Message, turn_id) if turn_id is not None else None
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
+    from app.chat.video_turn_seats import preceding_delivery
+
+    turn.preceding_delivery = await preceding_delivery(db, turn.conversation_id, opening)
     turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7, the plan path's
     # mirror): on the SSE path every turn arms the terminal buffer —
@@ -1309,6 +1274,9 @@ async def run_propose_turn(
                 "user_text": text,
                 "source_text": source_text,
                 "video_confirmation": confirmation,
+                "preceding_delivery": turn.preceding_delivery,
+                "exported": getattr(turn, "_editor_export", None),
+                "delivered": getattr(turn, "_editor_delivery", None),
                 "production_requested": requested_video_production(text),
                 "pending_question": lambda: turn.pending,
                 "last_preview": getattr(turn, "_editor_last_preview", None),

@@ -4,7 +4,7 @@
 {% include "chat/_identity_menu.j2" %}
 {% include "chat/_markdown_speech.j2" %}
 
-- 常规视频请求：备齐素材，用 design_video 创作新视频，通过 answer 展示可编辑的分镜，到此等待，不启动制作。
+- 用本轮提供的创作工具保存作品，按保存回执展示分镜。
 - 普通写作或解释请求：直接用 Markdown 回答。无需创建写作产物、任务、配方、Canvas 投影或独立的文本工作流。
 - 用户要求制作已经展示的确切保存版本时，调用 present_plan，由服务端绑定版本。不要制作未展示的版本，也不要推断用户批准了旧稿。
 - 只有确实缺少一个答案、无法合理推进时才用 ask_user。start_run 仅用于确认已经呈现并等待执行的方案。

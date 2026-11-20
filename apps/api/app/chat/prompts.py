@@ -152,9 +152,14 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         creative_state=creative_state, draft_present=bool(facts.get("drafts")),
         question_settled=facts.get("website_question_settled", False),
     )
+    pending_question = getattr(pending, "question", None) or {}
+    pending_workflow = pending and (
+        pending_question.get("kind") == "task_book" or pending_question.get("items")
+        or (getattr(pending, "intent", None) or {}).get("media_permission")
+    )
     native_creation = (
         not works and not hint and not facts.get("drafts") and not facts.get("skill")
-        and not pending and not facts.get("active_repair") and readiness.task_kind == "generic"
+        and not pending_workflow and not facts.get("active_repair") and readiness.task_kind == "generic"
         and any(tool.name == "create_video" for tool in facts["tools"])
     )
     if (native_creation or works or hint.get("unavailable") or hint.get("composition_id")) and not hint.get("draft_id"):
@@ -197,7 +202,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["already_saved_this_turn"] = recent["applied"]
             if recent["version_id"] == selected["version_id"]:
                 context["recently_edited_clips"] = list(recent["clips"].values())
+        from app.chat.editor import requests_observation_first
+
         last_preview = facts.get("last_preview") or {}
+        if selected and not recent and requests_observation_first(user_text):
+            context["observation_requested_before_edit"] = "Inspect actual rendered footage before deciding whether anything needs changing."
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video", "align_recording", "get_narration_alignment", "annotate_narration"}
@@ -206,9 +215,24 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             names.update({"prepare_video_materials", "get_asset", "get_understanding", "search_transcript"})
             context["available_sources"] = [{k: r.get(k) for k in ("snapshot_id", "kind", "title", "duration_ticks")}
                                             for _, r in resources if r.get("snapshot_id")][:24]
-        from app.chat.video_turn_seats import draft_only_request
+        from app.chat.video_turn_seats import asks_for_export, draft_only_request
+        delivery = facts.get("preceding_delivery") or {}
+        if selected and delivery.get("composition_id") == selected["composition_id"]:
+            context["preceding_reviewed_delivery"] = delivery
+            if recent.get("version_id") == selected["version_id"]:
+                delivered = facts.get("delivered") or {}
+                exported = facts.get("exported") or {}
+                context["revised_delivery"] = {
+                    "requested_artifact": "Reviewed MP4 in this Chat, updated with the requested change",
+                    "revised_version": selected["base_ref"],
+                    "output": exported if exported.get("composition_version_id") == selected["version_id"] else None,
+                    "chat_delivery": delivered if delivered.get("composition_version_id") == selected["version_id"] else None,
+                }
+        elif not asks_for_export(user_text) and not hint.get("output_id") and not confirmation:
+            context["delivery_scope"] = "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
         if draft_only_request(user_text):
-            context["delivery_scope"] = "Editable draft only. Stop after the saved draft and any requested preview."
+            context["delivery_scope"] = "Save the requested work and report any requested preview. Formal export is outside this request."
+            context.pop("revised_delivery", None)
             names.discard("export_video")
             names.discard("deliver_video")
         if hint.get("output_id") and selected is None:
@@ -229,13 +253,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["user_confirmed_export_of"] = confirmation["base_ref"]
         if facts.get("authorized_media"):
             context["completed_media_this_turn"] = {**facts["authorized_media"], "delivered_to_chat": facts["authorized_media"].get("role") != "export"}
+            if facts["authorized_media"].get("role") == "export":
+                context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
         return RoundAssembly(
             tools=tools,
             system="你是视频剪辑师。用本轮用户提问的语言回答。修改片段前，按需读取时间线定位目标。空项目按用户要求用 create_video 将镜头直接保存为可编辑作品。颜色、运动、时长、交付范围以用户原话为准。只要求调整和复看时，复看后答复；正式导出需要交付意图。目标不明确时询问。"
                    "可在同一响应提交独立的读取、素材生成或已知对象的修改。写入按声明次序保存。需要前项新标识时先看回执，再在下次决策引用。完成各项后再单独答复。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。同窗对照按 earlier 与 current 的标记读图。构图以用户点名的主体与取景要求为准，留边与是否填满画布是不同选择。当前预览满足要求就结束；素材取景限制改善时说明已看到的局限。以当前版本已观察窗口和用户要求为依据，说明发现的问题及未检查范围。调整前后的几何与时间以版本数据为准。只有实际收到可感知声音才能评价听感。按帧上的作品时间说明实际画面。混合波形只说明整体电平，声部重叠时间以各轨片段为准。"
-                   "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。如果针对已交付的成片提出修改，仍需交付修订后的成片，除非用户只要预览。只有交付回执才表示正式成片已发到对话。审阅发现问题时根据用户目标决定是否继续修改。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。",
+                   "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。如果 preceding_reviewed_delivery 或 referenced_output 表明用户针对已交付的成片提出修改，仍需交付修订后的成片，除非用户只要预览。只有交付回执才表示正式成片已发到对话。审阅发现问题时根据用户目标决定是否继续修改。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。",
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=facts.get("user_text") or "", enforce_offered_tools=True,
             stream_prose=native_creation,

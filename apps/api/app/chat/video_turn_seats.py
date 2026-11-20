@@ -657,6 +657,30 @@ async def review_working_draft_seat(*, project: Project, args: Any) -> WorkingDr
     }, ensure_ascii=False), images=media, receipt=receipt, context_lifetime="call"))
 
 
+async def author_specialized_draft(turn, args, settle_pending):
+    """Continue the website, bound Skill or retained working draft on either chat surface."""
+    if turn.project is None:
+        return "A project is required to save a video."
+    stopped = getattr(turn, "_video_design_stopped", None)
+    if stopped is not None:
+        return stopped
+    turn._video_call_counter += 1
+    read, feedback = await design_video_seat(
+        project=turn.project, args=args,
+        request_id=await video_request_id(turn.db, turn.conversation_id, turn._video_call_counter),
+        skill=turn.skill, skill_ambiguity=turn.skill_ambiguity,
+        package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}), user_text=turn.text,
+    )
+    if read is None:
+        if isinstance(feedback, ToolObservation) and not feedback.ok:
+            turn._video_design_stopped = feedback
+        return feedback
+    await settle_pending(args.pending_disposition)
+    read["fresh_design"] = True
+    turn._video_presentation_pending = read
+    return feedback
+
+
 async def design_video_seat(
     *,
     project: Project,
@@ -786,6 +810,7 @@ async def design_video_seat(
         + scrub_facts
         + "\nSAVED VERSION (execution truth):\n"
         + format_storyboard_text(read),
+        version_saved=True,
         images=tuple(await generator_preview_images(
             read, clip_ids=set(scope.get("clip_ids") or [])
         )) if scope else (),
@@ -1247,11 +1272,34 @@ def stamp_video_presentation(
     return updated
 
 
+def asks_for_export(text: str) -> bool:
+    return bool(re.search(r"导出|交付|正式成片|成片.{0,6}发|\b(?:export|deliver|mp4)\b", text, re.I))
+
+
+async def preceding_delivery(db, conversation_id, opening):
+    """Read the reviewed delivery on the immediately preceding user turn."""
+    from sqlalchemy import select
+
+    if opening is None:
+        return None
+    prior = select(Message.id).where(
+        Message.conversation_id == conversation_id, Message.role == "user",
+        Message.seq < opening.seq,
+    ).order_by(Message.seq.desc()).limit(1).scalar_subquery()
+    receipt = await db.scalar(select(Message.intent).where(
+        Message.conversation_id == conversation_id, Message.turn_id == prior,
+        Message.intent.has_key("reviewed_version"), Message.intent.has_key("output_refs"),
+    ).order_by(Message.seq.desc()).limit(1))
+    if receipt and receipt["output_refs"]:
+        return {**receipt["reviewed_version"], "output_id": receipt["output_refs"][0]}
+    return None
+
+
 def draft_only_request(text: str) -> bool:
     return bool(re.search(
-        r"(?:只(?:要|需|看|出|做)|仅(?:需|要)?)(?:可编辑的?)?(?:初稿|草稿|分镜)|"
+        r"(?:只(?:要|需|看|出|做)|仅(?:需|要)?)(?:可编辑的?)?(?:初稿|草稿|分镜|预览)|"
         r"(?:不要|不用|无需|暂不)(?:正式)?(?:导出|交付)|"
-        r"\b(?:draft only|only (?:a |the )?draft|(?:do not|don't|no) (?:formal )?(?:export|render))\b",
+        r"\b(?:preview only|draft only|only (?:a |the )?(?:draft|preview)|(?:do not|don't|no) (?:formal )?(?:export|render))\b",
         text, re.I,
     ))
 

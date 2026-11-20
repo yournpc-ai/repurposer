@@ -1755,7 +1755,7 @@ async def test_high_level_provider_requests_fold_prior_scene_writes_and_projecti
         if name == "read_skill_reference":
             return tool_loop.ToolObservation("DETAILED SKILL REFERENCE NEEDED BEFORE PLAN")
         if params.save:
-            return tool_loop.ToolObservation("SAVED VERSION with presentation_rows and no music track")
+            return tool_loop.ToolObservation("SAVED VERSION with presentation_rows and no music track", version_saved=True)
         if params.scene_plan is not None:
             content = _scene_plan_write({
                 "schema_version": 1,

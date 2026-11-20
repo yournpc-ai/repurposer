@@ -1051,7 +1051,9 @@ def _loop_incomplete_text(text: str, result) -> str:
     """An execution limit is not evidence that a requested capability is absent."""
     observations = getattr(result, "observations", [])
     rejections = getattr(result, "rejections", [])
-    video_tools = {"design_video", "split_clip"}
+    from app.chat.editor import WRITE_TOOLS
+
+    video_tools = {"design_video", "create_video", *WRITE_TOOLS}
     saved = bool(getattr(result, "version_saved", False))
     prepared = any(name in {"prepare_video_materials", "capture_web"} and ok for name, ok in observations)
     rejected = any(r.tool_name in video_tools for r in rejections) or any(name in video_tools and not ok for name, ok in observations)

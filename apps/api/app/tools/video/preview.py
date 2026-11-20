@@ -549,6 +549,8 @@ async def source_framing(db, owner_id, content, covered, sample_seconds):
     if not snapshot or snapshot.owner_id != owner_id or snapshot.digest != clip.source.snapshot_digest:
         return None, None
     offset = Fraction(str(sample_seconds)) - Fraction(clip.range.start, content.settings.timebase)
+    if not 0 <= offset < Fraction(clip.range.end - clip.range.start, content.settings.timebase):
+        return None, None
     target = Fraction(clip.source.source_range.start, SOURCE_TIMEBASE) + offset
     try:
         length = await storage.size(snapshot.storage_key)

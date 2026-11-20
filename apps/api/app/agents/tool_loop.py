@@ -431,6 +431,7 @@ class ToolObservation:
     awaiting_authorization: bool = False
     # A version-scoped observation expires when the snapshot no longer has its key.
     valid_for_key: str | None = None
+    version_saved: bool = False
 
 
 @dataclass(frozen=True)
@@ -1959,11 +1960,7 @@ class ToolLoopAgent:
                     # A working-draft observation is an accepted write step,
                     # not a saved version. Only the direct save observation
                     # carries this fact; tool.ok alone includes save=false.
-                    if (
-                        outcome.ok
-                        and dispatch_name in {"design_video", "split_clip"}
-                        and not is_draft_update
-                    ):
+                    if outcome.ok and outcome.version_saved:
                         version_saved = True
                         if dispatch_name == "design_video" and assembled.stage in {"draft_build", "draft_finalize"}:
                             draft_finalized = True

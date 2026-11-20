@@ -290,7 +290,7 @@ async def test_loop_exhaustion_distinguishes_working_draft_from_saved_version(
             }))
         if save_version:
             return tool_loop.ToolObservation(
-                json.dumps({"ok": True, "saved": True}), ok=True,
+                json.dumps({"ok": True, "saved": True}), ok=True, version_saved=True,
             )
         return "Composition validation failed"
 
