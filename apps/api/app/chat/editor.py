@@ -120,11 +120,11 @@ class ObjectArgs(BaseModel):
 class TranslateArgs(ObjectArgs):
     x: float = Field(
         allow_inf_nan=False,
-        description="Horizontal offset from the layout box, in canvas pixels; positive is right.",
+        description="Absolute offset of the layout box in canvas pixels, positive right. 0 restores its layout x.",
     )
     y: float = Field(
         allow_inf_nan=False,
-        description="Vertical offset from the layout box, in canvas pixels; positive is down.",
+        description="Absolute offset of the layout box in canvas pixels, positive down. 0 restores its layout y.",
     )
 
 
@@ -270,6 +270,7 @@ def _clip_facts(track, clip, content):
         "source": clip.source.model_dump(mode="json") if clip.source else None,
         "layout": obj.layout.model_dump() if getattr(obj, "layout", None) else None,
         "transform": transform.model_dump() if transform else None,
+        **({"fit": obj.fit} if hasattr(obj, "fit") else {}),
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
         **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
         **({"text": obj.text[:160]} if obj.kind == "text" else {}),
@@ -368,6 +369,8 @@ async def edit_clip(
             )
         updates = {"scale": args.value} if name == "scale" else {"x": args.x, "y": args.y}
         transform = target.object.transform.model_copy(update=updates)
+        extra["transform_before"] = target.object.transform.model_dump()
+        extra["transform_after"] = transform.model_dump()
         if transform == target.object.transform:
             raise ValueError("The object already has this transform.")
         op = UpdateClip(
@@ -595,6 +598,8 @@ async def execute_editor(turn, name, args):
                             c["clip_id"]: [c["start_seconds"], c["end_seconds"]]
                             for c in result["changed_clips"]
                         }
+                    if name in {"translate", "scale"}:
+                        receipt.update(transform_before=result["transform_before"], transform_after=result["transform_after"])
                     if name == "split_clip":
                         receipt["right_clip_id"] = result["right_clip_id"]
                     before = getattr(turn, "_editor_last_preview", None)
@@ -684,7 +689,7 @@ async def execute_editor(turn, name, args):
             if name != "preview_range":
                 raise ValueError("Unknown editor operation.")
             from app.editing.service import storyboard_block, video_version_read
-            from app.tools.video.preview import prepare_saved_video_scrub, saved_preview_media
+            from app.tools.video.preview import prepare_saved_video_scrub, saved_preview_media, source_framing
 
             read = await video_version_read(
                 db, owner_id=turn.project.user_id, version_id=version.id
@@ -712,6 +717,30 @@ async def execute_editor(turn, name, args):
             window = preview["scope"]["source_range_seconds"]
             if window not in windows:
                 windows.append(window)
+            # Keep one decoded contact sheet across a version change, only for
+            # the same work, observation window and actual sample times.
+            current_sheet = next((item for item in media if item.type == "image"), None)
+            prior_sheet = getattr(turn, "_editor_comparison_sheet", None)
+            sample_key = (str(composition.id), window, evidence["sample_seconds"])
+            if current_sheet is not None:
+                if prior_sheet and prior_sheet[0] == sample_key and prior_sheet[1] != version.id:
+                    historical = prior_sheet[2].model_copy(update={
+                        "caption": f"Earlier observation, version {prior_sheet[1]}. Compare the matching times with the current frames."
+                    })
+                    evidence["comparison"] = {
+                        "earlier_version_id": str(prior_sheet[1]), "earlier_mp4_sha256": prior_sheet[3],
+                        "current_version_id": str(version.id), "sample_seconds": evidence["sample_seconds"],
+                    }
+                    media = (historical, *media)
+                turn._editor_comparison_sheet = (sample_key, version.id, current_sheet, evidence["mp4_sha256"])
+            if current_sheet is not None and evidence.get("sample_seconds"):
+                framing, source_frame = await source_framing(
+                    db, turn.project.user_id, content_of(version), covered, evidence["sample_seconds"][0]
+                )
+                if framing:
+                    evidence["source_framing"] = framing
+                if source_frame:
+                    media = (*media, source_frame)
             turn._editor_last_preview = {
                 **base, "version_id": str(version.id), "mp4_sha256": evidence["mp4_sha256"],
                 "decision": current_group_id(), "window_seconds": window, "windows": windows,

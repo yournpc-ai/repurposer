@@ -529,6 +529,62 @@ async def render_preview(spec: dict) -> bytes:
     return response.content
 
 
+async def source_framing(db, owner_id, content, covered, sample_seconds):
+    """Compare a single static video layout with its fixed, uncropped source."""
+    from app.editing.timing import SOURCE_TIMEBASE
+    from app.models.tables import SourceSnapshot
+    from app.providers import storage
+    from app.tools.video.review import ReviewError, _decode_frame, _jpeg
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    visible = [clip for track in content.timeline.tracks if track.kind == "visual"
+               for clip in track.clips if clip.clip_id in covered]
+    if len(visible) != 1:
+        return None, None
+    clip = visible[0]
+    obj = clip.object
+    if obj.kind != "video" or not clip.source or not clip.source.source_range:
+        return None, None
+    snapshot = await db.get(SourceSnapshot, clip.source.snapshot_id)
+    if not snapshot or snapshot.owner_id != owner_id or snapshot.digest != clip.source.snapshot_digest:
+        return None, None
+    offset = Fraction(str(sample_seconds)) - Fraction(clip.range.start, content.settings.timebase)
+    target = Fraction(clip.source.source_range.start, SOURCE_TIMEBASE) + offset
+    try:
+        length = await storage.size(snapshot.storage_key)
+        if not length or length > 32 * 1024 * 1024:
+            return None, None
+        data = await storage.read(snapshot.storage_key)
+        if hashlib.sha256(data).hexdigest() != snapshot.digest:
+            return {"available": False, "reason": "Source digest mismatch."}, None
+        with av.open(io.BytesIO(data)) as container:
+            stream = container.streams.video[0]
+            frame, actual = _decode_frame(container, stream, target, Fraction(stream.average_rate or 30))
+            jpeg = _jpeg(frame)
+            width, height = frame.width, frame.height
+            square_upright = not frame.rotation and (stream.sample_aspect_ratio or 1) == 1
+    except (OSError, IndexError, ReviewError, BotoCoreError, ClientError, av.FFmpegError):
+        return {"available": False, "reason": "Could not decode fixed source reference."}, None
+
+    facts = {"snapshot_id": str(snapshot.id), "source_seconds": float(actual),
+             "source_pixels": [width, height], "fit": obj.fit, "transform": obj.transform.model_dump()}
+    # For contain, the source is centered inside its layout box before the
+    # renderer's origin-relative scale and canvas-space translation.
+    if square_upright and obj.fit == "contain" and not obj.transform.rotation and not clip.animations:
+        box, tr = obj.layout, obj.transform
+        ratio = min(box.width / width, box.height / height)
+        ox, oy = (box.width / 2, box.height / 2) if tr.origin == "center" else (0, 0)
+        x = box.x + tr.x + ox + ((box.width - width * ratio) / 2 - ox) * tr.scale
+        y = box.y + tr.y + oy + ((box.height - height * ratio) / 2 - oy) * tr.scale
+        right, bottom = x + width * ratio * tr.scale, y + height * ratio * tr.scale
+        facts["source_bounds_canvas_px"] = [round(v, 2) for v in (x, y, right, bottom)]
+        facts["canvas_px"] = [content.settings.width, content.settings.height]
+        facts["whole_source_inside_canvas"] = x >= 0 and y >= 0 and right <= content.settings.width and bottom <= content.settings.height
+    return facts, MediaInput(type=MediaInputType.IMAGE, mime="image/jpeg",
+                             caption=f"Uncropped SOURCE at {float(actual):g}s, before fit or transform. Compare with the rendered composition.",
+                             data_url="data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"))
+
+
 async def saved_preview_media(preview: dict, version_id: UUID):
     """Return the actual playback range and identify the media delivered to the model."""
     from app.providers.llm import get_llm_client
@@ -590,7 +646,7 @@ async def saved_preview_media(preview: dict, version_id: UUID):
         sheet.save(out, format="JPEG", quality=90)
         media.append(MediaInput(
             type=MediaInputType.IMAGE, mime="image/jpeg",
-            caption="Frames decoded from this playback, labelled with absolute composition seconds.",
+            caption=f"Current frames decoded from version {version_id}, labelled with absolute composition seconds.",
             data_url="data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode("ascii"),
         ))
     evidence = {
