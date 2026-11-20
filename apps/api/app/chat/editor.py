@@ -715,6 +715,8 @@ async def execute_editor(turn, name, args):
             if name in {"export_video", "generate_music", "generate_voice", "generate_image"}:
                 from app.chat.editor_media import generate_media
 
+                # Submission rechecks ownership and head in its own transaction.
+                await db.close()
                 return await generate_media(turn, name, args, composition, version)
             if name != "preview_range":
                 raise ValueError("Unknown editor operation.")
@@ -730,6 +732,8 @@ async def execute_editor(turn, name, args):
             preview = read["video_preview"]
             if preview["status"] != "ready":
                 raise ValueError(preview.get("reason") or preview["status"])
+            # The renderer consumes the prepared immutable specification.
+            await db.close()
             media, evidence = await saved_preview_media(preview, version.id)
             covered = set(preview["scope"]["clip_ids"])
             sources = {

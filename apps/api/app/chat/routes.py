@@ -1052,6 +1052,9 @@ async def send_chat_message(
                 status.HTTP_502_BAD_GATEWAY,
                 user_error_line(e, current_ui_language() or "en"),
             ) from e
+    # The generator owns a separate session. Release the preflight read
+    # before a long-lived response can occupy a second pool connection.
+    await db.close()
     return StreamingResponse(
         _turn_stream(
             UUID(str(current_user.id)), data, current_ui_language() or "en"
