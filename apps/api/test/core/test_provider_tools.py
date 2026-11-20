@@ -1191,9 +1191,14 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     assert "complete project and an unrelated asset" not in edited.context
     assert "title-second" not in edited.context
     assert edited.include_observation_media
-    presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True)
+    presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True,
+                              user_text="Review the draft and deliver the MP4")
     assert presenting.caller_state["video_target"] == saved
     assert EDITOR_NAMES <= {tool.name for tool in presenting.tools}
+
+    draft_only = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True,
+                             user_text="请保存初稿给我看。")
+    assert {t.name for t in draft_only.tools} == {"answer"}
 
     other = _composition_resource(suffix="two")
     ambiguous = _video_round(

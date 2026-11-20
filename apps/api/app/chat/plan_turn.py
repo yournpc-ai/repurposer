@@ -1037,7 +1037,7 @@ class PlanTurn:
                 "or paste their transcript to unlock them, or ask for the "
                 "text work only."
             )
-        has_root = any(t.tool == "produce_video" for t in params.tasks) or (
+        has_root = (
             bool((merged_brief.topic.value or "").strip())
             # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
             # user skipped the topic ask is not a root — the skip chose

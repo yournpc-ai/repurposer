@@ -20,6 +20,7 @@ from app.editing.store import (
     content_of,
     get_video_version,
 )
+from app.editing.temporal import timeline_duration
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import VideoRangeScrubTarget, canonical_json_hash
@@ -382,7 +383,7 @@ async def edit_clip(
             if (target.object.kind not in {"text", "image", "shape"} or target.animations
                     or target.linked_group_id or getattr(target.object, "caption", None)
                     or (target.source and target.source.source_range)
-                    or target.range.end != max(c.range.end for _, c in entries)):
+                    or target.range.end != timeline_duration(content)):
                 raise ValueError("Select an unanimated, unlinked closing still or title at the end of this work.")
             end = target.range.end + _ticks(args.seconds, rate)
             scene = next((s for s in content.scenes if s.scene_id == target.scene_id), None)

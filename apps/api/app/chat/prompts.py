@@ -1,6 +1,7 @@
 """Render the four existing Chat routes and their shared video rounds."""
 
 import json
+import re
 from copy import deepcopy
 from dataclasses import replace
 from typing import Literal
@@ -112,12 +113,20 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     snapshot = facts.get("snapshot")
     resources = list(getattr(snapshot, "resources", ()) or ())
     works = [r for _, r in resources if r.get("kind") == "composition"]
-    if facts.get("draft_finalized") and not works:
+    user_text = facts.get("user_text") or ""
+    draft_requested = re.search(r"初稿|草稿|分镜|\b(?:draft|storyboard)\b", user_text, re.I)
+    additional_work = re.search(
+        r"审片|检查|复看|修订|导出|交付|成片|\b(?:review|check|revise|render|export|deliver|mp4)\b",
+        re.sub(r"不(?:要|用|需要)?(?:导出|交付|制作成片)|(?:do not|don't) (?:export|deliver|render)", "", user_text, flags=re.I),
+        re.I,
+    )
+    if facts.get("draft_finalized") and (not works or (draft_requested and not additional_work
+                                                       and not facts.get("production_requested"))):
         presentation = jinja_env.get_template("chat/_video_presentation.j2").render()
         return RoundAssembly(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
             system=(
-                "用用户在本次对话中使用的语言作答。已审阅的草稿已经保存。根据 design_video 的结果在正文中展示该保存版本，然后调用 answer。\n" + presentation
+                "用用户在本次对话中使用的语言作答。草稿已经保存。根据 design_video 的结果在正文中展示该保存版本，然后调用 answer。\n" + presentation
             ),
             context="当前视频轮次（目标和状态由服务端提供）：\n{\"video_stage\": \"draft_present\"}",
             stage="draft_present", include_project_context=False,
