@@ -1,0 +1,461 @@
+{
+  "7af88e30-334d-4b2e-a229-50ef71908471": [
+    {
+      "version": 2,
+      "base": "7af88e30-334d-4b2e-a229-50ef71908471",
+      "id": "6744cbde-e36a-40b5-88ae-9331e7c501b9",
+      "digest": "4734aa03fe9cf97473e7c744cc2ad4857c547d137fd72d036ea02aa12ec2ce60",
+      "request": "c48ffeb0-c6f6-5cd0-a927-07cf535a2b2d",
+      "unchanged_clip_sha256": {
+        "elm_a": "37a85b6b2890620268851a9482efef18c87919dade2f5ddedf3d868ea4ce810f",
+        "elm_b": "a2e74e163657ee814ca93667659d91bf09338c6fb52ac45a91d1165246ecc5c1",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "81ff8c74470e7fd20138a28620b1e25036777fcd7f62ac5712063c1515113da0",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "clp_c48ffeb0c6f65cd0a92707cf535a2b2d": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 315000,
+              "start": 0
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": 0.0,
+              "object_id": "obj_c48ffeb0c6f65cd0a92707cf535a2b2d"
+            },
+            "source": {
+              "snapshot_id": "f0f2df40-c6e9-504c-a496-3d824a4ba104",
+              "source_range": {
+                "end": 315000,
+                "start": 0
+              },
+              "snapshot_digest": "f5324fc60e0f522d0378b6080c70bfcbd1c269196fc9622a8a2a92a63cac994e"
+            },
+            "clip_id": "clp_c48ffeb0c6f65cd0a92707cf535a2b2d",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "6744cbde-e36a-40b5-88ae-9331e7c501b9",
+      "id": "1f90de04-51bc-4c71-9e80-aa84c3ac9664",
+      "digest": "f1595f8428be87e5bc946d04c9235cf0647bfa4376afcf7bc010d189e0c1650c",
+      "request": "a590daef-a572-5798-be4b-14258b0f0814",
+      "unchanged_clip_sha256": {
+        "elm_a": "37a85b6b2890620268851a9482efef18c87919dade2f5ddedf3d868ea4ce810f",
+        "elm_b": "a2e74e163657ee814ca93667659d91bf09338c6fb52ac45a91d1165246ecc5c1",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "81ff8c74470e7fd20138a28620b1e25036777fcd7f62ac5712063c1515113da0",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7",
+        "clp_c48ffeb0c6f65cd0a92707cf535a2b2d": "5d53e1ce59a901dc89740aba0ae5f4d9ea9779462de82f848774d0212916515e"
+      },
+      "changed": {
+        "clp_a590daefa5725798be4b14258b0f0814": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 876735,
+              "start": 720000
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": -4.0,
+              "object_id": "obj_a590daefa5725798be4b14258b0f0814"
+            },
+            "source": {
+              "snapshot_id": "8b971570-8fd6-5b0f-b781-1aa6a33e82f1",
+              "source_range": {
+                "end": 156735,
+                "start": 0
+              },
+              "snapshot_digest": "c0e5c980d26b0fda4d36c3428ad5e66b28ee0db88acf40d99d5131e6ae23461a"
+            },
+            "clip_id": "clp_a590daefa5725798be4b14258b0f0814",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ],
+  "00bcc9f2-419d-4e55-9a33-7e1e514a7767": [
+    {
+      "version": 2,
+      "base": "00bcc9f2-419d-4e55-9a33-7e1e514a7767",
+      "id": "4dd83989-d083-425f-b32e-2bdd7e622784",
+      "digest": "2591210148055da3e8c351e3c669874b5b44b1d819d83b9c80b2270572d07214",
+      "request": "3250562e-c120-58a5-b709-285253856fe1",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "clp_3250562ec12058a5b709285253856fe1": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 202711,
+              "start": 0
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": 0.0,
+              "object_id": "obj_3250562ec12058a5b709285253856fe1"
+            },
+            "source": {
+              "snapshot_id": "e931c898-dd3d-565f-a6fa-f32a4a932e90",
+              "source_range": {
+                "end": 202711,
+                "start": 0
+              },
+              "snapshot_digest": "5d065571e98fc5f451298e1c3dd369d90e7d368f7feae2c750888b6b626935a0"
+            },
+            "clip_id": "clp_3250562ec12058a5b709285253856fe1",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "4dd83989-d083-425f-b32e-2bdd7e622784",
+      "id": "b0922d90-548d-49d5-aebb-b83521a21060",
+      "digest": "38dbb8928e24b625da1a4b53e5edad85981df2f7f47bff02e4118d67b3226b1a",
+      "request": "775e7bd8-86e6-555e-9270-953cf358c7d8",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7",
+        "clp_3250562ec12058a5b709285253856fe1": "3d68cb3d588c9aeeef678cbea96be8b3ca7345a84aeba5cb0b4ba6c15b52bd51"
+      },
+      "changed": {
+        "clp_775e7bd886e6555e9270953cf358c7d8": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 540000,
+              "start": 0
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": -12.0,
+              "object_id": "obj_775e7bd886e6555e9270953cf358c7d8"
+            },
+            "source": {
+              "snapshot_id": "26a027ff-9bdb-59c5-ba01-22a25b85f7ca",
+              "source_range": {
+                "end": 540000,
+                "start": 0
+              },
+              "snapshot_digest": "c77deff46b9c98638e178bc7ca08c9ca8d5b52335102e0ad220f2194fbe6afbe"
+            },
+            "clip_id": "clp_775e7bd886e6555e9270953cf358c7d8",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 4,
+      "base": "b0922d90-548d-49d5-aebb-b83521a21060",
+      "id": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+      "digest": "2a4f47bf83d853dcfdd77f0f46b306f2b4988916f039b2cda41937c1aefb24a7",
+      "request": "73d5a2a0-c526-5583-b45a-f577990490d3",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7",
+        "clp_3250562ec12058a5b709285253856fe1": "3d68cb3d588c9aeeef678cbea96be8b3ca7345a84aeba5cb0b4ba6c15b52bd51",
+        "clp_775e7bd886e6555e9270953cf358c7d8": "d49349a4d6694e98f69a27f7467038752bb291c334d841ae5d66aa5935afbb10"
+      },
+      "changed": {
+        "clp_73d5a2a0c5265583b45af577990490d3": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 1271250,
+              "start": 900000
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": -16.0,
+              "object_id": "obj_73d5a2a0c5265583b45af577990490d3"
+            },
+            "source": {
+              "snapshot_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+              "source_range": {
+                "end": 371250,
+                "start": 0
+              },
+              "snapshot_digest": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7"
+            },
+            "clip_id": "clp_73d5a2a0c5265583b45af577990490d3",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 5,
+      "base": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+      "id": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+      "digest": "73a823fc5caa143af255a89de90bf9e8c0bda26defa90f418ccf4a8d3f5e1581",
+      "request": "b0134f41-7493-53de-a185-5c7dcb7577e3",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7",
+        "clp_3250562ec12058a5b709285253856fe1": "3d68cb3d588c9aeeef678cbea96be8b3ca7345a84aeba5cb0b4ba6c15b52bd51",
+        "clp_775e7bd886e6555e9270953cf358c7d8": "d49349a4d6694e98f69a27f7467038752bb291c334d841ae5d66aa5935afbb10",
+        "clp_73d5a2a0c5265583b45af577990490d3": "2f728fd1ecfa7f9ada30afeb8bbfc1661ba1a3c7284ee9986d3b774ac328822a"
+      },
+      "changed": {
+        "clp_b0134f41749353dea1855c7dcb7577e3": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 1575000,
+              "start": 1350000
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": -18.0,
+              "object_id": "obj_b0134f41749353dea1855c7dcb7577e3"
+            },
+            "source": {
+              "snapshot_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+              "source_range": {
+                "end": 225000,
+                "start": 0
+              },
+              "snapshot_digest": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1"
+            },
+            "clip_id": "clp_b0134f41749353dea1855c7dcb7577e3",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 6,
+      "base": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+      "id": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+      "digest": "f84221d9bf812973de22f9187286c78cb7c14cf12769a5f643c12485b5231b30",
+      "request": "d26d04af-3e85-59d3-b6de-48ea3de9474d",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7",
+        "clp_3250562ec12058a5b709285253856fe1": "3d68cb3d588c9aeeef678cbea96be8b3ca7345a84aeba5cb0b4ba6c15b52bd51",
+        "clp_775e7bd886e6555e9270953cf358c7d8": "d49349a4d6694e98f69a27f7467038752bb291c334d841ae5d66aa5935afbb10",
+        "clp_73d5a2a0c5265583b45af577990490d3": "2f728fd1ecfa7f9ada30afeb8bbfc1661ba1a3c7284ee9986d3b774ac328822a",
+        "clp_b0134f41749353dea1855c7dcb7577e3": "50e4a7124e63b2b8011cbff6eea27bee1b95197c0f38b6ecc47889afbff5d736"
+      },
+      "changed": {
+        "clp_d26d04af3e8559d3b6de48ea3de9474d": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 787500,
+              "start": 630000
+            },
+            "object": {
+              "kind": "audio",
+              "gain_db": -15.0,
+              "object_id": "obj_d26d04af3e8559d3b6de48ea3de9474d"
+            },
+            "source": {
+              "snapshot_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+              "source_range": {
+                "end": 157500,
+                "start": 0
+              },
+              "snapshot_digest": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25"
+            },
+            "clip_id": "clp_d26d04af3e8559d3b6de48ea3de9474d",
+            "scene_id": null,
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": false,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 7,
+      "base": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+      "id": "610095e7-868f-496f-99d8-fbb8ed7ed5c6",
+      "digest": "2d1740f6f8fd0b99c5830e19011ed9ba3dda76b62276f2963ff19e0fd448e3e8",
+      "request": "independent-subtitle-during-generation",
+      "unchanged_clip_sha256": {
+        "elm_a": "845ac684700bd269e7afdeec3c11ce11c850bb3b7f5f8242315fe2bd754d5ca9",
+        "elm_b": "ad0eb6d4ec2903042a1f1e5b7822cbb5b672fac65aed7759e3e14b85e445ff93",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "a58888aa76061d6898ad7e52a683640eade70adec8480e40eea5bf9b9c8ea8a8",
+        "clp_3250562ec12058a5b709285253856fe1": "3d68cb3d588c9aeeef678cbea96be8b3ca7345a84aeba5cb0b4ba6c15b52bd51",
+        "clp_775e7bd886e6555e9270953cf358c7d8": "d49349a4d6694e98f69a27f7467038752bb291c334d841ae5d66aa5935afbb10",
+        "clp_73d5a2a0c5265583b45af577990490d3": "2f728fd1ecfa7f9ada30afeb8bbfc1661ba1a3c7284ee9986d3b774ac328822a",
+        "clp_b0134f41749353dea1855c7dcb7577e3": "50e4a7124e63b2b8011cbff6eea27bee1b95197c0f38b6ecc47889afbff5d736",
+        "clp_d26d04af3e8559d3b6de48ea3de9474d": "ab676a4f1cef70df8862fa811da745aa9fbe5e9a49d4f098f51e8505ca54ddbc"
+      },
+      "changed": {
+        "subtitle_line": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "kind": "text",
+              "text": "Inside the studio",
+              "style": {
+                "font": {
+                  "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                  "font_id": "noto-sans-sc"
+                },
+                "align": "center",
+                "color": "#FFFFFF",
+                "shadow": null,
+                "stroke": null,
+                "weight": 600,
+                "font_size": 17,
+                "background": "#151515",
+                "line_height": 1.2,
+                "letter_spacing": 0.0
+              },
+              "layout": {
+                "x": 8.0,
+                "y": 148.0,
+                "width": 304.0,
+                "height": 30.0
+              },
+              "caption": null,
+              "opacity": 1.0,
+              "object_id": "caption_text",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              },
+              "layout_version": "explicit-line-inline-v1",
+              "segmentation_version": "scalar-grapheme-v1"
+            },
+            "source": null,
+            "clip_id": "subtitle_line",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "kind": "text",
+              "text": "Inside the recording studio",
+              "style": {
+                "font": {
+                  "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                  "font_id": "noto-sans-sc"
+                },
+                "align": "center",
+                "color": "#FFFFFF",
+                "shadow": null,
+                "stroke": null,
+                "weight": 600,
+                "font_size": 17,
+                "background": "#151515",
+                "line_height": 1.2,
+                "letter_spacing": 0.0
+              },
+              "layout": {
+                "x": 8.0,
+                "y": 148.0,
+                "width": 304.0,
+                "height": 30.0
+              },
+              "caption": null,
+              "opacity": 1.0,
+              "object_id": "caption_text",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              },
+              "layout_version": "explicit-line-inline-v1",
+              "segmentation_version": "scalar-grapheme-v1"
+            },
+            "source": null,
+            "clip_id": "subtitle_line",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ]
+}

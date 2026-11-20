@@ -1,0 +1,404 @@
+{
+  "approval-a6d893f625.mp4": {
+    "sha256": "a6d893f62529f4f78333037699cca337d52faeb64e1bac3da2a34e368f4f93ca",
+    "bytes": 101547,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 3.562,
+    "audio_frames": 167,
+    "video_frames": 105,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 171008,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 171008
+        },
+        "duration_seconds": 3.562666666666667
+      },
+      "pcm_stats": {
+        "rms": 0.1164839773580687,
+        "peak": 0.6745927929878235,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.1,
+        "true_peak_dbtp": -3.4
+      }
+    }
+  },
+  "approval-c1dcdefea6.jpg": {
+    "sha256": "c1dcdefea62396bbb4c9d2bb6c69c522427fb540da49d5c663b1b46bed19263e",
+    "bytes": 14571,
+    "size": [
+      640,
+      200
+    ]
+  },
+  "authorized-voice-0130789b3c.jpg": {
+    "sha256": "0130789b3c336db988c5f56195e546558cec6a199260fbe6d1ff7d4708011030",
+    "bytes": 7620,
+    "size": [
+      320,
+      200
+    ]
+  },
+  "authorized-voice-1139f7016d.mp4": {
+    "sha256": "1139f7016d9724c1d451432f3b306a819e95dcc8dfc863fc36d2e2891645933a",
+    "bytes": 85457,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 3.05,
+    "audio_frames": 143,
+    "video_frames": 90,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 146432,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 146432
+        },
+        "duration_seconds": 3.050666666666667
+      },
+      "pcm_stats": {
+        "rms": 0.12131132339622724,
+        "peak": 0.5587508678436279,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.0,
+        "true_peak_dbtp": -5.0
+      }
+    }
+  },
+  "fault3-preview-06d327b72e.mp4": {
+    "sha256": "06d327b72ead72c9cc5b86844852d268048a1bca48fe438baf317eae558068c6",
+    "bytes": 135543,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 3.05,
+    "audio_frames": 143,
+    "video_frames": 90,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 146432,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 146432
+        },
+        "duration_seconds": 3.050666666666667
+      },
+      "pcm_stats": {
+        "rms": 0.1145561404805729,
+        "peak": 0.5630446076393127,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -15.8,
+        "true_peak_dbtp": -5.0
+      }
+    }
+  },
+  "fault3-preview-75e3d45134.jpg": {
+    "sha256": "75e3d45134002772deead6df1f93057db20785cd7a93d65878894b4decf509cb",
+    "bytes": 10002,
+    "size": [
+      320,
+      200
+    ]
+  },
+  "fault4-3667f9ec99.mp4": {
+    "sha256": "3667f9ec998252cbfb973ae28dd947a31c1de040657f7b6f56b676b797ed33a0",
+    "bytes": 60450,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 2.048,
+    "audio_frames": 96,
+    "video_frames": 60,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 98304,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 98304
+        },
+        "duration_seconds": 2.048
+      },
+      "pcm_stats": {
+        "rms": 0.11715560270890833,
+        "peak": 0.5665549635887146,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.0,
+        "true_peak_dbtp": -4.9
+      }
+    }
+  },
+  "fault4-d20d715da1.jpg": {
+    "sha256": "d20d715da1e3055db07c251d24b15de64bb5a1b4e3ecb1be848d0d2953c7d8bb",
+    "bytes": 7601,
+    "size": [
+      320,
+      200
+    ]
+  },
+  "image-only-c678d52eb2.png": {
+    "sha256": "c678d52eb2aed9ea45d84bef89844dfc3119f89c61dd1d22a03b45c04325239d",
+    "bytes": 1172520,
+    "size": [
+      1920,
+      1080
+    ]
+  },
+  "mix-a4c3a33a35.mp4": {
+    "sha256": "a4c3a33a35545871fee4aec3046e5915a900696273a52c837fa3c5af52b187fb",
+    "bytes": 113745,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 4.053,
+    "audio_frames": 190,
+    "video_frames": 120,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 194560,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 194560
+        },
+        "duration_seconds": 4.053333333333334
+      },
+      "pcm_stats": {
+        "rms": 0.1169783913582245,
+        "peak": 0.708573043346405,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.1,
+        "true_peak_dbtp": -3.0
+      }
+    }
+  },
+  "mix-f27f10a434.jpg": {
+    "sha256": "f27f10a43400a2b3e519d4b1d3701fb86fa15293d88645c62221fe256b6a6d4e",
+    "bytes": 14576,
+    "size": [
+      640,
+      200
+    ]
+  },
+  "music-1e24c800d6.wav": {
+    "sha256": "1e24c800d64b1593ba9d62f2663611da044772ff1307fccc51115edcb59aff1f",
+    "bytes": 408044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 2.125,
+    "audio_frames": 25
+  },
+  "music-28972b9f9a.wav": {
+    "sha256": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25",
+    "bytes": 336044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 1.75,
+    "audio_frames": 21
+  },
+  "music-33cd393133.wav": {
+    "sha256": "33cd393133527e499819f540d79663af39a1a672de3874030c48b8d424c16b53",
+    "bytes": 1152044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 6.0,
+    "audio_frames": 71
+  },
+  "music-664b04f6dc.wav": {
+    "sha256": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1",
+    "bytes": 480044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 2.5,
+    "audio_frames": 30
+  },
+  "music-c77deff46b.wav": {
+    "sha256": "c77deff46b9c98638e178bc7ca08c9ca8d5b52335102e0ad220f2194fbe6afbe",
+    "bytes": 1152044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 6.0,
+    "audio_frames": 71
+  },
+  "music-ea5f6ebbad.wav": {
+    "sha256": "ea5f6ebbadaa0143839a88f76fbc9e9d541534134389fa980887679ade92b1aa",
+    "bytes": 936044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 4.875,
+    "audio_frames": 58
+  },
+  "music-ed0ebf7a74.wav": {
+    "sha256": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7",
+    "bytes": 792044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 4.125,
+    "audio_frames": 49
+  },
+  "music-f5324fc60e.wav": {
+    "sha256": "f5324fc60e0f522d0378b6080c70bfcbd1c269196fc9622a8a2a92a63cac994e",
+    "bytes": 672044,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 3.5,
+    "audio_frames": 42
+  },
+  "narration-3197af3456.mp3": {
+    "sha256": "3197af3456ddde065056258a2ad1379b14f7f37d013e179f7cb8cd3952961cab",
+    "bytes": 33972,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 1.962094,
+    "audio_frames": 56
+  },
+  "narration-5d065571e9.mp3": {
+    "sha256": "5d065571e98fc5f451298e1c3dd369d90e7d368f7feae2c750888b6b626935a0",
+    "bytes": 38580,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 2.252344,
+    "audio_frames": 64
+  },
+  "narration-c0e5c980d2.mp3": {
+    "sha256": "c0e5c980d26b0fda4d36c3428ad5e66b28ee0db88acf40d99d5131e6ae23461a",
+    "bytes": 30516,
+    "streams": [
+      "audio"
+    ],
+    "container_seconds": 1.7415,
+    "audio_frames": 50
+  },
+  "svg-9f338226bd.png": {
+    "sha256": "9f338226bd766d3aa9124383f2a51e0515c5b3ac3e2587cf509a0f20ae2e08e5",
+    "bytes": 16523,
+    "size": [
+      1920,
+      1080
+    ]
+  },
+  "voice-0d8bef02e4.mp4": {
+    "sha256": "0d8bef02e45465577e01632e3e07357ce90a20878e5c570b6e2ec7f38435acb1",
+    "bytes": 308173,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 12.053,
+    "audio_frames": 565,
+    "video_frames": 360,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 578560,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 578560
+        },
+        "duration_seconds": 12.053333333333333
+      },
+      "pcm_stats": {
+        "rms": 0.11372054248007757,
+        "peak": 0.5978583097457886,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.0,
+        "true_peak_dbtp": -4.5
+      }
+    }
+  },
+  "voice-0ee5d57dfd.mp4": {
+    "sha256": "0ee5d57dfde8cc5dd5a98eb3d8d2f002eba16b72a5643648d9c0918c43d73e6f",
+    "bytes": 34356,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "container_seconds": 1.045,
+    "audio_frames": 49,
+    "video_frames": 30,
+    "mix": {
+      "decode": {
+        "fully_decoded": true,
+        "sample_count": 50176,
+        "actual_range_samples": {
+          "start": 0,
+          "end": 50176
+        },
+        "duration_seconds": 1.0453333333333332
+      },
+      "pcm_stats": {
+        "rms": 0.11563673271250396,
+        "peak": 0.6970537900924683,
+        "clipped_sample_count": 0,
+        "clipped_sample_ratio": 0.0,
+        "is_silent": false
+      },
+      "loudness": {
+        "integrated_lufs": -16.0,
+        "true_peak_dbtp": -3.1
+      }
+    }
+  },
+  "voice-13090b2594.jpg": {
+    "sha256": "13090b2594ffa95ed4094fab2fed4ae3f6be798e5006920f7d6db24656e0c0c8",
+    "bytes": 16819,
+    "size": [
+      640,
+      400
+    ]
+  },
+  "voice-dcaa884d47.jpg": {
+    "sha256": "dcaa884d47f040a60afd591b8a70f3becb9d361f24a5aa3892f0eb9daa87c90e",
+    "bytes": 7612,
+    "size": [
+      320,
+      200
+    ]
+  }
+}

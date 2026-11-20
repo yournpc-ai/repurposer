@@ -1,0 +1,306 @@
+{
+  "turns": {
+    "music": {
+      "requests": 2,
+      "prompt_tokens": 8500,
+      "completion_tokens": 246,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "voice": {
+      "requests": 16,
+      "prompt_tokens": 125133,
+      "completion_tokens": 5525,
+      "native_calls": 16,
+      "rejections": [
+        {
+          "iteration": 14,
+          "tool_name": "answer",
+          "kind": "execute_guardrail",
+          "detail": "an empty reply says nothing — speak the answer as your message text, then call answer."
+        }
+      ],
+      "activity_statuses": {
+        "active": 14,
+        "completed": 7,
+        "failed": 8
+      }
+    },
+    "voice-reuse": {
+      "requests": 2,
+      "prompt_tokens": 9178,
+      "completion_tokens": 252,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "image": {
+      "requests": 2,
+      "prompt_tokens": 9945,
+      "completion_tokens": 603,
+      "native_calls": 2,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "failed": 1
+      }
+    },
+    "image-only": {
+      "requests": 2,
+      "prompt_tokens": 12542,
+      "completion_tokens": 254,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "mix": {
+      "requests": 9,
+      "prompt_tokens": 62001,
+      "completion_tokens": 1238,
+      "native_calls": 9,
+      "rejections": [
+        {
+          "iteration": 1,
+          "tool_name": "generate_voice",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 7,
+        "completed": 7
+      }
+    },
+    "fault": {
+      "requests": 1,
+      "prompt_tokens": 5741,
+      "completion_tokens": 101,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1
+      }
+    },
+    "approval": {
+      "requests": 6,
+      "prompt_tokens": 41982,
+      "completion_tokens": 1038,
+      "native_calls": 6,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "generate_music",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 4,
+        "completed": 4
+      }
+    },
+    "authorized-voice": {
+      "requests": 7,
+      "prompt_tokens": 53107,
+      "completion_tokens": 1062,
+      "native_calls": 7,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "generate_voice",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 5,
+        "completed": 5
+      }
+    },
+    "music-reuse": {
+      "requests": 3,
+      "prompt_tokens": 18699,
+      "completion_tokens": 674,
+      "native_calls": 2,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 2,
+        "completed": 2
+      }
+    },
+    "alignment-ready": {
+      "requests": 3,
+      "prompt_tokens": 20463,
+      "completion_tokens": 603,
+      "native_calls": 2,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 2,
+        "completed": 2
+      }
+    },
+    "fault2": {
+      "requests": 13,
+      "prompt_tokens": 103733,
+      "completion_tokens": 988,
+      "native_calls": 13,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "inspect_timeline",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 2,
+        "completed": 1
+      }
+    },
+    "fault3": {
+      "requests": 12,
+      "prompt_tokens": 96200,
+      "completion_tokens": 1062,
+      "native_calls": 12,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "generate_music",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 1
+      }
+    },
+    "fault3-preview": {
+      "requests": 4,
+      "prompt_tokens": 30029,
+      "completion_tokens": 541,
+      "native_calls": 4,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "inspect_timeline",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 2,
+        "completed": 2
+      }
+    },
+    "fault4": {
+      "requests": 6,
+      "prompt_tokens": 42609,
+      "completion_tokens": 731,
+      "native_calls": 6,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "generate_music",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 1
+      }
+    },
+    "mix-levels": {
+      "requests": 7,
+      "prompt_tokens": 74643,
+      "completion_tokens": 875,
+      "native_calls": 6,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 6,
+        "completed": 6
+      }
+    },
+    "svg": {
+      "requests": 2,
+      "prompt_tokens": 15615,
+      "completion_tokens": 229,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "svg-reuse": {
+      "requests": 2,
+      "prompt_tokens": 15669,
+      "completion_tokens": 226,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "declined-voice": {
+      "requests": 1,
+      "prompt_tokens": 6231,
+      "completion_tokens": 631,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {}
+    },
+    "decline-gate": {
+      "requests": 1,
+      "prompt_tokens": 6226,
+      "completion_tokens": 79,
+      "native_calls": 1,
+      "rejections": [],
+      "activity_statuses": {
+        "active": 1,
+        "completed": 1
+      }
+    },
+    "stale": {
+      "requests": 2,
+      "prompt_tokens": 12912,
+      "completion_tokens": 723,
+      "native_calls": 3,
+      "rejections": [
+        {
+          "iteration": 0,
+          "tool_name": "generate_music",
+          "kind": "execute_guardrail",
+          "detail": "未执行本批工具。请一次调用一个工具。"
+        }
+      ],
+      "activity_statuses": {
+        "active": 1
+      }
+    }
+  },
+  "chat_metered_usd": 0.115957,
+  "ledger_amounts": {
+    "capture": -14,
+    "release": 15,
+    "grant": 2000,
+    "hold": -15
+  },
+  "media_runs": 13,
+  "step_metered_usd": 0.01367435,
+  "provider_units": {
+    "tts_chars": 87.0,
+    "images": 1.0
+  },
+  "wire_chat_priced_usd": 0.1262823
+}

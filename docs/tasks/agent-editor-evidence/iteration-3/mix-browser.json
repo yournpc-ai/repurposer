@@ -1,0 +1,69 @@
+{
+  "message": "b902fd85-523b-46a5-bccb-3437d009feac",
+  "version": "b0922d90-548d-49d5-aebb-b83521a21060",
+  "error": null,
+  "before": {
+    "media": [
+      {
+        "tag": "VIDEO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 11.823852,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/pricing-talk-source.mp4#t=10,13"
+      },
+      {
+        "tag": "AUDIO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 1.866546,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/source-snapshots/5d065571e98fc5f451298e1c3dd369d90e7d368f7feae2c750888b6b626935a0.mp3"
+      },
+      {
+        "tag": "AUDIO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 1.845222,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/source-snapshots/c77deff46b9c98638e178bc7ca08c9ca8d5b52335102e0ad220f2194fbe6afbe.wav"
+      }
+    ],
+    "playing": true
+  },
+  "after": {
+    "media": [
+      {
+        "tag": "VIDEO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 11.831479,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/pricing-talk-source.mp4#t=10,13"
+      },
+      {
+        "tag": "AUDIO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 1.874181,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/source-snapshots/5d065571e98fc5f451298e1c3dd369d90e7d368f7feae2c750888b6b626935a0.mp3"
+      },
+      {
+        "tag": "AUDIO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 1.810173,
+        "error": null,
+        "src": "http://127.0.0.1:19023/editor-i3/source-snapshots/c77deff46b9c98638e178bc7ca08c9ca8d5b52335102e0ad220f2194fbe6afbe.wav"
+      }
+    ],
+    "playing": true
+  }
+}

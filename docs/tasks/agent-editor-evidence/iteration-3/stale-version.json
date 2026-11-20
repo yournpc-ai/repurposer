@@ -1,0 +1,30 @@
+{
+  "change": {
+    "turn": "f4c9f6a5-a9a4-4d88-a94a-75bca70aa353",
+    "run": "99a7928b-21d0-41e3-938c-c1527620f3c1",
+    "receipt": "af6e5286-71f0-4102-b781-188df6dce5b9",
+    "original": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+    "head": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+    "state": "in_flight",
+    "run_status": "pending",
+    "independent_head": "610095e7-868f-496f-99d8-fbb8ed7ed5c6"
+  },
+  "after": {
+    "turn": "f4c9f6a5-a9a4-4d88-a94a-75bca70aa353",
+    "run": "99a7928b-21d0-41e3-938c-c1527620f3c1",
+    "receipt": "af6e5286-71f0-4102-b781-188df6dce5b9",
+    "original": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+    "head": "610095e7-868f-496f-99d8-fbb8ed7ed5c6",
+    "state": "failed",
+    "run_status": "completed",
+    "snapshot": "5ea804bb-e4bd-5ba1-a363-691cab58bdc2",
+    "step_attempts": [
+      1
+    ],
+    "bound": false,
+    "recovery_speech": [
+      "配乐已生成，可以试听。",
+      "素材已保存。生成期间影片已有新版本，请在当前版本选择插入位置。"
+    ]
+  }
+}

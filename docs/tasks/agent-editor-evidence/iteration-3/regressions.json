@@ -1,0 +1,21 @@
+{
+  "source": "fdcb378e",
+  "api": {
+    "command": "python -m pytest -q test/core",
+    "result": "508 passed, 4 warnings in 48.68s",
+    "warnings": "===============================\ntest/core/test_compositions.py::test_design_save_requires_an_existing_draft_and_no_new_content_writes\n  test/core/test_compositions.py:305: PytestWarning: The test <Function test_design_save_requires_an_existing_draft_and_no_new_content_writes> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.\n    def test_design_save_requires_an_existing_draft_and_no_new_content_writes():\n\ntest/core/test_compositions.py::test_focus_repair_loads_music_facts_independently\n  /Users/sylas/repurposer-i3/apps/api/.venv/lib/python3.11/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:\n    PydanticSerializationUnexpectedValue(Expected `uuid` - serialized value may not be as expected [field_name='music_snapshot_id', input_value='22222222-2222-2222-2222-222222222222', input_type=str])\n    return self.__pydantic_serializer__.to_python(\n\ntest/core/test_website_promo_readiness.py::test_visual_color_snaps_to_measured_dominant_brand_red\ntest/core/test_website_promo_readiness.py::test_saturated_accent_survives_antialiasing_and_frequency_cap\n  /Users/sylas/repurposer-i3/apps/api/app/tools/video/brand.py:132: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.\n    counts = Counter(source.getdata())\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n508 passed, 4 warnings in 48.68s"
+  },
+  "web": {
+    "command": "pnpm exec vitest run",
+    "result": "Test Files  47 passed (47)\n      Tests  432 passed (432)\n   Start at  23:21:49\n   Duration  5.70s (transform 3.63s, setup 0ms, import 13.70s, tests 6.20s, environment 8.88s)"
+  },
+  "typescript": {
+    "command": "pnpm exec tsc --noEmit",
+    "exit": 0
+  },
+  "ruff": {
+    "select": "F",
+    "changed_python_files": "passed"
+  },
+  "external_faults": "See crash-recovery.json and stale-version.json for process signals and committed execution facts."
+}

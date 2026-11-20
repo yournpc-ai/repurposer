@@ -1431,4 +1431,3 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     if not current:
         return {"action": "stale", **target}
     return {"action": "produce" if receipt.get("presentation_complete") else "wait", **target}
-

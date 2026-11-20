@@ -1,0 +1,873 @@
+{
+  "method": "Ajv 2020, structural validation, formats excluded; multi-call policy and execution recorded separately in cases.json",
+  "total": 96,
+  "valid": 95,
+  "first": {
+    "music": [
+      {
+        "tool": "generate_music",
+        "id": "chatcmpl-tool-9c17b591d142dd60",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "voice": [
+      {
+        "tool": "generate_voice",
+        "id": "call_5fbef11891914c4abb180939",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "voice-reuse": [
+      {
+        "tool": "generate_voice",
+        "id": "call_01a1f95f75f9770fa7e18e4d",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "image": [
+      {
+        "tool": "generate_image",
+        "id": "call_01a1f961ee7876b9a4461d00",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "image-only": [
+      {
+        "tool": "generate_image",
+        "id": "call_01a1f962553e7175ae2ce0b1",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "mix": [
+      {
+        "tool": "generate_voice",
+        "id": "call_7e103df074a8496989a8f453",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "generate_music",
+        "id": "call_1340180d6e8e4fc190d298ac",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "call_c3e9ec5a19604a74a5db3ea8",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "fault": [
+      {
+        "tool": "generate_music",
+        "id": "call_26c473c1298f452e8e304157",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "approval": [
+      {
+        "tool": "generate_music",
+        "id": "call_01a1f97753237791b4aaa927",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "call_01a1f9776d7c72929ade86a6",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "authorized-voice": [
+      {
+        "tool": "generate_voice",
+        "id": "call_01a1f979c0c07004aa4155fc",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "call_01a1f979dc107023ab556cf8",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "music-reuse": [
+      {
+        "tool": "generate_music",
+        "id": "call-7ffdaa61-3ba9-4774-b8d7-9b65ff092f65",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "alignment-ready": [],
+    "fault2": [
+      {
+        "tool": "generate_music",
+        "id": "call_01a1f9828ee8705fb7525f00",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "call_c234e3af13594a2bad9ab561",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "fault3": [
+      {
+        "tool": "generate_music",
+        "id": "call_01a1f98600d2730a9ab2c208",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "call_75bec7b323404f78a3087cdb",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "fault3-preview": [],
+    "fault4": [
+      {
+        "tool": "generate_music",
+        "id": "call_01a1f98c24bb7398a7615b8d",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      },
+      {
+        "tool": "insert_audio",
+        "id": "chatcmpl-tool-a68919014fdb3118",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "mix-levels": [],
+    "svg": [
+      {
+        "tool": "generate_image",
+        "id": "chatcmpl-tool-b054ceb6edb43acf",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "svg-reuse": [
+      {
+        "tool": "generate_image",
+        "id": "call_01a1f98e8dcb76cfb07cdb0e",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "declined-voice": [],
+    "decline-gate": [
+      {
+        "tool": "generate_voice",
+        "id": "call_01a1f991986875b3a796c680",
+        "schema_valid": true,
+        "call_count_in_response": 1
+      }
+    ],
+    "stale": [
+      {
+        "tool": "generate_music",
+        "id": "call_01a1f9933bdc75bf94656add",
+        "schema_valid": true,
+        "call_count_in_response": 2
+      }
+    ]
+  },
+  "checks": [
+    {
+      "case": "music",
+      "id": "chatcmpl-tool-9c17b591d142dd60",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_5fbef11891914c4abb180939",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_6990b2b424c143e7aade59ac",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_f7f3c946d44847ebb8b9ff6e",
+      "tool": "list_project_media",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_d79cafea2b964f00a58c1c84",
+      "tool": "inspect_clip",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_60a322a2b23540bd9cf39622",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_968c41287e0a4917a05b6e24",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_932619b643544e69819a4461",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_4d7ce4f2a6504f6da8fc1f44",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_2563238929324bd7bb6ed89f",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_cfe75d84871049b8aa848049",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_30d7113426c64bfebefe0578",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_6ebe205c73984dd4b52983bc",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_e6974a8ae0614c5b959f27b7",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_function_ziy8a1u8eech_1",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice-reuse",
+      "id": "call_01a1f95f75f9770fa7e18e4d",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_function_3kibcl6z9t2d_1",
+      "tool": "answer",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "voice",
+      "id": "call_function_dw1qleto5r0j_1",
+      "tool": "ask_user",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "image",
+      "id": "call_01a1f961ee7876b9a4461d00",
+      "tool": "generate_image",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "image",
+      "id": "call_01a1f961fbfc75f4aeddc942",
+      "tool": "ask_user",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "image-only",
+      "id": "call_01a1f962553e7175ae2ce0b1",
+      "tool": "generate_image",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_a3ef5a98bf8d434f9d8169ad",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_7e103df074a8496989a8f453",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_1340180d6e8e4fc190d298ac",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_52b97fde5606491f96fbcff0",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_01a1f964f55471108f62b2e7",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_c3e9ec5a19604a74a5db3ea8",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_f574090b1cee467f99db4eeb",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_01a1f9650a7b730b98e880aa",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix",
+      "id": "call_01a1f9651058765bba460e12",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault",
+      "id": "call_26c473c1298f452e8e304157",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_01a1f97753237791b4aaa927",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_01a1f97753a875dea9744fa1",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_01a1f9775779768983a5d148",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_01a1f9776676724580e36e04",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_01a1f9776d7c72929ade86a6",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "approval",
+      "id": "call_c822a46f5f53b9a9501f2726",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_01a1f979c0c07004aa4155fc",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_01a1f979c12073cb9d9cacfb",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_01a1f979c5747451805ee361",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_01a1f979d6c975f4b5d3da43",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_01a1f979dc107023ab556cf8",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_633bef7f151ea6978c18ba55",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "authorized-voice",
+      "id": "call_76305292342c424221db32ec",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "music-reuse",
+      "id": "call-b3ec3588-46f1-448e-a3a0-12e4317682e2",
+      "tool": "list_project_media",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "music-reuse",
+      "id": "call-7ffdaa61-3ba9-4774-b8d7-9b65ff092f65",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "alignment-ready",
+      "id": "call_adc1ba92848e454db3b59e9d",
+      "tool": "get_narration_alignment",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "alignment-ready",
+      "id": "call_7dfa78b0c0e74625ac2902ee",
+      "tool": "annotate_narration",
+      "valid": false,
+      "errors": [
+        {
+          "instancePath": "/sentences/0/needs",
+          "schemaPath": "#/$defs/NarrationSentenceSemanticsArgs/properties/needs/type",
+          "keyword": "type",
+          "params": {
+            "type": "array"
+          },
+          "message": "must be array"
+        }
+      ]
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f9828ec9702e9b0d4524",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f9828ee8705fb7525f00",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f982943b72dcaf5e67fc",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f98299b8733e878c52b0",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_400a9c959db34ea48125c77e",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_c234e3af13594a2bad9ab561",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f98330eb75c483127fef",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f983390f75b78024ffa0",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f9833d8b70ae97f1d280",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f98341557134a6148a03",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f983458175cd81694073",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f983494d726b9c29dcb1",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault2",
+      "id": "call_01a1f9834d0174a6b7daf6a6",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call_01a1f98600d2730a9ab2c208",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call_01a1f98601ab738585e5f654",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call_01a1f986060c754eb7047099",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call_8172cc6db89c4694b2a4ceb3",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call_75bec7b323404f78a3087cdb",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-cfca02ca-cfd1-4326-97f7-036aadb39e8f",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-ff5346e1-ef01-4183-a24b-0694d3ea9fc4",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-730a1ac1-0ef5-42ea-be5b-b1189f5986da",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-c9c99273-b508-4ebb-8a93-b34df60fbe70",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-f78543bb-eec1-4515-b1b7-d862a0c37834",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-6659747e-7e0f-43ed-ace3-5e16671ecd19",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3",
+      "id": "call-7f685d5f-602a-4ae4-a04a-da508256e71a",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3-preview",
+      "id": "call_064d66b0d9c14591a927bf7c",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3-preview",
+      "id": "call_dc1326da1a6f48c6a66e10de",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3-preview",
+      "id": "call_089b4d694b8d4fd1a1e50888",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault3-preview",
+      "id": "call_090b994a131e4816a8b8cc20",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "call_01a1f98c24bb7398a7615b8d",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "call_01a1f98c255470fab15ddddf",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "call_01a1f98c2a0971359f7ef0de",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "chatcmpl-tool-bff54abbd6566188",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "chatcmpl-tool-a68919014fdb3118",
+      "tool": "insert_audio",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "fault4",
+      "id": "call_01a1f98d17f77259a5b6f430",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d7ab07123b951ff40",
+      "tool": "read_conversation_context",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d7fc9752cb1b067d6",
+      "tool": "list_project_media",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d856272a5a4f5028d",
+      "tool": "read_conversation_context",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d8a4075979e3e5ab7",
+      "tool": "read_conversation_context",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d906c74c6b351c237",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "mix-levels",
+      "id": "call_01a1f98d99cb71b28ae23d9b",
+      "tool": "preview_range",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "svg",
+      "id": "chatcmpl-tool-b054ceb6edb43acf",
+      "tool": "generate_image",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "svg-reuse",
+      "id": "call_01a1f98e8dcb76cfb07cdb0e",
+      "tool": "generate_image",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "declined-voice",
+      "id": "call_23298652678a40138b3119a6",
+      "tool": "ask_user",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "decline-gate",
+      "id": "call_01a1f991986875b3a796c680",
+      "tool": "generate_voice",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "stale",
+      "id": "call_01a1f9933bdc75bf94656add",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "stale",
+      "id": "call_01a1f9933c5e71e1844dad20",
+      "tool": "inspect_timeline",
+      "valid": true,
+      "errors": null
+    },
+    {
+      "case": "stale",
+      "id": "call_01a1f99340ea7171adeca5f7",
+      "tool": "generate_music",
+      "valid": true,
+      "errors": null
+    }
+  ]
+}

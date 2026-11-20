@@ -1,0 +1,5090 @@
+{
+  "b4adac2db453418279bd9b3821aeb53fa7f0a3ac4f564c773e6ae4dd6b86de85": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不附引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "PlanAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "PlanAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不加引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体值，翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。仅自由作答时才留空。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "ChatAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对话阶段的 answer 参数，采用 AnswerProposal 的结构，回答文本写进消息正文。若有待回答的问题，其处理方式也随本调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "ChatAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "a5d485eeec466d171986e6fff2eb2e1db1089d0c320ee39abdc2f84079fb2dea": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不加引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体值，翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。仅自由作答时才留空。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "ChatAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对话阶段的 answer 参数，采用 AnswerProposal 的结构，回答文本写进消息正文。若有待回答的问题，其处理方式也随本调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "ChatAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_image",
+        "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "description": "Describe the image and its narrative purpose.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Prompt",
+              "type": "string"
+            },
+            "svg": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "For vector artwork only, an original self-contained SVG.",
+              "title": "Svg"
+            },
+            "evidence_snapshot_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Verified project webpage for brand facts.",
+              "title": "Evidence Snapshot Id"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "GenerateImageArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "f3435a2d2459b6534e8053fa937626aa2ca83dd3a31426eb4f61ebb5d0a746b9": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不附引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "PlanAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "PlanAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_image",
+        "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "description": "Describe the image and its narrative purpose.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Prompt",
+              "type": "string"
+            },
+            "svg": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "For vector artwork only, an original self-contained SVG.",
+              "title": "Svg"
+            },
+            "evidence_snapshot_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Verified project webpage for brand facts.",
+              "title": "Evidence Snapshot Id"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "GenerateImageArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不加引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体值，翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。仅自由作答时才留空。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "ChatAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对话阶段的 answer 参数，采用 AnswerProposal 的结构，回答文本写进消息正文。若有待回答的问题，其处理方式也随本调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "ChatAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "insert_audio",
+        "description": "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "source_id": {
+              "description": "Owned fixed audio snapshot from the project or a generation result.",
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            },
+            "start_seconds": {
+              "description": "Start on the composition timeline.",
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "duration_seconds": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Use the full recording when omitted.",
+              "title": "Duration Seconds"
+            },
+            "gain_db": {
+              "default": 0,
+              "description": "Clip gain in decibels.",
+              "maximum": 12,
+              "minimum": -60,
+              "title": "Gain Db",
+              "type": "number"
+            }
+          },
+          "required": [
+            "source_id",
+            "start_seconds"
+          ],
+          "title": "InsertAudioArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_image",
+        "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "description": "Describe the image and its narrative purpose.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Prompt",
+              "type": "string"
+            },
+            "svg": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "For vector artwork only, an original self-contained SVG.",
+              "title": "Svg"
+            },
+            "evidence_snapshot_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Verified project webpage for brand facts.",
+              "title": "Evidence Snapshot Id"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "GenerateImageArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不加引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体值，翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。仅自由作答时才留空。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "ChatAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对话阶段的 answer 参数，采用 AnswerProposal 的结构，回答文本写进消息正文。若有待回答的问题，其处理方式也随本调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "ChatAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "insert_audio",
+        "description": "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "source_id": {
+              "description": "Owned fixed audio snapshot from the project or a generation result.",
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            },
+            "start_seconds": {
+              "description": "Start on the composition timeline.",
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "duration_seconds": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Use the full recording when omitted.",
+              "title": "Duration Seconds"
+            },
+            "gain_db": {
+              "default": 0,
+              "description": "Clip gain in decibels.",
+              "maximum": 12,
+              "minimum": -60,
+              "title": "Gain Db",
+              "type": "number"
+            }
+          },
+          "required": [
+            "source_id",
+            "start_seconds"
+          ],
+          "title": "InsertAudioArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_image",
+        "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "description": "Describe the image and its narrative purpose.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Prompt",
+              "type": "string"
+            },
+            "svg": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "For vector artwork only, an original self-contained SVG.",
+              "title": "Svg"
+            },
+            "evidence_snapshot_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Verified project webpage for brand facts.",
+              "title": "Evidence Snapshot Id"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "GenerateImageArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "align_recording",
+        "description": "Align the exact transcript with an explicitly referenced recording.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "audio_asset_id": {
+              "format": "uuid",
+              "title": "Audio Asset Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "audio_asset_id"
+          ],
+          "title": "AlignRecordingArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_narration_alignment",
+        "description": "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "alignment_id": {
+              "format": "uuid",
+              "title": "Alignment Id",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alignment_id"
+          ],
+          "title": "GetNarrationAlignmentArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "annotate_narration",
+        "description": "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。",
+        "parameters": {
+          "$defs": {
+            "NarrationSentenceSemanticsArgs": {
+              "additionalProperties": false,
+              "properties": {
+                "sentence_id": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "title": "Sentence Id",
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "definition",
+                    "process",
+                    "comparison",
+                    "evidence",
+                    "example",
+                    "summary",
+                    "transition"
+                  ],
+                  "title": "Role",
+                  "type": "string"
+                },
+                "weight": {
+                  "enum": [
+                    "main",
+                    "sub"
+                  ],
+                  "title": "Weight",
+                  "type": "string"
+                },
+                "entities": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 12,
+                  "title": "Entities",
+                  "type": "array"
+                },
+                "needs": {
+                  "default": [],
+                  "description": "媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
+                  "items": {
+                    "enum": [
+                      "native_text",
+                      "diagram",
+                      "real_media",
+                      "data",
+                      "generator"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 5,
+                  "title": "Needs",
+                  "type": "array"
+                },
+                "emphasis_word_ids": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 24,
+                  "title": "Emphasis Word Ids",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "sentence_id",
+                "role",
+                "weight"
+              ],
+              "title": "NarrationSentenceSemanticsArgs",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。",
+          "properties": {
+            "alignment_id": {
+              "format": "uuid",
+              "title": "Alignment Id",
+              "type": "string"
+            },
+            "expected_timing_digest": {
+              "maxLength": 64,
+              "minLength": 64,
+              "title": "Expected Timing Digest",
+              "type": "string"
+            },
+            "sentences": {
+              "items": {
+                "$ref": "#/$defs/NarrationSentenceSemanticsArgs"
+              },
+              "minItems": 1,
+              "title": "Sentences",
+              "type": "array"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alignment_id",
+            "expected_timing_digest",
+            "sentences"
+          ],
+          "title": "AnnotateNarrationArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ask_user",
+        "description": "询问一个确定目标所需的问题。",
+        "parameters": {
+          "$defs": {
+            "Option": {
+              "additionalProperties": false,
+              "description": "结构化问题中的一个选项。",
+              "properties": {
+                "id": {
+                  "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                  "title": "Id",
+                  "type": "string"
+                },
+                "label": {
+                  "title": "Label",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "title": "Option",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+          "properties": {
+            "question": {
+              "description": "仅用界面语言写问题或问题组标题，不附引言或默认路径说明。",
+              "title": "Question",
+              "type": "string"
+            },
+            "options": {
+              "description": "从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
+              "items": {
+                "$ref": "#/$defs/Option"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "allow_freeform": {
+              "default": true,
+              "title": "Allow Freeform",
+              "type": "boolean"
+            },
+            "recommended_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
+              "title": "Recommended Id"
+            },
+            "default_path": {
+              "default": "",
+              "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+              "title": "Default Path",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "PlanAskArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "answer",
+        "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+          "properties": {
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "title": "PlanAnswerArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "list_project_media",
+        "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+        "parameters": {
+          "properties": {
+            "ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+              "title": "Ids"
+            },
+            "offset": {
+              "default": 0,
+              "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "ListProjectMediaParams",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "insert_audio",
+        "description": "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "source_id": {
+              "description": "Owned fixed audio snapshot from the project or a generation result.",
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            },
+            "start_seconds": {
+              "description": "Start on the composition timeline.",
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "duration_seconds": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Use the full recording when omitted.",
+              "title": "Duration Seconds"
+            },
+            "gain_db": {
+              "default": 0,
+              "description": "Clip gain in decibels.",
+              "maximum": 12,
+              "minimum": -60,
+              "title": "Gain Db",
+              "type": "number"
+            }
+          },
+          "required": [
+            "source_id",
+            "start_seconds"
+          ],
+          "title": "InsertAudioArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_image",
+        "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "description": "Describe the image and its narrative purpose.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Prompt",
+              "type": "string"
+            },
+            "svg": {
+              "anyOf": [
+                {
+                  "maxLength": 20000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "For vector artwork only, an original self-contained SVG.",
+              "title": "Svg"
+            },
+            "evidence_snapshot_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Verified project webpage for brand facts.",
+              "title": "Evidence Snapshot Id"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "title": "GenerateImageArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_voice",
+        "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "en",
+                "zh",
+                "fr",
+                "de",
+                "es",
+                "it"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "voice_id": {
+              "default": "presenter_male",
+              "enum": [
+                "presenter_male",
+                "English_Graceful_Lady"
+              ],
+              "title": "Voice Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "language"
+          ],
+          "title": "GenerateVoiceArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "generate_music",
+        "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "duration_seconds": {
+              "maximum": 120,
+              "minimum": 0.25,
+              "multipleOf": 0.001,
+              "title": "Duration Seconds",
+              "type": "number"
+            },
+            "style": {
+              "enum": [
+                "light_electronic",
+                "ambient",
+                "driving_electronic"
+              ],
+              "title": "Style",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 40,
+              "title": "Bpm",
+              "type": "integer"
+            },
+            "name": {
+              "default": "Electronic instrumental",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "duration_seconds",
+            "style"
+          ],
+          "title": "GenerateMusicArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_timeline",
+        "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "offset": {
+              "default": 0,
+              "description": "First clip index, starting at zero.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          "title": "InspectTimelineArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "inspect_clip",
+        "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "ClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "split_clip",
+        "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "Seconds from the start of this clip.",
+              "exclusiveMinimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "SplitClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "trim_clip",
+        "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "First clip-local second to keep. Defaults to zero.",
+              "title": "Start"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+              "title": "End"
+            }
+          },
+          "required": [
+            "clip_id"
+          ],
+          "title": "TrimClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_clip",
+        "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "clip_id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Clip Id",
+              "type": "string"
+            },
+            "time": {
+              "description": "New absolute start in composition seconds.",
+              "minimum": 0,
+              "title": "Time",
+              "type": "number"
+            }
+          },
+          "required": [
+            "clip_id",
+            "time"
+          ],
+          "title": "MoveClipArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "translate",
+        "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "x": {
+              "description": "Horizontal offset from the layout box, in canvas pixels; positive is right.",
+              "title": "X",
+              "type": "number"
+            },
+            "y": {
+              "description": "Vertical offset from the layout box, in canvas pixels; positive is down.",
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "x",
+            "y"
+          ],
+          "title": "TranslateArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "scale",
+        "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Visual object_id returned by inspection.",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "value": {
+              "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+              "exclusiveMinimum": 0,
+              "title": "Value",
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "value"
+          ],
+          "title": "ScaleArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "preview_range",
+        "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "A bounded playback window in composition time.",
+          "properties": {
+            "kind": {
+              "const": "range",
+              "default": "range",
+              "title": "Kind",
+              "type": "string"
+            },
+            "start_seconds": {
+              "minimum": 0,
+              "title": "Start Seconds",
+              "type": "number"
+            },
+            "end_seconds": {
+              "exclusiveMinimum": 0,
+              "title": "End Seconds",
+              "type": "number"
+            }
+          },
+          "required": [
+            "start_seconds",
+            "end_seconds"
+          ],
+          "title": "VideoRangeScrubTarget",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "review_video",
+        "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+        "parameters": {
+          "additionalProperties": false,
+          "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+          "properties": {
+            "output_id": {
+              "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+              "format": "uuid",
+              "title": "Output Id",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
+              "maxLength": 4000,
+              "minLength": 1,
+              "title": "Requirements",
+              "type": "string"
+            },
+            "at_seconds": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+              "title": "At Seconds"
+            },
+            "motion_scene_id": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+              "title": "Motion Scene Id"
+            },
+            "refresh": {
+              "default": false,
+              "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+              "title": "Refresh",
+              "type": "boolean"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "output_id",
+            "requirements"
+          ],
+          "title": "ReviewVideoArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "align_recording",
+        "description": "Align the exact transcript with an explicitly referenced recording.",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "maxLength": 9000,
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "audio_asset_id": {
+              "format": "uuid",
+              "title": "Audio Asset Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "audio_asset_id"
+          ],
+          "title": "AlignRecordingArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_narration_alignment",
+        "description": "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "alignment_id": {
+              "format": "uuid",
+              "title": "Alignment Id",
+              "type": "string"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alignment_id"
+          ],
+          "title": "GetNarrationAlignmentArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "annotate_narration",
+        "description": "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。",
+        "parameters": {
+          "$defs": {
+            "NarrationSentenceSemanticsArgs": {
+              "additionalProperties": false,
+              "properties": {
+                "sentence_id": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "title": "Sentence Id",
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "definition",
+                    "process",
+                    "comparison",
+                    "evidence",
+                    "example",
+                    "summary",
+                    "transition"
+                  ],
+                  "title": "Role",
+                  "type": "string"
+                },
+                "weight": {
+                  "enum": [
+                    "main",
+                    "sub"
+                  ],
+                  "title": "Weight",
+                  "type": "string"
+                },
+                "entities": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 12,
+                  "title": "Entities",
+                  "type": "array"
+                },
+                "needs": {
+                  "default": [],
+                  "description": "媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
+                  "items": {
+                    "enum": [
+                      "native_text",
+                      "diagram",
+                      "real_media",
+                      "data",
+                      "generator"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 5,
+                  "title": "Needs",
+                  "type": "array"
+                },
+                "emphasis_word_ids": {
+                  "default": [],
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 24,
+                  "title": "Emphasis Word Ids",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "sentence_id",
+                "role",
+                "weight"
+              ],
+              "title": "NarrationSentenceSemanticsArgs",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。",
+          "properties": {
+            "alignment_id": {
+              "format": "uuid",
+              "title": "Alignment Id",
+              "type": "string"
+            },
+            "expected_timing_digest": {
+              "maxLength": 64,
+              "minLength": 64,
+              "title": "Expected Timing Digest",
+              "type": "string"
+            },
+            "sentences": {
+              "items": {
+                "$ref": "#/$defs/NarrationSentenceSemanticsArgs"
+              },
+              "minItems": 1,
+              "title": "Sentences",
+              "type": "array"
+            },
+            "pending_disposition": {
+              "default": "none",
+              "enum": [
+                "answer",
+                "skip",
+                "none"
+              ],
+              "title": "Pending Disposition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "alignment_id",
+            "expected_timing_digest",
+            "sentences"
+          ],
+          "title": "AnnotateNarrationArgs",
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_conversation_context",
+        "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+        "parameters": {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "title": "Item Ids",
+              "type": "array"
+            },
+            "cursor": {
+              "default": 0,
+              "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          "title": "ReadConversationContextArgs",
+          "type": "object"
+        }
+      }
+    }
+  ]
+}

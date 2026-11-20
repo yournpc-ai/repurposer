@@ -1,0 +1,768 @@
+{
+  "fault": {
+    "api-before-delivery": {
+      "pid": 80738,
+      "run": "e2a2400b-0845-4d70-8d2c-2ef73994678c",
+      "status": "completed",
+      "request": "77b689cc-7e6b-5913-b98c-e1d6b303a451",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "1d7f3b9a-4ed3-5955-b529-10601e48f844",
+        "digest": "ea5f6ebbadaa0143839a88f76fbc9e9d541534134389fa980887679ade92b1aa"
+      },
+      "signal": "SIGKILL"
+    },
+    "worker-before-delivery": {
+      "pid": 80740,
+      "run": "e2a2400b-0845-4d70-8d2c-2ef73994678c",
+      "status": "completed",
+      "request": "77b689cc-7e6b-5913-b98c-e1d6b303a451",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "1d7f3b9a-4ed3-5955-b529-10601e48f844",
+        "digest": "ea5f6ebbadaa0143839a88f76fbc9e9d541534134389fa980887679ade92b1aa"
+      },
+      "signal": "SIGKILL"
+    },
+    "before": {
+      "run": "e2a2400b-0845-4d70-8d2c-2ef73994678c",
+      "turn": "1b26073c-5509-4a14-881c-07cee7dc0885",
+      "state": "in_flight",
+      "head": "b0922d90-548d-49d5-aebb-b83521a21060",
+      "receipt": "4366c99f-cb30-4f4e-b90c-a813b277d664",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "b0922d90-548d-49d5-aebb-b83521a21060",
+        "fingerprint": "8d22412a2d4766a3b912f8a4e1ec42a58b369e4f51ce3e459fda406179148353",
+        "editor_media": "77b689cc-7e6b-5913-b98c-e1d6b303a451",
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [],
+      "step_attempts": [
+        {
+          "id": "68b00d48-412c-4406-8229-ed60afa4ca65",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T14:50:59.646444+00:00",
+            "key": "chat.activity.musicPrepare",
+            "kind": "read",
+            "status": "active",
+            "activity_id": "a0509f37630e4a9f87d70ee2b868fbf8"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    },
+    "after": {
+      "run": "e2a2400b-0845-4d70-8d2c-2ef73994678c",
+      "turn": "1b26073c-5509-4a14-881c-07cee7dc0885",
+      "state": "failed",
+      "head": "b0922d90-548d-49d5-aebb-b83521a21060",
+      "receipt": "4366c99f-cb30-4f4e-b90c-a813b277d664",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "b0922d90-548d-49d5-aebb-b83521a21060",
+        "fingerprint": "8d22412a2d4766a3b912f8a4e1ec42a58b369e4f51ce3e459fda406179148353",
+        "editor_media": "77b689cc-7e6b-5913-b98c-e1d6b303a451",
+        "media_result": {
+          "peak": 0.2735595703125,
+          "role": "music",
+          "score": {
+            "bpm": {
+              "den": 1,
+              "num": 113
+            },
+            "style": "driving_electronic"
+          },
+          "digest": "ea5f6ebbadaa0143839a88f76fbc9e9d541534134389fa980887679ade92b1aa",
+          "status": "available",
+          "music_id": "83849589-736d-5166-83dd-4d0387e961d5",
+          "cache_hit": false,
+          "snapshot_id": "1d7f3b9a-4ed3-5955-b529-10601e48f844",
+          "analysis_digest": "685c6e3d3001418a24109088a33808ef528fe1c5fb79902081970f38e8a4e989",
+          "duration_seconds": 4.875,
+          "added_to_composition": false
+        },
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [
+        {
+          "kind": "audio_playback",
+          "items": [
+            {
+              "role": "music",
+              "peaks": [
+                0.24212646484375,
+                0.2276611328125,
+                0.1373291015625,
+                0.095977783203125,
+                0.09661865234375,
+                0.263885498046875,
+                0.229522705078125,
+                0.167083740234375,
+                0.096221923828125,
+                0.097015380859375,
+                0.263702392578125,
+                0.227783203125,
+                0.204437255859375,
+                0.094451904296875,
+                0.096160888671875,
+                0.26611328125,
+                0.2342529296875,
+                0.21319580078125,
+                0.090576171875,
+                0.06817626953125,
+                0.19012451171875,
+                0.242218017578125,
+                0.229644775390625,
+                0.146148681640625,
+                0.09033203125,
+                0.095947265625,
+                0.25189208984375,
+                0.2437744140625,
+                0.15704345703125,
+                0.091888427734375,
+                0.091461181640625,
+                0.2735595703125,
+                0.200653076171875,
+                0.182342529296875,
+                0.096588134765625,
+                0.087432861328125,
+                0.265411376953125,
+                0.210906982421875,
+                0.213897705078125,
+                0.096923828125,
+                0.06597900390625,
+                0.214630126953125,
+                0.236297607421875,
+                0.210052490234375,
+                0.130828857421875,
+                0.09686279296875,
+                0.047943115234375,
+                0.056732177734375
+              ],
+              "title": "Interview Cut 1 - Driving Electronic 113",
+              "digest": "ea5f6ebbadaa0143839a88f76fbc9e9d541534134389fa980887679ade92b1aa",
+              "scene_id": null,
+              "snapshot_id": "1d7f3b9a-4ed3-5955-b529-10601e48f844",
+              "analysis_digest": "685c6e3d3001418a24109088a33808ef528fe1c5fb79902081970f38e8a4e989",
+              "duration_seconds": 4.875
+            }
+          ],
+          "project_id": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d"
+        }
+      ],
+      "step_attempts": [
+        {
+          "id": "68b00d48-412c-4406-8229-ed60afa4ca65",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T14:50:59.646444+00:00",
+            "key": "chat.activity.musicPrepareDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T14:54:50.201464+00:00",
+            "activity_id": "a0509f37630e4a9f87d70ee2b868fbf8"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    }
+  },
+  "fault2": {
+    "api-before-delivery": {
+      "pid": 83945,
+      "run": "fb6f709c-a1f8-4ad4-a3db-7903cf29f1a8",
+      "status": "completed",
+      "request": "398d017c-764a-56cb-ab7f-b107b601fa13",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+        "digest": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7"
+      },
+      "signal": "SIGKILL"
+    },
+    "worker-before-delivery": {
+      "pid": 83946,
+      "run": "fb6f709c-a1f8-4ad4-a3db-7903cf29f1a8",
+      "status": "completed",
+      "request": "398d017c-764a-56cb-ab7f-b107b601fa13",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+        "digest": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7"
+      },
+      "signal": "SIGKILL"
+    },
+    "before": {
+      "run": "fb6f709c-a1f8-4ad4-a3db-7903cf29f1a8",
+      "turn": "ee540620-1c9b-4c3a-95ff-0ea8666fca18",
+      "state": "in_flight",
+      "head": "b0922d90-548d-49d5-aebb-b83521a21060",
+      "receipt": "2db90ed4-24b0-465e-87e8-052f355a0788",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "b0922d90-548d-49d5-aebb-b83521a21060",
+        "activity_id": "da550daf-f5cc-48cc-abbd-da6661242786",
+        "fingerprint": "5d15f827566aa014db27b87f603ac51e68e84b06b425a5f2d922307ec7bcb6d0",
+        "editor_media": "398d017c-764a-56cb-ab7f-b107b601fa13",
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [],
+      "step_attempts": [
+        {
+          "id": "131522bb-0db8-491b-b7f1-f5f5628414d8",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:10:47.037605+00:00",
+            "key": "chat.activity.inspectClipsDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T15:10:47.077573+00:00",
+            "activity_id": "0985a0cacb324187aa8dfe4f1aa8be98",
+            "duration_ms": 39
+          }
+        },
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:10:48.433384+00:00",
+            "key": "chat.activity.musicPrepare",
+            "kind": "read",
+            "status": "active",
+            "activity_id": "3fe60fa693b34c82a63c39fcd1ac4e13"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    },
+    "after": {
+      "run": "fb6f709c-a1f8-4ad4-a3db-7903cf29f1a8",
+      "turn": "ee540620-1c9b-4c3a-95ff-0ea8666fca18",
+      "state": "settled",
+      "head": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+      "receipt": "2db90ed4-24b0-465e-87e8-052f355a0788",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "b0922d90-548d-49d5-aebb-b83521a21060",
+        "activity_id": "da550daf-f5cc-48cc-abbd-da6661242786",
+        "fingerprint": "5d15f827566aa014db27b87f603ac51e68e84b06b425a5f2d922307ec7bcb6d0",
+        "editor_media": "398d017c-764a-56cb-ab7f-b107b601fa13",
+        "media_result": {
+          "peak": 0.097015380859375,
+          "role": "music",
+          "score": {
+            "bpm": {
+              "den": 1,
+              "num": 101
+            },
+            "style": "ambient"
+          },
+          "digest": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7",
+          "status": "available",
+          "music_id": "6405c3c6-637b-5206-8f9c-44e9c694c395",
+          "cache_hit": false,
+          "snapshot_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+          "analysis_digest": "036aefb71c5877b55f5e1580fb305f22193f86e38d64d48b42cedbb1e227c7e7",
+          "duration_seconds": 4.125,
+          "added_to_composition": false
+        },
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [
+        {
+          "kind": "audio_playback",
+          "items": [
+            {
+              "role": "music",
+              "peaks": [
+                0.08746337890625,
+                0.09429931640625,
+                0.095916748046875,
+                0.096893310546875,
+                0.09588623046875,
+                0.09661865234375,
+                0.095489501953125,
+                0.09423828125,
+                0.094635009765625,
+                0.09564208984375,
+                0.096221923828125,
+                0.097015380859375,
+                0.095947265625,
+                0.096221923828125,
+                0.094940185546875,
+                0.09332275390625,
+                0.095306396484375,
+                0.096160888671875,
+                0.095123291015625,
+                0.097015380859375,
+                0.09576416015625,
+                0.0953369140625,
+                0.095733642578125,
+                0.09405517578125,
+                0.093353271484375,
+                0.085418701171875,
+                0.0567626953125,
+                0.02813720703125,
+                0.08367919921875,
+                0.08837890625,
+                0.09661865234375,
+                0.094024658203125,
+                0.08807373046875,
+                0.09686279296875,
+                0.096099853515625,
+                0.08282470703125,
+                0.0947265625,
+                0.093719482421875,
+                0.080718994140625,
+                0.096160888671875,
+                0.096099853515625,
+                0.086334228515625,
+                0.095611572265625,
+                0.096923828125,
+                0.086029052734375,
+                0.07025146484375,
+                0.0357666015625,
+                0.006103515625
+              ],
+              "title": "Ambient Interview Bed",
+              "digest": "ed0ebf7a7492542a92646ec696a817877b80b65d372a51822d49babcf0f6e9a7",
+              "scene_id": null,
+              "snapshot_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+              "analysis_digest": "036aefb71c5877b55f5e1580fb305f22193f86e38d64d48b42cedbb1e227c7e7",
+              "duration_seconds": 4.125
+            }
+          ],
+          "project_id": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d"
+        }
+      ],
+      "step_attempts": [
+        {
+          "id": "131522bb-0db8-491b-b7f1-f5f5628414d8",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:10:47.037605+00:00",
+            "key": "chat.activity.inspectClipsDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T15:10:47.077573+00:00",
+            "activity_id": "0985a0cacb324187aa8dfe4f1aa8be98",
+            "duration_ms": 39
+          }
+        },
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:10:48.433384+00:00",
+            "key": "chat.activity.musicPrepareDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T15:11:21.804656+00:00",
+            "activity_id": "3fe60fa693b34c82a63c39fcd1ac4e13"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    }
+  },
+  "fault3": {
+    "api-before-delivery": {
+      "pid": 84623,
+      "run": "0059506f-2154-410b-be6a-e550e46043ba",
+      "status": "completed",
+      "request": "a110dcb1-275b-52fb-8aa6-53e233b323c6",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+        "digest": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1"
+      },
+      "signal": "SIGKILL"
+    },
+    "worker-before-delivery": {
+      "pid": 84622,
+      "run": "0059506f-2154-410b-be6a-e550e46043ba",
+      "status": "completed",
+      "request": "a110dcb1-275b-52fb-8aa6-53e233b323c6",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+        "digest": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1"
+      },
+      "signal": "SIGKILL"
+    },
+    "before": {
+      "run": "0059506f-2154-410b-be6a-e550e46043ba",
+      "turn": "59df628e-e46c-48c8-b71b-fc8aa39b0e79",
+      "state": "in_flight",
+      "head": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+      "receipt": "7d0df283-e106-44a2-b071-119c5a25e156",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+        "activity_id": "a731e0d9-e4ab-4983-b56b-639b81c4d395",
+        "fingerprint": "e5cb9f24bc55a8585083b2b14d535e1ffeca7672c7ac8b1594a3b04a8663bd7d",
+        "editor_media": "a110dcb1-275b-52fb-8aa6-53e233b323c6",
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [],
+      "step_attempts": [
+        {
+          "id": "d467ea19-9629-4029-9b32-4378a12065c3",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:14:32.849096+00:00",
+            "key": "chat.activity.musicPrepare",
+            "kind": "read",
+            "status": "active",
+            "activity_id": "4562d159a6a140e796c4d10f4c980c38"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    },
+    "after": {
+      "run": "0059506f-2154-410b-be6a-e550e46043ba",
+      "turn": "59df628e-e46c-48c8-b71b-fc8aa39b0e79",
+      "state": "settled",
+      "head": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+      "receipt": "7d0df283-e106-44a2-b071-119c5a25e156",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "8b01171a-c07d-45bc-a05c-b333b398fbdd",
+        "activity_id": "a731e0d9-e4ab-4983-b56b-639b81c4d395",
+        "fingerprint": "e5cb9f24bc55a8585083b2b14d535e1ffeca7672c7ac8b1594a3b04a8663bd7d",
+        "editor_media": "a110dcb1-275b-52fb-8aa6-53e233b323c6",
+        "media_result": {
+          "peak": 0.2705078125,
+          "role": "music",
+          "score": {
+            "bpm": {
+              "den": 1,
+              "num": 92
+            },
+            "style": "light_electronic"
+          },
+          "digest": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1",
+          "status": "available",
+          "music_id": "ace5416d-6095-55ee-9349-591b6ac3d939",
+          "cache_hit": false,
+          "snapshot_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+          "analysis_digest": "2301ccc69c9fe49dd77e58e0bc9e6503154f49dfc7a161ae723188aa03a077c6",
+          "duration_seconds": 2.5,
+          "added_to_composition": false
+        },
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [
+        {
+          "kind": "audio_playback",
+          "items": [
+            {
+              "role": "music",
+              "peaks": [
+                0.22564697265625,
+                0.24212646484375,
+                0.2276611328125,
+                0.20916748046875,
+                0.2047119140625,
+                0.157196044921875,
+                0.095977783203125,
+                0.09588623046875,
+                0.09661865234375,
+                0.09136962890625,
+                0.095489501953125,
+                0.093719482421875,
+                0.19952392578125,
+                0.214813232421875,
+                0.207427978515625,
+                0.208160400390625,
+                0.21240234375,
+                0.17205810546875,
+                0.1241455078125,
+                0.09326171875,
+                0.095947265625,
+                0.095672607421875,
+                0.096221923828125,
+                0.094940185546875,
+                0.092987060546875,
+                0.2705078125,
+                0.246185302734375,
+                0.21978759765625,
+                0.2183837890625,
+                0.205322265625,
+                0.131988525390625,
+                0.096405029296875,
+                0.097015380859375,
+                0.09307861328125,
+                0.09576416015625,
+                0.0953369140625,
+                0.095733642578125,
+                0.19122314453125,
+                0.193115234375,
+                0.195526123046875,
+                0.198089599609375,
+                0.20050048828125,
+                0.178314208984375,
+                0.08355712890625,
+                0.04498291015625,
+                0.026458740234375,
+                0.011566162109375,
+                0.00244140625
+              ],
+              "title": "Outro Bed 92BPM",
+              "digest": "664b04f6dcc51c4ff9497ba39f36f5d296e057506c7b1b36cb0ed9410b731cd1",
+              "scene_id": null,
+              "snapshot_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+              "analysis_digest": "2301ccc69c9fe49dd77e58e0bc9e6503154f49dfc7a161ae723188aa03a077c6",
+              "duration_seconds": 2.5
+            }
+          ],
+          "project_id": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d"
+        }
+      ],
+      "step_attempts": [
+        {
+          "id": "d467ea19-9629-4029-9b32-4378a12065c3",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:14:32.849096+00:00",
+            "key": "chat.activity.musicPrepareDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T15:15:13.233574+00:00",
+            "activity_id": "4562d159a6a140e796c4d10f4c980c38"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    }
+  },
+  "fault4": {
+    "api-before-delivery": {
+      "pid": 85994,
+      "run": "159749b1-4fd8-48ab-b08d-4290e644781c",
+      "status": "completed",
+      "request": "09b3fe62-4c64-5152-8cd4-5859151193f9",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+        "digest": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25"
+      },
+      "signal": "SIGKILL"
+    },
+    "worker-before-delivery": {
+      "pid": 85993,
+      "run": "159749b1-4fd8-48ab-b08d-4290e644781c",
+      "status": "completed",
+      "request": "09b3fe62-4c64-5152-8cd4-5859151193f9",
+      "project": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d",
+      "snapshot": {
+        "snapshot_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+        "digest": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25"
+      },
+      "signal": "SIGKILL"
+    },
+    "before": {
+      "run": "159749b1-4fd8-48ab-b08d-4290e644781c",
+      "turn": "73c4f930-6840-4267-a05c-0484780ef42a",
+      "state": "in_flight",
+      "head": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+      "receipt": "c17bcb72-e573-4111-8590-ae2425f6d028",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+        "activity_id": "a97e617b-af94-4200-8f0d-c92b5d98f2ff",
+        "fingerprint": "a46f912cc9fd37355776eaae46a788de21fa687ac1afd6dbb7ec26fb74c47f9e",
+        "editor_media": "09b3fe62-4c64-5152-8cd4-5859151193f9",
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [],
+      "step_attempts": [
+        {
+          "id": "e286ebc4-85b9-4c28-b6cb-2545a20872c3",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:21:15.240362+00:00",
+            "key": "chat.activity.musicPrepare",
+            "kind": "read",
+            "status": "active",
+            "activity_id": "2bf4a743b7bb497baf601f0d655d80bb"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    },
+    "after": {
+      "run": "159749b1-4fd8-48ab-b08d-4290e644781c",
+      "turn": "73c4f930-6840-4267-a05c-0484780ef42a",
+      "state": "settled",
+      "head": "07e9fca4-0cd3-4e31-8e35-b6b1fc9c2afc",
+      "receipt": "c17bcb72-e573-4111-8590-ae2425f6d028",
+      "intent": {
+        "tool": "generate_music",
+        "version_id": "7c7fbd6d-6aec-4f11-83a3-b58139da617b",
+        "activity_id": "a97e617b-af94-4200-8f0d-c92b5d98f2ff",
+        "fingerprint": "a46f912cc9fd37355776eaae46a788de21fa687ac1afd6dbb7ec26fb74c47f9e",
+        "editor_media": "09b3fe62-4c64-5152-8cd4-5859151193f9",
+        "media_result": {
+          "peak": 0.262542724609375,
+          "role": "music",
+          "score": {
+            "bpm": {
+              "den": 1,
+              "num": 104
+            },
+            "style": "light_electronic"
+          },
+          "digest": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25",
+          "status": "available",
+          "music_id": "b2f19291-fba2-54ac-a895-557308b1954a",
+          "cache_hit": false,
+          "snapshot_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+          "analysis_digest": "f13f2174a30d1d22bfd945eb33bc1723e17a514d66c191f33e336839bd8d5239",
+          "duration_seconds": 1.75,
+          "added_to_composition": false
+        },
+        "composition_id": "2139664b-3525-46d8-926d-dbddbde24680",
+        "interaction_policy_version": "interaction_constitution.v2"
+      },
+      "blocks": [
+        {
+          "kind": "audio_playback",
+          "items": [
+            {
+              "role": "music",
+              "peaks": [
+                0.22564697265625,
+                0.240020751953125,
+                0.24212646484375,
+                0.22137451171875,
+                0.2276611328125,
+                0.200103759765625,
+                0.1654052734375,
+                0.1131591796875,
+                0.09332275390625,
+                0.095977783203125,
+                0.09588623046875,
+                0.093231201171875,
+                0.09661865234375,
+                0.09136962890625,
+                0.095489501953125,
+                0.127899169921875,
+                0.212066650390625,
+                0.195953369140625,
+                0.214447021484375,
+                0.206512451171875,
+                0.21160888671875,
+                0.17828369140625,
+                0.1378173828125,
+                0.104095458984375,
+                0.0882568359375,
+                0.096221923828125,
+                0.089111328125,
+                0.097015380859375,
+                0.09326171875,
+                0.095947265625,
+                0.095672607421875,
+                0.22607421875,
+                0.262542724609375,
+                0.253143310546875,
+                0.239166259765625,
+                0.218994140625,
+                0.20074462890625,
+                0.17578125,
+                0.13812255859375,
+                0.0950927734375,
+                0.087432861328125,
+                0.076934814453125,
+                0.053497314453125,
+                0.036346435546875,
+                0.025054931640625,
+                0.010772705078125,
+                0.006561279296875,
+                0.002349853515625
+              ],
+              "title": "Bridge 104",
+              "digest": "28972b9f9a41216ec8670ae5f72d6e6b5a572962341a798d62a38af6c9a97e25",
+              "scene_id": null,
+              "snapshot_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+              "analysis_digest": "f13f2174a30d1d22bfd945eb33bc1723e17a514d66c191f33e336839bd8d5239",
+              "duration_seconds": 1.75
+            }
+          ],
+          "project_id": "73ed7b1b-f2ef-43e0-ab16-9ac908d98a0d"
+        }
+      ],
+      "step_attempts": [
+        {
+          "id": "e286ebc4-85b9-4c28-b6cb-2545a20872c3",
+          "status": "done",
+          "attempt": 1
+        }
+      ],
+      "activity": [
+        {
+          "type": "activity",
+          "frame": {
+            "at": "2026-11-20T15:21:15.240362+00:00",
+            "key": "chat.activity.musicPrepareDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T15:22:01.936666+00:00",
+            "activity_id": "2bf4a743b7bb497baf601f0d655d80bb"
+          }
+        }
+      ],
+      "ledger_rows": 0
+    }
+  }
+}

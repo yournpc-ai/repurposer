@@ -1,0 +1,1006 @@
+[
+  {
+    "case": "music",
+    "schema": "b4adac2db453418279bd9b3821aeb53fa7f0a3ac4f564c773e6ae4dd6b86de85",
+    "id": "chatcmpl-tool-9c17b591d142dd60",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 6,
+      "style": "light_electronic",
+      "bpm": 96,
+      "name": "访谈剪辑练习 - 轻电子器乐"
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_5fbef11891914c4abb180939",
+    "name": "generate_voice",
+    "arguments": {
+      "text": "Welcome to the editing studio.",
+      "language": "en",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_6990b2b424c143e7aade59ac",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_f7f3c946d44847ebb8b9ff6e",
+    "name": "list_project_media",
+    "arguments": {}
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_d79cafea2b964f00a58c1c84",
+    "name": "inspect_clip",
+    "arguments": {
+      "clip_id": "v_speaker"
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_60a322a2b23540bd9cf39622",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 10,
+      "end_seconds": 14
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_968c41287e0a4917a05b6e24",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 12,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_932619b643544e69819a4461",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 6,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_4d7ce4f2a6504f6da8fc1f44",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 3,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_2563238929324bd7bb6ed89f",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 12,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_cfe75d84871049b8aa848049",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 10,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_30d7113426c64bfebefe0578",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 12,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_6ebe205c73984dd4b52983bc",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 2,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_e6974a8ae0614c5b959f27b7",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 1.5,
+      "start_seconds": 0.5
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_function_ziy8a1u8eech_1",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 12,
+      "start_seconds": 0
+    }
+  },
+  {
+    "case": "voice-reuse",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_01a1f95f75f9770fa7e18e4d",
+    "name": "generate_voice",
+    "arguments": {
+      "text": "Welcome to the editing studio.",
+      "language": "en",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_function_3kibcl6z9t2d_1",
+    "name": "answer",
+    "arguments": {
+      "pending_disposition": "none"
+    }
+  },
+  {
+    "case": "voice",
+    "schema": "15fb2a0df81b2be96246d33e34c84b361a604b2141df36aa19e126b3e63935cb",
+    "id": "call_function_dw1qleto5r0j_1",
+    "name": "ask_user",
+    "arguments": {
+      "question": "这句旁白放在时间线的哪个位置？",
+      "options": [
+        {
+          "id": "start",
+          "label": "开头 0 秒",
+          "description": "盖在第一段 “The team workspace” 标题画面上，作为开场介绍"
+        },
+        {
+          "id": "gap",
+          "label": "11–13 秒空档",
+          "description": "放在第二段画面与图形卡之间的 2 秒空白处做过渡"
+        },
+        {
+          "id": "interview",
+          "label": "15–18 秒访谈段",
+          "description": "与 “Inside the studio” 字幕同段，出现在受访人物画面上"
+        }
+      ],
+      "recommended_id": "start",
+      "default_path": "放在开头 0 秒，并出一段 0–3 秒的预览",
+      "pending_disposition": "none"
+    }
+  },
+  {
+    "case": "image",
+    "schema": "a5d485eeec466d171986e6fff2eb2e1db1089d0c320ee39abdc2f84079fb2dea",
+    "id": "call_01a1f961ee7876b9a4461d00",
+    "name": "generate_image",
+    "arguments": {
+      "prompt": "一张真实感的摄影棚照片：一张专业录音麦克风竖立在桌面中央，麦克风上挂着一副大尺寸的录音用耳罩耳机，桌面是深色木质或哑光材质，背景虚化出话筒支架和吸音棉。柔和的暖色灯光（琥珀色/钨丝灯）从侧后方打来，营造温暖、安静的深夜录音室氛围，浅景深，真实的摄影质感，高细节，自然阴影。"
+    }
+  },
+  {
+    "case": "image",
+    "schema": "a5d485eeec466d171986e6fff2eb2e1db1089d0c320ee39abdc2f84079fb2dea",
+    "id": "call_01a1f961fbfc75f4aeddc942",
+    "name": "ask_user",
+    "arguments": {
+      "question": "这句旁白放在时间线的哪个位置？",
+      "options": [
+        {
+          "id": "start",
+          "label": "开头 0 秒",
+          "description": "盖在第一段 “The team workspace” 标题画面上，作为开场介绍"
+        },
+        {
+          "id": "gap",
+          "label": "11–13 秒空档",
+          "description": "放在第二段画面与图形卡之间的 2 秒空白处做过渡"
+        },
+        {
+          "id": "interview",
+          "label": "15–18 秒访谈段",
+          "description": "与 “Inside the studio” 字幕同段，出现在受访人物画面上"
+        }
+      ],
+      "recommended_id": "start",
+      "default_path": "放在开头 0 秒，并出一段 0–3 秒的预览",
+      "pending_disposition": "none"
+    }
+  },
+  {
+    "case": "image-only",
+    "schema": "f3435a2d2459b6534e8053fa937626aa2ca83dd3a31426eb4f61ebb5d0a746b9",
+    "id": "call_01a1f962553e7175ae2ce0b1",
+    "name": "generate_image",
+    "arguments": {
+      "prompt": "Photorealistic studio photograph: a professional condenser recording microphone mounted in a shock mount on a wooden desk, warm tungsten key light from the side, soft amber highlights on the metal grille, blurred dark studio background with faint acoustic foam, shallow depth of field, cinematic warm color grading, 50mm lens, high detail"
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_a3ef5a98bf8d434f9d8169ad",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_7e103df074a8496989a8f453",
+    "name": "generate_voice",
+    "arguments": {
+      "text": "Our story begins in the studio.",
+      "language": "en",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_1340180d6e8e4fc190d298ac",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 6.0,
+      "style": "light_electronic",
+      "bpm": 100,
+      "name": "Opening bed"
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_52b97fde5606491f96fbcff0",
+    "name": "generate_voice",
+    "arguments": {
+      "voice_id": "presenter_male",
+      "text": "Our story begins in the studio.",
+      "language": "en"
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_01a1f964f55471108f62b2e7",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 100,
+      "duration_seconds": 6,
+      "name": "Opening bed",
+      "style": "light_electronic"
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_c3e9ec5a19604a74a5db3ea8",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "e931c898-dd3d-565f-a6fa-f32a4a932e90",
+      "start_seconds": 0,
+      "gain_db": 0
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_f574090b1cee467f99db4eeb",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "26a027ff-9bdb-59c5-ba01-22a25b85f7ca",
+      "start_seconds": 0,
+      "gain_db": -12
+    }
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_01a1f9650a7b730b98e880aa",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "mix",
+    "schema": "72f62cbe0aae2a3634a6906bc5dd4a3e5ece8bcb6477b08463efc852884132c8",
+    "id": "call_01a1f9651058765bba460e12",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 0,
+      "end_seconds": 4
+    }
+  },
+  {
+    "case": "fault",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_26c473c1298f452e8e304157",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 4.875,
+      "style": "driving_electronic",
+      "bpm": 113,
+      "name": "Interview Cut 1 - Driving Electronic 113"
+    }
+  },
+  {
+    "case": "approval",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f97753237791b4aaa927",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 3.5,
+      "style": "ambient",
+      "bpm": 87,
+      "name": "访谈氛围电子配乐"
+    }
+  },
+  {
+    "case": "approval",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f97753a875dea9744fa1",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "approval",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f9775779768983a5d148",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 3.5,
+      "style": "ambient",
+      "bpm": 87,
+      "name": "访谈氛围电子配乐"
+    }
+  },
+  {
+    "case": "approval",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f9776676724580e36e04",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "approval",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f9776d7c72929ade86a6",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "f0f2df40-c6e9-504c-a496-3d824a4ba104",
+      "start_seconds": 0,
+      "gain_db": 0
+    }
+  },
+  {
+    "case": "approval",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_c822a46f5f53b9a9501f2726",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 0,
+      "end_seconds": 3.5
+    }
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f979c0c07004aa4155fc",
+    "name": "generate_voice",
+    "arguments": {
+      "text": "A new chapter starts here.",
+      "language": "en",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f979c12073cb9d9cacfb",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f979c5747451805ee361",
+    "name": "generate_voice",
+    "arguments": {
+      "language": "en",
+      "text": "A new chapter starts here.",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f979d6c975f4b5d3da43",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f979dc107023ab556cf8",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "8b971570-8fd6-5b0f-b781-1aa6a33e82f1",
+      "start_seconds": 8,
+      "duration_seconds": 1.7415,
+      "gain_db": -4
+    }
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_633bef7f151ea6978c18ba55",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "authorized-voice",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_76305292342c424221db32ec",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 8,
+      "end_seconds": 11
+    }
+  },
+  {
+    "case": "music-reuse",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call-b3ec3588-46f1-448e-a3a0-12e4317682e2",
+    "name": "list_project_media",
+    "arguments": {}
+  },
+  {
+    "case": "music-reuse",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call-7ffdaa61-3ba9-4774-b8d7-9b65ff092f65",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 100,
+      "duration_seconds": 6,
+      "name": "Opening bed",
+      "style": "light_electronic"
+    }
+  },
+  {
+    "case": "alignment-ready",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_adc1ba92848e454db3b59e9d",
+    "name": "get_narration_alignment",
+    "arguments": {
+      "alignment_id": "18360a94-7b87-4bf9-8168-0c274e80cbab"
+    }
+  },
+  {
+    "case": "alignment-ready",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_7dfa78b0c0e74625ac2902ee",
+    "name": "annotate_narration",
+    "arguments": {
+      "alignment_id": "18360a94-7b87-4bf9-8168-0c274e80cbab",
+      "expected_timing_digest": "43e46051fab8052952751b174b9c7f6442a451fb08d7bea54aaab3511894d34f",
+      "sentences": [
+        {
+          "sentence_id": "s0001",
+          "role": "transition",
+          "weight": "main",
+          "entities": [
+            "studio"
+          ],
+          "needs": {},
+          "emphasis_word_ids": [
+            "w000003",
+            "w000006"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f9828ec9702e9b0d4524",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault2",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f9828ee8705fb7525f00",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 101,
+      "duration_seconds": 4.125,
+      "style": "ambient",
+      "name": "Ambient Interview Bed"
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f982943b72dcaf5e67fc",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault2",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98299b8733e878c52b0",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 101,
+      "duration_seconds": 4.125,
+      "name": "Ambient Interview Bed",
+      "style": "ambient"
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_400a9c959db34ea48125c77e",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_c234e3af13594a2bad9ab561",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "1d882ec7-e2ec-5ba4-bfb6-0f0946e2c023",
+      "start_seconds": 10,
+      "gain_db": -16
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f98330eb75c483127fef",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f983390f75b78024ffa0",
+    "name": "preview_range",
+    "arguments": {
+      "kind": "range",
+      "start_seconds": 10,
+      "end_seconds": 13
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f9833d8b70ae97f1d280",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 13,
+      "kind": "range",
+      "start_seconds": 10
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f98341557134a6148a03",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 13,
+      "kind": "range",
+      "start_seconds": 10
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f983458175cd81694073",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 13,
+      "kind": "range",
+      "start_seconds": 10
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f983494d726b9c29dcb1",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 13,
+      "start_seconds": 10
+    }
+  },
+  {
+    "case": "fault2",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f9834d0174a6b7daf6a6",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 13,
+      "start_seconds": 10
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98600d2730a9ab2c208",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 2.5,
+      "style": "light_electronic",
+      "bpm": 92,
+      "name": "Outro Bed 92BPM"
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98601ab738585e5f654",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault3",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f986060c754eb7047099",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 2.5,
+      "style": "light_electronic",
+      "bpm": 92,
+      "name": "Outro Bed 92BPM"
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_8172cc6db89c4694b2a4ceb3",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_75bec7b323404f78a3087cdb",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "bd4408e3-4760-5599-8aae-8d4d557d7d06",
+      "start_seconds": 15,
+      "duration_seconds": 2.5,
+      "gain_db": -18
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-cfca02ca-cfd1-4326-97f7-036aadb39e8f",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 15,
+      "end_seconds": 18
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-ff5346e1-ef01-4183-a24b-0694d3ea9fc4",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-730a1ac1-0ef5-42ea-be5b-b1189f5986da",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 15,
+      "end_seconds": 18
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-c9c99273-b508-4ebb-8a93-b34df60fbe70",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 18,
+      "start_seconds": 15
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-f78543bb-eec1-4515-b1b7-d862a0c37834",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 18,
+      "start_seconds": 15
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-6659747e-7e0f-43ed-ace3-5e16671ecd19",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 17.5,
+      "start_seconds": 15
+    }
+  },
+  {
+    "case": "fault3",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call-7f685d5f-602a-4ae4-a04a-da508256e71a",
+    "name": "preview_range",
+    "arguments": {
+      "end_seconds": 17.5,
+      "start_seconds": 15.5
+    }
+  },
+  {
+    "case": "fault3-preview",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_064d66b0d9c14591a927bf7c",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault3-preview",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_dc1326da1a6f48c6a66e10de",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 15,
+      "end_seconds": 18
+    }
+  },
+  {
+    "case": "fault3-preview",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_089b4d694b8d4fd1a1e50888",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault3-preview",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_090b994a131e4816a8b8cc20",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 15,
+      "end_seconds": 18
+    }
+  },
+  {
+    "case": "fault4",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98c24bb7398a7615b8d",
+    "name": "generate_music",
+    "arguments": {
+      "name": "Bridge 104",
+      "style": "light_electronic",
+      "bpm": 104,
+      "duration_seconds": 1.75
+    }
+  },
+  {
+    "case": "fault4",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98c255470fab15ddddf",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "fault4",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98c2a0971359f7ef0de",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 104,
+      "duration_seconds": 1.75,
+      "name": "Bridge 104",
+      "style": "light_electronic"
+    }
+  },
+  {
+    "case": "fault4",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "chatcmpl-tool-bff54abbd6566188",
+    "name": "inspect_timeline",
+    "arguments": {
+      "offset": 0
+    }
+  },
+  {
+    "case": "fault4",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "chatcmpl-tool-a68919014fdb3118",
+    "name": "insert_audio",
+    "arguments": {
+      "source_id": "9e3619fd-c426-5f30-a4ee-fc48de268c2f",
+      "start_seconds": 7,
+      "duration_seconds": 1.75,
+      "gain_db": -15
+    }
+  },
+  {
+    "case": "fault4",
+    "schema": "7659e393f3ec7b728c3ebe957001012bfd2eaa3d96c625e4a837e1cdea9dedda",
+    "id": "call_01a1f98d17f77259a5b6f430",
+    "name": "preview_range",
+    "arguments": {
+      "start_seconds": 7,
+      "end_seconds": 9
+    }
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d7ab07123b951ff40",
+    "name": "read_conversation_context",
+    "arguments": {}
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d7fc9752cb1b067d6",
+    "name": "list_project_media",
+    "arguments": {}
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d856272a5a4f5028d",
+    "name": "read_conversation_context",
+    "arguments": {
+      "cursor": 16
+    }
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d8a4075979e3e5ab7",
+    "name": "read_conversation_context",
+    "arguments": {
+      "cursor": 32
+    }
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d906c74c6b351c237",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "mix-levels",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98d99cb71b28ae23d9b",
+    "name": "preview_range",
+    "arguments": {
+      "kind": "range",
+      "start_seconds": 0,
+      "end_seconds": 4
+    }
+  },
+  {
+    "case": "svg",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "chatcmpl-tool-b054ceb6edb43acf",
+    "name": "generate_image",
+    "arguments": {
+      "prompt": "A blue circle on white",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1920 1080\"><rect width=\"1920\" height=\"1080\" fill=\"white\"/><circle cx=\"960\" cy=\"540\" r=\"220\" fill=\"blue\"/></svg>"
+    }
+  },
+  {
+    "case": "svg-reuse",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f98e8dcb76cfb07cdb0e",
+    "name": "generate_image",
+    "arguments": {
+      "prompt": "A blue circle on white",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1920 1080\"><rect width=\"1920\" height=\"1080\" fill=\"white\"/><circle cx=\"960\" cy=\"540\" r=\"220\" fill=\"blue\"/></svg>"
+    }
+  },
+  {
+    "case": "declined-voice",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_23298652678a40138b3119a6",
+    "name": "ask_user",
+    "arguments": {
+      "question": "生成这句英文旁白 “The rehearsal starts tomorrow.” 需要消耗额度（约 1 段配音 + 可能的插入），你想怎么进行？",
+      "options": [
+        {
+          "id": "generate_now",
+          "label": "直接生成并插入",
+          "description": "消耗最小额度，立刻产出这条旁白并放到时间线上"
+        },
+        {
+          "id": "estimate_only",
+          "label": "先看费用估算",
+          "description": "只报告预计消耗，不生成，保留你的决定"
+        },
+        {
+          "id": "skip",
+          "label": "暂不生成",
+          "description": "不消耗任何额度，时间线保持现状"
+        }
+      ],
+      "recommended_id": "generate_now",
+      "default_path": "直接生成这段旁白并插入时间线",
+      "pending_disposition": "none"
+    }
+  },
+  {
+    "case": "decline-gate",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f991986875b3a796c680",
+    "name": "generate_voice",
+    "arguments": {
+      "text": "The rehearsal starts tomorrow.",
+      "language": "en",
+      "voice_id": "presenter_male"
+    }
+  },
+  {
+    "case": "stale",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f9933bdc75bf94656add",
+    "name": "generate_music",
+    "arguments": {
+      "duration_seconds": 2.125,
+      "style": "ambient",
+      "bpm": 77,
+      "name": "Stale Cut 77"
+    }
+  },
+  {
+    "case": "stale",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f9933c5e71e1844dad20",
+    "name": "inspect_timeline",
+    "arguments": {}
+  },
+  {
+    "case": "stale",
+    "schema": "0a4c65454d1381fd9cfdda5ca0a385d1e76477aef9d1fd7f77d3bc95c1ed83a5",
+    "id": "call_01a1f99340ea7171adeca5f7",
+    "name": "generate_music",
+    "arguments": {
+      "bpm": 77,
+      "duration_seconds": 2.125,
+      "name": "Stale Cut 77",
+      "style": "ambient"
+    }
+  }
+]

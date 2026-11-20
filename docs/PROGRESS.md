@@ -1,17 +1,15 @@
 # PROGRESS — 进展、排期与需求池
 
-> Status: 活跃快照（2026-11-16）。§0 为当前优先级与开放事项；需求池持续维护。状态就地更新，删除失效快照，不保存周期归档。
-> 本文是**排期 / 优先级 / 需求池的唯一事实源**（未排期需求见 §2）；其他文档只引用当前优先级或需求池条目，不复述排期。
+> 更新至 2026-11-20。Agent Editor 的施工顺序、作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
 
 ## 0. 当前里程碑与施工序列
 
-> 新会话先读本节，再进入当前任务的状态/合同与其指定的具体规范章节。§1 保留后续能力与上线条件，§2 是常驻需求池；已完成工作不在这里留施工记录。
-
 ### 0.1 里程碑状态
+
+- **Agent Editor v1** 已验证原子剪辑、多版本回合、生成媒体后接续剪辑，以及双进程重启后的原回合恢复。保存作品使用直接编辑 Tool；后续施工从主合同 Iteration 4 及其停止条件接续。[Iteration 2](tasks/agent-editor-evidence/iteration-2.md) · [Iteration 3](tasks/agent-editor-evidence/iteration-3.md)
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
 - **当前主线 — Chat-only Video Project**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
-- **下一项独立任务 · Agent Editing Loop MVP（待第二轮验收通过后施工）**。在已保存作品上通过真实局部预览判断遮挡，使用 `revise_video(ops[])` 对一个明确对象调整 Transform，保存并重看同一时间窗。复用现有版本、预览及写入口，按目标收窄模型可见操作。引擎验收核对给定变换、版本差异及字幕音频隔离；Agent 验收由模型自行选择目标和调整幅度，根据修改前后的真实画面决定是否继续，记录工具参数合法性和渲染结果。更换素材检验判断，关键帧与蒙版另行排期。
 - **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项
@@ -20,8 +18,7 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
-| **当前** | **视频上下文与直接 Op 收敛** | 当前工作面只投影目标现值、相关来源、选区和兼容 Op；旧参数与媒体按生命周期退役。已覆盖多 Op 单版本与 region wire，仍需真实复合编辑、刷新/Stop 和完整旅程验收 | [统一视频合同](tasks/skill-package-promo-video.md) / [长期规则](VIDEO_PROJECT.md#22-唯一写口与并发) |
+| 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **官网品牌宣传片批 1A：装配修复、集中澄清、品牌档案与创作状态继承** | Readiness 三阶段、真实 PNG analyze_brand、扩展 Brief/CreativeState、集中问题组前后端和版本/Run 继承已落码；fake provider golden wire 通过，`test/core` 437 项与 Web 410 项通过，TypeScript 通过。真实 LegitEvi BrandProfile 含实测 `#DC0000`、“接近 Inter”和原始宣言；数字 option_id 整组提交已验证标签回填、六项 user-stated、preview/正式 digest 一致、过期/重复 409 与刷新恢复，最终 readiness=design_video。批 1 验收止于集中作答与本批状态恢复；首稿写作/修复和后续媒体迭代尚未开始，不纳入本批测试、通过结论或阻塞项。开发库已确认 h8e5a2c4d7f1，生产 migration/恢复和本批真实浏览器问题组仍未验证 | [任务合同](tasks/website-promo-evidence-brief-workflow.md) / [验证登记](VERIFICATION.md#411-官网品牌宣传片基础链iteration-1a) |
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
