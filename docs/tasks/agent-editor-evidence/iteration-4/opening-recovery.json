@@ -1,0 +1,33 @@
+{
+  "race": {
+    "project": "af0c9da5-e24d-4fbb-b850-80ead59a7b27",
+    "claims": [
+      {
+        "detail": {
+          "code": "chat.already_opened"
+        },
+        "turn_id": null,
+        "persisted": false
+      },
+      {
+        "id": "b90359ac-5877-4f2a-a677-a41a577935ae",
+        "stop": {
+          "accepted": true,
+          "turn_state": "retracted"
+        }
+      }
+    ],
+    "replay": 409,
+    "rows": 0
+  },
+  "login": {
+    "url": "http://localhost:3026/home",
+    "draft": "My studio login draft",
+    "verify": "real JWT, isolated mail transport"
+  },
+  "history": {
+    "injected": "delayed history with first 503",
+    "historyReads": 4,
+    "posts": 0
+  }
+}

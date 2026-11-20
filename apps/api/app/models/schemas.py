@@ -1975,6 +1975,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project_id: UUID
+    first_message: bool = False
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)
     mentions: list[ChatMention] = Field(default_factory=list)

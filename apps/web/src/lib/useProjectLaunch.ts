@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -65,6 +65,7 @@ export function useProjectLaunch() {
   const { requireAuth } = useAuth()
   const [launching, setLaunching] = useState(false)
 
+  const pending = useRef(false)
   const launch = useCallback(
     async (input: LaunchInput) => {
       await requireAuth(async () => {
@@ -82,6 +83,8 @@ export function useProjectLaunch() {
           toast.error(t("composer.uploadInProgress"))
           return
         }
+        if (pending.current) return
+        pending.current = true
         setLaunching(true)
         input.onStart?.()
         try {
@@ -142,7 +145,7 @@ export function useProjectLaunch() {
           // editor/state, then we hand the draft to the project's chat dock.
           input.onSent?.()
 
-          navigate({
+          await navigate({
             to: "/projects/$id",
             params: { id: project.id },
             state: {
@@ -158,6 +161,7 @@ export function useProjectLaunch() {
           })
         } catch {
           // apiFetch already toasted the server's reason; just reset the UI.
+          pending.current = false
           setLaunching(false)
         }
       })

@@ -48,6 +48,7 @@ import type {
 } from "@/lib/chatStreamFrames"
 
 export interface ChatTurnBody {
+  first_message?: boolean
   project_id: string
   message: string
   mentions?: ChatMention[]

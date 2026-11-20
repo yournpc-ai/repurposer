@@ -939,30 +939,6 @@ body {
   pointer-events: none;
 }
 
-/* Home bottom-dock entrance (2026-10 bottom-dock ruling): the composer flips
-   from its in-flow slot to `fixed` at the viewport bottom once the slot
-   scrolls out — a DISCRETE state change, so a clock animation is legal here
-   (the scroll-linked morph itself never uses clocks). Transform/opacity
-   only; the bar rises 12px into place. Reduced motion: plain swap. */
-@keyframes home-dock-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.home-dock-in {
-  animation: home-dock-in 0.22s var(--arc-ease-enter) both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-dock-in {
-    animation: none;
-  }
-}
-
 /* Composer rotating placeholder (Lovart-style: fixed prefix + cycling
    example prompt, 2026-08-30; rolling window per user ruling 2026-08-31 —
    the first pass was a blink-swap): per cycle the outgoing line rolls up

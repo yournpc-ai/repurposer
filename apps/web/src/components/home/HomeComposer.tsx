@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react"
+import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Box, Plus, Upload, User } from "lucide-react"
@@ -40,17 +40,6 @@ type Persona = PersonaPickerEntry
 
 interface HomeComposerProps {
   personas: Persona[]
-  /** Scroll-LINKED morph (ADR-046 walkthrough pass 3): 0 = expanded hero
-   * card, 1 = the docked one-line explore bar (stadium / half-radius). Every
-   * morph property is an interpolation of this scroll progress — NEVER a
-   * clock transition: the form always matches the scroll position exactly
-   * (fast scroll = fast morph, zero lag, zero threshold flap). */
-  dockP?: number
-  /** The docked bar's viewport seat: at the BOTTOM (2026-10 bottom-dock
-   * ruling — the composer flips to `fixed` once its flow slot scrolls out).
-   * The bar's panels/tooltips open UPWARD from there (a side="bottom" panel
-   * would leave the screen); the expanded card's panels always open down. */
-  dockedAtBottom?: boolean
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
    * owns the text (MentionEditor); Home keeps it only as the send payload. */
@@ -70,12 +59,6 @@ const AUTO_GENERATE = "__auto_generate__"
  * change replays the tour exactly once per user, zero manual versioning.
  * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
-
-/** Persona entry hidden 2026-09-23 (user ruling): returns with the
- * positioning / memory ops-layer iteration (docs/POSITIONING.md). The
- * state machinery (personaId / launch payload) stays — only the button
- * and its tour step go away; the sidebar nav entry is hidden too. */
-const SHOW_PERSONA = false
 
 /** Composer teaching tour (3 steps while the persona entry is hidden):
  * assets → prompt (send folded in) → the recipe gallery's Use-prompt entry
@@ -103,54 +86,12 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
 
 const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 
-// Morph endpoints (expanded ↔ docked one-line bar). The shell is the shadcn
-// InputGroup (2026-08-21 adoption — the layout converged to the canonical
-// AI-composer anatomy: chips block-start / control / actions block-end), so
-// the density recipe lives ON the addons and the editor band, never on the
-// container: 20px sides / 20px top / 12px chin (measured off the MiniMax
-// composer reference); the docked bar narrows the sides to 8px — the attach
-// button and the send reserve already hold the bar's horizontal air. The
-// docked bar is 56px tall — 16px pad + one 24px
-// text-base line + 16px pad, so the single line self-centers by construction
-// and the h-9 send rides with 10px air (MiniMax bar proportions: the button
-// is ~2/3 of the bar height, never stuffed).
-// The radius is a scroll-linked morph property: the 16px resting surface
-// becomes a 40px docked bar, where the CSS radius cap (≤ half the bar) turns
-// it into a stadium. Still a pure function of dockP — never a clock transition.
-// An inline style also sidesteps the stock
-// has-data-[align=*]:rounded-md pins (their :has() specificity outranks any
-// plain rounded-* class).
-const EDITOR_H = 80 // rest band FLOOR (the empty/one-line MiniMax card look)
-const EDITOR_MAX_H = 136 // growth cap: 2×20 pad + 4×24 lines — beyond it the
-// editor's own overflow-y-auto scrolls (the band never exceeds four lines)
-const BAR_EDITOR_H = 56 // bar band height (= the whole bar): 16 + 24 line + 16
-const EDITOR_PAD_Y = 20 // pt-5
-const BAR_EDITOR_PAD_Y = 16 // (56 − 24 line) / 2 — the bar line self-centers
-const PAD_X = 20 // px-5 sides (expanded card)
-const BAR_PAD_X = 8 // bar: the attach button + the row's send reserve already
-// hold the horizontal air — the band's own 20px sides would be dead width
-// (on a phone that's 40px of the text lane, the difference between the
-// placeholder fitting and clipping).
-const RADIUS_REST = 16 // rounded-surface
-const RADIUS_DOCK = 40 // ≥ half the 56px bar — the cap makes the stadium
-const CHIPS_MAX_H = 160 // ~4 chip rows
-const CHIPS_PAD_TOP = 20 // pt-5 — interpolated, never a class (see chipsStyle)
-const CONTROL_ROW_H = 48 // h-9 content + pb-3 chin (the cap swallows the padding)
-const CONTROL_PAD_BOTTOM = 12 // pb-3 chin — interpolated, never a class
-const SEND_ANCHOR_X = 12 // right-3
-const SEND_ANCHOR_Y = 12 // bottom-3 (on the control row's line)
-const SEND_BAR_ANCHOR = 10 // (56 − 36) / 2 — centered in the bar
-const BAR_SEND_RESERVE = 54 // 10 anchor + 36 send + 8 gap — bar input's right reserve
-const ATTACH_PAD_X = 10 // bar: the attach glyph's center mirrors the send's (28px)
-const ATTACH_MAX_W = 96
 /** Rotating placeholder cadence (Lovart-style): one full example prompt
  * cycles every this-many ms — no prefix, the whole line rolls. */
 const PLACEHOLDER_ROTATE_MS = 3500
 
 export function HomeComposer({
   personas,
-  dockP = 0,
-  dockedAtBottom = false,
   onGenerateStart,
   prompt,
   onPromptChange,
@@ -328,10 +269,6 @@ export function HomeComposer({
     description: t(step.descKey),
   }))
 
-  // Scroll-linked morph interpolations (dockP is a pure function of
-  // scrollTop; SSR renders dockP=0 = the expanded card).
-  const docked = dockP >= 1
-  const rest = dockP <= 0
   // Click-to-focus (the input-group addon contract): clicks on a band's
   // padding focus the editor; clicks on real buttons pass through. Native
   // clicks INSIDE the editable already place the caret — focusing again here
@@ -341,103 +278,15 @@ export function HomeComposer({
     if (target.closest("button") || target.closest("[contenteditable]")) return
     editorRef.current?.focus()
   }
-  // Content-driven band target: re-measured after every content change
-  // (typing / paste / recipe prefill / clear — all funnel through onChange
-  // → the prompt prop) and on viewport rewraps. The rAF defers the read
-  // past the DOM mutation. SSR and first paint = EDITOR_H.
-  const [contentH, setContentH] = useState(EDITOR_H)
-  useEffect(() => {
-    const remeasure = () => {
-      const h = editorRef.current?.getContentHeight()
-      if (!h) return
-      setContentH(
-        Math.min(Math.max(h + 2 * EDITOR_PAD_Y, EDITOR_H), EDITOR_MAX_H),
-      )
-    }
-    const id = requestAnimationFrame(remeasure)
-    window.addEventListener("resize", remeasure)
-    return () => {
-      cancelAnimationFrame(id)
-      window.removeEventListener("resize", remeasure)
-    }
-  }, [prompt, mentions, selectedSkill, editorRef])
-  // One-place law: the Assets panel IS the chips band's expanded form —
-  // while it's open the band folds away, so the file list lives in exactly
-  // one place. The fold interpolates maxHeight AND the one-sided padding in
-  // the same style object: a flex item's padding SURVIVES max-height:0
-  // (border-box does not clip it — the old "clips its padding for free"
-  // belief leaked pt-5/pb-3 into the docked bar, 2026-08-21 headless probe),
-  // so static padding classes on a fold addon are banned; the padding must
-  // ride the interpolation.
-  const chipsOpen = staged.length > 0 && !assetsOpen
-  const chipsStyle: CSSProperties = {
-    maxHeight: chipsOpen ? (1 - dockP) * CHIPS_MAX_H : 0,
-    paddingTop: chipsOpen ? (1 - dockP) * CHIPS_PAD_TOP : 0,
-    opacity: assetsOpen ? 0 : 1 - dockP,
-    visibility: docked || assetsOpen ? "hidden" : undefined,
-  }
-  const attachStyle: CSSProperties = {
-    maxWidth: dockP * ATTACH_MAX_W,
-    paddingLeft: dockP * ATTACH_PAD_X,
-    opacity: dockP,
-    visibility: rest ? "hidden" : undefined,
-  }
-  const editorRowStyle: CSSProperties = { paddingRight: dockP * BAR_SEND_RESERVE }
-  // The band owns the editor's padding (not the MentionEditor itself) so the
-  // air can morph: py 20→16 leaves exactly one line in the bar; px 20→8 —
-  // in the docked bar the attach button (left) and the row's send reserve
-  // (right) already hold the horizontal air.
-  // The band's height is CONTENT-DRIVEN at rest (2026-10-15 mobile ruling):
-  // a fixed 80px band left 40px for text = 1.67 lines, so every two-line
-  // prompt on a phone clipped its second line ("下面被遮挡"). The band hugs
-  // the draft between EDITOR_H (floor) and EDITOR_MAX_H (cap, then the
-  // editor scrolls); the measured target only changes on content edits /
-  // rewraps, so the morph stays a pure function of scrollTop — it
-  // interpolates WHATEVER the current target is down to the 56px bar.
-  const editorBandStyle: CSSProperties = {
-    height: contentH + dockP * (BAR_EDITOR_H - contentH),
-    padding: `${EDITOR_PAD_Y + dockP * (BAR_EDITOR_PAD_Y - EDITOR_PAD_Y)}px ${PAD_X + dockP * (BAR_PAD_X - PAD_X)}px`,
-  }
-  const controlRowStyle: CSSProperties = {
-    maxHeight: (1 - dockP) * CONTROL_ROW_H,
-    paddingBottom: (1 - dockP) * CONTROL_PAD_BOTTOM,
-    marginTop: (1 - dockP) * 8,
-    opacity: 1 - dockP,
-    visibility: docked ? "hidden" : undefined,
-    pointerEvents: dockP > 0.5 ? "none" : undefined,
-  }
-  // The shell radius rides dockP (inline style — beats the stock
-  // has-data-[align=*]:rounded-md pins' :has() specificity for free).
-  const shellStyle: CSSProperties = {
-    borderRadius: RADIUS_REST + dockP * (RADIUS_DOCK - RADIUS_REST),
-  }
-  const sendStyle: CSSProperties = {
-    right: SEND_ANCHOR_X + dockP * (SEND_BAR_ANCHOR - SEND_ANCHOR_X),
-    bottom: SEND_ANCHOR_Y + dockP * (SEND_BAR_ANCHOR - SEND_ANCHOR_Y),
-  }
-
   return (
     <>
-    {/* Two forms, ONE DOM (the MentionEditor never unmounts — the DOM owns
-        the draft). The shell is the shadcn InputGroup, re-skinned to the
-        card law (2026-08-21 adoption): the stock `border-input` stroke and
-        `bg-input/20` fill give way to the base subtle border + bg-card + NO
-        shadow; the focus-within outline machinery, cursor-text addons, and the
-        block-start/block-end anatomy are what we came for. expanded = chips
-        addon / editor band / control-row addon at a 16px radius (MiniMax's
-        soft rectangle); docked = the one-line explore bar — the stadium
-        emerges via the CSS radius cap as the inline-style radius rides dockP
-        to 40px against the 56px bar (the user-ruled rounded-full exception).
-        The morph between them is SCROLL-LINKED (dockP), never a clock
-        transition. NO backdrop-filter (it would make the card the containing
-        block for the portaled MentionPicker). */}
     <InputGroup
       className={`border bg-card shadow-none dark:bg-card ${
         dragging
           ? "border-2 border-dashed border-foreground/30 "
           : "border border-subtle"
       }`}
-      style={shellStyle}
+      style={{ borderRadius: 16 }}
       {...dropProps}
     >
         {/* Drop affordance — the floating pill (screenshot parity): centered
@@ -452,14 +301,10 @@ export function HomeComposer({
             </div>
           </div>
         )}
-        {/* Block-start — staged asset chips. Always rendered (keeps the
-            container h-auto), folds to zero when empty / docked / the Assets
-            panel is open (the icon buttons are stateless — in the docked bar
-            the files simply ride no display, per the 2026-08-30 ruling). */}
         <InputGroupAddon
           align="block-start"
           className="min-h-0 overflow-hidden px-5 py-0 font-normal"
-          style={chipsStyle}
+          style={{ display: staged.length && !assetsOpen ? undefined : "none", paddingTop: 16 }}
           onClick={focusEditor}
         >
           <AssetChips items={staged} onRemove={removeStaged} onRetry={retryStaged} />
@@ -468,55 +313,18 @@ export function HomeComposer({
         {/* The input row: the bar's attach button (zero width when expanded)
             + the editor band. A plain row, not an addon — the inline-start
             addon only fits single-line shells. */}
-        <div className="flex w-full items-center" style={editorRowStyle}>
-          <div className="flex-none overflow-hidden" style={attachStyle}>
-            {/* MiniMax-standard one-line layout: attach on the left. Panel
-                direction follows the dock seat: the bar rides the viewport's
-                BOTTOM (2026-10 bottom-dock ruling), so its panel opens
-                UPWARD (side="top") — a downward panel would leave the
-                screen. Pure circle icon + function tooltip, stateless
-                (2026-08-30 icon-button ruling): the staged files themselves
-                live in the panel. */}
-            <ComposerPanelButton
-              icon={Plus}
-              label={t("composer.assets")}
-              tooltipSide={dockedAtBottom ? "top" : "bottom"}
-              popoverSide={dockedAtBottom ? "top" : "bottom"}
-              align="start"
-              tabIndex={dockP > 0.5 ? 0 : -1}
-            >
-              <AssetsPanel
-                items={staged}
-                onAdd={addFiles}
-                onRemove={removeStaged}
-                onRetry={retryStaged}
-              />
-            </ComposerPanelButton>
-          </div>
+        <div className="flex w-full items-center">
           <div
             className="relative flex min-w-0 flex-1 cursor-text flex-col"
-            style={editorBandStyle}
+            style={{ minHeight: 80, padding: 20 }}
             data-tour="composer-prompt"
             onClick={focusEditor}
           >
-            {/* Rotating placeholder overlay — pointer-events-none so clicks
-                land on the band's focus handler. Padding mirrors the band's
-                (the morph interpolation), so the text sits exactly where the
-                editor's first line is. whitespace-nowrap + overflow-hidden =
-                native-placeholder parity: a placeholder NEVER wraps — on
-                narrow viewports the line clips at the edge instead of the
-                nowrap line dropping to a second row and spilling out of the
-                56px docked bar. The line is a rolling window: per cycle the
-                outgoing line (absolute, so layout follows the incoming) rolls up-out while the incoming rolls in from below
-                — styles.css `.placeholder-roll-*`. Color = the whisper tier
-                (2026-09-23 user ruling, chat-dock parity: the MentionEditor's
-                CSS placeholder reads --meta-foreground, this overlay was one
-                tier brighter). */}
-            {promptEmpty && (
+                {promptEmpty && (
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 overflow-hidden whitespace-nowrap text-base text-meta-foreground"
-                style={{ padding: editorBandStyle.padding }}
+                style={{ padding: 20 }}
               >
                 <span className="relative inline-block whitespace-nowrap">
                   {placeholderRoll.prev !== null && (
@@ -552,26 +360,10 @@ export function HomeComposer({
           </div>
         </div>
 
-        {/* Block-end — the control row (folds away into the bar; send is NOT
-            here — it's the absolute anchor below so it survives the fold).
-            Lovart-style pure circle icon buttons (2026-08-30 ruling): icon +
-            function tooltip, completely STATELESS — no count, no Auto/name
-            value text; the selection is read inside each frosted panel (the
-            staged files themselves also ride the chips band, unchanged).
-            The pr-12 reserves the send anchor's space. ONE HEIGHT for the
-            whole row (2026-09-23 ruling, retiring the 2026-08-31 "32px
-            buttons one register below the 36px send" size gap): circle
-            buttons, the cost-confirm pill and the send all share h-9, so
-            hover backgrounds align on the row's top/bottom edges by
-            construction. The left group's -ml-[9px] pulls the first button
-            9px left so its GLYPH's left edge lands on the editor text's
-            left edge (the 18px glyph centers inside the 36px button with a
-            9px offset — without the bleed the icons read indented under the
-            text). */}
         <InputGroupAddon
           align="block-end"
           className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
-          style={controlRowStyle}
+          style={{ marginTop: 8, paddingBottom: 12 }}
           onClick={focusEditor}
         >
           <div className="flex w-full items-center justify-between">
@@ -593,7 +385,7 @@ export function HomeComposer({
                 />
               </ComposerPanelButton>
 
-              {SHOW_PERSONA && (
+              {(
                 <ComposerPanelButton
                   icon={User}
                   label={t("composer.persona")}
@@ -644,12 +436,9 @@ export function HomeComposer({
 
         </InputGroupAddon>
 
-        {/* Send — the absolute bottom-right anchor in BOTH forms (expanded:
-            on the control row's line, its historical seat; docked: centered
-            in the bar). Absolute so the control row's fold never takes it. */}
         <ComposerSendButton
           className="absolute"
-          style={sendStyle}
+          style={{ bottom: 12, right: 12 }}
           data-tour="composer-send"
           disabled={isGenerating}
           generating={isGenerating}

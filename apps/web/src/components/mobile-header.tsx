@@ -48,7 +48,6 @@ export function MobileHeader() {
   const { t } = useTranslation()
   const router = useRouterState()
   const onProjects = router.location.pathname.startsWith("/projects")
-  const onHome = router.location.pathname === "/home"
   const { isAuthenticated } = useAuth()
 
   // Same SSR discipline as the rail footer: getUser() reads localStorage,
@@ -93,7 +92,7 @@ export function MobileHeader() {
 
         {/* Home carries the same CreditsPill as the project spend point;
             bare inside the shared glass, never another floating chip. */}
-        {onHome && <CreditsPill refreshKey="home" />}
+        <CreditsPill refreshKey={router.location.pathname} />
 
         {/* Bell in its bare form — the glass tile is the header's. */}
         <NotificationBell chip={false} />

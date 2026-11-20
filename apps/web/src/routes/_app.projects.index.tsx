@@ -180,7 +180,7 @@ function ProjectsPage() {
             interleave. Vertical separation makes horizontal clearance
             unnecessary, so the controls stay flush with the grid's right
             edge. */}
-        <div className="mb-8 mt-10 flex items-center justify-between gap-4">
+        <div className="mb-6 mt-2 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("projects.title")}
           </h1>
@@ -262,7 +262,7 @@ function ProjectsPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visible.map((project) => (
               <ProjectCard
                 key={project.id}

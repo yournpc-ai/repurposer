@@ -2870,10 +2870,28 @@ async def prepare_chat_turn(
             else f"At most {MAX_MENTIONS_PER_TURN} @-mentions per message.",
         )
 
+    # Serialize opening admissions, including a manual send racing the Home
+    # handoff. This transaction ends at the existing input-durability commit.
+    from sqlalchemy import func
+
+    await db.execute(select(func.pg_advisory_xact_lock(
+        request.project_id.int % (1 << 63)
+    )))
     conversation = await _get_or_create_project_conversation(
         db, user_id, request.project_id
     )
     conversation_id = UUID(str(conversation.id))
+    if request.first_message:
+        # The sequence counter also survives a zero-visible Stop retraction.
+        # Allocate the opener's sequence in this transaction so an admission
+        # failure before commit cannot consume the handoff.
+        counter = await db.get(MessageSeqCounter, conversation_id)
+        opening = await db.scalar(select(Message.id).where(
+            Message.conversation_id == conversation_id, Message.role == "user"
+        ).limit(1))
+        if counter is not None or opening is not None:
+            raise HTTPException(409, detail={"code": "chat.already_opened"})
+        db.info.setdefault(_FRESH_CONVERSATIONS_INFO, set()).add(conversation_id)
     from app.chat.editor_recovery import recover_interrupted_edits
     await recover_interrupted_edits(db, conversation_id)
     # Worker-born speech and deterministic chrome inherit this locale owner;

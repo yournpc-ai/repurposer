@@ -1,3 +1,4 @@
+import "@/studio.css"
 import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 
@@ -8,7 +9,6 @@ import { NotificationBell } from "@/components/notifications/NotificationBell"
 import {
   SIDEBAR_COOKIE_NAME,
   SidebarProvider,
-  SidebarInset,
 } from "@/components/ui/sidebar"
 
 // Server-module imports are denied in the client bundle (same pattern as the
@@ -20,25 +20,6 @@ const readSidebarCookieOnServer = createServerFn({ method: "GET" }).handler(
   }
 )
 
-/**
- * Pathless layout route for the authenticated studio: everything under
- * `_app` gets the sidebar chrome. The public landing page (`/`) lives
- * outside this layout.
- *
- * No global AppHeader on md+ (ADR-046 D5): utilities live in the account
- * console (rail footer); the notification bell is the single floating chrome
- * chip at the content area's top-right — the top-right slot is reserved
- * app-wide, page-level controls never take that corner. Below md the chrome
- * consolidates into the glass MobileHeader (2026-10-14 user ruling — the
- * two-entry nav doesn't deserve a bottom tab bar; the floating sidebar
- * trigger retires with it, the drawer is unreachable, and PC keeps
- * expanding/collapsing via the rail's hover-logo button or Cmd/Ctrl+B).
- *
- * The expanded/collapsed choice PERSISTS: the primitive writes the
- * `sidebar_state` cookie on every toggle and this loader reads it back, so
- * SSR and hydration render the same form (language-cookie precedent in
- * `__root.tsx`).
- */
 export const Route = createFileRoute("/_app")({
   loader: async (): Promise<{ sidebarOpen: boolean }> => {
     if (typeof document === "undefined") {
@@ -55,34 +36,19 @@ export const Route = createFileRoute("/_app")({
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const onHome = pathname === "/home"
   return (
-    <SidebarProvider defaultOpen={sidebarOpen}>
-      {/* Settings = a shared dialog rooted at __root.tsx (summonable from
-          anywhere via useSettingsDialog) — the account console row and the
-          /settings OAuth shim both ride that single seat. */}
+    <SidebarProvider defaultOpen={sidebarOpen} className="ui-as-app">
       <AppSidebar />
-      <SidebarInset className="relative overflow-x-clip">
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-          <div className="absolute -left-[20%] -top-[10%] h-[50%] w-[50%] rounded-full bg-primary/5 blur-[120px]" />
-          <div className="absolute -right-[20%] top-[20%] h-[40%] w-[40%] rounded-full bg-primary/3 blur-[100px]" />
-        </div>
-        {/* Mobile chrome (stacked, never overlay): the glass header is the
-            first IN-FLOW child — sticky top-0 pins it on window-scroll
-            pages, whose content scrolls under the glass naturally; home is
-            the one exception, its scrollport pulls up UNDER the glass
-            (-mt-14) so the frost has something to blur. First child order
-            keeps it above the Outlet in both paint and tab order. */}
+      <main className="ui-as-main">
         <MobileHeader />
-        {/* Home exposes the same bare CreditsPill as the project spend point,
-            immediately left of the bell. The bell remains the only floating
-            chip; other pages keep their existing credits seats. */}
-        <div className="fixed right-4 top-4 z-40 hidden items-center gap-1 md:flex">
-          {onHome && <CreditsPill refreshKey="home" />}
-          <NotificationBell />
+        <div className="hidden h-12 shrink-0 items-center justify-end gap-1 px-4 md:flex">
+          <CreditsPill refreshKey={pathname} />
+          <NotificationBell chip={false} />
         </div>
-        <Outlet />
-      </SidebarInset>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Outlet />
+        </div>
+      </main>
     </SidebarProvider>
   )
 }

@@ -1,5 +1,6 @@
 const en = {
   common: {
+    retryHistory: "Reload conversation",
     upload: "Upload",
     googleDrive: "Google Drive",
     delete: "Delete",

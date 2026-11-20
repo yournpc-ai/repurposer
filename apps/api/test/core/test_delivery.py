@@ -1386,3 +1386,31 @@ async def test_completed_video_delivery_survives_its_unanswered_dock(database, m
         "user_text": "OK",
     })
     assert "用户在本次对话中使用的语言" in assembly.system
+
+
+async def test_home_opening_is_admitted_once_even_after_retraction(database, monkeypatch):
+    from fastapi import HTTPException
+    from app.chat.service import prepare_chat_turn, stop_turn_at_visible_frontier
+    from app.models.schemas import ChatRequest, ChatTurnStopRequest
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    uid = await owner(database)
+    async with database() as db:
+        project = Project(user_id=uid, title="Opening race")
+        db.add(project)
+        await db.commit()
+        request = ChatRequest(project_id=project.id, message="Inspect my assets", first_message=True)
+
+    async def admit():
+        async with database() as db:
+            try:
+                return (await prepare_chat_turn(db, uid, request)).user_message.id
+            except HTTPException as conflict:
+                assert conflict.detail == {"code": "chat.already_opened"}
+                return None
+
+    winners = [opening for opening in await asyncio.gather(admit(), admit()) if opening]
+    assert len(winners) == 1
+    async with database() as db:
+        assert await stop_turn_at_visible_frontier(db, winners[0], ChatTurnStopRequest()) == "retracted"
+    assert await admit() is None

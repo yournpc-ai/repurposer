@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { ChatDock, type DerivedRow, type DecisionPlanRow } from "@/components/chat/ChatDock"
 import { normalizeIntent, tasksFromRunContext } from "@/components/chat/chatProtocol"
 import { SoundMutexProvider } from "@/components/flow/sound-mutex"
-import { ProjectHeader } from "@/components/project/ProjectHeader"
+import { ProjectMenu } from "@/components/project/ProjectMenu"
 import { apiFetch } from "@/lib/api"
 import type { FirstMessageHandoff } from "@/lib/chatAttachments"
 import { useRunEvents } from "@/lib/use-run-events"
@@ -58,12 +58,16 @@ interface ProjectResults {
   lifecycle?: LifecycleStamp | null
 }
 
-export const Route = createFileRoute("/projects/$id/")({
+export const Route = createFileRoute("/_app/projects/$id/")({
   component: ProjectDetailPage,
 })
 
 function ProjectDetailPage() {
   const { id: projectId } = Route.useParams()
+  return <ProjectThreadPage key={projectId} projectId={projectId} />
+}
+
+function ProjectThreadPage({ projectId }: { projectId: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
@@ -125,10 +129,10 @@ function ProjectDetailPage() {
   }, [materialPending, results?.latest_run, fetchResults])
 
   if (loading) {
-    return <div className="grid h-dvh place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
+    return <div className="grid h-full place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
   }
   if (error || !results) {
-    return <div className="grid h-dvh place-items-center bg-background text-destructive">{error || "Project not found"}</div>
+    return <div className="grid h-full place-items-center bg-background text-destructive">{error || "Project not found"}</div>
   }
 
   const { project, prompt, pending_brief: pendingBrief } = results
@@ -154,14 +158,13 @@ function ProjectDetailPage() {
 
   return (
     <SoundMutexProvider>
-      <div className="relative flex h-dvh flex-col overflow-hidden bg-background">
-        <ProjectHeader
+      <div className="relative flex h-full flex-col overflow-hidden bg-background">
+        <ProjectMenu
           projectId={project.id}
           title={project.title}
           runActive={runActive}
           onRenamed={(title) => setResults((current) => current ? { ...current, project: { ...current.project, title } } : current)}
           onDeleted={() => navigate({ to: "/projects" })}
-          creditsRefreshKey={latestRun ? `${latestRun.id}:${latestRun.status}` : "idle"}
         />
 
         <ChatDock
@@ -171,14 +174,7 @@ function ProjectDetailPage() {
           lifecycle={lifecycle}
           canvasAvailable={false}
           prompt={firstMessage?.text ?? pendingBrief?.prompt ?? (runActive ? latestRun?.context?.instruction : null) ?? prompt ?? ""}
-          firstMessage={firstMessage ? {
-            text: firstMessage.text,
-            mentions: firstMessage.mentions ?? [],
-            skill: firstMessage.skill,
-            skillOption: firstMessage.skillOption,
-            personaId: firstMessage.personaId,
-            attachments: firstMessage.attachments ?? [],
-          } : null}
+          firstMessage={firstMessage}
           onFirstMessageRetracted={() => {
             void navigate({
               to: "/projects/$id",

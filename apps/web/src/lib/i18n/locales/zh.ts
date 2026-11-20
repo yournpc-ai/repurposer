@@ -2,6 +2,7 @@ import type { Resources } from "./en"
 
 const zh: Resources = {
   common: {
+    retryHistory: "重新加载对话",
     upload: "上传",
     googleDrive: "Google Drive",
     delete: "删除",

@@ -1,0 +1,734 @@
+{
+  "desktop": {
+    "project": "47ddfc08-68e0-42e3-9381-55ebfdc66b7e",
+    "posts": [
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "47ddfc08-68e0-42e3-9381-55ebfdc66b7e",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "D\n992\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\nWorked for 1s\n\n프로젝트에 업로드된 영상이나 이미지素材은 현재 0개입니다. 아직 사용자가 올린 파일이 없어 바로 편집에 쓸 수 있는 소스 미디어가 없습니다. 텍스트로 주신 내용만으로는 제가 분량을 세거나 내용을 읽을 수 없고, 자료가 있었다면 요약은 채팅 창에서 확인해 드렸을 텐데 지금은 비어 있습니다.\n\n원하시는 진행 방향 알려 주세요. 예를 들면 웹사이트 주소를 주시면 그 페이지를素材로 캡처해서 영상으로 만들거나, 대본을 주시면 나레이션 중심으로 영상 구성을 시작할 수 있습니다.\n\nScroll to end\n\nRookie Cut can make mistakes — review before you publish.",
+    "width": 1360,
+    "url": "http://localhost:3026/projects/47ddfc08-68e0-42e3-9381-55ebfdc66b7e",
+    "events": [
+      [
+        "turn.started",
+        {
+          "turn_id": "cfb3d638-bc39-4b8c-9625-eaf7d7bf57c1"
+        }
+      ],
+      [
+        "assistant.row.append",
+        {
+          "row": {
+            "id": "e590e6c0-fce8-4a94-a328-59667844f2d5",
+            "conversation_id": "8989434a-8218-40a2-b6c5-b869a291ab21",
+            "role": "assistant",
+            "content": "",
+            "turn_id": "cfb3d638-bc39-4b8c-9625-eaf7d7bf57c1",
+            "seq": 2,
+            "intent": {
+              "type": "activity",
+              "frame": {
+                "at": "2026-11-20T16:26:31.370680+00:00",
+                "key": "chat.inspecting.projectMedia",
+                "kind": "read",
+                "status": "active",
+                "activity_id": "04f9d6e8be8244ecb33930fa8d2cd44e"
+              }
+            },
+            "blocks": [],
+            "created_at": "2026-11-20T16:26:31.384023+00:00"
+          }
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "04f9d6e8be8244ecb33930fa8d2cd44e",
+          "seq": 1,
+          "kind": "read",
+          "status": "active",
+          "key": "chat.inspecting.projectMedia",
+          "at": "2026-11-20T16:26:31.370671+00:00"
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "04f9d6e8be8244ecb33930fa8d2cd44e",
+          "seq": 2,
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.inspectingDone.projectMedia",
+          "at": "2026-11-20T16:26:31.399481+00:00",
+          "duration_ms": 28
+        }
+      ],
+      [
+        "assistant.row.update",
+        {
+          "id": "e590e6c0-fce8-4a94-a328-59667844f2d5",
+          "frame": {
+            "activity_id": "04f9d6e8be8244ecb33930fa8d2cd44e",
+            "kind": "read",
+            "status": "completed",
+            "key": "chat.inspectingDone.projectMedia",
+            "at": "2026-11-20T16:26:31.370680+00:00",
+            "settled_at": "2026-11-20T16:26:31.399481+00:00",
+            "duration_ms": 28
+          }
+        }
+      ],
+      [
+        "turn.completed",
+        {
+          "conversation_id": "8989434a-8218-40a2-b6c5-b869a291ab21",
+          "user_message": {
+            "id": "cfb3d638-bc39-4b8c-9625-eaf7d7bf57c1",
+            "conversation_id": "8989434a-8218-40a2-b6c5-b869a291ab21",
+            "role": "user",
+            "content": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "cfb3d638-bc39-4b8c-9625-eaf7d7bf57c1",
+            "turn_state": "settled",
+            "intent": null,
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 1,
+            "created_at": "2026-11-20T16:26:24.977674Z",
+            "updated_at": "2026-11-20T16:26:36.413562Z"
+          },
+          "assistant_message": {
+            "id": "f6398ac3-06d4-424c-be85-9fdba9243c78",
+            "conversation_id": "8989434a-8218-40a2-b6c5-b869a291ab21",
+            "role": "assistant",
+            "content": "프로젝트에 업로드된 영상이나 이미지素材은 현재 0개입니다. 아직 사용자가 올린 파일이 없어 바로 편집에 쓸 수 있는 소스 미디어가 없습니다. 텍스트로 주신 내용만으로는 제가 분량을 세거나 내용을 읽을 수 없고, 자료가 있었다면 요약은 채팅 창에서 확인해 드렸을 텐데 지금은 비어 있습니다.\n\n원하시는 진행 방향 알려 주세요. 예를 들면 웹사이트 주소를 주시면 그 페이지를素材로 캡처해서 영상으로 만들거나, 대본을 주시면 나레이션 중심으로 영상 구성을 시작할 수 있습니다.",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "cfb3d638-bc39-4b8c-9625-eaf7d7bf57c1",
+            "turn_state": null,
+            "intent": {
+              "interaction_policy_version": "interaction_constitution.v2"
+            },
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 3,
+            "created_at": "2026-11-20T16:26:36.389469Z",
+            "updated_at": "2026-11-20T16:26:36.404100Z"
+          },
+          "run_id": null,
+          "answered_question": null
+        }
+      ]
+    ]
+  },
+  "mobile": {
+    "project": "ceb102c3-2f84-4866-a516-427e60b14666",
+    "posts": [
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "ceb102c3-2f84-4866-a516-427e60b14666",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "992\nD\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\nWorked for 1s\n\n프로젝트에 현재 등록된 영상·이미지 소재는 0개입니다. 업로드된 파일이 없기 때문에 참조할 수 있는 동영상이나 이미지가 아직 없습니다.\n\n텍스트만 있는 상태라, 이 사실만으로는 클립·타임라인을 구성할素材가 없습니다. 웹페이지 링크를 주시면 그 페이지를 촬영해 화면 소스로 삼거나, 스크립트만으로 나레이션 중심으로 영상을 구성할 수 있습니다. 어느 쪽으로 진행할까요?\n\nScroll to end\n\nRookie Cut can make mistakes — review before you publish.",
+    "width": 390,
+    "url": "http://localhost:3026/projects/ceb102c3-2f84-4866-a516-427e60b14666",
+    "events": [
+      [
+        "turn.started",
+        {
+          "turn_id": "71a7165e-aff6-44a9-887a-6cf89d7cba9e"
+        }
+      ],
+      [
+        "assistant.row.append",
+        {
+          "row": {
+            "id": "52ac5fd3-7bd7-4f56-b022-c6c5fb068f28",
+            "conversation_id": "e730e147-7cac-4e6d-bf67-63b077fa1d7a",
+            "role": "assistant",
+            "content": "",
+            "turn_id": "71a7165e-aff6-44a9-887a-6cf89d7cba9e",
+            "seq": 2,
+            "intent": {
+              "type": "activity",
+              "frame": {
+                "at": "2026-11-20T16:29:21.663162+00:00",
+                "key": "chat.inspecting.projectMedia",
+                "kind": "read",
+                "status": "active",
+                "activity_id": "b67deca2b238403c9134e38c7a3f2379"
+              }
+            },
+            "blocks": [],
+            "created_at": "2026-11-20T16:29:21.677836+00:00"
+          }
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "b67deca2b238403c9134e38c7a3f2379",
+          "seq": 1,
+          "kind": "read",
+          "status": "active",
+          "key": "chat.inspecting.projectMedia",
+          "at": "2026-11-20T16:29:21.663152+00:00"
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "b67deca2b238403c9134e38c7a3f2379",
+          "seq": 2,
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.inspectingDone.projectMedia",
+          "at": "2026-11-20T16:29:21.698961+00:00",
+          "duration_ms": 35
+        }
+      ],
+      [
+        "assistant.row.update",
+        {
+          "id": "52ac5fd3-7bd7-4f56-b022-c6c5fb068f28",
+          "frame": {
+            "activity_id": "b67deca2b238403c9134e38c7a3f2379",
+            "kind": "read",
+            "status": "completed",
+            "key": "chat.inspectingDone.projectMedia",
+            "at": "2026-11-20T16:29:21.663162+00:00",
+            "settled_at": "2026-11-20T16:29:21.698961+00:00",
+            "duration_ms": 35
+          }
+        }
+      ],
+      [
+        "turn.completed",
+        {
+          "conversation_id": "e730e147-7cac-4e6d-bf67-63b077fa1d7a",
+          "user_message": {
+            "id": "71a7165e-aff6-44a9-887a-6cf89d7cba9e",
+            "conversation_id": "e730e147-7cac-4e6d-bf67-63b077fa1d7a",
+            "role": "user",
+            "content": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "71a7165e-aff6-44a9-887a-6cf89d7cba9e",
+            "turn_state": "settled",
+            "intent": null,
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 1,
+            "created_at": "2026-11-20T16:29:19.036702Z",
+            "updated_at": "2026-11-20T16:29:24.162546Z"
+          },
+          "assistant_message": {
+            "id": "6ff86170-d8b5-460c-acd8-8f08fa79cf14",
+            "conversation_id": "e730e147-7cac-4e6d-bf67-63b077fa1d7a",
+            "role": "assistant",
+            "content": "프로젝트에 현재 등록된 영상·이미지 소재는 **0개**입니다. 업로드된 파일이 없기 때문에 참조할 수 있는 동영상이나 이미지가 아직 없습니다.\n\n텍스트만 있는 상태라, 이 사실만으로는 클립·타임라인을 구성할素材가 없습니다. 웹페이지 링크를 주시면 그 페이지를 촬영해 화면 소스로 삼거나, 스크립트만으로 나레이션 중심으로 영상을 구성할 수 있습니다. 어느 쪽으로 진행할까요?",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "71a7165e-aff6-44a9-887a-6cf89d7cba9e",
+            "turn_state": null,
+            "intent": {
+              "interaction_policy_version": "interaction_constitution.v2"
+            },
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 3,
+            "created_at": "2026-11-20T16:29:24.148750Z",
+            "updated_at": "2026-11-20T16:29:24.157537Z"
+          },
+          "run_id": null,
+          "answered_question": null
+        }
+      ]
+    ]
+  },
+  "desktop-upload": {
+    "project": "af21bdbb-bf23-4943-b7e1-f36a4416ac6f",
+    "posts": [
+      {
+        "path": "uploads/staging/upload-url",
+        "body": null
+      },
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "projects/af21bdbb-bf23-4943-b7e1-f36a4416ac6f/assets/from-staging",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "af21bdbb-bf23-4943-b7e1-f36a4416ac6f",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [
+            {
+              "id": "e38989b6-b1cb-4550-9c8f-b0cf69cd2943",
+              "name": "pricing-talk-source.mp4",
+              "type": "video",
+              "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/9f18af1b-5b71-49c7-b00f-bf561b158965/pricing-talk-source-1795192159-ossf4Q.mp4",
+              "size": 2477261,
+              "status": "uploaded"
+            }
+          ],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "D\n992\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\n파일은 받았습니다. 먼저 목록을 확인할게요.\n\nWorked for 1s\n\n프로젝트에 등록된 소재는 1개입니다.\n\npricing-talk-source.mp4 (영상, 1280×720, 길이 아직 확인 안 됨)\n\n다만 이 파일은 아직 처리 중이라 내용을 볼 수 없고, 실제로 재생된 영상은 아닙니다. 어떤 장면을 쓰고 싶은지는 말씀해 주시면 그 지점을 중심으로 작업하겠습니다.\n\nScroll to end\n\nRookie Cut can make mistakes — review before you publish.",
+    "width": 1360,
+    "url": "http://localhost:3026/projects/af21bdbb-bf23-4943-b7e1-f36a4416ac6f",
+    "events": [
+      [
+        "turn.started",
+        {
+          "turn_id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": "파일",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": "은",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": " 받",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": "았습니다",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": ".",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": " 먼저",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": " 목록을 확인할",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": "게",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": "요",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.delta",
+        {
+          "text": ".",
+          "message_id": "c5203cd2-8aea-4bf7-bb5e-40b3d986ac2b"
+        }
+      ],
+      [
+        "assistant.interim_prose",
+        {
+          "text": "파일은 받았습니다. 먼저 목록을 확인할게요.",
+          "at": "2026-11-20T16:29:23.833279+00:00",
+          "message_id": "1b44e26f-81b8-4ddb-ac54-48d553535edc",
+          "seq": 3,
+          "turn_id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9"
+        }
+      ],
+      [
+        "assistant.row.append",
+        {
+          "row": {
+            "id": "5ff9dc52-75af-41f3-b92f-5fdb3f11cdfb",
+            "conversation_id": "060f0665-72a1-421f-a12a-0641ec02b373",
+            "role": "assistant",
+            "content": "",
+            "turn_id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9",
+            "seq": 4,
+            "intent": {
+              "type": "activity",
+              "frame": {
+                "at": "2026-11-20T16:29:23.836422+00:00",
+                "key": "chat.inspecting.projectMedia",
+                "kind": "read",
+                "status": "active",
+                "activity_id": "298702dd1f67417ab7404a9ce45fb4a1"
+              }
+            },
+            "blocks": [],
+            "created_at": "2026-11-20T16:29:23.839565+00:00"
+          }
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "298702dd1f67417ab7404a9ce45fb4a1",
+          "seq": 1,
+          "kind": "read",
+          "status": "active",
+          "key": "chat.inspecting.projectMedia",
+          "at": "2026-11-20T16:29:23.836413+00:00"
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "298702dd1f67417ab7404a9ce45fb4a1",
+          "seq": 2,
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.inspectingDone.projectMedia",
+          "at": "2026-11-20T16:29:23.845402+00:00",
+          "duration_ms": 8
+        }
+      ],
+      [
+        "assistant.row.update",
+        {
+          "id": "5ff9dc52-75af-41f3-b92f-5fdb3f11cdfb",
+          "frame": {
+            "activity_id": "298702dd1f67417ab7404a9ce45fb4a1",
+            "kind": "read",
+            "status": "completed",
+            "key": "chat.inspectingDone.projectMedia",
+            "at": "2026-11-20T16:29:23.836422+00:00",
+            "settled_at": "2026-11-20T16:29:23.845402+00:00",
+            "duration_ms": 8
+          }
+        }
+      ],
+      [
+        "turn.completed",
+        {
+          "conversation_id": "060f0665-72a1-421f-a12a-0641ec02b373",
+          "user_message": {
+            "id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9",
+            "conversation_id": "060f0665-72a1-421f-a12a-0641ec02b373",
+            "role": "user",
+            "content": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+            "attachments": [
+              {
+                "id": "e38989b6-b1cb-4550-9c8f-b0cf69cd2943",
+                "name": "pricing-talk-source.mp4",
+                "type": "video",
+                "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/9f18af1b-5b71-49c7-b00f-bf561b158965/pricing-talk-source-1795192159-ossf4Q.mp4",
+                "size": 2477261,
+                "status": "uploaded"
+              }
+            ],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9",
+            "turn_state": "settled",
+            "intent": null,
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 1,
+            "created_at": "2026-11-20T16:29:22.269671Z",
+            "updated_at": "2026-11-20T16:29:25.324943Z"
+          },
+          "assistant_message": {
+            "id": "46843b3a-e2fc-4614-8620-abda478a3496",
+            "conversation_id": "060f0665-72a1-421f-a12a-0641ec02b373",
+            "role": "assistant",
+            "content": "프로젝트에 등록된 소재는 **1개**입니다.\n\n- pricing-talk-source.mp4 (영상, 1280×720, 길이 아직 확인 안 됨)\n\n다만 이 파일은 아직 처리 중이라 내용을 볼 수 없고, 실제로 재생된 영상은 아닙니다. 어떤 장면을 쓰고 싶은지는 말씀해 주시면 그 지점을 중심으로 작업하겠습니다.",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "d94b6867-5726-41d4-8e8b-dd1415fcd8c9",
+            "turn_state": null,
+            "intent": {
+              "interaction_policy_version": "interaction_constitution.v2"
+            },
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 5,
+            "created_at": "2026-11-20T16:29:25.307992Z",
+            "updated_at": "2026-11-20T16:29:25.316945Z"
+          },
+          "run_id": null,
+          "answered_question": null
+        }
+      ]
+    ]
+  },
+  "mobile-upload": {
+    "project": "b2507e1a-a9a3-494a-84eb-aedf00e5eba7",
+    "posts": [
+      {
+        "path": "uploads/staging/upload-url",
+        "body": null
+      },
+      {
+        "path": "projects",
+        "body": null
+      },
+      {
+        "path": "projects/b2507e1a-a9a3-494a-84eb-aedf00e5eba7/assets/from-staging",
+        "body": null
+      },
+      {
+        "path": "chat",
+        "body": {
+          "project_id": "b2507e1a-a9a3-494a-84eb-aedf00e5eba7",
+          "message": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+          "first_message": true,
+          "mentions": [],
+          "attachments": [
+            {
+              "id": "566fbdc9-947b-4cf4-a2ca-17e6c5fc840b",
+              "name": "pricing-talk-source.mp4",
+              "type": "video",
+              "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/5f849931-5948-44de-bf07-7f80a42279da/pricing-talk-source-1795192047-v26HCA.mp4",
+              "size": 2477261,
+              "status": "uploaded"
+            }
+          ],
+          "surface": "chat",
+          "canvas_available": false
+        }
+      }
+    ],
+    "errors": [],
+    "visible": "992\nD\n请查看项目素材列表，告诉我有几…\n\n请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。\n\nWorked for 1s\n\n프로젝트에 현재 1개의素材가 있습니다.\n\npricing-talk-source.mp4 · 영상 · 1280×720 · 길이 아직 확인되지 않음 (처리 중)\n\n현재는 이 파일 하나뿐이고, 아직 처리 중이라 내용을 읽지는 못했습니다. 내용을 보려면 몇 분 정도 기다려야 합니다.\n\nScroll to end\n\nRookie Cut can make mistakes — review before you publish.",
+    "width": 390,
+    "url": "http://localhost:3026/projects/b2507e1a-a9a3-494a-84eb-aedf00e5eba7",
+    "events": [
+      [
+        "turn.started",
+        {
+          "turn_id": "eb12d6a9-909a-479f-8dc9-86f3dd885320"
+        }
+      ],
+      [
+        "assistant.row.append",
+        {
+          "row": {
+            "id": "1ddd6343-1242-4b0c-9992-eddf418bde3f",
+            "conversation_id": "1620a9c5-c5bd-4d71-ab1f-8af0ef865d04",
+            "role": "assistant",
+            "content": "",
+            "turn_id": "eb12d6a9-909a-479f-8dc9-86f3dd885320",
+            "seq": 2,
+            "intent": {
+              "type": "activity",
+              "frame": {
+                "at": "2026-11-20T16:27:38.186994+00:00",
+                "key": "chat.inspecting.projectMedia",
+                "kind": "read",
+                "status": "active",
+                "activity_id": "43e47046dba84325ab4369f57b8ff5be"
+              }
+            },
+            "blocks": [],
+            "created_at": "2026-11-20T16:27:38.206194+00:00"
+          }
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "43e47046dba84325ab4369f57b8ff5be",
+          "seq": 1,
+          "kind": "read",
+          "status": "active",
+          "key": "chat.inspecting.projectMedia",
+          "at": "2026-11-20T16:27:38.186964+00:00"
+        }
+      ],
+      [
+        "assistant.activity",
+        {
+          "activity_id": "43e47046dba84325ab4369f57b8ff5be",
+          "seq": 2,
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.inspectingDone.projectMedia",
+          "at": "2026-11-20T16:27:38.217000+00:00",
+          "duration_ms": 30
+        }
+      ],
+      [
+        "assistant.row.update",
+        {
+          "id": "1ddd6343-1242-4b0c-9992-eddf418bde3f",
+          "frame": {
+            "activity_id": "43e47046dba84325ab4369f57b8ff5be",
+            "kind": "read",
+            "status": "completed",
+            "key": "chat.inspectingDone.projectMedia",
+            "at": "2026-11-20T16:27:38.186994+00:00",
+            "settled_at": "2026-11-20T16:27:38.217000+00:00",
+            "duration_ms": 30
+          }
+        }
+      ],
+      [
+        "turn.completed",
+        {
+          "conversation_id": "1620a9c5-c5bd-4d71-ab1f-8af0ef865d04",
+          "user_message": {
+            "id": "eb12d6a9-909a-479f-8dc9-86f3dd885320",
+            "conversation_id": "1620a9c5-c5bd-4d71-ab1f-8af0ef865d04",
+            "role": "user",
+            "content": "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。",
+            "attachments": [
+              {
+                "id": "566fbdc9-947b-4cf4-a2ca-17e6c5fc840b",
+                "name": "pricing-talk-source.mp4",
+                "type": "video",
+                "url": "http://127.0.0.1:19024/editor-i4/6bb633b4-b3ce-4ba4-925b-d177761a3c80/uploads/staging/5f849931-5948-44de-bf07-7f80a42279da/pricing-talk-source-1795192047-v26HCA.mp4",
+                "size": 2477261,
+                "status": "uploaded"
+              }
+            ],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "eb12d6a9-909a-479f-8dc9-86f3dd885320",
+            "turn_state": "settled",
+            "intent": null,
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 1,
+            "created_at": "2026-11-20T16:27:30.188351Z",
+            "updated_at": "2026-11-20T16:27:39.652375Z"
+          },
+          "assistant_message": {
+            "id": "cd6d38bc-de94-4d49-9047-91b5727fa949",
+            "conversation_id": "1620a9c5-c5bd-4d71-ab1f-8af0ef865d04",
+            "role": "assistant",
+            "content": "프로젝트에 현재 **1개**의素材가 있습니다.\n\n- pricing-talk-source.mp4 · 영상 · 1280×720 · 길이 아직 확인되지 않음 (처리 중)\n\n현재는 이 파일 하나뿐이고, 아직 처리 중이라 내용을 읽지는 못했습니다. 내용을 보려면 몇 분 정도 기다려야 합니다.",
+            "attachments": [],
+            "mentions": [],
+            "skill": null,
+            "focus_output": null,
+            "workflow_run_id": null,
+            "turn_id": "eb12d6a9-909a-479f-8dc9-86f3dd885320",
+            "turn_state": null,
+            "intent": {
+              "interaction_policy_version": "interaction_constitution.v2"
+            },
+            "question": null,
+            "answer": null,
+            "suggestions": [],
+            "blocks": [],
+            "suggestion_ref": null,
+            "seq": 3,
+            "created_at": "2026-11-20T16:27:39.635917Z",
+            "updated_at": "2026-11-20T16:27:39.646831Z"
+          },
+          "run_id": null,
+          "answered_question": null
+        }
+      ]
+    ]
+  }
+}

@@ -1109,20 +1109,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const [assets, setAssets] = useState<ProjectAsset[]>([])
 
   const firstMessageSentRef = useRef(false)
-  /** Mount-order law (首条重复事故): the archive replay below prepends with
-   * NO dedup — it assumes the flow is still empty. The firstMessage handoff
-   * pushes the optimistic user bubble and POSTs within the same mount
-   * window; a fast prepare commits the server row BEFORE the replay's
-   * messages fetch resolves, and the replay then prepends the twin next to
-   * the bubble (the duplicate-first-message bug). So the handoff awaits the
-   * replay's first pass: history settles first, the send starts after. */
-  const [historyReady] = useState(() => {
-    let resolve!: () => void
-    const promise = new Promise<void>((r) => {
-      resolve = r
-    })
-    return { promise, resolve }
-  })
+  const [openingHistory, setOpeningHistory] = useState<"loading" | "empty" | "occupied" | "failed">("loading")
+  const [historyAttempt, setHistoryAttempt] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const activeChatStopRef = useRef<ActiveChatStop | null>(null)
   /** The Turn owning the global pending flag; late old requests cannot clear
@@ -1400,18 +1388,24 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
           toast: false,
         })
-        if (!convRes.ok) return
+        if (convRes.status === 404) {
+          if (!cancelled) setOpeningHistory("empty")
+          return
+        }
+        if (!convRes.ok) throw new Error("Conversation unavailable")
         const conv = (await convRes.json()) as { id?: string }
-        if (!conv.id) return
+        if (!conv.id) throw new Error("Conversation unavailable")
         const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
           toast: false,
         })
-        if (!res.ok) return
+        if (!res.ok) throw new Error("History unavailable")
         const data = (await res.json()) as { items?: HistoryRow[] }
         // The row→flow mapping is the extracted PURE seam (timeline/history.ts,
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
-        const rows = data.items ?? []
+        if (!Array.isArray(data.items)) throw new Error("Invalid history")
+        const rows = data.items
+        if (!cancelled) setOpeningHistory(rows.some((row) => row.role === "user") ? "occupied" : "empty")
         const active = new Set(rows.filter((r) => r.turn_state === "in_flight").map((r) => r.id))
         watchingMedia = rows.some((r) => {
           const intent = r.intent as { media_status?: string; media_result?: unknown } | null
@@ -1435,13 +1429,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           }
         }
       } catch {
-        /* the archive replay is best-effort */
+        if (!cancelled) setOpeningHistory("failed")
       } finally {
         if (!cancelled) setHistorySettled(true)
-        // Settled either way (empty archive counts) — the firstMessage
-        // handoff waits on this pass before its optimistic push, never on
-        // the fetch succeeding.
-        historyReady.resolve()
         if (!cancelled && watchingMedia) timer = setTimeout(load, 2500)
       }
     }
@@ -1449,12 +1439,9 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     return () => {
       cancelled = true
       clearTimeout(timer)
-      // An unmount also settles the gate (idempotent resolve) — a pending
-      // firstMessage handoff must never hang on a torn-down replay.
-      historyReady.resolve()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [projectId, historyAttempt])
 
   // Mid-run dock revival (期 4): the direction interrupt docks its question
   // while the run is already streaming — when a waiting interrupt step
@@ -2650,6 +2637,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
   const sendChat = async (
     text: string,
     opts?: {
+      firstMessage?: boolean
       mentions?: ChatMention[]
       skill?: SkillOption | null
       personaId?: string
@@ -2877,6 +2865,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         {
           project_id: projectId,
           message: text,
+          first_message: opts?.firstMessage,
           mentions: opts?.mentions ?? [],
           skill: opts?.skill?.reference,
           attachments: opts?.attachments ?? [],
@@ -3285,6 +3274,12 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       // in-flow marker. Only a pre-persistence rejection (entry caps) or a
       // pre-stream failure rolls the optimistic bubble back out and
       // restores the draft (nothing exists server-side to diverge from).
+      if (opts?.firstMessage && e instanceof StreamTurnError &&
+          (e.detail as { code?: string } | null)?.code === "chat.already_opened") {
+        setMessages((rows) => rows.filter((row) => row.id !== opts.rollbackId && row.id !== streamId))
+        setHistoryAttempt((attempt) => attempt + 1)
+        return
+      }
       const persisted = e instanceof StreamTurnError && e.persisted
       const persistedTurnId = persisted && e instanceof StreamTurnError ? e.turnId : null
       if (opts?.rollbackId && persistedTurnId) {
@@ -3373,105 +3368,10 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
     }
   }
 
-  /** Fresh composer navigation: the handed-over draft is the conversation's
-   * first message — send it once on mount (the optimistic bubble pushes
-   * locally first; the archive replay converges on the same server row).
-   * Router state survives a page refresh, so before firing we check the
-   * server: if the first send already landed, REBUILD from the server
-   * (dock / live run) instead of duplicating the message — there is no
-   * server-side dedup by design. */
   useEffect(() => {
-    if (!firstMessage || initialRunId || firstMessageSentRef.current) return
+    if (!firstMessage || initialRunId || openingHistory !== "empty" || firstMessageSentRef.current) return
     firstMessageSentRef.current = true
     void (async () => {
-      try {
-        // The mount-order law: the archive replay's first pass settles
-        // BEFORE the optimistic push / send — a replay landing mid-send
-        // would prepend the server twin next to the local bubble (the
-        // duplicate first message).
-        await historyReady.promise
-        const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
-          toast: false,
-        })
-        if (res.ok) {
-          const data = (await res.json()) as {
-            prompt?: string | null
-            latest_run?: {
-              id: string
-              status: string
-              context?: {
-                tasks?: unknown
-                target_language?: string
-                aspect?: "9:16" | "1:1" | "16:9" | null
-                instruction?: string | null
-                name?: string | null
-              } | null
-            } | null
-          }
-          if ((data.prompt ?? "") === firstMessage.text) {
-            const run = data.latest_run
-            if (run && (run.status === "pending" || run.status === "running" || run.status === "waiting_human")) {
-              // Refresh after the run started: attach to it (intent rebuilt
-              // from the run context for the confirmed-plan summary line).
-              // The current Run context carries the authorized task list.
-              const runCtx = run.context ?? {}
-              setIntent(
-                normalizeIntent({
-                  tasks: runCtx.tasks,
-                  language: runCtx.target_language,
-                  aspect: runCtx.aspect,
-                  specific_instruction: runCtx.instruction,
-                  // The run's LLM name (ADR-058) — the receipt title
-                  // survives the refresh verbatim.
-                  name: runCtx.name,
-                })
-              )
-              landOnStartedRun(run.id)
-            } else {
-              // Refresh while confirming: rebuild the dock + panel plan.
-              // The archive already replays the dock's echo. Restore only
-              // its pending question and plan state; marking that echo as
-              // carried prevents a duplicate assistant row on refresh.
-              const q = dockWorthyQuestion(await fetchPendingQuestion())
-              if (q && q.question?.kind === "task_book") {
-                await handleAssistantMessage(q, { echoCarried: true })
-              }
-            }
-            return
-          }
-        }
-      } catch {
-        /* results unreadable — fall through to the durable-row check */
-      }
-      // Router state survives refresh. A durable opening user row proves the
-      // handoff was already consumed; a zero-visible retraction instead clears
-      // the handoff explicitly, so neither path may auto-POST the draft again.
-      try {
-        const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
-          toast: false,
-        })
-        if (convRes.ok) {
-          const conversation = (await convRes.json()) as { id?: string }
-          if (conversation.id) {
-            const messagesRes = await apiFetch(
-              `/api/v1/chat/conversations/${conversation.id}/messages`,
-              { toast: false },
-            )
-            if (messagesRes.ok) {
-              const archive = (await messagesRes.json()) as {
-                items?: { role?: string }[]
-              }
-              if ((archive.items ?? []).some((message) => message.role === "user")) return
-            }
-          }
-        }
-      } catch {
-        /* no durable opening row readable — retain the original send fallback */
-      }
-      // The optimistic user bubble rides before the turn (归档单一源后的
-      // 唯一即时座位): same shape as the send-button push — the archive
-      // replay converges on the same server row, rollbackId rolls it back
-      // if the turn never persists.
       const rollbackId = crypto.randomUUID()
       const handoffSkill = firstMessage.skill
         ? (firstMessage.skillOption ?? skillOptionForReference(firstMessage.skill))
@@ -3489,6 +3389,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
         },
       ])
       await sendChat(firstMessage.text, {
+        firstMessage: true,
+        draft: firstMessage.text,
         mentions: firstMessage.mentions,
         skill: handoffSkill,
         personaId: firstMessage.personaId,
@@ -3497,7 +3399,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [openingHistory, firstMessage, initialRunId])
 
   const handleGroupSubmit = async (
     answers: BriefAnswerItem[],
@@ -4662,7 +4564,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
       ref={chatContainerRef}
       tabIndex={-1}
       className={cn(
-        "pointer-events-none fixed inset-0 z-50 flex flex-col",
+        "relative flex min-h-0 flex-1 flex-col",
         panel && dockHidden && "hidden"
       )}
     >
@@ -4715,7 +4617,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // The full form's scroller starts BELOW the transparent
           // ProjectHeader (pt-14 = the 56px bar, 2026-10-15): nothing ever
           // scrolls under the header, so the bar needs no glass of its own.
-          full && "pt-14",
+          
         )}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -4765,6 +4667,7 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
               it in both forms: the full form's chat stage, the panel's
               body). */}
           <div className="min-h-0 flex-1">
+            {openingHistory === "failed" && <button className="p-3 text-sm underline" onClick={() => setHistoryAttempt((n) => n + 1)}>{t("common.retryHistory")}</button>}
             {(full || stageMounted || panel) && chatScroller}
           </div>
         </div>
