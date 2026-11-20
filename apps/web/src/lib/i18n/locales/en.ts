@@ -1420,6 +1420,8 @@ const en = {
       exportVideo: "Exporting MP4",
       exportVideoDone: "MP4 exported",
       previewRange: "Checking the preview",
+      createVideo: "Creating the first version",
+      createVideoDone: "Saved the first version",
       previewRangeDone: "Checked the local preview",
       videoReviseDone: "Adjusted the video storyboard",
       videoReview: "Reviewing the delivered video…",

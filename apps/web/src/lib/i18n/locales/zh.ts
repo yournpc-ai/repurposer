@@ -1348,6 +1348,8 @@ const zh: Resources = {
       exportVideo: "正在导出正式 MP4",
       exportVideoDone: "正式 MP4 已导出",
       previewRange: "正在检查局部预览",
+      createVideo: "正在创建初稿",
+      createVideoDone: "已保存初稿",
       previewRangeDone: "已检查局部预览",
       videoReviseDone: "已调整视频分镜",
       videoReview: "正在检查成片…",

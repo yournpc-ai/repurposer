@@ -14,7 +14,7 @@ def editor_lock_key(turn_id):
 
 
 async def report_committed_edits(db, opening):
-    from app.chat.editor import WRITE_TOOLS
+    from app.chat.editor import EDITOR_TOOLS
     from app.chat.service import _create_message, _prefers_zh
 
     markers = (opening.intent or {}).get("editor_commits") or []
@@ -32,6 +32,7 @@ async def report_committed_edits(db, opening):
     )
     versions = {v.request_id: v for v in rows}
     labels = {
+        "create_video": ("创建初稿", "create draft"),
         "insert_audio": ("插入音频", "insert audio"),
         "split_clip": ("分割", "split"),
         "trim_clip": ("裁剪", "trim"),
@@ -53,7 +54,7 @@ async def report_committed_edits(db, opening):
             f"{action}（版本 {version.version}）" if zh else f"{action} (version {version.version})"
         )
         if marker.get("activity_row"):
-            done[UUID(marker["activity_row"])] = WRITE_TOOLS[name].presentation.done_key
+            done[UUID(marker["activity_row"])] = next(t.presentation.done_key for t in EDITOR_TOOLS if t.name == name)
     if not saved:
         return
     activities = await db.scalars(

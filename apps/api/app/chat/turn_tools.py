@@ -712,6 +712,8 @@ def video_round_tools(
         # context on unrelated graph operations.
         if tool.name in {"get_graph", "get_node", "edit_graph"}:
             continue
+        if tool.name == "create_video":
+            continue  # The native first-version seat is offered by the editor projection.
         if tool.name in EDITOR_NAMES:
             if has_saved_version or tool.name.startswith("generate_"):
                 projected.append(tool)

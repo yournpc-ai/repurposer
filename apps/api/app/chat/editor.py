@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
+from app.chat.editor_create import CreateVideoArgs
 from app.editing.edits import SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.schemas import EditTarget, TimeRange
 from app.editing.store import (
@@ -153,6 +154,7 @@ def _editor_tool(name, description, args, key):
 
 
 EDITOR_TOOLS = (
+    _editor_tool("create_video", "Create the first editable version from ordered shots. A title card only needs headline, duration_seconds and text_color. Save without exporting.", CreateVideoArgs, "createVideo"),
     _editor_tool(
         "deliver_video", "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
         DeliverVideoArgs, "deliverVideo",
@@ -520,6 +522,19 @@ def _remember_labels(turn, facts, version_id, digest, number):
 
 async def execute_editor(turn, name, args):
     base = getattr(turn, "_video_base_ref", None)
+    if name == "create_video":
+        from app.chat.editor_create import create_video
+        from app.chat.editor_recovery import editor_lock_key
+
+        if not turn.project or not turn.turn_id or not current_call_id():
+            return ToolObservation("A project and persisted opening are required.", ok=False)
+        await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await create_video(db, turn, args)
+                return ToolObservation(json.dumps(result), valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}")
+            except ValueError as exc:
+                return ToolObservation(str(exc), ok=False, user_error=str(exc))
     if not base and turn.project is not None and name in {"generate_music", "generate_voice", "generate_image"}:
         from app.chat.editor_media import generate_media
 

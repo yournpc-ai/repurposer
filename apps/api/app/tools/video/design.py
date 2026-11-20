@@ -1668,6 +1668,10 @@ def _scene_plan_write(
 def _scene_reading_ticks(
     scene: CompositionSceneAuthoring, settings: VersionSettings
 ) -> int:
+    if getattr(scene, "duration_seconds", None) is not None:
+        if scene.source_end_seconds is not None and abs(scene.source_end_seconds - (scene.source_start_seconds or 0) - scene.duration_seconds) > 1e-6:
+            raise DesignError("A video shot must retain its actual source duration.")
+        return seconds_to_ticks(scene.duration_seconds, settings.timebase)
     if scene.source_end_seconds is not None:
         return seconds_to_ticks(
             scene.source_end_seconds - (scene.source_start_seconds or 0),
@@ -1939,10 +1943,27 @@ async def _expand_scene_authoring(
     reveal = frames_to_ticks(18, settings.timebase, settings.fps.num, settings.fps.den)
     stagger = frames_to_ticks(12, settings.timebase, settings.fps.num, settings.fps.den)
     try:
-        if scene.headline is not None:
+        if scene.headline is not None and getattr(scene, "title_motion", None) == "static":
+            title_track = "trk_static_titles"
+            if not any(t.track_id == title_track for t in candidate.timeline.tracks):
+                order = max((t.order for t in candidate.timeline.tracks if t.kind == "visual"), default=0) + 1
+                ops.append(AddTrack(op="add_track", track=Track(track_id=title_track, kind="visual", role="title", order=order)))
+            text = "\n".join(part for part in (scene.headline, scene.supporting_text) if part)
+            ops.append(AddClip.model_validate({
+                "op": "add_clip", "track_id": title_track,
+                "clip": {"clip_id": f"clip_{scene.scene_id}_title", "scene_id": scene.scene_id,
+                         "range": current.range.model_dump(), "object": {
+                             "kind": "text", "object_id": f"title_{scene.scene_id}", "text": text,
+                             "layout": {"x": settings.width * .08, "y": settings.height * .35,
+                                        "width": settings.width * .84, "height": settings.height * .3},
+                             "style": {"font_size": round(settings.height * .082), "color": scene.text_color, "align": "center"},
+                         }},
+            }))
+        elif scene.headline is not None:
             height = 260.0 if scene.snapshot_id is not None else 400.0
             ops.extend(expand_preset(scene.text_preset or "title-lockup", candidate, {
                 "title": scene.headline,
+                **({"style": {"color": scene.text_color, "font_size": 88, "align": "center"}} if hasattr(scene, "text_color") else {}),
                 "subtitle": scene.supporting_text,
                 "range": current.range.model_dump(mode="json"),
                 "scene_id": scene.scene_id,

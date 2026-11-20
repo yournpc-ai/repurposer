@@ -1247,9 +1247,18 @@ def stamp_video_presentation(
     return updated
 
 
+def draft_only_request(text: str) -> bool:
+    return bool(re.search(
+        r"(?:只(?:要|需|看|出|做)|仅(?:需|要)?)(?:可编辑的?)?(?:初稿|草稿|分镜)|"
+        r"(?:不要|不用|无需|暂不)(?:正式)?(?:导出|交付)|"
+        r"\b(?:draft only|only (?:a |the )?draft|(?:do not|don't|no) (?:formal )?(?:export|render))\b",
+        text, re.I,
+    ))
+
+
 def requested_video_production(text: str) -> bool:
     """Recognize an explicit initial make request on a saved design turn."""
-    if re.search(
+    if draft_only_request(text) or re.search(
         r"不(?:要|用)?(?:制作|渲染)|只(?:看|出|要|做)分镜|"
         r"\b(?:do not|don't|no)\s+(?:produce|production|render)|"
         r"\bstoryboard only\b|\b(?:make|create|produce)\s+(?:an?\s+)?(?:editable\s+)?storyboard\b",

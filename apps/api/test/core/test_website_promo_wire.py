@@ -564,7 +564,8 @@ async def test_failed_capture_and_non_website_paths(monkeypatch):
         refresh_context=refresh_generic,
         message="做一只宣传片",
     )
-    assert "design_video" in tool_names(generic_provider.wires[0])
+    assert "create_video" in tool_names(generic_provider.wires[0])
+    assert not {"design_video", "review_working_draft", "present_plan"} & tool_names(generic_provider.wires[0])
     assert "当前路径：website_promo" not in str(generic_provider.wires[0]["messages"])
     assert "promo-video" not in generic_provider.wires[0]["messages"][0]["content"]
 

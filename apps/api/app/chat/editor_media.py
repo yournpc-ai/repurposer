@@ -300,6 +300,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 raise ValueError("Resolve the outstanding authorization before generating more media.")
             preview = None
             if name == "export_video":
+                from app.chat.video_turn_seats import draft_only_request
+
+                if draft_only_request(opening.content or ""):
+                    raise ValueError("The current request is limited to an editable draft.")
                 preview = getattr(turn, "_editor_last_preview", None) or {}
                 if (preview.get("composition_version_id") != version_id
                         or preview.get("content_digest") != version.content_digest
