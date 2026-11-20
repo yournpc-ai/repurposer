@@ -271,3 +271,36 @@ async def test_export_quote_replay_competing_openings_and_stop(database, monkeyp
         assert replay_on_new_head.id == execution.id
         assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
         assert (await db.get(WorkflowRun, run.id, populate_existing=True)).status.value == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_auto_account_needs_permission_for_unrequested_export(database, monkeypatch):
+    from app.chat.editor import ExportVideoArgs
+
+    monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    await _snapshots(database, owner)
+    comp, version, _ = await _create(database, owner, project_id)
+    ref = {"composition_id": str(comp.id), "composition_version_id": str(version.id),
+           "content_digest": version.content_digest}
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        user = await db.get(User, owner)
+        user.settings = {"confirm_execution": "auto", "confirm_credits": "auto"}
+        conversation = Conversation(user_id=owner, project_id=project_id)
+        db.add(conversation)
+        await db.commit()
+        opening = await service._create_message(db, conversation.id, "user", "How long is this MP4?")
+        opening.turn_state = "in_flight"
+        await db.commit()
+        turn = SimpleNamespace(project=project, user_id=owner, turn_id=opening.id,
+                               conversation_id=conversation.id, _video_base_ref=ref,
+                               _editor_last_preview={**ref, "mp4_sha256": "a" * 64})
+        receipt = await editor_media.submit_editor_media(
+            turn, "export_video", ExportVideoArgs(), comp, version, "unrequested-export",
+        )
+        assert receipt.question and receipt.workflow_run_id is None
+        assert not await db.scalar(select(WorkflowRun.id))
+        assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))

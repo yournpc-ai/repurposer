@@ -775,6 +775,7 @@ async def execute_editor(turn, name, args):
             turn._editor_last_preview = {
                 **base, "version_id": str(version.id), "mp4_sha256": evidence["mp4_sha256"],
                 "decision": current_group_id(), "window_seconds": window, "windows": windows,
+                "sample_seconds": evidence["sample_seconds"],
                 "model_media": evidence["model_media"],
                 "audio_available_to_model": evidence["audio_available_to_model"],
             }

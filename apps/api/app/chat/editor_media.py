@@ -368,8 +368,8 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 prior = getattr(turn, "preceding_delivery", None) or {}
                 confirmed = (opening.intent or {}).get("video_confirmation") or {}
                 export_needs_consent = not (
-                    selected_output.get("output_id")
-                    or (prior.get("composition_id") == composition_id and (opening.intent or {}).get("editor_commits"))
+                    ((selected_output.get("output_id") or prior.get("composition_id") == composition_id)
+                     and (opening.intent or {}).get("editor_commits"))
                     or confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
                 )
             if need.requires_confirmation or export_needs_consent:

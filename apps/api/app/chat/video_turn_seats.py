@@ -1273,7 +1273,14 @@ def stamp_video_presentation(
 
 
 def asks_for_export(text: str) -> bool:
-    return bool(re.search(r"导出|交付|正式成片|成片.{0,6}发|\b(?:export|deliver|mp4)\b", text, re.I))
+    if draft_only_request(text) or re.search(
+        r"多少|多久|多长|如何|怎样|怎么|\b(?:how (?:much|long|do)|what|which|why|when)\b", text, re.I
+    ):
+        return False
+    return bool(re.search(
+        r"导出|交付|(?:成片|mp4).{0,8}(?:发给|发我)|(?:发给我|给我发).{0,8}(?:成片|mp4)|"
+        r"\b(?:export|deliver|send.{0,30}mp4)\b", text, re.I
+    ))
 
 
 async def preceding_delivery(db, conversation_id, opening):
@@ -1298,8 +1305,8 @@ async def preceding_delivery(db, conversation_id, opening):
 def draft_only_request(text: str) -> bool:
     return bool(re.search(
         r"(?:只(?:要|需|看|出|做)|仅(?:需|要)?)(?:可编辑的?)?(?:初稿|草稿|分镜|预览)|"
-        r"(?:不要|不用|无需|暂不)(?:正式)?(?:导出|交付)|"
-        r"\b(?:preview only|draft only|only (?:a |the )?(?:draft|preview)|(?:do not|don't|no) (?:formal )?(?:export|render))\b",
+        r"(?:不要|不用|无需|不需要|暂不|先不|别|不)(?:正式)?(?:导出|交付)|"
+        r"\b(?:preview only|draft only|only (?:a |the )?(?:draft|preview)|(?:do not|don't|no) (?:formal )?(?:export|render|deliver))\b",
         text, re.I,
     ))
 
