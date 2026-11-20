@@ -658,8 +658,6 @@ def video_round_tools(
         stage_tools["briefing"] = {"answer"} if resolution.get("pending") else {"ask_user"}
     if stage == "draft_build" and not active_draft and readiness and readiness.task_kind == "website_promo":
         stage_tools["draft_build"].discard("ask_user")
-    if stage == "draft_build" and active_draft and (draft_arguments or {}).get("design", {}).get("scene_assets"):
-        stage_tools["draft_build"].update({"present_plan", "propose_tasks", "start_run"})
     review_facts = {}
     if stage == "draft_review" and active_draft:
         from app.agents.working_drafts import working_draft_review_facts

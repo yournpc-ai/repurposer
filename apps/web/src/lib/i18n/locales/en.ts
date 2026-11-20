@@ -1413,6 +1413,8 @@ const en = {
       scaleDone: "Scaled the object",
       splitClip: "Splitting the clip",
       splitClipDone: "Split the clip into two parts",
+      exportVideo: "Exporting MP4",
+      exportVideoDone: "MP4 exported",
       previewRange: "Checking the preview",
       previewRangeDone: "Checked the local preview",
       videoReviseDone: "Adjusted the video storyboard",

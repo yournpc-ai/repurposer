@@ -281,7 +281,7 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
     monkeypatch.setattr(visual_assets, "fixed_visual_asset_manifest", cache_miss)
     monkeypatch.setattr(generated_images, "find_fixed_generated_image", lambda *a: cache_miss())
     task = TaskItem(tool="prepare_visual_assets", params={"draft_ref": reference.model_dump(mode="json"), "scene_ids": ["s2"], "review_existing": False})
-    assert "directly" in await video_proposal_guard(db, project, [task])
+    assert "directly" in video_proposal_guard([task])
     assert (await video_quote_facts(db, project, [task]))["visual_images"] == 1
     node = compile_graph(TaskSpec(tasks=[task]))[0]
     pinned = (await pin_visual_asset_preparation(db, project, [task]))["visual_asset_preparation"]
@@ -291,7 +291,7 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
         "draft_ref": reference.model_dump(mode="json"),
         "scene_assets": pinned["scene_assets"],
     }})
-    assert "directly" in await video_proposal_guard(db, project, [legacy])
+    assert "directly" in video_proposal_guard([legacy])
     assert (await pin_visual_asset_preparation(db, project, [legacy]))[
         "visual_asset_preparation"
     ]["scene_assets"] == pinned["scene_assets"]

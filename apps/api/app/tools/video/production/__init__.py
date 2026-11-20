@@ -232,36 +232,7 @@ async def pin_narration_preparation(project, tasks):
     return {"narration_preparation": parts[0] if len(parts) == 1 else {"scenes": parts}}
 
 
-async def pin_video_production(db, project, tasks, approved_by):
-    video_tasks = [t for t in tasks or [] if t.tool == "produce_video"]
-    if not video_tasks:
-        return {}
-    if len(video_tasks) != 1:
-        raise ValueError("Produce one saved video per run")
-    production = ProduceVideoParams.model_validate(video_tasks[0].params)
-    ref = production.version_ref
-    composition = await db.scalar(select(Composition).where(
-        Composition.id == ref.composition_id,
-        Composition.owner_id == project.user_id,
-    ).with_for_update())
-    if composition is None:
-        raise ValueError("Video composition not found")
-    read = await video_version_read(db, owner_id=project.user_id,
-                                    version_id=ref.composition_version_id)
-    if read["base_ref"] != ref.model_dump(mode="json"):
-        raise ValueError("Video version identity mismatch")
-    storyboard = read["storyboard"]
-    clips = [
-        clip
-        for scene in storyboard["scenes"]
-        for clip in scene["clips"]
-    ] + list(storyboard["unassigned_clips"])
-    assert_saved_producers_available(clips)
-    if production.regenerate_media and not any(
-        clip.get("object_kind") == "generator" and clip.get("producer") == "image-generation"
-        for clip in clips
-    ):
-        raise ValueError("This saved video has no model-generated image to regenerate")
+async def _presented_production_authority(db, project, composition, read, approved_by):
     pending = PendingPlan.model_validate(project.pending_brief or {})
     receipt = pending.video_presentation or {}
     for key in ("composition_id", "composition_version_id", "content_digest", "presentation_digest"):
@@ -297,7 +268,7 @@ async def pin_video_production(db, project, tasks, approved_by):
                 or confirmation.get("action") not in {"produce", "start"}
                 or confirmation.get("base_ref") != read["base_ref"]
                 or confirmation.get("presented_message_id") != str(presented.id)
-                or composition.current_version_id != ref.composition_version_id):
+                or composition.current_version_id != UUID(read["composition_version_id"])):
             raise ValueError("This confirmation needs a current storyboard with a production invitation")
         used = await db.scalar(select(WorkflowRun.id).where(
             WorkflowRun.project_id == project.id,
@@ -311,6 +282,55 @@ async def pin_video_production(db, project, tasks, approved_by):
                   and b.get("composition_version_id") == read["composition_version_id"]), None)
     if not block or block.get("presentation_digest") != read["presentation_digest"]:
         raise ValueError("The storyboard presentation receipt is invalid")
+    return {"video_authorized_by": str(approval.id), "video_presentation": receipt}
+
+
+async def pin_video_production(db, project, tasks, approved_by, *, export_receipt=None):
+    video_tasks = [t for t in tasks or [] if t.tool == "produce_video"]
+    if not video_tasks:
+        return {}
+    if len(video_tasks) != 1:
+        raise ValueError("Produce one saved video per run")
+    production = ProduceVideoParams.model_validate(video_tasks[0].params)
+    ref = production.version_ref
+    composition = await db.scalar(select(Composition).where(
+        Composition.id == ref.composition_id,
+        Composition.owner_id == project.user_id,
+    ).with_for_update())
+    if composition is None:
+        raise ValueError("Video composition not found")
+    read = await video_version_read(db, owner_id=project.user_id,
+                                    version_id=ref.composition_version_id)
+    if read["base_ref"] != ref.model_dump(mode="json"):
+        raise ValueError("Video version identity mismatch")
+    storyboard = read["storyboard"]
+    clips = [
+        clip
+        for scene in storyboard["scenes"]
+        for clip in scene["clips"]
+    ] + list(storyboard["unassigned_clips"])
+    assert_saved_producers_available(clips)
+    if production.regenerate_media and not any(
+        clip.get("object_kind") == "generator" and clip.get("producer") == "image-generation"
+        for clip in clips
+    ):
+        raise ValueError("This saved video has no model-generated image to regenerate")
+    if export_receipt is None:
+        authority = await _presented_production_authority(db, project, composition, read, approved_by)
+    else:
+        preview = (export_receipt.intent or {}).get("export_preview") or {}
+        opening = await db.scalar(select(Message).join(Conversation).where(
+            Message.id == approved_by, Message.role == "user", Message.id == export_receipt.turn_id,
+            Message.conversation_id == export_receipt.conversation_id,
+            Conversation.user_id == project.user_id, Conversation.project_id == project.id,
+        ))
+        if (opening is None or composition.origin_project_id != project.id
+                or composition.current_version_id != ref.composition_version_id
+                or export_receipt.intent.get("tool") != "export_video"
+                or not preview.get("mp4_sha256") or not preview.get("model_media")
+                or any(preview.get(k) != v for k, v in read["base_ref"].items())):
+            raise ValueError("Export authorization does not match the observed version.")
+        authority = {"video_authorized_by": str(opening.id)}
     # The Composition lock serializes cross-Chat starts for the same work.
     active = await db.scalar(select(WorkflowRun.id).where(
         WorkflowRun.status.in_([WorkflowStatus.PENDING, WorkflowStatus.RUNNING]),
@@ -338,8 +358,7 @@ async def pin_video_production(db, project, tasks, approved_by):
             "regenerate_media": production.regenerate_media,
             "narration_policy": policy.model_dump(mode="json"),
             "aspect": aspect,
-            "video_authorized_by": str(approval.id),
-            "video_presentation": receipt}
+            **authority}
 
 
 async def resolve_visual_asset_selection(db, project, params: PrepareVisualAssetsParams):

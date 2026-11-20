@@ -513,7 +513,7 @@ async def _create_run_from_tasks(
                 source_asset_id=source_asset_id,
                 exemplar_asset_id=exemplar_asset_id,
                 name=name or None,
-                video_authorized_by=await latest_video_approval(db, project),
+                video_authorized_by=export_receipt.turn_id if export_receipt else await latest_video_approval(db, project),
             ),
         )
     except CreditsInsufficientError as exc:
@@ -2084,7 +2084,7 @@ def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> 
 
 
 async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instruction,
-                                 confirmation_id, confirmed_via, quote):
+                                 confirmation_id, confirmed_via, quote, export_receipt=None):
     """Materialize an authorized request and its accounting scope in the caller transaction."""
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
     from app.tools.video.production import latest_video_approval
@@ -2114,7 +2114,8 @@ async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instructi
             # the receipt title and completion line read it.
             name=name or None,
         ),
-        reuse_video_production=True,
+        reuse_video_production=export_receipt is None,
+        export_receipt=export_receipt,
     )
     _scope_user = await db.get(User, project.user_id)
     _scope_execution, _scope_credits = read_confirmation_prefs(

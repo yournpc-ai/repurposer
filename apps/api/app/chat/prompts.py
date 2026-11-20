@@ -90,33 +90,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     from app.tools.project_context import render_resources
 
     confirmation = facts.get("video_confirmation")
-    if confirmation is not None:
-
+    if confirmation and confirmation["action"] in {"wait", "stale", "already_started", "start"}:
         action = confirmation["action"]
-        action_tool = {
-            "produce": "present_plan" if facts["mode"] == "plan" else "propose_tasks",
-            "start": "start_run",
-        }.get(action)
         rules = {
-            "produce": "用户已批准制作所展示的版本。简要介绍制作方案，调用制作提案工具。服务端负责提供任务并绑定确切版本。",
-            "start": "用户已确认待执行的制作报价。用空参数调用 start_run。",
-            "wait": "告知用户分镜仍在展示，待完整可见后即可确认。",
-            "stale": "告知用户分镜已有修改，需先展示当前版本再制作。",
-            "already_started": "根据给定的 run_status 和交付事实，告知用户该分镜已请求制作。若为 completed，说明已有结果可在视频卡片查看；若为 pending 或 running，说明正在安排或制作。其他情况按实际状态说明，不猜测。",
+            "wait": "说明仍在展示该版本。",
+            "stale": "说明引用的版本已过期，询问要使用哪一版。",
+            "already_started": "按已有执行回执陈述状态，交付以确切产物为准。",
+            "start": "请用户在原有费用确认中核对并批准报价。",
         }
-        available = [tool for tool in facts["tools"] if tool.name in {action_tool, "answer"}]
-        if action == "produce":
-
-            def confirmation_wire(description, parameters):
-                return (
-                    "展示服务端为已批准视频绑定的制作任务，供执行。",
-                    prune_wire_parameters(parameters, set(parameters.get("properties", {})) - {"name"}),
-                )
-
-            available = [
-                replace(tool, wire_view=confirmation_wire) if tool.name == action_tool else tool
-                for tool in available
-            ]
+        available = [tool for tool in facts["tools"] if tool.name == "answer"]
         return RoundAssembly(
             tools=available,
             system=f"用用户在本次对话中使用的语言作答。{rules[action]} 若只需告知情况，先在消息正文中说明，再调用 answer。",
@@ -152,6 +134,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     resources = list(getattr(snapshot, "resources", ()) or ())
     works = [r for _, r in resources if r.get("kind") == "composition"]
     hint = facts.get("target_hint") or {}
+    if confirmation and confirmation["action"] == "produce" and not hint:
+        ref = confirmation["base_ref"]
+        hint = {"composition_id": ref["composition_id"], "version_id": ref["composition_version_id"]}
     if (works or hint.get("unavailable") or hint.get("composition_id")) and not hint.get("draft_id"):
         selected = None
         if hint.get("composition_id"):
@@ -204,8 +189,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "根据实际结果结束本轮；也可以直接在消息正文答复。" if t.name == "answer" else
             "询问一个确定目标所需的问题。"
         )) if t.name in {"answer", "ask_user"} else t for t in tools]
+        if confirmation and confirmation["action"] == "produce":
+            context["user_confirmed_export_of"] = confirmation["base_ref"]
         if facts.get("authorized_media"):
-            context["completed_media_this_turn"] = {**facts["authorized_media"], "delivered_to_chat": True}
+            context["completed_media_this_turn"] = {**facts["authorized_media"], "delivered_to_chat": facts["authorized_media"].get("role") != "export"}
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
         return RoundAssembly(

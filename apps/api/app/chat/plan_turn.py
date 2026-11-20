@@ -961,19 +961,10 @@ class PlanTurn:
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
         """Validate and dock the proposed production plan."""
-        if getattr(self, "video_confirmation", None) and self.video_confirmation["action"] == "produce":
-            from app.chat.video_turn_seats import confirmed_video_task
-
-            params = params.model_copy(update={
-                "tasks": [confirmed_video_task(self.video_confirmation)],
-                "production_intent": True,
-                "material_urls": None,
-            })
         db, project = self.db, self.project
         stored = self._current_pending()
         from app.chat.video_turn_seats import video_proposal_guard
-        video_guard = await video_proposal_guard(db, project, params.tasks,
-            pending_read=self._video_presentation_pending, production_intent=params.production_intent, mentions=self.request.mentions)
+        video_guard = video_proposal_guard(params.tasks)
         if video_guard is not None:
             return video_guard
         if params.production_intent is None:

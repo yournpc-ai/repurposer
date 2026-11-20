@@ -218,10 +218,9 @@ async def test_revision_uses_its_own_presentation_when_another_work_was_shown(da
         pending = await video_version_read(db, owner_id=uid, version_id=revised[1].id)
         pending["previous_version_ref"] = base["base_ref"]
         task = TaskItem(tool="produce_video", params={"version_ref": pending["base_ref"]})
-        assert await video_proposal_guard(db, project, [task], pending_read=pending,
-            production_intent=True) is None
-        assert pending["authorized_revision_message_id"] == str(approval.id)
-        assert project.pending_brief["video_presentation"]["composition_id"] == str(first.id)
+        assert "export_video" in video_proposal_guard([task])
+        assert "authorized_revision_message_id" not in pending
+        assert project.pending_brief["video_presentation"]["composition_id"] == str(other.composition_id)
 
 
 def set_intent(intent: str) -> Op:

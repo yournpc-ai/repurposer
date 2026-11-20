@@ -14,7 +14,7 @@ from app.chat.service import (
 )
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import TaskItem, WorkflowStatus, canonical_json_hash
-from app.models.tables import Composition, Conversation, Message, Project, WorkflowRun, WorkflowStep
+from app.models.tables import Composition, Conversation, Message, Output, Project, WorkflowRun, WorkflowStep
 from app.pipeline.orchestrator import derive_task_estimates
 from app.tools.music.score import instrumental_score
 from app.tools.video.audio_playback import playback_item
@@ -67,6 +67,28 @@ async def _record_image(db, project, receipt, asset):
     return receipt
 
 
+async def _record_export(db, project, receipt, run):
+    from app.pipeline.run_review import output_is_delivered
+
+    output = (await db.scalars(select(Output).join(WorkflowStep, Output.workflow_step_id == WorkflowStep.id)
+        .where(WorkflowStep.run_id == run.id, WorkflowStep.kind == "produce_video",
+               Output.project_id == project.id))).one_or_none()
+    ref = run.context["version_ref"]
+    if (output is None or not output_is_delivered(output)
+            or output.type != "video" or not (output.files or {}).get("video")
+            or str(output.composition_version_id) != receipt.intent["version_id"]
+            or str(output.composition_id) != receipt.intent["composition_id"]
+            or output.render_spec.get("provenance") != ref
+            or (output.payload or {}).get("composition_digest") != ref["content_digest"]):
+        raise ValueError("The renderer has no verified MP4 for the authorized version.")
+    facts = {"role": "export", "status": "available", **ref, "output_id": str(output.id),
+             "duration_seconds": output.payload["duration_seconds"], "review_pending": True}
+    receipt.intent = {**receipt.intent, "media_result": facts}
+    receipt.content = ("正式 MP4 已导出，待审片。" if (project.language or "").startswith("zh")
+                       else "MP4 export complete. Output review is pending.")
+    return receipt
+
+
 async def settle_media_receipt(db, project, run):
     """Worker delivery, live tool return and history recovery share one locked receipt."""
     receipt = await db.scalar(select(Message).where(
@@ -80,6 +102,8 @@ async def settle_media_receipt(db, project, run):
     outcome_unknown = bool((run.context or {}).get("provider_outcome_unknown"))
     if run.status == WorkflowStatus.COMPLETED:
         try:
+            if receipt.intent["tool"] == "export_video":
+                return await _record_export(db, project, receipt, run)
             if "visual_asset_preparation" in run.context:
                 result = run.context["visual_asset_preparation"]["result"]
                 if result["failures"]:
@@ -103,9 +127,22 @@ async def settle_media_receipt(db, project, run):
 
 
 async def _submit(db, project, receipt, task, quote, via):
+    export = receipt if task.tool == "produce_video" else None
+    if export is not None:
+        # Serialize even independent Chat openings before checking for a
+        # completed export. In-flight production is fenced by create_run.
+        await db.execute(select(Project.id).where(Project.id == project.id).with_for_update())
+        existing = await db.scalar(select(WorkflowRun).where(
+            WorkflowRun.project_id == project.id, WorkflowRun.status == WorkflowStatus.COMPLETED,
+            WorkflowRun.context["editor_media"].as_string().is_not(None),
+            WorkflowRun.context["version_ref"]["composition_version_id"].as_string() == receipt.intent["version_id"],
+        ).order_by(WorkflowRun.created_at.desc()).limit(1))
+        if existing is not None:
+            await _record_export(db, project, receipt, existing)
+            return existing.id
     run = await submit_confirmed_tasks(
         db, project, None, [task], name=task.params.get("name", task.tool), instruction=None,
-        confirmation_id=receipt.intent["editor_media"], confirmed_via=via, quote=quote,
+        confirmation_id=receipt.intent["editor_media"], confirmed_via=via, quote=quote, export_receipt=export,
     )
     from app.models.tables import CreditTransaction
 
@@ -177,6 +214,8 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
     composition_id = str(composition.id) if composition else None
     version_id = str(version.id) if version else None
     fingerprint = canonical_json_hash({"tool": name, "composition": composition_id, "params": params})
+    if name == "export_video":
+        fingerprint = canonical_json_hash({"tool": name, "version": version_id, "params": params})
     async with AsyncSessionLocal() as db:
         opening = await _lock_turn_for_transcript_write(db, turn.turn_id)
         project = await db.scalar(select(Project).join(Conversation, Conversation.project_id == Project.id).where(
@@ -216,7 +255,17 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             if pending and ((pending.question or {}).get("kind") == "task_book" or
                             (pending.intent or {}).get("media_permission")):
                 raise ValueError("Resolve the outstanding authorization before generating more media.")
-            if name == "generate_image":
+            preview = None
+            if name == "export_video":
+                preview = getattr(turn, "_editor_last_preview", None) or {}
+                if (preview.get("composition_version_id") != version_id
+                        or preview.get("content_digest") != version.content_digest
+                        or not preview.get("mp4_sha256")
+                        or current_group_id() and preview.get("decision") == current_group_id()):
+                    raise ValueError("Inspect actual preview evidence for this version before deciding to export it.")
+                task = TaskItem(tool="produce_video", params={"version_ref": turn._video_base_ref})
+                cached = None
+            elif name == "generate_image":
                 from app.tools.video.params import PrepareVisualAssetsParams
                 from app.tools.video.production import resolve_visual_asset_selection
                 from app.tools.video.visual_assets import SceneAssetSpec, cached_visual_asset, preflight_scene_svgs
@@ -247,6 +296,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 db, turn.conversation_id, "assistant", "", turn_id=opening.id,
                 intent={"editor_media": identity, "fingerprint": fingerprint,
                         "composition_id": composition_id, "version_id": version_id, "tool": name,
+                        **({"export_preview": preview} if preview else {}),
                         "activity_id": str(activity_id) if activity_id else None},
             )
             if cached is not None:
@@ -265,6 +315,9 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 zh = (project.language or "").startswith("zh")
                 text = (f"允许这次素材生成吗？最多使用 {need.quote_high} 积分。" if zh else
                         f"Authorize this media generation for up to {need.quote_high} credits?")
+                if name == "export_video":
+                    text = (f"允许导出这个版本的 MP4 吗？最多使用 {need.quote_high} 积分。" if zh else
+                            f"Authorize MP4 export of this version for up to {need.quote_high} credits?")
                 receipt.content = text
                 receipt.question = {"kind": "question", "question": text,
                                     "options": [{"id": "approve", "label": "允许" if zh else "Allow"},
@@ -321,7 +374,7 @@ async def generate_media(turn, name, args, composition, version):
             }])
     if current_group_id() and facts.get("snapshot_id") and not facts.get("cache_hit"):
         turn.__dict__.setdefault("_generated_in_response", {})[facts["snapshot_id"]] = current_group_id()
-    facts["delivered_to_chat"] = True
+    facts["delivered_to_chat"] = facts.get("role") != "export"
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest"):
         if facts.get(key):

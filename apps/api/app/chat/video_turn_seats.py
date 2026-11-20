@@ -302,85 +302,11 @@ async def review_video_seat(
     )
 
 
-async def video_proposal_guard(db, project, tasks, *, pending_read=None, production_intent=None, mentions=()):
+def video_proposal_guard(tasks):
+    if any(t.tool == "produce_video" for t in tasks):
+        return "Export the observed version directly with export_video."
     if any(t.tool in {"prepare_music", "prepare_narration", "prepare_visual_assets"} for t in tasks):
         return "Generate media directly using the available media tools."
-    if not any(t.tool == "produce_video" for t in tasks):
-        return None
-    # Native tool loops occasionally serialize a nested object as JSON text.
-    # Normalize that one bounded shape BEFORE any guard reads it; malformed
-    # values become repair feedback, never a 500 or an implicit redesign.
-    import json
-    for task in tasks:
-        if task.tool != "produce_video":
-            continue
-        params = dict(task.params or {})
-        ref = params.get("version_ref")
-        if isinstance(ref, str):
-            try:
-                ref = json.loads(ref)
-            except (TypeError, ValueError):
-                return "暂缓制作：version_ref 须为已保存的 base_ref 对象，不能传不透明字符串。请重新读取版本并原样传入 base_ref。"
-            if not isinstance(ref, dict):
-                return "暂缓制作：version_ref 须为已保存的 base_ref 对象。请重新读取版本并原样传入 base_ref。"
-            task.params = {**params, "version_ref": ref}
-    from app.editing.store import CompositionNotFound, PermissionDenied
-    from app.tools.video.production import latest_video_approval, pin_video_production
-    # A later revision may carry this turn's explicit "change and make".
-    # It still waits for the creative overview to finish before auto Start.
-    prior = (project.pending_brief or {}).get("video_presentation") or {}
-    if len(tasks) == 1:
-        # A new revision is not presented yet. Recover the presentation of
-        # its actual base work, rather than the other work last shown in Chat.
-        ref = ((pending_read or {}).get("previous_version_ref")
-               or (tasks[0].params or {}).get("version_ref") or {})
-        if prior.get("composition_version_id") != ref.get("composition_version_id"):
-            from sqlalchemy import select
-
-            from app.models.tables import Conversation
-            shown = await db.scalar(select(Message).join(Conversation, Message.conversation_id == Conversation.id)
-                .where(Conversation.project_id == project.id, Message.blocks.contains([
-                    {"kind": "video_storyboard", "composition_version_id": ref.get("composition_version_id"), "presentation_complete": True}
-                ])).order_by(Message.seq.desc()).limit(1))
-            if shown is not None:
-                block = next(b for b in shown.blocks if b.get("composition_version_id") == ref.get("composition_version_id"))
-                prior = {**block, "presented_message_id": str(shown.id)}
-                stored = PendingPlan.model_validate(project.pending_brief or {})
-                project.pending_brief = stored.model_copy(update={"video_presentation": prior}).model_dump(mode="json")
-            else:
-                from app.models.tables import WorkflowRun
-                previous = await db.scalar(select(WorkflowRun).where(
-                    WorkflowRun.project_id == project.id,
-                    WorkflowRun.context["version_ref"]["composition_version_id"].as_string() == ref.get("composition_version_id"),
-                ).order_by(WorkflowRun.created_at.desc()).limit(1))
-                proven = (previous.context or {}).get("video_presentation") if previous else None
-                if proven and proven.get("presentation_complete"):
-                    prior = proven
-                    stored = PendingPlan.model_validate(project.pending_brief or {})
-                    project.pending_brief = stored.model_copy(update={"video_presentation": prior}).model_dump(mode="json")
-    if (pending_read and pending_read["version"] > 1 and production_intent is True
-            and prior.get("presentation_complete")
-            and prior.get("composition_id") == pending_read["composition_id"]
-            and all(t.tool == "produce_video" and (t.params or {}).get("version_ref") == pending_read["base_ref"] for t in tasks)):
-        pending_read["authorized_revision_message_id"] = str(await latest_video_approval(db, project))
-        pending_read["prior_presented_message_id"] = prior.get("presented_message_id")
-        return None
-    if (pending_read and production_intent is True and pending_read["version"] > 1
-            and len(tasks) == 1 and tasks[0].params.get("version_ref") == pending_read["base_ref"]):
-        from app.tools.video.production import reviewed_output_ref
-        pins = [m for m in mentions if m.type == "output"]
-        if len(pins) == 1:
-            ref = await reviewed_output_ref(db, project, UUID(str(pins[0].id)))
-            if ref and ref == pending_read.get("previous_version_ref"):
-                pending_read["authorized_revision_message_id"] = str(await latest_video_approval(db, project))
-                pending_read["prior_reviewed_output_id"] = str(pins[0].id)
-                return None
-    try:
-        await pin_video_production(db, project, tasks, await latest_video_approval(db, project))
-    except (ValueError, CompositionNotFound, PermissionDenied) as exc:
-        return (
-            f"暂缓制作：{exc}。不要声称已经开工。用 get_video_version(present=true) 补全展示并等待用户批准，不得为修复回执而重新设计。"
-        )
     return None
 
 
@@ -1329,12 +1255,6 @@ def requested_video_production(text: str) -> bool:
     return bool(re.search(r"制作|做(?:一[个部条支只]|成片)|\b(?:make|produce|create)\b", text, re.I))
 
 
-def confirmed_video_task(confirmation: dict):
-    from app.models.schemas import TaskItem
-
-    return TaskItem(tool="produce_video", params={"version_ref": confirmation["base_ref"]})
-
-
 async def short_video_confirmation(db, project, conversation_id, text, pending):
     """Resolve a brief affirmation against the last visible confirmation."""
     from sqlalchemy import select
@@ -1372,7 +1292,7 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     if all(ref.values()):
         run = await db.scalar(
             select(WorkflowRun).where(
-                WorkflowRun.project_id == project.id,
+                WorkflowRun.project_id == project.id, WorkflowRun.context["editor_media"].as_string().is_(None),
                 WorkflowRun.context["version_ref"]["composition_version_id"].as_string()
                 == ref["composition_version_id"],
             ).order_by(WorkflowRun.created_at.desc()).limit(1)
@@ -1387,7 +1307,7 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
             return None
         last_run = await db.scalar(
             select(WorkflowRun).where(
-                WorkflowRun.project_id == project.id,
+                WorkflowRun.project_id == project.id, WorkflowRun.context["editor_media"].as_string().is_(None),
                 WorkflowRun.context["version_ref"]["composition_version_id"].as_string().is_not(None),
             ).order_by(WorkflowRun.created_at.desc()).limit(1)
         )

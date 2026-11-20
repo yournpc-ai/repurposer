@@ -465,7 +465,7 @@ async def capture_step(
         else f"step:{node.id}:capture:{node.attempt or 0}"
     )
     held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=node.run_id)
-    if node.kind in {"prepare_music", "prepare_visual_assets", "prepare_narration"}:
+    if node.kind in {"prepare_music", "prepare_visual_assets", "prepare_narration", "produce_video", "render"}:
         from app.models.tables import WorkflowRun
 
         context = await db.scalar(select(WorkflowRun.context).where(WorkflowRun.id == node.run_id))

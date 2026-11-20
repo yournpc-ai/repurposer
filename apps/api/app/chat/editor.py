@@ -27,6 +27,10 @@ from app.tools.music.score import GenerateMusicArgs
 from app.models.tables import CompositionVersion, Message
 
 
+class ExportVideoArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class InsertAudioArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_id: UUID = Field(description="Owned fixed audio snapshot from the project or a generation result.")
@@ -139,6 +143,10 @@ def _editor_tool(name, description, args, key):
 
 
 EDITOR_TOOLS = (
+    _editor_tool(
+        "export_video", "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
+        ExportVideoArgs, "exportVideo",
+    ),
     _editor_tool(
         "insert_audio", "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
         InsertAudioArgs, "insertAudio",
@@ -633,7 +641,7 @@ async def execute_editor(turn, name, args):
                     ),
                     valid_for_key=version_key,
                 )
-            if name in {"generate_music", "generate_voice", "generate_image"}:
+            if name in {"export_video", "generate_music", "generate_voice", "generate_image"}:
                 from app.chat.editor_media import generate_media
 
                 return await generate_media(turn, name, args, composition, version)
@@ -669,7 +677,8 @@ async def execute_editor(turn, name, args):
             if window not in windows:
                 windows.append(window)
             turn._editor_last_preview = {
-                **base, "version_id": str(version.id), "window_seconds": window, "windows": windows,
+                **base, "version_id": str(version.id), "mp4_sha256": evidence["mp4_sha256"],
+                "decision": current_group_id(), "window_seconds": window, "windows": windows,
                 "model_media": evidence["model_media"],
                 "audio_available_to_model": evidence["audio_available_to_model"],
             }

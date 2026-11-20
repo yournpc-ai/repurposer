@@ -1341,6 +1341,8 @@ const zh: Resources = {
       scaleDone: "已缩放画面",
       splitClip: "正在分割片段",
       splitClipDone: "已将片段分为两部分",
+      exportVideo: "正在导出正式 MP4",
+      exportVideoDone: "正式 MP4 已导出",
       previewRange: "正在检查局部预览",
       previewRangeDone: "已检查局部预览",
       videoReviseDone: "已调整视频分镜",
