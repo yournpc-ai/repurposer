@@ -56,3 +56,20 @@
   .ui-as-main { margin: 0; border: 0; border-radius: 0; }
   .ui-as-start { width: calc(100% - 32px); padding: 32px 0; }
 }
+
+/* Agent Thread screen, transcript and composer owned by the project. */
+.ui-th-body { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ui-th-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 16px 24px 32px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .ui-th-col { gap: 20px; padding: 12px 16px 24px; }
+}

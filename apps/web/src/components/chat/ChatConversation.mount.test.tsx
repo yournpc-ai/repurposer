@@ -61,7 +61,7 @@ function props(rows: OverlayMessage[], extra: Partial<ComponentProps<typeof Chat
     nowRow: null, bottomNowRow: null, activeTurnId: null,
     steps: [], runTitle: "Video", runCreatedAt: null, terminal: false, status: null,
     reviewPending: false, runWorkEndedAtMs: null, runFallbackOutputs: [],
-    hasUploads: false, assets: [], panel: false, scrollerSendRef: { current: null }, ...extra,
+    hasUploads: false, assets: [],  scrollerSendRef: { current: null }, ...extra,
   }
 }
 const user: OverlayMessage = { id: "user", role: "user", content: "Make a video", turnId: "turn" }

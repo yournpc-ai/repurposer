@@ -3,7 +3,7 @@ import { useState } from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 import { QuestionDock } from "./QuestionDock"
-import { dockWorthyQuestion } from "./ChatDock"
+import { dockWorthyQuestion } from "./AgentThread"
 import type { BriefAnswerItem, BriefQuestionItem, QuestionMessage } from "./timeline/types"
 
 vi.mock("react-i18next", () => ({

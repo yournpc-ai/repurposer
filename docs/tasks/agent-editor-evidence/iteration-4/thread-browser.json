@@ -1,0 +1,29 @@
+{
+  "video": {
+    "live": {
+      "time": 33.546877,
+      "ready": 4,
+      "paused": false
+    },
+    "refresh": {
+      "time": 33.511437,
+      "ready": 4,
+      "paused": false
+    },
+    "errors": []
+  },
+  "audioAndStop": {
+    "audio": {
+      "paused": false,
+      "t": 0.204101,
+      "ready": 4
+    },
+    "stop": {
+      "accepted": true,
+      "turn_state": "retracted"
+    },
+    "http": 200,
+    "draft": "Inspect the saved timeline and play the first two seconds.",
+    "url": "http://localhost:3026/projects/2aed9783-3ec6-46a8-a2bf-2ad5c702aa44"
+  }
+}

@@ -2,13 +2,12 @@ import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-route
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { ChatDock, type DerivedRow, type DecisionPlanRow } from "@/components/chat/ChatDock"
+import { AgentThread, type DerivedRow, type DecisionPlanRow } from "@/components/chat/AgentThread"
 import { normalizeIntent, tasksFromRunContext } from "@/components/chat/chatProtocol"
 import { SoundMutexProvider } from "@/components/flow/sound-mutex"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
 import { apiFetch } from "@/lib/api"
 import type { FirstMessageHandoff } from "@/lib/chatAttachments"
-import { useRunEvents } from "@/lib/use-run-events"
 import type { LifecycleStamp, WorkflowStep, Project } from "@/lib/types"
 
 interface AssetStatusEntry {
@@ -101,26 +100,12 @@ function ProjectThreadPage({ projectId }: { projectId: string }) {
 
   const latestRun = results?.latest_run ?? null
   const runActive = latestRun != null && ["pending", "running", "waiting_human"].includes(latestRun.status)
-  const sse = useRunEvents(runActive ? latestRun.id : null, fetchResults)
-  const sseActive = runActive && sse.steps.length > 0
-
   useEffect(() => {
     if (latestRun?.status === "completed") setStickyCompletedRun(latestRun)
   }, [latestRun])
 
   const lifecycle = results?.lifecycle ?? null
   const materialPending = lifecycle?.blockers.includes("material_pending") ?? false
-
-  useEffect(() => {
-    if (!results?.latest_run || sseActive) return
-    const status = results.latest_run.status
-    const hasRenderingOutputs = results.latest_run.steps.some(
-      (step) => step.kind === "render" && ["pending", "running"].includes(step.status),
-    )
-    if (["completed", "failed", "cancelled"].includes(status) && !hasRenderingOutputs) return
-    const interval = setInterval(() => { void fetchResults() }, 2500)
-    return () => clearInterval(interval)
-  }, [results?.latest_run, sseActive, fetchResults])
 
   useEffect(() => {
     if (!materialPending || results?.latest_run) return
@@ -167,12 +152,12 @@ function ProjectThreadPage({ projectId }: { projectId: string }) {
           onDeleted={() => navigate({ to: "/projects" })}
         />
 
-        <ChatDock
+        <AgentThread
           key={projectId}
           projectId={projectId}
-          form="full"
+
           lifecycle={lifecycle}
-          canvasAvailable={false}
+
           prompt={firstMessage?.text ?? pendingBrief?.prompt ?? (runActive ? latestRun?.context?.instruction : null) ?? prompt ?? ""}
           firstMessage={firstMessage}
           onFirstMessageRetracted={() => {

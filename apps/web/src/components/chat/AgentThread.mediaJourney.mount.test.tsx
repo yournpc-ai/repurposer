@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 import { apiFetch } from "@/lib/api"
-import { ChatDock } from "./ChatDock"
+import { AgentThread } from "./AgentThread"
 import type { WorkflowStep } from "@/lib/types"
 import type { HistoryRow } from "./timeline/history"
 
@@ -93,7 +93,7 @@ it("folds routine recording and delivers one playable score live and after reope
     return new Response(null, { status: 404 })
   })
   const onRunStarted = vi.fn()
-  const dock = <ChatDock projectId="p" prompt="" form="full" canvasAvailable={false} initialRunId="image-run" onComplete={vi.fn()} onRunStarted={onRunStarted} />
+  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} onRunStarted={onRunStarted} />
   const view = render(dock)
   await act(async () => {})
   expect(screen.getByText("message 1")).toBeDefined()
@@ -146,7 +146,7 @@ it("updates tool status in place and shows each worker reply once, live and on r
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  const dock = (prompt: string) => <ChatDock projectId="p" prompt={prompt} form="full" canvasAvailable={false}
+  const dock = (prompt: string) => <AgentThread projectId="p" prompt={prompt}
     initialRunId="image-run" onComplete={vi.fn()} />
   const view = render(dock(""))
   await act(async () => {})
@@ -250,7 +250,7 @@ it("stops the original request between image delivery and narration and stays st
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  const dock = <ChatDock projectId="p" prompt="" form="full" canvasAvailable={false} initialRunId="image-run" onComplete={vi.fn()} />
+  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} />
   const view = render(dock)
   await act(async () => {})
   expect(screen.getByText("chat.thinking")).toBeDefined()
@@ -276,7 +276,7 @@ it.each(["blocked", "stopped"])("stops following a journey after its durable %s 
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  render(<ChatDock projectId="p" prompt="" form="full" canvasAvailable={false} initialRunId="image-run" onComplete={vi.fn()} />)
+  render(<AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} />)
   await act(async () => {})
   rows.push({ ...mark(2, null, state), content: state })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })

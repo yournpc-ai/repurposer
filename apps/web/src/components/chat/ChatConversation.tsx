@@ -100,7 +100,6 @@ interface ChatConversationProps {
   runFallbackOutputs: Output[]
   hasUploads: boolean
   assets: ProjectAsset[]
-  panel: boolean
   scrollerSendRef: RefObject<(() => void) | null>
 }
 
@@ -173,7 +172,6 @@ export function ChatConversation({
   runFallbackOutputs,
   hasUploads,
   assets,
-  panel,
   scrollerSendRef,
 }: ChatConversationProps) {
   const { t } = useTranslation()
@@ -479,21 +477,7 @@ export function ChatConversation({
       <ScrollerSendBridge apiRef={scrollerSendRef} />
       <MessageScroller className="h-full">
         <MessageScrollerViewport className="scroll-fade-y thin-scroll">
-          {/* Full form: the stage's scroller starts below the
-              transparent ProjectHeader (the wrapper's pt-14), so the
-              content's own top rhythm is the dock's pt-4 — no extra
-              headroom needed. The panel form fills the 480px column
-              (no max-w centering). */}
-          <MessageScrollerContent
-            className={
-              panel
-                ? // Panel rails (2026-09-28 user ruling, two-step):
-                  // the message column holds FLORA's px-6; the bottom
-                  // register below runs one step tighter (px-4).
-                  "w-full gap-0 px-6 pb-6 pt-3 [&>*+*]:mt-6 [&>*+[data-slot=run-response]]:mt-3"
-                : "mx-auto w-full max-w-3xl gap-0 px-4 pb-8 pt-4 [&>*+*]:mt-8 [&>*+[data-slot=run-response]]:mt-3"
-            }
-          >
+          <MessageScrollerContent className="ui-th-col" role="log" aria-busy={chatBusy}>
             {/* ONE row stream: transcript rows keep their array order;
                 the run adapter pins bottom while live and anchors at the
                 run end once terminal. */}

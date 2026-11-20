@@ -1,0 +1,899 @@
+{
+  "split-final": [
+    [
+      "turn.started",
+      {
+        "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b"
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "023af8b5-76c0-447a-a9a8-efc5780941a6",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "seq": 2,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:36:21.047695+00:00",
+              "key": "chat.activity.inspectClips",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "26c5fd5f182343d38ecc96904c2ebdb3"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:36:21.058619+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "26c5fd5f182343d38ecc96904c2ebdb3",
+        "seq": 1,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.inspectClips",
+        "at": "2026-11-20T16:36:21.047676+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "26c5fd5f182343d38ecc96904c2ebdb3",
+        "seq": 2,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.inspectClipsDone",
+        "at": "2026-11-20T16:36:21.077441+00:00",
+        "duration_ms": 29
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "023af8b5-76c0-447a-a9a8-efc5780941a6",
+        "frame": {
+          "activity_id": "26c5fd5f182343d38ecc96904c2ebdb3",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.inspectClipsDone",
+          "at": "2026-11-20T16:36:21.047695+00:00",
+          "settled_at": "2026-11-20T16:36:21.077441+00:00",
+          "duration_ms": 29
+        }
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "5e048b98-96e1-4e76-a6be-5f4f5a7a01e8",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "seq": 3,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:36:23.206198+00:00",
+              "key": "chat.activity.splitClip",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "abcb38011892431984ebf5b290c43ba0"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:36:23.215004+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "abcb38011892431984ebf5b290c43ba0",
+        "seq": 3,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.splitClip",
+        "at": "2026-11-20T16:36:23.206184+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "abcb38011892431984ebf5b290c43ba0",
+        "seq": 4,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.splitClipDone",
+        "at": "2026-11-20T16:36:23.247116+00:00",
+        "duration_ms": 40
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "5e048b98-96e1-4e76-a6be-5f4f5a7a01e8",
+        "frame": {
+          "activity_id": "abcb38011892431984ebf5b290c43ba0",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.splitClipDone",
+          "at": "2026-11-20T16:36:23.206198+00:00",
+          "settled_at": "2026-11-20T16:36:23.247116+00:00",
+          "duration_ms": 40
+        }
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "2fedf21e-d0ec-4277-b759-40683a2c356f",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "seq": 4,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:36:24.517988+00:00",
+              "key": "chat.activity.previewRange",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "b0af79cd0cb949f68f41e0c00c03144b"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:36:24.531501+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "b0af79cd0cb949f68f41e0c00c03144b",
+        "seq": 5,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.previewRange",
+        "at": "2026-11-20T16:36:24.517970+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "b0af79cd0cb949f68f41e0c00c03144b",
+        "seq": 6,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.previewRangeDone",
+        "at": "2026-11-20T16:36:27.878931+00:00",
+        "duration_ms": 3360
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "2fedf21e-d0ec-4277-b759-40683a2c356f",
+        "frame": {
+          "activity_id": "b0af79cd0cb949f68f41e0c00c03144b",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.previewRangeDone",
+          "at": "2026-11-20T16:36:24.517988+00:00",
+          "settled_at": "2026-11-20T16:36:27.878931+00:00",
+          "duration_ms": 3360
+        }
+      }
+    ],
+    [
+      "turn.completed",
+      {
+        "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+        "user_message": {
+          "id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "user",
+          "content": "把第二段从第 5 秒切开，播放切点附近看看。请直接剪辑并描述实际预览。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "turn_state": "settled",
+          "intent": {
+            "editor_commits": [
+              {
+                "tool": "split_clip",
+                "request": "68f2c947-9da2-5c47-a699-7dc7507da219",
+                "fingerprint": "4c8bc78bb396b9814397caaaf288053c6fee4fce847b7acffe8b12fb2475d8e4",
+                "activity_row": "5e048b98-96e1-4e76-a6be-5f4f5a7a01e8"
+              }
+            ]
+          },
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 1,
+          "created_at": "2026-11-20T16:36:19.101169Z",
+          "updated_at": "2026-11-20T16:36:36.966247Z"
+        },
+        "assistant_message": {
+          "id": "7c8f8c59-bfdb-43fe-bf01-4fb2250da5bd",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "已完成分割，版本号仍为 v2（第 2 版）。\n\n- 分割点：3–8 秒的片段（第二段）在其自身第 5 秒处切开，对应作品时间轴 **8.0 秒**。\n- 结果：3–8 秒的片段 变为 3.0–8.0 秒（源 2700000–3150000 刻度），新增 8–11 秒的片段 占 8.0–11.0 秒（源 3150000–3420000），同属第 1 场景 visual 轨，中间无空隙。\n\n实际预览（6.0–10.0 秒，取样 6.97 秒与 8.97 秒）：切点前后画面几乎一致，都是深蓝底、左侧竖条、标题 \"The team workspace\"、副标 \"Product, pricing and plans\" 与底部 \"A practical overview\"。8 秒处竖条和文字位置有轻微重排，右侧版式整体略向右偏移，但内容、颜色、动画状态没有明显断裂，切口过渡自然，没有黑帧或跳变。\n\n如果你说的\"第 5 秒\"是指整条时间轴的第 5 秒（也就是本段内第 2 秒），我可以再切一次。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "28e9f487-ba11-48c6-bf84-5c139ec9892b",
+          "turn_state": null,
+          "intent": {
+            "interaction_policy_version": "interaction_constitution.v2"
+          },
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [
+            {
+              "kind": "video_storyboard",
+              "composition_id": "fe341db4-f816-4f9f-9774-066a6995d63c",
+              "composition_version_id": "a7589819-1f08-43db-b8d4-b36b18330908",
+              "version": 2,
+              "content_digest": "3e792cef80e1a8f485c94783bf3a1bc460b8d94f79e04a0f627bfe86f3bf3ff1",
+              "presentation_digest": "99850da4ce1ff7b566985cd171c8ba0409a88f17a9446906360e9355893c6f2a",
+              "scrub": {
+                "kind": "range",
+                "start_seconds": 6.0,
+                "end_seconds": 10.0
+              },
+              "presented_message_id": "7c8f8c59-bfdb-43fe-bf01-4fb2250da5bd"
+            }
+          ],
+          "suggestion_ref": null,
+          "seq": 5,
+          "created_at": "2026-11-20T16:36:36.954446Z",
+          "updated_at": "2026-11-20T16:36:36.962146Z"
+        },
+        "run_id": null,
+        "answered_question": null
+      }
+    ]
+  ],
+  "followup-final": [
+    [
+      "turn.started",
+      {
+        "turn_id": "0d3273d8-25e6-4ab8-ac9d-0ffe47012160"
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "e78f176d-688e-4623-b992-2b583cbadf86",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "0d3273d8-25e6-4ab8-ac9d-0ffe47012160",
+          "seq": 7,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:36:45.695989+00:00",
+              "key": "chat.activity.inspectClips",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "c4c1c4c8b883459a910205743ea0b7f7"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:36:45.702252+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "c4c1c4c8b883459a910205743ea0b7f7",
+        "seq": 1,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.inspectClips",
+        "at": "2026-11-20T16:36:45.695980+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "c4c1c4c8b883459a910205743ea0b7f7",
+        "seq": 2,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.inspectClipsDone",
+        "at": "2026-11-20T16:36:45.715066+00:00",
+        "duration_ms": 19
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "e78f176d-688e-4623-b992-2b583cbadf86",
+        "frame": {
+          "activity_id": "c4c1c4c8b883459a910205743ea0b7f7",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.inspectClipsDone",
+          "at": "2026-11-20T16:36:45.695989+00:00",
+          "settled_at": "2026-11-20T16:36:45.715066+00:00",
+          "duration_ms": 19
+        }
+      }
+    ],
+    [
+      "turn.completed",
+      {
+        "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+        "user_message": {
+          "id": "0d3273d8-25e6-4ab8-ac9d-0ffe47012160",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "user",
+          "content": "请检查刚切开的两段，告诉我前半段和后半段各有多长。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "0d3273d8-25e6-4ab8-ac9d-0ffe47012160",
+          "turn_state": "settled",
+          "intent": null,
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 6,
+          "created_at": "2026-11-20T16:36:40.901533Z",
+          "updated_at": "2026-11-20T16:36:59.738312Z"
+        },
+        "assistant_message": {
+          "id": "cba10c5e-76cb-40a6-8fdb-0b58ed92b198",
+          "conversation_id": "c1a3f884-cef6-48a2-b398-6be8e3ede8b3",
+          "role": "assistant",
+          "content": "查看版本 2 的时间线后，切开的两段是同一素材快照上的连续两段（源区间首尾相接，无缝衔接）：\n\n**版本 v2「访谈剪辑练习」**（时间线共 18.0 秒）\n\n| 段落 | 素材/片段 ID | 作品时间位置 | 时长 |\n|---|---|---|---|\n| 前半段 | 3–8 秒的片段（3–8 秒的对象） | 3.0s → 8.0s | **5.0 秒** |\n| 后半段 | 8–11 秒的片段（8–11 秒的对象） | 8.0s → 11.0s | **3.0 秒** |\n\n实测依据：两段的 source_range 分别为 2,700,000–3,150,000 与 3,150,000–3,420,000 刻度（时基 90,000），边界正好相接，确认是切开后的前后两段，合计 8.0 秒。\n\n其余片段未受影响：0–3 秒的片段（0.0–3.0s，3.0 秒）、13–15 秒的片段 图形（13.0–15.0s）、场景 2 的 15–18 秒的片段 与字幕（15.0–18.0s）。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "0d3273d8-25e6-4ab8-ac9d-0ffe47012160",
+          "turn_state": null,
+          "intent": {
+            "interaction_policy_version": "interaction_constitution.v2"
+          },
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 8,
+          "created_at": "2026-11-20T16:36:59.728446Z",
+          "updated_at": "2026-11-20T16:36:59.734644Z"
+        },
+        "run_id": null,
+        "answered_question": null
+      }
+    ]
+  ],
+  "approve": [
+    [
+      "turn.started",
+      {
+        "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81"
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "22a1c22d-6e31-4390-9e75-cc5ff9028293",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "seq": 5,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:36:03.167409+00:00",
+              "key": "chat.activity.recordVoice",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "139c05b05a8347a6bc0ccf0ef38436aa"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:36:03.179603+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "139c05b05a8347a6bc0ccf0ef38436aa",
+        "seq": 1,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.recordVoice",
+        "at": "2026-11-20T16:36:03.167361+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "139c05b05a8347a6bc0ccf0ef38436aa",
+        "seq": 2,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.mediaPermission",
+        "at": "2026-11-20T16:36:03.228146+00:00",
+        "duration_ms": 60
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "22a1c22d-6e31-4390-9e75-cc5ff9028293",
+        "frame": {
+          "activity_id": "139c05b05a8347a6bc0ccf0ef38436aa",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.mediaPermission",
+          "at": "2026-11-20T16:36:03.167409+00:00",
+          "settled_at": "2026-11-20T16:36:03.228146+00:00",
+          "duration_ms": 60
+        }
+      }
+    ],
+    [
+      "turn.completed",
+      {
+        "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+        "user_message": {
+          "id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "user",
+          "content": "Generate a new English male voice narration reading exactly \"The gallery opens today.\". Deliver the audio for listening. Do not edit the video.",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "turn_state": "settled",
+          "intent": null,
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 4,
+          "created_at": "2026-11-20T16:36:00.024023Z",
+          "updated_at": "2026-11-20T16:36:03.239567Z"
+        },
+        "assistant_message": {
+          "id": "e4e0a536-68fb-4019-85be-21e92656eaf2",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "允许这次素材生成吗？最多使用 2 积分。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "turn_state": null,
+          "intent": {},
+          "question": {
+            "kind": "question",
+            "question": "允许这次素材生成吗？最多使用 2 积分。",
+            "options": [
+              {
+                "id": "approve",
+                "label": "允许"
+              },
+              {
+                "id": "decline",
+                "label": "取消"
+              }
+            ]
+          },
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 6,
+          "created_at": "2026-11-20T16:36:03.211364Z",
+          "updated_at": "2026-11-20T16:36:03.218101Z"
+        },
+        "run_id": null,
+        "answered_question": null
+      }
+    ]
+  ],
+  "approve-answer": [
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "3c25de81-afb9-4de2-b606-4a19a5a942a1",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "旁白已生成，可以试听。",
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "seq": 7,
+          "intent": {
+            "media_result": {
+              "peak": 0.4327859580516815,
+              "role": "narration",
+              "text": "The gallery opens today.",
+              "digest": "19c33bdfd68808778028937878612017040448508466bc615051908930090136",
+              "status": "available",
+              "language": "en",
+              "voice_id": "presenter_male",
+              "cache_hit": false,
+              "snapshot_id": "25a1a7bf-2cb7-53e1-8d83-0063927b9891",
+              "alignment_id": "e4138593-e050-410f-b157-dd706cb6318a",
+              "analysis_digest": "7077ec6120cfa1ab6758b93d681d1994725af6090d5978c1251bf8cbaf0c6cb8",
+              "duration_seconds": 1.7415,
+              "added_to_composition": false
+            }
+          },
+          "blocks": [
+            {
+              "kind": "audio_playback",
+              "items": [
+                {
+                  "role": "narration",
+                  "peaks": [
+                    0.0013151102466508746,
+                    0.0046094926074147224,
+                    0.00420261500403285,
+                    0.004447022918611765,
+                    0.004352669697254896,
+                    0.32371920347213745,
+                    0.3235493302345276,
+                    0.24463337659835815,
+                    0.11993732303380966,
+                    0.4327859580516815,
+                    0.3886477053165436,
+                    0.414288729429245,
+                    0.2877916097640991,
+                    0.21620608866214752,
+                    0.32067635655403137,
+                    0.2551362216472626,
+                    0.26026591658592224,
+                    0.3298065960407257,
+                    0.33086150884628296,
+                    0.2481461465358734,
+                    0.05814579874277115,
+                    0.11985137313604355,
+                    0.24780671298503876,
+                    0.2860305607318878,
+                    0.24760030210018158,
+                    0.12639488279819489,
+                    0.15673257410526276,
+                    0.22017723321914673,
+                    0.1959669291973114,
+                    0.10909297317266464,
+                    0.07291039079427719,
+                    0.09359196573495865,
+                    0.03759011998772621,
+                    0.04063565284013748,
+                    0.17744168639183044,
+                    0.10327640175819397,
+                    0.27648481726646423,
+                    0.31758078932762146,
+                    0.2924627959728241,
+                    0.16067758202552795,
+                    0.07222898304462433,
+                    0.041440729051828384,
+                    0.022678526118397713,
+                    0.01203849259763956,
+                    0.005492157768458128,
+                    0.004451591521501541,
+                    0.012346586212515831,
+                    0.00042392441537231207
+                  ],
+                  "title": "The gallery opens today.",
+                  "digest": "19c33bdfd68808778028937878612017040448508466bc615051908930090136",
+                  "scene_id": null,
+                  "snapshot_id": "25a1a7bf-2cb7-53e1-8d83-0063927b9891",
+                  "analysis_digest": "7077ec6120cfa1ab6758b93d681d1994725af6090d5978c1251bf8cbaf0c6cb8",
+                  "duration_seconds": 1.7415
+                }
+              ],
+              "project_id": "2aed9783-3ec6-46a8-a2bf-2ad5c702aa44"
+            }
+          ],
+          "created_at": "2026-11-20T16:36:03.324246+00:00"
+        }
+      }
+    ],
+    [
+      "answer.completed",
+      {
+        "answered_question": {
+          "id": "e4e0a536-68fb-4019-85be-21e92656eaf2",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "允许这次素材生成吗？最多使用 2 积分。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "turn_state": null,
+          "intent": {},
+          "question": {
+            "kind": "question",
+            "options": [
+              {
+                "id": "approve",
+                "label": "允许"
+              },
+              {
+                "id": "decline",
+                "label": "取消"
+              }
+            ],
+            "question": "允许这次素材生成吗？最多使用 2 积分。"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "允许",
+            "answers": [],
+            "option_id": "approve",
+            "answered_at": "2026-11-20T16:36:03.310952Z",
+            "group_digest": null
+          },
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 6,
+          "created_at": "2026-11-20T16:36:03.211364Z",
+          "updated_at": "2026-11-20T16:36:03.353374Z"
+        },
+        "follow_up": {
+          "id": "3ebd1da6-50df-4691-a45c-04b9791e2cc1",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "英文男声旁白已生成并交付，未改动视频。\n\n- 音频卡：英文男声朗读 \"The gallery opens today.\"（presenter_male，语速原速）\n- 实测时长：1.7415 秒，峰值电平 0.433\n- 该音频未插入时间线（added_to_composition = false），成片 18.0 秒内容保持不变\n\n音频已在对话中提供，可直接试听。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "d73a05f5-f453-46c9-9aee-c285c7b3fa81",
+          "turn_state": null,
+          "intent": {
+            "interaction_policy_version": "interaction_constitution.v2"
+          },
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 8,
+          "created_at": "2026-11-20T16:36:13.864198Z",
+          "updated_at": "2026-11-20T16:36:13.879214Z"
+        }
+      }
+    ]
+  ],
+  "decline": [
+    [
+      "turn.started",
+      {
+        "turn_id": "891a408d-ced3-4392-9837-52e23726a317"
+      }
+    ],
+    [
+      "assistant.row.append",
+      {
+        "row": {
+          "id": "5ee1d04a-2d34-45e5-a222-769c5b5860c6",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "",
+          "turn_id": "891a408d-ced3-4392-9837-52e23726a317",
+          "seq": 2,
+          "intent": {
+            "type": "activity",
+            "frame": {
+              "at": "2026-11-20T16:35:58.375776+00:00",
+              "key": "chat.activity.recordVoice",
+              "kind": "read",
+              "status": "active",
+              "activity_id": "f3dda690601545c29114241e79c51046"
+            }
+          },
+          "blocks": [],
+          "created_at": "2026-11-20T16:35:58.385374+00:00"
+        }
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "f3dda690601545c29114241e79c51046",
+        "seq": 1,
+        "kind": "read",
+        "status": "active",
+        "key": "chat.activity.recordVoice",
+        "at": "2026-11-20T16:35:58.375760+00:00"
+      }
+    ],
+    [
+      "assistant.activity",
+      {
+        "activity_id": "f3dda690601545c29114241e79c51046",
+        "seq": 2,
+        "kind": "read",
+        "status": "completed",
+        "key": "chat.activity.mediaPermission",
+        "at": "2026-11-20T16:35:58.451496+00:00",
+        "duration_ms": 75
+      }
+    ],
+    [
+      "assistant.row.update",
+      {
+        "id": "5ee1d04a-2d34-45e5-a222-769c5b5860c6",
+        "frame": {
+          "activity_id": "f3dda690601545c29114241e79c51046",
+          "kind": "read",
+          "status": "completed",
+          "key": "chat.activity.mediaPermission",
+          "at": "2026-11-20T16:35:58.375776+00:00",
+          "settled_at": "2026-11-20T16:35:58.451496+00:00",
+          "duration_ms": 75
+        }
+      }
+    ],
+    [
+      "turn.completed",
+      {
+        "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+        "user_message": {
+          "id": "891a408d-ced3-4392-9837-52e23726a317",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "user",
+          "content": "Generate a new English male voice narration reading exactly \"A cobalt bird sings.\". Deliver the audio for listening. Do not edit the video.",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "891a408d-ced3-4392-9837-52e23726a317",
+          "turn_state": "settled",
+          "intent": null,
+          "question": null,
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 1,
+          "created_at": "2026-11-20T16:35:50.699089Z",
+          "updated_at": "2026-11-20T16:35:58.471353Z"
+        },
+        "assistant_message": {
+          "id": "eea48ece-0847-4a86-9699-54382112a430",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "允许这次素材生成吗？最多使用 2 积分。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "891a408d-ced3-4392-9837-52e23726a317",
+          "turn_state": null,
+          "intent": {},
+          "question": {
+            "kind": "question",
+            "question": "允许这次素材生成吗？最多使用 2 积分。",
+            "options": [
+              {
+                "id": "approve",
+                "label": "允许"
+              },
+              {
+                "id": "decline",
+                "label": "取消"
+              }
+            ]
+          },
+          "answer": null,
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 3,
+          "created_at": "2026-11-20T16:35:58.433838Z",
+          "updated_at": "2026-11-20T16:35:58.442855Z"
+        },
+        "run_id": null,
+        "answered_question": null
+      }
+    ]
+  ],
+  "decline-answer": [
+    [
+      "answer.completed",
+      {
+        "answered_question": {
+          "id": "eea48ece-0847-4a86-9699-54382112a430",
+          "conversation_id": "54232d78-021f-4093-ba7b-ef7bcfaab4d2",
+          "role": "assistant",
+          "content": "允许这次素材生成吗？最多使用 2 积分。",
+          "attachments": [],
+          "mentions": [],
+          "skill": null,
+          "focus_output": null,
+          "workflow_run_id": null,
+          "turn_id": "891a408d-ced3-4392-9837-52e23726a317",
+          "turn_state": null,
+          "intent": {
+            "media_result": {
+              "status": "declined"
+            }
+          },
+          "question": {
+            "kind": "question",
+            "options": [
+              {
+                "id": "approve",
+                "label": "允许"
+              },
+              {
+                "id": "decline",
+                "label": "取消"
+              }
+            ],
+            "question": "允许这次素材生成吗？最多使用 2 积分。"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "取消",
+            "answers": [],
+            "option_id": "decline",
+            "answered_at": "2026-11-20T16:35:58.544661Z",
+            "group_digest": null
+          },
+          "suggestions": [],
+          "blocks": [],
+          "suggestion_ref": null,
+          "seq": 3,
+          "created_at": "2026-11-20T16:35:58.433838Z",
+          "updated_at": "2026-11-20T16:35:58.547501Z"
+        },
+        "follow_up": null
+      }
+    ]
+  ]
+}
