@@ -1,29 +1,30 @@
 # PROGRESS — 进展、排期与需求池
 
-> 更新至 2026-11-20。Agent Editor 的施工顺序、作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
+> 更新至 2026-11-21。Agent Editor 的施工顺序、作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
 
 ## 0. 当前里程碑与施工序列
 
 ### 0.1 里程碑状态
 
-- **Agent Editor v1** 已验证原子剪辑、多版本回合、生成媒体后接续剪辑，以及双进程重启后的原回合恢复。保存作品使用直接编辑 Tool；后续施工从主合同 Iteration 4 及其停止条件接续。[Iteration 2](tasks/agent-editor-evidence/iteration-2.md) · [Iteration 3](tasks/agent-editor-evidence/iteration-3.md)
+- **当前产品主线 — Agent Editor v1**。Iteration 1–3 已按各轮出口验收。下一批为 Iteration 4 的 Studio 与原生多调用；随后必须完成 Iteration 5 的自主审片、正式 MP4 导出与实际 Output 交付。Iteration 6+ 的专业视觉工具按需独立排期。后续批次均待验收。[主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) · [Iteration 1](tasks/agent-editor-evidence/iteration-1.md) · [Iteration 2](tasks/agent-editor-evidence/iteration-2.md) · [Iteration 3](tasks/agent-editor-evidence/iteration-3.md)
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
-- **当前主线 — Chat-only Video Project**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
+- **既有 Chat-only Video Project 验收范围**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
 - **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项
 
-“当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
+“当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。Agent Editor 的排期只读主合同 §8。其余项目按各自合同登记，旧官网批次与历史 Run 展示不构成本主线的开工条件。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
+| **当前** | **Agent Editor · Iteration 4** | 从 4A 共享 Shell、Home 首发与 Projects 开始，接续 4B 真实 Agent Thread、4C 多 Tool Calls 与分组恢复、4D 旧路径退役。保留当前产物 Inbox、详情弹窗与播放器。此次仅修订合同，四片均待实施与实测。 | [主合同 §8](tasks/new-agent.md#8-五面纵向施工计划) |
 | 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **官网品牌宣传片批 1A：装配修复、集中澄清、品牌档案与创作状态继承** | Readiness 三阶段、真实 PNG analyze_brand、扩展 Brief/CreativeState、集中问题组前后端和版本/Run 继承已落码；fake provider golden wire 通过，`test/core` 437 项与 Web 410 项通过，TypeScript 通过。真实 LegitEvi BrandProfile 含实测 `#DC0000`、“接近 Inter”和原始宣言；数字 option_id 整组提交已验证标签回填、六项 user-stated、preview/正式 digest 一致、过期/重复 409 与刷新恢复，最终 readiness=design_video。批 1 验收止于集中作答与本批状态恢复；首稿写作/修复和后续媒体迭代尚未开始，不纳入本批测试、通过结论或阻塞项。开发库已确认 h8e5a2c4d7f1，生产 migration/恢复和本批真实浏览器问题组仍未验证 | [任务合同](tasks/website-promo-evidence-brief-workflow.md) / [验证登记](VERIFICATION.md#411-官网品牌宣传片基础链iteration-1a) |
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
 | **当前** | **Landing 对话式视频叙事与内测商业面** | 暖白底三层 Hero（Rookie Cut 品牌与新主标题）、四类 Tab 自动演示/独立背景、340svh 固定滚动叙事、静态 Gallery（当前不挂载）、正文 FAQ、简洁 CTA 与参考三列 Footer 已落码。演示使用公开候选样片与交互投影，未验证为真实 Chat 回放或修改后成片；真实类别样片与多轮交付仍按 P6+P7 验收。既有 TypeScript 与 landingCreate 定向检查通过；最新 Header/Hero 视觉调整尚未复跑静态检查或浏览器验收，桌面首屏/Tab/FAQ/Footer、其余尺寸、双主题、reduced-motion、媒体播放与登录预填完整旅程均待复验。Footer 未配置项目仅保留文字座位，发布前需真实链接或移除；公开 1,000 开户赠额前核对数据库配置；支付与公开授权门未关闭 | [当前合同](LANDING.md) |
-| **当前** | **Chat TurnBlock 与可见 Stop 收口** | 回复容器结构已落码：TurnBlock 分离用户与 AssistantResponse，回复内部持有正文/Worked/组件槽位；RunBlock 组合明确关联且连续的开场、工作面与逐消息交付，独立 QA/跨回合消息不重排。ChatConversation 已移除相邻工作块间距补偿；RunCard 统一 attached/detached 入口，交接不重挂载工作组件、不重复订阅。Chat/stream 22 files / 269 tests 通过；Web tsc 最新被范围外 MentionChip 两项 unused 阻断，全量 Web 425 passed / 2 failed（首页旧文案、媒体选区浮点断言）；媒体选区已继续接入选区外 mask、实时尺寸、「引用选区」chip、消息正文/结构化 region、普通 Chat 与 Video Project 上下文及 prompt 语义；region 只寄存在 chip，删除 chip 同步清除正文摘要和全部结构化选区草稿。上述 Web 读数早于本轮接入，需重跑；真实呈现由用户验收。独立上传 tool、消息自有 output_refs、Stop frontier、授权与费用边界不变。剩余多段回复、Run 收段视口、中途 QA/多次交付、上传/Stop、慢历史/刷新及全形态用户验收；全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
+| 已有实现，随 4B–4D 复验 | **Chat TurnBlock 与可见 Stop 收口** | 回复容器结构已落码：TurnBlock 分离用户与 AssistantResponse，回复内部持有正文/Worked/组件槽位；RunBlock 组合明确关联且连续的开场、工作面与逐消息交付，独立 QA/跨回合消息不重排。ChatConversation 已移除相邻工作块间距补偿；RunCard 统一 attached/detached 入口，交接不重挂载工作组件、不重复订阅。Chat/stream 22 files / 269 tests 通过；Web tsc 最新被范围外 MentionChip 两项 unused 阻断，全量 Web 425 passed / 2 failed（首页旧文案、媒体选区浮点断言）；媒体选区已继续接入选区外 mask、实时尺寸、「引用选区」chip、消息正文/结构化 region、普通 Chat 与 Video Project 上下文及 prompt 语义；region 只寄存在 chip，删除 chip 同步清除正文摘要和全部结构化选区草稿。上述 Web 读数早于本轮接入，需重跑；真实呈现由用户验收。独立上传 tool、消息自有 output_refs、Stop frontier、授权与费用边界不变。剩余多段回复、Run 收段视口、中途 QA/多次交付、上传/Stop、慢历史/刷新及全形态用户验收；全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
 | 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证；staging GC 已移出 worker 认领等待并改为 8 路有界用户前缀 listing，定向纯测试已补但未运行。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) |
 | 开放 | Agent Working Loop 持续闭环 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |

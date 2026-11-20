@@ -1,9 +1,9 @@
 # Repurposer · Agent Editor v1
 ## 破坏性架构重构与五面一体施工总合同
 
-**状态：新主线 / 待执行**
+**状态：Iteration 1–3 已按各轮出口验收。下一项为 Iteration 4 的 Slice 4A。**
 
-**基准日期：2026-11-20**
+**修订基准：2026-11-21，main @ a0005e76。**
 
 **目标：2027 年具有专业剪辑能力的无工作台 AI 剪辑师**
 
@@ -114,76 +114,20 @@ Agent 默认获得当前作品、版本、用户目标、素材目录和最近�
 
 # 1. 施工现场接管
 
-## 1.1 已知基准
+## 1.1 已验收的起点
 
-上一 Agent 报告的现场状态：
+原生 Tool、作品 Context、唯一版本写口及其恢复语义沿用前三轮结论。下表限定已验证的范围。
 
-- `main` HEAD：`1dc14e7a`
-- 工作树：20 个已修改文件
-- 另有一个未跟踪的配乐事务测试
-- §9A 图片审阅约束减法已在本地施工
-- §9B 已授权 BGM 直接执行已在本地施工
-- 最近定向回归 112 项通过
-- 旧第二轮真实 Chat 尚未验收
-- 另有正在运行或尚未结束的验收工作
+| 批次 | 可复查的事实 |
+|---|---|
+| 现场审计 | 检查点 `09cf1873` 保存原合同。§9A 的图片审阅与来源约束、§9B 的授权、幂等及费用保护归入直接 Tool 路径。[消费者与事务审计](agent-editor-evidence/audit.md) |
+| Iteration 1 | `inspect_timeline → split_clip → preview_range` 将指定 Clip 在自身第 5 秒分割，在 v2 播放成片第 7–9 秒。模型读到实际画面，刷新后仍播放同一窗口。[原生调用与验收](agent-editor-evidence/iteration-1.md) |
+| Iteration 2 | 一个用户回合分割、裁剪、移动、缩放、平移，同一 Composition 从 v1 递增至 v6。两张预览卡可独立恢复，已验证 Stop、StaleBase 及版本提交后进程中断。[逐版差异与恢复](agent-editor-evidence/iteration-2.md) |
+| Iteration 3 | 旁白、配乐各自生成并固定，再分别插入同一作品，主样本 v1 → v3。保留 Worker、来源快照、对齐和账本，退役普通媒体 Dock 与模拟 Start。已验证局部混音实播与故障续剪；模型听感和自主审阅正式 Output 待验。[媒体回执与验收](agent-editor-evidence/iteration-3.md) |
 
-以上是交接报告，不代表新 Agent 已重新核验。
+## 1.2 每批开工核对
 
-## 1.2 开工前必须完成
-
-新 Agent 首先执行只读现场调查：
-
-```text
-git status
-git diff
-git log
-当前工作树与实际 HEAD
-当前 API/worker 进程与代码重载方式
-未结束的 Run、生成任务和测试项目
-未提交文件的完整归属
-```
-
-确认旧 Agent 已停止写入。
-
-不得在仍会被热重载的运行中服务上直接开展破坏性修改。
-
-必须先建立可恢复的 Git 检查点：
-
-- 保存所有属于已停止施工的本地成果。
-- 保存未跟踪的必要测试文件。
-- 不覆盖其他并行任务的改动。
-- 不使用 reset、clean 或强制 checkout 丢弃工作。
-- 若文件归属不能确认，先列出冲突，不擅自提交或删除。
-
-建议检查点名称：
-
-`checkpoint/pre-agent-editor-v1`
-
-允许使用独立工作树或分支隔离施工。
-
-检查点仅用于恢复工程成果，**不构成继续兼容旧架构的要求**。
-
-## 1.3 对 §9A / §9B 的裁决
-
-§9A 和 §9B 不继续作为旧第二轮专项任务推进。
-
-新 Agent 应分别盘点其成果：
-
-**§9A：**
-
-保留用户要求、真实品牌事实、来源证据与模型自选拍摄手法之间的正确区分。
-
-保留已经验证的图片审阅判断与快照复用。
-
-删除不再需要的旧媒体阶段专用适配。
-
-**§9B：**
-
-保留已授权媒体请求直接提交、稳定调用身份、并发重放、费用与恢复保护。
-
-取消旧 Dock / 模拟 Start 的入口和后续消费者。
-
-如果成果只覆盖 BGM，允许作为新媒体 Tool 的第一条实现，不得误称图片和 TTS 已完成迁移。
+核对实际分支、HEAD、工作树、相关服务与并行施工归属。沿上述审计复核本批涉及的现役消费者。在独立工作树或可恢复的 Git 检查点施工，保护未跟踪文件和运行中的用户工程。无法确认归属时保留现场，不使用 reset、clean 或强制 checkout 丢弃工作。
 
 ---
 
@@ -276,7 +220,7 @@ Run、Step、worker 可以继续支持异步任务。
 
 ## 3.2 目标工具目录
 
-以下是目标能力目录。必须先核对已有实现，再按纵向切片接入。未实现或未验证的工具不得伪装成可用。
+以下是候选能力目录，施工顺序见 §8。关键帧及复杂合成归 Iteration 6+。必须先核对已有实现，再按纵向切片接入。未实现或未验证的工具不得伪装成可用。
 
 | 类型 | 候选 Tool | 最小语义 |
 |---|---|---|
@@ -287,7 +231,7 @@ Run、Step、worker 可以继续支持异步任务。
 | 分割 | `split_clip` | clip_id、time |
 | 裁剪 | `trim_clip` | clip_id、时间边界 |
 | 时间线移动 | `move_clip` | clip_id、目标时间 |
-| 素材插入 | `insert_media` | source_id、目标位置 |
+| 素材插入 | `insert_audio`（已验证） | 固定音频来源、作品时间、增益 |
 | 删除 | `remove_clip` | clip_id |
 | 空间平移 | `translate` | id、x、y |
 | 缩放 | `scale` | id、scale |
@@ -474,7 +418,7 @@ Chat 只呈现：
 - 已接受
 - 正在执行
 - 已完成
-- 已失败
+- 已失败、已停止或未提交及其原因
 - 确实需要用户确认
 
 这只是模型和用户的执行结果语义，不要求新建持久状态机。
@@ -487,11 +431,11 @@ Chat 只呈现：
 
 ## 6.3 消息恢复
 
-刷新后通过持久结果重建消息和组件。
+TurnBlock 按用户回合组织正文、活动、问题、作品与媒体块。在线用 Chat SSE 更新同一消息，刷新用持久消息及其回执重建。重复、乱序和晚到事件按身份与顺序合并，保留正文与卡片的相对位置。Run SSE 只报告相应后台工作。
 
-重复执行事件不得产生重复的交付消息。
+每个调用可从所属 opening 回溯原生 call ID、工具名、调用顺序、实际状态、自然语言摘要、实测耗时、真实结果引用及失败或停止原因。尚未提交的调用标明原因，缺少计时的历史行不补造耗时。版本卡固定 CompositionVersion、digest 与窗口，素材卡固定 Asset / SourceSnapshot，交付卡固定消息引用的 Output。引用失效时明确提示，不以当前 head 或最新 Output 补位。
 
-后台恢复不得把旧的 Run 文案重新呈现为用户必须操作的工作流指令。
+分组由同一回合、同一次模型决策及其有序调用推导，在正文、确认或交付块处断开。默认显示“正在查看时间线”“正在调整片段”等折叠活动行，多个相关调用可展开逐项查看允许展示的参数摘要、耗时和诊断。长任务只保留一处真实进度；前端定时动画不得触发结算、写回消息或重复播报活动。
 
 ---
 
@@ -499,7 +443,7 @@ Chat 只呈现：
 
 ## 7.1 优先移除
 
-重点盘点并删除旧创作消费者：
+以下为历轮消费者盘点入口。Iteration 1–3 已删除的分支见 §1.1；后续只检查实际剩余调用方。
 
 ```text
 chat/turn_tools.py
@@ -565,6 +509,8 @@ chat/video_turn_seats.py
 5. Recovery/Replay
 
 不得分拆为五个互不相关的任务。
+
+以下 Iteration 0–3 记录既有基线及各轮验收范围。下一项施工从 Slice 4A 开始。
 
 ## Iteration 0：现场保护与旧架构切除图
 
@@ -696,68 +642,103 @@ Recovery：
 
 不得要求用户再输入 Start。
 
-## Iteration 4：动画与专业视觉操作
+## Iteration 4｜Studio UI 与多 Tool Calls（下一轮，待施工与验收）
 
-**目标：扩展真正的专业剪辑能力。**
+一个登录后 Studio 承载 Home、Projects 和项目 Agent Thread。用户能从素材和一句要求开始，在同一作品上连续对话、查看修改结果，并在刷新后接着工作。全站采用 affectUI Clean 的字体、颜色、圆角、间距与导航层级，共用现有主题偏好，覆盖浅色、深色、跟随系统及移动端。
 
-Tool：
-- 关键帧
-- 叠加
-- 画中画
-- 蒙版
-- 必要的抠像与运动跟踪
+**接入基线。** Web 声明 React `^19.2.0`。修订时本地工作树有 `@affectui` Registry 配置及未跟踪的 `thinking-loader.tsx`，两者均未进入基准 main；本机可读 affectUI 与 screens 等 Skills，MCP 可取下列源码。所列条目中，Tool Call Card / Group 为 Free，其余为 Pro。这些目标组件尚未落入项目 UI 目录。施工时按实际 import 核对依赖，尤其是 `@hugeicons/react`、`@hugeicons/core-free-icons` 和多个 Clean 子组件；整页示例有传递依赖。
 
-实际能力按底座与执行证据分批接入，不得用占位 Tool 冒充实现。
+| 已核源码（Registry slug / 导出） | 接入边界 |
+|---|---|
+| App Shell Inset · `app-shell` / `AppShell` | `children` 承载页面，`nav`、`active`、`onNavigate` 对接真实路由，账户来自 session。源码默认展开面板（`defaultPanelOpen=true`）并带示例项目。首批只取外壳，去掉示例入口。 |
+| AI Chat / Start · `assistant-home` / `AssistantHomeScreen` | 内置 AppShell、示例会话与本地 `replyFor`。采用启动页布局，保留产品 Composer 和实际提交链。 |
+| Folders / Overview · `files` / `FilesScreen` | 整页内置 AppShell，数据接口是 folders / templates。只取作品库布局与搜索排序交互，直接消费 Project。 |
+| Agent / Thread · `agent-thread` / `AgentThreadScreen` | 内置 AppShell。源码支持 `messages`、`decisions`、`onSend`、`onStop`、`onDecide`、`upload`，`ThreadPart` 的 tools 分组接收 `ThreadTool[]`。采用线程结构与折叠行。示例 Stop 会先修改本地消息再触发回调，接入时以服务端 Stop 回执结算。消息槽保留产品的引用、Markdown、确认和播放器。模拟回复、上传、离线补发及文件名驱动的示例产物不得接管会话。 |
+| Chat Composer · `chat-composer-clean` / `ChatComposer` | `onSend(message, {model})` 和菜单 `onAttach(item)` 不携带完整引用、Skill 或上传回执。通过现有编辑器及发送动作接线，费用同意仍走服务端问题。 |
+| Tool Call Card / Group · `tool-call-card-clean` | 同文件导出 `ToolCallCard` 和 `ToolCallGroup`。Group 接收卡片 children；卡片仅有 running / success / error。普通调用优先 Thread 活动行；待授权、停止、未提交用真实语义显示，禁止映射成成功或错误。 |
+| AI Answer · `ai-answer-clean` / `AIAnswer`；Thinking State · `thinking-state-clean` / `ThinkingState` | 前者接受 `answer`、`sources`、`streaming`，仅解析部分 Markdown；保留现有 Streamdown 的完整正文表现。后者用 `steps`、`stepMs` 定时展开，只有真实活动可支撑时才采用其呈现。 |
 
-Context：
-- 当前 Object、图层、关键帧、画布和局部时间范围。
+三个整页组件均以共享布局中的**内容区**接入，不能原样嵌套整页。视觉适配只消费既有 API、Chat SSE 与持久记录；不得新增 Workflow UI 表、第二套 Agent 状态或媒体投影。
 
-Chat：
-- 显示当前制作效果及实际预览。
+**产物范围。** 保留用户点击既有产物后的 Inbox、详情弹窗、图片查看与音视频播放。当前可定位的入口是 Chat 消息、项目的 `chat/outputs` 投影、`ChatOutputViewer → MediaLightbox`、`StoryboardCard → CompositionPreview` 及 `AudioPlaybackSurface → WaveformPlayer`；“Inbox”沿用这些真实引用和入口，不要求创建同名路由。允许为共享 Shell 适配尺寸、主题与焦点。可拖拽分隔线、复杂审看模式、多标签素材区、自动聚焦时间码、完整 Inspector、多窗口布局及大型右栏管理系统均留待后续按需安排。
 
-Execution：
-- 使用现有 Composition / video-spec / Renderer。
-- 只修改目标对象。
-- 不创建第二套合成引擎。
+### Slice 4A｜共享 Shell、Home 与 Projects
 
-Recovery：
-- 版本隔离、局部失效、失败恢复和复用已通过内容。
+| 面 | 同片交付 |
+|---|---|
+| Tool Call | Home 一次提交把原请求交给项目 Chat，再由原入口进入 ToolLoop。保留 staging 上传、附件、mentions、Skill 及 persona 选择。 |
+| Prompt / Context | 原文与结构化引用随 `firstMessage` 交接，保留选区与来源归属。精选示例仅预填，登录返回继续原草稿。 |
+| Chat Message | 一个开场用户消息。Home 保留输入、添加素材、发送；移除重复分类、空货架与吸底变形。Projects 从项目 API 展示名称、实际封面或可靠占位、更新时间，按名称搜索、基本排序并打开原项目。 |
+| Execution / State | `_app.tsx` 现持 Sidebar 与 MobileHeader，Home、Projects 列表在其下；`_app.projects.$id.tsx` 只有 Outlet，实际 `projects.$id.index.tsx` 在生成树里直属 root，独挂 ProjectHeader、ChatDock。调整文件路由父子关系，由共享布局持唯一导航和 Outlet，保留项目 URL、鉴权、账户、设置、积分和通知。按路由源重新生成 `routeTree.gen.ts`。 |
+| Recovery / Replay | 沿 `HomeComposer → useProjectLaunch → assets/from-staging → location.state.firstMessage → ChatDock` 核对交接：Home 建项目并关联已上传素材，只有项目 Chat 发首条 POST。保留历史加载屏障、results 与持久用户行核对。现状中挂载 ref 不能跨刷新去重，历史读取异常仍可能落入发送分支。提交结果未知先回读，禁止因重挂、慢历史或读失败自动重复发送。 |
 
-**真实出口：**
+**出口。** 用桌面和移动端实走登录 → 上传并带引用发送 → 项目 Chat，核对请求数、开场行、附件与 ToolLoop 回合各自身份；双击、刷新、返回再进均只留下同一次提交。深链、Projects 搜索排序及历史项目打开正确，导航和账户可用。首页不建设运营系统，作品库不增加团队、文件夹管理或工作台。
 
-用户要求：
+### Slice 4B｜Agent Thread 接通项目对话
 
-「把演讲者放在右边，左边展示 PPT。第三秒人物缩小，PPT 放大，然后淡出。」
+| 面 | 同片交付 |
+|---|---|
+| Tool Call | 现役编辑与生成工具从项目 Chat 原入口发起，Stop 绑定 opening，问题和费用确认绑定原消息。 |
+| Prompt / Context | 续聊仍携当前作品、版本、用户约束及有效观察；从产物引用继续编辑时校验引用对象与归属。 |
+| Chat Message | 复用 `ChatConversation`、TurnBlock 与 timeline 的逐消息位置。用户引用、中外文流式 Markdown、活动、问题、批准/拒绝、错误、作品卡及播放入口各有真实来源。 |
+| Execution / State | `chat-stream.ts` 的 `streamChat` / `streamAnswer` 仍接 Chat SSE；`use-run-events.ts` 仅供关联的后台 Run。接通现有 Stop、QuestionDock、费用授权和失败反馈，调用接受、版本保存与产物可播放分别取对应事实。 |
+| Recovery / Replay | 从会话 messages 和对应回执恢复，合并未结束活动及后续 SSE。同一工具、问题、正文或交付卡只显示一次。旧消息固定原版本与窗口，已归档 Output 按原 ID 打开。 |
 
-Agent 自主执行并预览实际动画。
+**出口。** 在真实项目发送编辑要求，看到流式正文和工具活动；分别实测 Stop、同意、拒绝、失败、刷新和继续编辑。点击已有素材、音频、预览及正式产物，验证弹窗或播放器实际加载；推进 head 后刷新并重开旧卡仍命中原媒体。
 
-## Iteration 5：审片、连续修订与交付
+### Slice 4C｜一次模型决策中的多调用、分组与恢复
 
-**目标：完成真正的剪辑师行为。**
+两个前台 Chat 入口启用了 `service_per_call`。当前 `tool_loop.py` 的批次预检会检查 terminal / `batchable`，同名组才可能使用 `finish_batch`；前台缺少该收尾时会在执行前拒绝整批，允许的批次仍按循环逐项执行。Iteration 3 的 mix 样本中，合法的旁白和配乐被整批拒绝后再逐个调用。目标是在既有 ToolLoop 内按下表处理同一原生响应的多个调用，不能仅因数量大于一而拒绝。[实际调用](agent-editor-evidence/iteration-3/native-calls.json) · [每轮输入及观察](agent-editor-evidence/iteration-3/provider-wire.json.gz)
 
-Tool：
-- 检查真实视听内容
-- 按需局部修改
-- 导出当前作品
+| 调用关系 | 执行与失败语义 |
+|---|---|
+| 独立读取 | 对同一明确版本或独立来源的只读观察可安全并发。记录各自版本、范围和耗时；完成先后不改原调用次序。 |
+| 独立媒体生成 | 在权限、逐项费用上限、余额及资源允许时可并发提交或执行。生成固定素材，插入另算一次作品写入。待确认项按原回执暂停，不得借同批其他调用的授权。 |
+| 同一 Composition 写入 | 对本次决策时已知且可独立定位的目标，按原生顺序逐项走唯一写口。首写校验观察时的 base，后写校验本批上一笔提交的确切版本与目标前置条件；外部抢写返回 StaleBase，回模型重读。不得把未知的新 head 自动当作自己的 base。 |
+| 结果依赖与终结 | 需要刚生成的 SourceSnapshot、分割所得 Clip ID 或前一项的观察判断时，先把真实结果交回模型，下一次决策再调用。猜测 ID、前置失败或引用失效的写入标为未执行。终结回答或交付须等相关结果落定，不短路尚未记录结果的同批调用。 |
+| 部分失败与 Stop | 各项分别标明已提交/完成、待授权、失败、停止、未执行或供应商结果未知。独立成功保留；后续有依赖或安全性无法确定时停止该项并写明原因。Stop 与每次提交按既有锁排序，保留先落库的版本、快照与费用，停止新提交，按原执行身份处理在途工作。 |
 
-Context：
-- 当前版本、用户目标、受影响范围、实际媒体证据。
+| 面 | 同片交付 |
+|---|---|
+| Tool Call | 保留一条 assistant 原生调用列表及各自的 call ID、参数、序号和 Schema 校验。合法组按上述语义执行，无需通用 DAG、变量引用语言或新 Scheduler。 |
+| Prompt / Context | 在下一次模型决策前按 call ID 对齐每一项 tool 响应，包含已生效、失败及未执行项。投影提交后的作品版本、固定结果与仍有效的观察；涉及新 ID 或外部改版时由模型重新选择。 |
+| Chat Message | 修正 ActivityProjector 的单一开放调用槽，以及媒体提交按活动 key 选最近活动行的关联方式。按 opening、原生调用、ToolExchange 的 iteration / call_index 关联实际 Activity 与持久消息，确保同名调用和乱序完成仍归到各自活动行；依 §6 展开分组，不跨正文或问题合并。只暴露用户可读且获准展示的事实。 |
+| Execution / State | 并发工作隔离数据库会话与调用上下文。逐项保存实际提交/完成次序、请求指纹、版本或媒体回执。沿用唯一版本事务、Worker claim、报价及 hold/capture/release；同身份同参重放取原结果，异参拒绝。 |
+| Recovery / Replay | 崩溃后按原 opening 与各 call ID 核对版本、执行、快照及账本；供应商结果未知时先对账。已提交的调用不可重跑；待授权、未开始、中断和已完成的调用按事实恢复。多个 Worker 完成不得各自重复续剪；历史与 live 复建同一组和每个结果。 |
 
-Chat：
-- 正确区分制作、审片和交付。
-- 用户可直接查看最终作品。
+**出口。** 用真实模型在**一次响应**发出多个调用，逐项对照 wire、下一轮 Context、持久消息、版本及账本。至少覆盖独立读取、旁白与配乐同批、同一作品两个顺序写入与外部竞争、生成后下一次决策使用真实来源 ID 插入、部分失败。另测同名调用、乱序完成、费用拒绝、批中 Stop、提交后回执前强杀、重启重放与浏览器硬刷新。已成功的项仍可查可播，未执行的项无写入，恢复无重复扣费、版本或交付消息。
 
-Execution：
-- 渲染真实 MP4。
-- 技术检查与模型视听观察分别记录。
-- 不以 Run 完成冒充作品完成。
+### Slice 4D｜退役重复界面与消息路径
 
-Recovery：
-- 渲染缓存、幂等交付、失败重试和刷新回读。
+| 面 | 同片交付 |
+|---|---|
+| Tool Call | 沿路由及调用方盘点旧启动按钮、模拟操作和重复发送入口；仅删除已由 4A–4C 实证替代且无消费者的路径。 |
+| Prompt / Context | 清除旧 UI 阶段对工具与当前作品的重复投影；同一续聊只消费现役作品事实。 |
+| Chat Message | 移除失去消费者的旧 Chat Shell、重复 Sidebar、Run 展示、活动卡、阶段文案与视觉组件，保留历史消息和产物的读取能力。 |
+| Execution / State | 删除废弃的状态同步、订阅和路由入口；权限、计费、Worker、播放器、Inbox 及媒体访问仍走已核验的执行路径。 |
+| Recovery / Replay | 通过新 Thread 打开旧项目、历史问题、已停止和部分完成的回合，刷新、播放并续聊。无旧 UI fallback。 |
 
-**真实出口：**
+**出口。** 提交调用方与删除清单，沿唯一项目入口复跑 4A–4C 的真实旅程；确认无双 Shell、双发送、双订阅或重复活动。通过后进入 Iteration 5。
 
-用户只用自然语言完成一条多素材视频剪辑任务，Agent 能观察、修改、继续观察并交付可播放 MP4。
+## Iteration 5｜自主审片与正式视频交付（必做，待验收）
+
+用户要求完成作品后，Agent 在当前 Composition 上检查、观察、修订、再观察，固定通过审片的版本，导出正式 MP4，审阅该 Output 的实际字节，再在 Chat 交付。基础闭环使用已有编辑能力。
+
+| 面 | 同片交付及证据 |
+|---|---|
+| Tool Call | 原生轨迹包含检查 Composition、取得实际视听证据、因已识别的问题选择具体编辑 Tool、再看同一受影响窗口、固定版本并导出、读取和审阅真实 Output。保留模型据以选择下一步的观察。 |
+| Prompt / Context | 每次观察绑定版本、媒体来源、时间窗与用户要求。代码校验来源、版本、解码、时长和音视频轨等技术事实。Agent 根据实际画面与声音判断内容、节奏和混音。要声称听见问题，必须有可感知音频的模型实际收到相应声音并据此判断的独立记录；波形、响度、ASR 和轨道存在只能支持各自的技术结论。缺少听感证据时该项待验。 |
+| Chat Message | 分别报告局部修改、审片意见、正式导出和最终交付。成功消息引用实际 Output，Inbox/播放器从同一引用播放原片；看不到、听不到或导出失败时说明具体缺口。 |
+| Execution / State | 经现有钉版制作、快照、Renderer 与 Output 路径导出可解码 MP4。核对 Output 与不可变版本、来源、交付规格一致。Agent 打开正式产物审阅；发现问题则继续修订并重新钉版、导出、审阅，不能沿用旧 Output 的结论。 |
+| Recovery / Replay | 重试或重启取回原导出身份、固定版本和 Output；未完成或失败的审阅不得生成成功消息。重复回读或推进 head 后，已交付消息仍只指向原片，不重复渲染、扣费或交付。 |
+
+**真实出口。** 同一用户任务从多素材作品到可播放 MP4，提交一次“实际观察发现问题 → 局部修改 → 再观察”的前后对照、正式 Output 的技术检查与模型审阅，以及 Chat / Inbox 刷新后实播证据。仅有局部预览、Run completed 或渲染任务完成均不能关闭本轮。
+
+## Iteration 6+｜按需扩展专业剪辑（可选独立批次）
+
+可按作品需求接入图片插入、overlay、画中画、复杂图层、关键帧、蒙版、色键抠像、前景分割（segmentation）、运动跟踪及高级动画特效。它们均不阻塞 Iteration 4、5 或 v1 验收。
+
+每批用一个明确的 Tool 接入现有 ToolLoop。Context 提供目标图层、属性、时间与版本；Chat 呈现实际局部预览；Execution 在现有 Composition / video-spec / Renderer 中实现领域算法；Recovery 核对版本隔离、未改对象及故障重放。例如新增关键帧能力时，应从用户要求走到指定时刻的真实动画预览。缺少算法先实现并验证，再暴露 Tool，避免为扩展重写主循环或预建通用视觉平台。
 
 ---
 
@@ -810,6 +791,8 @@ Recovery：
 ```
 
 禁止把「测试全部通过」等同于真实 Agent 任务通过。
+
+Iteration 4 的证据按 4A–4D 分别登记。4C 报告模型响应数、同批原生调用数、合法数、实际提交数及逐项结果，区分同一回合连续决策与一次响应多调用。Iteration 5 的最终凭据须能从 Chat 消息追到经审阅的固定版本及可播放 Output。
 
 ## 9.1 核心指标
 
@@ -881,22 +864,10 @@ Canvas 不再承担创作规划或执行身份。
 
 不再用固定 Pipeline 阶段决定 Agent 的下一步行动。
 
-**最终验收以真实剪辑效果、连续操作能力、上下文可靠性和用户任务完成率为准。**
+**v1 关闭条件。** Iteration 4 的统一 Studio 和多调用回放通过真实对话验收，Iteration 5 完成对正式 Output 的自主审阅与交付。以实际视听证据、连续修订、版本及消息一致性和用户任务完成率核验。
 
 ---
 
-# 12. 给施工 Agent 的第一条指令
+# 12. 下一批施工入口
 
-请先接管当前工作树，建立可恢复 Git 检查点，确认上一轮验收进程不会与新施工混用代码。
-
-随后执行 Iteration 0 的函数级消费者盘点，给出明确的删除清单。
-
-进入 Iteration 1 时，不再提出新的 Agent 架构。
-
-直接使用现有 ToolLoop、Editing Service、Composition Store 和 Preview，建立单一模型可见剪辑工具面。
-
-每个施工切片必须同时闭合 Tool Call、Prompt/Context、Chat、Execution、Recovery 五个方面。
-
-在同一批真实验收通过之后，立即删除已经失去消费者的旧创作路径，而不是长期保留双轨兼容。
-
-**这次要减少系统，而不是在系统上继续增加新的层。**
+核对 §1 的现场基准后，从 §8 的 Slice 4A 开工。保留现有发送与播放路径，先以带素材的 Home 首发、项目深链和刷新证明共享 Shell 交接正确，再依次完成 4B、4C、4D。每片按 §9 留存五面证据，遇到 §10 的停止条件先报告。随后实施必做的 Iteration 5；Iteration 6+ 依独立需求立项。
