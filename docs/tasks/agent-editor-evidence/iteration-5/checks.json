@@ -1,0 +1,30 @@
+{
+  "api_core": {
+    "command": "python -m pytest -q test/core",
+    "summary": "512 passed, 4 warnings in 50.56s"
+  },
+  "web_tests": {
+    "command": "pnpm test",
+    "summary": [
+      "Test Files  44 passed (44)",
+      "Tests  411 passed (411)"
+    ]
+  },
+  "web_types": {
+    "command": "pnpm exec tsc --noEmit",
+    "exit_code": 0
+  },
+  "web_build": {
+    "command": "pnpm build",
+    "completion": "✓ built in 498ms"
+  },
+  "media": {
+    "command": "python docs/tasks/agent-editor-evidence/iteration-5/verify.py",
+    "mp4_samples_verified": 16
+  },
+  "model": "MiniMax-M3.1-Flash",
+  "storage": "isolated S3-compatible Moto bucket editor-i5",
+  "database": "rep_editor_i5_1121",
+  "working_copy_base": "13670989",
+  "production_data_modified": false
+}

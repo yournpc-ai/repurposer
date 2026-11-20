@@ -1,0 +1,1170 @@
+{
+  "delivery-v3.mp4": {
+    "sha256": "d25da845967ec255c8d9bfb881a56dd82abea167a98883e9205beaf920992db9",
+    "output_id": "c7f108a1-74d9-4adc-b64d-7d638facdd14",
+    "version_id": "0cf6c979-652c-409f-9c21-32915c95c05e",
+    "video": {
+      "codec": "h264",
+      "duration": 5.0,
+      "frames": 150,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 5.056,
+      "frames": 237,
+      "samples": 242688,
+      "sample_rate": 48000
+    }
+  },
+  "delivery-v2.mp4": {
+    "sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+    "output_id": "6f1eeb55-3a5b-4d93-928b-f595b5aa610d",
+    "version_id": "e3323856-1e22-4407-9dba-f197846cea07",
+    "video": {
+      "codec": "h264",
+      "duration": 4.5,
+      "frames": 135,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 4.544,
+      "frames": 213,
+      "samples": 218112,
+      "sample_rate": 48000
+    }
+  },
+  "preview-v1-4af58057.mp4": {
+    "sha256": "4af580578074c2204372f0cf8f1dd73fc8ef6c1e30d5dd2eef5cb0054ee6699b",
+    "preview": {
+      "version_id": "890aa567-11a5-4c67-b388-e610393855bd",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 6.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 6.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "4af580578074c2204372f0cf8f1dd73fc8ef6c1e30d5dd2eef5cb0054ee6699b",
+      "sample_seconds": [
+        1.466667,
+        3.733333,
+        5.233333
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 4.5,
+          "active_clips": []
+        },
+        {
+          "from": 4.5,
+          "to": 6.0,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 290816,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 290816
+          },
+          "duration_seconds": 6.058666666666666
+        },
+        "pcm_stats": {
+          "rms": 0.07891325246532255,
+          "peak": 0.6515746712684631,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -16.0,
+          "true_peak_dbtp": -3.7
+        }
+      },
+      "composition_id": "67d9e38b-f7c2-48e0-9d4c-b50c435e3a99",
+      "composition_version_id": "890aa567-11a5-4c67-b388-e610393855bd",
+      "content_digest": "49eba6e16435fc42da927f5756cbfc6aac924c37c3c4636635b367c6b7c063f5",
+      "sources": [
+        {
+          "snapshot_id": "50cd7b1c-9cc6-449c-b893-3b27e4b6ad0b",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 6.0,
+      "frames": 180,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 6.058,
+      "frames": 284,
+      "samples": 290816,
+      "sample_rate": 48000
+    }
+  },
+  "preview-v2-3cb376b9.mp4": {
+    "sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+    "preview": {
+      "version_id": "e3323856-1e22-4407-9dba-f197846cea07",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 4.5
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 4.5
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+      "sample_seconds": [
+        1.466667,
+        3.733333
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 4.5,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 218112,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 218112
+          },
+          "duration_seconds": 4.544
+        },
+        "pcm_stats": {
+          "rms": 0.09283280518775255,
+          "peak": 0.6614802479743958,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.8,
+          "true_peak_dbtp": -3.6
+        }
+      },
+      "composition_id": "67d9e38b-f7c2-48e0-9d4c-b50c435e3a99",
+      "composition_version_id": "e3323856-1e22-4407-9dba-f197846cea07",
+      "content_digest": "a416fe30159c2dfa76dd7a7084bfb17d12bfc24f7113b8ca71cd92fe68f9ff27",
+      "sources": [
+        {
+          "snapshot_id": "50cd7b1c-9cc6-449c-b893-3b27e4b6ad0b",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 4.5,
+      "frames": 135,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 4.544,
+      "frames": 213,
+      "samples": 218112,
+      "sample_rate": 48000
+    }
+  },
+  "preview-v3-d25da845.mp4": {
+    "sha256": "d25da845967ec255c8d9bfb881a56dd82abea167a98883e9205beaf920992db9",
+    "preview": {
+      "version_id": "0cf6c979-652c-409f-9c21-32915c95c05e",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "d25da845967ec255c8d9bfb881a56dd82abea167a98883e9205beaf920992db9",
+      "sample_seconds": [
+        1.466667,
+        3.966667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 5.0,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.08922712929560478,
+          "peak": 0.6705342531204224,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.7,
+          "true_peak_dbtp": -3.5
+        }
+      },
+      "composition_id": "67d9e38b-f7c2-48e0-9d4c-b50c435e3a99",
+      "composition_version_id": "0cf6c979-652c-409f-9c21-32915c95c05e",
+      "content_digest": "c0b7d11856e58502fccad061e5916aa5d8eefb68b04dcb2db7495bd0d6291713",
+      "sources": [
+        {
+          "snapshot_id": "50cd7b1c-9cc6-449c-b893-3b27e4b6ad0b",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 5.0,
+      "frames": 150,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 5.056,
+      "frames": 237,
+      "samples": 242688,
+      "sample_rate": 48000
+    }
+  },
+  "take2-delivery-v2.mp4": {
+    "sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+    "output_id": "c9ce06dd-bd8a-4136-a773-b88af0ccc980",
+    "version_id": "bd8597b8-a7f7-454d-bbcb-ef452416a910",
+    "video": {
+      "codec": "h264",
+      "duration": 4.5,
+      "frames": 135,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 4.544,
+      "frames": 213,
+      "samples": 218112,
+      "sample_rate": 48000
+    }
+  },
+  "take2-delivery-v3.mp4": {
+    "sha256": "d25da845967ec255c8d9bfb881a56dd82abea167a98883e9205beaf920992db9",
+    "output_id": "368820b1-511b-47a7-8159-f4eb80d8ae92",
+    "version_id": "b776f3eb-3f83-4574-b817-70346988db81",
+    "video": {
+      "codec": "h264",
+      "duration": 5.0,
+      "frames": 150,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 5.056,
+      "frames": 237,
+      "samples": 242688,
+      "sample_rate": 48000
+    }
+  },
+  "take2-preview-v2-3cb376b9.mp4": {
+    "sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+    "preview": {
+      "version_id": "bd8597b8-a7f7-454d-bbcb-ef452416a910",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 4.5
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 4.5
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "3cb376b9ea82068643eb430b0d876eeb5c5c90f41459e1b07a082ae2b3a5c724",
+      "sample_seconds": [
+        1.466667,
+        3.733333
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 4.5,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 218112,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 218112
+          },
+          "duration_seconds": 4.544
+        },
+        "pcm_stats": {
+          "rms": 0.09283280518775255,
+          "peak": 0.6614802479743958,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.8,
+          "true_peak_dbtp": -3.6
+        }
+      },
+      "composition_id": "963349ed-473b-4bfc-85a3-44425b7aa5d1",
+      "composition_version_id": "bd8597b8-a7f7-454d-bbcb-ef452416a910",
+      "content_digest": "36a40d667316be5439b975eafa3a836409ef3f17d992849086778efa24bcc102",
+      "sources": [
+        {
+          "snapshot_id": "5302e82a-fe2d-402d-a861-93006cae3762",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 4.5,
+      "frames": 135,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 4.544,
+      "frames": 213,
+      "samples": 218112,
+      "sample_rate": 48000
+    }
+  },
+  "take2-preview-v3-ba949135.mp4": {
+    "sha256": "ba9491353a1c4d812cd392c43f6281fd86726749d6e157e08674a86e2502480b",
+    "preview": {
+      "version_id": "b776f3eb-3f83-4574-b817-70346988db81",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 2.5,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 2.5,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "ba9491353a1c4d812cd392c43f6281fd86726749d6e157e08674a86e2502480b",
+      "sample_seconds": [
+        2.733333,
+        3.966667
+      ],
+      "visual_windows": [
+        {
+          "from": 2.5,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 5.0,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 122880,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 122880
+          },
+          "duration_seconds": 2.56
+        },
+        "pcm_stats": {
+          "rms": 0.04347089348368752,
+          "peak": 0.840120255947113,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -19.8,
+          "true_peak_dbtp": -1.5
+        }
+      },
+      "composition_id": "963349ed-473b-4bfc-85a3-44425b7aa5d1",
+      "composition_version_id": "b776f3eb-3f83-4574-b817-70346988db81",
+      "content_digest": "a7e4b09a5b6610187de5d3905e96691fd76575b7538dbf749f08d3f6c44c28fb",
+      "sources": [
+        {
+          "snapshot_id": "5302e82a-fe2d-402d-a861-93006cae3762",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 2.5,
+      "frames": 75,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 2.56,
+      "frames": 120,
+      "samples": 122880,
+      "sample_rate": 48000
+    }
+  },
+  "take2-preview-v3-d27c5838.mp4": {
+    "sha256": "d27c5838323f765c6d65578f5c02a2a33708f10e3886dd98d17b1830e7371561",
+    "preview": {
+      "version_id": "b776f3eb-3f83-4574-b817-70346988db81",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a",
+          "elm_c"
+        ]
+      },
+      "mp4_sha256": "d27c5838323f765c6d65578f5c02a2a33708f10e3886dd98d17b1830e7371561",
+      "sample_seconds": [
+        1.466667,
+        3.966667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        },
+        {
+          "from": 3.0,
+          "to": 5.0,
+          "active_clips": [
+            "elm_c"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.08922712929560478,
+          "peak": 0.6705342531204224,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.7,
+          "true_peak_dbtp": -3.5
+        }
+      },
+      "composition_id": "963349ed-473b-4bfc-85a3-44425b7aa5d1",
+      "composition_version_id": "b776f3eb-3f83-4574-b817-70346988db81",
+      "content_digest": "a7e4b09a5b6610187de5d3905e96691fd76575b7538dbf749f08d3f6c44c28fb",
+      "sources": [
+        {
+          "snapshot_id": "5302e82a-fe2d-402d-a861-93006cae3762",
+          "digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 5.0,
+      "frames": 150,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 5.056,
+      "frames": 237,
+      "samples": 242688,
+      "sample_rate": 48000
+    }
+  },
+  "visual-1-3b336f4c.mp4": {
+    "sha256": "3b336f4c3bc47c1b0f0231740679074062c08d90db032dfe68722eb402d28053",
+    "preview": {
+      "version_id": "9bf4549e-fc7e-4536-8081-62a7636c68ea",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "3b336f4c3bc47c1b0f0231740679074062c08d90db032dfe68722eb402d28053",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "63afeafb-becc-42be-a419-7c905b204db7",
+      "composition_version_id": "9bf4549e-fc7e-4536-8081-62a7636c68ea",
+      "content_digest": "92aefc5812642dbcc35b79caf032d4a4b3927369cfca51bfa27116e7f0950994",
+      "sources": [
+        {
+          "snapshot_id": "cbac96c8-99c0-4f8a-8f96-e4d3a23e9860",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  },
+  "visual-2-4282af91.mp4": {
+    "sha256": "4282af9121887a6f4428e0152fcffdfbf82fee9e48af9b736a1cac73cde864ea",
+    "preview": {
+      "version_id": "a8fcb818-9915-42c7-a102-a38f9445bd46",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "4282af9121887a6f4428e0152fcffdfbf82fee9e48af9b736a1cac73cde864ea",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "63afeafb-becc-42be-a419-7c905b204db7",
+      "composition_version_id": "a8fcb818-9915-42c7-a102-a38f9445bd46",
+      "content_digest": "f9f0abb9eb7e16862c88827e90085f2ce6d574b4558fe3fc185c80f774062146",
+      "sources": [
+        {
+          "snapshot_id": "cbac96c8-99c0-4f8a-8f96-e4d3a23e9860",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  },
+  "visual-7-cbef026b.mp4": {
+    "sha256": "cbef026ba6e4d334e8a9f71742741941ff593ba7a33265b781b6e30e1e1ec1b4",
+    "preview": {
+      "version_id": "e69e1faa-fb81-454b-be15-1d5c864ddedc",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "cbef026ba6e4d334e8a9f71742741941ff593ba7a33265b781b6e30e1e1ec1b4",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "63afeafb-becc-42be-a419-7c905b204db7",
+      "composition_version_id": "e69e1faa-fb81-454b-be15-1d5c864ddedc",
+      "content_digest": "6d80a5679b98aa6bc947a20dd1a51dea7aa344d289f6b1282c14ca0ad7a3124f",
+      "sources": [
+        {
+          "snapshot_id": "cbac96c8-99c0-4f8a-8f96-e4d3a23e9860",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  },
+  "visual-final-1-3b336f4c.mp4": {
+    "sha256": "3b336f4c3bc47c1b0f0231740679074062c08d90db032dfe68722eb402d28053",
+    "preview": {
+      "version_id": "ca7ef4a8-0d59-4c4c-9007-99270a3ef2d2",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "3b336f4c3bc47c1b0f0231740679074062c08d90db032dfe68722eb402d28053",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "2679ecd7-d3f5-4f40-99fa-913e014d9dbb",
+      "composition_version_id": "ca7ef4a8-0d59-4c4c-9007-99270a3ef2d2",
+      "content_digest": "d6c3de5d995a3db108f30e5f53ed3a595efb165ca6f1b91de11d72b27b0b8707",
+      "sources": [
+        {
+          "snapshot_id": "0aacd29e-392e-4f22-baf2-27ee0e4aecf5",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  },
+  "visual-final-2-c52e7a4e.mp4": {
+    "sha256": "c52e7a4e8b7d7f06b9409a9401ef044aa6821305da74993b1a00b8738df3aec2",
+    "preview": {
+      "version_id": "c09fe8ee-72f5-4cdb-baff-c7d9ca356080",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "c52e7a4e8b7d7f06b9409a9401ef044aa6821305da74993b1a00b8738df3aec2",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "2679ecd7-d3f5-4f40-99fa-913e014d9dbb",
+      "composition_version_id": "c09fe8ee-72f5-4cdb-baff-c7d9ca356080",
+      "content_digest": "3d9f544e176f8ccfef8aa05d7161bb651982de0021df1c5fa2bc41ce47d7aa6e",
+      "sources": [
+        {
+          "snapshot_id": "0aacd29e-392e-4f22-baf2-27ee0e4aecf5",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  },
+  "visual-final-8-f106c22b.mp4": {
+    "sha256": "f106c22b8768681d1b4cfb3896b46af3ac6371e88cdafca4eaba024cbd8a3dbf",
+    "preview": {
+      "version_id": "1972f3c7-37b7-4186-b7d8-341bc5272855",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 3.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 3.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "elm_a"
+        ]
+      },
+      "mp4_sha256": "f106c22b8768681d1b4cfb3896b46af3ac6371e88cdafca4eaba024cbd8a3dbf",
+      "sample_seconds": [
+        1.466667
+      ],
+      "visual_windows": [
+        {
+          "from": 0.0,
+          "to": 3.0,
+          "active_clips": [
+            "elm_a"
+          ]
+        }
+      ],
+      "model_media": [
+        "video",
+        "image"
+      ],
+      "audio_available_to_model": false,
+      "audio_stream_present": true,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 146432,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 146432
+          },
+          "duration_seconds": 3.050666666666667
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      },
+      "composition_id": "2679ecd7-d3f5-4f40-99fa-913e014d9dbb",
+      "composition_version_id": "1972f3c7-37b7-4186-b7d8-341bc5272855",
+      "content_digest": "5328330c54f91c6c39d0d6fa94240f29c34d2f56fcdb63036f0e4259a84fe5de",
+      "sources": [
+        {
+          "snapshot_id": "0aacd29e-392e-4f22-baf2-27ee0e4aecf5",
+          "digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+        }
+      ],
+      "coverage": "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
+    },
+    "video": {
+      "codec": "h264",
+      "duration": 3.0,
+      "frames": 90,
+      "width": 320,
+      "height": 180
+    },
+    "audio": {
+      "codec": "aac",
+      "duration": 3.050666666666667,
+      "frames": 143,
+      "samples": 146432,
+      "sample_rate": 48000
+    }
+  }
+}
