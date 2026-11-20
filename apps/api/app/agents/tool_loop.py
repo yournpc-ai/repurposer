@@ -1827,9 +1827,9 @@ class ToolLoopAgent:
                         await _emit(on_tool_ready, member.tool_name, validated)
                         await _emit(on_loop_event, replace(member, state="running"))
                         started.add(member.call_id)
-                    async with asyncio.TaskGroup() as tasks:
-                        pending = [tasks.create_task(inspect_member(member, validated))
-                                   for member, validated in zip(members.values(), parallel_params, strict=True)]
+                    pending = [asyncio.create_task(inspect_member(member, validated))
+                               for member, validated in zip(members.values(), parallel_params, strict=True)]
+                    try:
                         for completed in asyncio.as_completed(pending):
                             member, observed, duration = await completed
                             read_results[member.call_id] = observed
@@ -1838,6 +1838,11 @@ class ToolLoopAgent:
                             await _emit(on_loop_event, replace(member, state=state, duration_ms=duration,
                                         key=presentation.done_key if observed.ok else member.key,
                                         user_error=observed.user_error))
+                    finally:
+                        for task in pending:
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
                 if not tool.terminal and not parallel_params:
                     # The read's work-START stamp (ADR-108 数组位置律): the
                     # projector re-anchors the span's honest duration at
@@ -1991,6 +1996,10 @@ class ToolLoopAgent:
                             tool_name=dispatch_name, ok=outcome.ok, receipt=outcome.receipt,
                             awaiting_authorization=outcome.awaiting_authorization,
                         ))
+                    if group_id and not parallel_params and not outcome.awaiting_authorization:
+                        # Presentations with their own receipt already closed the row.
+                        # Native-only tools still settle the declared member.
+                        await _emit(on_loop_event, replace(members[call_id], state="completed" if outcome.ok else "failed"))
                     if (
                         not self.service_per_call
                         and outcome.ok

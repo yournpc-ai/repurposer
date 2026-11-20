@@ -15,6 +15,7 @@ from app.editing.edits import SplitClip, TemporalEdit, UpdateClip
 from app.editing.schemas import EditTarget
 from app.editing.store import (
     RequestMismatch,
+    StaleBase,
     apply_composition_edits,
     content_of,
     get_video_version,
@@ -516,7 +517,8 @@ async def execute_editor(turn, name, args):
                     call_id=current_call_id(),
                     base=base,
                     args=args,
-                    inspected_version=getattr(turn, "_inspected_version", None),
+                    inspected_version=(base["composition_version_id"] if group and previous_write and previous_write[0] == group
+                                       else getattr(turn, "_inspected_version", None)),
                 )
                 _remember_labels(
                     turn,
@@ -662,5 +664,14 @@ async def execute_editor(turn, name, args):
                 "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
             )
             return ToolObservation(json.dumps(evidence), images=media, valid_for_key=version_key)
+        except StaleBase:
+            return ToolObservation(
+                f"Version conflict. This call checked base {base['composition_version_id']}, "
+                "which is no longer current. This call made no change. "
+                "If the user asked to stop on conflict, report it now and do not retry. "
+                "Otherwise inspect the new version before choosing another edit.",
+                ok=False, fold_after_delivery=True,
+                user_error="Another edit changed the saved work. This change was not applied.",
+            )
         except ValueError as exc:
             return ToolObservation(str(exc), ok=False, fold_after_delivery=True, user_error=str(exc))

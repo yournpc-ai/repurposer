@@ -285,6 +285,10 @@ def _make_activity_persister(
                 await update_row(row_id, merged)
             return
         desc = projector.open_activity()
+        if event and event.group_id and event.call_id in open_rows:
+            # A batch also includes tools without a standalone Activity presentation.
+            key = desc[2] if desc else open_rows[event.call_id][1]["key"]
+            desc = (event.call_id, KIND_READ, key)
         if desc is None:
             return None
         activity_id, kind, key = desc
@@ -366,11 +370,7 @@ def _make_activity_persister(
             if open_d.get("group_id"):
                 merged["call_state"] = "not_executed" if open_d.get("call_state") == "queued" else "cancelled"
             try:
-                from app.models.database import AsyncSessionLocal
-
-                async with AsyncSessionLocal() as db:
-                    await settle_activity_row(db, row_id, merged)
-                    await db.commit()
+                await update_row(row_id, merged)
             except TurnStopped:
                 continue
             except Exception as e:  # noqa: BLE001 — best-effort on teardown
@@ -397,6 +397,19 @@ def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector, ap
             await mirror(frame)
 
     return on_loop_event
+
+
+def persistent_activity_hooks(db, conversation_id, turn_id):
+    """No SSE subscriber: project JSON and Worker decisions into the same history."""
+    projector = _new_activity_projector()
+    append, mirror, cancel = _make_activity_persister(None, projector, conversation_id, turn_id, owner_db=db)
+
+    async def on_tool_call(name):
+        for frame in projector.name_known(name):
+            await mirror(frame)
+
+    return {"on_tool_call": on_tool_call,
+            "on_loop_event": _make_loop_event_hook(None, projector, append, mirror)}, cancel
 
 
 def _make_activity_hook(queue: asyncio.Queue, projector: ActivityProjector, mirror):
@@ -820,6 +833,8 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     turn_conversation_id, detail, turn_user_message_id
                 )
             await _sweep_activities(queue, projector, "failed", mirror)
+            if cancel_open is not None:
+                await cancel_open()
             if turn_conversation_id is not None and turn_user_message_id is not None:
                 await _persist_activity_forensics(
                     turn_conversation_id, str(turn_user_message_id), projector
@@ -986,6 +1001,8 @@ async def _answer_stream(
                     UUID(str(conversation_id)), detail, answer_turn_id
                 )
             await _sweep_activities(queue, projector, "failed", mirror)
+            if cancel_open is not None:
+                await cancel_open()
             await queue.put(
                 (
                     "failed",

@@ -621,3 +621,44 @@ async def test_stage_speech_precedes_activity_and_silent_calls_can_continue(monk
     assert events[:5] == ["同时检查两项。", "read", "read", "analyze_brand", "analyze_brand"]
     assert events[5:] == [entry for i in range(6) for entry in (f"查看素材 {i}。", "read")] + ["answer"]
     assert result.prose == "已完成。"
+
+async def test_language_of_the_current_edit_overrides_an_older_english_turn():
+    from types import SimpleNamespace
+
+    rows = [SimpleNamespace(role="user", content=s) for s in (
+        "Inspect the saved timeline and describe both clips.",
+        "请裁剪已核对的第二段 elm_b，保留片段局部 0.3 到 7.6 秒，保存后告诉我新时长。",
+    )]
+    assert conversation_speech_language(rows) == "zh"
+    rows[-1].content = "请查看项目素材列表，告诉我有几个素材。只读取，不需要生成。"
+    assert conversation_speech_language(rows) == "zh"
+    rows[-1].content = "Please inspect the clip named 开场采访 and tell me its duration."
+    assert conversation_speech_language(rows) == "en"
+
+async def test_mixed_terminal_and_invalid_member_keep_the_valid_sibling(monkeypatch):
+    from app.agents.tool_loop import ChatTool
+    from app.chat.editor import ClipArgs
+
+    provider = FakeToolProvider([
+        [("answer", {}), ("inspect_clip", {}), ("inspect_clip", {"clip_id": "known"})],
+        ("answer", {}),
+    ])
+    monkeypatch.setattr(intent_router, "client", provider)
+    accepted = []
+
+    async def execute(name, params, speech):
+        accepted.append(name)
+        return ToolObservation("found known") if params is not None else None
+
+    await intent_router.call_loop(
+        execute,
+        tools=[ChatTool("answer", "Reply", None),
+               ChatTool("inspect_clip", "Read one clip", ClipArgs, terminal=False, batchable=True)],
+        message="Inspect the clip",
+    )
+    assert accepted == ["inspect_clip", "answer"]
+    replies = [m for m in provider.wires[1]["messages"] if m["role"] == "tool"]
+    assert [r["tool_call_id"] for r in replies] == ["call-1-0", "call-1-1", "call-1-2"]
+    assert "Not executed" in replies[0]["content"]
+    assert "params_validation" in replies[1]["content"]
+    assert replies[2]["content"] == "found known"

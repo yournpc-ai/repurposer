@@ -398,17 +398,10 @@ async def continue_media_turn(db, project, receipt, **hooks):
         await state.commit()
     conversation = await db.get(Conversation, opening.conversation_id)
     if hooks.get("on_loop_event") is None:
-        # Worker continuation writes the same Activity rows, with no SSE subscriber.
-        from app.chat.routes import _make_activity_persister, _make_loop_event_hook, _new_activity_projector
+        from app.chat.routes import persistent_activity_hooks
 
-        projector = _new_activity_projector()
-        append, mirror, _ = _make_activity_persister(None, projector, conversation.id, turn_id, owner_db=db)
-        async def on_tool_call(name):
-            for frame in projector.name_known(name):
-                await mirror(frame)
-
-        hooks.update(on_tool_call=on_tool_call,
-                     on_loop_event=_make_loop_event_hook(None, projector, append, mirror))
+        durable, _ = persistent_activity_hooks(db, conversation.id, turn_id)
+        hooks.update(durable)
     with bind_conversation_turn(conversation_id=conversation.id, turn_id=turn_id, project_id=project.id) as usage:
         follow_up, _, _, _ = await _plan_turn(
             db, project.user_id, conversation, project,

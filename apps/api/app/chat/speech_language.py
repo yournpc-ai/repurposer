@@ -20,6 +20,8 @@ _REFERENCES = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 _WORDS = re.compile(r"[^\W\d_]+")
+_HAN = re.compile(r"[㐀-鿿]")
+_KANA_OR_HANGUL = re.compile(r"[぀-ヿ가-힯]")
 _UNSPACED = re.compile(r"[\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 
 
@@ -34,6 +36,11 @@ def _detector_factory() -> DetectorFactory:
 def _language_of(text: str) -> str | None:
     words = _WORDS.findall(_REFERENCES.sub(" ", text[:4096]))
     sample = " ".join(words)
+    # langdetect can confidently classify short Chinese editing requests as
+    # Korean or Vietnamese. Script takes precedence for Han-dominant prose.
+    han = len(_HAN.findall(sample))
+    if han >= 4 and han * 2 >= sum(map(len, words)) and not _KANA_OR_HANGUL.search(sample):
+        return "zh"
     if len(_UNSPACED.findall(sample)) < 4 and (
         len(words) < 3 or sum(map(len, words)) < 12
     ):

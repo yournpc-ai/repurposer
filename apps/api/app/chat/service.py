@@ -3770,7 +3770,13 @@ async def chat(
     stream between them.
     """
     prepared = await prepare_chat_turn(db, user_id, request)
-    return await execute_chat_turn(db, prepared, request)
+    from app.chat.routes import persistent_activity_hooks
+
+    hooks, cancel_open = persistent_activity_hooks(db, prepared.conversation_id, prepared.user_message.id)
+    try:
+        return await execute_chat_turn(db, prepared, request, **hooks)
+    finally:
+        await cancel_open()
 
 
 async def list_conversation_messages(
