@@ -1199,7 +1199,7 @@ async def search_web(db: AsyncSession, project: Project, params: SearchWebParams
 async def get_video_version(db: AsyncSession, project: Project, params: GetVideoVersionParams) -> str:
     """The video chain's explicit version read (ADR-145 §2.2): one
     Composition's current version or one exact version, with the canonical
-    storyboard's full facts — the re-read seat before revise_video and the
+    storyboard's full facts — the immutable version read and the
     answer seat for 'what does the storyboard look like now'."""
     from app.editing.service import (  # deferred: domain seat
         format_storyboard_text,
@@ -1258,7 +1258,7 @@ async def get_video_version(db: AsyncSession, project: Project, params: GetVideo
         context_lifetime="project",
         context_keys=(f"composition:{version_id}:{digest}",) if version_id and digest else (),
         project_text=(
-            "The exact saved version is in CURRENT PROJECT EVIDENCE with base_ref and "
-            "clip_targets; recover this full observation by its context item id when needed."
+            "The exact saved version is in CURRENT PROJECT EVIDENCE with its base_ref; "
+            "recover this full observation by its context item id when needed."
         ),
     )

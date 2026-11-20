@@ -24,4 +24,4 @@ metadata:
 
 - 需要用户原文，或用户明确要求提炼文案的 Brief。无需 video-template.json 或媒体素材。
 - 使用原生动态图形设计流程，可展开用户选定的 Preset。没有 StylePack 层、第二套模板语言、组件运行时、隐藏执行工具或特定渲染器专用字段。
-- 本 Skill 仅指导首稿。后续修改使用 revise_video；制作时直接使用已保存的 CompositionVersion，不重新加载本 Skill。
+- 本 Skill 指导首稿。制作时直接使用已保存的 CompositionVersion。

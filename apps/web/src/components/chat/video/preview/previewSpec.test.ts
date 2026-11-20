@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parsePreviewSpec, parseScopedPreviewSpec, type VideoScrubScope } from "./previewSpec"
+import { parsePreviewSpec, parseScopedPreviewSpec, sameScrubTarget, type VideoScrubScope } from "./previewSpec"
 
 const identity = {
   composition_id: "composition-1",
@@ -76,6 +76,13 @@ describe("composition preview spec admission", () => {
 })
 
 describe("scoped Scrub admission", () => {
+  it("matches a persisted JSONB window independently of key order", () => {
+    const window = { kind: "range", start_seconds: 7, end_seconds: 9 } as const
+    expect(sameScrubTarget({ kind: "range", end_seconds: 9, start_seconds: 7 }, window)).toBe(true)
+    expect(sameScrubTarget({ ...window, end_seconds: 8 }, window)).toBe(false)
+    expect(sameScrubTarget({ ...window, kind: "segment", scene_id: "scene" }, window)).toBe(false)
+  })
+
   const scope: VideoScrubScope = {
     target: { kind: "object", object_id: "object-1" },
     source_range_seconds: { start: 0, end: 1 },

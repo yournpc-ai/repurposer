@@ -1,123 +1,17 @@
 """Render the four existing Chat routes and their shared video rounds."""
 
 import json
-import re
 from copy import deepcopy
 from dataclasses import replace
 from typing import Literal
 
-from pydantic import create_model, field_validator
+from app.chat.editor import EDITOR_NAMES
 
 from app.agents.base import jinja_env
-from app.agents.tool_loop import RoundAssembly
+from app.agents.tool_loop import RoundAssembly, prune_wire_parameters
 from app.tools import tool_catalog_lines
 
 ChatMode = Literal["plan", "conversation", "event", "delivery"]
-
-_QUOTED_TITLE_EDIT = re.compile(
-    r'把(?:刚才保存(?:的)?作品的)?(?:第(?P<zh_scene>[一二三四五六七八九1-9])幕的?)?标题'
-    r'(?:改为|改成)[“"](?P<zh_text>[^”"]+)[”"][。.]?'
-    r'(?:只改这个标题(?:[，,]不要重新审片)?(?:[，,]不要制作或渲染正式视频)?[。.]?)?'
-    r'|(?:change|set|replace) the (?:(?P<en_scene>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth) scene(?:’s|\x27s)? )?'
-    r'title (?:to|with) [“"](?P<en_text>[^”"]+)[”"][.!]?',
-    re.IGNORECASE,
-)
-
-
-def _compact_title_round(facts: dict, resolution: dict, tools: list) -> RoundAssembly | None:
-    """Project an explicit, standalone title replacement without the project catalog."""
-    if (
-        resolution["stage"] != "version_edit" or resolution.get("pending") is not None
-        or facts.get("active_repair") is not None or facts.get("material_pending")
-    ):
-        return None
-    user_text = (facts.get("user_text") or "").strip()
-    match = _QUOTED_TITLE_EDIT.fullmatch(user_text)
-    if not match:
-        return None
-    new_text = match["zh_text"] or match["en_text"]
-    if not new_text.strip() or len(new_text) > 9000:
-        return None
-    target = resolution["target"]
-    ordinal = match["zh_scene"] or match["en_scene"]
-    scene_id = None
-    if ordinal:
-        if ordinal.isascii() and ordinal.isdigit():
-            index = int(ordinal) - 1
-        else:
-            ordinals = (
-                list("一二三四五六七八九") if match["zh_scene"]
-                else "first second third fourth fifth sixth seventh eighth ninth".split()
-            )
-            index = ordinals.index(ordinal.lower())
-        scenes = sorted(target.get("scenes") or [], key=lambda scene: (scene.get("range") or {}).get("start", 0))
-        if index >= len(scenes):
-            return None
-        scene_id = scenes[index]["scene_id"]
-    candidates = [
-        {key: clip[key] for key in ("clip_id", "scene_id", "text") if key in clip}
-        for clip in target.get("clip_targets") or []
-        if clip.get("object_kind") == "text" and not clip.get("derived_caption")
-        and (scene_id is None or clip.get("scene_id") == scene_id)
-    ]
-    if not candidates:
-        return None
-    saved = facts.get("version_saved", False)
-    if saved:
-        names = {"answer"}
-    elif len(candidates) != 1:
-        names = {"ask_user"}
-    else:
-        names = {"revise_video", "answer"}
-    base_ref = target["base_ref"]
-    compact_tools = [tool for tool in tools if tool.name in names]
-    if "revise_video" in names:
-        from app.models.schemas import ReviseVideoTextArgs
-
-        def current_base(value):
-            if value.model_dump(mode="json") != base_ref:
-                raise ValueError("请使用所选作品当前的 base_ref")
-            return value
-
-        scoped_args = create_model(
-            "ScopedVideoTextRevision", __base__=ReviseVideoTextArgs,
-            __validators__={"current_base": field_validator("base_ref")(current_base)},
-            clip_id=(Literal[candidates[0]["clip_id"]], ...),
-            text=(Literal[new_text], ...),
-        )
-        compact_tools = [
-            replace(tool, params_model=scoped_args, wire_view=None, repairable=False,
-                    description="只替换一个原生文字 Clip 的文本，保留其他所有内容。")
-            if tool.name == "revise_video" else tool
-            for tool in compact_tools
-        ]
-    if not compact_tools:
-        return None
-
-    if saved:
-        rule = (
-            "用一句简短的正文确认实际保存的标题改动，然后调用 answer。缺少消息正文的 answer 不会结束本轮。"
-        )
-    elif len(candidates) != 1:
-        rule = "调用 ask_user，让用户从相关标题中选择，然后等待回答。"
-    else:
-        rule = (
-            "使用给出的当前 base_ref 和确切标题目标，直接调用 revise_video。若现有文字已符合要求，用 answer 告知用户。"
-            "写入被拒绝后，按刷新后的事实处理或报告实际阻碍。只有工具确认保存后才可声称已保存。"
-        )
-    dynamic = {
-        "video_stage": "version_edit",
-        "base_ref": base_ref, "title_targets": candidates,
-    }
-    return RoundAssembly(
-        tools=compact_tools,
-        system=f"你是 Rookie Cut 的视频编辑。用用户在本次对话中使用的语言作答。{rule}",
-        context="当前视频轮次（目标和状态由服务端提供）：\n"
-        + json.dumps(dynamic, ensure_ascii=False),
-        stage="version_edit", include_project_context=False, include_observation_media=False,
-        opening_text=user_text,
-    )
-
 
 def chat_system(
     mode: ChatMode,
@@ -176,29 +70,6 @@ def _current_source_resources(snapshot, readiness, creative_state) -> list[tuple
     return selected
 
 
-def _region_target_candidates(target: dict, region: dict) -> list[dict]:
-    from app.tools.project_context import region_target_candidates
-
-    return region_target_candidates(target, region)
-
-
-def _target_resource_projection(target: dict, region: dict | None) -> dict:
-    keys = (
-        "kind", "composition_id", "name", "version_id", "version", "content_digest",
-        "base_ref", "schema_version", "skill_provenance", "settings", "sources",
-    )
-    projected = {key: target[key] for key in keys if key in target}
-    projected["scenes"] = [
-        {key: scene[key] for key in ("scene_id", "range", "intent") if key in scene}
-        for scene in target.get("scenes") or []
-    ]
-    projected["clip_targets"] = (
-        _region_target_candidates(target, region)
-        if region is not None else list(target.get("clip_targets") or [])
-    )
-    return projected
-
-
 def _creative_state_projection(creative_state) -> dict:
     """Keep creative facts while source identities stay in the resource projection."""
     def compact(value):
@@ -237,7 +108,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         }
         available = [tool for tool in facts["tools"] if tool.name in {action_tool, "answer"}]
         if action == "produce":
-            from app.agents.tool_loop import prune_wire_parameters
 
             def confirmation_wire(description, parameters):
                 return (
@@ -282,6 +152,57 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         creative_state = creative_state()
     snapshot = facts.get("snapshot")
     resources = list(getattr(snapshot, "resources", ()) or ())
+    works = [r for _, r in resources if r.get("kind") == "composition"]
+    hint = facts.get("target_hint") or {}
+    if (works or hint.get("unavailable") or hint.get("composition_id")) and not hint.get("draft_id"):
+        selected = None
+        if hint.get("composition_id"):
+            selected = next((r for r in works if r["composition_id"] == hint["composition_id"]
+                             and (not hint.get("version_id") or r["version_id"] == hint["version_id"])), None)
+        elif not hint.get("unavailable"):
+            project = next((r for _, r in resources if r.get("kind") == "project"), {})
+            work_count = (project.get("resource_counts") or {}).get("composition", len(works))
+            if len(works) == work_count == 1:
+                selected = works[0]
+            else:
+                user_text = facts.get("user_text") or ""
+                named = [r for r in works if r["composition_id"] in user_text
+                         or (r.get("name") and r["name"] in user_text)]
+                selected = named[0] if len(named) == 1 else None
+        context = {
+            "works": [{k: r.get(k) for k in ("composition_id", "name", "version_id", "version")} for r in works],
+            "selected": selected["base_ref"] if selected else None,
+            "project": next(({k: r.get(k) for k in ("title", "project_id", "user_stated_constraints")}
+                             for _, r in resources if r.get("kind") == "project"), None),
+            "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")} for _, r in resources if r.get("kind") == "asset"][:24],
+        }
+        if selected:
+            context.update(clip_count=selected.get("clip_count"), scene_count=selected.get("scene_count"),
+                           timebase=selected.get("timebase"), duration_ticks=selected.get("duration_ticks"),
+                           selected_region=hint.get("selected_region"))
+        names = EDITOR_NAMES | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video"}
+
+        def dialogue_wire(description, parameters):
+            return description, prune_wire_parameters(parameters, {
+                "brief", "material_text", "material_urls", "items", "slot",
+            })
+
+        tools = [t for t in facts["tools"] if t.name in names]
+        tools = [replace(t, wire_view=dialogue_wire, description=(
+            "用自然语言报告实际结果，同时调用 answer 结束本轮。" if t.name == "answer" else
+            "询问一个确定目标所需的问题。"
+        )) if t.name in {"answer", "ask_user"} else t for t in tools]
+        if pending:
+            context["pending_question"] = getattr(pending, "question", None)
+        return RoundAssembly(
+            tools=tools,
+            system="你是视频剪辑师。先读取当前时间线定位用户描述的片段。目标不明确时询问。"
+                   "依据工具返回的实际结果用用户的语言答复。预览只说明实际观察到的内容。"
+                   "对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答并调用 answer。",
+            context=json.dumps(context, ensure_ascii=False), include_project_context=False,
+            opening_text=facts.get("user_text") or "", enforce_offered_tools=True,
+            caller_state={"video_target": selected},
+        )
     readiness = compute_source_readiness(
         user_text=facts.get("user_text") or "",
         source_text=facts.get("source_text"),
@@ -351,10 +272,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         user_text=facts.get("user_text") or "",
     )
     if media_state is not None:
-        tools = [tool for tool in tools if tool.name in permitted]
-    compact = _compact_title_round(facts, resolution, tools)
-    if compact is not None:
-        return compact
+        tools = [tool for tool in tools if tool.name in permitted or tool.name in EDITOR_NAMES]
     stage = resolution["stage"]
     draft = resolution.get("draft")
     draft_facts = {}
@@ -370,14 +288,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     include_project_context = stage == "none"
     if not include_project_context and snapshot is not None and not judging_preview:
         resources = []
-        if resolution.get("target") is not None:
-            target = resolution["target"]
-            region = (facts.get("target_hint") or {}).get("selected_region")
-            resources = [(
-                f"composition:{target['version_id']}:{target['content_digest']}",
-                _target_resource_projection(target, region),
-            )]
-        elif draft is not None:
+        if draft is not None:
             content = draft.arguments.get("content") or {}
             source_ids = {
                 str(source.get("snapshot_id"))
@@ -501,33 +412,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             ]
         if draft.errors:
             dynamic["validation_errors"] = draft.errors
-    elif resolution.get("target") is not None:
-        target = resolution["target"]
-        dynamic["base_ref"] = target["base_ref"]
-        dynamic["target_composition_id"] = target["composition_id"]
-        selected_region = (facts.get("target_hint") or {}).get("selected_region")
-        if selected_region is not None:
-            dynamic["selected_region"] = selected_region
-            dynamic["region_target_candidates"] = [
-                {
-                    key: candidate[key]
-                    for key in (
-                        "clip_id", "object_id", "scene_id", "object_kind",
-                        "range", "motion_at_selection",
-                    )
-                    if key in candidate
-                }
-                for candidate in _region_target_candidates(target, selected_region)
-            ]
-    elif resolution.get("candidates") is not None:
-        dynamic["target_candidates"] = [
-            {
-                "composition_id": resource["composition_id"],
-                "name": resource.get("name"),
-                "base_ref": resource["base_ref"],
-            }
-            for resource in resolution["candidates"]
-        ]
     if facts.get("active_repair") is not None:
         dynamic = {
             "video_stage": "candidate_repair",
@@ -684,7 +568,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             stage in {"none", "briefing", "draft_build"}
             or (stage == "draft_review" and bool(draft_facts.get("awaiting_judgment")))
         ),
-        caller_state={"video_target": resolution.get("target"), "media_state": media_state},
+        caller_state={"media_state": media_state},
     )
 
 

@@ -401,6 +401,7 @@ async def apply_composition_edits(
                 await db.execute(
                     select(Composition)
                     .where(Composition.id == composition_id)
+                    .execution_options(populate_existing=True)
                     .with_for_update()
                 )
             ).scalar_one_or_none()

@@ -226,6 +226,7 @@ export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
 }
 
 export type VideoScrubTarget =
+  | { kind: "range"; start_seconds: number; end_seconds: number }
   | {
       kind: "segment"
       scene_id?: string

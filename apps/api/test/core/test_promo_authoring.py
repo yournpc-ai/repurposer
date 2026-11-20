@@ -148,63 +148,13 @@ def revision_args(version, action):
 
 
 def test_generic_design_and_high_level_revision_wires_stay_closed():
-    from app.chat.turn_tools import _REVISE_VIDEO_TOOL, _design_video_tool, tools_for_bound_skill
+    from app.chat.turn_tools import _design_video_tool
     from app.tools.video.design import CompositionDesignVideoArgs
 
-    design, _ = tools_for_bound_skill(
-        [_design_video_tool(), _REVISE_VIDEO_TOOL], SimpleNamespace(skill_id="promo-video")
-    )
+    design = _design_video_tool()
     assert design.params_model is CompositionDesignVideoArgs
-    _, design_schema = design.wire_view(design.description, design.params_model.model_json_schema())
-    assert design_schema["additionalProperties"] is False
-
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.prompts import assemble_video_round
-    from app.chat.turn_tools import PLAN_TOOLS
-
-    composition_id, version_id = uuid4(), uuid4()
-    target = {
-        "kind": "composition",
-        "composition_id": str(composition_id),
-        "version_id": str(version_id),
-        "content_digest": "d" * 64,
-        "base_ref": {
-            "composition_id": str(composition_id),
-            "composition_version_id": str(version_id),
-            "content_digest": "d" * 64,
-        },
-        "skill_provenance": {"skill": "promo-video"},
-    }
-    projected = assemble_video_round({
-        "tools": [_design_video_tool(), _REVISE_VIDEO_TOOL, *PLAN_TOOLS],
-        "drafts": (),
-        "snapshot": ContextSnapshot(
-            "saved",
-            frozenset({"composition:version:digest"}),
-            resources=(("composition:version:digest", target),),
-        ),
-        "mode": "plan",
-        "user_text": "Edit the saved promo",
-    }).tools
-    continued = next(tool for tool in projected if tool.name == "revise_video")
-    assert continued.params_model is ReviseVideoOpsArgs
-    _, continued_schema = continued.wire_view(
-        continued.description, continued.params_model.model_json_schema(),
-    )
-    assert "base_ref" not in continued_schema["properties"]
-    assert "tracks" not in continued_schema["properties"]
-    assert "Keyframe" not in continued_schema.get("$defs", {})
-    assert continued.repairable
-    assert any(tool.name == "ask_user" for tool in projected)
-
-    from app.chat.video_turn_seats import bind_video_revision_base
-
-    bound = bind_video_revision_base(
-        ReviseVideoOpsArgs(ops=[{"op": "remove_clip", "clip_id": "title"}]),
-        target["base_ref"],
-    )
-    assert bound.base_ref.composition_id == composition_id
-    assert bound.base_ref.composition_version_id == version_id
+    _, schema = design.wire_view(design.description, design.params_model.model_json_schema())
+    assert schema["additionalProperties"] is False
 
     raw = {
         "base_ref": {
@@ -927,67 +877,16 @@ async def test_direct_op_batch_saves_one_version_for_one_user_intent(database, i
         assert texts == {"Direct opening", "Direct proof"}
 
 
-def test_direct_op_wire_uses_current_target_and_selected_region():
+def test_editor_does_not_silently_rebind_an_old_or_inaccessible_output():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.prompts import assemble_video_round
-    from app.chat.turn_tools import PLAN_TOOLS, _REVISE_VIDEO_TOOL
+    from app.chat.intent import intent_router
 
-    composition_id, version_id = uuid4(), uuid4()
-    region = {
-        "coordinateSpace": "source_pixels",
-        "mediaTimeMs": 2500,
-        "sourceSize": {"width": 1920, "height": 1080},
-        "sourceRect": {"x": 100, "y": 100, "width": 400, "height": 120},
-        "normalizedRect": {"x": 100 / 1920, "y": 100 / 1080, "width": 400 / 1920, "height": 120 / 1080},
-        "viewportRect": {"x": 100.0, "y": 100.0, "width": 400.0, "height": 120.0},
-    }
-    target = {
-        "kind": "composition",
-        "composition_id": str(composition_id),
-        "version_id": str(version_id),
-        "content_digest": "d" * 64,
-        "base_ref": {
-            "composition_id": str(composition_id),
-            "composition_version_id": str(version_id),
-            "content_digest": "d" * 64,
-        },
-        "settings": {"width": 1920, "height": 1080, "timebase": 90000},
-        "clip_targets": [
-            {
-                "clip_id": "clp_title", "object_id": "obj_title", "object_kind": "text",
-                "scene_id": "proof", "range": {"start": 0, "end": 270000},
-                "layout": {"x": 100, "y": 100, "width": 500, "height": 120},
-                "has_motion": True,
-            },
-            {
-                "clip_id": "clp_later", "object_id": "obj_later", "object_kind": "text",
-                "scene_id": "close", "range": {"start": 360000, "end": 450000},
-                "layout": {"x": 100, "y": 100, "width": 500, "height": 120},
-            },
-        ],
-    }
-    assembly = assemble_video_round({
-        "tools": [_REVISE_VIDEO_TOOL, *PLAN_TOOLS],
-        "drafts": (),
-        "snapshot": ContextSnapshot(
-            "saved",
-            frozenset({"composition:version:digest"}),
-            resources=(("composition:version:digest", target),),
-        ),
-        "mode": "plan",
-        "user_text": "Change this selected title",
-        "target_hint": {"composition_id": str(composition_id), "selected_region": region},
-    })
-    tool = next(tool for tool in assembly.tools if tool.name == "revise_video")
-    _, schema = tool.wire_view(tool.description, tool.params_model.model_json_schema())
-    op_mapping = schema["properties"]["ops"]["items"]["discriminator"]["mapping"]
-    assert "set_text" in op_mapping
-    assert "set_narration" not in op_mapping
-    assert "remove_clip" not in op_mapping
-    assert "Keyframe" not in schema.get("$defs", {})
-    assert '"selected_region"' in assembly.context
-    assert '"mediaTimeMs": 2500' in assembly.context
-    assert '"region_target_candidates"' in assembly.context
-    assert '"clip_id": "clp_title"' in assembly.context
-    assert '"clip_id": "clp_later"' not in assembly.context
-    assert '"motion_at_selection": "not_evaluated"' in assembly.context
+    base = {"composition_id": str(uuid4()), "composition_version_id": str(uuid4()), "content_digest": "a"*64}
+    work = {"kind": "composition", "base_ref": base, "composition_id": base["composition_id"],
+            "version_id": base["composition_version_id"]}
+    for hint in [{"unavailable": True}, {"composition_id": str(uuid4())},
+                 {"composition_id": base["composition_id"], "version_id": str(uuid4())}]:
+        assembly = assemble_video_round({"snapshot": ContextSnapshot("saved", resources=(("work", work),)),
+                                         "tools": intent_router.tools, "mode": "plan", "target_hint": hint})
+        assert assembly.caller_state["video_target"] is None

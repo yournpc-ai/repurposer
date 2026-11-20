@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.editing.edits import EditError, replace_text_ops
+from app.editing.edits import EditError
 from app.editing.revisions import (
     AddAudioEffectOp as RevisionAddAudioEffectOp,
     AddMediaOverlayOp as RevisionAddMediaOverlayOp,
@@ -38,7 +38,6 @@ from app.editing.store import (
 from app.models.schemas import (
     ReviseVideoOpsArgs,
     ReviseVideoArgs,
-    ReviseVideoTextArgs,
     canonical_json_hash,
 )
 from app.models.tables import Composition, CompositionVersion
@@ -121,7 +120,7 @@ async def revise_video(
     db: AsyncSession,
     *,
     owner_id: UUID,
-    args: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs,
+    args: ReviseVideoArgs | ReviseVideoOpsArgs,
     request_id: str | None = None,
 ) -> dict[str, Any]:
     """Apply direct Ops or complete entities to an exact base."""
@@ -140,19 +139,7 @@ async def revise_video(
     base_content = content_of(base_version)
     provenance = deepcopy(base_version.skill_provenance or {})
     write: dict[str, Any]
-    if isinstance(args, ReviseVideoTextArgs):
-        clip = next(
-            (clip for track in base_content.timeline.tracks for clip in track.clips
-             if clip.clip_id == args.clip_id),
-            None,
-        )
-        if clip is None:
-            raise VideoServiceError(f"clip {args.clip_id!r} does not exist in the base version")
-        ops = replace_text_ops(clip, args.text)
-        if not ops:
-            raise VideoServiceError("the text already matches the requested value")
-        write = {"ops": ops}
-    elif isinstance(args, ReviseVideoOpsArgs):
+    if isinstance(args, ReviseVideoOpsArgs):
         source_ids = {binding.snapshot_id for binding in base_content.sources}
         source_ids.update(
             operation.source_id
@@ -496,25 +483,6 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
         if music_clips else "\nMusic: none in this saved version."
     )
     return "\n".join(lines)
-
-
-def format_revision_text(read: dict[str, Any]) -> str:
-    """The saved field-level delta plus the reference needed by the next tool.
-
-    The saved version owns the complete current work. Returning the changed
-    clips' whole style/layout/source readout here invites a technical handoff
-    and repeats unchanged layers; the system-computed delta is the only fact
-    the answering iteration needs. A later parameter question can explicitly
-    read the full version again.
-    """
-    import json
-
-    return json.dumps({
-        "version": read["version"],
-        "duration_seconds": read["storyboard"]["duration_seconds"],
-        "base_ref": read["base_ref"],
-        "change_set": read.get("change_set") or {},
-    }, ensure_ascii=False, indent=1)
 
 
 # ---------------------------------------------------------------------------

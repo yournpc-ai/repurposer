@@ -2,6 +2,16 @@ import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec"
 import { assertVideoSupported } from "@repurposer/video-remotion"
 import type { VideoScrubTarget } from "../../timeline/types"
 
+export function sameScrubTarget(a?: VideoScrubTarget | null, b?: VideoScrubTarget | null) {
+  if (a == null || b == null) return a == null && b == null
+  if (a.kind === "object") return b.kind === "object" && a.object_id === b.object_id
+  if (b.kind === "object" || a.start_seconds !== b.start_seconds || a.end_seconds !== b.end_seconds) {
+    return false
+  }
+  if (a.kind === "range") return b.kind === "range"
+  return b.kind === "segment" && a.scene_id === b.scene_id && a.clip_id === b.clip_id
+}
+
 export interface PreviewIdentity {
   composition_id: string
   composition_version_id: string

@@ -194,7 +194,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="get_video_version",
             description=(
-                "读取视频作品已保存的确切版本及标准分镜（逐场时间窗、准确屏幕文字和摄像机/动画 ID）。revise_video 修订前必须重读。"
+                "读取视频作品已保存的确切版本及标准分镜（逐场时间窗、准确屏幕文字和摄像机/动画 ID）。"
                 "以 composition_id 指定当前版本，或用分镜卡或已有读取返回的确切 version_id，不能猜测。present=true 再次展示标准卡片；显式指定局部 scrub 时仅展示对应 Scene/Clip 时间窗或独立对象。"
             ),
             params_model=GetVideoVersionParams,

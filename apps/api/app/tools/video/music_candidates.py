@@ -1,8 +1,7 @@
 """Local Music-library candidates and ordinal selection.
 
 Search emits message-borne candidates only. A later turn resolves the persisted
-member and returns its Music identity; freezing and timeline placement remain
-with prepare_video_materials and revise_video respectively.
+member and returns its Music identity; prepare_video_materials freezes the selected source.
 """
 from __future__ import annotations
 

@@ -1089,11 +1089,6 @@ class PresentPlanArgs(BaseModel):
 
 # ---------------------------------------------------------------------------
 # Video Project (ADR-145 phase B): the CompositionVersion chain's chat tools.
-# design_video / revise_video are NON-terminal beats — the system designs /
-# revises inside the call, saves an immutable CompositionVersion through the
-# content write door, and hands the canonical storyboard payload back; the
-# model's ONE next message presents it (the structured card carries the
-# table — the model introduces, never re-transcribes it).
 # ---------------------------------------------------------------------------
 
 
@@ -1124,6 +1119,21 @@ class VideoSegmentScrubTarget(BaseModel):
             raise ValueError("a segment names exactly one scene_id or clip_id")
         if self.end_seconds <= self.start_seconds:
             raise ValueError("scrub end_seconds must be after start_seconds")
+        return self
+
+
+class VideoRangeScrubTarget(BaseModel):
+    """A bounded playback window in composition time."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["range"] = "range"
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _bounded(self):
+        if not 0 < self.end_seconds - self.start_seconds <= 12:
+            raise ValueError("Choose a positive preview window of up to 12 seconds.")
         return self
 
 
@@ -1392,17 +1402,6 @@ class ReviseVideoArgs(BaseModel):
         return EntityWrites.model_validate({
             key: getattr(self, key) for key in EntityWrites.model_fields
         })
-
-
-class ReviseVideoTextArgs(BaseModel):
-    """Replace the text of one independent native Text Clip."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    base_ref: VideoVersionRef
-    clip_id: str
-    text: str = Field(min_length=1, max_length=9000)
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
 class ShowVideoPresetsArgs(BaseModel):

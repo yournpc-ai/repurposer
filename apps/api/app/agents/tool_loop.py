@@ -634,7 +634,6 @@ class ToolLoopAgent:
         on_interim_prose: _Hook | None = None,
         on_loop_event: _Hook | None = None,
         should_stop_rejection: RejectionStop | None = None,
-        bare_rejection_feedback: Callable[[], str | None] | None = None,
         refresh_context: Callable[[], Awaitable[ContextSnapshot]] | None = None,
         restore_context: Callable[..., Awaitable[ConversationHistory]] | None = None,
         on_context_event: _Hook | None = None,
@@ -1273,9 +1272,7 @@ class ToolLoopAgent:
                     if stopped is not None:
                         return stopped
                     continue
-                required_feedback = (
-                    bare_rejection_feedback() if bare_rejection_feedback is not None else None
-                ) or assembled.missing_tool_feedback
+                required_feedback = assembled.missing_tool_feedback
                 if self.service_per_call and not required_feedback:
                     required_feedback = "在助手消息正文中回答，并调用合适的终结工具。"
                 if required_feedback:
@@ -1849,7 +1846,7 @@ class ToolLoopAgent:
                     # carries this fact; tool.ok alone includes save=false.
                     if (
                         outcome.ok
-                        and dispatch_name in {"design_video", "revise_video"}
+                        and dispatch_name in {"design_video", "split_clip"}
                         and not is_draft_update
                     ):
                         version_saved = True
@@ -1990,7 +1987,7 @@ class ToolLoopAgent:
                     candidate_progress_digest(candidate_record)
                     if candidate_record is not None and (is_correction or is_draft_merge)
                     else tool_progress_digest(dispatch_name, call.arguments)
-                    if dispatch_name in {"design_video", "revise_video"}
+                    if dispatch_name in {"design_video", "split_clip"}
                     else None
                 )
                 stopped = await _reject(

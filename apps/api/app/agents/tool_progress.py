@@ -16,6 +16,13 @@ _reporter: ContextVar[Callable[[str], Awaitable[None]] | None] = ContextVar(
 )
 
 
+_call_id: ContextVar[str | None] = ContextVar("native_call_id", default=None)
+
+
+def current_call_id() -> str | None:
+    return _call_id.get()
+
+
 @contextmanager
 def bind_progress(
     call_id: str, emit: Callable[[ToolProgress], Awaitable[None] | None] | None,
@@ -28,12 +35,14 @@ def bind_progress(
             if result is not None:
                 await result
 
+    identity = _call_id.set(call_id)
     token = _reporter.set(report)
     try:
         yield
     finally:
         active = False
         _reporter.reset(token)
+        _call_id.reset(identity)
 
 
 async def report_progress(step: str) -> None:

@@ -279,6 +279,11 @@ class ConversationContext:
         return tuple(images), notes
 
     async def restore(self, snapshot, assembled_messages):
+        if not self._resume_turn and any(
+            resource.get("kind") == "composition" for _, resource in getattr(snapshot, "resources", ())
+        ):
+            return ConversationHistory()
+
         items, valid_turns, budget = await self._load()
         if self._resumed_item_ids is None:
             # A resumed loop has no protocol pairs from its previous execution.

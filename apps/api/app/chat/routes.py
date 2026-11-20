@@ -1084,7 +1084,7 @@ async def read_video_storyboard(
     never a leak."""
     from app.editing.service import video_version_read  # deferred: editing seam
     from app.editing.store import CompositionNotFound, PermissionDenied
-    from app.models.schemas import VideoScrubTarget
+    from app.models.schemas import VideoRangeScrubTarget, VideoScrubTarget
     from app.tools.video.preview import ScrubTargetError, enrich_video_scrub
 
     try:
@@ -1094,7 +1094,7 @@ async def read_video_storyboard(
         if scrub is None:
             return read
         try:
-            target = TypeAdapter(VideoScrubTarget).validate_python(json.loads(scrub))
+            target = TypeAdapter(VideoScrubTarget | VideoRangeScrubTarget).validate_python(json.loads(scrub))
         except (ValueError, TypeError, json.JSONDecodeError):
             raise HTTPException(422, "Invalid Scrub target") from None
         return await enrich_video_scrub(

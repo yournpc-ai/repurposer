@@ -184,44 +184,6 @@ async def settled_skill_read_receipts(
     return merge_skill_read_receipts([item["receipt"] for item in items])
 
 
-def region_target_candidates(target: dict, region: dict) -> list[dict]:
-    """Project region-compatible Clip candidates; animated geometry stays unresolved."""
-    settings = target.get("settings") or {}
-    width, height = settings.get("width"), settings.get("height")
-    timebase = settings.get("timebase") or 90000
-    normalized = region.get("normalizedRect") or {}
-    at_seconds = region.get("mediaTimeMs", 0) / 1000
-    if not width or not height:
-        return []
-    selected = []
-    for clip in target.get("clip_targets") or []:
-        clip_range = clip.get("range") or {}
-        if not clip_range:
-            continue
-        start = clip_range.get("start", 0) / timebase
-        end = clip_range.get("end", 0) / timebase
-        if not start <= at_seconds < end:
-            continue
-        layout = clip.get("layout") or {}
-        if not layout:
-            continue
-        left = layout.get("x", 0) / width
-        top = layout.get("y", 0) / height
-        right = left + layout.get("width", 0) / width
-        bottom = top + layout.get("height", 0) / height
-        if (
-            left < normalized.get("x", 0) + normalized.get("width", 0)
-            and right > normalized.get("x", 0)
-            and top < normalized.get("y", 0) + normalized.get("height", 0)
-            and bottom > normalized.get("y", 0)
-        ):
-            selected.append({
-                **clip,
-                "motion_at_selection": "not_evaluated" if clip.get("has_motion") else "static_layout",
-            })
-    return selected
-
-
 async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> ContextSnapshot:
     project = await db.scalar(select(Project).where(Project.id == project_id, Project.user_id == owner_id))
     if project is None:
@@ -249,28 +211,10 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
             "kind": "composition", "composition_id": str(composition.id), "name": composition.name,
             "version_id": str(version.id), "version": version.version, "content_digest": version.content_digest,
             "base_ref": {"composition_id": str(composition.id), "composition_version_id": str(version.id), "content_digest": version.content_digest},
-            "schema_version": version.schema_version, "skill_provenance": version.skill_provenance,
-            **({"creative_state": version.creative_state} if version.creative_state is not None else {}),
-            "settings": version.settings, "sources": version.sources,
-            "scenes": scenes,
-            "clip_targets": [
-                {
-                    "clip_id": clip.get("clip_id"), "track_id": track.get("track_id"),
-                    "scene_id": clip.get("scene_id"), "range": clip.get("range"),
-                    "object_kind": (clip.get("object") or {}).get("kind"),
-                    "object_id": (clip.get("object") or {}).get("object_id"),
-                    "layout": (clip.get("object") or {}).get("layout"),
-                    "transform": (clip.get("object") or {}).get("transform"),
-                    "has_motion": bool(clip.get("animations")),
-                    **({
-                        "text": (clip.get("object") or {}).get("text"),
-                        "derived_caption": (clip.get("object") or {}).get("caption") is not None,
-                    } if (clip.get("object") or {}).get("kind") == "text" else {}),
-                    **({"view_id": (clip.get("object") or {}).get("view_id")} if (clip.get("object") or {}).get("kind") == "web" else {}),
-                    "source": clip.get("source"),
-                }
-                for track in tracks for clip in track.get("clips") or []
-            ],
+            "timebase": version.settings.get("timebase", 90000),
+            "clip_count": sum(len(track.get("clips") or []) for track in tracks),
+            "scene_count": len(scenes),
+            "duration_ticks": max((c["range"]["end"] for t in tracks for c in t.get("clips", [])), default=0),
         }))
     pages = (await db.scalars(select(PageReading).where(PageReading.project_id == project_id)
                               .order_by(PageReading.url))).all()

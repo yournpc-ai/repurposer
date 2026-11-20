@@ -27,6 +27,7 @@ from copy import deepcopy
 from dataclasses import replace
 
 from app.agents.tool_loop import ChatTool, NATIVE_PRESENTATION, ToolPresentation, ToolPresentationVariant, ToolRejected, prune_wire_parameters
+from app.chat.editor import EDITOR_NAMES, EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
@@ -43,8 +44,6 @@ from app.models.schemas import (
     ProposeTasksArgs,
     RetryUploadArgs,
     ReviewVideoArgs,
-    ReviseVideoArgs,
-    ReviseVideoOpsArgs,
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
@@ -54,51 +53,6 @@ from app.models.schemas import (
 )
 
 MAX_DESIGN_CORRECTIONS_PER_TURN = 2
-
-
-def _edit_op_signature(op) -> str:
-    """One op's mechanical key: op name + target handles + the PRESENT
-    payload fields (presence = ``model_fields_set``; dict-typed fields
-    expand one key level). The target VALUE joins only where the value IS
-    the target identity (a reorder's arrangement, set_music's mood,
-    set_voiceover's on/off); field values otherwise never enter the key —
-    a repair retry that only fixes the offending value signs identically
-    to its failure, while a different FIELD on the same scene/element
-    signs differently (the 同一幕换背景 ≠ 修复动画时序 hole)."""
-    head = ":".join(
-        [
-            getattr(op, "op", "?"),
-            getattr(op, "scene_id", None) or "",
-            getattr(op, "element_id", None) or "",
-        ]
-    )
-    fields: list[str] = []
-    present = (getattr(op, "model_fields_set", None) or set()) - {
-        "op",
-        "scene_id",
-        "element_id",
-    }
-    for name in present:
-        value = getattr(op, name, None)
-        if isinstance(value, dict):
-            fields.extend(f"{name}.{key}" for key in sorted(value))
-        elif name == "order":  # reorder: the arrangement IS the handle
-            fields.append("order=" + ">".join(str(v) for v in value or []))
-        elif name in ("mood", "enabled"):  # the value IS the target
-            fields.append(f"{name}={value}")
-        else:
-            fields.append(name)
-    return f"{head}[{','.join(sorted(fields))}]"
-
-
-
-
-
-
-
-
-
-
 
 
 def video_rejection_stop(
@@ -115,8 +69,7 @@ def video_rejection_stop(
     erase the failure budget: this is a per-turn failed-design cap, not the
     deferred unified nested-LLM budget.
     """
-    design_tools = {"design_video", "revise_video"}
-    if current.tool_name not in design_tools:
+    if current.tool_name != "design_video":
         return False
     history = (*previous, current)
     if previous:
@@ -128,15 +81,13 @@ def video_rejection_stop(
             and last.candidate_digest == current.candidate_digest
         ):
             return True
-    return sum(event.tool_name in design_tools for event in history) >= 3
+    return sum(event.tool_name == "design_video" for event in history) >= 3
+
+
 _DESIGN_VIDEO_DESCRIPTION = (
     "通过向服务端工作草稿写入完整值构建视频。只写本次要处理的设置、来源、Scenes、Tracks、Clips 或 Transitions，未写入的范围保持原状。"
     "新轨道的首批 Clip 直接放入该 Track 的 clips。单独写 Clip 时，clips 项格式为 {track_id, clip}。save=false 将修改合入工作草稿。"
-    "save=true 仅校验并保存已有 draft_ref，不附新的内容。只有用户明确要求开放式重写时，才用 composition_id 从该作品当前版本开始。保存不会启动制作。"
-)
-_REVISE_VIDEO_DESCRIPTION = (
-    "通过 base_ref 修订确切的已保存视频版本。仅提交有改动的完整 Scene、Track、Clip 或 Transition，或按稳定 ID 删除。"
-    "保留其余内容，由服务端校验并保存一个新版本。修订不启动制作。"
+    "save=true 仅校验并保存已有 draft_ref，不附新的内容。保存不会启动制作。"
 )
 
 
@@ -151,18 +102,6 @@ def _design_video_wire_view(description: str, parameters: dict) -> tuple[str, di
     if isinstance(producer.get("enum"), list):
         producer["enum"] = [item for item in producer["enum"] if item != "remotion-project"]
     return description + "当前部署不支持 remotion-project。", pruned
-
-
-def _revise_video_wire_view(description: str, parameters: dict) -> tuple[str, dict]:
-    from app.config import settings
-
-    if settings.component_bake_enabled:
-        return description, parameters
-    pruned = deepcopy(parameters)
-    producer = pruned.get("$defs", {}).get("GeneratorObject", {}).get("properties", {}).get("producer", {})
-    if isinstance(producer.get("enum"), list):
-        producer["enum"] = [item for item in producer["enum"] if item != "remotion-project"]
-    return description + "当前部署不支持写入 remotion-project。", pruned
 
 
 def _design_video_tool() -> ChatTool:
@@ -181,20 +120,6 @@ def _design_video_tool() -> ChatTool:
             policy="design", receipt_kind="component",
         ),
     )
-
-
-_REVISE_VIDEO_TOOL = ChatTool(
-    name="revise_video",
-    terminal=False,
-    description=_REVISE_VIDEO_DESCRIPTION,
-    params_model=ReviseVideoArgs,
-    wire_view=_revise_video_wire_view,
-    presentation=ToolPresentation(
-        kind="draft", active_key="chat.activity.videoRevise",
-        done_key="chat.activity.videoReviseDone", defer_start=True,
-        policy="revision", receipt_kind="video_revision",
-    ),
-)
 
 
 _REVIEW_VIDEO_DESCRIPTION = (
@@ -281,7 +206,7 @@ _IMPORT_SFX_TOOL = ChatTool(
     terminal=False,
     description=(
         "从先前已结算回合的候选卡导入用户选中的声音。只传 candidate_set_id 和从零起的 member_index，不提供或编造 URL、标题、作者、供应商 ID 或许可。"
-        "服务端重新解析已保存的候选并复核 CC0，下载真实 MP3 预览并返回素材 snapshot_id。随后用当前 base_ref 通过 revise_video 的 add_audio_effect Op 添加。"
+        "服务端重新解析已保存的候选并复核 CC0，下载真实 MP3 预览并返回素材 snapshot_id。导入后可从项目素材中读取。"
     ),
     params_model=ImportSfxArgs,
     presentation=ToolPresentation(
@@ -512,54 +437,6 @@ def tools_for_bound_skill(tools: list[ChatTool], skill: object | None) -> list[C
     return [tool for tool in tools if tool.name not in names]
 
 
-def _direct_revision_wire(description: str, parameters: dict) -> tuple[str, dict]:
-    from app.editing.presets import PRESET_REGISTRY
-
-    parameters = deepcopy(parameters)
-    parameters = prune_wire_parameters(
-        parameters,
-        set(parameters.get("properties") or {}) - {"ops", "scrub", "pending_disposition"},
-    )
-    parameters["required"] = ["ops"]
-    preset = parameters.get("$defs", {}).get("ApplyPresetOp", {}).get("properties", {}).get("preset_id", {})
-    preset["enum"] = list(PRESET_REGISTRY)
-    return (
-        "对已解析作品的当前最新版本原子提交一批直接 Op。须在一次调用中包含全部相关改动。服务端绑定 base_ref，解析目标、来源、布局和时间刻度，校验并保存一个新版本。"
-        "对 add_media_overlay，除非用户的请求及先前明确答复已确定 whole_scene 或数值型源/输出时间窗，否则首次写入前调用 ask_user。目标或时序不唯一时先询问。修订不启动制作。",
-        parameters,
-    )
-
-
-def _direct_ops_for_target(target: dict | None) -> set[str]:
-    clips = list((target or {}).get("clip_targets") or [])
-    allowed = {"add_media_overlay", "add_narration", "add_audio_effect"}
-    if any(clip.get("object_kind") == "text" for clip in clips):
-        allowed.add("set_text")
-    if any(clip.get("object_kind") == "speech" for clip in clips):
-        allowed.add("set_narration")
-    if clips:
-        allowed.add("apply_preset")
-    if len(clips) > 1:
-        allowed.add("remove_clip")
-    return allowed
-
-
-def _restrict_direct_ops(parameters: dict, allowed: set[str]) -> dict:
-    defs = parameters.get("$defs") or {}
-    items = parameters.get("properties", {}).get("ops", {}).get("items") or {}
-    items["oneOf"] = [
-        variant for variant in items.get("oneOf") or []
-        if (defs.get(variant.get("$ref", "").rsplit("/", 1)[-1], {})
-            .get("properties", {}).get("op", {}).get("const") in allowed)
-    ]
-    discriminator = items.get("discriminator") or {}
-    if isinstance(discriminator.get("mapping"), dict):
-        discriminator["mapping"] = {
-            name: ref for name, ref in discriminator["mapping"].items() if name in allowed
-        }
-    return prune_wire_parameters(parameters, set())
-
-
 def _explicit_constraint_wire(
     parameters: dict, constraints: dict, *, include_fixed: bool,
 ) -> dict:
@@ -645,11 +522,6 @@ def resolve_video_stage(
     hint = target_hint or {}
     if not isinstance(hint, dict):
         hint = {"base_ref": getattr(hint, "base_ref", None)}
-    hinted_composition = (
-        hint.get("composition_id")
-        or _named_reference(hint, "composition_id")
-        or _named_reference(pending, "composition_id")
-    )
     hinted_draft = _named_reference(pending, "draft_id") or _named_reference(hint, "draft_id")
     explicit_draft = hinted_draft or next(
         (draft.candidate_id for draft in drafts if draft.candidate_id in user_text), None
@@ -661,23 +533,6 @@ def resolve_video_stage(
     )
     if selected_draft is None and len(drafts) == 1 and (not resources or explicit_draft):
         selected_draft = drafts[0]
-    target = next(
-        (resource for resource in resources if str(resource.get("composition_id")) == str(hinted_composition)),
-        None,
-    )
-    if target is None:
-        target = next(
-            (
-                resource for resource in resources
-                if str(resource.get("composition_id")) in user_text
-                or str(resource.get("version_id")) in user_text
-            ),
-            None,
-        )
-    if selected_draft is None and target is None and len(resources) == 1 and not drafts:
-        target = resources[0]
-    if selected_draft is None and target is None and len(resources) == 1 and drafts and explicit_draft is None:
-        target = resources[0]
     if selected_draft is not None:
         facts = working_draft_review_facts(selected_draft.arguments)
         has_content = bool((selected_draft.arguments.get("content") or {}).get("scenes"))
@@ -711,8 +566,6 @@ def resolve_video_stage(
         else:
             stage = "draft_review"
         return {"stage": stage, "draft": selected_draft, "target": None, "pending": pending}
-    if target is not None:
-        return {"stage": "version_edit", "draft": None, "target": target, "pending": pending}
     if resources or drafts:
         return {"stage": "resolve_target", "draft": None, "target": None, "candidates": resources, "pending": pending}
     return {
@@ -906,6 +759,9 @@ def video_round_tools(
         # context on unrelated graph operations.
         if tool.name in {"get_graph", "get_node", "edit_graph"}:
             continue
+        if tool.name in EDITOR_NAMES:
+            projected.append(tool)
+            continue
         if stage in stage_tools and tool.name not in stage_tools[stage]:
             continue
         if tool.name == "prepare_music" and not (
@@ -929,8 +785,6 @@ def video_round_tools(
             and not _music_choice_requested(user_text)
         ):
             continue
-        if stage == "version_edit" and tool.name in {"design_video", "review_working_draft"}:
-            continue
         if skill is not None and tool.name == "start_run" and not has_saved_version:
             continue
         if defer_design and tool.name == "design_video":
@@ -940,33 +794,7 @@ def video_round_tools(
             or (skill is not None and not has_saved_version)
         ):
             continue
-        if tool.name in {"revise_video", "get_video_version"} and not has_saved_version:
-            continue
-        if stage == "version_edit" and tool.name == "revise_video":
-            def direct_revision_wire(description: str, parameters: dict, *, current=target):
-                if resolution.get("selected_region") is not None:
-                    from app.tools.project_context import region_target_candidates
-
-                    current = {
-                        **current,
-                        "clip_targets": region_target_candidates(
-                            current, resolution["selected_region"]
-                        ),
-                    }
-                projected_description, projected_parameters = _direct_revision_wire(
-                    description, parameters
-                )
-                return projected_description, _restrict_direct_ops(
-                    projected_parameters, _direct_ops_for_target(current)
-                )
-
-            projected.append(replace(
-                tool,
-                params_model=ReviseVideoOpsArgs,
-                wire_view=direct_revision_wire,
-                repairable=True,
-                draftable=False,
-            ))
+        if tool.name in {"get_video_version"} and not has_saved_version:
             continue
         if (
             stage in {"briefing", "draft_build"}
@@ -1142,7 +970,7 @@ def _video_project_tools() -> list[ChatTool]:
         *_skill_authoring_read_tools(),
         *_video_material_tools(),
         _design_video_tool(),
-        _REVISE_VIDEO_TOOL,
+        *EDITOR_TOOLS,
         _REVIEW_VIDEO_TOOL,
         _review_working_draft_tool(),
         _show_video_presets_tool(),

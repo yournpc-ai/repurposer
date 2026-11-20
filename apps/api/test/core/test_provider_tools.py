@@ -8,6 +8,8 @@ and the complete local trace/export path.
 import json
 from types import SimpleNamespace
 
+from app.chat.editor import EDITOR_NAMES
+
 import pytest
 
 from app.providers.llm.base import LLMSchemaError, ToolCall
@@ -759,7 +761,8 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
         skill=skill, material_pending=True, user_text="change the title",
     ).tools
     saved_names = {tool.name for tool in saved}
-    assert {"revise_video", "get_video_version", "present_plan"} <= saved_names
+    assert {"split_clip", "inspect_timeline", "preview_range"} <= saved_names
+    assert not {"revise_video", "present_plan", "start_run"} & saved_names
     assert "design_video" not in saved_names
 
 
@@ -776,7 +779,6 @@ async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_pro
     from app.skills.resolution import get_builtin_skill_option
     from app.tools.video.design import (
         CompositionDesignVideoArgs,
-        CompositionSceneAuthoring,
         CompositionScenePlan,
         _expand_scene_authoring,
         _music_bed_write,
@@ -1120,8 +1122,7 @@ def test_missing_package_session_keeps_generic_high_level_protocol(installed_pro
 
 
 def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
-    from types import SimpleNamespace
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope, correction_tool
+    from app.agents.candidate_correction import CandidateRecord, CandidateScope
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
     from app.tools.video.design import CompositionDesignVideoArgs
@@ -1169,7 +1170,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
     ),))
     judging = _video_round(intent_router.tools, drafts=(with_evidence,), snapshot=web_snapshot)
     assert judging.stage == "draft_review"
-    assert {tool.name for tool in judging.tools} == {"review_working_draft", "ask_user", "answer"}
+    assert {tool.name for tool in judging.tools} == {"review_working_draft", "ask_user", "answer", *EDITOR_NAMES}
     judging_tool = next(tool for tool in judging.tools if tool.name == "review_working_draft")
     assert "judgment" in tool_spec(judging_tool)["function"]["parameters"]["required"]
     assert "frozen source page only" not in judging.context
@@ -1185,13 +1186,12 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
         intent_router.tools, drafts=(draft,), snapshot=snapshot,
         user_text="Change the second Scene title",
     )
-    assert edited.stage == "version_edit"
-    assert "revise_video" in {tool.name for tool in edited.tools}
+    assert edited.caller_state["video_target"] == saved
+    assert EDITOR_NAMES <= {tool.name for tool in edited.tools}
     assert not {"design_video", "review_working_draft"} & {tool.name for tool in edited.tools}
     assert "complete project and an unrelated asset" not in edited.context
-    assert "title-second" in edited.context
-    assert edited.include_observation_media is False
-    assert "定向修订：只编辑" in edited.system
+    assert "title-second" not in edited.context
+    assert edited.include_observation_media
     presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True)
     assert presenting.stage == "draft_present"
     assert {tool.name for tool in presenting.tools} == {"answer"}
@@ -1201,17 +1201,9 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
         intent_router.tools,
         snapshot=ContextSnapshot("two", resources=(("one", saved), ("two", other))),
     )
-    assert ambiguous.stage == "resolve_target"
-    assert {tool.name for tool in ambiguous.tools} == {
-        "ask_user", "answer", "get_video_version",
-    }
-
-    repaired = _video_round(
-        [correction_tool()], snapshot=snapshot, active_repair=SimpleNamespace(tool_name="design_video"),
-    )
-    assert [tool.name for tool in repaired.tools] == ["correct_tool_candidate"]
-    assert "pending_question" not in repaired.context
-    assert "CURRENT PROJECT EVIDENCE" not in repaired.context
+    assert ambiguous.caller_state["video_target"] is None
+    assert EDITOR_NAMES <= {tool.name for tool in ambiguous.tools}
+    assert "ask_user" in {tool.name for tool in ambiguous.tools}
 
 
 @pytest.mark.parametrize("mode", ["plan", "conversation"])
@@ -1254,8 +1246,8 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
             calls.append(kwargs)
             if len(calls) == 1:
                 return ToolGeneration("", [ToolCall(
-                    id="revise-1", name="revise_video",
-                    arguments={"ops": [{"op": "remove_clip", "clip_id": "title-second"}], "pending_disposition": "answer"},
+                    id="split-1", name="split_clip",
+                    arguments={"clip_id": "title-second", "time": 1},
                 )])
             return ToolGeneration("Saved", [ToolCall(id="answer-1", name="answer", arguments={})])
 
@@ -1279,7 +1271,7 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
 
     async def execute(name, _params, _speech):
         nonlocal pending
-        if name == "revise_video":
+        if name == "split_clip":
             pending = None
             return tool_loop.ToolObservation("saved")
         return None
@@ -1303,7 +1295,7 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
     second_text = json.dumps(second["messages"], ensure_ascii=False)
     assert "Which title?" in first_text
     assert "Which title?" not in second_text
-    assert "old review" in second_text and "Historical observation old" not in second_text
+    assert "old review" not in second_text and "Historical observation old" not in second_text
     assert all(
         part.get("type") == "text"
         for message in second["messages"] if isinstance(message.get("content"), list)
@@ -1318,48 +1310,18 @@ async def _immediate(value):
     return value
 
 
-def test_explicit_title_edit_only_projects_current_title_and_its_write():
-    from pydantic import ValidationError
-
+def test_editor_tools_do_not_depend_on_requested_action():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
 
     saved = _composition_resource()
-    saved["scenes"] = [
-        {"scene_id": "second", "range": {"start": 20}},
-        {"scene_id": "first", "range": {"start": 0}},
-    ]
-    saved["clip_targets"] = [
-        {"clip_id": "other", "scene_id": "first", "object_kind": "text", "text": "unrelated"},
-        {"clip_id": "title-second", "scene_id": "second", "object_kind": "text", "text": "Old title"},
-        {"clip_id": "captions", "scene_id": "second", "object_kind": "text", "derived_caption": True},
-    ]
-    snapshot = ContextSnapshot("large project snapshot", resources=(("composition", saved),))
-    request = "把刚才保存作品的第二幕标题改为“Value / Defend”。只改这个标题，不要重新审片，不要制作或渲染正式视频。"
-    edit = _video_round(intent_router.tools, snapshot=snapshot, user_text=request)
-    assert edit.opening_text == request
-    assert not edit.include_project_context
-    assert "Old title" in edit.context
-    assert "unrelated" not in edit.context and "captions" not in edit.context
-    assert {tool.name for tool in edit.tools} == {"revise_video", "answer"}
-    revision = next(tool.params_model for tool in edit.tools if tool.name == "revise_video")
-    valid = {"base_ref": saved["base_ref"], "clip_id": "title-second", "text": "Value / Defend"}
-    assert revision.model_validate(valid).clip_id == "title-second"
-    with pytest.raises(ValidationError):
-        revision.model_validate({**valid, "clip_id": "other"})
-    with pytest.raises(ValidationError):
-        revision.model_validate({**valid, "base_ref": {**saved["base_ref"], "content_digest": "a" * 64}})
-    after_save = _video_round(intent_router.tools, snapshot=snapshot, user_text=request, version_saved=True)
-    assert {tool.name for tool in after_save.tools} == {"answer"}
-
-    compound = _video_round(intent_router.tools, snapshot=snapshot, user_text=request + "再加一段音乐。")
-    assert compound.opening_text is None
-    assert "search_music" in {tool.name for tool in compound.tools}
-    saved["clip_targets"].append(
-        {"clip_id": "another", "scene_id": "second", "object_kind": "text", "text": "Another title"}
-    )
-    ambiguous = _video_round(intent_router.tools, snapshot=snapshot, user_text=request)
-    assert {tool.name for tool in ambiguous.tools} == {"ask_user"}
+    snapshot = ContextSnapshot("saved", resources=(("work", saved),))
+    first = _video_round(intent_router.tools, snapshot=snapshot, user_text="Split the second clip")
+    second = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the title")
+    assert {t.name for t in first.tools} == {t.name for t in second.tools}
+    assert EDITOR_NAMES <= {t.name for t in second.tools}
+    assert not {"start_run", "revise_video", "design_video"} & {t.name for t in second.tools}
+    assert "clip_targets" not in second.context and "title-second" not in second.context
 
 
 def test_video_rounds_allow_service_text_for_reads_and_edits():
@@ -1379,7 +1341,7 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
         ),
         user_text="Change the title", iteration=0, new_result=True,
     )
-    assert edit.stage == "version_edit"
+    assert edit.caller_state["video_target"] == saved
     assert edit.stream_prose
 
 
@@ -1690,7 +1652,7 @@ def test_copy_only_draft_hold_projects_skill_receipt_without_media():
     assert round.stage == "draft_hold"
     assert "a" * 64 in round.context and "receipt_contains_media" in round.context
     assert round.include_observation_media is False
-    assert {tool.name for tool in round.tools} == {"answer"}
+    assert {tool.name for tool in round.tools} == {"answer", *EDITOR_NAMES}
 
 
 @pytest.mark.asyncio
@@ -1855,7 +1817,7 @@ async def test_high_level_provider_requests_fold_prior_scene_writes_and_projecti
     finalizing_text = json.dumps(requests[4]["messages"], ensure_ascii=False)
     assert "Exact headline first" not in finalizing_text
     assert "Exact headline second" in finalizing_text
-    assert {item["function"]["name"] for item in requests[4]["tools"]} == {"design_video", "answer", "read_conversation_context"}
+    assert {item["function"]["name"] for item in requests[4]["tools"]} == {"design_video", "answer", "read_conversation_context", *EDITOR_NAMES}
     assert {item["function"]["name"] for item in requests[5]["tools"]} == {"answer"}
     presented_text = json.dumps(requests[5]["messages"], ensure_ascii=False)
     assert "SAVED VERSION with presentation_rows and no music track" in presented_text

@@ -118,9 +118,6 @@ from app.models.schemas import (
     QuestionPayload,
     QuestionProposal,
     ReviewVideoArgs,
-    ReviseVideoArgs,
-    ReviseVideoOpsArgs,
-    ReviseVideoTextArgs,
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
@@ -203,7 +200,7 @@ class PlanTurn:
         # for the runner's signature parity (the channel is generic).
         self.on_row_append = on_row_append
         # 视频呈现挂号 (ADR-145 phase B): a successful design_video /
-        # revise_video execute stashes the saved version's READ dict here;
+        # A saved-version presentation keeps its exact read here;
         # finish stamps the receipt (pending_brief.video_presentation, with
         # the terminal row's id) and attaches the storyboard block to that
         # row — only after the row actually persists. The write door
@@ -214,7 +211,6 @@ class PlanTurn:
         # request_id (a repair-loop retry of the SAME call replays; distinct
         # calls mint distinct ids).
         self._video_call_counter: int = 0
-        self._video_target_ambiguity = None
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
         self.stored: PendingPlan | None = None
@@ -727,6 +723,10 @@ class PlanTurn:
             )
             if rejection:
                 return rejection
+        from app.chat.editor import EDITOR_NAMES, execute_editor
+
+        if name in EDITOR_NAMES:
+            return await execute_editor(self, name, params)
         if name == "read_conversation_context":
             return await self._conversation_context.read(params)
         if name in PERCEPTION_TOOLS:
@@ -753,24 +753,8 @@ class PlanTurn:
         # code fast path and composes — it sees pending_q=None after this.
         # Plan-path plain questions are never parked interrupts (prepare
         # filters workflow_run_id), so there is no wake branch here.
-        answering_current_ambiguity = (
-            self._video_target_ambiguity is not None
-            and name == "revise_video"
-            and self.pending_q is not None
-            and getattr(params, "pending_disposition", None) == "answer"
-            and params.base_ref.model_dump(mode="json") == self._video_target_ambiguity.base_ref
-        )
         if (
-            self._video_target_ambiguity is not None
-            and name != "ask_user"
-            and not answering_current_ambiguity
-        ):
-            return (
-                "the current video revision has unresolved target candidates. "
-                "Call ask_user with those facts; prose, answer and further writes cannot close this turn."
-            )
-        if (
-            name in {"design_video", "revise_video"}
+            name == "design_video"
             and self.pending_q is not None
             and params is not None
             and "pending_disposition" not in params.model_fields_set
@@ -794,8 +778,6 @@ class PlanTurn:
             if result.stop_after_observation:
                 await self._resolve_deferred()
         if result is None:
-            if name == "ask_user":
-                self._video_target_ambiguity = None
             await self._settle_pending_by_disposition(disposition)
         # The speech-commit resolution (言语提交协议): a terminal accept
         # closes the frame buffer (a rejection-marked turn drops — its
@@ -849,9 +831,6 @@ class PlanTurn:
             from app.tools.video.design import CompositionDesignVideoArgs
             assert isinstance(params, CompositionDesignVideoArgs)
             return await self._design_video(params)
-        if name == "revise_video":
-            assert isinstance(params, (ReviseVideoArgs, ReviseVideoOpsArgs, ReviseVideoTextArgs))
-            return await self._revise_video(params)
         if name == "review_working_draft":
             from app.chat.video_turn_seats import review_working_draft_seat
             return await review_working_draft_seat(project=self.project, args=params)
@@ -1054,46 +1033,6 @@ class PlanTurn:
         read["fresh_design"] = True
         self._video_presentation_pending = read
         return feedback
-
-    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        """revise_video → the targeted-revision beat (ADR-145 phase B):
-        the shared seat applies a direct Op batch or complete entity writes through the write
-        door (own session); the observation carries the system-computed
-        change set + the full current facts. The revision alone never starts
-        production."""
-        from app.chat.video_turn_seats import (  # deferred: same layer
-            VideoTargetAmbiguityFeedback,
-            bind_video_revision_base,
-            revise_video_seat,
-            video_mention_guard,
-            video_request_id,
-        )
-        params = bind_video_revision_base(params, getattr(self, "_video_base_ref", None))
-        if params.base_ref is not None:
-            guard = await video_mention_guard(
-                self.db, self.project, self.request.mentions, params.base_ref.composition_id
-            )
-            if guard:
-                return guard
-        self._video_call_counter += 1
-        read, feedback = await revise_video_seat(
-            project=self.project,
-            args=params,
-            request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
-            conversation_id=self.conversation_id,
-            user_text=self.text,
-            pending_question=self.pending_q,
-        )
-        if read is None:
-            if isinstance(feedback, VideoTargetAmbiguityFeedback):
-                self._video_target_ambiguity = feedback
-            return feedback
-        self._video_target_ambiguity = None
-        await self._settle_pending_by_disposition(params.pending_disposition)
-        self._video_presentation_pending = read
-        return feedback
-
-
 
     async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
         """Validate and dock the proposed production plan."""
@@ -1950,6 +1889,7 @@ async def run_plan_turn(
     turn.media_resume_narration = media_resume_narration
     await turn.assemble(recent)
     mention_target = await video_target_hint(db, project, request.mentions)
+    turn._editor_output_pin = mention_target
     opening = await db.get(Message, turn_id) if turn_id is not None else None
     from app.chat.media_journey import initial_media_journey, visual_results
 
@@ -2040,7 +1980,7 @@ async def run_plan_turn(
                 include_project_context=False,
                 observation_tools=frozenset({"prepare_music"}),
             )
-        target_hint = mention_target or turn._video_target_ambiguity
+        target_hint = mention_target
         if media_resume_draft is not None:
             from app.chat.media_journey import MediaDraftUnavailable
 
@@ -2107,10 +2047,6 @@ async def run_plan_turn(
             on_interim_prose=interim_prose_hook,
             on_loop_event=on_loop_event,
             should_stop_rejection=video_rejection_stop,
-            bare_rejection_feedback=lambda: (
-                str(turn._video_target_ambiguity)
-                if turn._video_target_ambiguity is not None else None
-            ),
             refresh_context=context_reader,
             restore_context=conversation_context.restore if conversation_context else None,
             on_context_event=conversation_context.record if conversation_context else None,

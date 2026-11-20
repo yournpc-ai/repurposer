@@ -38,7 +38,6 @@ from app.chat.activity_receipts import (
     music_selection_receipt,
     sfx_import_receipt,
     sfx_search_receipt,
-    video_revision_receipt,
 )
 from app.editing.validators import ContentValidationError
 from app.models.schemas import (
@@ -62,22 +61,6 @@ from app.models.tables import Message, Project
 
 if TYPE_CHECKING:
     pass
-
-
-class VideoTargetAmbiguityFeedback(str):
-    def __new__(cls, message: str, *, candidates: list[dict[str, Any]], base_ref: dict[str, Any]):
-        value = super().__new__(cls, message)
-        value.candidates = candidates
-        value.base_ref = base_ref
-        return value
-
-
-def bind_video_revision_base(params: Any, base_ref: dict[str, Any] | None) -> Any:
-    if getattr(params, "base_ref", None) is not None or base_ref is None:
-        return params
-    from app.models.schemas import VideoVersionRef
-
-    return params.model_copy(update={"base_ref": VideoVersionRef.model_validate(base_ref)})
 
 
 def _sfx_display_title(title: str) -> str:
@@ -170,16 +153,13 @@ async def _owned_video_output(db, project, mention):
 
 
 async def video_target_hint(db, project, mentions=()):
-    for mention in mentions or []:
-        if mention.type != "output":
-            continue
-        row = await _owned_video_output(db, project, mention)
-        if row is not None and row.composition_id is not None:
-            return {
-                "composition_id": str(row.composition_id),
-                **({"selected_region": mention.region.model_dump(mode="json")}
-                   if mention.region is not None else {}),
-            }
+    pins = [m for m in mentions or [] if m.type == "output"]
+    if pins:
+        row = await _owned_video_output(db, project, pins[0]) if len(pins) == 1 else None
+        if row is None or not row.composition_id or not row.composition_version_id:
+            return {"unavailable": True}
+        return {"composition_id": str(row.composition_id), "version_id": str(row.composition_version_id),
+                **({"selected_region": pins[0].region.model_dump(mode="json")} if pins[0].region else {})}
     return None
 
 
@@ -415,21 +395,6 @@ async def video_proposal_guard(db, project, tasks, *, pending_read=None, product
         return (
             f"暂缓制作：{exc}。不要声称已经开工。用 get_video_version(present=true) 补全展示并等待用户批准，不得为修复回执而重新设计。"
         )
-    return None
-
-
-async def video_mention_guard(db, project, mentions, composition_id):
-    """A unique @output fixes the work, even if the model relays another id."""
-    pins = [m for m in mentions or [] if m.type == "output"]
-    if len(pins) != 1:
-        return None
-    from app.editing.service import VideoServiceError, video_version_read
-    try:
-        read = await video_version_read(db, owner_id=project.user_id, output_id=UUID(str(pins[0].id)))
-    except VideoServiceError:
-        return "The mentioned output has no accessible video version; do not edit another work instead."
-    if read["composition_id"] != str(composition_id):
-        return "The user named a different work. Read get_video_version(output_id=" + str(pins[0].id) + ") and use that work's exact version reference."
     return None
 
 
@@ -810,9 +775,9 @@ async def design_video_seat(
             + ", ".join(skill_ambiguity)
             + "。询问用户指的是哪个 Skill 和版本。尚未设计版本。"
         )
-    if skill is not None and args.composition_id is not None:
+    if args.composition_id is not None:
         return None, (
-            "design_video 被拒绝。显式 Skill 只绑定新作品的首版。请用已有版本的 base_ref 调用 revise_video，不重新加载 Skill。"
+            "已有作品的修改需要使用当前作品的剪辑工具。"
         )
     try:
         read = await design_video(
@@ -910,133 +875,6 @@ async def design_video_seat(
         )) if scope else (),
         receipt=component_receipt(read),
         context_keys=_version_context_keys(read),
-    )
-
-
-async def revise_video_seat(
-    *,
-    project: Project,
-    args: Any,
-    request_id: str,
-    conversation_id: UUID | None = None,
-    user_text: str = "",
-    pending_question: Any = None,
-) -> tuple[dict[str, Any] | None, Any]:
-    """Revise an exact saved version through one direct Op batch or complete entities."""
-
-    from app.agents.candidate_correction import CandidateRejected
-    from app.editing.edits import EditError
-    from app.editing.presets import PresetError
-    from app.editing.revisions import RevisionInputError, RevisionTargetAmbiguityError
-    from app.editing.service import (  # deferred: editing seam
-        VideoServiceError,
-        format_revision_text,
-        revise_video,
-    )
-    from app.editing.store import (  # deferred: write door
-        CandidateContentError,
-        CompositionNotFound,
-        ContentDigestMismatch,
-        PermissionDenied,
-        StaleBase,
-    )
-    from app.editing.validators import ContentValidationError
-    from app.models.database import AsyncSessionLocal  # deferred: db seam
-    from app.models.schemas import ReviseVideoOpsArgs
-    from app.tools.video.programs import generator_preview_images
-
-    if isinstance(args, ReviseVideoOpsArgs):
-        args.bind_request_context(user_text=user_text, pending_question=pending_question)
-
-    try:
-        async with AsyncSessionLocal() as video_db:
-            read = await revise_video(
-                video_db,
-                owner_id=project.user_id,
-                args=args,
-                request_id=request_id,
-            )
-            if getattr(args, "scrub", None) is not None:
-                from app.tools.video.preview import (
-                    ScrubTargetError,
-                    prepare_saved_video_scrub,
-                    revision_scrub_affected,
-                )
-                if not revision_scrub_affected(read, args.scrub):
-                    read["scrub_rejected"] = "the Scrub target is outside this revision's affected scope"
-                else:
-                    try:
-                        read = await prepare_saved_video_scrub(
-                            video_db, read, owner_id=project.user_id, target=args.scrub
-                        )
-                    except ScrubTargetError as exc:
-                        read["scrub_rejected"] = str(exc)
-    except RevisionTargetAmbiguityError as exc:
-        return None, VideoTargetAmbiguityFeedback(
-            "写入前需澄清 revise_video 的目标："
-            + str(exc)
-            + "。当前基准版本的候选事实："
-            + json.dumps(exc.candidates, ensure_ascii=False)
-            + "。当前 base_ref："
-            + json.dumps(args.base_ref.model_dump(mode="json"), ensure_ascii=False)
-            + "。根据这些候选调用 ask_user 提一个问题并给出选项。在用户作答前，不要仅用正文结束、猜测目标或重试写入。",
-            candidates=exc.candidates,
-            base_ref=args.base_ref.model_dump(mode="json"),
-        )
-    except RevisionInputError as exc:
-        return None, CandidateRejected(str(exc), exception_errors(exc))
-    except (StaleBase, ContentDigestMismatch, CompositionNotFound, PermissionDenied) as exc:
-        return None, (
-            "revise_video did not write: "
-            + str(exc)
-            + "。通过 get_video_version 重读当前版本，再用它的 base_ref 构建新候选。"
-        )
-    except (CandidateContentError, ContentValidationError, EditError) as exc:
-        return None, f"revise_video rejected: {exc}"
-    except (PresetError, VideoServiceError) as exc:
-        return None, f"revise_video rejected: {exc}"
-    except ValueError as exc:
-        return None, f"revise_video rejected: {exc}"
-    read["previous_version_ref"] = args.base_ref.model_dump(mode="json")
-    changed_clip_ids = {
-        str(item.get("clip_id"))
-        for group in ("added", "updated")
-        for item in (read.get("change_set") or {}).get("clips", {}).get(group, [])
-    }
-    generator_clip_ids = {
-        str(clip.get("clip_id"))
-        for scene in read.get("storyboard", {}).get("scenes", [])
-        for clip in scene.get("clips", [])
-        if clip.get("clip_id") in changed_clip_ids and clip.get("object_kind") == "generator"
-    }
-    preview = read.get("video_preview") or {}
-    scope = preview.get("scope") or {}
-    scrub_facts = ""
-    if read.get("scrub_rejected"):
-        scrub_facts = "\nLOCAL SCRUB NOT PROVIDED: " + read["scrub_rejected"]
-    if preview:
-        scrub_facts = (
-            "\nLOCAL SCRUB (not an Output or a complete-video preview; "
-            "an isolated Object does not prove scene layout, occlusion or joins):\n"
-            + json.dumps({
-                "status": preview.get("status"),
-                "reason": preview.get("reason"),
-                "scope": scope,
-                "generator_previews": read.get("generator_previews") or [],
-            }, ensure_ascii=False)
-        )
-    return read, ToolObservation(
-        f"事实：视频版本 {read['version']} 的修订已保存，尚未启动 Run 或制作成片。展示回复会附带保存版本的引用。按视频创作规则用自然语言交接。以下已保存的事实包括系统计算的逐字段差异，以及下一工具所需的引用：\n"
-        + format_revision_text(read)
-        + scrub_facts,
-        images=tuple(await generator_preview_images(
-            read, clip_ids=set(scope.get("clip_ids") or [])
-        )) if scope else (),
-        context_keys=_version_context_keys(read),
-        receipt=video_revision_receipt(
-            read,
-            component_clip_ids=generator_clip_ids,
-        ),
     )
 
 
@@ -1212,7 +1050,7 @@ async def import_sfx_seat(
     }
     selection_facts["title"] = _sfx_display_title(facts["title"])
     return ToolObservation(
-        "事实：选中的 MP3 已作为音频素材导入，并有下列不可变 SourceSnapshot。未修改 CompositionVersion。使用当前 base_ref，通过 revise_video 的 add_audio_effect Op 添加。\n"
+        "事实：选中的 MP3 已作为音频素材导入，并有下列不可变 SourceSnapshot。未修改 CompositionVersion。\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=sfx_import_receipt(
             selection_facts,
@@ -1297,7 +1135,7 @@ async def select_music_seat(
         for key in ("music_id", "title", "duration_seconds")
     }
     return ToolObservation(
-        "事实：已解析保存的本地 Music 选择，未导入素材、修改 CompositionVersion 或启动 Run。用 prepare_video_materials 固定该 music_id，通过 revise_video 放置到音乐轨。\n"
+        "事实：已解析保存的本地 Music 选择，未导入素材、修改 CompositionVersion 或启动 Run。可用 prepare_video_materials 固定该 music_id。\n"
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=music_selection_receipt(
             selection_facts,
@@ -1592,6 +1430,13 @@ def stamp_video_presentation(
         video_presentation_receipt,
     )
 
+    message.blocks = [
+        *(block for block in message.blocks or [] if block.get("kind") != "video_storyboard"),
+        {**storyboard_block(read), "presented_message_id": str(message.id)},
+    ]
+    if (read.get("scrub") or {}).get("kind") == "range":
+        return None
+
     receipt = video_presentation_receipt(read, review_hold=True)
     if production_requested and read["version"] == 1:
         receipt["production_invited"] = True
@@ -1602,10 +1447,6 @@ def stamp_video_presentation(
     stored = PendingPlan.model_validate(project.pending_brief or {})
     updated = stored.model_copy(update={"video_presentation": receipt})
     project.pending_brief = updated.model_dump(mode="json")
-    message.blocks = [
-        *(block for block in message.blocks or [] if block.get("kind") != "video_storyboard"),
-        {**storyboard_block(read), "presented_message_id": str(message.id)},
-    ]
     return updated
 
 

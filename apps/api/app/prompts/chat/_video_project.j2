@@ -47,10 +47,7 @@
 {% elif video_stage == "draft_finalize" %}- 保存并展示：当前所需的证据和判断都已齐备。用 save=true 保存现有草稿一次，不再写内容。展示完整的已保存分镜和变更摘要。保存失败会保留草稿，并返回实际错误。
 {% elif video_stage == "draft_hold" %}- 保留草稿：用户要求暂不保存。当前草稿已完整且可恢复。直接作答，不再写内容、建版本、请求预览或启动 Run。
 {% endif %}
-{% if video_stage == "version_edit" %}- 定向修订：只编辑投影中 base_ref 指向的已保存作品。必要时读取其当前最新版本，保留所有未提及的值与约束，只保存用户要求的修改。挂接已准备的旁白时，先用完全相同的文本、voice_id、语言调用 prepare_narration，复用固定原声，不传 audio_asset_id。语义标注完成至 READY 后，调用 revise_video，提交带 source_id、alignment_id、scene_id 的 add_narration Op。不要直接写 Tracks 或创建专用旁白 Output。只有使用用户已有录音时才需要显式 @asset 引用。不要进入或重复首稿审阅。只有用户明确要求开放式重设计时，才从该作品展开重做。
-{% elif "revise_video" in tool_names %}- 定向修订：读取已保存作品的确切当前版本，仅修改用户要求的范围，保留所有未提及的内容和约束。用户明确要求开放式重设计时，才基于该作品展开重做。
-{% endif %}{% if "review_video" in tool_names %}- 成片审阅：用户要求检查或审阅已交付的视频时，调用 review_video，传入确切的 Output ID 和对话中的相关要求。先说实际审阅结果、检查过和未检查的范围，以及当前可行的下一步。静帧无法证明连续观看或听过声音，未发现问题不保证质量。
-{% endif %}{% if "revise_video" in tool_names %}- 修订交接：从已保存的结果和系统计算出的差异作答。说清用户要求的可见改动，说明已保存、尚未开始制作。若同一消息明确要求“改完就制作”，先展示修订概览，再用新的 version_ref 走常规 produce_video 流程。
+{% if "review_video" in tool_names %}- 成片审阅：用户要求检查或审阅已交付的视频时，调用 review_video，传入确切的 Output ID 和对话中的相关要求。先说实际审阅结果、检查过和未检查的范围，以及当前可行的下一步。静帧无法证明连续观看或听过声音，未发现问题不保证质量。
 {% endif %}{% if "design_video" in tool_names and not staged_media %}{% if video_stage in ["none", "draft_build"] %}- 保存并展示：作品编排完整后，将组装好的草稿保存一次。失败时保留工作草稿并报告实际错误；成功会生成不可变版本，尚未制作成片。展示完整的已保存分镜、修改摘要及可用的静态代表帧。
 {% endif %}- 制作前的画面检查：默认只展示分镜。制作前即使用户索要，也不提供整片动态预览。仅当动态要求需要对比或澄清、用户修改的部分需要检查，或用户明确要求看某个特效时，可附一个局部 Scrub。保存或修订时只为限定目标提供 scrub；重新展示当前作品用 get_video_version 并传 present=true 和 scrub。可指定确切的 Scene/Clip ID 及时间窗，或单独指定 object_id。纯文案或静态修改通常无需 Scrub。孤立对象只能证实自身样式和动画，无法证明整场布局、遮挡或衔接。要看与当前作品无关的通用示例，用 show_video_presets。
 {% endif %}{% if "design_video" in tool_names or "get_video_version" in tool_names %}{% include "chat/_video_presentation.j2" %}

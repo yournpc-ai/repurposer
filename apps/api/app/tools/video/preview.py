@@ -1,10 +1,7 @@
 """Read-only, bounded CompositionVersion Scrub previews.
 
-A pre-production browser receives only one explicit Scene/Clip time window or
-one isolated Object, never the complete video-spec. Compilation may resolve
-already-fixed sources and explicitly requested local Generator media; it never
-prepares Speech or model-generated media. Apply remains the separate write
-through ``revise_video``.
+The browser and the editor receive an explicit time window or one isolated
+object. Compilation resolves fixed sources and requested local Generator media.
 """
 from __future__ import annotations
 
@@ -40,6 +37,7 @@ from app.models.schemas import (
     VideoDraftRef,
     VideoObjectScrubTarget,
     VideoScrubTarget,
+    VideoRangeScrubTarget,
     VideoSegmentScrubTarget,
 )
 
@@ -50,7 +48,7 @@ class ScrubTargetError(ValueError):
 
 def project_video_scrub(
     content: CompositionContent,
-    target: VideoScrubTarget,
+    target: VideoScrubTarget | VideoRangeScrubTarget,
     *,
     allow_outside_target: bool = False,
     allow_complete: bool = False,
@@ -74,8 +72,10 @@ def project_video_scrub(
         clip = matches[0][1]
         window = deepcopy(clip.range)
         selected = {clip.clip_id}
-    elif isinstance(target, VideoSegmentScrubTarget):
-        if target.scene_id is not None:
+    elif isinstance(target, (VideoSegmentScrubTarget, VideoRangeScrubTarget)):
+        if isinstance(target, VideoRangeScrubTarget):
+            bounds = TimeRange(start=0, end=max((c.range.end for _, c in owners), default=0))
+        elif target.scene_id is not None:
             scene = next((row for row in content.scenes if row.scene_id == target.scene_id), None)
             if scene is None:
                 raise ScrubTargetError("the scrub scene_id does not exist in this version")
@@ -171,7 +171,7 @@ def compile_video_scrub(
     composition_id: UUID,
     version_id: UUID,
     content_digest: str,
-    target: VideoScrubTarget,
+    target: VideoScrubTarget | VideoRangeScrubTarget,
     generator_media: dict[str, dict[str, Any]],
     allow_outside_target: bool = False,
     allow_complete: bool = False,
@@ -275,7 +275,7 @@ async def prepare_saved_video_scrub(
     read: dict[str, Any],
     *,
     owner_id: UUID,
-    target: VideoScrubTarget,
+    target: VideoScrubTarget | VideoRangeScrubTarget,
 ) -> dict[str, Any]:
     """Prepare local Generator media only for an explicitly requested scope."""
     from app.tools.video.components import ComponentError
@@ -314,7 +314,7 @@ async def enrich_video_scrub(
     read: dict[str, Any],
     *,
     owner_id: UUID,
-    target: VideoScrubTarget,
+    target: VideoScrubTarget | VideoRangeScrubTarget,
 ) -> dict[str, Any]:
     """Attach a scoped preview to an already owner-scoped exact-version read."""
     from app.pipeline.rendering import absolutize_video
@@ -504,6 +504,56 @@ def _representative_preview_frame(
         raise ScrubTargetError("the target Scene's representative frame could not be decoded") from exc
 
 
+async def render_preview(spec: dict) -> bytes:
+    from app.config import settings
+
+    endpoint = settings.render_url.removesuffix("/render") + "/preview"
+    try:
+        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
+            response = await client.post(endpoint, json={"spec": spec})
+    except httpx.HTTPError as exc:
+        raise ScrubTargetError(f"continuous preview request failed: {type(exc).__name__}") from exc
+    if response.status_code != 200:
+        raise ScrubTargetError(f"continuous preview failed with renderer status {response.status_code}")
+    return response.content
+
+
+async def saved_preview_media(preview: dict, version_id: UUID):
+    """Return the actual playback range and identify the media delivered to the model."""
+    from app.providers.llm import get_llm_client
+
+    bounds = preview["scope"]["source_range_seconds"]
+    video = await render_preview(preview["video_spec"])
+    jpeg, seconds = _representative_preview_frame(
+        video, window_start=bounds["start"], scene_start=bounds["start"],
+        window_end=bounds["end"], retry=False,
+    )
+    capabilities = get_llm_client().capabilities
+    caption = f"Saved version {version_id}, composition seconds {bounds}."
+    media = []
+    # MiniMax rejected a real half-second H.264/AAC clip (HTTP 400) even
+    # as a standalone input. Keep the exact user window and label the still.
+    if capabilities.supports_video_input and bounds["end"] - bounds["start"] >= 1:
+        media.append(MediaInput(
+            type=MediaInputType.VIDEO, mime="video/mp4", caption=caption,
+            data_url="data:video/mp4;base64," + base64.b64encode(video).decode("ascii"),
+        ))
+    if capabilities.supports_tool_result_images:
+        media.append(MediaInput(
+            type=MediaInputType.IMAGE, mime="image/jpeg", caption=f"{caption} Decoded frame at {seconds}s.",
+            data_url="data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"),
+        ))
+    evidence = {
+        "version_id": str(version_id), "scope": preview["scope"],
+        "mp4_sha256": hashlib.sha256(video).hexdigest(), "frame_seconds": seconds,
+        "model_media": [item.type for item in media],
+        "audio_available_to_model": capabilities.understands_video_audio and any(
+            item.type == MediaInputType.VIDEO for item in media
+        ),
+    }
+    return tuple(media), evidence
+
+
 async def prepare_working_draft_review(
     db: AsyncSession,
     *,
@@ -511,7 +561,6 @@ async def prepare_working_draft_review(
     args: ReviewWorkingDraftArgs,
 ) -> tuple[dict[str, Any], tuple[MediaInput, MediaInput]]:
     """Compile and render only an authenticated draft's bounded review window."""
-    from app.config import settings
     from app.editing.store import _raw_snapshot_ids
     from app.models.schemas import canonical_json_hash
     from app.pipeline.rendering import absolutize_video
@@ -562,15 +611,7 @@ async def prepare_working_draft_review(
             + json.dumps({key: value for key, value in preview.items() if key != "video_spec"}, ensure_ascii=False)
         )
     preview["video_spec"] = absolutize_video(preview["video_spec"])
-    endpoint = settings.render_url.removesuffix("/render") + "/preview"
-    try:
-        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
-            response = await client.post(endpoint, json={"spec": preview["video_spec"]})
-    except httpx.HTTPError as exc:
-        raise ScrubTargetError(f"continuous preview request failed: {type(exc).__name__}") from exc
-    if response.status_code != 200:
-        raise ScrubTargetError(f"continuous preview failed with renderer status {response.status_code}")
-    video = response.content
+    video = await render_preview(preview["video_spec"])
     scene = next(scene for scene in content.scenes if scene.scene_id == target.scene_id)
     jpeg, frame_seconds = _representative_preview_frame(
         video, window_start=target.start_seconds, scene_start=scene.range.start / content.settings.timebase,

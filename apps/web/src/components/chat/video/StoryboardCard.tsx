@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api"
 import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"
 import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
+import { sameScrubTarget } from "./preview/previewSpec"
 import { TextSizeScrubInput, type ScrubVersionRead } from "./TextSizeScrubInput"
 
 const SHOW_TEXT_SIZE_SCRUB = false
@@ -80,7 +81,7 @@ export function StoryboardCard({
             block.content_digest != null &&
             data.content_digest !== block.content_digest
           ) ||
-          JSON.stringify(data.scrub ?? null) !== JSON.stringify(scrub ?? null)
+          !sameScrubTarget(data.scrub, scrub)
         ) {
           throw new Error("Storyboard identity mismatch")
         }
@@ -109,6 +110,7 @@ export function StoryboardCard({
 
   useEffect(() => {
     if (
+      block.scrub?.kind === "range" ||
       activeVersionId !== block.composition_version_id ||
       !read ||
       !presentationAckReady({

@@ -79,6 +79,7 @@ from app.chat.service import (
     list_conversation_messages,
     stamp_suggestions,
 )
+from app.chat.editor import EDITOR_NAMES
 from app.chat.turn_tools import CHAT_READ_TOOLS
 from app.metering import bind_conversation_turn, fold_conversation_usage
 from app.models.schemas import Option, QuestionPayload, SuggestionItem, WrapUpArgs
@@ -275,8 +276,8 @@ trigger_agent = ToolLoopAgent(
     assemble=_assemble_trigger_turn,
     tools=[
         WRAP_UP,
-        *(t for t in CHAT_READ_TOOLS if t.name not in {
-            "design_video", "revise_video", "search_sfx", "import_sfx",
+        *(t for t in CHAT_READ_TOOLS if t.name not in EDITOR_NAMES and t.name not in {
+            "design_video", "search_sfx", "import_sfx",
             "show_video_presets", "select_video_preset",
             "show_music_candidates", "select_music",
             "prepare_narration", "prepare_music", "get_narration_alignment", "annotate_narration",

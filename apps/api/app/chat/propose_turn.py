@@ -125,9 +125,6 @@ from app.models.schemas import (
     QuestionProposal,
     RetryUploadArgs,
     ReviewVideoArgs,
-    ReviseVideoArgs,
-    ReviseVideoOpsArgs,
-    ReviseVideoTextArgs,
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
@@ -255,7 +252,7 @@ class ChatTurn:
         # board. The param stays for the runner's signature parity.
         self.on_row_append = on_row_append
         # 视频呈现挂号 (ADR-145 phase B, the plan path's mirror): a
-        # successful design_video / revise_video stashes the saved
+        # A successful design or preview keeps the saved
         # version's read dict; finish stamps the receipt + the storyboard
         # block onto the persisted terminal row (shared seat:
         # video_turn_seats).
@@ -264,7 +261,6 @@ class ChatTurn:
         # continuation later fails; finish closes from this persisted report.
         self._video_review_report: dict | None = None
         self._video_call_counter: int = 0
-        self._video_target_ambiguity = None
         self.pending: Message | None = None
         self.pending_judgable = False
         self.context: dict = {"text": ""}
@@ -460,6 +456,10 @@ class ChatTurn:
         + outcome. A PERCEPTION call never carries a disposition and never
         ends the turn — it dispatches to the family registry and rides back
         as a ToolObservation."""
+        from app.chat.editor import EDITOR_NAMES, execute_editor
+
+        if name in EDITOR_NAMES:
+            return await execute_editor(self, name, params)
         if name == "read_conversation_context":
             return await self._conversation_context.read(params)
         if name in PERCEPTION_TOOLS:
@@ -475,25 +475,8 @@ class ChatTurn:
                 name,
                 params,
             )
-        answering_current_ambiguity = (
-            self._video_target_ambiguity is not None
-            and name == "revise_video"
-            and self.pending is not None
-            and self.pending_judgable
-            and getattr(params, "pending_disposition", None) == "answer"
-            and params.base_ref.model_dump(mode="json") == self._video_target_ambiguity.base_ref
-        )
         if (
-            self._video_target_ambiguity is not None
-            and name != "ask_user"
-            and not answering_current_ambiguity
-        ):
-            return (
-                "the current video revision has unresolved target candidates. "
-                "Call ask_user with those facts; prose, answer and further writes cannot close this turn."
-            )
-        if (
-            name in {"design_video", "revise_video"}
+            name == "design_video"
             and self.pending_judgable
             and params is not None
             and "pending_disposition" not in params.model_fields_set
@@ -511,8 +494,6 @@ class ChatTurn:
         else:
             result = await self._dispatch(name, params, prose)
             if result is None:
-                if name == "ask_user":
-                    self._video_target_ambiguity = None
                 await self._settle_by_disposition(disposition)
         # The speech-commit resolution (言语提交协议): a terminal accept
         # closes the frame buffer (a rejection-marked turn drops — its
@@ -555,9 +536,6 @@ class ChatTurn:
             from app.tools.video.design import CompositionDesignVideoArgs
             assert isinstance(params, CompositionDesignVideoArgs)
             return await self._design_video(params)
-        if name == "revise_video":
-            assert isinstance(params, (ReviseVideoArgs, ReviseVideoOpsArgs, ReviseVideoTextArgs))
-            return await self._revise_video(params)
         if name == "review_working_draft":
             from app.chat.video_turn_seats import review_working_draft_seat
             return await review_working_draft_seat(project=self.project, args=params)
@@ -807,48 +785,6 @@ class ChatTurn:
         read["fresh_design"] = True
         self._video_presentation_pending = read
         return feedback
-
-    async def _revise_video(self, params: ReviseVideoArgs | ReviseVideoOpsArgs | ReviseVideoTextArgs) -> str | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        """revise_video → the targeted-revision beat (ADR-145 phase B, the
-        plan path's mirror): the shared seat applies a direct Op batch or complete entity writes
-        through the write door; the observation carries the system-computed
-        change set + the full current facts. The revision alone never starts
-        production."""
-        if self.project is None:
-            return "a video work lives in a project — there is no project context here."
-        from app.chat.video_turn_seats import (  # deferred: same layer
-            VideoTargetAmbiguityFeedback,
-            bind_video_revision_base,
-            revise_video_seat,
-            video_mention_guard,
-            video_request_id,
-        )
-        params = bind_video_revision_base(params, getattr(self, "_video_base_ref", None))
-        if params.base_ref is not None:
-            guard = await video_mention_guard(
-                self.db, self.project, self.mentions, params.base_ref.composition_id
-            )
-            if guard:
-                return guard
-        self._video_call_counter += 1
-        read, feedback = await revise_video_seat(
-            project=self.project,
-            args=params,
-            request_id=await video_request_id(self.db, self.conversation_id, self._video_call_counter),
-            conversation_id=self.conversation_id,
-            user_text=self.text,
-            pending_question=self.pending,
-        )
-        if read is None:
-            if isinstance(feedback, VideoTargetAmbiguityFeedback):
-                self._video_target_ambiguity = feedback
-            return feedback
-        self._video_target_ambiguity = None
-        await self._settle_by_disposition(params.pending_disposition)
-        self._video_presentation_pending = read
-        return feedback
-
-
 
     async def _dock_plan_as_question(
         self,
@@ -1306,6 +1242,7 @@ async def run_propose_turn(
     )
     await turn.assemble(mentions, recent, suggestion_ref)
     mention_target = await video_target_hint(db, project, mentions) if project is not None else None
+    turn._editor_output_pin = mention_target
     opening = await db.get(Message, turn_id) if turn_id is not None else None
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     turn.video_confirmation = confirmation
@@ -1395,7 +1332,7 @@ async def run_propose_turn(
                 "video_confirmation": confirmation,
                 "production_requested": requested_video_production(text),
                 "pending_question": lambda: turn.pending,
-                "target_hint": mention_target or turn._video_target_ambiguity,
+                "target_hint": mention_target,
                 "material_pending": bool(urls_in_text(text) or mentions),
                 "creative_state": creative_state_for_pending(current_pending),
                 "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
@@ -1420,10 +1357,6 @@ async def run_propose_turn(
             on_loop_event=on_loop_event,
             on_interim_prose=interim_prose_hook,
             should_stop_rejection=video_rejection_stop,
-            bare_rejection_feedback=lambda: (
-                str(turn._video_target_ambiguity)
-                if turn._video_target_ambiguity is not None else None
-            ),
             refresh_context=context_reader,
             restore_context=conversation_context.restore if conversation_context else None,
             on_context_event=conversation_context.record if conversation_context else None,
