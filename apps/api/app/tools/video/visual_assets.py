@@ -111,7 +111,10 @@ class ControlledSVGSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["controlled_svg"] = "controlled_svg"
-    program: str = Field(min_length=1, max_length=_MAX_SVG_BYTES)
+    program: str = Field(
+        min_length=1, max_length=_MAX_SVG_BYTES,
+        description="完整 SVG。引用关系可用通用来源标签表达；图中具体 DOI 等标识符须逐字来自已固定来源。",
+    )
 
 
 class MiniMaxImageSource(BaseModel):
@@ -151,7 +154,7 @@ class SceneAssetSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1] = 1
-    scene_id: str = Field(min_length=1, max_length=64)
+    scene_id: str = Field(min_length=1, max_length=64, description="本规格所属的 scene_plan.scene_id。")
     intent: str = Field(min_length=1, max_length=2000)
     source: VisualAssetSource
     on_screen_copy: str | None = Field(

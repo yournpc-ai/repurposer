@@ -96,7 +96,6 @@ export function sceneOrder(row: JourneyMessage): string[] | undefined {
 export function journeyTranscriptRow<T extends JourneyMessage>(row: T): T {
   const mark = journeyMark(row)
   const blocks = row.blocks?.flatMap<MessageBlock>((block) => {
-    if (mark && block.kind === "audio_playback") return []
     if (row.question?.kind === "task_book" && block.kind === "system_notice") {
       // Old task books sometimes combined a version warning and a price in one notice.
       const text = block.text.trim()

@@ -760,15 +760,14 @@ async def run_trigger_turn(
             managed_media = bool(run is not None and (run.context or {}).get("media_journey"))
             if trigger == TRIGGER_RUN_COMPLETED:
                 assert run is not None
-                # One terminal snapshot feeds both the speech facts and the
-                # message's own product association.
                 review_lines, delivered_refs = await _run_review_snapshot(db, run)
                 delivery_output_refs = _new_delivery_output_refs(
                     history, run.id, delivered_refs
                 )
                 from app.tools.video.production.visual_assets import has_visual_asset_preparation_scope
 
-                if managed_media and has_visual_asset_preparation_scope(run) and "delivery=delivered" in review_lines:
+                if managed_media and "stage=scene_images" in review_lines:
+                    # The continuation reads per-scene reviews and owns both repair and the final stop.
                     intent = _trigger_dump(trigger, ref, [], [])
                     intent.update(presentation="media_progress", media_journey={**run.context["media_journey"], "state": "active"})
                     message = await _create_message(db, conversation_id, "assistant", "", workflow_run_id=run.id, intent=intent)
@@ -776,7 +775,7 @@ async def run_trigger_turn(
                     from app.chat.media_journey import continue_media_journey
                     await continue_media_journey(db, project, conversation, run)
                     return message
-                if has_visual_asset_preparation_scope(run):
+                if not managed_media and has_visual_asset_preparation_scope(run):
                     from app.tools.video.visual_assets import visual_asset_result_images
 
                     preparation = (run.context or {}).get("visual_asset_preparation") or {}
@@ -803,7 +802,7 @@ async def run_trigger_turn(
                 event_line = _delivery_event_line(str(run_id), review_lines)
                 if (run.context or {}).get("media_journey"):
                     event_line += (
-                        "\n这是自动准备任务的回执。用一句话说明用户拿到了什么。有影响成片的发现时说明影响。省略常规质检指标和待办清单。"
+                        "\n根据本次交付事实，告诉用户哪段素材无法使用、已知原因及其对制作的影响。"
                     )
             elif trigger == TRIGGER_RUN_FAILED:
                 assert run is not None
@@ -977,13 +976,11 @@ async def run_trigger_turn(
                 if journey:
                     if "delivery=partial" in review_lines or "delivery=failed" in review_lines:
                         intent["presentation"] = "preparation_issue"
-                    # A valid image settlement still has a continuation that owns
-                    # bounded repair and the final per-scene stop decision.
                     blocked = trigger == TRIGGER_RUN_FAILED or (
                         "delivery=partial" in review_lines and bool(run.context.get("narration_preparation"))
-                    ) or (
-                        "delivery=failed" in review_lines and "stage=scene_images" not in review_lines
-                    )
+                    ) or "delivery=failed" in review_lines
+                    if blocked:
+                        run.context = {**run.context, "media_continuation_finished": True}
                     intent["media_journey"] = {
                         "opening_id": journey["opening_id"], "state": "blocked" if blocked else "active",
                     }

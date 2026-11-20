@@ -368,6 +368,8 @@ class RoundAssembly:
     # Keep this form's opening invitation across consecutive argument repairs.
     invitation_tool: str | None = None
     enforce_offered_tools: bool = False
+    # A caller may acknowledge a settled user action when the first tool response is silent.
+    acknowledgment: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1686,6 +1688,9 @@ class ToolLoopAgent:
                 # Read speech lands before execution. Terminal speech belongs to its
                 # answer/card. With no delivery hook, the ledger keeps both.
                 prose_handled = True
+                if (assembled.acknowledgment and not tool.terminal and not prose.strip()
+                        and not interim_proses_sent and not speech_parts):
+                    prose = assembled.acknowledgment
                 # Draft judgments speak only from their accepted observation.
                 if (
                     not tool.terminal and not self.service_per_call
@@ -1752,6 +1757,7 @@ class ToolLoopAgent:
                     outcome = replace(observation, text=json.dumps(payload, ensure_ascii=False))
                     is_draft_update = True
                 if isinstance(outcome, WorkingDraftUpdated):
+                    previous_arguments = candidate_record.arguments if candidate_record else {}
                     if not tool.draftable:
                         raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
                     if candidate_record is None:
@@ -1764,8 +1770,9 @@ class ToolLoopAgent:
                         candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
                     drafts[candidate_record.candidate_id] = candidate_record
                     latest_draft_id = candidate_record.candidate_id
+                    receipt = outcome.receipt(candidate_record, previous_arguments)
                     outcome = ToolObservation(
-                        json.dumps(working_draft_observation(candidate_record), ensure_ascii=False),
+                        json.dumps(receipt, ensure_ascii=False),
                         ok=True,
                         fold_after_delivery=True,
                     )

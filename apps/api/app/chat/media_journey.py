@@ -128,8 +128,11 @@ def media_actions(draft: dict | None, results: list[dict]) -> dict:
             missing.append(spec.scene_id)
         elif review.get("status") == "unavailable" and not item.get("review_retry_of"):
             unavailable.append(spec.scene_id)
-        elif review.get("status") == "fail" and attempt_count < 2:
-            repair.append(spec.scene_id)
+        elif review.get("status") == "fail":
+            if attempt_count < 2:
+                repair.append(spec.scene_id)
+            else:
+                blocked.append(spec.scene_id)
             failures.append({
                 "scene_id": spec.scene_id, "code": "content_review_failed",
                 "detail": review.get("summary") or "The fixed image failed content review.",
@@ -159,6 +162,22 @@ def media_actions(draft: dict | None, results: list[dict]) -> dict:
         "review_retry_scene_ids": unavailable,
         "repair_scene_ids": repair,
         "scene_failures": failures,
+    }
+
+
+def scene_asset_changes(previous: dict, current: dict, results: list[dict]) -> dict:
+    prior = {spec.scene_id: spec.request_digest() for spec in current_scene_assets(previous)}
+    specs = current_scene_assets(current)
+    state = media_actions(current, results)
+    pending = set(state["missing_scene_ids"] + state["review_retry_scene_ids"]
+                  + state["repair_scene_ids"] + state["blocked_scene_ids"])
+    return {
+        "changed_scene_ids": [s.scene_id for s in specs if prior.get(s.scene_id) != s.request_digest()],
+        "reusable_scene_ids": [s.scene_id for s in specs if s.scene_id not in pending],
+        "prepare_scene_ids": state["missing_scene_ids"],
+        "review_existing_scene_ids": state["review_retry_scene_ids"],
+        "repair_scene_ids": state["repair_scene_ids"],
+        "blocked_scene_ids": state["blocked_scene_ids"],
     }
 
 
@@ -401,7 +420,8 @@ async def dock_media_observation(
                 # before folding. Only its closing answer is allowed after this.
                 if state == "complete":
                     turn.media_score_delivered = True
-                    return observation
+                    cached.update({"execution": "artifact_ready", "playback_message_id": str(message.id)})
+                    return replace(observation, text=json.dumps(cached, ensure_ascii=False))
                 return replace(observation, ok=False, text=message.content, stop_after_observation=True)
     if name == "prepare_visual_assets" and observation.ok:
         result = json.loads(observation.text)
@@ -524,7 +544,15 @@ async def _dock_tasks(turn, tasks, observation, draft):
                 "media_journey": {**turn.media_journey, "state": "active" if run_id else "blocked",
                                   "scene_order": scenes},
             }
-    return replace(observation, stop_after_observation=True)
+    started = bool(turn.outcome and turn.outcome[1])
+    result = json.loads(observation.text)
+    result.update({
+        "ok": started, "execution": "run_created" if started else "run_not_created",
+        "run_id": str(turn.outcome[1]) if started else None,
+    })
+    result.pop("next", None)
+    return replace(observation, ok=started, text=json.dumps(result, ensure_ascii=False),
+                   stop_after_observation=True)
 
 
 async def stop_media_journey(db, opening, conversation) -> dict | None:
@@ -689,10 +717,14 @@ async def continue_media_journey(db, project, conversation, run) -> None:
     images = await visual_results(db, project.id, journey["opening_id"], draft_id)
     state = media_actions(draft, images)
     if state["phase"] == "images_blocked":
-        scenes = ", ".join(state["blocked_scene_ids"])
+        blocked = set(state["blocked_scene_ids"])
+        scenes = ", ".join(str(index) for index, scene in enumerate(draft["content"]["scenes"], 1)
+                           if scene["scene_id"] in blocked)
+        reasons = " ".join(failure["detail"] for failure in state["scene_failures"]
+                           if failure["scene_id"] in blocked and failure["code"] == "content_review_failed")
         await stop_continuation(
-            f"Image preparation stopped for these scenes: {scenes}. The required image or review is still unavailable after recovery.",
-            f"分镜 {scenes} 的图片准备已停止。恢复后仍缺少符合要求的图片或审阅结果。",
+            f"Image preparation stopped at scene {scenes}. " + (reasons or "A usable image or review is still missing after recovery."),
+            f"分镜 {scenes} 的图片准备已停止。" + (reasons or "重试后仍缺少符合要求的图片或审阅结果。"),
         )
         return
     creative = CreativeState.model_validate(context.get("creative_state"))

@@ -4,7 +4,7 @@ import json
 import wave
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import numpy as np
 import pytest
@@ -165,6 +165,97 @@ async def test_scene_audio_freezes_and_yields_measured_playback_without_system_f
     loudness = report["media_facts"]["loudness"]
     assert loudness["integrated_lufs"] == pytest.approx(-15.05, abs=0.3)
     assert loudness["true_peak_dbtp"] == pytest.approx(-12.04, abs=0.2)
+
+
+@pytest.mark.asyncio
+async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_history(database, monkeypatch):
+    from importlib import import_module
+
+    from app.chat.plan_turn import PlanTurn
+    from app.chat.service import _create_message
+    from app.editing.schemas import speech_text_digest
+    from app.editing.timing import SOURCE_TIMEBASE as ticks
+    from app.models.schemas import ChatMessageResponse, ChatRequest, canonical_json_hash
+    from app.models.tables import Conversation, Message, WorkflowRun
+    from app.providers import storage
+    from app.tools.music.score import ScoreSpecDraft
+    from app.tools.video import music_preparation as music
+    from app.tools.video.audio_playback import record_prepared_audio, record_run_audio
+    from app.tools.video.narration_draft import reproject_narration_timing
+    from test.core.test_media_audio_continuation import spoken_draft
+
+    project, _ = await _project(database, generated=True)
+    files = {}
+    monkeypatch.setattr(storage, "read", AsyncMock(side_effect=files.__getitem__))
+    monkeypatch.setattr(storage, "exists", AsyncMock(side_effect=files.__contains__))
+    monkeypatch.setattr(storage, "save", AsyncMock(side_effect=lambda key, data, **kw: files.update({key: data})))
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    monkeypatch.setattr(music, "AsyncSessionLocal", database)
+
+    ids = ["intro", "end"]
+    draft = spoken_draft(ids)
+    draft["content"]["scenes"][-1]["range"]["end"] = 15 * ticks
+    draft["design"].update(user_constraints={"target_seconds": 15}, narrations=[{
+        "scene_id": sid, "text_digest": speech_text_digest(sid), "alignment": {"status": "READY"},
+        "source_duration_ticks": ticks, "source_timebase": ticks,
+        "cues": [{"source_range": {"start": 0, "end": ticks}}],
+    } for sid in ids])
+    reproject_narration_timing(draft)
+    score = music.score_for_current_draft(draft, ScoreSpecDraft.model_validate({
+        "bpm": {"num": 96}, "sections": [{"scene_id": sid, "intent": "build"} for sid in ids],
+        "instruments": [{"instrument_id": "lead", "kind": "pad"}], "seed": 42,
+        "events": [{"scene_id": sid, "instrument_id": "lead", "start_beat": "0",
+                    "duration_beats": "4", "midi": 60} for sid in ids],
+    }))
+    result = await music.prepare_programmatic_music(project=project, name="Evidence", score=score, execution_id="test")
+    cached = await music.cached_music_preparation(owner_id=project.user_id, project_id=project.id, score=score)
+    reference = {"draft_id": "storyboard", "draft_digest": canonical_json_hash(draft)}
+    request = {"draft_ref": reference, "name": "Evidence"}
+    async with database() as db:
+        conversation = Conversation(user_id=project.user_id, project_id=project.id, ui_language="en", context={
+            "schema_version": 1, "items": [{"executed_arguments": draft, "candidate": {
+                "target_tool": "design_video", "candidate_id": reference["draft_id"],
+                "candidate_digest": reference["draft_digest"],
+            }}],
+        })
+        run = WorkflowRun(project_id=project.id)
+        db.add_all([conversation, run])
+        await db.commit()
+        opening = await _create_message(db, conversation.id, "user", "帮我做一支宣传片")
+        journey = {"opening_id": str(opening.id)}
+        first = await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)
+        assert first.content == "配乐已准备好，可以试听了。"
+        turn = PlanTurn(db, project.user_id, conversation, project, ChatRequest(project_id=project.id, message="试听"))
+        turn.media_score_delivered = True
+        turn.outcome = (first, None, None, [])
+        closing = "这段配乐有 15 秒，点下面可以听。"
+        await turn.execute("answer", None, closing)
+        receipt = await record_run_audio(db, project, conversation.id, journey, "music",
+                                         {"request": request, "result": result},
+                                         trigger_intent={"trigger": "run_completed"}, run_id=run.id)
+        await db.commit()
+        assert receipt.id == first.id and receipt.workflow_run_id == run.id
+    async with database() as db:
+        row = await db.get(Message, receipt.id)
+        wire = ChatMessageResponse.model_validate(row)
+        assert wire.content == closing
+        assert wire.intent["media_journey"]["state"] == "complete"
+        block, = wire.blocks
+        item, = block["items"]
+        assert block["kind"] == "audio_playback" and block["project_id"] == str(project.id)
+        assert (item["role"], item["title"], item["duration_seconds"]) == ("music", "Evidence", 15)
+        assert item["snapshot_id"] == result["snapshot"]["snapshot_id"]
+        assert item["analysis_digest"] == result["analysis"]["report_digest"] and max(item["peaks"]) > 0
+        signed = AsyncMock(return_value="https://storage.example.test/signed-score")
+        assets_routes = import_module("app.pipeline.routes.assets")
+        monkeypatch.setattr(assets_routes, "presign_download", signed)
+        playback = await assets_routes.get_audio_playback(project.id, UUID(item["snapshot_id"]), db, await db.get(User, project.user_id))
+        signed.assert_awaited_once_with(result["media"]["storage_key"])
+        assert playback["digest"] == item["digest"] and playback["url"] == signed.return_value
+        assert (await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)).id == row.id
+        files[result["media"]["storage_key"]] = b"unreadable score"
+        failed = await record_prepared_audio(db, project, conversation.id, journey, "music", cached, request)
+        assert failed.intent["media_journey"]["state"] == "blocked" and not failed.blocks
 
 
 def test_loudness_failure_reports_the_audio_stage(monkeypatch, tmp_path):

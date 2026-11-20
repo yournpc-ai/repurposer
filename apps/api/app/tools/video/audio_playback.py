@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import func, select
 
 from app.models.schemas import VideoDraftRef, canonical_json_hash
-from app.models.tables import Message, SourceSnapshot
+from app.models.tables import Conversation, Message, SourceSnapshot
 from app.providers import storage
 from app.tools.video.media_analysis import read_report
 
@@ -22,6 +22,17 @@ class PlaybackUnavailable(ValueError):
 
 class ScoreDraftUnavailable(PlaybackUnavailable):
     pass
+
+
+async def _speaks_chinese(db, conversation_id, journey) -> bool:
+    from app.chat.speech_language import conversation_speech_language
+
+    opening = await db.get(Message, UUID(journey["opening_id"]))
+    language = conversation_speech_language([opening]) if opening is not None else None
+    if not language:
+        conversation = await db.get(Conversation, conversation_id)
+        language = conversation.ui_language if conversation else None
+    return (language or "en").startswith("zh")
 
 
 async def _measured_audio(db, project, result: dict):
@@ -65,6 +76,10 @@ async def _measured_audio(db, project, result: dict):
 
 async def playback_item(db, project, role: str, result: dict, request: dict) -> dict:
     measured, report = await _measured_audio(db, project, result)
+    return _playback_item(measured, report, role, result, request)
+
+
+def _playback_item(measured: dict, report: dict, role: str, result: dict, request: dict) -> dict:
     waveform = report["media_facts"].get("waveform") or {}
     peaks = waveform.get("peak")
     if (
@@ -133,7 +148,7 @@ async def record_run_audio(
         intent.update(prepared_audio_items=items, presentation="media_progress")
     except PlaybackUnavailable:
         state = "blocked"
-        speech = ("音频文件未通过校验，已暂停音频准备。" if str(project.language or "").startswith("zh")
+        speech = ("音频文件未通过校验，已暂停音频准备。" if await _speaks_chinese(db, conversation_id, journey)
                   else "Audio preparation paused because the recording could not be verified.")
     intent["media_journey"] = {**journey, "state": state}
     if existing_message is not None:
@@ -151,9 +166,10 @@ async def record_prepared_audio(
     from app.chat.service import _create_message
     from app.tools.video.narration_draft import recover_current_draft
 
-    zh = str(project.language or "").startswith("zh")
     state = "complete" if role == "music" else "active"
+    zh = await _speaks_chinese(db, conversation_id, journey)
     intent = dict(trigger_intent or {})
+    blocks = []
     try:
         draft_id = (request.get("draft_ref") or {}).get("draft_id")
         if not draft_id:
@@ -168,7 +184,10 @@ async def record_prepared_audio(
                     raise ValueError("missing current narration timing")
             except (ValueError, KeyError) as exc:
                 raise ScoreDraftUnavailable("score does not have current narration timing") from exc
-        measured, _ = await _measured_audio(db, project, result)
+        measured, report = await _measured_audio(db, project, result)
+        if role == "music":
+            item = _playback_item(measured, report, role, result, request)
+            blocks = [{"kind": "audio_playback", "project_id": str(project.id), "items": [item]}]
         scene_id = result.get("scene_id") or request.get("scene_id")
         if role == "narration" and not scene_id:
             raise PlaybackUnavailable("missing narration scene")
@@ -184,12 +203,19 @@ async def record_prepared_audio(
             Message.conversation_id == conversation_id,
             Message.intent["audio_playback_key"].as_string() == key,
         ).limit(1))
-        if previous is not None and run_id is None:
-            return previous
+        if previous is not None:
+            if run_id is None:
+                return previous
+            if existing_message is None and previous.workflow_run_id in (None, run_id):
+                previous.workflow_run_id = run_id
+                previous.intent = {**previous.intent, **intent}
+                return previous
         intent["audio_playback_key"] = key  # Matches receipts written by older workers.
         intent["prepared_audio"] = {"role": role, "scene_id": scene_id, **measured}
-        speech = ("配乐已准备好。" if zh else "The score is ready.") if role == "music" else ""
-        if role == "narration":
+        if role == "music":
+            speech = "配乐已准备好，可以试听了。" if zh else "The score is ready to play."
+        else:
+            speech = ""
             intent["presentation"] = "media_progress"
     except ScoreDraftUnavailable:
         state = "blocked"
@@ -208,9 +234,9 @@ async def record_prepared_audio(
         existing_message.content = speech
         existing_message.blocks = [
             block for block in existing_message.blocks or [] if block.get("kind") != "audio_playback"
-        ]
+        ] + blocks
         return existing_message
     return await _create_message(
-        db, conversation_id, "assistant", speech, intent=intent,
+        db, conversation_id, "assistant", speech, intent=intent, blocks=blocks,
         workflow_run_id=run_id, turn_id=UUID(journey["opening_id"]),
     )

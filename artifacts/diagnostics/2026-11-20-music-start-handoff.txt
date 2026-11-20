@@ -1,0 +1,23 @@
+给 Claude：第二轮 P0 配乐自动 Start 故障定位
+
+一条真实 Chat 在两幕重定时后，没有自动启动配乐 Run。相同计划在事后只读回放中能恢复草稿并通过乐谱校验。现在已在隔离 PostgreSQL 实验中把差异定位到自动 Start 的 ORM 读取路径。
+
+实际代码路径
+media_journey.py 的后台续行先刷新 Conversation.context，然后把持有该对象的 db 会话传给 run_plan_turn。续行中的两次 design_video 重定时分别由 conversation_context.py 的 ConversationContext.record 使用独立 AsyncSession 提交。原会话仍持有进入续行时的 Conversation 实例。随后 _present_plan → _auto_start_docked_plan → answer_question → create_run → pin_music_preparation → recover_current_draft 沿用原会话。recover_current_draft 通过 select(Conversation) 取得实体后访问其 context；普通实体查询命中 SQLAlchemy identity map 时，可以沿用已加载的属性。这样读取到的候选版本落后于数据库已经提交的版本。
+
+复现实验
+使用真实项目 dc28ebcf-f6d6-4b12-b5ae-3a7fd7105b28 的两次重定时记录和已保存的配乐计划。原库只读，写入仓库测试 fixture 新建的临时 PostgreSQL 库。模型、TTS、音乐合成均无调用。
+1. 读会话载入初始候选 3a0ef9de9bc8，再由独立写会话依次提交 a9454bfb64f6 和 ac1b07660b91。候选 ID 相同，最新记录 active=true、target_tool=design_video。
+2. 原读事务隔离级别为 READ COMMITTED。在同一事务直接 SELECT context 列得到 ac1b07660b91，持有的 ORM 实例仍为 3a0ef9de9bc8。
+3. 请求携带最新的 ac1b07660b91，调用真实 Start 校验函数 pin_music_preparation，稳定抛出 draft_ref is stale or inactive。
+4. 仅显式刷新该 ORM 对象的 context 属性，然后原样调用相同函数，恢复成功，score_digest 为 537e8abe775e49a3d0b3cc11df2c13a8b7efd01f3a5078213efc5522832083e1。再用真正过期的 3a0ef9de9bc8 发起校验，仍被正确拒绝。
+这个实验捕获了复现时的两种读取值。历史故障发生当刻没有记录 ORM 实例的 digest。真实 trace、实际调用链和隔离实验三者指向相同机制。
+
+修复边界
+请优先检查 apps/api/app/tools/video/narration_draft.py 的 recover_current_draft。可考虑仅投影读取本次草稿判定需要的 Conversation.context 列，沿用项目和 owner 筛选及当前候选的选择规则。保留 active、target_tool、精确 digest 的检查和已有 Stop/授权逻辑。修改前核对该共享函数的旁白调用方。无需改乐谱合成、问卷或整个 ToolLoop。
+修复后的回归应保留一个已经加载 Conversation 的读会话，由另一会话提交重定时后的新版本，断言原读会话直接用最新引用通过、真正旧的引用和已停用候选仍被拒绝。附件是故障机理探针，当前断言包含“旧实现会误拒”；修复后需把这项改成期望成功。之后再用新项目经一次作答验证配乐 Run 完成、音频和分析报告存在、刷新后点播时间前进。当前仍未完成该验收。
+
+复现命令（依赖本地仍保留上述归档会话与计划）
+cd apps/api
+PYTHONPATH=. .venv/bin/pytest -qs ../../artifacts/diagnostics/round2_music_start_probe.py
+本次结果 1 passed in 1.43s。仅增加诊断材料，未修改产品代码。

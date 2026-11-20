@@ -39,6 +39,33 @@ def result_for(spec, status, **extra):
     }
 
 
+def test_scene_asset_receipt_tracks_changes_and_reviewed_images():
+    from app.chat.media_journey import scene_asset_changes
+
+    draft, spec = draft_with_scene()
+    initial = scene_asset_changes({}, draft, [])
+    assert initial["changed_scene_ids"] == initial["prepare_scene_ids"] == ["intro"]
+    ready = scene_asset_changes(draft, draft, [result_for(spec, "pass")])
+    assert ready["reusable_scene_ids"] == ["intro"]
+    assert ready["changed_scene_ids"] == ready["prepare_scene_ids"] == []
+    reviewed = scene_asset_changes(draft, draft, [result_for(spec, "fail")])
+    assert reviewed["repair_scene_ids"] == ["intro"]
+    assert reviewed["reusable_scene_ids"] == []
+
+    updated = spec.model_copy(update={"intent": "Show the source paper"})
+    second = spec.model_copy(update={"scene_id": "end"})
+    current = {
+        "content": {"scenes": [{"scene_id": "intro"}, {"scene_id": "end"}]},
+        "design": {"scene_assets": [updated.model_dump(mode="json"), second.model_dump(mode="json")]},
+    }
+    previous = {
+        **current, "design": {"scene_assets": [spec.model_dump(mode="json"), second.model_dump(mode="json")]},
+    }
+    partial = scene_asset_changes(previous, current, [result_for(spec, "fail"), result_for(second, "pass")])
+    assert partial["changed_scene_ids"] == partial["prepare_scene_ids"] == ["intro"]
+    assert partial["reusable_scene_ids"] == ["end"]
+
+
 def test_staged_media_preserves_original_intent_and_enforces_current_images():
     opening = SimpleNamespace(
         id=uuid4(), role="user", content="给 https://www.legitevi.com/en 做一只宣传片",
@@ -87,7 +114,11 @@ def test_existing_image_repair_uses_current_evidence_review_and_keeps_attempt_bo
     draft["design"]["scene_assets"] = [changed.model_dump(mode="json")]
     for status, phase in [("fail", "images_blocked"), ("pass", "audio")]:
         retry = result_for(changed, status, execution={"run_id": "second"})
-        assert media_actions(draft, [wrong_section, retry])["phase"] == phase
+        retry["content_review"]["summary"] = "The fourth step is cropped."
+        state = media_actions(draft, [wrong_section, retry])
+        assert state["phase"] == phase
+        if status == "fail":
+            assert state["scene_failures"][0]["detail"] == "The fourth step is cropped."
 
 
 @pytest.mark.asyncio
@@ -137,12 +168,24 @@ async def test_rejected_verified_plan_can_retry_without_searching_or_saving(monk
     assert isinstance(await turn.execute("search_music", None, ""), str)
     assert isinstance(await turn.execute("design_video", SimpleNamespace(save=True), ""), str)
     accepted = await turn.execute("prepare_visual_assets", None, "")
+    assert json.loads(accepted.text)["run_id"] == str(run_id)
+    assert json.loads(accepted.text)["execution"] == "run_created"
     assert accepted.ok and accepted.stop_after_observation
     assert run.context["media_journey"] == turn.media_journey
     assert all(
         params.production_intent is True and params.tasks[0].params == exact_params and prose
         for params, prose in calls
     )
+
+    async def held_plan(params, prose):
+        turn.outcome = (SimpleNamespace(intent={}), None, None, [])
+        return None
+
+    monkeypatch.setattr(turn, "_present_plan", held_plan)
+    held = await turn.execute("prepare_visual_assets", None, "")
+    assert not held.ok and held.stop_after_observation
+    assert json.loads(held.text)["execution"] == "run_not_created"
+    assert json.loads(held.text)["run_id"] is None
 
 
 @pytest.mark.asyncio

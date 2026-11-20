@@ -715,8 +715,9 @@ class ChatMessageResponse(BaseModel):
 
     @model_validator(mode="after")
     def _automatic_audio_progress(self):
-        """Project old automatic playback receipts as progress on history and SSE."""
-        if not (self.intent or {}).get("media_journey"):
+        """Keep intermediate recordings in progress and the delivered score playable."""
+        journey = (self.intent or {}).get("media_journey")
+        if not journey or journey.get("state") == "complete":
             return self
         playback = next((block for block in self.blocks if block.get("kind") == "audio_playback"), None)
         if playback is not None:

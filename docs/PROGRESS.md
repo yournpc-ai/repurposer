@@ -11,6 +11,7 @@
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。
 - **当前主线 — Chat-only Video Project**：Project / Composition / CompositionVersion、Track/Clip/Object、Skill 和 video-spec 承重；创作、修订、授权、交付与观看在同一 Chat。P8/P9 已完成指定退役与真实验收，旧 Film、旧文案产品、旧 Clip/ClipSpec 和多 Output 画廊不再作为现役实现。剩余主观视听、许可、完整 live 矩阵、部署与发布统一按 `tasks/skill-package-promo-video.md` 及其创作循环合同推进。
+- **下一项独立任务 · Agent Editing Loop MVP（待第二轮验收通过后施工）**。在已保存作品上通过真实局部预览判断遮挡，使用 `revise_video(ops[])` 对一个明确对象调整 Transform，保存并重看同一时间窗。复用现有版本、预览及写入口，按目标收窄模型可见操作。引擎验收核对给定变换、版本差异及字幕音频隔离；Agent 验收由模型自行选择目标和调整幅度，根据修改前后的真实画面决定是否继续，记录工具参数合法性和渲染结果。更换素材检验判断，关键帧与蒙版另行排期。
 - **R1.1 — Commercial / Distribution：支付首批 ACTIVE，其余排期挂起**。Stripe 一次性积分充值已落码并通过本地真实付款主旅程，重放/并发等验收、公网 test 与 live 仍未完成，范围与合同见 §0.3；落码与本地主链通过不代表可 live 收款。
 
 ### 0.2 Active batch 与开放事项

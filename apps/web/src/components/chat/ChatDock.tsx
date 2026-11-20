@@ -1595,7 +1595,8 @@ export const ChatDock = forwardRef<ChatDockHandle, ChatDockProps>(function ChatD
           // A restarted worker can settle the same receipt in place.
           const settled = journeyTranscriptRow(row)
           if (mark && mark.state !== "active" && !existing.streaming &&
-              (existing.content !== (settled.content ?? "") || (!!existing.mediaProgress !== mediaProgress(row)))) {
+              (existing.content !== (settled.content ?? "") || !!existing.mediaProgress !== mediaProgress(row) ||
+               JSON.stringify(existing.blocks ?? []) !== JSON.stringify(settled.blocks ?? []))) {
             setMessages((previous) => previous.map((message) => message.id === existing.id
               ? { ...message, content: settled.content ?? "", blocks: settled.blocks,
                   mediaProgress: mediaProgress(row), continuationTurnId: continuationTurnId(row, openingId) }

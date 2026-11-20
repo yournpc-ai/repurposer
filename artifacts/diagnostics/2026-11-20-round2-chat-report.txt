@@ -1,0 +1,28 @@
+Repurposer 第二轮真实 Chat 验收报告 · 2026-11-20（北京时间）
+
+结论：一次集中作答后，系统自动完成了两幕画面修订、两段英文旁白、对齐和 15 秒分镜重定时。配乐计划通过乐谱校验，但自动启动 Run 时被拒绝。用户刷新后仍拿不到可试听的 BGM，第二轮端到端验收未通过。
+
+测试条件
+在本机运行中的 API、worker、Postgres 和 Chrome 上测试。工作区 HEAD 为 9831fec9，包含测试前已有的未提交改动。仓库中找到的该账号旧测试 JWT 均已过期，本次按仓库真实旅程测试入口的做法，为 xymzhs 同一账号签发本地 JWT。新建项目，经正常 Chat HTTP 入口发出「给 https://www.legitevi.com/en 做一只宣传片」，五题问卷一次提交。选定官网品牌介绍、产品证据叙事、15 秒、两幕、24 fps、英文配音与英文字幕、16:9、纯电子器乐。此后只观察。未人工点 Start、追加对话、重启失败任务或改生产代码。浏览器用于最终页面和刷新检查，问卷通过同一产品 API 提交。
+项目 dc28ebcf-f6d6-4b12-b5ae-3a7fd7105b28
+会话 ac068938-93c6-48ee-b2e3-523f728e6404
+模型 MiniMax-M3.1-Flash。样本量为一条新旅程，不能据此估算成功率。
+
+实测过程
+1. 17:08:13 创建项目。官网主页及两个子页完成抓取。首轮 Chat 约 101 秒。ask_user 调了五次才呈现问卷。五份工具参数都能解析为 JSON，前四次未通过字段校验。前两次将选项放在题目层并多出 item；接下来两次又将顶层 question 写成数组。四次被拒的响应合计消耗 77,093 个输入 token。第五次成功，用户只看到一份问卷。
+2. 首批两张图来自现有官网截图。两次图像内容审阅分别指出页尾标题占用字幕区、导航栏占用标题区。后台自行改用两张受控 SVG，重新生成并通过审阅，随后两幕成功绑定图片。两次图片 Run 均完成。本样本没有覆盖合同指定的「一张受控 SVG 加一张 MiniMax 生成图」组合。
+3. 系统自动发起一次含两段旁白的 Run。原音快照 d1750de3-8c5e-521a-8c36-72b5119fe216 和 e6e1464b-ac23-58a9-8cae-15421ddd40ce 均有 READY 对齐，每段含两条句级时间记录。实测时长分别为 644704/90000 = 7.16 秒、587233/90000 = 6.52 秒。随后将两幕时长分别调整为 8 秒和 7 秒。
+4. 第一份 prepare_music 乐谱含 36 个事件，第二幕有一个事件越界。模型自行将 events[25].duration_beats 从 2 改成 1；比较前后两份 score，仅此一处变化。两次调用携带的草稿 ID 和摘要相同，均与第二幕重定时工具刚返回的引用一致。
+5. 17:13:35，worker 记录 auto_start_rejected，详情为 draft_ref is stale or inactive。同一调用的 prepare_music 工具观察记为 ok=True。该状态只说明计划已具备提交条件。数据库中共有三个已完成的 Run（图片两次、旁白一次），配乐计划没有 workflow_run_id。Chrome 打开项目和刷新后均显示工作无法启动、需输入 start 的提示，播放器按钮数均为零。中文任务的首条进度和多条后台进度也以英文显示。
+
+能直接复核的故障证据
+• 配乐计划消息 769cab4f-79bc-407f-9ca2-1ad5555a85de。draft_id 为 cnd_35f9959174d94e239d3d4a8b7d1dc81d，最终 draft_digest 为 ac1b07660b913f6923bfaca68839e443c3fce7361709a58e0d8fed1a654abbbe。这个 digest 同时出现在重定时回执、修正后的模型调用、持久化计划和会话中最新的同 ID 候选上。
+• 在新的只读数据库事务中，从上述计划原样取出参数，执行实际的 recover_current_draft 和 score_for_current_draft。二者均通过，score_digest 为 537e8abe775e49a3d0b3cc11df2c13a8b7efd01f3a5078213efc5522832083e1。此次回放没有生成音乐或启动 Run。
+• 优先检查 apps/api/app/chat/service.py 自动 Start 调用 answer_question 的时机、apps/api/app/tools/video/production/__init__.py 的配乐 Run 校验，以及 apps/api/app/tools/video/narration_draft.py 的 recover_current_draft。最有区分度的下一项测试是在同一后台续行中连续重定时两幕，随即发起配乐，在自动 Start 当刻记录请求的 digest、当时读到的最新候选 digest/active/target_tool 和会话事务，再与提交后读取对照。事务可见性或旧会话对象是待验证假设。当前证据不足以认定具体原因，也不支持放宽过期草稿保护。
+
+与旧问题的对照
+旧项目 ff0604d5-2d2a-4947-a5d6-4374e0bea74c 的 provider trace 向模型明确提供了首幕 s1_gap 的 approved_images，review_status=pass，snapshot_id=a6714fe6-d7bb-5c47-8f9c-ce1ea2520b67。模型两次 design_video 参数都用了这个 ID。逐条配对后，第一条回执写着工具未执行并要求附上用户可见正文；第二条才明确返回 source_not_ready。可以确认旧例中正确图片引用仍遭拒绝。新例已成功越过此处，最终停在更晚的配乐自动启动阶段。
+
+用量及定向验证
+conversation_usage 对本项目记录累计输入 904,896、输出 27,701、缓存输入 365,431 token，记录成本 US$0.152354。这是会话记账口径，不能当作所有供应商的最终账单。图片及旁白步骤 capture 分别为 3、2、9、9 积分，合计 23 积分。未启动配乐 Run。
+同一工作区运行 test/core/test_website_promo_wire.py、test/core/test_media_audio_continuation.py、test/core/test_narration_preparation.py，共 31 项通过，用时 8.88 秒。当前覆盖仍漏掉这次真实自动 Start 失败。最小修复验收应要求同一次作答后出现已完成的配乐 Run、有效音频与分析报告，并在刷新后实际点播、验证播放时间前进。第三、四轮的渲染和 MP4 不在本次测试范围。

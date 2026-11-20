@@ -36,6 +36,7 @@ outcome — and ride back as a ToolObservation the loop feeds back.
 """
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -711,6 +712,9 @@ class PlanTurn:
         if self.media_score_delivered:
             if name != "answer":
                 return "The score was delivered. Close this preparation with answer."
+            assert self.outcome is not None and self.outcome[0] is not None
+            if prose.strip():
+                self.outcome[0].content = prose.strip()
             await self._resolve_deferred()
             return None
         if self.media_journey is not None and name == "design_video" and getattr(params, "save", False):
@@ -1029,6 +1033,9 @@ class PlanTurn:
                     index for index, scene in enumerate(ordered, start=1)
                     if scene["scene_id"] == params.scene.scene_id
                 ), None)
+        if (self.media_state and self.media_state["phase"] == "images"
+                and isinstance(feedback, WorkingDraftUpdated) and params.scene_assets):
+            feedback = replace(feedback, visual_results=self.media_visual_results)
         if read is None:
             if isinstance(feedback, ToolObservation) and not feedback.ok:
                 self._video_design_stopped = feedback
@@ -2004,7 +2011,7 @@ async def run_plan_turn(
         if turn.media_score_delivered:
             return RoundAssembly(
                 tools=[tool for tool in facts["tools"] if tool.name == "answer"],
-                system="阅读已固定的电子配乐及实测音频数据。音频已在 Chat 中，用 answer 结束本轮。尚未渲染视频。",
+                system="配乐的试听播放器已附在本条消息。用对话语言简短交付这段配乐，根据实测结果发言，然后调用 answer。当前交付物只有音频。",
                 include_project_context=False,
                 observation_tools=frozenset({"prepare_music"}),
             )
@@ -2028,6 +2035,7 @@ async def run_plan_turn(
             "media_visual_results": turn.media_visual_results,
             "website_question_settled": website_question_settled,
             "group_answer_submitted": group_answer_submitted,
+            "speech_language": speech_language or getattr(conversation, "ui_language", None),
             "settled_narration": turn.media_resume_narration,
             "mode": "plan",
             "skill": turn.skill,

@@ -7,8 +7,12 @@
 {% else %}- 当前问卷正在等待用户作答或跳过。可以用 answer 回应用户对题目的疑问。
 {% endif %}
 {% elif video_stage == "draft_build" and website_promo %}- 用户要求做宣传片时直接搭建可修改的首稿。未指定的片长、语言、画幅和叙事方向可采用 working_defaults 或根据证据做合理选择，作为暂定设置告诉用户。用户明确要求先确认时，使用 ask_user 询问相关决定，等待答复。按已确定的 production_direction 和预期用途选择开场及叙事结构。旧 Brief 可能分别用 purpose 和 narrative_mode 表达用途和叙事方式。时长、旁白语言、字幕语言及画幅分别遵循 Brief 的对应字段。某项发现确实影响镜头、旁白或视觉处理时，可在该处解释，让用户看懂用意。其余资料留在工作用 BrandProfile 中。只有用户要求时才完整总结调研。
+- 逐幕分配叙事职责。需要准确呈现的引用关系、界面、文字用固定官网证据或受控图形；生成图承担人物、环境等适合摄影表达的部分。只把观众理解这一幕所必需的细节列为画面要求。
+- 分镜写入回执中的 scene_asset_changes 按幕比较规格与已有审阅。对 prepare_scene_ids 调 prepare_visual_assets，对 review_existing_scene_ids 复审固定图；只有 repair_scene_ids 需要重新设计。规格写入后要看到新 PNG 才能判断返工效果。
 {% endif %}
-{% if video_stage == "draft_build" and "list_skill_shots" in tool_names %}- 宿主流程：用户直接要求制作视频并选了 Skill，即已选择由你自主创作至首个已保存分镜。本轮直接推进。跳过包内要求展示工作模式菜单或在分镜前等待批准的指令。只有明确要求时才用模板或引导式创作。阅读相关已安装方法和卡片以作创意判断，素材准备、可编辑创作、展示及制作批准均使用宿主工具。
+{% if video_speech == "brief_answer" %}- 用户刚提交制作偏好，官网和品牌资料已经读过。本次响应用 content 直接回应用户：选一项影响剪法的回答，让他能想象第一个镜头是什么，或故事先讲什么、再讲什么。说一两句，然后在同一条消息中发出一个原生工具调用。
+{% elif staged_media and video_stage == "draft_build" %}- 按已和用户说好的剪法工作时，只返回 tool_calls，content 留空。逐幕录音、对齐和开始配乐可以连续多轮这样执行，用户会在同一条活动记录里看到进度。新证据改变剪法时，说清它对画面或旁白的影响。已经解释过的决定，随后直接执行。交付时以用户能看到或听到的结果为准。
+{% endif %}{% if video_stage == "draft_build" and "list_skill_shots" in tool_names %}- 宿主流程：用户直接要求制作视频并选了 Skill，即已选择由你自主创作至首个已保存分镜。本轮直接推进。跳过包内要求展示工作模式菜单或在分镜前等待批准的指令。只有明确要求时才用模板或引导式创作。阅读相关已安装方法和卡片以作创意判断，素材准备、可编辑创作、展示及制作批准均使用宿主工具。
 {% endif %}
 {% if scene_authoring and video_stage in ["none", "draft_build"] %}
 - 分步搭建：准备或复用项目需要的确切素材，再调用 design_video。 {% if staged_media and "prepare_narration" in tool_names %}已有场景计划且图片审查通过。继续使用当前 draft_ref。{% else %}从 scene_plan 和 source_ids 开始。场景数量及叙事顺序由 scene_plan 决定，不由时间范围决定。{% endif %} 每个当前 Scene 写一个高层 scene 对象，只含已固定的来源和构图、画面文案、口播文案与已有 Preset 的动效意图。服务端负责推导来源摘要、设置、连续时序、Tracks、Clips、Objects、布局及动画。不要写入底层实体、来源摘要、布局、关键帧或输出时间。 {% if not staged_media %}使用已准备的配乐时，传入 music_snapshot_id。{% endif %} 如果只求建议，可直接回答而不保存。

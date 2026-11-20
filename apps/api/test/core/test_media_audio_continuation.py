@@ -128,6 +128,7 @@ def media_session(monkeypatch, ids, *, target_seconds=None):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ids,try_partial,prose", [
     (["intro"], False, ""),
+    (["intro", "end"], False, ""),
     (["intro", "middle", "end"], False, "我会把这三段录成同一种叙述口吻。"),
     (["intro", "middle", "end"], True, ""),
 ])
@@ -157,6 +158,7 @@ async def test_image_settlement_dispatches_pending_narrations_in_one_provider_ro
         if tool["function"]["name"] == "design_video":
             assert set(tool["function"]["parameters"]["properties"]) == {"draft_ref", "scene", "narration_update"}
     assert "旁白驱动的媒体草稿" in str(wire["messages"])
+    assert "只返回 tool_calls，content 留空" in str(wire["messages"])
     assert "固定画面准备" not in str(wire["messages"])
 
 
@@ -203,10 +205,11 @@ async def test_verified_cache_hit_removes_scene_from_pending_in_same_resumed_tur
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cached_intro", [False, True])
-async def test_completed_recording_revises_then_records_only_changed_scene_and_starts_score(monkeypatch, cached_intro):
-    db, project, conversation, first_run, runs, scheduled, ref = media_session(monkeypatch, ["a", "b"], target_seconds=10)
+@pytest.mark.parametrize("target_seconds,cached_intro", [(15, False), (10, False), (10, True)])
+async def test_measured_narrations_only_trigger_a_rewrite_when_they_overrun(monkeypatch, target_seconds, cached_intro):
+    db, project, conversation, first_run, runs, scheduled, ref = media_session(monkeypatch, ["a", "b"], target_seconds=target_seconds)
     original = [recording("a", "a", 3, ref), recording("b", "b", 8, ref)]
+    overrun = target_seconds < 11
     del first_run.context["visual_asset_preparation"]
     history = original[1:] if cached_intro else list(original)
     first_run.context["narration_preparation"] = history[0] if cached_intro else {"scenes": list(history)}
@@ -249,6 +252,7 @@ async def test_completed_recording_revises_then_records_only_changed_scene_and_s
     monkeypatch.setattr("app.tools.video.music_preparation.cached_music_preparation", AsyncMock(return_value=None))
 
     rounds = []
+    creative_update = "两段旁白实录共 11 秒，比目标多了 1 秒。我会精简第二幕，保留开场的原声。"
 
     class Provider(FakeToolProvider):
         async def generate_with_tools(self, *, messages, tools, **kwargs):
@@ -266,14 +270,15 @@ async def test_completed_recording_revises_then_records_only_changed_scene_and_s
             media = dynamic["media_preparation"]
             state = media["narration_resume"]
             rounds.append((reference, state))
+            self.content = creative_update if overrun and len(rounds) == 2 else ""
             assert len(rounds) <= 6, messages[-1]
             assert ("prepare_music" in tool_names({"tools": tools})) == media["audio_timing_ready"]
-            if len(rounds) == 1:
+            if overrun and len(rounds) == 1:
                 assert dynamic["required_next_action"] == "design_video" and state["remaining_seconds"] == -1
                 call = ("design_video", {"narration_update": {
                     "scene_id": "b", "text": "short", "alignment_id": original[1]["result"]["alignment_id"],
                 }})
-            elif len(rounds) == 2:
+            elif overrun and len(rounds) == 2:
                 assert rounds[0] == rounds[1]
                 assert "changed narration needs a new original" in str(messages)
                 call = ("design_video", {"narration_update": {"scene_id": "b", "text": "short"}})
@@ -283,7 +288,10 @@ async def test_completed_recording_revises_then_records_only_changed_scene_and_s
                 call = ("prepare_narration", {"scene_id": "b"})
             elif not media["audio_timing_ready"]:
                 row = next(s for s in state["scenes"] if not s["timing_confirmed"])
-                call = ("design_video", {"narration_update": {"scene_id": row["scene_id"], "alignment_id": row["alignment_id"]}})
+                update = {"scene_id": row["scene_id"], "alignment_id": row["alignment_id"]}
+                if not overrun and row["scene_id"] == "b":
+                    update["target_duration_seconds"] = 10
+                call = ("design_video", {"narration_update": update})
             else:
                 call = ("prepare_music", {"name": "Electronic theme", "score": {
                     "bpm": {"num": 96}, "sections": [{"scene_id": s, "intent": "build"} for s in ("a", "b")],
@@ -296,6 +304,12 @@ async def test_completed_recording_revises_then_records_only_changed_scene_and_s
     monkeypatch.setattr(intent_router, "client", Provider([]))
     await media_journey.continue_media_journey(db, project, conversation, first_run)
     await media_journey.continue_media_journey(db, project, conversation, first_run)
+    if not overrun:
+        service.persist_interim_prose.assert_not_awaited()
+        assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_music"]]
+        assert rounds[-1][1]["draft_seconds"] == rounds[-1][1]["target_seconds"] == 15
+        assert all(scene["timing_confirmed"] for scene in rounds[-1][1]["scenes"])
+        return
     assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_narration"]]
     task = scheduled[0][0]
     assert task.params["scene_id"] == "b" and task.params["text"] == "short"
@@ -309,6 +323,8 @@ async def test_completed_recording_revises_then_records_only_changed_scene_and_s
     await media_journey.continue_media_journey(db, project, conversation, second)
     await media_journey.continue_media_journey(db, project, conversation, second)
     assert len(rounds) == 6
+    service.persist_interim_prose.assert_awaited_once()
+    assert service.persist_interim_prose.await_args.args[-1] == creative_update
     assert [[t.tool for t in tasks] for tasks in scheduled] == [["prepare_narration"], ["prepare_music"]]
     final_ref, final = rounds[-1]
     assert scheduled[-1][0].params["draft_ref"] == final_ref

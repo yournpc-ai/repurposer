@@ -378,7 +378,8 @@ async def test_question_written_in_prose_then_unoffered_design_retries_the_form(
 
 
 @pytest.mark.parametrize("submitted", [True, False])
-async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire_submit(monkeypatch, submitted):
+@pytest.mark.parametrize("silent", [True, False])
+async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire_submit(monkeypatch, submitted, silent):
     from app.chat.prompts import assemble_video_round
     from test.core.test_website_promo_readiness import profile
 
@@ -387,7 +388,7 @@ async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire
     resources = (("asset:1", asset("completed")), ("snapshot:1", snapshot()))
     world = ContextSnapshot("evidence", frozenset(key for key, _ in resources), resources=resources)
     plan = {"scene_plan": [{"scene_id": "intro", "intent": "用证据说明产品机制"}]}
-    provider = FakeToolProvider([("design_video", plan)])
+    provider = FakeToolProvider([("design_video", plan)] * 2, content="" if silent else "先从证据链的起点讲起。")
     monkeypatch.setattr(intent_router, "client", provider)
     events = []
 
@@ -395,21 +396,29 @@ async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire
         return assemble_video_round({
             **facts, "mode": "plan", "user_text": text, "creative_state": state, "snapshot": world,
             "media_journey": {"opening_id": "opening"}, "group_answer_submitted": submitted,
+            "speech_language": "zh",
         })
 
     async def execute(name, params, prose):
         events.append(name)
-        return ToolObservation("draft prepared", stop_after_observation=True)
+        provider.content = ""
+        return ToolObservation("draft prepared", stop_after_observation=events.count(name) == 2)
 
     await intent_router.call_loop(
         execute, round_assembler=assemble, message=text,
         on_delta=lambda _: None, on_interim_prose=events.append,
     )
-    assert events == ["我来处理这一步。", "design_video"]
+    spoken = []
+    if not silent:
+        spoken = ["先从证据链的起点讲起。"]
+    elif submitted:
+        spoken = ["收到，我会按你选的方向安排这支 30 秒短片的开场和镜头顺序。"]
+    assert events == [*spoken, "design_video", "design_video"]
     assert ("用户刚提交制作偏好" in str(provider.wires[0]["messages"])) == submitted
     following = assemble(tools=intent_router.tools, interim_prose_count=1)
     assert following.stream_prose
-    assert "用户刚提交制作偏好" not in following.context
+    assert following.acknowledgment is None
+    assert "用户刚提交制作偏好" not in following.system
 
 
 async def test_url_and_suggestion_preserve_speech_language_until_user_writes_in_english():

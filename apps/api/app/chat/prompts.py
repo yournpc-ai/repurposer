@@ -552,16 +552,21 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     draft_facts = dynamic.get("draft") or {}
     required_next = readiness.required_next_action
     awaiting_brief = stage == "briefing" and readiness.brand_profile_ready
-    if (
+    acknowledge_brief = (
         facts.get("group_answer_submitted", False)
         and readiness.task_kind == "website_promo"
         and media_state is not None and media_state["phase"] == "images"
         and not facts.get("interim_prose_count")
-    ):
-        dynamic["answer_acknowledgment"] = (
-            "用户刚提交制作偏好。在这次工具调用的正文中，用对话语言简短确认一项影响创作的选择，"
-            "说明接下来怎样据此安排分镜，并在同一次响应中开始工作。"
-        )
+    )
+    acknowledgment = None
+    if acknowledge_brief:
+        seconds = readiness.brief.target_seconds.value
+        if (facts.get("speech_language") or "").startswith("zh"):
+            film = f"这支 {seconds} 秒短片" if seconds else "这支短片"
+            acknowledgment = f"收到，我会按你选的方向安排{film}的开场和镜头顺序。"
+        else:
+            length = f"{seconds}-second " if seconds else ""
+            acknowledgment = f"Got it. I’ll shape the {length}storyboard around your choices, starting with the opening."
     if awaiting_brief and pending is not None:
         required_next = "answer"
     if media_state is not None:
@@ -587,6 +592,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                     remaining = resume["remaining_seconds"]
                     if remaining is not None and (remaining < 0 or remaining == 0 and resume["pending_scene_ids"]):
                         required_next = "design_video"
+                        if not facts.get("interim_prose_count"):
+                            dynamic["media_instruction"] += (
+                                "这次实测牵涉剪辑取舍。改稿时在同一响应的正文中，用对话语言告诉用户"
+                                "录音和目标时长差多少、你会精简哪部分来保住哪句重点，然后动手。"
+                            )
                     elif not resume["pending_scene_ids"]:
                         if all(s["timing_confirmed"] for s in resume["scenes"]):
                             required_next = "design_video"
@@ -628,6 +638,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             facts["mode"],
             available_tools=tools,
             video_stage=stage,
+            video_speech="brief_answer" if acknowledge_brief else None,
             scene_authoring=scene_authoring,
             staged_media=media_state is not None,
             website_promo=readiness.task_kind == "website_promo",
@@ -644,6 +655,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             else None
         ),
         stream_prose=not awaiting_brief,
+        acknowledgment=acknowledgment,
         enforce_offered_tools=readiness.task_kind == "website_promo" and (
             stage in {"source_preparing", "briefing"} or (stage == "draft_build" and draft is None)
         ),

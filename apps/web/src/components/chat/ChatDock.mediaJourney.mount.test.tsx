@@ -54,15 +54,16 @@ vi.mock("@/lib/typewriter", () => ({
 
 function mark(seq: number, run: string | null, state: string, role?: "music" | "narration"): HistoryRow {
   return {
-    id: `m${seq}`, seq, role: "assistant", content: `message ${seq}`, created_at: "2026-11-18T12:00:00Z",
+    id: `m${seq}`, seq, role: "assistant", content: role === "narration" ? "" : `message ${seq}`, created_at: "2026-11-18T12:00:00Z",
     workflow_run_id: run, question: null, answer: null, turn_id: "opening",
     intent: {
       ...(run && role ? { type: "trigger_review", trigger: "run_completed", suggestions: [] } : {}),
+      ...(role === "narration" ? { presentation: "media_progress", prepared_audio: { role, scene_id: `scene-${seq}` } } : {}),
       media_journey: { opening_id: "opening", state },
     },
-    blocks: role ? [{
+    blocks: role === "music" && state === "complete" ? [{
       kind: "audio_playback", project_id: "p", items: [{
-        role, scene_id: role === "music" ? null : `scene-${seq}`, title: role + seq,
+        role, scene_id: null, title: role + seq,
         snapshot_id: "fixed", digest: "hash", duration_seconds: 2, peaks: [0.7, 0.1], analysis_digest: "report",
       }],
     }] : [],
@@ -78,7 +79,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-it("continues automatic recording without player controls or user input, including older playback receipts on reopen", async () => {
+it("folds routine recording and delivers one playable score live and after reopening", async () => {
   vi.useFakeTimers()
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {})
   const rows = [mark(1, "image-run", "active")]
@@ -106,12 +107,12 @@ it("continues automatic recording without player controls or user input, includi
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
   expect(onRunStarted).toHaveBeenCalledWith("music-run")
   const music = mark(7, "music-run", "active", "music")
-  rows.push({ ...music, blocks: [] })
+  rows.push({ ...music, content: "配乐已准备好。" })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
   expect(screen.queryByText("music7")).toBeNull()
   rows[rows.length - 1] = { ...mark(7, "music-run", "complete", "music"), content: "配乐已准备好。" }
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
-  expect(screen.queryByRole("button", { name: "chat.audio.play" })).toBeNull()
+  expect(screen.getAllByRole("button", { name: "chat.audio.play" })).toHaveLength(1)
   expect(screen.getAllByText("配乐已准备好。")).toHaveLength(1)
   const stoppedReads = reads
   await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
@@ -119,7 +120,7 @@ it("continues automatic recording without player controls or user input, includi
   view.unmount()
   render(dock)
   await act(async () => {})
-  expect(screen.queryByRole("button", { name: "chat.audio.play" })).toBeNull()
+  expect(screen.getAllByRole("button", { name: "chat.audio.play" })).toHaveLength(1)
   expect(screen.getAllByText("配乐已准备好。")).toHaveLength(1)
   expect(screen.queryByText("narration5")).toBeNull()
 })

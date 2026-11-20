@@ -59,12 +59,13 @@ class SceneNarrationUpdate(BaseModel):
 
 
 async def recover_current_draft(db, project, reference: VideoDraftRef) -> dict[str, Any]:
-    conversations = list((await db.scalars(select(Conversation).where(
+    # Tool receipts commit in a separate session during the same editing turn.
+    contexts = await db.scalars(select(Conversation.context).where(
         Conversation.project_id == project.id,
         Conversation.user_id == project.user_id,
-    ))).all())
-    for conversation in conversations:
-        for item in reversed(context_items(conversation.context)):
+    ))
+    for context in contexts:
+        for item in reversed(context_items(context)):
             candidate = item.get("candidate") or {}
             if candidate.get("candidate_id") != reference.draft_id:
                 continue
