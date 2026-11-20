@@ -548,7 +548,10 @@ async def saved_preview_media(preview: dict, version_id: UUID):
     frames = []
     try:
         with av.open(io.BytesIO(video)) as container:
-            stream = container.streams.video[0]
+            stream = next(iter(container.streams.video), None)
+            if stream is None:
+                raise ScrubTargetError("The preview contains no video stream.")
+            has_audio = bool(container.streams.audio)
             for start, end in samples:
                 target = Fraction((start + end - 1) // 2, 1) / fps
                 frame, actual = _decode_frame(container, stream, target, fps)
@@ -601,7 +604,8 @@ async def saved_preview_media(preview: dict, version_id: UUID):
             item.type == MediaInputType.VIDEO for item in media
         ),
     }
-    if any(track["kind"] == "audio" and track["clips"] for track in spec["tracks"]):
+    evidence["audio_stream_present"] = has_audio
+    if has_audio:
         import asyncio
         from app.tools.video.media_analysis import analyze_audio_bytes
 

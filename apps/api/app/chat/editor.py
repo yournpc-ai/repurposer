@@ -589,6 +589,7 @@ async def execute_editor(turn, name, args):
             )
             if (
                 composition.origin_project_id != turn.project.id
+                or version.content_digest != base["content_digest"]
                 or str(composition.id) != base["composition_id"]
             ):
                 raise ValueError("This version is outside the selected project.")
@@ -620,6 +621,7 @@ async def execute_editor(turn, name, args):
                 return ToolObservation(
                     json.dumps(
                         {
+                            **base,
                             "version_id": str(version.id),
                             "count": len(clips),
                             **scope,
@@ -650,10 +652,26 @@ async def execute_editor(turn, name, args):
             if preview["status"] != "ready":
                 raise ValueError(preview.get("reason") or preview["status"])
             media, evidence = await saved_preview_media(preview, version.id)
+            covered = set(preview["scope"]["clip_ids"])
+            sources = {
+                (str(clip.source.snapshot_id), clip.source.snapshot_digest)
+                for track in content_of(version).timeline.tracks for clip in track.clips
+                if clip.clip_id in covered and clip.source
+            }
+            evidence.update(base, sources=[
+                {"snapshot_id": sid, "digest": digest} for sid, digest in sorted(sources)
+            ])
+            if not media:
+                raise ValueError("The configured model cannot receive visual evidence for this window.")
+            previous = getattr(turn, "_editor_last_preview", {}) or {}
+            windows = list(previous.get("windows", [])) if previous.get("version_id") == str(version.id) else []
+            window = preview["scope"]["source_range_seconds"]
+            if window not in windows:
+                windows.append(window)
             turn._editor_last_preview = {
-                "version_id": str(version.id),
-                "window_seconds": preview["scope"]["source_range_seconds"],
+                **base, "version_id": str(version.id), "window_seconds": window, "windows": windows,
                 "model_media": evidence["model_media"],
+                "audio_available_to_model": evidence["audio_available_to_model"],
             }
             block = storyboard_block(read)
             blocks = turn.__dict__.setdefault("_editor_preview_blocks", [])
