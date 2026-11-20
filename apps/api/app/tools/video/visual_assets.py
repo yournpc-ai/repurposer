@@ -176,6 +176,15 @@ class SceneAssetSpec(BaseModel):
             raise ValueError("palette entries must be fixed six-digit hex colors")
         return value
 
+    # Server-owned review inputs, excluded from the pixel-generation identity and model schema.
+    _review_basis: dict[str, Any] | None = PrivateAttr(default=None)
+
+    def review_version(self) -> str:
+        version = image_reviewer_version(self.source.kind)
+        if self._review_basis is None:
+            return version
+        return f"{version}-{canonical_json_hash(self._review_basis)}"
+
     def request_digest(self) -> str:
         return canonical_json_hash(self.model_dump(mode="json"))
 
@@ -260,7 +269,13 @@ def current_scene_assets(arguments: dict[str, Any]) -> list[SceneAssetSpec]:
     values = (arguments.get("design") or {}).get("scene_assets") or []
     if not values:
         return []
-    return scene_asset_specs(content, values)
+    specs = scene_asset_specs(content, values)
+    words = (arguments.get("design") or {}).get("review_user_words")
+    if words is not None:
+        roles = {s["scene_id"]: s.get("intent") for s in content.get("scenes", [])}
+        for spec in specs:
+            spec._review_basis = {"user_words": words, "scene_roles": roles}
+    return specs
 
 
 def select_scene_assets(arguments: dict[str, Any], scene_ids: list[str]) -> list[SceneAssetSpec]:
@@ -528,7 +543,7 @@ async def _save_manifest(key: str, value: dict[str, Any]) -> None:
 
 
 def versioned_request_key(owner_id: UUID, project_id: UUID, spec: SceneAssetSpec) -> str:
-    version = image_reviewer_version(spec.source.kind)
+    version = spec.review_version()
     if isinstance(spec.source, ControlledSVGSource):
         version = f"{VISUAL_ASSET_RUNNER_VERSION}/{version}"
     return (
@@ -600,7 +615,7 @@ async def cached_visual_asset(
         raise VisualAssetError("fixed visual asset bytes do not match their digest")
     analysis = await read_report(manifest["analysis_ref"])
     review = await read_report(manifest["content_review_ref"])
-    if review.get("reviewer_version") != image_reviewer_version(spec.source.kind):
+    if review.get("reviewer_version") != spec.review_version():
         return None
     result = {**manifest, "cache_hit": True, "analysis": analysis, "content_review": review}
     if review["status"] == "unavailable":
@@ -878,7 +893,7 @@ async def prepare_visual_asset(
                 "filter": "Pillow.LANCZOS",
             }
     media_key, media_digest = await store_source_bytes(png, ".png", "image/png")
-    revision = image_reviewer_version(spec.source.kind)
+    revision = spec.review_version()
     if isinstance(spec.source, ControlledSVGSource):
         revision = f"{VISUAL_ASSET_RUNNER_VERSION}:{revision}"
     identity = uuid5(NAMESPACE_URL, f"visual-asset:{spec.request_digest()}:{revision}")

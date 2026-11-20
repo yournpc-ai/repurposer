@@ -6,11 +6,11 @@
 
 ## 1. 一句话 North Star
 
-**一个以 Structured Media 为领域核心、以 Execution Kernel 为可靠性核心、以 Agent 为 Decision Producer 的可编排媒体生产系统。**
+**视频创作目标（TARGET）是无工作台的 AI 剪辑师。** 用户通过对话提出目标，Agent 在同一 Composition 中建立粗剪、按需准备素材、检查真实视听结果并局部修订。CompositionVersion 保存修改历史，SourceSnapshot 标识可复用素材，Renderer 提供精确版本和范围的观察证据。Canvas 是可选展示面；Run、Step、队列、计费与恢复属于内部执行机制。
 
-**对外叙事版**：DAG + 状态机是执行层，不是产品本身——最终产品是一个 **Agentic Content OS**：Agent = 决策层（§3），Structured Media + Decompiler/Compiler = 内容语义层（§9），Execution Kernel = 可靠执行层（§8）。此句只是上一句的展开，不产生任何超出五态表的承诺（统一 Artifact 模型、Media IR 等上层抽象仍为触发制 OPEN）。
+第三轮应独立验证从已有素材开始、观察指定区间、修改该作品并再次观察的闭环。官网宣传片的图片、旁白、配乐准备顺序仅用于当前样例验收。[第三轮审查前提](tasks/website-promo-iteration2-media-slice.md#63-第三轮compositionversionscene-证据渲染与局部修复)
 
-**对外口径**：已成立的是**一个 Agent 驱动的 Content Execution System**——Agent → Execution Kernel → Structured Media → Rendered Output 的真实可用闭环（证据 = R1 四条 invariant + 剧本矩阵回归网）。「Agentic Content OS」仍是 North Star，但 OS 的高级抽象（统一 Artifact / Media IR / ExecutionAttempt）**不提前承诺、不成 R2/R3 排期暗示**——触发条件满足才进入决策。
+CURRENT 的可靠执行依据仍是 R1 四项 invariant 与剧本回归。下文的 Decision Producer、Structured Media 和 Execution Kernel 分别说明决策、作品表达和后台执行的工程职责。统一 Artifact、Media IR、ExecutionAttempt 保持 OPEN。
 
 ### 1.1 愿景词汇 ↔ 现行词汇对照表
 

@@ -555,6 +555,7 @@ async def resolve_confirmation_need(
     production_intent: bool | None = True,
     unmet_condition: bool = False,
     copy_drift: bool = False,
+    require_quote: bool = False,
 ) -> "ConfirmationNeed":
     """The dock's confirmation conjunct (ADR-117 §4): read the user's two
     prefs + the guardrail config, fold the quote, run the pure law. The
@@ -573,7 +574,7 @@ async def resolve_confirmation_need(
     pass the birth turn's drift hold (the published copy drifted from the
     user-verifiable original) — auto start holds until the user sees the
     drift note and chooses."""
-    from app.pipeline.lifecycle import confirmation_need
+    from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
 
     user = await db.get(User, user_id)
     execution, credits = read_confirmation_prefs(
@@ -582,6 +583,8 @@ async def resolve_confirmation_need(
     guardrail = await get_config(db, "billing.always_confirm_above")
     quote_high = int(estimate.total[1]) if estimate is not None else None
     unquotable = estimate is None or any(t is None for t in estimate.per_task)
+    if require_quote and unquotable:
+        return ConfirmationNeed(True, "unquotable", quote_high, True)
     return confirmation_need(
         execution=execution,
         credits=credits,
@@ -2080,6 +2083,65 @@ def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> 
     return {"creative_state": pending.creative_state.model_dump(mode="json")}
 
 
+async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instruction,
+                                 confirmation_id, confirmed_via, quote):
+    """Materialize an authorized request and its accounting scope in the caller transaction."""
+    from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
+    from app.tools.video.production import latest_video_approval
+
+    pending = pending or PendingPlan()
+    run = await create_run(
+        db,
+        project,
+        TaskSpec(
+            tasks=tasks,
+            video_authorized_by=await latest_video_approval(db, project),
+            target_language=first_task_language(tasks) or project.language or "en",
+            instruction=instruction or pending.prompt or None,
+            persona_id=str(pending.persona_id) if pending.persona_id else None,
+            scope="full",
+            # Caption mode rides the run context verbatim from
+            # the InferredIntent — the chat path's caption-mode
+            # question stores it on the intent (RECIPES §4.7).
+            # 资产角色 pins (ADR-078 判词④): settled on the
+            # PendingPlan by the role question / the mention,
+            # riding TaskSpec → run.context verbatim. The panel
+            # never edits them (it edits the intent only), so
+            # the stored pending's pins are the confirmed ones.
+            source_asset_id=pending.source_asset_id,
+            exemplar_asset_id=pending.exemplar_asset_id,
+            # The router's fresh naming of the plan (ADR-058) —
+            # the receipt title and completion line read it.
+            name=name or None,
+        ),
+        reuse_video_production=True,
+    )
+    _scope_user = await db.get(User, project.user_id)
+    _scope_execution, _scope_credits = read_confirmation_prefs(
+        _scope_user.settings if _scope_user is not None else None
+    )
+    run.context = {
+        **(run.context or {}),
+        **_creative_run_context(pending, run.context),
+        "confirmed_scope": {
+            "confirmation_id": str(confirmation_id),
+            "confirmed_at": datetime.now(UTC).isoformat(),
+            "confirmed_via": confirmed_via,
+            "compiled_scope": [task.model_dump(mode="json") for task in tasks],
+            "quote": quote,
+            "settings": {
+                "confirm_execution": _scope_execution,
+                "confirm_credits": _scope_credits,
+                "billing.always_confirm_above": await get_config(
+                    db, "billing.always_confirm_above"
+                ),
+            },
+        },
+    }
+    project.status = ProjectStatus.PROCESSING
+    return run
+
+
 async def answer_question(
     db: AsyncSession,
     user_id: UUID,
@@ -2143,10 +2205,7 @@ async def answer_question(
         raise ValueError("defer_start_commit is valid only for task_book Start")
 
     from app.pipeline.orchestrator import (
-        TaskSpec,
         bail_waiting_interrupt,
-        create_run,
-        first_task_language,
         resume_waiting_interrupt,
     )
 
@@ -2357,43 +2416,14 @@ async def answer_question(
                         "unnamed_proposal", path="plan_start",
                         project_id=str(project.id),
                     )
-                from app.tools.video.production import latest_video_approval
-                run = await create_run(
-                    db,
-                    project,
-                    TaskSpec(
-                        tasks=tasks,
-                        video_authorized_by=await latest_video_approval(db, project),
-                        target_language=(
-                            first_task_language(tasks)
-                            or project.language
-                            or "en"
-                        ),
-                        instruction=intent.specific_instruction
-                        or pending.prompt
-                        or None,
-                        persona_id=(
-                            str(pending.persona_id)
-                            if pending.persona_id
-                            else None
-                        ),
-                        scope="full",
-                        # Caption mode rides the run context verbatim from
-                        # the InferredIntent — the chat path's caption-mode
-                        # question stores it on the intent (RECIPES §4.7).
-                        # 资产角色 pins (ADR-078 判词④): settled on the
-                        # PendingPlan by the role question / the mention,
-                        # riding TaskSpec → run.context verbatim. The panel
-                        # never edits them (it edits the intent only), so
-                        # the stored pending's pins are the confirmed ones.
-                        source_asset_id=pending.source_asset_id,
-                        exemplar_asset_id=pending.exemplar_asset_id,
-                        # The router's fresh naming of the plan (ADR-058) —
-                        # the receipt title and completion line read it.
-                        name=intent.name or None,
-                    ),
-                    reuse_video_production=True,
+                run = await submit_confirmed_tasks(
+                    db, project, pending, tasks, name=intent.name, instruction=intent.specific_instruction,
+                    confirmation_id=message.id, confirmed_via=confirmed_via,
+                    quote=(message.question or {}).get("estimate_credits"),
                 )
+                journey = (message.intent or {}).get("media_journey")
+                if journey and [task.tool for task in tasks] == ["prepare_music"]:
+                    run.context = {**run.context, "media_journey": {"opening_id": journey["opening_id"]}}
             except ToolRejected as exc:
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
@@ -2414,40 +2444,9 @@ async def answer_question(
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
                 ) from exc
-            project.status = ProjectStatus.PROCESSING
-            # The plan is confirmed now — drop the unconfirmed copy.
             project.pending_brief = None
             message.workflow_run_id = run.id
-            # Confirmed Scope Snapshot (iter-2 ④, ADR-089 §4 R20 — 销
-            # P0-①): the immutable record of WHAT was confirmed at the paid
-            # boundary — the reading layer as docked, the exact chain the
-            # run was born with, the quote shown at confirm time, and the
-            # settings that governed the authorization (ADR-117 — standing
-            # authorization is only auditable against its frozen basis).
-            # Stamped post-birthplace so a rejected Start never leaves a
-            # snapshot.
-            _scope_user = await db.get(User, user_id)
-            _scope_execution, _scope_credits = read_confirmation_prefs(
-                _scope_user.settings if _scope_user is not None else None
-            )
-            run.context = {
-                **(run.context or {}),
-                **_creative_run_context(pending, run.context),
-                "confirmed_scope": {
-                    "confirmation_id": str(message.id),
-                    "confirmed_at": datetime.now(UTC).isoformat(),
-                    "confirmed_via": confirmed_via,
-                    "compiled_scope": [task.model_dump(mode="json") for task in tasks],
-                    "quote": (message.question or {}).get("estimate_credits"),
-                    "settings": {
-                        "confirm_execution": _scope_execution,
-                        "confirm_credits": _scope_credits,
-                        "billing.always_confirm_above": await get_config(
-                            db, "billing.always_confirm_above"
-                        ),
-                    },
-                },
-            }
+
 
     elif question.kind == "question" and message.workflow_run_id is not None:
         # Direction interrupt (期 4) — but the run-id column alone does NOT

@@ -321,6 +321,8 @@ class PrepareVisualAssets(NodeBase):
             if params.scene_ids is not None else specs != params.scene_assets
         ):
             raise ValueError("The visual asset step has no matching pinned scene specifications")
+        for spec in specs:
+            spec._review_basis = (preparation.get("review_basis") or {}).get(spec.scene_id)
         attempts = preparation.get("content_attempts") or {}
         stages = ProductionStages(
             run_id=run.id,

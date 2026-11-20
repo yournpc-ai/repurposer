@@ -1725,7 +1725,7 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     return {"action": "produce" if receipt.get("presentation_complete") else "wait", **target}
 
 
-async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObservation:
+async def prepare_music_seat(*, project: Project | None, args: Any, managed: bool = False) -> ToolObservation:
     if project is None:
         return ToolObservation("music preparation needs a project context", ok=False)
     from app.tools.video.music_preparation import cached_music_preparation, score_for_current_draft
@@ -1742,6 +1742,8 @@ async def prepare_music_seat(*, project: Project | None, args: Any) -> ToolObser
     except (BotoCoreError, ClientError, OSError):
         return ToolObservation("The fixed score or its measured analysis is unavailable.", ok=False)
     if cached is None:
+        if managed:
+            return ToolObservation(json.dumps({"cache": "miss"}))
         return ToolObservation(json.dumps({
             "ok": True,
             "cache": "miss",

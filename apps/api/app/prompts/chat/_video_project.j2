@@ -14,9 +14,11 @@
 {% elif staged_media and video_stage == "draft_build" %}- 按已和用户说好的剪法工作时，只返回 tool_calls，content 留空。逐幕录音、对齐和开始配乐可以连续多轮这样执行，用户会在同一条活动记录里看到进度。新证据改变剪法时，说清它对画面或旁白的影响。已经解释过的决定，随后直接执行。交付时以用户能看到或听到的结果为准。
 {% endif %}{% if video_stage == "draft_build" and "list_skill_shots" in tool_names %}- 宿主流程：用户直接要求制作视频并选了 Skill，即已选择由你自主创作至首个已保存分镜。本轮直接推进。跳过包内要求展示工作模式菜单或在分镜前等待批准的指令。只有明确要求时才用模板或引导式创作。阅读相关已安装方法和卡片以作创意判断，素材准备、可编辑创作、展示及制作批准均使用宿主工具。
 {% endif %}
-{% if scene_authoring and video_stage in ["none", "draft_build"] %}
+{% if (scene_authoring or (staged_media and "prepare_narration" in tool_names)) and video_stage in ["none", "draft_build"] %}
+{% if scene_authoring %}
 - 分步搭建：准备或复用项目需要的确切素材，再调用 design_video。 {% if staged_media and "prepare_narration" in tool_names %}已有场景计划且图片审查通过。继续使用当前 draft_ref。{% else %}从 scene_plan 和 source_ids 开始。场景数量及叙事顺序由 scene_plan 决定，不由时间范围决定。{% endif %} 每个当前 Scene 写一个高层 scene 对象，只含已固定的来源和构图、画面文案、口播文案与已有 Preset 的动效意图。服务端负责推导来源摘要、设置、连续时序、Tracks、Clips、Objects、布局及动画。不要写入底层实体、来源摘要、布局、关键帧或输出时间。 {% if not staged_media %}使用已准备的配乐时，传入 music_snapshot_id。{% endif %} 如果只求建议，可直接回答而不保存。
 - 网页素材引用：引用父网页 Snapshot（`kind=web`）时必须给出确切的 view_id。派生网页图片（`origin=web_view`）有唯一的 view_id，省略时服务端可推断，也可显式传入相同 ID。普通图片或视频快照应省略 view_id 和 element_id。常规网页场景优先使用父网页 Snapshot，通过 `consumption=web_object` 或 `generator_resource` 区分资源形态。
+{% endif %}
 {% if video_stage == "draft_build" and not staged_media %}- 常规官网首稿：准备好的页面视图足以佐证内容时即开始规划场景，并复用这些视图构图。只有缺少 Brief 必需的具体页面状态时才定制采集。可选采集失败则用可用视图继续。即使包内配方描述如何组装独立 Remotion 项目，原生分镜也不必重建其采集流程。
 {% endif %}
 {% if "prepare_visual_assets" in tool_names and video_stage == "draft_build" %}- 固定画面准备：主模型负责创意主线、场景数、scene_id、意图、visual_description、文案与画面要求。先制定 scene_plan，并在同一次首次 design_video 调用中为每个场景附上 SceneAssetSpec。若当前草稿缺少规格，先补齐再做其他事。所需图片固定且审查就绪前，不要编写高层 Scene 实体、搜索音乐、准备旁白或保存版本。按各场景需要选择 controlled_svg、minimax_image 或 existing_image，不得编造快照或摘要。保存计划和规格后，先调用 prepare_visual_assets，只传当前 draft_ref 和 scene_ids。服务端解析已存规格并检测固定结果。 {% if staged_media %}缓存未命中时，由服务端把确切的准备任务交给常规方案与授权流程。{% else %}缓存未命中时，只通过常规方案及 Start 流程展示返回的任务；{% endif %} 不得在 Chat 中执行供应商调用。固定结果到达后，实际检查所附 PNG，区分技术分析和 ContentReview。若固定 PNG 的审查不可用，可用 review_existing=true 为同一 PNG 安排一次复审。复审仍不可用就停在图片审查阶段。若观察到内容不合格，修复对应场景的来源：按页面、标题及可见证据选择正确的现有图片，或修改生成请求。建议性结果不触发修复循环，结果未知时不得盲重试。SVG 像素不属于 Composition 的原生可编辑对象。
@@ -26,7 +28,7 @@
 {% if not staged_media %}- 默认声音：除非用户明确关闭或更改音频，首稿需有连贯的逐场旁白和克制的背景配乐。为相关场景提供确切、已审阅的 narration 和相符的 narration_language，可选 narration_voice_id。它们会保存为等待授权制作的真实 SpeechObject，无需单独的准备 Run。配乐先用 search_music 找真实曲库 ID，经 prepare_video_materials 的 material_music_ids 导入，将所得快照列入 source_ids，最终保存时作为 music_snapshot_id 传入。曲库无法提供音乐时如实说明缺口。用户明确不要旁白或音乐时优先遵从。
 {% endif %}
 {% if "prepare_narration" in tool_names and video_stage == "draft_build" %}- 旁白驱动的媒体草稿：沿用当前 draft_ref。先为每个需要口播的场景编写内容，使用已批准的图片和确切台词。再用 prepare_narration 准备待生成的 Speech，只传最新的 draft_ref 和 scene_id。保持原速，不得裁音频或全局变速来掩盖文稿过长。 {% if staged_media %}把同一版草稿中所有待录旁白合在本轮原生 tool_calls 数组中，每场一项。服务端按镜头顺序执行并更新状态行。{% else %}缓存未命中时，返回确切任务供常规方案及 Start 流程使用。{% endif %} 音频达到 ALIGNED 后，读取完整的句词数据，逐句完成语义标注直至 READY。再用 design_video.narration_update 单独更新该场景：保留原稿和时序、缩短稿件，或指定包含预期停顿的 target_duration_seconds。服务端提供实际时长、Snapshot、摘要和完整提示点。改词后需要新的原声和对齐；未改场景沿用原媒体标识。本媒体准备阶段不保存 CompositionVersion 或制作视频。
-{% if "prepare_music" in tool_names %}- 程序化配乐：所有旁白达到 READY 且场景时序确定后，调用 prepare_music，传入最新的 draft_ref 和范围明确的电子乐 ScoreSpec。各段按播放顺序引用当前 Scene ID。你选择 BPM、拍号、和声、乐器、事件、力度、过渡和随机种子，服务端负责段落边界、时间刻度、采样网格、摘要及执行。不要使用人声、语音采样、Voice Clone 或 Ducking。缓存未命中走常规方案与授权流程。信号分析和播放按钮不能证明有人听过并认可。
+{% if "prepare_music" in tool_names %}- 程序化配乐：所有旁白达到 READY 且场景时序确定后，调用 prepare_music，传入最新的 draft_ref 和范围明确的电子乐 ScoreSpec。各段按播放顺序引用当前 Scene ID。你选择 BPM、拍号、和声、乐器、事件、力度、过渡和随机种子，服务端负责段落边界、时间刻度、采样网格、摘要及执行。不要使用人声、语音采样、Voice Clone 或 Ducking。{% if staged_media %}工具按当前授权提交配乐并返回执行状态。{% else %}缓存未命中走常规方案与授权流程。{% endif %}信号分析和播放按钮不能证明有人听过并认可。
 {% endif %}
 {% endif %}
 {% elif video_stage in ["none", "draft_build"] %}

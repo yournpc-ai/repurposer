@@ -464,6 +464,7 @@ async def project_lifecycle(
     pending_question: "Message | None",
     pending_plan: bool,
     ui_language: str = "en",
+    requested_tasks: tuple[dict, ...] = (),
 ) -> LifecycleStamp:
     """Gather the pipeline-owned facts and compute the stamp.
 
@@ -477,7 +478,7 @@ async def project_lifecycle(
     using the existing private seats here adds no new cross-module debt.
     """
     # --- Agent Interface facts, field-level (U4: never payload-existence)
-    plan_tasks: tuple[dict[str, Any], ...] = ()
+    plan_tasks = requested_tasks
     plan_prose = ""
     estimate_total: tuple[int, int] | None = None
     prerequisite_pending = False

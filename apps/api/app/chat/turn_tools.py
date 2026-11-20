@@ -363,7 +363,7 @@ def _prepare_music_tool() -> ChatTool:
         description=(
             "检查或准备一首用于当前已调整时序草稿的纯电子器乐曲。传入最新 draft_ref、曲名，以及按播放顺序覆盖所有当前 Scene 的限定 ScoreSpec 段落。"
             "服务端负责段落范围、整数刻度、采样网格、ScoreSpec 摘要和编排好的 BeatGrid。禁用人声、音频采样、任意代码或命令。"
-            "命中缓存则返回固定私有 Music、Snapshot 和完整分析，不再合成。未命中则通过常规方案及 Start 流程展示确切任务，Chat 不直接合成。不创建 CompositionVersion 或视频 Output。"
+            "命中缓存返回固定私有 Music、Snapshot 和完整分析。官网制作已授权时系统直接提交缺失配乐，需要确认时呈现报价。其他上下文沿用方案授权。"
         ),
         params_model=PrepareMusicArgs,
         presentation=ToolPresentation(
@@ -1045,6 +1045,12 @@ def video_round_tools(
                     return "用 save=true 仅保存已审阅的现有 draft_ref，不再写入内容。", parameters
                 if resolution.get("media_phase") == "audio":
                     allowed = {"draft_ref", "scene", "narration_update"}
+                    if resolution.get("scenes_filled"):
+                        allowed.remove("scene")
+                        return (
+                            "更新已有场景的旁白或确认实测时序。",
+                            prune_wire_parameters(parameters, set(parameters["properties"]) - allowed),
+                        )
                     return (
                         "根据已批准的图片和确切旁白续写已有 Scene，或基于 READY 对齐结果用 narration_update 确认或调整旁白时序。",
                         prune_wire_parameters(parameters, set(parameters["properties"]) - allowed),

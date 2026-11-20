@@ -324,6 +324,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         resolution["media_phase"] = media_state["phase"]
         permitted = allowed_media_tools(media_state["phase"])
         if media_state["phase"] == "audio":
+            from app.agents.working_drafts import working_draft_review_facts
+
+            scenes = working_draft_review_facts(current.arguments)["scenes"]
+            resolution["scenes_filled"] = bool(scenes) and all(scene["clip_ids"] for scene in scenes)
             timing_issue = audio_timing_issue(current.arguments)
             media_state["audio_timing_ready"] = timing_issue is None
             media_state["timing_issue"] = timing_issue
@@ -578,6 +582,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             )
             required_next = "prepare_music" if media_state["audio_timing_ready"] else None
             resume = media_state.get("narration_resume")
+            if resume is None and resolution["scenes_filled"] and not media_state["audio_timing_ready"]:
+                dynamic["media_instruction"] = "各幕已填入画面和旁白。以当前 draft_ref 将待录场景一并提交 prepare_narration。"
+                required_next = "prepare_narration"
             if resume is not None:
                 dynamic["media_instruction"] = (
                     "旁白已录制。以本轮 draft_ref 和 narration_resume 为准。scenes 只列与当前原文、声音和语言一致的录音引用。"

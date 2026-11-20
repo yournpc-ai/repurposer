@@ -237,7 +237,6 @@ async def derive_task_estimates(
     """
     if not tasks:
         return None
-    spec = TaskSpec(tasks=list(tasks))
     facts = await _estimate_facts(db, project)
     from app.tools.video.production import video_quote_facts
     facts.update(await video_quote_facts(db, project, tasks))
@@ -270,6 +269,10 @@ async def derive_task_estimates(
         prev = current
         total = current
     if total == [0, 0]:
+        # Local deterministic synthesis has a known zero provider cost. Preserve that
+        # quote through confirmation; deferred fan-out still has no bounded quote.
+        if len(tasks) == 1 and tasks[0].tool == "prepare_music":
+            return PlanEstimate(total=total, per_task=[total])
         return None
     return PlanEstimate(total=total, per_task=per_task)
 

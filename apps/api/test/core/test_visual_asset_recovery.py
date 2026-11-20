@@ -635,3 +635,46 @@ async def test_submitted_provider_image_reuses_only_verified_fixed_media(monkeyp
     )
     assert recovered and usage == {}
     assert json.loads(stored[key])["state"] == "submitted"
+
+
+@pytest.mark.asyncio
+async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
+    from app.chat.media_journey import media_actions
+
+    draft, _ = image_draft()
+    draft["content"]["scenes"][0]["intent"] = "Show the link to a source paper."
+    draft["content"]["scenes"][1]["intent"] = "Show a researcher communicating science."
+    draft["design"]["scene_assets"][1]["intent"] = "Use a vertically mounted phone."
+    draft["design"]["review_user_words"] = ["Show the researcher in the second scene."]
+    spec = visual_assets.current_scene_assets(draft)[1]
+    pixel_identity = spec.request_digest()
+    first_version = spec.review_version()
+    output = io.BytesIO()
+    Image.new("RGB", (32, 18), "white").save(output, format="PNG")
+    data = output.getvalue()
+    facts = analyze_image_bytes(data, snapshot_id=str(uuid4()))
+
+    reviewer = AsyncMock(return_value={"status": "pass", "summary": "Use case visible", "findings": []})
+    async def review():
+        return await review_image_content(data, scene_asset=spec, analysis=facts,
+                                          analysis_ref={"digest": facts.report_digest}, reviewer=reviewer)
+    first = await review()
+    projection = json.loads(reviewer.await_args.kwargs["scene_asset_json"])
+    assert "vertically" not in str(projection)
+    assert projection["requirements"]["narrative"] == draft["content"]["scenes"][1]["intent"]
+    assert projection["other_scene_roles"] == {"s1": "Show the link to a source paper."}
+    result = {"scene_id": "s2", "request_digest": pixel_identity, "content_review": first.model_dump()}
+    assert "s2" not in media_actions(draft, [result])["repair_scene_ids"]
+
+    draft["design"]["review_user_words"].append("Use a vertically mounted phone.")
+    spec = visual_assets.current_scene_assets(draft)[1]
+    assert spec.request_digest() == pixel_identity and spec.review_version() != first_version
+    reviewer.return_value = {"status": "fail", "summary": "Orientation mismatch", "findings": [{
+        "kind": "observed_issue", "requirement": "user_1", "observed": "Horizontal phone",
+        "evidence": "The grip holds the long edge parallel to the desk.",
+    }]}
+    second = await review()
+    assert second.status == "fail"
+    assert json.loads(reviewer.await_args.kwargs["scene_asset_json"])["requirements"]["user_1"] == (
+        "Use a vertically mounted phone.")
+    assert media_actions(draft, [{**result, "content_review": second.model_dump()}])["repair_scene_ids"] == ["s2"]

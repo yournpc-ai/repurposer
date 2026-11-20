@@ -789,6 +789,7 @@ class PlanTurn:
 
             result = await dock_media_observation(
                 self, name, result, working_draft=getattr(params, "_working_draft", None),
+                music_args=params if name == "prepare_music" else None,
             )
             if result.stop_after_observation:
                 await self._resolve_deferred()
@@ -906,7 +907,7 @@ class PlanTurn:
             return await prepare_visual_assets_seat(project=self.project, args=params)
         if name == "prepare_music":
             from app.chat.video_turn_seats import prepare_music_seat
-            return await prepare_music_seat(project=self.project, args=params)
+            return await prepare_music_seat(project=self.project, args=params, managed=self.media_state is not None)
         if name == "get_narration_alignment":
             assert isinstance(params, GetNarrationAlignmentArgs)
             from app.chat.video_turn_seats import get_narration_alignment_seat
@@ -1035,6 +1036,15 @@ class PlanTurn:
                 ), None)
         if (self.media_state and self.media_state["phase"] == "images"
                 and isinstance(feedback, WorkingDraftUpdated) and params.scene_assets):
+            opening = await self.db.get(Message, self.turn_id)
+            answers = await self.db.scalars(select(Message.answer).where(
+                Message.conversation_id == self.conversation_id, Message.turn_id == self.turn_id,
+                Message.answer["kind"].as_string() == "group",
+            ).order_by(Message.seq))
+            words = [opening.content]
+            for answer in answers:
+                words.extend(item["text"] for item in answer.get("answers", []) if item.get("text"))
+            feedback.arguments["design"]["review_user_words"] = words
             feedback = replace(feedback, visual_results=self.media_visual_results)
         if read is None:
             if isinstance(feedback, ToolObservation) and not feedback.ok:
@@ -1251,6 +1261,7 @@ class PlanTurn:
         need = await resolve_confirmation_need(
             db, self.user_id, task_estimate,
             production_intent=params.production_intent,  # ADR-139
+            require_quote=any(task.tool == "prepare_music" for task in params.tasks),
             # 7276ef13 ③: a change refused THIS turn holds the auto start.
             # 定点收尾②复审: the drift hold reads the STANDING VERSION's
             # persisted state (world truth — a rebuilt turn never loses it),
@@ -1948,6 +1959,20 @@ async def run_plan_turn(
             db, project.id, opening_id=turn.media_journey["opening_id"],
             draft_id=media_resume_draft.candidate_id if media_resume_draft else None,
         )
+        remembered = ((getattr(conversation, "context", None) or {}).get("music_requests") or {}).get(str(turn_id))
+        if remembered:
+            from app.chat.media_journey import _submit_music_observation
+            from app.models.schemas import TaskItem
+            task = TaskItem.model_validate(remembered["task"])
+            receipt = ToolObservation(json.dumps({"cache": "miss", "plan_task": remembered["task"]}))
+            result = await _submit_music_observation(turn, task, receipt)
+            if turn.outcome:
+                return turn.outcome
+            message = await _create_message(
+                db, conversation.id, "assistant", result.text, turn_id=turn_id,
+                intent={"media_journey": {**turn.media_journey, "state": "blocked"}},
+            )
+            return message, None, turn.settled_pending, []
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     turn.video_confirmation = confirmation
     # 言语提交协议武装 (speech-commit protocol, ADR-099 §7): on the SSE path

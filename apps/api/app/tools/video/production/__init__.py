@@ -424,6 +424,8 @@ async def pin_visual_asset_preparation(db, project, tasks):
         "visual_asset_preparation": {
             "request": params.model_dump(mode="json", exclude_none=True),
             "scene_assets": [spec.model_dump(mode="json") for spec in specs],
+            "review_basis": {spec.scene_id: spec._review_basis for spec in specs
+                             if spec._review_basis is not None},
             "content_attempts": content_attempts,
             "creative_state": (
                 pending.creative_state.model_dump(mode="json")

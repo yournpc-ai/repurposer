@@ -150,7 +150,10 @@ async def discard_turn_context(db, conversation_id, turn_id):
                 # world fact even though this turn's own exchanges retract.
                 item = {**item, "candidate": {**candidate, "active": False}}
             retained.append(item)
-        conversation.context = {"schema_version": 1, "items": retained}
+        requests = dict((conversation.context or {}).get("music_requests", {}))
+        requests.pop(str(turn_id), None)
+        conversation.context = {**(conversation.context or {}), "schema_version": 1, "items": retained,
+                                "music_requests": requests}
 
 
 class ConversationContext:
@@ -239,7 +242,7 @@ class ConversationContext:
                 raise PermissionError("conversation context is not accessible")
             items = context_items(conversation.context)
             items = [prior for prior in items if prior["id"] != item["id"]]
-            conversation.context = {"schema_version": 1, "items": [*items, item]}
+            conversation.context = {**(conversation.context or {}), "schema_version": 1, "items": [*items, item]}
             await db.commit()
         logger.info("conversation_context_recorded", conversation_id=str(self.conversation_id),
                     turn_id=str(self.turn_id), item_id=item["id"], tool=exchange.tool_name, ok=observation.ok)

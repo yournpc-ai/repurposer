@@ -22,7 +22,7 @@ from app.providers.llm.base import LLMError, LLMSchemaError
 
 IMAGE_ANALYZER_SET_VERSION = "image-pillow-v1"
 AUDIO_ANALYZER_SET_VERSION = "audio-pyav-numpy-ffmpeg-v2"
-IMAGE_REVIEWER_VERSION = "scene-image-review-v6"
+IMAGE_REVIEWER_VERSION = "scene-image-review-v7"
 _ANALYSIS_PREFIX = "visual-media-analysis"
 _AUDIO_ANALYSIS_PREFIX = "audio-media-analysis"
 _REVIEW_PREFIX = "visual-content-reviews"
@@ -458,7 +458,7 @@ def _assemble_image_review(
     return {
         "scene_asset_json": scene_asset_json,
         "analysis_json": analysis_json,
-        "existing_image": json.loads(scene_asset_json)["source"]["kind"] == "existing_image",
+        "existing_image": json.loads(scene_asset_json)["source_kind"] == "existing_image",
     }, [image]
 
 
@@ -500,13 +500,29 @@ async def review_image_content(
         "scene_id": scene_asset.scene_id,
         "request_digest": scene_asset.request_digest(),
         "analysis_report_ref": analysis_ref,
-        "reviewer_version": image_reviewer_version(scene_asset.source.kind),
+        "reviewer_version": scene_asset.review_version(),
         "review_scope": "full_static_image",
+    }
+    basis = scene_asset._review_basis or {}
+    scene_id = scene_asset.scene_id
+    roles = basis.get("scene_roles") or {scene_id: scene_asset.intent}
+    requirements = {"narrative": roles.get(scene_id) or scene_asset.intent,
+                    "technical": "Image is decodable and essential picture content is visible and legible."}
+    for index, words in enumerate(basis.get("user_words", [])):
+        requirements[f"user_{index}"] = words
+    if scene_asset.source.kind == "existing_image" and scene_asset.source.visible_evidence:
+        requirements["source_evidence"] = scene_asset.source.visible_evidence
+    projected = {
+        "scene_id": scene_id, "source_kind": scene_asset.source.kind,
+        "requirements": requirements,
+        "other_scene_roles": {key: value for key, value in roles.items() if key != scene_id},
+        "native_overlay_copy": scene_asset.on_screen_copy,
+        "output": scene_asset.output.model_dump(mode="json"),
     }
     try:
         call = reviewer or image_content_reviewer.call
         answer = await call(
-            scene_asset_json=json.dumps(scene_asset.model_dump(mode="json"), ensure_ascii=False),
+            scene_asset_json=json.dumps(projected, ensure_ascii=False),
             analysis_json=analysis.model_dump_json(),
             image=image_media_input(
                 data,
@@ -518,6 +534,14 @@ async def review_image_content(
         )
         if isinstance(answer, dict):
             answer = ContentReviewAnswer.model_validate(answer)
+        if basis:
+            findings = [item for item in answer.findings if item.kind != "observed_issue"
+                        or item.requirement in requirements]
+            if len(findings) != len(answer.findings):
+                answer = ContentReviewAnswer.model_validate({
+                    "status": answer.status, "findings": findings,
+                    "summary": " ".join(item.observed for item in findings)[:1200],
+                })
         payload = {
             **common,
             "status": answer.status,

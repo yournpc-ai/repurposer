@@ -79,7 +79,7 @@ class PrepareVisualAssetsParams(VisualAssetSelection):
         legacy = self.scene_assets or []
         selected = select_scene_assets(draft, [spec.scene_id for spec in legacy])
         for current, supplied in zip(selected, legacy):
-            if current != supplied:
+            if current.model_dump(mode="json") != supplied.model_dump(mode="json"):
                 raise ValueError(f"Scene {current.scene_id} does not match its current SceneAssetSpec")
         return selected
 

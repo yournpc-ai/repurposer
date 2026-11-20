@@ -113,6 +113,12 @@ def media_session(monkeypatch, ids, *, target_seconds=None):
         runs[next_run.id] = next_run
         turn.outcome = (None, next_run.id, None, [])
 
+    async def submit_score(turn, task, observation):
+        scheduled.append([task])
+        turn.outcome = (None, uuid4(), None, [])
+        return ToolObservation('{"status":"pending"}', stop_after_observation=True)
+
+    monkeypatch.setattr(media_journey, "_submit_music_observation", submit_score)
     monkeypatch.setattr(plan_turn.PlanTurn, "_present_plan", present)
     async def get(model, identity, **kwargs):
         if model is WorkflowRun:
@@ -156,7 +162,7 @@ async def test_image_settlement_dispatches_pending_narrations_in_one_provider_ro
     assert "prepare_visual_assets" not in tool_names(wire)
     for tool in wire["tools"]:
         if tool["function"]["name"] == "design_video":
-            assert set(tool["function"]["parameters"]["properties"]) == {"draft_ref", "scene", "narration_update"}
+            assert set(tool["function"]["parameters"]["properties"]) == {"draft_ref", "narration_update"}
     assert "旁白驱动的媒体草稿" in str(wire["messages"])
     assert "只返回 tool_calls，content 留空" in str(wire["messages"])
     assert "固定画面准备" not in str(wire["messages"])
