@@ -542,6 +542,16 @@ def apply_temporal_edit(content: CompositionContent, edit: TemporalEdit) -> Comp
                 scene.visual_description = None
 
     final_clips = _clips_by_id(candidate)
+    # When the last clip moves earlier its owning scene can no longer end
+    # beyond the film. Only contract the old terminal boundary of that scene.
+    if edit.action == "move" and edit.target.kind == "clip":
+        before_end = max(c.range.end for c in original_clips.values())
+        after_end = max(c.range.end for c in final_clips.values())
+        owner = original_clips[edit.target.id].scene_id
+        if after_end < before_end:
+            for scene in candidate.scenes:
+                if scene.scene_id == owner and scene.range.end == before_end and scene.range.start < after_end:
+                    scene.range = TimeRange(start=scene.range.start, end=after_end)
     final_scenes = {scene.scene_id: scene for scene in candidate.scenes}
     for scene in candidate.scenes:
         scene.speech_clip_ids = [
