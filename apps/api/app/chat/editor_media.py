@@ -102,7 +102,7 @@ async def settle_media_receipt(db, project, run):
     outcome_unknown = bool((run.context or {}).get("provider_outcome_unknown"))
     if run.status == WorkflowStatus.COMPLETED:
         try:
-            if receipt.intent["tool"] == "export_video":
+            if receipt.intent.get("tool") == "export_video":
                 return await _record_export(db, project, receipt, run)
             if "visual_asset_preparation" in run.context:
                 result = run.context["visual_asset_preparation"]["result"]
@@ -352,6 +352,8 @@ async def generate_media(turn, name, args, composition, version):
     if version is not None:
         turn._inspected_version = str(version.id)
     facts = dict(receipt.intent["media_result"])
+    if facts.get("role") == "export":
+        turn._editor_export = facts
     if facts.get("alignment_id"):
         from app.tools.video.alignment_store import wait_for_alignment
 
@@ -376,7 +378,7 @@ async def generate_media(turn, name, args, composition, version):
         turn.__dict__.setdefault("_generated_in_response", {})[facts["snapshot_id"]] = current_group_id()
     facts["delivered_to_chat"] = facts.get("role") != "export"
     labels = turn.__dict__.setdefault("_editor_labels", {})
-    for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest"):
+    for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest", "output_id"):
         if facts.get(key):
             for token in (facts[key], facts[key][:8], facts[key][:12]):
                 labels[token] = ("这份素材", "this media")

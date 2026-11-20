@@ -154,6 +154,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 selected = named[0] if len(named) == 1 else None
         context = {
             "works": [{k: r.get(k) for k in ("composition_id", "name", "version_id", "version")} for r in works],
+            "referenced_output": hint if hint.get("output_id") else None,
             "selected": selected["base_ref"] if selected else None,
             "project": next(({k: r.get(k) for k in ("title", "project_id", "user_stated_constraints")}
                              for _, r in resources if r.get("kind") == "project"), None),

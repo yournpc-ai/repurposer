@@ -505,9 +505,6 @@ class ChatTurn:
             await self._resolve_deferred()
         return result
 
-    def _remember_video_review(self, report: dict) -> None:
-        self._video_review_report = report
-
     async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
         if name == "propose_tasks":
             assert isinstance(params, ProposeTasksArgs)
@@ -542,11 +539,7 @@ class ChatTurn:
         if name == "review_video":
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
-            return await review_video_seat(
-                project=self.project,
-                args=params,
-                on_report=self._remember_video_review,
-            )
+            return await review_video_seat(turn=self, args=params)
         if name == "show_video_presets":
             assert isinstance(params, ShowVideoPresetsArgs)
             from app.chat.video_turn_seats import show_video_presets_seat

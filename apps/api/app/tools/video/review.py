@@ -623,12 +623,13 @@ async def review_video(
     db: AsyncSession,
     *,
     owner_id: UUID,
+    project_id: UUID,
     args: ReviewVideoArgs,
 ) -> dict[str, Any]:
     output = await db.scalar(
         select(Output)
         .join(Project, Output.project_id == Project.id)
-        .where(Output.id == args.output_id, Project.user_id == owner_id)
+        .where(Output.id == args.output_id, Output.project_id == project_id, Project.user_id == owner_id)
     )
     if output is None or output.type != "video":
         raise ReviewError("no accessible delivered video Output at this exact id")
@@ -653,8 +654,22 @@ async def review_video(
     video = await storage.read(video_key)
     video_sha256 = hashlib.sha256(video).hexdigest()
     saved = _reusable_report(output.quality, output.id, video_sha256, args)
-    if saved is not None:
+    if (saved is not None and saved.get("file") and
+            all(saved.get(k) == v for k, v in pinned.items())):
         return saved
+    try:
+        with av.open(io.BytesIO(video)) as container:
+            stream = container.streams.video[0]
+            file_facts = {
+                "bytes": len(video), "width": stream.width, "height": stream.height,
+                "video_codec": stream.codec_context.name, "video_frames": stream.frames,
+                "video_seconds": float(stream.duration * stream.time_base) if stream.duration else None,
+                "audio_codecs": [s.codec_context.name for s in container.streams.audio],
+            }
+    except (av.FFmpegError, IndexError) as exc:
+        raise ReviewError("The Output contains no readable video stream.") from exc
+    if [file_facts["width"], file_facts["height"]] != [spec.get("width"), spec.get("height")]:
+        raise ReviewError("The decoded Output size differs from its executed spec.")
 
     # This read resolves the Output's exact version, including when it is old.
     read = await video_version_read(db, owner_id=owner_id, output_id=output.id)
@@ -675,7 +690,7 @@ async def review_video(
         "output_id": str(output.id),
         **pinned,
         "execution_digest": (output.payload or {}).get("execution_digest"),
-        "video_sha256": video_sha256,
+        "video_sha256": video_sha256, "file": file_facts,
         "duration_frames": spec.get("duration_frames"),
         "fps": str(_fps(spec)),
     }
@@ -715,6 +730,7 @@ async def review_video(
         inspection=inspection,
         motion_sampling=motion_sampling,
     )
+    report["file"] = file_facts
     quality = dict(output.quality or {})
     quality["content_review"] = report
     output.quality = quality

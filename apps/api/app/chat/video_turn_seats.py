@@ -147,7 +147,7 @@ async def _owned_video_output(db, project, mention):
     except ValueError:
         return None
     return await db.scalar(select(Output).join(Project, Output.project_id == Project.id).where(
-        Output.id == output_id, Project.user_id == project.user_id
+        Output.id == output_id, Output.project_id == project.id, Project.user_id == project.user_id
     ))
 
 
@@ -157,7 +157,7 @@ async def video_target_hint(db, project, mentions=()):
         row = await _owned_video_output(db, project, pins[0]) if len(pins) == 1 else None
         if row is None or not row.composition_id or not row.composition_version_id:
             return {"unavailable": True}
-        return {"composition_id": str(row.composition_id), "version_id": str(row.composition_version_id),
+        return {"output_id": str(row.id), "composition_id": str(row.composition_id), "version_id": str(row.composition_version_id),
                 **({"selected_region": pins[0].region.model_dump(mode="json")} if pins[0].region else {})}
     return None
 
@@ -265,9 +265,7 @@ async def read_video_for_presentation(db, project, params):
 
 async def review_video_seat(
     *,
-    project: Project,
-    args: ReviewVideoArgs,
-    on_report: Callable[[dict[str, Any]], None] | None = None,
+    turn, args: ReviewVideoArgs,
 ) -> str | ToolObservation | TerminalRefusal:
     """Decode and review the exact Output; persist its advisory report."""
 
@@ -276,9 +274,13 @@ async def review_video_seat(
     from app.models.database import AsyncSessionLocal
     from app.tools.video.review import ReviewAttemptFailed, ReviewError, review_video
 
+    turn._video_review_report = None
+    selected = (getattr(turn, "_editor_export", None) or getattr(turn, "_editor_output_pin", None) or {})
+    if selected.get("output_id") and str(args.output_id) != selected["output_id"]:
+        return ToolObservation("Review the exact selected Output.", ok=False)
     try:
         async with AsyncSessionLocal() as video_db:
-            report = await review_video(video_db, owner_id=project.user_id, args=args)
+            report = await review_video(video_db, owner_id=turn.project.user_id, project_id=turn.project.id, args=args)
     except ReviewAttemptFailed as exc:
         return TerminalRefusal(
             str(exc),
@@ -290,9 +292,8 @@ async def review_video_seat(
             },
         )
     except (ReviewError, ValueError) as exc:
-        return f"review_video rejected: {exc}"
-    if on_report is not None:
-        on_report(report)
+        return ToolObservation(str(exc), ok=False, user_error=str(exc))
+    turn._video_review_report = report
     from app.chat.activity_receipts import video_review_receipt
 
     return ToolObservation(

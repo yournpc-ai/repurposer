@@ -798,7 +798,7 @@ class PlanTurn:
         if name == "review_video":
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
-            return await review_video_seat(project=self.project, args=params)
+            return await review_video_seat(turn=self, args=params)
         if name == "show_video_presets":
             assert isinstance(params, ShowVideoPresetsArgs)
             from app.chat.video_turn_seats import show_video_presets_seat
