@@ -508,6 +508,7 @@ def compile_video_spec(
     content_digest: str,
     generator_media: dict[str, dict] | None = None,
     speech_media: dict[str, dict] | None = None,
+    playback_ticks: int | None = None,
 ) -> dict[str, Any]:
     """Compile validated content into the renderer-neutral spec dict."""
     settings = content.settings
@@ -517,9 +518,15 @@ def compile_video_spec(
         (clip.range.end for track in content.timeline.tracks for clip in track.clips),
         default=0,
     )
+    if playback_ticks is not None:
+        if playback_ticks < total_ticks:
+            raise CompileError("The requested playback ends before a projected clip.")
+        total_ticks = playback_ticks
     if total_ticks <= 0:
         raise CompileError("nothing to render: the timeline has no clips")
     total_frames = _quantize_frames(total_ticks, content)
+    if total_frames < 1:
+        raise CompileError("The playback window must span at least one frame.")
     if total_frames > VIDEO_MAX_FRAMES:
         raise CompileError(
             f"video production supports at most {VIDEO_MAX_FRAMES} frames; "

@@ -370,6 +370,7 @@ class RoundAssembly:
     enforce_offered_tools: bool = False
     # A caller may acknowledge a settled user action when the first tool response is silent.
     acknowledgment: str | None = None
+    project_reply: Callable[[str], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -423,6 +424,8 @@ class ToolObservation:
     accepted_interim_prose: str | None = None
     # A caller-owned handoff settled the observation and can finish this turn.
     stop_after_observation: bool = False
+    # A version-scoped observation expires when the snapshot no longer has its key.
+    valid_for_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -817,6 +820,7 @@ class ToolLoopAgent:
         project_image_observations: dict[str, ToolObservation] = {}
         delivered_observations: set[str] = set()
         fold_after_delivery: set[str] = set()
+        observed_keys: dict[str, str] = {}
         # Repair-label truthfulness (交互完整性批 ②): set by the rejection
         # paths below, cleared at each iteration's top — on_repair marks a
         # rejection's retry, never an accepted read's continuation.
@@ -947,6 +951,8 @@ class ToolLoopAgent:
                         and set(keys).issubset(snapshot.keys))
                 )
             }
+            if snapshot is not None:
+                omitted.update(call_id for call_id, key in observed_keys.items() if key not in snapshot.keys)
             replacements = {
                 call_id: observation_wire_content(
                     replace(observation, text=observation.project_text, images=())
@@ -1117,14 +1123,17 @@ class ToolLoopAgent:
                 opening = [{**message, "name": "application_context"} for message in opening]
                 shared = [{**message, "name": "project_evidence"} for message in shared]
                 feedback = [{**message, "name": "tool_feedback"} for message in feedback]
+            round_dialogue = dialogue
+            if assembled.project_reply and dialogue is not None:
+                round_dialogue = next(([m] for m in reversed(dialogue) if m["role"] == "user"), [])
             opening_index = 1 + len(history_messages)
             if dialogue is not None and self.name in {"trigger_turn", "trigger_delivery"}:
                 dialogue_start = opening_index
-                opening_index += len(dialogue)
+                opening_index += len(round_dialogue)
                 observation_start = opening_index + len(opening)
                 feedback_start = observation_start + len(tail)
                 project_start = feedback_start + len(feedback)
-                messages = [base_messages[0], *history_messages, *dialogue, *opening,
+                messages = [base_messages[0], *history_messages, *round_dialogue, *opening,
                             *tail, *feedback, *shared]
             elif dialogue is None:
                 messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
@@ -1139,10 +1148,10 @@ class ToolLoopAgent:
                     opening = []
                 project_start = opening_index + len(opening)
                 dialogue_start = project_start + len(shared)
-                observation_start = dialogue_start + len(dialogue)
+                observation_start = dialogue_start + len(round_dialogue)
                 feedback_start = observation_start + len(tail)
                 messages = [base_messages[0], *history_messages, *opening, *shared,
-                            *dialogue, *tail, *feedback]
+                            *round_dialogue, *tail, *feedback]
             assembly = {
                 "agent": self.name, "iteration": iteration, "max_iterations": self.max_iterations,
                 "system_sources": [
@@ -1178,7 +1187,7 @@ class ToolLoopAgent:
                                      "observations": list(range(observation_start, feedback_start)),
                                      "loop_feedback": list(range(feedback_start, feedback_start + len(feedback))),
                                      "project_context": list(range(project_start, project_start + len(shared))),
-                                     "dialogue": list(range(dialogue_start, dialogue_start + len(dialogue or [])))},
+                                     "dialogue": list(range(dialogue_start, dialogue_start + len(round_dialogue or [])))},
             }
             try:
                 with bind_model_prompt(assembly):
@@ -1231,6 +1240,10 @@ class ToolLoopAgent:
             # Misplaced speech (an args-level "prose" habit key) reads as
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
+            if assembled.project_reply:
+                prose = assembled.project_reply(prose)
+                if any(not by_name[c.name].terminal for c in result.tool_calls if c.name in by_name):
+                    prose = ""  # The Activity owns pre-execution speech for editor operations.
             if (
                 len(result.tool_calls) == 1
                 and result.tool_calls[0].name == assembled.invitation_tool
@@ -1273,7 +1286,8 @@ class ToolLoopAgent:
                         return stopped
                     continue
                 required_feedback = assembled.missing_tool_feedback
-                if self.service_per_call and not required_feedback:
+                editor_can_finish = assembled.project_reply is not None and bool(observation_scopes)
+                if self.service_per_call and not required_feedback and not editor_can_finish:
                     required_feedback = "在助手消息正文中回答，并调用合适的终结工具。"
                 if required_feedback:
                     stopped = await _reject(
@@ -1329,6 +1343,8 @@ class ToolLoopAgent:
                 fold_keys = observation.context_keys if not observation.images or observation.project_text is not None else ()
                 if observation.images and observation.project_text is not None:
                     project_image_observations[call_id] = observation
+                if observation.valid_for_key:
+                    observed_keys[call_id] = observation.valid_for_key
                 if observation.fold_after_delivery:
                     fold_after_delivery.add(call_id)
                 observation_scopes[call_id] = (observation.context_lifetime, fold_keys)

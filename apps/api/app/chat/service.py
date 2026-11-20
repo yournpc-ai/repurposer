@@ -2835,6 +2835,8 @@ async def prepare_chat_turn(
         db, user_id, request.project_id
     )
     conversation_id = UUID(str(conversation.id))
+    from app.chat.editor_recovery import recover_interrupted_edits
+    await recover_interrupted_edits(db, conversation_id)
     # Worker-born speech and deterministic chrome inherit this locale owner;
     # plan/chat instead infer speech from user messages and history. None-safe:
     # outside a request there is nothing to stamp, and a worker path never
@@ -3379,7 +3381,8 @@ async def stop_turn_at_visible_frontier(
     from app.chat.conversation_context import discard_turn_context
     await discard_turn_context(db, row.conversation_id, user_message_id)
 
-    if not visible_prose and not visible_activity and not visible_structure:
+    committed = bool((row.intent or {}).get("editor_commits"))
+    if not committed and not visible_prose and not visible_activity and not visible_structure:
         await db.execute(
             delete(Message)
             .where(Message.id.in_([message.id for message in turn_rows]))
@@ -3417,6 +3420,9 @@ async def stop_turn_at_visible_frontier(
         "stop_requested_at": now,
         "stop_visible": frontier.model_dump(mode="json"),
     }
+    if committed:
+        from app.chat.editor_recovery import report_committed_edits
+        await report_committed_edits(db, row)
     row.turn_state = "cancelled"
     await db.commit()
     return "cancelled"
@@ -3440,6 +3446,8 @@ async def settle_interrupted_turn(
                 return None
             if row.turn_state != "in_flight":
                 return row.turn_state
+            from app.chat.editor_recovery import report_committed_edits
+            await report_committed_edits(db, row)
             row.turn_state = "failed"
             await db.commit()
             return "failed"
@@ -3464,8 +3472,11 @@ async def stamp_turn_failed(user_message_id) -> None:
 
     try:
         async with AsyncSessionLocal() as db:
-            row = await db.get(Message, user_message_id)
+            row = await db.get(Message, user_message_id, with_for_update=True)
             if row is not None and row.turn_state == "in_flight":
+                from app.chat.editor_recovery import report_committed_edits
+
+                await report_committed_edits(db, row)
                 row.turn_state = "failed"
                 await db.commit()
     except Exception as e:  # noqa: BLE001 — best-effort by contract

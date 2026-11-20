@@ -716,3 +716,33 @@ def test_valid_focus_repair_enters_review_and_save_waits_for_pass():
     rechecked = judge_unjudged(rechecked, resolves_issue_ids=[issue_id])
     assert working_draft_review_facts(rechecked)["save_ready"] is True
     assert_working_draft_review_ready(rechecked)
+
+
+def test_saved_playback_preserves_empty_time_and_transition_boundaries():
+    from app.editing.schemas import Transition
+    from app.models.schemas import VideoRangeScrubTarget
+
+    content = valid_content()
+    main_track = content.timeline.tracks[0]
+    content.timeline.tracks = [main_track]
+    left = main_track.clips[0]
+    right = left.model_copy(deep=True)
+    right.clip_id, right.object.object_id = "right", "right-image"
+    left.range.end, right.range.start = 90000, 270000
+    main_track.clips.append(right)
+
+    def play(start, end):
+        result = compile_preview(content, target=VideoRangeScrubTarget(start_seconds=start, end_seconds=end))
+        assert result["status"] == "ready"
+        return result["video_spec"]
+
+    assert play(0, 4)["duration_frames"] == 120
+    gap = play(1, 3)
+    assert gap["duration_frames"] == 60 and gap["tracks"][0]["clips"] == []
+    tail_gap = play(0.5, 2)
+    assert tail_gap["duration_frames"] == 45 and tail_gap["tracks"][0]["clips"][0]["end_frame"] == 15
+    right.range.start = left.range.end
+    content.timeline.transitions = [Transition(transition_id="dissolve", from_clip_id=left.clip_id,
+                                               to_clip_id=right.clip_id, duration=36000)]
+    with pytest.raises(ScrubTargetError, match="complete transition"):
+        play(1, 2)

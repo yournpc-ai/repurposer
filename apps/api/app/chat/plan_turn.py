@@ -1339,7 +1339,7 @@ class PlanTurn:
         )
         source_text = (
             self.text if infer_task_kind(self.text) == "website_promo"
-            else stored.prompt or self.text
+            else (stored.prompt if stored else None) or self.text
         )
         website_promo = infer_task_kind(source_text) == "website_promo"
         if website_promo and params.brief is not None:
@@ -2009,6 +2009,9 @@ async def run_plan_turn(
             "video_confirmation": confirmation,
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,
+            "last_preview": getattr(turn, "_editor_last_preview", None),
+            "recent_edit": getattr(turn, "_editor_recent", None),
+            "editor_labels": turn.__dict__.setdefault("_editor_labels", {}),
             "target_hint": target_hint,
             "material_pending": bool(urls_in_text(request.message) or request.attachments or request.mentions),
             "creative_state": creative_state_for_pending(current_pending),

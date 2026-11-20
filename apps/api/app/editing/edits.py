@@ -163,13 +163,6 @@ class RemoveClip(BaseModel):
     clip_id: str
 
 
-class TrimClip(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    op: Literal["trim_clip"]
-    clip_id: str
-    range: TimeRange
-
-
 class SetTransition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     op: Literal["set_transition"]
@@ -494,7 +487,6 @@ Op = Annotated[
     | AddClip
     | UpdateClip
     | RemoveClip
-    | TrimClip
     | SplitClip
     | SetTransition
     | RemoveTransition,
@@ -686,12 +678,6 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
             _invalidate_visual_description(content, _find_clip(content, clip_id).scene_id)
     elif isinstance(op, RemoveTransition):
         content.timeline.transitions = [t for t in content.timeline.transitions if t.transition_id != op.transition_id]
-    elif isinstance(op, TrimClip):
-        _apply_temporal_in_place(content, TemporalEdit(
-            op="temporal_edit", action="trim",
-            target=EditTarget(kind="clip", id=op.clip_id),
-            start=op.range.start, end=op.range.end, source_policy="crop_1x",
-        ))
     elif isinstance(op, SplitClip):
         from app.editing.temporal import resolve_temporal_target, slice_clip
 

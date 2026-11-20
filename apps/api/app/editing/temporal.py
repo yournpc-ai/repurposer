@@ -449,6 +449,8 @@ def apply_temporal_edit(content: CompositionContent, edit: TemporalEdit) -> Comp
             direct_clips[clip_id] = _trimmed_clip(
                 content, original_clips[clip_id], kept, edit.source_policy
             )
+            if edit.target.kind == "clip" and direct_clips[clip_id] is None:
+                raise TemporalEditError("Trimming this range would entirely remove a linked clip.")
         for scene_id in resolved.scene_ids:
             intersection = _intersection(original_scenes[scene_id].range, kept)
             result = copy.deepcopy(original_scenes[scene_id]) if intersection else None

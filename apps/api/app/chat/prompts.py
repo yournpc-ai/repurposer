@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Literal
 
-from app.chat.editor import EDITOR_NAMES
+from app.chat.editor import EDITOR_NAMES, project_editor_reply
 
 from app.agents.base import jinja_env
 from app.agents.tool_loop import RoundAssembly, prune_wire_parameters
@@ -180,6 +180,16 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context.update(clip_count=selected.get("clip_count"), scene_count=selected.get("scene_count"),
                            timebase=selected.get("timebase"), duration_ticks=selected.get("duration_ticks"),
                            selected_region=hint.get("selected_region"))
+            if selected.get("timebase") and selected.get("duration_ticks") is not None:
+                context["duration_seconds"] = selected["duration_ticks"] / selected["timebase"]
+        recent = facts.get("recent_edit") or {}
+        if selected and recent.get("composition_id") == selected["composition_id"]:
+            context["already_saved_this_turn"] = recent["applied"]
+            if recent["version_id"] == selected["version_id"]:
+                context["recently_edited_clips"] = list(recent["clips"].values())
+        last_preview = facts.get("last_preview") or {}
+        if selected and last_preview.get("version_id") == selected["version_id"]:
+            context["observed_preview"] = last_preview
         names = EDITOR_NAMES | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video"}
 
         def dialogue_wire(description, parameters):
@@ -189,7 +199,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
 
         tools = [t for t in facts["tools"] if t.name in names]
         tools = [replace(t, wire_view=dialogue_wire, description=(
-            "用自然语言报告实际结果，同时调用 answer 结束本轮。" if t.name == "answer" else
+            "根据实际结果结束本轮；也可以直接在消息正文答复。" if t.name == "answer" else
             "询问一个确定目标所需的问题。"
         )) if t.name in {"answer", "ask_user"} else t for t in tools]
         if pending:
@@ -197,10 +207,12 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         return RoundAssembly(
             tools=tools,
             system="你是视频剪辑师。先读取当前时间线定位用户描述的片段。目标不明确时询问。"
-                   "依据工具返回的实际结果用用户的语言答复。预览只说明实际观察到的内容。"
-                   "对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答并调用 answer。",
+                   "按本轮已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。按帧上的作品时间说明实际画面。"
+                   "对用户用片段顺序和时间称呼目标，技术标识仅用于工具参数。完成后在正文中回答。",
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=facts.get("user_text") or "", enforce_offered_tools=True,
+            stream_prose=False,
+            project_reply=lambda text: project_editor_reply(text, facts.get("editor_labels", {}), facts.get("user_text") or ""),
             caller_state={"video_target": selected},
         )
     readiness = compute_source_readiness(

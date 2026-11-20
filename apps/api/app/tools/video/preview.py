@@ -91,10 +91,12 @@ def project_video_scrub(
             end=round(target.end_seconds * timebase),
         )
         if not allow_outside_target and (window.start < bounds.start or window.end > bounds.end):
+            if isinstance(target, VideoRangeScrubTarget):
+                raise ScrubTargetError(f"Preview must stay within composition seconds 0–{bounds.end / timebase:g}.")
             raise ScrubTargetError("the scrub window must stay inside its named Scene or Clip")
         timeline_start = min((clip.range.start for _, clip in owners), default=0)
         timeline_end = max((clip.range.end for _, clip in owners), default=0)
-        if not allow_complete and window.start <= timeline_start and window.end >= timeline_end:
+        if not (allow_complete or isinstance(target, VideoRangeScrubTarget)) and window.start <= timeline_start and window.end >= timeline_end:
             raise ScrubTargetError("a pre-production Scrub cannot contain the complete video")
         selected = {
             clip.clip_id
@@ -103,12 +105,12 @@ def project_video_scrub(
         }
     else:
         raise ScrubTargetError("unknown Scrub target")
-    if not selected:
+    if not selected and not isinstance(target, VideoRangeScrubTarget):
         raise ScrubTargetError("the scrub window contains no clips")
 
     tracks = []
     for track in content.timeline.tracks:
-        if any(clip.clip_id in selected for clip in track.clips) is False:
+        if selected and not any(clip.clip_id in selected for clip in track.clips):
             continue
         clips = []
         for clip in track.clips:
@@ -132,12 +134,16 @@ def project_video_scrub(
     if not isolated:
         by_id = {clip.clip_id: clip for _, clip in owners}
         for transition in content.timeline.transitions:
-            if transition.from_clip_id not in selected or transition.to_clip_id not in selected:
-                continue
             cut = by_id[transition.from_clip_id].range.end
             before, after = transition.duration // 2, transition.duration - transition.duration // 2
             if window.start <= cut - before and cut + after <= window.end:
-                transitions.append(deepcopy(transition))
+                if {transition.from_clip_id, transition.to_clip_id} <= selected:
+                    transitions.append(deepcopy(transition))
+            elif isinstance(target, VideoRangeScrubTarget) and window.start < cut + after and window.end > cut - before:
+                rate = content.settings.timebase
+                raise ScrubTargetError(
+                    f"Include the complete transition at {(cut - before) / rate:g}–{(cut + after) / rate:g} seconds."
+                )
 
     scenes = []
     for scene in content.scenes:
@@ -226,6 +232,11 @@ def compile_video_scrub(
             version_id=version_id,
             content_digest=content_digest,
             generator_media=generator_media,
+            playback_ticks=(
+                round(target.end_seconds * content.settings.timebase)
+                - round(target.start_seconds * content.settings.timebase)
+                if isinstance(target, VideoRangeScrubTarget) else None
+            ),
         )
     except (CompileError, ValueError):
         return {"status": "unavailable", "reason": "preview_compile_failed", "scope": scope}
@@ -524,10 +535,26 @@ async def saved_preview_media(preview: dict, version_id: UUID):
 
     bounds = preview["scope"]["source_range_seconds"]
     video = await render_preview(preview["video_spec"])
-    jpeg, seconds = _representative_preview_frame(
-        video, window_start=bounds["start"], scene_start=bounds["start"],
-        window_end=bounds["end"], retry=False,
-    )
+    from app.tools.video.review import ReviewError, _decode_frame, _jpeg
+
+    if not video or len(video) > 32 * 1024 * 1024:
+        raise ScrubTargetError("The rendered preview is empty or exceeds its evidence budget.")
+    spec = preview["video_spec"]
+    fps = Fraction(spec["fps"]["num"], spec["fps"]["den"])
+    clips = [clip for track in spec["tracks"] if track["kind"] == "visual" for clip in track["clips"]]
+    cuts = sorted({0, spec["duration_frames"], *(c[k] for c in clips for k in ("start_frame", "end_frame"))})
+    intervals = [(start, end) for start, end in zip(cuts, cuts[1:]) if start < end]
+    samples = intervals if len(intervals) <= 6 else [intervals[i * (len(intervals) - 1) // 5] for i in range(6)]
+    frames = []
+    try:
+        with av.open(io.BytesIO(video)) as container:
+            stream = container.streams.video[0]
+            for start, end in samples:
+                target = Fraction((start + end - 1) // 2, 1) / fps
+                frame, actual = _decode_frame(container, stream, target, fps)
+                frames.append((_jpeg(frame), round(bounds["start"] + float(actual), 6)))
+    except (av.FFmpegError, ReviewError) as exc:
+        raise ScrubTargetError("Could not decode evidence frames from the rendered window.") from exc
     capabilities = get_llm_client().capabilities
     caption = f"Saved version {version_id}, composition seconds {bounds}."
     media = []
@@ -539,13 +566,36 @@ async def saved_preview_media(preview: dict, version_id: UUID):
             data_url="data:video/mp4;base64," + base64.b64encode(video).decode("ascii"),
         ))
     if capabilities.supports_tool_result_images:
+        from PIL import Image, ImageDraw
+        # The timestamps travel inside the pixels as well as in the wire.
+        # A provider may sample the MP4 at a different cadence or resize it.
+        width, height = 320, 200
+        columns = min(len(frames), 2)
+        sheet = Image.new("RGB", (width * columns, height * ((len(frames) + 1) // 2)))
+        draw = ImageDraw.Draw(sheet)
+        for i, (jpeg, seconds) in enumerate(frames):
+            with Image.open(io.BytesIO(jpeg)) as img:
+                img.thumbnail((width, height - 22))
+                x, y = (i % columns) * width, (i // columns) * height
+                sheet.paste(img, (x + (width - img.width) // 2, y))
+                draw.text((x + 4, y + height - 18), f"{seconds:g} s", fill="white")
+        out = io.BytesIO()
+        sheet.save(out, format="JPEG", quality=90)
         media.append(MediaInput(
-            type=MediaInputType.IMAGE, mime="image/jpeg", caption=f"{caption} Decoded frame at {seconds}s.",
-            data_url="data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"),
+            type=MediaInputType.IMAGE, mime="image/jpeg",
+            caption="Frames decoded from this playback, labelled with absolute composition seconds.",
+            data_url="data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode("ascii"),
         ))
     evidence = {
         "version_id": str(version_id), "scope": preview["scope"],
-        "mp4_sha256": hashlib.sha256(video).hexdigest(), "frame_seconds": seconds,
+        "mp4_sha256": hashlib.sha256(video).hexdigest(),
+        "sample_seconds": [time for _, time in frames],
+        "visual_windows": [
+            {"from": round(bounds["start"] + float(start / fps), 6),
+             "to": round(bounds["start"] + float(end / fps), 6),
+             "active_clips": [c["clip_id"] for c in clips if c["start_frame"] <= start < c["end_frame"]]}
+            for start, end in intervals
+        ],
         "model_media": [item.type for item in media],
         "audio_available_to_model": capabilities.understands_video_audio and any(
             item.type == MediaInputType.VIDEO for item in media

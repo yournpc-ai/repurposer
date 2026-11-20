@@ -1023,6 +1023,9 @@ async def list_chat_messages(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",
         )
+    from app.chat.editor_recovery import recover_interrupted_edits
+    if await recover_interrupted_edits(db, id):
+        await db.commit()
     messages = await list_conversation_messages(db, id)
     return MessageListResponse(items=[ChatMessageResponse.model_validate(m) for m in messages])
 

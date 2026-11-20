@@ -1342,7 +1342,7 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
         user_text="Change the title", iteration=0, new_result=True,
     )
     assert edit.caller_state["video_target"] == saved
-    assert edit.stream_prose
+    assert not edit.stream_prose and edit.project_reply is not None
 
 
 def test_draft_repair_focus_schema_uses_real_clip_and_element_ids():
@@ -1971,3 +1971,23 @@ def test_complete_draft_repair_only_saves_the_existing_draft(installed_promo):
     assert not {"scene_plan", "scene", "aspect_ratio"} & set(properties)
     assert "Extra inputs are not permitted" in round.context
     assert "计划中的 Scene 均已在当前草稿内" in spec["description"]
+
+
+def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_preview():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    saved = _composition_resource()
+    receipt = {"tool": "move_clip", "version": 2, "arguments": {"clip_id": "moved", "time": 3}}
+    round = assemble_video_round({
+        "tools": intent_router.tools, "user_text": "Move the clip", "mode": "plan",
+        "snapshot": ContextSnapshot("head", resources=(("work", saved),)),
+        "recent_edit": {"composition_id": saved["composition_id"], "version_id": "old",
+                        "clips": {"moved": {"start_seconds": 3}}, "applied": [receipt]},
+        "last_preview": {"version_id": "old", "window_seconds": {"start": 3, "end": 4}},
+    })
+    facts = json.loads(round.context)
+    assert facts["already_saved_this_turn"] == [receipt]
+    assert facts["selected"] == saved["base_ref"]
+    assert "recently_edited_clips" not in facts and "observed_preview" not in facts
