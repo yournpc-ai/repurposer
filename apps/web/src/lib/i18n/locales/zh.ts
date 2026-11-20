@@ -1458,6 +1458,20 @@ const zh: Resources = {
      * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
     recordingGroup: "正在生成旁白与配乐",
     toolGroup: "{{count}} 项操作",
+    toolName: {
+      inspect_clip: "查看片段",
+      inspect_timeline: "检查时间线",
+      generate_voice: "生成旁白",
+      generate_music: "生成配乐",
+      generate_image: "生成图片",
+      insert_audio: "插入音频",
+      split_clip: "分割片段",
+      trim_clip: "裁剪片段",
+      move_clip: "移动片段",
+      translate: "平移画面",
+      scale: "缩放画面",
+      preview_range: "预览选段",
+    },
     callState: {
       provider_unknown: "供应商结果未知",
       queued: "等待执行",

@@ -11,7 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { apiFetch } from "@/lib/api"
+import { apiFetch, WALLET_REFRESH_EVENT } from "@/lib/api"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
   formatCredits,
@@ -24,24 +24,7 @@ interface WalletState {
   held: number
 }
 
-/** Shared Home / ProjectHeader credits read + purchase-entry surface
- * (BILLING §7 — absolute credits, no plan quota). Seats: Home places the bare
- * readout left of the notification bell (and inside MobileHeader below md);
- * ProjectHeader keeps it at the right end, all breakpoints and world states —
- * credits must be visible at the spend point, pre-run included.
- * Bare anatomy (the MobileHeader bell's law): controls inside glass carry
- * no tile of their own.
- *
- * The popover is the GLANCE seat: a compact wallet summary makes the current
- * balance explicit, Add credits is the one primary action, and the latest
- * three semantic rows answer "什么操作扣了多少". Held / negative notes appear
- * only when they exist. The ledger's full view lives in the SettingsDialog
- * credits section — "View all" deep-links there via openSettings("credits").
- *
- * Data contract mirrors the account console (防双报 discipline): silent
- * fetch failures keep "—", never a toast. Refreshes on mount, on
- * `refreshKey` change (the page passes the latest run's id+status — a run's
- * hold/capture/release settles server-side), and on every popover open. */
+/** Studio balance and recent ledger entries. Opening the popover refreshes both. */
 export function CreditsPill({ refreshKey }: { refreshKey: string }) {
   const { t, i18n } = useTranslation()
   const { isAuthenticated } = useAuth()
@@ -61,7 +44,10 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
   }, [])
 
   useEffect(() => {
-    if (isAuthenticated) void fetchWallet()
+    if (!isAuthenticated) return
+    void fetchWallet()
+    window.addEventListener(WALLET_REFRESH_EVENT, fetchWallet)
+    return () => window.removeEventListener(WALLET_REFRESH_EVENT, fetchWallet)
   }, [isAuthenticated, fetchWallet, refreshKey])
 
   // Every open refetches BOTH endpoints — the ledger is the truth, never a

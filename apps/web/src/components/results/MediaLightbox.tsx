@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useSoundMutexHold } from "@/components/flow/sound-mutex"
 import { MediaLightboxStage } from "./MediaLightboxStage"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
 import type { MediaRegionSelectionControl } from "./mediaRegionSelection"
@@ -33,7 +32,6 @@ export function MediaLightbox({
   getSlot?: (slotId: string) => HTMLElement | null
   regionSelection?: MediaRegionSelectionControl
 }) {
-  useSoundMutexHold(!!data && data.kind === "video", "lightbox")
   const requestCloseRef = useRef<(() => void) | null>(null)
   const finalFocusRef = useRef<HTMLElement | null>(null)
   const veil = useMotionValue(0)

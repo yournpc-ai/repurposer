@@ -10,6 +10,7 @@ export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 /** Dispatched on window when any API call answers 401, so the AuthProvider
  * can clear state and open the login dialog instead of leaving raw errors. */
 export const UNAUTHORIZED_EVENT = "repurposer:unauthorized"
+export const WALLET_REFRESH_EVENT = "repurposer:refresh-wallet"
 
 /** Per-call toast control:
  * - omitted: errors toast the server's real `detail` via sonner, success is silent
@@ -124,47 +125,6 @@ export async function apiPut(
 
 export async function apiDelete(path: string, options: ApiFetchOptions = {}) {
   return apiFetch(path, { method: "DELETE", ...options })
-}
-
-/** The asset's content layer (ADR-113 §1 — the transcript's ONE seat is the
- * asset row): source text + the user's edit overlay + the read-time cue
- * rows (label preformatted server-side — the client never formats time).
- * cues null = the asset has no word timeline (paste/extraction yields). */
-export interface AssetTranscript {
-  text: string
-  edited_text: string | null
-  cues: { start: number; end: number; text: string; label: string }[] | null
-  truncated: boolean
-}
-
-/** Mount-fetch for the asset card's transcript section. Card-level load
- * failure reads as an absent section (inline), never a toast — toast:false
- * per the load-failure law. */
-export async function fetchAssetTranscript(
-  projectId: string,
-  assetId: string
-): Promise<AssetTranscript | null> {
-  const res = await apiGet(
-    `/api/v1/projects/${projectId}/assets/${assetId}/transcript`,
-    { toast: false }
-  )
-  if (!res.ok) return null
-  return (await res.json()) as AssetTranscript
-}
-
-/** The transcript's in-place edit — writes the OVERLAY only (C4: the source
- * layer and word evidence never move); null = clear the overlay. */
-export async function putAssetTranscript(
-  projectId: string,
-  assetId: string,
-  text: string | null
-): Promise<AssetTranscript | null> {
-  const res = await apiPut(
-    `/api/v1/projects/${projectId}/assets/${assetId}/transcript`,
-    { text }
-  )
-  if (!res.ok) return null
-  return (await res.json()) as AssetTranscript
 }
 
 /** Extract a human-readable message from a FastAPI error body.

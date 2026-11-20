@@ -387,10 +387,10 @@ export function ChatConversation({
             <summary>{title}</summary>
             <ol>{members.map((row) => (
               <li key={row.call_id} data-call-id={row.call_id} data-state={row.call_state}>
-                <span title={row.tool_name}>{row.key ? t(row.key) : row.tool_name}
+                <span title={row.tool_name}>{t(`chat.toolName.${row.tool_name}`, { defaultValue: row.tool_name?.replaceAll("_", " ") ?? "" })}
                   {row.error && <span className="block text-xs">{row.error}</span>}
                 </span>
-                <small>{t(`chat.callState.${row.call_state ?? row.status}`)}{row.duration_ms != null && ` · ${(row.duration_ms / 1000).toFixed(1)}s`}</small>
+                <small>{t(`chat.callState.${row.call_state ?? row.status}`)}{row.duration_ms != null && (row.duration_ms < 1000 ? ` · ${row.duration_ms} ms` : ` · ${(row.duration_ms / 1000).toFixed(1)} s`)}</small>
               </li>
             ))}</ol>
           </details>

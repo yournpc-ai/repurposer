@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  Box,
   Check,
   ChevronDown,
   ChevronUp,
@@ -93,9 +92,7 @@ import {
 import { ChatOutputViewer } from "@/components/chat/ChatOutputViewer"
 import { createSpeechSegments, isSpeechSegmentRow } from "./timeline/speech"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
-import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
-import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   mapHistoryRows,
   activityRowFrame,
@@ -184,7 +181,6 @@ import { useFileDrop } from "@/lib/useFileDrop"
 /** Derived preview row (ADR-043): the server dry-run-compiles the chain at
  * dock time and projects what it will MAKE — the card's "you'll get"
  * section. `video` = production of an exact saved CompositionVersion. */
-export type { DerivedRow, DecisionPlanRow } from "./timeline/types"
 
 const TOOL_META: Record<string, {
   Icon: typeof Video
@@ -406,28 +402,14 @@ interface AgentThreadProps {
   /** A zero-visible Stop retracted the handed-over first Turn. Clear the
    * router handoff so a refresh cannot auto-send the restored draft again. */
   onFirstMessageRetracted?: () => void
-  /** The run reached a terminal-success state while this dock was watching
-   * — the page refetches so the landed products show. */
-  onComplete: (runId: string | null) => void | Promise<void>
+  onProjectChanged: (runId?: string | null) => void | Promise<void>
   /** The server-named lifecycle stamp (ADR-087 §2, Phase 1): the confirm
    * beat's derived gate (confirmActive) reads it — the dock never derives
    * lifecycle locally. Null on the
    * pre-first-fetch frame (the page's loading gate holds the mount, so this
    * is always settled before the confirm beat can show). */
   lifecycle?: LifecycleStamp | null
-  /** A run STARTED while this dock was watching (prose confirmation /
-   * 修订 run) — the page refetches immediately so its own
-   * SSE attaches and the run 期活画布 (placeholders / wipe / fills) renders
-   * from the first beat, not only at terminal. One-shot per run. */
-  onRunStarted?: (runId: string) => void | Promise<void>
-  /** The draft graph changed server-side (a task_book docked → stamped, or
-   * a task_book bailed → torn down) — the page refetches the graph so the
-   * form flip reads the fresh lifecycle stamp (ADR-057 K5 图先展示后运行 +
-   * ADR-087 §2: the stamp's plan_ready is the flip's gate:
-   * the desktop world morphs on the draft graph's arrival, BEFORE any run
-   * — without this channel the flip only ever fires on the first run and
-   * the chain preview never shows). */
-  onDraftGraphChange?: () => void | Promise<void>
+
 }
 
 /** A superseded plan version in the flow: one slim chip row that expands
@@ -519,13 +501,10 @@ export function AgentThread({
   initialRunId,
   onFirstMessageRetracted,
   lifecycle,
-  onComplete,
-  onRunStarted,
-  onDraftGraphChange,
+  onProjectChanged,
 }: AgentThreadProps) {
   const { openCreditTopup } = useSettingsDialog()
   const { t } = useTranslation()
-  const [modelsOpen, setModelsOpen] = useState(false)
   // Restore mount (Phase 1, acceptance #4; Phase 3 Batch B): the dock's only
   // view fork is "a run is attached" vs plain chat — a transport fact
   // (initialRunId), never a lifecycle judgment. The CONFIRM beat is derived
@@ -974,12 +953,8 @@ export function AgentThread({
   const reconcileGenRef = useRef(0)
   const reconcileRunningRef = useRef<number | null>(null)
   const reconciledIdsRef = useRef<Set<string>>(new Set())
-  const onCompleteRef = useRef(onComplete)
-  onCompleteRef.current = onComplete
-  const onRunStartedRef = useRef(onRunStarted)
-  onRunStartedRef.current = onRunStarted
-  const onDraftGraphChangeRef = useRef(onDraftGraphChange)
-  onDraftGraphChangeRef.current = onDraftGraphChange
+  const projectChangedRef = useRef(onProjectChanged)
+  projectChangedRef.current = onProjectChanged
 
   const {
     steps,
@@ -1659,22 +1634,7 @@ export function AgentThread({
     return () => document.removeEventListener("visibilitychange", onVisible)
   }, [])
 
-  // Workspace Birth relay (Workspace 合同 v4.2 C3): the transcript card is
-  // stamped server-side the moment an asset attaches (queued at upload) and
-  // flips done + text-filled when processing lands — but an attach-in-dock
-  // flow's page graph state predates the stamp, and nothing else refetches
-  // it pre-run (this watch window polls asset ROWS + trigger messages,
-  // never the graph; the page's lifecycle poll arms only off a stamp its
-  // stale fetch never saw). Relay every assets-signature edge (a new asset
-  // arrives, or one leaves processing — completed OR failed) to the page's
-  // graph refetch: the page's graph state stays fresh so the canvas's
-  // first-run reveal (ADR-105 — node birth ≠ canvas visibility; ADR-111
-  // 翻案注: reveal 触发态将改挂计划就绪，待施工) arrives
-  // WITH the content, and a manual reload never brings it back. The mount
-  // frame never fires (prev === null — the page's own mount fetch holds
-  // that truth). The camera beats nothing here: the page's
-  // onDraftGraphChange pan is gated on hasRuns (canvas hidden = no move)
-  // and the reveal's initial fit is the canvas mount's own.
+  // Refresh the project lifecycle when a staged asset finishes processing.
   const assetsSigRef = useRef<string | null>(null)
   useEffect(() => {
     const sig = assets
@@ -1682,7 +1642,7 @@ export function AgentThread({
       .join("|")
     const prev = assetsSigRef.current
     assetsSigRef.current = sig
-    if (prev !== null && prev !== sig) void onDraftGraphChangeRef.current?.()
+    if (prev !== null && prev !== sig) void projectChangedRef.current()
   }, [assets])
 
   // Send gate (2026-09-28 user ruling — 暂存 ≠ 交付): the conversation's
@@ -1973,7 +1933,7 @@ export function AgentThread({
     ) {
       return
     }
-    void onCompleteRef.current(runIdRef.current)
+    void projectChangedRef.current()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminal])
 
@@ -2012,7 +1972,7 @@ export function AgentThread({
     }
     setRunStartedExplicitly(true)
     setRunId(startedRunId)
-    void onRunStartedRef.current?.(startedRunId)
+    void projectChangedRef.current(startedRunId)
   }, [])
 
   // Worker continuations have no browser request or uploaded asset to keep
@@ -2414,7 +2374,7 @@ export function AgentThread({
         // A plan docked — the server stamped the draft graph in the same
         // transaction: tell the page so its flip gate sees it (K5 图先展示
         // 后运行 — the world morphs on the draft graph, not just on runs).
-        void onDraftGraphChangeRef.current?.()
+        void projectChangedRef.current()
         // 计划行自完备 (2026-09-08, 方案 B): the docked row IS the whole
         // plan — the chain on the row's `intent` column. The live path
         // renders it straight off the envelope (one turn = one call);
@@ -2424,7 +2384,7 @@ export function AgentThread({
         // phase — the confirm beat derives from the stamp's PLAN_READY
         // (confirmActive), so a dock envelope alone never opens the beat
         // (task_book exists ≠ PLAN_READY). The intent state still lands
-        // here; the stamp's refetch (onDraftGraphChange above) flips the
+        // here; the stamp's refetch (project refresh above) flips the
         // surface.
         if (message.intent) {
           setIntent(normalizeIntent(message.intent))
@@ -3630,7 +3590,7 @@ export function AgentThread({
       }
       // A task_book bail tears the draft graph down server-side — the page
       // morphs back to the chat world (K5 条款: bail 拆图).
-      if (wasPlan) void onDraftGraphChangeRef.current?.()
+      if (wasPlan) void projectChangedRef.current()
       pushAnsweredQuestion(data.answered_question)
       if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
@@ -4306,21 +4266,6 @@ export function AgentThread({
             onClick={() => fileInputRef.current?.click()}
           />
           <span className="min-w-0 flex-1" />
-          {/* Models (honest Auto panel) — PARKED: hidden until the panel has
-              something actionable to show; restore by ungating. */}
-          {false && (
-            <ComposerPanelButton
-              icon={Box}
-              label={t("composer.models")}
-              open={modelsOpen}
-              onOpenChange={setModelsOpen}
-              popoverSide="top"
-              align="end"
-              unpadded
-            >
-              <ModelsPanel />
-            </ComposerPanelButton>
-          )}
           {/* The same 36px seat switches between send and the current
               abortable stream's Stop action. */}
           <ComposerSendButton

@@ -19,35 +19,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-/**
- * Mobile chrome (<md, 2026-10-14 user ruling): the desktop law "no global
- * AppHeader — the bell is the single floating chip" scopes to md+. Below md
- * the sidebar rail AND its drawer go away entirely — a two-entry nav
- * (Home / Projects) doesn't deserve a bottom tab bar, so this header absorbs
- * everything: brand lockup left (tap = /home), Projects + home CreditsPill +
- * bell + avatar (the same AccountConsole popover as the rail footer) right. The floating
- * sidebar trigger and floating bell chip are retired below md with it.
- *
- * Material = dock-surface glass (user ruling — Pexo parity): the pinned
- * chrome is the same species as the results dock's parked glass — persistent,
- * content scrolls UNDER it — so it takes the no-shadow high-translucency
- * recipe, NOT overlay-surface (75% fill + floating-layer shadow reads as a
- * solid white bar over the white page). Stacked anatomy, never overlay: the
- * header is the first IN-FLOW child of SidebarInset (sticky top-0 pins it on
- * window-scroll pages, whose content scrolls under the glass naturally).
- * Home is the ONE deliberate exception — its scrollport pulls up UNDER the
- * glass (-mt-14, root stays 100svh) so the hero/cards frost through it as
- * they scroll, and its pinned tabs bar compensates with max-md:top-14. No
- * shadow — separation comes from the hairline + content blurring through
- * the frost.
- *
- * Press feedback (touch law): `hover:` never fires on a phone — every
- * header control also carries `active:bg-accent` so a finger press reads.
- */
-export function MobileHeader() {
+export function StudioHeader() {
   const { t } = useTranslation()
-  const router = useRouterState()
-  const onProjects = router.location.pathname.startsWith("/projects")
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const onProjects = pathname.startsWith("/projects")
   const { isAuthenticated } = useAuth()
 
   // Same SSR discipline as the rail footer: getUser() reads localStorage,
@@ -61,21 +36,17 @@ export function MobileHeader() {
   const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase()
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between px-4 dock-surface border border-subtle md:hidden">
-      {/* Brand lockup = the Home entry (mobile convention: brand tap goes
-          home; the rail's SidebarHeader lockup mirrored in miniature). */}
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between px-4 border-b border-border md:h-12 md:justify-end md:border-0">
       <Link
         to="/home"
         aria-label={t("nav.home")}
-        className="-ml-2 flex items-center gap-2 rounded-lg px-2 py-1 transition-colors active:bg-accent"
+        className="-ml-2 md:hidden flex items-center gap-2 rounded-lg px-2 py-1 transition-colors active:bg-accent"
       >
         <LogoMark className="h-6 w-6" />
         <span className="font-semibold tracking-tight max-[400px]:hidden">Rookie Cut</span>
       </Link>
 
       <div className="flex items-center gap-1">
-        {/* Projects — the second nav entry, bare icon button inside the
-            glass (no chip tile of its own); active reads foreground. */}
         <Button
           variant="ghost"
           size="icon"
@@ -83,27 +54,18 @@ export function MobileHeader() {
           render={<Link to="/projects" />}
           aria-label={t("nav.myProjects")}
           aria-current={onProjects ? "page" : undefined}
-          className={`h-10 w-10 rounded-lg active:bg-accent ${
+          className={`md:hidden h-10 w-10 rounded-lg active:bg-accent ${
             onProjects ? "text-foreground" : "text-muted-foreground"
           }`}
         >
           <FolderKanban />
         </Button>
-
-        {/* Home carries the same CreditsPill as the project spend point;
-            bare inside the shared glass, never another floating chip. */}
-        <CreditsPill refreshKey={router.location.pathname} />
-
-        {/* Bell in its bare form — the glass tile is the header's. */}
+        <CreditsPill refreshKey={pathname} />
         <NotificationBell chip={false} />
-
-        {/* Avatar → the SAME AccountConsole as the rail footer (theme /
-            language / replay tour / logout) — without this seat the mobile
-            shell would lose the account surface entirely. */}
         <Popover open={consoleOpen} onOpenChange={setConsoleOpen}>
           <PopoverTrigger
             aria-label={displayName}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none hover:bg-accent active:bg-accent focus-visible:outline-2 focus-visible:outline-ring/30"
+            className="md:hidden flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none hover:bg-accent active:bg-accent focus-visible:outline-2 focus-visible:outline-ring/30"
           >
             <Avatar className="h-7 w-7 rounded-full">
               <AvatarImage src="" alt={displayName} />

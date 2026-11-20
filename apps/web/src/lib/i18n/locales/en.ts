@@ -1533,6 +1533,20 @@ const en = {
      * `actionCount` is the honest fallback when no wall clock exists. */
     recordingGroup: "Preparing narration and music…",
     toolGroup: "{{count}} tool calls",
+    toolName: {
+      inspect_clip: "Inspect clip",
+      inspect_timeline: "Inspect timeline",
+      generate_voice: "Generate narration",
+      generate_music: "Generate music",
+      generate_image: "Generate image",
+      insert_audio: "Insert audio",
+      split_clip: "Split clip",
+      trim_clip: "Trim clip",
+      move_clip: "Move clip",
+      translate: "Move object",
+      scale: "Scale object",
+      preview_range: "Preview range",
+    },
     callState: {
       provider_unknown: "Provider outcome unknown",
       queued: "Queued",

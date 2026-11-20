@@ -23,7 +23,7 @@
 
 import { fetchEventSource } from "@microsoft/fetch-event-source"
 
-import { API_URL, UNAUTHORIZED_EVENT } from "@/lib/api"
+import { API_URL, UNAUTHORIZED_EVENT, WALLET_REFRESH_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
@@ -60,18 +60,8 @@ export interface ChatTurnBody {
    * project (ADR-038 — the single identity payload; the skin follows the
    * persona). */
   persona_id?: string
-  /** The sender's surface at send time (2026-09-25 canvas↔chat 联动, user
-   * ruling — the page width already judges it): "canvas" = the dock is in
-   * panel form, the plan's draft graph live beside the conversation — the
-   * reply's review invitation may name that home; "chat" = no canvas
-   * beneath (full / dock forms) — the reply stays surface-neutral. */
-  surface?: "canvas" | "chat"
-  /** 环境能力位 (ADR-118 §6 双键的客户端一半): the RAW can-host-canvas
-   * read (canvasAvailable in lib/canvasVisibility — the use-mobile
-   * breakpoint), riding every send. Distinct from `surface` (the panel-form
-   * bit): pre-reveal desktop is surface="chat" yet CAN host the canvas, and
-   * the server's canvas_visible = this ∧ world-liveness (api 半座:
-   * app/chat/canvas_visibility.py). */
+  surface?: "chat"
+  /** The Studio Thread always sends false. */
   canvas_available?: boolean
   prior_intent?: unknown
 }
@@ -289,6 +279,9 @@ function streamTurn<T>(
             ? { bare: !("phase" in frame.payload) }
             : {}),
         })
+        if (frame.kind === "completed" || frame.kind === "failed") {
+          window.dispatchEvent(new Event(WALLET_REFRESH_EVENT))
+        }
         switch (frame.kind) {
           case "turn_started":
             onTurnStarted?.(frame.turnId)

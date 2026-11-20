@@ -20,7 +20,6 @@ import { Route as AppPersonasIndexRouteImport } from './routes/_app.personas.ind
 import { Route as AppPersonasIdRouteImport } from './routes/_app.personas.$id'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
 import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
-import { Route as AppProjectsIdIndexRouteImport } from './routes/_app.projects.$id.index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,11 +75,6 @@ const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AppProjectsRoute,
 } as any)
-const AppProjectsIdIndexRoute = AppProjectsIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppProjectsIdRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -90,10 +84,9 @@ export interface FileRoutesByFullPath {
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/personas/$id': typeof AppPersonasIdRoute
-  '/projects/$id': typeof AppProjectsIdRouteWithChildren
+  '/projects/$id': typeof AppProjectsIdRoute
   '/personas/': typeof AppPersonasIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
-  '/projects/$id/': typeof AppProjectsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,9 +94,9 @@ export interface FileRoutesByTo {
   '/home': typeof AppHomeRoute
   '/settings': typeof AppSettingsRoute
   '/personas/$id': typeof AppPersonasIdRoute
+  '/projects/$id': typeof AppProjectsIdRoute
   '/personas': typeof AppPersonasIndexRoute
   '/projects': typeof AppProjectsIndexRoute
-  '/projects/$id': typeof AppProjectsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,10 +108,9 @@ export interface FileRoutesById {
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/personas/$id': typeof AppPersonasIdRoute
-  '/_app/projects/$id': typeof AppProjectsIdRouteWithChildren
+  '/_app/projects/$id': typeof AppProjectsIdRoute
   '/_app/personas/': typeof AppPersonasIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
-  '/_app/projects/$id/': typeof AppProjectsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -133,7 +125,6 @@ export interface FileRouteTypes {
     | '/projects/$id'
     | '/personas/'
     | '/projects/'
-    | '/projects/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -141,9 +132,9 @@ export interface FileRouteTypes {
     | '/home'
     | '/settings'
     | '/personas/$id'
+    | '/projects/$id'
     | '/personas'
     | '/projects'
-    | '/projects/$id'
   id:
     | '__root__'
     | '/'
@@ -157,7 +148,6 @@ export interface FileRouteTypes {
     | '/_app/projects/$id'
     | '/_app/personas/'
     | '/_app/projects/'
-    | '/_app/projects/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -244,13 +234,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsIdRouteImport
       parentRoute: typeof AppProjectsRoute
     }
-    '/_app/projects/$id/': {
-      id: '/_app/projects/$id/'
-      path: '/'
-      fullPath: '/projects/$id/'
-      preLoaderRoute: typeof AppProjectsIdIndexRouteImport
-      parentRoute: typeof AppProjectsIdRoute
-    }
   }
 }
 
@@ -268,25 +251,13 @@ const AppPersonasRouteWithChildren = AppPersonasRoute._addFileChildren(
   AppPersonasRouteChildren,
 )
 
-interface AppProjectsIdRouteChildren {
-  AppProjectsIdIndexRoute: typeof AppProjectsIdIndexRoute
-}
-
-const AppProjectsIdRouteChildren: AppProjectsIdRouteChildren = {
-  AppProjectsIdIndexRoute: AppProjectsIdIndexRoute,
-}
-
-const AppProjectsIdRouteWithChildren = AppProjectsIdRoute._addFileChildren(
-  AppProjectsIdRouteChildren,
-)
-
 interface AppProjectsRouteChildren {
-  AppProjectsIdRoute: typeof AppProjectsIdRouteWithChildren
+  AppProjectsIdRoute: typeof AppProjectsIdRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
 }
 
 const AppProjectsRouteChildren: AppProjectsRouteChildren = {
-  AppProjectsIdRoute: AppProjectsIdRouteWithChildren,
+  AppProjectsIdRoute: AppProjectsIdRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
 }
 

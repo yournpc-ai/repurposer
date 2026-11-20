@@ -80,3 +80,9 @@
 .studio-tools ol { list-style: none; margin: .25rem 0 .75rem .35rem; padding-inline-start: 1rem; border-inline-start: 1px solid var(--border); }
 .studio-tools li { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block: .25rem; }
 .studio-tools small { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Files Overview uses the available content width inside the shared inset. */
+.ui-as-folders { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
+@container ui-as-main (max-width: 960px) { .ui-as-folders { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container ui-as-main (max-width: 720px) { .ui-as-folders { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container ui-as-main (max-width: 440px) { .ui-as-folders { grid-template-columns: minmax(0, 1fr); } }

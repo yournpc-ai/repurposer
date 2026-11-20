@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { Box, Plus, Upload, User } from "lucide-react"
+import { Plus, Upload, User } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { useStagingUploads } from "@/lib/stagingUploads"
@@ -22,7 +22,6 @@ import { AssetChips } from "@/components/home/AssetChips"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import { AssetsPanel } from "@/components/composer/AssetsPanel"
-import { ModelsPanel } from "@/components/composer/ModelsPanel"
 import {
   PersonaPanel,
   type PersonaPickerEntry,
@@ -114,7 +113,6 @@ export function HomeComposer({
     useStagingUploads()
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [personaOpen, setPersonaOpen] = useState(false)
-  const [modelsOpen, setModelsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
   // Drag-drop upload (2026-09-24, user ruling — MiniMax/Lovart parity): the
@@ -385,53 +383,27 @@ export function HomeComposer({
                 />
               </ComposerPanelButton>
 
-              {(
-                <ComposerPanelButton
-                  icon={User}
-                  label={t("composer.persona")}
-                  open={personaOpen}
-                  onOpenChange={setPersonaOpen}
-                  popoverSide="bottom"
-                  align="start"
-                  data-tour="composer-persona"
-                >
-                  <PersonaPanel
-                    personas={personas}
-                    value={personaId}
-                    autoValue={AUTO_GENERATE}
-                    onSelect={(id) => {
-                      setPersonaId(id)
-                      setPersonaOpen(false)
-                    }}
-                  />
-                </ComposerPanelButton>
-              )}
+              <ComposerPanelButton
+                icon={User}
+                label={t("composer.persona")}
+                open={personaOpen}
+                onOpenChange={setPersonaOpen}
+                popoverSide="bottom"
+                align="start"
+                data-tour="composer-persona"
+              >
+                <PersonaPanel
+                  personas={personas}
+                  value={personaId}
+                  autoValue={AUTO_GENERATE}
+                  onSelect={(id) => {
+                    setPersonaId(id)
+                    setPersonaOpen(false)
+                  }}
+                />
+              </ComposerPanelButton>
             </div>
 
-            {/* Right group — Models, the honest Auto panel
-                (user-ruled 2026-08-30): the pipeline assigns models per
-                modality and there is exactly one provider per modality, so
-                this is a READ-ONLY display of the real assignments — no
-                selectable rows, no fake SKU shelf. `mr-3` holds the group
-                off the absolutely-anchored send button (measured gap was
-                0px — the circles touched, 2026-08-31). */}
-            <div className="mr-3 flex items-center gap-2">
-              {/* Models (honest Auto panel) — PARKED: hidden until the panel
-                  has something actionable to show; restore by ungating. */}
-              {false && (
-                <ComposerPanelButton
-                  icon={Box}
-                  label={t("composer.models")}
-                  open={modelsOpen}
-                  onOpenChange={setModelsOpen}
-                  popoverSide="bottom"
-                  align="end"
-                  unpadded
-                >
-                  <ModelsPanel />
-                </ComposerPanelButton>
-              )}
-            </div>
           </div>
 
         </InputGroupAddon>

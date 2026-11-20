@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowUpDown, FolderKanban, Search, Trash2, X } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -38,79 +37,6 @@ type SortDir = "desc" | "asc"
 export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,
 })
-
-/** Collapsed = a quiet circle button; hover (pointer preview) or click grows
- *  the search field leftward. It stays open while focused or holding a query,
- *  folds back on blur-when-empty; Esc clears and folds. Collapsing with an
- *  active query is impossible by construction — the fold requires empty. */
-function ExpandingSearch({
-  value,
-  onChange,
-  placeholder,
-  label,
-}: {
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  label: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [focused, setFocused] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const expanded = open || value.length > 0
-
-  return (
-    <div
-      className={cn(
-        "overflow-hidden transition-[width] duration-200 ease-out",
-        expanded ? "w-52 sm:w-64" : "w-8"
-      )}
-      onMouseLeave={() => {
-        if (!focused && value.length === 0) setOpen(false)
-      }}
-    >
-      {expanded ? (
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => {
-              setFocused(false)
-              if (value.length === 0) setOpen(false)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                onChange("")
-                setOpen(false)
-                inputRef.current?.blur()
-              }
-            }}
-            placeholder={placeholder}
-            aria-label={label}
-            className="h-8 pl-8"
-          />
-        </div>
-      ) : (
-        <Button
-          variant="ghost"
-          size="icon-lg"
-          aria-label={label}
-          onMouseEnter={() => setOpen(true)}
-          onClick={() => {
-            setOpen(true)
-            // Focus after the input swaps in.
-            requestAnimationFrame(() => inputRef.current?.focus())
-          }}
-        >
-          <Search className="size-4" />
-        </Button>
-      )}
-    </div>
-  )
-}
 
 function ProjectsPage() {
   const { t } = useTranslation()
@@ -164,33 +90,27 @@ function ProjectsPage() {
       new Date(
         (sortField === "updated"
           ? (p.updated_at ?? p.created_at)
-          : (p.created_at ?? p.updated_at)) || p.id
+          : (p.created_at ?? p.updated_at)) || 0
       ).getTime()
     return list.sort((a, b) =>
-      sortDir === "desc" ? stamp(b) - stamp(a) : stamp(a) - stamp(b)
+      (sortDir === "desc" ? stamp(b) - stamp(a) : stamp(a) - stamp(b)) || a.id.localeCompare(b.id)
     )
   }, [projects, query, sortField, sortDir])
 
   return (
     <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
-        {/* mt-10 drops the whole header row below the floating bell chip's
-            band (top-4 + h-10 → the bell owns 16–56px from the viewport top,
-            ADR-046 reserved corner): the two horizontal bands must not
-            interleave. Vertical separation makes horizontal clearance
-            unnecessary, so the controls stay flush with the grid's right
-            edge. */}
-        <div className="mb-6 mt-2 flex items-center justify-between gap-4">
+        <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("projects.title")}
           </h1>
           <div className="flex items-center gap-1">
-            <ExpandingSearch
-              value={query}
-              onChange={setQuery}
-              placeholder={t("projects.searchPlaceholder")}
-              label={t("projects.search")}
-            />
+            <label className="relative">
+              <Search aria-hidden className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input type="search" className="w-40 pl-8 sm:w-60" value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                aria-label={t("projects.search")} placeholder={t("projects.searchPlaceholder")} />
+            </label>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -262,7 +182,7 @@ function ProjectsPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="ui-as-folders">
             {visible.map((project) => (
               <ProjectCard
                 key={project.id}

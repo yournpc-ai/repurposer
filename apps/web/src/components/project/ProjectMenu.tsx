@@ -1,9 +1,7 @@
-import { useNavigate } from "@tanstack/react-router"
-import { ArrowLeft, ChevronDown, Pencil, Trash2 } from "lucide-react"
+import { Ellipsis, Pencil, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { LogoMark } from "@/components/LogoMark"
 import {
   DeleteProjectDialog,
   RenameProjectDialog,
@@ -13,7 +11,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -29,15 +26,6 @@ interface ProjectMenuProps {
   onDeleted: () => void
 }
 
-/** The project page header's left cluster (ADR-041 canvas world): the
- * brand-mark trigger opens the project menu (navigation + project-level
- * ops), the truncated title rides beside it. The title is a BUTTON
- * (2026-09-23 user ruling, MiniMax click-to-edit parity without their
- * centered title bar): one click opens the rename dialog directly, skipping
- * the dropdown hop (the menu item stays as the second path).
- * Bare anatomy (2026-10-15 header ruling): the cluster lives INSIDE the
- * glass ProjectHeader, so the frosted-pill tile is gone — controls inside
- * glass go bare (the MobileHeader bell's law), hover/active bg-accent. */
 export function ProjectMenu({
   projectId,
   title,
@@ -46,7 +34,6 @@ export function ProjectMenu({
   onDeleted,
 }: ProjectMenuProps) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -63,19 +50,9 @@ export function ProjectMenu({
               />
             }
           >
-            <LogoMark className="h-5 w-5" />
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <Ellipsis className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => navigate({ to: "/projects" })}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                {t("projectMenu.backToProjects")}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => setRenameOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" />

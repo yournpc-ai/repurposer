@@ -1,11 +1,9 @@
 import "@/studio.css"
-import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router"
+import { Outlet, createFileRoute } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { CreditsPill } from "@/components/credits/CreditsPill"
-import { MobileHeader } from "@/components/mobile-header"
-import { NotificationBell } from "@/components/notifications/NotificationBell"
+import { StudioHeader } from "@/components/StudioHeader"
 import {
   SIDEBAR_COOKIE_NAME,
   SidebarProvider,
@@ -35,16 +33,11 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
   return (
     <SidebarProvider defaultOpen={sidebarOpen} className="ui-as-app">
       <AppSidebar />
       <main className="ui-as-main">
-        <MobileHeader />
-        <div className="hidden h-12 shrink-0 items-center justify-end gap-1 px-4 md:flex">
-          <CreditsPill refreshKey={pathname} />
-          <NotificationBell chip={false} />
-        </div>
+        <StudioHeader />
         <div className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </div>

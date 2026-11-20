@@ -92,20 +92,20 @@ it("folds routine recording and delivers one playable score live and after reope
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  const onRunStarted = vi.fn()
-  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} onRunStarted={onRunStarted} />
+  const onProjectChanged = vi.fn()
+  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onProjectChanged={onProjectChanged} />
   const view = render(dock)
   await act(async () => {})
   expect(screen.getByText("message 1")).toBeDefined()
   rows.push(mark(2, "voice-run", "active"), mark(3, "voice-run", "active", "narration"))
   rows.push({ ...mark(4, "other-run", "active"), intent: { media_journey: { opening_id: "unrelated", state: "active" } } })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
-  expect(onRunStarted).toHaveBeenCalledWith("voice-run")
+  expect(onProjectChanged).toHaveBeenCalledWith("voice-run")
   expect(screen.queryByRole("button", { name: "chat.audio.play" })).toBeNull()
   expect(screen.queryByText("message 4")).toBeNull()
   rows.push(mark(5, null, "active", "narration"), mark(6, "music-run", "active"))
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
-  expect(onRunStarted).toHaveBeenCalledWith("music-run")
+  expect(onProjectChanged).toHaveBeenCalledWith("music-run")
   const music = mark(7, "music-run", "active", "music")
   rows.push({ ...music, content: "配乐已准备好。" })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
@@ -147,7 +147,7 @@ it("updates tool status in place and shows each worker reply once, live and on r
     return new Response(null, { status: 404 })
   })
   const dock = (prompt: string) => <AgentThread projectId="p" prompt={prompt}
-    initialRunId="image-run" onComplete={vi.fn()} />
+    initialRunId="image-run" onProjectChanged={vi.fn()} />
   const view = render(dock(""))
   await act(async () => {})
   const line = screen.getByText("chat.stepKinds.prepare_visual_assets")
@@ -250,7 +250,7 @@ it("stops the original request between image delivery and narration and stays st
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} />
+  const dock = <AgentThread projectId="p" prompt="" initialRunId="image-run" onProjectChanged={vi.fn()} />
   const view = render(dock)
   await act(async () => {})
   expect(screen.getByText("chat.thinking")).toBeDefined()
@@ -276,7 +276,7 @@ it.each(["blocked", "stopped"])("stops following a journey after its durable %s 
     if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
     return new Response(null, { status: 404 })
   })
-  render(<AgentThread projectId="p" prompt="" initialRunId="image-run" onComplete={vi.fn()} />)
+  render(<AgentThread projectId="p" prompt="" initialRunId="image-run" onProjectChanged={vi.fn()} />)
   await act(async () => {})
   rows.push({ ...mark(2, null, state), content: state })
   await act(async () => { await vi.advanceTimersByTimeAsync(3000) })

@@ -23,6 +23,10 @@
   },
   "registries": {
     "@react-bits": "https://reactbits.dev/r/{name}.json",
-    "@animate-ui": "https://animate-ui.com/r/{name}.json"
+    "@animate-ui": "https://animate-ui.com/r/{name}.json",
+    "@affectui": {
+      "url": "https://registry.collectui.pro/api/r/affectui/{name}.json",
+      "headers": { "Authorization": "Bearer ${AFFECTUI_TOKEN}" }
+    }
   }
 }

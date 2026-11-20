@@ -216,14 +216,6 @@
   }
 }
 
-/* Dot grid = the results-canvas SIGNATURE (ADR-046 附; home dropped it
- * 2026-09-02, user-ruled — a fixed texture behind a non-pannable surface
- * advertises an affordance that isn't there, and single-surface use makes
- * the dots MEAN "you've entered the graph"). It lives in FlowView as
- * react-flow's Background (32px gap + 2px dot + muted-foreground 32%/30%,
- * FLORA's measured world constants) — there is NO CSS utility for it; any
- * second dotted surface is a violation. */
-
 /*
  * Display typeface for marketing section headings: SF Pro on Apple devices,
  * falling back to Inter elsewhere. Scoped to marketing surfaces — the product
@@ -979,35 +971,6 @@ body {
   }
   .placeholder-roll-out {
     display: none;
-  }
-}
-
-/* The right-docked panel's entrance beat (2026-09-06; 2026-10-02
-   让位方向修订): only the full→panel MORPH replays it (gated by the
-   stageMounted latch — refresh / history-open mounts render the final frame
-   directly, 水合首帧永不重播). The chat YIELDS RIGHT: the panel starts 40px
-   left of its slot and slides rightward into place (was: a 12px peek from
-   off-screen right — that read as a NEW element entering, not the chat
-   relocating). No delay: the slide starts at the flip, and the canvas's
-   150ms-delayed fade-in follows into the freed space — one causal beat,
-   「chat 让位 → 画布出现」(the shared 150ms delay also left a 150ms blank
-   window: the `both` fill held the card invisible). Reduced motion instant. */
-@keyframes dock-panel-in {
-  from {
-    opacity: 0;
-    transform: translateX(-40px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.dock-panel-in {
-  animation: dock-panel-in 450ms var(--arc-ease-enter) both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dock-panel-in {
-    animation: none;
   }
 }
 
