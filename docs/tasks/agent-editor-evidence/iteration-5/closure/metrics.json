@@ -1,0 +1,5394 @@
+{
+  "ack": {
+    "opening": "739f2115-4c9f-4015-afbd-21d8f3201140",
+    "project": "24012567-e32f-4d8b-b29b-6ca424aa69eb",
+    "requests": 2,
+    "tokens": [
+      [
+        8349,
+        39
+      ],
+      [
+        9010,
+        43
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-8bfbd4f1c64bff84",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-89ef9f293442bb47",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "b1": {
+    "opening": "48b16067-3e41-4fd2-a69e-ae27235f5d6e",
+    "project": "ff306263-3a22-4da7-bd72-73572fad1217",
+    "requests": 8,
+    "tokens": [
+      [
+        8403,
+        61
+      ],
+      [
+        8927,
+        74
+      ],
+      [
+        11207,
+        556
+      ],
+      [
+        9689,
+        83
+      ],
+      [
+        10225,
+        304
+      ],
+      [
+        12592,
+        191
+      ],
+      [
+        9465,
+        41
+      ],
+      [
+        11563,
+        360
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-9502228952abcba1",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-b16925d624266b1c",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-b0aa2ec3eea89203",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-afba02158f3a9dd2",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_lx9u1q4nz8x8_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60abf5732a9bc14ed8",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60b44f75998bc46abc",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_5030e2ztnsyp_1",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": -60, \"y\": 0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_78118c30156149d586f78c2f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "b2": {
+    "opening": "20a44f0b-e607-41e5-92c7-0d6c9a261f6b",
+    "project": "beee8ec7-c0dd-450b-8117-66948a786a3e",
+    "requests": 7,
+    "tokens": [
+      [
+        8411,
+        66
+      ],
+      [
+        8948,
+        38
+      ],
+      [
+        9401,
+        88
+      ],
+      [
+        11278,
+        316
+      ],
+      [
+        9453,
+        47
+      ],
+      [
+        9314,
+        41
+      ],
+      [
+        11430,
+        296
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa60509072a59c7b1959",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6050ad719b99475872",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"clip_1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60552f711cbce2ff28",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60598877e9b24f935f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_dqa34avtgqit_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60a3f3727e8e8fb65b",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_3d2a7966cfd643ec9c41d889",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "card": {
+    "opening": "43f2f08e-8e5f-4763-b6a3-587c8b8b7ca8",
+    "project": "3494fbd2-659f-4b38-9589-636cb8d24fa4",
+    "requests": 3,
+    "tokens": [
+      [
+        9239,
+        165
+      ],
+      [
+        8533,
+        72
+      ],
+      [
+        10627,
+        164
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_a62dba68cee64b22819cb387",
+        "tool": "create_video",
+        "args": "{\"name\":\"白色文字静态字卡\",\"aspect\":\"16:9\",\"background\":\"#000000\",\"fps\":30,\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"白色文字静态字卡\",\"text_color\":\"#FFFFFF\",\"duration_seconds\":\"3\",\"title_motion\":\"static\"}]}",
+        "status": "completed",
+        "schema_valid": false
+      },
+      {
+        "call": "call_01a1fa655fcb74bfa80fcda9",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 0,
+        "first_valid": false
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "draft-retest": {
+    "opening": "8e47f151-4d93-40e8-bd50-709afe22aa48",
+    "project": "51ca55ae-2bae-46b2-8bc5-4948e0c1d1fd",
+    "requests": 2,
+    "tokens": [
+      [
+        9259,
+        223
+      ],
+      [
+        6511,
+        95
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa57f34f74c28e3bcf22",
+        "tool": "create_video",
+        "args": "{\"name\":\"白色文字静态字卡\",\"aspect\":\"16:9\",\"background\":\"#000000\",\"fps\":30,\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"白色文字静态字卡\",\"text_color\":\"#FFFFFF\",\"title_motion\":\"static\",\"duration_seconds\":3}]}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "frame-left": {
+    "opening": "7c93b9b8-9001-4749-ab31-62f6ff563099",
+    "project": "42093b07-e68b-4f65-839e-dddabe2889e7",
+    "requests": 8,
+    "tokens": [
+      [
+        8375,
+        29
+      ],
+      [
+        8859,
+        104
+      ],
+      [
+        10752,
+        1895
+      ],
+      [
+        11000,
+        116
+      ],
+      [
+        13171,
+        582
+      ],
+      [
+        9810,
+        258
+      ],
+      [
+        9627,
+        41
+      ],
+      [
+        11755,
+        292
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa65576075789ecc3c5e",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6568d870668c9a74e8",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_pqpkb4oayon8_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.05}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa65b67b72ce964880ea",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_dtdywvyb4zpo_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_5febdc0870a04342a0058211",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0, \"y\": 0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_15de75a7efb6448cb78fc217",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "frame-right": {
+    "opening": "09d21f6a-e776-4487-9ae9-526160e2a540",
+    "project": "c2d79623-5898-4a9c-ac3b-2eaeb5a0389d",
+    "requests": 14,
+    "tokens": [
+      [
+        8378,
+        41
+      ],
+      [
+        8870,
+        73
+      ],
+      [
+        11180,
+        423
+      ],
+      [
+        9533,
+        177
+      ],
+      [
+        9406,
+        41
+      ],
+      [
+        11495,
+        628
+      ],
+      [
+        9980,
+        50
+      ],
+      [
+        12066,
+        426
+      ],
+      [
+        9932,
+        47
+      ],
+      [
+        9660,
+        65
+      ],
+      [
+        11751,
+        594
+      ],
+      [
+        10344,
+        68
+      ],
+      [
+        9945,
+        41
+      ],
+      [
+        12010,
+        432
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call-e9a45df1-96c8-4f82-ade4-9c74f526da18",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-ccab27b1-718a-4795-b30f-0e1ee2af023c",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-e1dbe299-a15d-48d2-86a1-f1e410c7be8e",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_x42pd5dskuze_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.833}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa658dff754f847744f5",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_11a1d06a93604e619063a641",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_v2ihgfaa7zlz_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.9}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa65c06871ffabc2f7ec",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_tlll7rf0c32g_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.85}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa65efa27611a0a8c6b1",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":-2}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa65f3ef72c59659e143",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_zgr79lt63p3b_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_08c80e64304d4832b0db8b6a",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0.0, \"y\": 0.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-da1af97d-06cb-4a60-96a8-23506ec79412",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 5,
+        "valid": 5,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 4,
+        "valid": 4,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      }
+    }
+  },
+  "goodbye": {
+    "opening": "c33909c6-d491-4842-a74f-08e0d32b7573",
+    "project": "56f19013-5849-4c80-bd7f-2e11f855d09c",
+    "requests": 2,
+    "tokens": [
+      [
+        9463,
+        138
+      ],
+      [
+        8708,
+        106
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa604fd37626a38f7007",
+        "tool": "create_video",
+        "args": "{\"name\":\"Goodbye 片尾卡\",\"aspect\":\"16:9\",\"background\":\"#000000\",\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"Goodbye\",\"text_color\":\"#FFFFFF\",\"title_motion\":\"static\",\"duration_seconds\":3}]}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "image": {
+    "opening": "29ff9ab6-db60-4400-bd0e-5aa431a4fa2f",
+    "project": "241253db-66b4-4e33-8177-dfb9cc3ecff2",
+    "requests": 3,
+    "tokens": [
+      [
+        8382,
+        318
+      ],
+      [
+        11888,
+        249
+      ],
+      [
+        15450,
+        161
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_5f28e744b9bf450d83eadfea",
+        "tool": "generate_image",
+        "args": "{\"prompt\": \"简单矢量图形：纯蓝色背景（#1E5FD6），画面正中央一个纯白色实心圆形，无边框、无文字、无阴影。图形简洁扁平，可复用为图标素材。\", \"svg\": \"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" viewBox=\\\"0 0 1024 1024\\\" width=\\\"1024\\\" height=\\\"1024\\\"><rect width=\\\"1024\\\" height=\\\"1024\\\" fill=\\\"#1E5FD6\\\"/><circle cx=\\\"512\\\" cy=\\\"512\\\" r=\\\"300\\\" fill=\\\"#FFFFFF\\\"/></svg>\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6803b176c69f3dac72",
+        "tool": "generate_image",
+        "args": "{\"prompt\":\"纯蓝色背景铺满整个画面（#1E5FD6，无任何白色边缘或留边），正中央一个纯白色实心圆形，无文字无阴影，扁平矢量风格。\",\"svg\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" width=\\\"1920\\\" height=\\\"1080\\\" viewBox=\\\"0 0 1920 1080\\\"><rect x=\\\"0\\\" y=\\\"0\\\" width=\\\"1920\\\" height=\\\"1080\\\" fill=\\\"#1E5FD6\\\"/><circle cx=\\\"960\\\" cy=\\\"540\\\" r=\\\"300\\\" fill=\\\"#FFFFFF\\\"/></svg>\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "generate_image": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      }
+    }
+  },
+  "left-head": {
+    "opening": "c61b77f2-969e-4cec-8950-8073c4563741",
+    "project": "4d90f48f-94fb-47bc-bc8c-f57f9644504b",
+    "requests": 7,
+    "tokens": [
+      [
+        8378,
+        66
+      ],
+      [
+        8915,
+        44
+      ],
+      [
+        9374,
+        49
+      ],
+      [
+        11212,
+        420
+      ],
+      [
+        9532,
+        47
+      ],
+      [
+        9294,
+        49
+      ],
+      [
+        11411,
+        296
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa699c60720284e24091",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa699c7d7115af27472c",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"clip_1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a0f277ababb16593",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a964755db6d87bc2",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_0ifpiuwe1prs_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_c9362ef92aeb407dab3be0cc",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0.0, \"y\": 0.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69d7f570f382408687",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "media-final": {
+    "opening": "906d10c0-9925-47f7-93d7-39f13d108929",
+    "project": "c19f7e54-1222-4400-8925-53c7f936beb5",
+    "requests": 4,
+    "tokens": [
+      [
+        8225,
+        112
+      ],
+      [
+        9648,
+        217
+      ],
+      [
+        10478,
+        41
+      ],
+      [
+        13337,
+        199
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa6556f671458127421a",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa655713778b91e836d7",
+        "tool": "generate_voice",
+        "args": "{\"text\":\"Hello, this is the first cut.\",\"language\":\"en\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa65576970c5aae59561",
+        "tool": "generate_music",
+        "args": "{\"duration_seconds\":4,\"style\":\"light_electronic\",\"name\":\"Light electronic bed\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa67e3c975339c34cb8f",
+        "tool": "insert_audio",
+        "args": "{\"source_id\":\"ab388fdc-e92e-5814-a723-b2f2047937ba\",\"start_seconds\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa67e3c975339c34cb90",
+        "tool": "insert_audio",
+        "args": "{\"source_id\":\"8ce37014-743f-55d2-8c7e-c88c81b183a3\",\"start_seconds\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_e4c7c3b853a640e0b690bda5",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 4}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_voice": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_music": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "insert_audio": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "mix": {
+    "opening": "2155301d-5dc2-4b45-b65b-3dd0f6ce0f46",
+    "project": "7310a502-9355-4a43-a79a-fbb95bf8f266",
+    "requests": 5,
+    "tokens": [
+      [
+        8384,
+        37
+      ],
+      [
+        9043,
+        192
+      ],
+      [
+        9916,
+        136
+      ],
+      [
+        10673,
+        41
+      ],
+      [
+        13501,
+        195
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa5b06ba76fbab8eab49",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5b0c3a76c1a4d2a0ad",
+        "tool": "generate_voice",
+        "args": "{\"text\":\"Hello, this is the first cut.\",\"language\":\"en\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5b0c3a76c1a4d2a0ae",
+        "tool": "generate_music",
+        "args": "{\"duration_seconds\":4,\"style\":\"light_electronic\",\"bpm\":100,\"name\":\"Light electronic intro bed\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_00cffef31573425abff627de",
+        "tool": "insert_audio",
+        "args": "{\"source_id\": \"07c574ca-288d-5091-a44a-6a006febd665\", \"start_seconds\": 0.0, \"gain_db\": 0.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_1895f6105e324bd386cafda3",
+        "tool": "insert_audio",
+        "args": "{\"source_id\": \"87d9b39c-26a8-5157-b596-93efdee04680\", \"start_seconds\": 0.0, \"gain_db\": -12.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5d96ea71058c991e90",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_voice": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_music": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "insert_audio": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "open": {
+    "opening": "66f7ad02-603e-4887-9fd3-f543a507136b",
+    "project": "7011f51e-c78f-41b0-b379-0a6b3737f520",
+    "requests": 12,
+    "tokens": [
+      [
+        8368,
+        50
+      ],
+      [
+        9074,
+        159
+      ],
+      [
+        12202,
+        2856
+      ],
+      [
+        12553,
+        43
+      ],
+      [
+        13781,
+        618
+      ],
+      [
+        15024,
+        686
+      ],
+      [
+        10100,
+        60
+      ],
+      [
+        12339,
+        1076
+      ],
+      [
+        13594,
+        83
+      ],
+      [
+        2314,
+        228
+      ],
+      [
+        14775,
+        50
+      ],
+      [
+        14978,
+        255
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_135e6e5e73eb4c429a17c931",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_7a9aadb6227843499115830d",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_28a8e3f6412a444a8f9f20d3",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_fa05c5d1ae074309b155877f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_8tljkbe61kra_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.34}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_8tljkbe61kra_2",
+        "tool": "move_clip",
+        "args": "{\"clip_id\": \"elm_c\", \"time\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-7c6b558c-1f76-43eb-b5ed-dbda057b87d7",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_3o2yhzllto4w_1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_gulq7c29p45t_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-1befaa9f-b08d-4b1a-b068-a737efe9ef27",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_j5vwm6m7xhy2_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_gqbsmse36cgx_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"9124cadd-4f46-4964-a456-2a77cbc99746\", \"requirements\": \"开头直接进入内容，片尾保留原文，衔接自然；画面无裁切、音轨正常；可交付的成片\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_xs71w6fzx75k_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"9124cadd-4f46-4964-a456-2a77cbc99746\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-card": {
+    "opening": "0fc4736b-dc03-4ac6-bca2-aa7aad1a84ac",
+    "project": "6a48cde8-9cd8-4932-a219-9f8567630cbb",
+    "requests": 2,
+    "tokens": [
+      [
+        9253,
+        244
+      ],
+      [
+        8632,
+        77
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa738009704c9a737d93",
+        "tool": "create_video",
+        "args": "{\"name\":\"白色文字静态字卡\",\"aspect\":\"16:9\",\"shots\":[{\"duration_seconds\":3,\"headline\":\"白色文字静态字卡\",\"text_color\":\"#FFFFFF\",\"text_preset\":\"title-lockup\",\"title_motion\":\"static\"}],\"background\":\"#000000\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-demo": {
+    "opening": "8a043ebd-c9e2-44f2-adad-c5418f260a9a",
+    "project": "ae30e87b-8fb1-49c3-8c75-6e5bb5a201c5",
+    "requests": 10,
+    "tokens": [
+      [
+        8410,
+        49
+      ],
+      [
+        9090,
+        241
+      ],
+      [
+        12329,
+        189
+      ],
+      [
+        9075,
+        140
+      ],
+      [
+        9838,
+        71
+      ],
+      [
+        11735,
+        84
+      ],
+      [
+        12001,
+        93
+      ],
+      [
+        2313,
+        495
+      ],
+      [
+        13261,
+        51
+      ],
+      [
+        13467,
+        212
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_2c2151447c8849ca841958ef",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_7d7cc6d2e33d474d8ab69b88",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_97bd57d44ca14de99f2c0252",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_acx0spuzfk6m_1",
+        "tool": "move_clip",
+        "args": "{\"clip_id\": \"elm_c\", \"time\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-94320295-4088-4d51-a85b-66c52c07ecda",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-0ef15b8a-8be9-477b-8c80-2dcf3625854e",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_e8wlwi3ymqhm_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_85zcn8vg2oom_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"84b188b8-3878-4669-98d5-6de266267ebd\", \"requirements\": \"两张卡组成的演示样片：保留两张卡原文与展示时长，从头到尾衔接干净、无多余停顿\", \"pending_disposition\": \"none\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_99t1l8lsx24h_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"84b188b8-3878-4669-98d5-6de266267ebd\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-left": {
+    "opening": "28006dd5-b58f-420a-bae0-73f4f84c5d1f",
+    "project": "de3950b6-f226-4608-9f4e-e46b59c390d9",
+    "requests": 6,
+    "tokens": [
+      [
+        8391,
+        39
+      ],
+      [
+        8882,
+        101
+      ],
+      [
+        11228,
+        991
+      ],
+      [
+        10102,
+        65
+      ],
+      [
+        9284,
+        121
+      ],
+      [
+        11431,
+        341
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa737e4777a09040abed",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa73832e7056b1ad0438",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa73832e7056b1ad0439",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_t9k5mfk1blaz_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-6dcd6043-afbd-487e-9a83-7c01b1737a95",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_7aad79c6ef8544a5a06032b6",
+        "tool": "preview_range",
+        "args": "{\"kind\": \"range\", \"start_seconds\": 0.0, \"end_seconds\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-right": {
+    "opening": "b7158df8-8bb3-4371-a25e-09bb2f9018db",
+    "project": "375354d8-9fc5-453f-96ff-73442df635cb",
+    "requests": 10,
+    "tokens": [
+      [
+        8388,
+        62
+      ],
+      [
+        8918,
+        53
+      ],
+      [
+        9385,
+        68
+      ],
+      [
+        9491,
+        59
+      ],
+      [
+        11341,
+        830
+      ],
+      [
+        10048,
+        63
+      ],
+      [
+        9405,
+        41
+      ],
+      [
+        11490,
+        316
+      ],
+      [
+        9788,
+        50
+      ],
+      [
+        11892,
+        468
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa737d8a77e18eff05b2",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa737d95729cb47fe11c",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa73819977bd9851e911",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa73863576608a94b0d5",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa738a59759fa3d0d30f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_dmngvhn1ajvh_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.05}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-30928aac-3bf5-4b4b-9d57-ac5913201a5c",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa73bcec70bca3ae00cc",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_y7x2t3hi99gu_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-a45b90870a3c5aba",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-sound": {
+    "opening": "4861bc5e-54c6-4e45-ade8-2c3be9e0392d",
+    "project": "44ffa78b-ea98-4fc0-9517-18ce8eac1cb0",
+    "requests": 5,
+    "tokens": [
+      [
+        8223,
+        61
+      ],
+      [
+        8898,
+        110
+      ],
+      [
+        9702,
+        118
+      ],
+      [
+        10426,
+        41
+      ],
+      [
+        13297,
+        370
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-8f20d7618d1b20b7",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-aad8a65a9e123ced",
+        "tool": "generate_voice",
+        "args": "{\"text\":\"Hello, this is the first cut.\",\"language\":\"en\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-92f22520364419e3",
+        "tool": "generate_music",
+        "args": "{\"duration_seconds\":4,\"style\":\"light_electronic\",\"bpm\":100,\"name\":\"Opening light electronic bed\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_84dbb0baba274c549f898d1f",
+        "tool": "insert_audio",
+        "args": "{\"source_id\": \"01553f45-2c5d-5013-a749-67c7c5706617\", \"start_seconds\": 0.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_24de995baa864f7598dde6b6",
+        "tool": "insert_audio",
+        "args": "{\"source_id\": \"9f236cbe-fe90-583e-aaac-de3a4d4e4af8\", \"start_seconds\": 0.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_3a18f8a3923b4094b3bd674b",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 4}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_voice": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_music": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "insert_audio": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "race": {
+    "opening": "69366610-4fac-45c9-a4eb-6094b27c900f",
+    "project": "256b99ae-1ec0-4317-b594-619923dd0d42",
+    "requests": 3,
+    "tokens": [
+      [
+        8406,
+        31
+      ],
+      [
+        9068,
+        92
+      ],
+      [
+        8578,
+        147
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_c88797d7f52041a39224bdc3",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_68d1196eb6b945e1be880920",
+        "tool": "extend_still",
+        "args": "{\"clip_id\": \"elm_c\", \"seconds\": 0.5}",
+        "status": "failed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-card": {
+    "opening": "afef0c8c-e811-4e6e-a178-7d558ab3a0c4",
+    "project": "805d4db0-4f8a-4c4e-88d5-441c01461905",
+    "requests": 2,
+    "tokens": [
+      [
+        9255,
+        255
+      ],
+      [
+        8653,
+        107
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_778d19ed34a54d7fb3081b77",
+        "tool": "create_video",
+        "args": "{\"name\": \"三秒白色文字静态字卡\", \"aspect\": \"16:9\", \"background\": \"#000000\", \"shots\": [{\"headline\": \"白色文字静态字卡\", \"text_preset\": \"title-lockup\", \"title_motion\": \"static\", \"duration_seconds\": \"3\", \"text_color\": \"#FFFFFF\"}]}",
+        "status": "completed",
+        "schema_valid": false
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 0,
+        "first_valid": false
+      }
+    }
+  },
+  "release-left": {
+    "opening": "dc67ca2a-08cc-470d-a41a-c6c689d36ce9",
+    "project": "de3950b6-f226-4608-9f4e-e46b59c390d9",
+    "requests": 2,
+    "tokens": [
+      [
+        8391,
+        40
+      ],
+      [
+        8912,
+        114
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa702ceb71438f23c2f2",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa702d02711e9ca2d3f0",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa70322f70a6b2638c08",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa70322f70a6b2638c09",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "failed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-right": {
+    "opening": "913f312c-76dc-4a8b-b2ae-e2e6dc6b522a",
+    "project": "375354d8-9fc5-453f-96ff-73442df635cb",
+    "requests": 3,
+    "tokens": [
+      [
+        8388,
+        58
+      ],
+      [
+        8914,
+        38
+      ],
+      [
+        9364,
+        86
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa702db973f9b16dacc1",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa702dd374bc8720cb01",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"clip_1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa70322a7353b8f29487",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa70366772cdb860e010",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "failed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-sound": {
+    "opening": "50bf1791-24ad-489f-8a85-180163f74f9e",
+    "project": "44ffa78b-ea98-4fc0-9517-18ce8eac1cb0",
+    "requests": 1,
+    "tokens": [
+      [
+        8223,
+        214
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-8d461ebdd9b36d27",
+        "tool": "generate_voice",
+        "args": "{\"text\":\"Hello, this is the first cut.\",\"language\":\"en\",\"voice_id\":\"presenter_male\"}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-8bc1465483ecb897",
+        "tool": "generate_music",
+        "args": "{\"bpm\":100,\"duration_seconds\":4,\"name\":\"Light Electronic Bed\",\"style\":\"light_electronic\"}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "generate_voice": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_music": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "resend": {
+    "opening": "03d6e245-efc0-4f67-9856-0795b8f3589e",
+    "project": "ac22ce6c-7532-4a6f-aec6-724b33f9d4c1",
+    "requests": 5,
+    "tokens": [
+      [
+        8556,
+        73
+      ],
+      [
+        8654,
+        95
+      ],
+      [
+        2593,
+        256
+      ],
+      [
+        9772,
+        54
+      ],
+      [
+        9980,
+        140
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-99c35be856512339",
+        "tool": "deliver_video",
+        "args": "{\"output_id\":\"61e069a5-2cba-460a-af54-3948c36c7d3d\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-b318f8fe0e981727",
+        "tool": "review_video",
+        "args": "{\"output_id\":\"61e069a5-2cba-460a-af54-3948c36c7d3d\",\"requirements\":\"用户要求：将已完成的正式版本 MP4（项目演示短片，版本3，5秒）再次发送到对话中，复用现有成片，不做任何修改。\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-9d4e0a88272d2ffa",
+        "tool": "deliver_video",
+        "args": "{\"output_id\":\"61e069a5-2cba-460a-af54-3948c36c7d3d\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "deliver_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "right-head": {
+    "opening": "ebfe9ca8-4b6f-4803-bcf7-9a0c10fd2c9e",
+    "project": "8f7376e3-7574-46c7-ad9f-7ecb0e9f63c3",
+    "requests": 9,
+    "tokens": [
+      [
+        8398,
+        38
+      ],
+      [
+        8904,
+        40
+      ],
+      [
+        9409,
+        134
+      ],
+      [
+        11498,
+        359
+      ],
+      [
+        9680,
+        167
+      ],
+      [
+        9618,
+        48
+      ],
+      [
+        11717,
+        293
+      ],
+      [
+        9874,
+        111
+      ],
+      [
+        12030,
+        326
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa699bc9707587ba53ae",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a077758dadea6ca1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a56774e6a2ac017d",
+        "tool": "list_project_media",
+        "args": "{\"ids\":[\"d19c2de8-ca13-4468-9586-a8f4a8d834ad\"]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a56774e6a2ac017e",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_m7ig0o17zqc3_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.05}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-ff00f53b-89ea-4614-981d-80301109598c",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69ea4d76ecb2097335",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_uqf8y6wrkf3d_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-d5d26f57-84af-429d-8068-ff9dfc9e4e5b",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "sample": {
+    "opening": "967de5ca-5732-4eb0-abbe-7a5626e3f343",
+    "project": "6d8b4fbd-c5e5-4721-b5be-fb218e79b489",
+    "requests": 3,
+    "tokens": [
+      [
+        9264,
+        217
+      ],
+      [
+        8609,
+        50
+      ],
+      [
+        10711,
+        270
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa6d743771869d47d13b",
+        "tool": "create_video",
+        "args": "{\"name\":\"三秒白色字卡初稿\",\"aspect\":\"16:9\",\"background\":\"#000000\",\"fps\":30,\"shots\":[{\"headline\":\"空项目首稿\",\"text_preset\":\"title-lockup\",\"duration_seconds\":3,\"text_color\":\"#FFFFFF\",\"title_motion\":\"static\"}]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6d7a767437849c40cf",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "sound-head": {
+    "opening": "57300b74-0343-4cb5-965a-0dc2c7de5b04",
+    "project": "b02623e6-cfc6-4d81-b040-ab8e1b5aa9d4",
+    "requests": 4,
+    "tokens": [
+      [
+        8213,
+        163
+      ],
+      [
+        9720,
+        200
+      ],
+      [
+        10559,
+        41
+      ],
+      [
+        13419,
+        389
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa699d4a76d680e7a97f",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa699d68775185083a6f",
+        "tool": "generate_voice",
+        "args": "{\"text\":\"Hello, this is the first cut.\",\"language\":\"en\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa699db4710496e429d3",
+        "tool": "generate_music",
+        "args": "{\"duration_seconds\":4,\"style\":\"light_electronic\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69c567718bb13d16f3",
+        "tool": "insert_audio",
+        "args": "{\"source_id\":\"193c1c68-5c39-57a5-8f1f-f3fdbd6a0983\",\"start_seconds\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69c567718bb13d16f4",
+        "tool": "insert_audio",
+        "args": "{\"source_id\":\"9cbeabe1-ca93-586a-99f7-21ce44d2620f\",\"start_seconds\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_582329f5100148499861d04c",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_voice": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "generate_music": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "insert_audio": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "stale": {
+    "opening": "dd97fdda-7cc0-42d4-8f70-442d5309e4ee",
+    "project": "2b3df2b4-8f50-423c-8cf9-53f2f3567e71",
+    "requests": 1,
+    "tokens": [
+      [
+        2477,
+        328
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_3b468a1953ea468fb3086c2b",
+        "tool": "ask_user",
+        "args": "{\"question\": \"引用的成片（版本 16a22777）与项目当前版本（第 3 版，7474a9be）不是同一版本，存在冲突，我已停止修改。请选择要对哪个基线执行“片尾文字延长一秒”。\", \"options\": [{\"id\": \"current\", \"label\": \"以当前第 3 版为准\", \"description\": \"在最新版本上延长片尾文字，并重新交付成片。\"}, {\"id\": \"referenced\", \"label\": \"以引用的历史成片为准\", \"description\": \"在 16a22777 那一版的片尾文字上延长，并另存为新版本。\"}], \"recommended_id\": \"current\", \"default_path\": \"默认以当前第 3 版为基线延长片尾文字并重新交付。\"}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "ask_user": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "title-head": {
+    "opening": "d37a17f8-5eee-402c-b779-8780b9ab6945",
+    "project": "e894848d-c1a3-460b-bbe7-2218c47328b3",
+    "requests": 3,
+    "tokens": [
+      [
+        9238,
+        315
+      ],
+      [
+        8684,
+        81
+      ],
+      [
+        10815,
+        163
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa699ed871a0b04642ca",
+        "tool": "create_video",
+        "args": "{\"name\":\"三秒白色文字静态字卡\",\"aspect\":\"16:9\",\"background\":\"#000000\",\"shots\":[{\"duration_seconds\":3,\"text_preset\":\"title-lockup\",\"headline\":\"空项目首稿\",\"text_color\":\"#FFFFFF\",\"title_motion\":\"static\"}]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa69a4d17024a9e76037",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "create_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "visual": {
+    "opening": "4b00c9b8-4c07-4d7f-b8df-aa5079c90115",
+    "project": "379feaab-c6a6-4711-8ae0-b2c678670070",
+    "requests": 20,
+    "tokens": [
+      [
+        6200,
+        89
+      ],
+      [
+        6750,
+        73
+      ],
+      [
+        8751,
+        330
+      ],
+      [
+        7276,
+        41
+      ],
+      [
+        9133,
+        535
+      ],
+      [
+        7613,
+        59
+      ],
+      [
+        9461,
+        468
+      ],
+      [
+        10384,
+        461
+      ],
+      [
+        10884,
+        409
+      ],
+      [
+        8129,
+        112
+      ],
+      [
+        10027,
+        688
+      ],
+      [
+        11169,
+        733
+      ],
+      [
+        8570,
+        59
+      ],
+      [
+        10424,
+        958
+      ],
+      [
+        8963,
+        41
+      ],
+      [
+        10816,
+        458
+      ],
+      [
+        8583,
+        41
+      ],
+      [
+        10412,
+        357
+      ],
+      [
+        11219,
+        598
+      ],
+      [
+        8865,
+        45
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-bcba153eb685c7a8",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-bf9f0cc7e8ebb2d1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-84068679eb8b16c8",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-a75d175ac6c2b30a",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_4hyrcl1zbxd7_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa52e7a8730d8e67cefa",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ac9gji4q3338_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.95}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa530a91727788cfa61f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_wfu5056i09po_1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_swslcnjh2hvs_1",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_j4wpwov41y3g_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.8}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_93310f289ed81b7f8e2291ea",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_yi4p5npo1ev4_1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_2ehgwhaagqhz_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.55}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_922d704e7da84cfba867869f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_5u95ingugc3r_1",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0, \"y\": 0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_97bbf228aa1b43cd8eb1edfd",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_rkgtkb2omcga_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_a8c4ee44e3094343b2b67969",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_hbnc9q36rg3w_1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_nwzu6n3rwc5p_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.45}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_9c0b6a503f254c07a9ea6094",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 5,
+        "valid": 5,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 8,
+        "valid": 8,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 6,
+        "valid": 6,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "visual-compare": {
+    "opening": "0c923556-a79b-4b8e-ad44-27c092320f87",
+    "project": "dcc3452e-db81-432e-bb05-8bfa8c2dd072",
+    "requests": 17,
+    "tokens": [
+      [
+        6196,
+        62
+      ],
+      [
+        6719,
+        37
+      ],
+      [
+        7163,
+        80
+      ],
+      [
+        8998,
+        4485
+      ],
+      [
+        11395,
+        47
+      ],
+      [
+        7087,
+        67
+      ],
+      [
+        9172,
+        579
+      ],
+      [
+        7772,
+        41
+      ],
+      [
+        9862,
+        337
+      ],
+      [
+        7675,
+        107
+      ],
+      [
+        9828,
+        864
+      ],
+      [
+        10871,
+        117
+      ],
+      [
+        2362,
+        169
+      ],
+      [
+        12160,
+        49
+      ],
+      [
+        12361,
+        296
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa54a7a376b2a9b7b5c3",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54a7c275a4aea3fb19",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"c1\"}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54af59722587b40d49",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54b63d73f4a37d9847",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_sr91whlfir6k_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.79}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa553aba7418bea9ad0f",
+        "tool": "translate",
+        "args": "{\"id\":\"obj_elm_a\",\"x\":0,\"y\":12}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-bedfd7a396e95859",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_6fcpz11s44kd_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa557b2c7179aee46ed1",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_2j6gnwltrvsj_1",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0, \"y\": 0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_74be3f6af6594f44bee58cc4",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_as1y6kdk41tq_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ii8e9paxm4ur_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"600608fc-b55a-48b6-b879-2a8d75396181\", \"requirements\": \"访谈镜头构图：脸和肩膀要尽量完整、自然；时长不变（3秒）\", \"at_seconds\": [0.2, 1.5, 2.9]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ivsy8xdsk5sh_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"600608fc-b55a-48b6-b879-2a8d75396181\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 4,
+        "valid": 4,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "visual-final": {
+    "opening": "f6ee8b66-1f9f-4dce-86a3-a47493b8703c",
+    "project": "f676ae20-5d9f-4240-b87d-4cd01f09b291",
+    "requests": 14,
+    "tokens": [
+      [
+        6206,
+        38
+      ],
+      [
+        6691,
+        31
+      ],
+      [
+        7167,
+        61
+      ],
+      [
+        8735,
+        590
+      ],
+      [
+        7528,
+        41
+      ],
+      [
+        9362,
+        844
+      ],
+      [
+        7913,
+        47
+      ],
+      [
+        9731,
+        320
+      ],
+      [
+        8285,
+        167
+      ],
+      [
+        9617,
+        502
+      ],
+      [
+        8004,
+        138
+      ],
+      [
+        9950,
+        395
+      ],
+      [
+        8013,
+        112
+      ],
+      [
+        9925,
+        557
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-a10c19a85aaa01c0",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-b9996ffb19b912b7",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-b7b7f6e3af500e5d",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_xljynd6lzvz5_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa52c7c9773b953310a3",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_blti4746804f_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 2.6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_900481a0900946b9b7024340",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_4vyzfub9am6d_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.8}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_4vyzfub9am6d_2",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 40, \"y\": 10}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-9faecd99e2475604",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_9arwznk0ejdr_1",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 110, \"y\": 35}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa53c273755f8589ea68",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_9swfoipvz6pt_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1.45}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa53f36771feadfa0f54",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 6,
+        "valid": 6,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 4,
+        "valid": 4,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      }
+    }
+  },
+  "visual-final-compare": {
+    "opening": "e92f0fa7-205d-4449-9348-27e1d75c4200",
+    "project": "ba75daff-27a6-4b1f-9ede-075ff043cc12",
+    "requests": 11,
+    "tokens": [
+      [
+        6197,
+        51
+      ],
+      [
+        6727,
+        119
+      ],
+      [
+        9072,
+        1580
+      ],
+      [
+        9317,
+        41
+      ],
+      [
+        10780,
+        402
+      ],
+      [
+        7663,
+        41
+      ],
+      [
+        9741,
+        251
+      ],
+      [
+        10170,
+        75
+      ],
+      [
+        2018,
+        475
+      ],
+      [
+        11158,
+        52
+      ],
+      [
+        11361,
+        217
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa54a7db70bfbb498fd2",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54a7fb7720945a648d",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54adc773078fe1f5dc",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa54adc773078fe1f5dd",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_8ig6r7hkkyj7_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 1}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_8ig6r7hkkyj7_2",
+        "tool": "translate",
+        "args": "{\"id\": \"obj_elm_a\", \"x\": 0, \"y\": 0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call-b2e4e417-6096-486a-9ee6-7abfdd356bac",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_mmmvnqfomn7r_1",
+        "tool": "scale",
+        "args": "{\"id\": \"obj_elm_a\", \"value\": 0.93}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5539e4751b9692ff4b",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_pe9i28s6i184_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_siy33oy6apxg_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"ef5b1d64-8521-416a-8d91-b5a504375aa5\", \"requirements\": \"访谈镜头构图：脸和肩膀尽量完整、自然；时长保持3秒不变\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_o8kcxheeff2b_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"ef5b1d64-8521-416a-8d91-b5a504375aa5\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "scale": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "translate": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "final-revision": {
+    "opening": "d4aedff6-fcd8-43b9-8ded-73e55043db20",
+    "project": "2b3df2b4-8f50-423c-8cf9-53f2f3567e71",
+    "requests": 5,
+    "tokens": [
+      [
+        8568,
+        64
+      ],
+      [
+        9258,
+        54
+      ],
+      [
+        9108,
+        37
+      ],
+      [
+        9172,
+        41
+      ],
+      [
+        11124,
+        73
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-b7c15435bc97ecbb",
+        "tool": "inspect_timeline",
+        "args": "{\"offset\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "chatcmpl-tool-a9b6a7b971bb2148",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_5ae0b732225143f6bb2a2d9f",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_ff1e0a7fe9324bd994158173",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":5}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "studio": {
+    "opening": "14ee99f1-b250-4c45-83b5-45c1e5d2b3d7",
+    "project": "4f811c24-7772-45be-a6f9-745da1fd0650",
+    "requests": 10,
+    "tokens": [
+      [
+        8387,
+        41
+      ],
+      [
+        9090,
+        202
+      ],
+      [
+        9140,
+        43
+      ],
+      [
+        11014,
+        155
+      ],
+      [
+        11356,
+        134
+      ],
+      [
+        2682,
+        599
+      ],
+      [
+        12944,
+        53
+      ],
+      [
+        13157,
+        257
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa5b075677fc9ec812a0",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5b077672b694cf3383",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5b0e8976be93bdb700",
+        "tool": "move_clip",
+        "args": "{\"clip_id\":\"elm_c\",\"time\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5b13457745ab66db88",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_a6j6gfniy4l3_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_vno2w5egmo3t_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"2dc786f4-9b68-45de-aa89-cd389f36b7d9\", \"requirements\": \"两张卡原文与展示时长都保留；从头到尾衔接干净、无多余停顿；最终交付正式 MP4\", \"at_seconds\": [0, 2.8, 3.2, 4.4]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_06sv6c4b2z2d_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"2dc786f4-9b68-45de-aa89-cd389f36b7d9\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "verified-studio": {
+    "opening": "40416e90-73ab-4a18-b174-de58ef1a3820",
+    "project": "ac22ce6c-7532-4a6f-aec6-724b33f9d4c1",
+    "requests": 10,
+    "tokens": [
+      [
+        8362,
+        40
+      ],
+      [
+        9019,
+        131
+      ],
+      [
+        10369,
+        240
+      ],
+      [
+        9104,
+        20
+      ],
+      [
+        9756,
+        100
+      ],
+      [
+        11689,
+        50
+      ],
+      [
+        11930,
+        94
+      ],
+      [
+        2319,
+        1644
+      ],
+      [
+        13734,
+        118
+      ],
+      [
+        14016,
+        236
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa638189708caba4f1d8",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6387997144965be4a3",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6387997144965be4a4",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_c\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa638ebf73cc983805ae",
+        "tool": "move_clip",
+        "args": "{\"clip_id\":\"elm_c\",\"time\":3.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_913c7be59e5a4b8db0e22822",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_1f26c9dff5cb4ac2b7198d4f",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_q3hnm3v8h14b_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_r1zerf1vhg0s_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"303fa62a-7533-4b08-8ebc-44b87edb35cb\", \"requirements\": \"两张卡组成的项目演示样片：两卡原文与各自展示时长都保留；从头到尾衔接干净、没有多余停顿；检查最终成片后交付正式 MP4\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_dyz5w9kque30_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"303fa62a-7533-4b08-8ebc-44b87edb35cb\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "observed-revision": {
+    "opening": "e117df25-15cc-443a-9cc4-bf72629b3b23",
+    "project": "cb8d472a-fe51-4011-b6b0-1b70be850bf6",
+    "requests": 9,
+    "tokens": [
+      [
+        8557,
+        64
+      ],
+      [
+        9253,
+        72
+      ],
+      [
+        9265,
+        24
+      ],
+      [
+        9316,
+        43
+      ],
+      [
+        10830,
+        46
+      ],
+      [
+        11237,
+        95
+      ],
+      [
+        2333,
+        267
+      ],
+      [
+        12453,
+        55
+      ],
+      [
+        12815,
+        173
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_513c2579c6454058ba7cf012",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_a4c9d14429b34e6b8882fd9a",
+        "tool": "extend_still",
+        "args": "{\"clip_id\": \"elm_c\", \"seconds\": 0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_12b3bbab733d4a7cb00a3c9e",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_9eb6468ac0bd49248b043a81",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 2.5, \"end_seconds\": 5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_6i346fpaj5se_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_4uib372xmt7m_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"ceef936c-290a-4b1f-aaf4-99bd2d5b8e6c\", \"requirements\": \"结尾字幕卡再留半秒：结尾 “Thanks for watching” 文字卡结束时间应为 5.0 秒，总时长 5.0 秒。\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_6xo2rgm2v5ak_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"ceef936c-290a-4b1f-aaf4-99bd2d5b8e6c\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "mobile-final": {
+    "opening": "a4c9ec1f-b84e-4e2a-8fc4-bd9a0cf564ce",
+    "project": "d7eebedd-7f9a-4daa-b9d7-99e0fee9d123",
+    "requests": 4,
+    "tokens": [
+      [
+        8461,
+        98
+      ],
+      [
+        8492,
+        167
+      ],
+      [
+        2599,
+        209
+      ],
+      [
+        9697,
+        6
+      ]
+    ],
+    "calls": [
+      {
+        "call": "chatcmpl-tool-ace75aec2a3c717c",
+        "tool": "review_video",
+        "args": "{\"output_id\":\"e013bbea-a8b8-4ce3-80af-33a3a0ba4d58\",\"requirements\":\"确认该已交付成片的实际时长（秒）\",\"refresh\":false}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-studio": {
+    "opening": "be0badc6-c6a8-48a1-89f4-7505b8e911ab",
+    "project": "d7eebedd-7f9a-4daa-b9d7-99e0fee9d123",
+    "requests": 10,
+    "tokens": [
+      [
+        8407,
+        28
+      ],
+      [
+        9068,
+        121
+      ],
+      [
+        12187,
+        139
+      ],
+      [
+        9041,
+        62
+      ],
+      [
+        9743,
+        58
+      ],
+      [
+        11666,
+        68
+      ],
+      [
+        11926,
+        85
+      ],
+      [
+        2342,
+        506
+      ],
+      [
+        13143,
+        54
+      ],
+      [
+        13362,
+        263
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa702e37719e9fbd4612",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa7033857728834cabd1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa7033857728834cabd2",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_xcpnas4t5l0b_1",
+        "tool": "move_clip",
+        "args": "{\"clip_id\": \"elm_c\", \"time\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_adee4cb9f773484a9d3e98fe",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_cb55a3a5e1c34b60877c3571",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_qp145vty65ss_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_d92z9qhj7uwk_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"7aa5110e-7cfe-47a0-8332-3567f2e63f08\", \"requirements\": \"两张卡组成：保留两张卡原文与各自展示时长；从头到尾衔接干净、无多余停顿；无明显问题\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_2nasye9kxy14_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"7aa5110e-7cfe-47a0-8332-3567f2e63f08\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "revision": {
+    "opening": "184d4c80-8d0a-48ce-9167-3266eda5ba67",
+    "project": "4f811c24-7772-45be-a6f9-745da1fd0650",
+    "requests": 4,
+    "tokens": [
+      [
+        8429,
+        31
+      ],
+      [
+        9095,
+        43
+      ],
+      [
+        8955,
+        91
+      ],
+      [
+        10730,
+        85
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa5e21077259ac1643c4",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa5e24c0754d87fd807c",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_f7920860ca9d4e0aa041e196",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":2,\"end_seconds\":5}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "approved-fixed": {
+    "opening": "78af674c-7472-472d-bdbf-d9d929d80921",
+    "project": "62bd9f8f-8f0b-4c2d-9fd2-1188f6bb8427",
+    "requests": 13,
+    "tokens": [
+      [
+        8369,
+        71
+      ],
+      [
+        9068,
+        19
+      ],
+      [
+        9114,
+        41
+      ],
+      [
+        11435,
+        83
+      ],
+      [
+        8543,
+        120
+      ],
+      [
+        2511,
+        390
+      ],
+      [
+        10127,
+        60
+      ],
+      [
+        10815,
+        388
+      ],
+      [
+        11327,
+        58
+      ],
+      [
+        11183,
+        116
+      ],
+      [
+        11326,
+        50
+      ],
+      [
+        11260,
+        52
+      ],
+      [
+        13077,
+        36
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_6355e80839534610ba931191",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_5057bed5b7fa4a30ae2808bc",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_852c1d72cbed4e4a94914613",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_vq6ut2l2ofmp_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_6966f8c29180429e9c3f8ab8",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"35d94b50-5a80-4936-ba86-700745cb2988\", \"requirements\": \"\\u4fdd\\u7559\\u73b0\\u6709\\u526a\\u8f91\\uff0c\\u5bfc\\u51fa\\u6b63\\u5f0f MP4\\uff1b\\u753b\\u9762\\u4e0e\\u58f0\\u97f3\\u5e94\\u5b8c\\u6574\\u3001\\u65e0\\u9ed1\\u5c4f\\u6216\\u5f02\\u5e38\\uff0c\\u5b57\\u5e55\\u4e0e\\u65c1\\u767d\\u4e0d\\u8d8a\\u754c\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_a024f08d203a4bf2bdab8c32",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_75a986e7a38149bebb755560",
+        "tool": "list_project_media",
+        "args": "{\"ids\": [\"2e2988a4-d247-4b2c-ac11-87e00190079c\"]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_2a3e5e3243114c4a8791d19a",
+        "tool": "move_clip",
+        "args": "{\"clip_id\": \"elm_c\", \"time\": 3.0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa615a147048bfa9209c",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa615dd9710ead067fa6",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa616197754d8b1a0858",
+        "tool": "preview_range",
+        "args": "{\"end_seconds\":4.5,\"kind\":\"range\",\"start_seconds\":0}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ecocek33gxyz_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 4,
+        "valid": 4,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-revision": {
+    "opening": "10e950bc-57ad-4453-8c88-b8e077c4e2b2",
+    "project": "d7eebedd-7f9a-4daa-b9d7-99e0fee9d123",
+    "requests": 9,
+    "tokens": [
+      [
+        8591,
+        57
+      ],
+      [
+        9288,
+        96
+      ],
+      [
+        9306,
+        25
+      ],
+      [
+        9358,
+        41
+      ],
+      [
+        11333,
+        27
+      ],
+      [
+        11715,
+        108
+      ],
+      [
+        2327,
+        264
+      ],
+      [
+        12938,
+        53
+      ],
+      [
+        13292,
+        132
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_5ad3a47ea12c4eba9fba1392",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_80acb520f81346cc8dac901e",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_bc99bde8c5e54e2e8631f958",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_fcecb983a91544f591e80300",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_mcfd240g61xl_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_mls25p3h7gih_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"e013bbea-a8b8-4ce3-80af-33a3a0ba4d58\", \"requirements\": \"结尾字幕画面保持到 5.0 秒，片长 5 秒\", \"at_seconds\": [4, 4.9]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_twfcpsrp0f41_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"e013bbea-a8b8-4ce3-80af-33a3a0ba4d58\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "mobile-head": {
+    "opening": "63eb877d-045c-4579-840f-8536b07f8cdd",
+    "project": "cb8d472a-fe51-4011-b6b0-1b70be850bf6",
+    "requests": 3,
+    "tokens": [
+      [
+        8450,
+        145
+      ],
+      [
+        8480,
+        110
+      ],
+      [
+        9195,
+        25
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_09106845c4e9465e928c52b1",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "observed-studio": {
+    "opening": "13e9870d-f94b-489c-b1ea-730acfb03209",
+    "project": "cb8d472a-fe51-4011-b6b0-1b70be850bf6",
+    "requests": 16,
+    "tokens": [
+      [
+        8383,
+        27
+      ],
+      [
+        9035,
+        100
+      ],
+      [
+        10370,
+        129
+      ],
+      [
+        12815,
+        106
+      ],
+      [
+        8977,
+        40
+      ],
+      [
+        9649,
+        84
+      ],
+      [
+        11563,
+        321
+      ],
+      [
+        12514,
+        577
+      ],
+      [
+        13130,
+        76
+      ],
+      [
+        15501,
+        821
+      ],
+      [
+        18424,
+        504
+      ],
+      [
+        19768,
+        276
+      ],
+      [
+        20230,
+        83
+      ],
+      [
+        2323,
+        351
+      ],
+      [
+        21465,
+        53
+      ],
+      [
+        21677,
+        301
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa66c97971afb3e5a2a3",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa66cd997569b0753e91",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_c\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa66cd997569b0753e92",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\":\"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa66d2b575869faf9536",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_u9u609wvp6ky_1",
+        "tool": "move_clip",
+        "args": "{\"clip_id\": \"elm_c\", \"time\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa670050759290d1a7ee",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6704d2721491f00c1e",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_sqq7xcrty0te_1",
+        "tool": "inspect_clip",
+        "args": "{\"clip_id\": \"elm_a\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_kmh4a9njn5xh_1",
+        "tool": "list_project_media",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_voyxh0i33vlb_1",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 1.8, \"end_seconds\": 3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ldsosy8iwgvt_1",
+        "tool": "preview_range",
+        "args": "{\"end_seconds\": 2.2, \"start_seconds\": 1.9}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_129tvkevrdrl_1",
+        "tool": "preview_range",
+        "args": "{\"end_seconds\": 3.4, \"start_seconds\": 2.6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_z67v0k17o992_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_jcrmrzir8z1n_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"7dadcb81-86df-47f2-851e-9c8de5d8fc21\", \"requirements\": \"两张卡组成的项目演示样片：两张卡的原文和展示时长保留，从头到尾衔接干净、没有多余停顿\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_0wphix6oxvmx_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"7dadcb81-86df-47f2-851e-9c8de5d8fc21\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "inspect_clip": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 5,
+        "valid": 5,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "list_project_media": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "approved-final": {
+    "opening": "30bb1612-4ff5-4d11-920d-0c617dc19d6e",
+    "project": "94ffa0b4-09d7-4cb5-9f5a-23d4bcf0e393",
+    "requests": 10,
+    "tokens": [
+      [
+        8360,
+        32
+      ],
+      [
+        8419,
+        20
+      ],
+      [
+        9014,
+        19
+      ],
+      [
+        9060,
+        41
+      ],
+      [
+        11396,
+        18
+      ],
+      [
+        8583,
+        236
+      ],
+      [
+        9472,
+        174
+      ],
+      [
+        2703,
+        615
+      ],
+      [
+        11107,
+        70
+      ],
+      [
+        11337,
+        204
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa63833373748366ba0d",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa6386f277eca3b427af",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa638a6972398c40c8d1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa638dfd702a8f790140",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":0,\"end_seconds\":6}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_unnye4f1xv1m_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa63db70773c9664cd90",
+        "tool": "review_video",
+        "args": "{\"output_id\":\"849ffb68-6f7e-4580-8a2c-01031abc7db8\",\"requirements\":\"原样导出当前版本（version 1，composition_version_id c6927dcd-0a84-4975-8e6d-803e7ca346e3）为正式 MP4；保持黑场、2 个片段的位置与内容不变，总时长 6 秒。\",\"at_seconds\":[0,2,4,5.5]}",
+        "status": "not_executed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa63dd5f776abd4b0deb",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa63e28d76aca7aa7bb7",
+        "tool": "review_video",
+        "args": "{\"output_id\":\"849ffb68-6f7e-4580-8a2c-01031abc7db8\",\"requirements\":\"原样导出当前版本（version 1，composition_version_id c6927dcd-0a84-4975-8e6d-803e7ca346e3）为正式 MP4；保持黑场、2 个片段的位置与内容不变，总时长 6 秒。\",\"at_seconds\":[0,2,4,5.5]}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa64033e769c84e62b3b",
+        "tool": "deliver_video",
+        "args": "{\"output_id\":\"849ffb68-6f7e-4580-8a2c-01031abc7db8\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "export_video": {
+        "calls": 3,
+        "valid": 3,
+        "first_valid": true
+      },
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "verified-revision": {
+    "opening": "df675e0b-965b-4afd-923b-05c1adcc87c9",
+    "project": "ac22ce6c-7532-4a6f-aec6-724b33f9d4c1",
+    "requests": 9,
+    "tokens": [
+      [
+        8564,
+        38
+      ],
+      [
+        9234,
+        43
+      ],
+      [
+        9217,
+        36
+      ],
+      [
+        9280,
+        43
+      ],
+      [
+        10757,
+        38
+      ],
+      [
+        11142,
+        78
+      ],
+      [
+        2300,
+        414
+      ],
+      [
+        12328,
+        53
+      ],
+      [
+        12674,
+        84
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa64c25975c8aa5b2353",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa64c6be779684e01488",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa64cc3f761990c39dc3",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa64d0b5773ba912c233",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\":2.5,\"end_seconds\":5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_8mb21gl4l3ap_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_ozlmxmsrjt2n_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"61e069a5-2cba-460a-af54-3948c36c7d3d\", \"requirements\": \"结尾再留半秒：结尾静态画面延长0.5秒，总时长5秒\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_cssioqvbbq4y_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"61e069a5-2cba-460a-af54-3948c36c7d3d\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "mobile": {
+    "opening": "a5824988-1e34-42fa-85da-c1ab327920e3",
+    "project": "4f811c24-7772-45be-a6f9-745da1fd0650",
+    "requests": 2,
+    "tokens": [
+      [
+        8331,
+        56
+      ],
+      [
+        9022,
+        6
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_47d8a07ade854d129f7acb34",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-play-revision": {
+    "opening": "6ab705a1-3e93-44f4-b56b-027ef2365cc7",
+    "project": "ae30e87b-8fb1-49c3-8c75-6e5bb5a201c5",
+    "requests": 10,
+    "tokens": [
+      [
+        8555,
+        42
+      ],
+      [
+        9220,
+        43
+      ],
+      [
+        9243,
+        78
+      ],
+      [
+        9348,
+        20
+      ],
+      [
+        9895,
+        94
+      ],
+      [
+        11311,
+        18
+      ],
+      [
+        11692,
+        88
+      ],
+      [
+        2321,
+        278
+      ],
+      [
+        12881,
+        54
+      ],
+      [
+        13244,
+        195
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa76c5c976d0a0be8057",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa76cb25737bb76b9829",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa76d06a764a970689fa",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "failed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa76d3a9746abeaeeadc",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa76d7f1741fa0bd6380",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":3,\"end_seconds\":5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_i3whst9n4j4q_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_98ko1j31ysl4_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"0b7ea6d2-da1f-41c0-986c-989e083d9ff1\", \"requirements\": \"结尾再留半秒：结尾文字静止画面延长0.5秒，总时长由4.5秒变为5.0秒\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_iholhiozajpn_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"0b7ea6d2-da1f-41c0-986c-989e083d9ff1\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 2,
+        "valid": 2,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "final-studio": {
+    "opening": "76360375-b66b-4c6a-8d6b-e9841dbee403",
+    "project": "2b3df2b4-8f50-423c-8cf9-53f2f3567e71",
+    "requests": 8,
+    "tokens": [
+      [
+        8407,
+        33
+      ],
+      [
+        9076,
+        200
+      ],
+      [
+        9076,
+        43
+      ],
+      [
+        10933,
+        111
+      ],
+      [
+        11223,
+        79
+      ],
+      [
+        2312,
+        413
+      ],
+      [
+        12437,
+        50
+      ],
+      [
+        12639,
+        217
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_2c85a844ca694a63bb4bae57",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_e05eba2c828e4f60a1c7c10b",
+        "tool": "move_clip",
+        "args": "{\"clip_id\":\"elm_c\",\"time\":3}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_1d2ffc8ebd9045368eb2c1a2",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0.0, \"end_seconds\": 4.5}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_9xr2a3ejcwn4_1",
+        "tool": "export_video",
+        "args": "{}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_e62n9w78zcag_1",
+        "tool": "review_video",
+        "args": "{\"output_id\": \"497c9681-3648-4e65-b5a9-f41915771f44\", \"requirements\": \"两张卡的原文与展示时长保留；从头到尾衔接干净、无多余停顿；检查后交付正式 MP4\"}",
+        "status": "completed",
+        "schema_valid": true
+      },
+      {
+        "call": "call_function_eszgk80oqv7m_1",
+        "tool": "deliver_video",
+        "args": "{\"output_id\": \"497c9681-3648-4e65-b5a9-f41915771f44\"}",
+        "status": "completed",
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "move_clip": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "export_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "review_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "deliver_video": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "stop-first": {
+    "opening": "62520752-6c44-4dd1-8323-fa8e2b013b01",
+    "project": "fccbcc9c-a4fd-474b-8d16-e5bbdfbb36a9",
+    "requests": 1,
+    "tokens": [
+      [
+        8407,
+        20
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa60502571e7b16f999a",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "save-first": {
+    "opening": "3fd711dd-6a32-4e5f-9c12-190436be8fbd",
+    "project": "fccbcc9c-a4fd-474b-8d16-e5bbdfbb36a9",
+    "requests": 3,
+    "tokens": [
+      [
+        8407,
+        44
+      ],
+      [
+        9079,
+        43
+      ],
+      [
+        8947,
+        82
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_01a1fa6054a4775294b47791",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_01a1fa60581076bdb54ef570",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_35123e636a5044ad961fdad0",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":6.5}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-stop-first": {
+    "opening": "d2382a5c-b1e1-42f2-803f-1adafe4c20b1",
+    "project": "cbf503a3-3b29-4623-9819-8da3d20c2a57",
+    "requests": 1,
+    "tokens": [
+      [
+        8397,
+        28
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_8cebb2c641da4d6e8c799c1f",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "release-save-first": {
+    "opening": "d6825dbf-bc36-4bc3-97fa-b6a3f08829cf",
+    "project": "cbf503a3-3b29-4623-9819-8da3d20c2a57",
+    "requests": 3,
+    "tokens": [
+      [
+        8397,
+        32
+      ],
+      [
+        9062,
+        43
+      ],
+      [
+        8920,
+        64
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_e7885f806e3b4e73adf96d6c",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_ae5934ed2d5b46ec925ca05c",
+        "tool": "extend_still",
+        "args": "{\"clip_id\": \"elm_c\", \"seconds\": 0.5}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_f7e20967d804413bbf98eea0",
+        "tool": "preview_range",
+        "args": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":6.5}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-stop-first": {
+    "opening": "64f0b413-907a-4f5d-9623-bca4dda47153",
+    "project": "78ba0475-42b0-46a8-92bf-34ab5519950e",
+    "requests": 1,
+    "tokens": [
+      [
+        8384,
+        31
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_ab8a64321dab4e8d92b0e086",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  },
+  "pool-save-first": {
+    "opening": "3b7d772d-bea0-405a-81c0-521319bed83b",
+    "project": "78ba0475-42b0-46a8-92bf-34ab5519950e",
+    "requests": 3,
+    "tokens": [
+      [
+        8384,
+        32
+      ],
+      [
+        9040,
+        43
+      ],
+      [
+        8912,
+        43
+      ]
+    ],
+    "calls": [
+      {
+        "call": "call_a64f39909f944f40983e92b9",
+        "tool": "inspect_timeline",
+        "args": "{}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_a820a74bca02487fb2a76a23",
+        "tool": "extend_still",
+        "args": "{\"clip_id\":\"elm_c\",\"seconds\":0.5}",
+        "status": null,
+        "schema_valid": true
+      },
+      {
+        "call": "call_4307cea780954cb4aa3dcffa",
+        "tool": "preview_range",
+        "args": "{\"start_seconds\": 0, \"end_seconds\": 6.5}",
+        "status": null,
+        "schema_valid": true
+      }
+    ],
+    "tool_schema": {
+      "inspect_timeline": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "extend_still": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      },
+      "preview_range": {
+        "calls": 1,
+        "valid": 1,
+        "first_valid": true
+      }
+    }
+  }
+}

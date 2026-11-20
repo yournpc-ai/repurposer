@@ -1,5 +1,7 @@
 # Video Project — 视频作品、Skill 与渲染目标架构
 
+> 普通视频创作的现行入口与模型可见工具以 [Agent Editor 主合同](tasks/new-agent.md) 为准。早期条目中的 `revise_video` 是已退役的模型接口。`design_video` 与工作稿审阅仍有网站及 Skill 等专用消费者。
+
 > Status: 已拍板目标架构，开发中（2026-11-17）。本文是新架构唯一目标事实源；能力与剩余验收统筹归 [当前视频合同](tasks/skill-package-promo-video.md)，当前批次归 PROGRESS §0。目标能力与单次模型/旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
 >
 > 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；混合合成、程序化画面与生成媒体按施工合同分批接入。ASR 选段、固定视口、原生字幕与配音已归入普通 Composition 对象，旧 Clip/ClipSpec 已退役；完整 Scrub Inspector 后续独立迭代。**不把旧作品内容迁移到新模型**；退役产物按明确授权定向清理，新表、新列和索引仍须走 Alembic schema migration。

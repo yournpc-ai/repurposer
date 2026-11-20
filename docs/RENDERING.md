@@ -53,3 +53,5 @@ Composition 的 Track/Clip/Object、源窗、输出窗和锚点以 [VIDEO_PROJEC
 ## 9. 共享渲染所有权与验收
 
 编译期为 Output 指定唯一 render owner，inputs 包含全部实际写入者。非 owner 不 re-pend / 建 render step；失败阻断 owner，归档对象不重新排队，跨 Run 不双重拥有。Worker 认领铸造 `render_claim_token`，终态写核对 token 和命中数，失势执行不覆盖结果或重复扣费。交错、取消、恢复和失败注入验收见 [VERIFICATION §5](VERIFICATION.md#5-共享机制与-ui-的当前验收)。
+
+有 WorkflowStep 的正式导出使用项目、Output 及固定 step、版本与 render spec 派生的对象 key。首次上传以条件 PUT 写入，恢复时从该 key 重读实际字节并探测媒体流，提交时记录 SHA-256。已交付文件复用时复核摘要。既有历史对象仍按其持久引用读取。

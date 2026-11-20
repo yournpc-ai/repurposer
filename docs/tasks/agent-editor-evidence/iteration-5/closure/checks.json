@@ -1,0 +1,183 @@
+{
+  "pool-left": {
+    "requests": 6,
+    "prompt_tokens": 59318,
+    "completion_tokens": 1658,
+    "native_calls": 6,
+    "schema_valid": 6,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [
+      "scale",
+      "translate"
+    ],
+    "delivered_outputs": [],
+    "assistant": "复看后，当前版本构图符合要求，无需再改：\n\n- **画面内容**（1.47s 采样帧）：人物头部完整、脸部五官清晰不裁切，肩部和上半身保留完整，取景自然。\n- **处理**：本轮已把之前遗留的偏移复位（scale 2.6→1.0、位移 x110/y35→0/0），即取消之前的放大和硬位移——那会切掉脸和肩；现在恢复源画面的完整构图。\n- **布局**：源素材 240×216 竖向偏方，画布 320×180，采用 contain 完整保留画面，左右留黑边，未做裁切填满。\n- **时长**：仍为 3.0 秒，未改动。\n\n未检查范围：仅按 0–3 秒窗口复看，采样时点为 1.47 秒；片段内其余帧未逐帧核对。该作品尚未正式导出，若需要成片交付请告知。",
+    "final_transform": {
+      "x": 0.0,
+      "y": 0.0,
+      "scale": 1.0,
+      "origin": "center",
+      "rotation": 0.0
+    }
+  },
+  "pool-right": {
+    "requests": 10,
+    "prompt_tokens": 100146,
+    "completion_tokens": 2010,
+    "native_calls": 10,
+    "schema_valid": 10,
+    "rejected_or_skipped": [
+      [
+        "inspect_clip",
+        "failed"
+      ]
+    ],
+    "identical_edit_requests": 0,
+    "edits": [
+      "scale",
+      "translate",
+      "scale"
+    ],
+    "delivered_outputs": [],
+    "assistant": "复看后，当前版本（v4）的构图是合适的，未再继续改动。\n\n观察结果（采样 1.47s，版本 第 4 版）：\n- 画面：人物居中偏左，头部完整、顶部有留白，面部无遮挡；双肩与上臂都在画面内，麦克风从右上方入画。源画面（240×216）以 contain 完整落在 320×180 画布内，未裁切头顶或下巴。\n- 对照上一版：之前主体被推到右侧、左侧留出大片黑边；现在偏移已归零（x=0, y=0），黑边已消除，视觉重心回到人物身上。\n- 时长不变，仍为 0–3.0 秒，3 秒单镜头。\n\n未检查范围：仅解码了 0–3.0 秒窗口内的抽样帧（1.47s），窗口其余时刻未逐帧核对；音轨存在但当前无可感知声音数据（RMS 为 0，无法据此评价听感）。\n\n若还需要正式导出成片，请确认后我再导出并交付。",
+    "final_transform": {
+      "x": 0.0,
+      "y": 0.0,
+      "scale": 1.0,
+      "origin": "center",
+      "rotation": 0.0
+    }
+  },
+  "pool-card": {
+    "requests": 2,
+    "prompt_tokens": 17885,
+    "completion_tokens": 321,
+    "native_calls": 1,
+    "schema_valid": 1,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [
+      "create_video"
+    ],
+    "delivered_outputs": [],
+    "assistant": "初稿已保存（未导出）。\n\n- 作品《白色文字静态字卡》第 1 版：单场字卡，16:9，纯黑背景，白色 #FFFFFF 标题「白色文字静态字卡」，静态无入场动画，时长 3.0 秒。\n\n如果你想换具体文案、加副标题或改竖屏比例，告诉我即可。"
+  },
+  "pool-sound": {
+    "requests": 5,
+    "prompt_tokens": 50546,
+    "completion_tokens": 700,
+    "native_calls": 6,
+    "schema_valid": 6,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [
+      "insert_audio",
+      "insert_audio"
+    ],
+    "delivered_outputs": [],
+    "assistant": "已完成并保存（当前版本 v3，composition `bcb6c8f2…`）：\n\n- **英文旁白**：`Hello, this is the first cut.`（presenter_male，实测 2.763 秒），已插入开头 0.0s–2.763s（clip `clp_1e926b78…`，轨 trk_editor_narration，音量 0 dB）。\n- **轻电子配乐**：4.00 秒，100 BPM，已插入开头 0.0s–4.0s（clip `clp_b285d5ba…`，轨 trk_editor_music，音量 0 dB）。\n- **画面未做任何改动**，原有标题卡素材保持原状。\n\n前 4 秒预览结果（窗口 0.0–4.0s）：\n- 画面 0–3 秒为原标题卡 \"The team workspace / Product, pricing and plans / A practical overview\"；3.0–4.0 秒画面为空（黑），这是原有时长结构所致，未做调整。\n- 混合音轨已完整解码（4.05 秒），RMS 0.117、峰值 0.841、无削波，综合响度 −16 LUFS，真峰 −1.5 dBTP。音频本身我未直接听到，只能据此说明整体电平正常。\n\n按你的要求，本次只做预览，未导出正式成片。"
+  },
+  "pool-demo": {
+    "requests": 10,
+    "prompt_tokens": 101519,
+    "completion_tokens": 1625,
+    "native_calls": 9,
+    "schema_valid": 9,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [
+      "move_clip"
+    ],
+    "delivered_outputs": [
+      "84b188b8-3878-4669-98d5-6de266267ebd"
+    ],
+    "assistant": "正式成片已发到对话中。\n\n- 作品：项目演示短片，版本 2（第 2 版），总时长 4.5 秒，320×180。\n- 修改：结尾卡原在 4.5–6.0 秒，与首卡之间空出 3.0–4.5 秒纯黑空档；已把结尾卡前移到 3.0–4.5 秒，时长仍为 1.5 秒，两张卡原文未动。\n- 实测：成片解码无重复帧组、无解码异常，1.500 s 帧为首卡（\"the team workspace / Product, pricing and plans / A practical overview\"），3.733 s 帧为结束卡 \"Thanks for watching\"，文字完整可读。音频轨存在且无削波。\n- 未覆盖范围：审阅基于离散采样帧，3.000 s 衔接处的逐帧过渡未做连续运动核验；音画同步与听感未评估。"
+  },
+  "pool-play-revision": {
+    "requests": 10,
+    "prompt_tokens": 97710,
+    "completion_tokens": 910,
+    "native_calls": 8,
+    "schema_valid": 8,
+    "rejected_or_skipped": [
+      [
+        "export_video",
+        "failed"
+      ]
+    ],
+    "identical_edit_requests": 0,
+    "edits": [
+      "extend_still"
+    ],
+    "delivered_outputs": [
+      "0b7ea6d2-da1f-41c0-986c-989e083d9ff1"
+    ],
+    "assistant": "结尾已延长半秒并重新交付。\n\n- 版本 3（第 3 版）：结尾文字片段 3–5 秒的片段 从 3.0–4.5 秒延长到 3.0–5.0 秒，全片时长 5.0 秒。\n- 复看 3.0–5.0 秒窗口：结尾画面持续为居中文字，无跳切或异常。\n- 审阅成片（output 这份素材，5.0 秒 / 150 帧）：4.0 秒帧结尾文字完整无裁切，末帧仍为该静态文字。未做逐帧运动连续性检查，音轨可解码但未评价听感。\n\n修订版已发送到对话中。"
+  },
+  "race": {
+    "requests": 3,
+    "prompt_tokens": 26052,
+    "completion_tokens": 270,
+    "native_calls": 2,
+    "schema_valid": 2,
+    "rejected_or_skipped": [
+      [
+        "extend_still",
+        "failed"
+      ]
+    ],
+    "identical_edit_requests": 0,
+    "edits": [
+      "extend_still"
+    ],
+    "delivered_outputs": [],
+    "assistant": "遇到版本冲突，已按你的要求立即停止，未重试。\n\n- 该次写入基于版本 第 1 版（已非当前版本），工具判定冲突，本次调用**未做任何改动**。\n- 我保留了对方的版本，没有覆盖、也没有再次提交同一个延长操作。\n- 片尾 \"Thanks for watching\" 静态卡目前仍是原时长（作品总长 6.0 秒，2 个片段），**未保存草稿**。\n\n如需继续，请告知是否以当前最新版本为基准重新延长半秒；届时我需要先读取当前时间线确认片尾片段 ID 与时长。"
+  },
+  "sample": {
+    "requests": 3,
+    "prompt_tokens": 28584,
+    "completion_tokens": 537,
+    "native_calls": 2,
+    "schema_valid": 2,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [
+      "create_video"
+    ],
+    "delivered_outputs": [],
+    "assistant": "初稿已保存，未做正式导出。\n\n**作品**：《三秒白色字卡初稿》— 版本 1（version_id 第 1 版）\n- 单一场景 clip `clip_scene_1_title`，时长 3.0 秒，黑底，白色文字「空项目首稿」，静态无入场动画，16:9、30fps。\n\n**预览范围**：0.0–3.0 秒，跨全部轨道，覆盖完整成片。\n\n**实际抽取的时点**：只有 1 个 — **1.466667 秒**（约 1.47s，位于片段中部）。播放窗口是 0–3 秒整段，但画面只在这一时点解码出帧，其余时间未逐帧抽样。\n\n**预览所见**：该帧为黑底居中白色文字，字重清晰、居中位置正确，无裁切。音频轨整体为静音（RMS 0，LUFS −70，无削波），符合纯字卡预期。\n\n未检查范围：除 1.47 秒外的画面未逐帧核对，若字卡在片头片尾存在淡入淡出或位置漂移，当前预览无法证实；本轮无声音内容可评价听感。"
+  },
+  "mobile-final": {
+    "requests": 4,
+    "prompt_tokens": 29249,
+    "completion_tokens": 480,
+    "native_calls": 1,
+    "schema_valid": 1,
+    "rejected_or_skipped": [],
+    "identical_edit_requests": 0,
+    "edits": [],
+    "delivered_outputs": [],
+    "assistant": "5.0 秒"
+  },
+  "coverage": {
+    "projects": 38,
+    "captured_media_credits": 153,
+    "captures": 21,
+    "repeated_capture_keys": 0,
+    "outputs": 15,
+    "duplicate_outputs_per_version": 0,
+    "duplicate_cards_per_opening_and_output": 0,
+    "conversation_usage_usd": "0.523205",
+    "provider_invoice_reconciled": false
+  },
+  "checks": {
+    "api_core": "514 passed, 4 warnings in 59.36s",
+    "web": "411 tests in 44 files",
+    "renderer": "8 upload tests",
+    "tsc": true,
+    "web_build": "✓ built in 4.13s",
+    "pool_timeouts_before": 3,
+    "pool_timeouts_after": 0
+  }
+}

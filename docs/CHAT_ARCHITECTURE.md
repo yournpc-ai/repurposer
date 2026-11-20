@@ -1,6 +1,7 @@
 # Chat Architecture — Agent Interface 层
 
 > Status: 当前规范（2026-11-06）。`POST /chat` 是唯一意图表面，计划构建/修订/确认并入 plan path；会话层使用 ADR-077 有界工具 loop。实现与 live 验收欠账归 `PROGRESS.md` 和当前任务合同。
+> 普通视频创作的现行入口与模型可见工具以 [Agent Editor 主合同](tasks/new-agent.md) 为准。早期条目中的 `revise_video` 是已退役的模型接口。`design_video` 与工作稿审阅仍有网站及 Skill 等专用消费者。
 > 上游决策：ADR-028（RunPlan）/ ADR-029（plan 级 dispatch）/ ADR-030（产物统一）/ ADR-032（edit ops）/ ADR-039（四层工程地图与 `TOOL_REGISTRY`，见 §4）/ **ADR-057（图即产品对象）——图结构变更统一为 wiring ops（add_node / connect / edit_prompt / delete_node / run(_subgraph)）并经 `apply_wiring_ops` 唯一写口；Chat 与确定性卡面动作都是合法消费者。产物级精确修改另走 Operation Model，不把两家族混成同一写口** / **ADR-077（会话层工具 loop 化）——动作 union 机械翻译为终态工具集（§3），护栏搬进工具执行内，读工具一族 = 世界的读法（§3.4），触发回合 = 主动说话（§8.8）；生产层 DAG 与执行写门不因此被绕开，执行 loop 永拒（§12）**
 > 命名遵循：`docs/NAMING.md`；模块归属：`docs/MODULE_ARCHITECTURE.md`（Agent Interface：conversations/messages）；chat/ 包是本文的代码家。
 >
