@@ -55,6 +55,7 @@ would be a lie.
 
 import json
 import re
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
@@ -165,6 +166,7 @@ class ChatTool:
     # Evidence reads authenticate and retain the same draft without merging writes.
     draft_reader: bool = False
     presentation: ToolPresentation | None = None
+    snapshot_read: bool = False
     finish_batch: Callable[[list[tuple[BaseModel, "ToolObservation"]]], Awaitable["ToolObservation | None"]] | None = None
 
 
@@ -423,6 +425,8 @@ class ToolObservation:
     # Accepted domain evidence may supply one user-facing finding after acceptance.
     accepted_interim_prose: str | None = None
     # A caller-owned handoff settled the observation and can finish this turn.
+    user_error: str | None = None
+    provider_outcome_unknown: bool = False
     stop_after_observation: bool = False
     awaiting_authorization: bool = False
     # A version-scoped observation expires when the snapshot no longer has its key.
@@ -441,6 +445,7 @@ class ToolExchange:
     executed_arguments: dict | None = None
     iteration: int = 0
     call_index: int = 0
+    group_id: str | None = None
     # Actual correction calls retain their own wire identity; these fields
     # attribute validation, supersession and execution to the original tool.
     target_tool: str | None = None
@@ -551,6 +556,25 @@ class ReadExecuting:
     tool_name: str
     params: BaseModel | None = None
     call_id: str = ""
+    group_id: str | None = None
+
+
+@dataclass(frozen=True)
+class BatchMember:
+    group_id: str
+    call_id: str
+    tool_name: str
+    call_index: int
+    call_count: int
+    key: str | None
+    state: str = "queued"
+    duration_ms: int | None = None
+    user_error: str | None = None
+
+
+@dataclass(frozen=True)
+class BatchDeclared:
+    members: tuple[BatchMember, ...]
 
 
 @dataclass(frozen=True)
@@ -562,7 +586,7 @@ class LoopExhausted:
     iterations: int
 
 
-LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | ToolProgress | LoopExhausted
+LoopEvent = ToolRejected | TerminalAccepted | ReadAccepted | ReadExecuting | ToolProgress | BatchDeclared | BatchMember | LoopExhausted
 
 # A synchronous, caller-owned stop decision. The kernel supplies the real
 # rejection and the preceding history; it never imports chat/Film policy.
@@ -821,6 +845,7 @@ class ToolLoopAgent:
         observation_scopes: dict[str, tuple[str, tuple[str, ...]]] = {}
         project_image_observations: dict[str, ToolObservation] = {}
         delivered_observations: set[str] = set()
+        batch_keys: dict[str, str] = {}
         fold_after_delivery: set[str] = set()
         observed_keys: dict[str, str] = {}
         # Repair-label truthfulness (交互完整性批 ②): set by the rejection
@@ -962,6 +987,13 @@ class ToolLoopAgent:
                 for call_id, observation in project_image_observations.items()
                 if call_id in omitted and observation.context_lifetime == "project"
             }
+            # Retain a receipt once for a sibling superseded by a later write;
+            # never send stale pixels or silently erase a successful native call.
+            for call_id in omitted.intersection(batch_keys).difference(delivered_observations):
+                replacements[call_id] = json.dumps({
+                    "observed_on": observed_keys[call_id], "superseded": True,
+                    "result": batch_keys[call_id],
+                }, ensure_ascii=False)
             omitted -= replacements.keys()
             # Remove whole protocol pairs, never orphan assistant/tool messages.
             tail = []
@@ -1336,10 +1368,28 @@ class ToolLoopAgent:
             if batched:
                 observation_tail.append(assistant_message)
 
+            group_id = (assembly.get("model_call_id") or wire_calls[0]["id"]) if batched and self.service_per_call else None
+            if len({wire["id"] for wire in wire_calls}) != len(wire_calls):
+                raise ValueError("The provider returned ambiguous duplicate native call IDs.")
+            members = {}
+            started = set()
+            if group_id:
+                for index, (request, wire) in enumerate(zip(result.tool_calls, wire_calls, strict=True)):
+                    declared = by_name.get(request.name)
+                    presentation = declared.presentation if declared else None
+                    member = BatchMember(group_id, wire["id"], request.name, index, len(wire_calls),
+                                         presentation.active_key if presentation else None)
+                    members[wire["id"]] = member
+                await _emit(on_loop_event, BatchDeclared(tuple(members.values())))
+
             async def remember(call, call_id, observation, executed_arguments=None, *,
                                candidate_record: CandidateRecord | None = None,
                                candidate_active: bool = True,
                                target_tool: str | None = None):
+                if group_id and call_id not in started:
+                    await _emit(on_loop_event, replace(members[call_id], state="not_executed"))
+                if group_id and observation.valid_for_key:
+                    batch_keys[call_id] = observation.project_text or observation.text
                 if observation.context_lifetime not in {"call", "turn", "project"}:
                     raise ValueError("unknown observation context lifetime")
                 fold_keys = observation.context_keys if not observation.images or observation.project_text is not None else ()
@@ -1357,7 +1407,7 @@ class ToolLoopAgent:
                 await _emit(on_context_event, ToolExchange(
                     call_id=call_id, tool_name=call.name, arguments=call.arguments,
                     observation=observation, base_keys=snapshot.keys if snapshot else frozenset(),
-                    executed_arguments=executed_arguments, iteration=iteration, call_index=call_index,
+                    executed_arguments=executed_arguments, iteration=iteration, call_index=call_index, group_id=group_id,
                     target_tool=target_tool,
                     candidate=({"candidate_id": candidate_record.candidate_id,
                         "candidate_digest": candidate_record.candidate_digest,
@@ -1437,12 +1487,9 @@ class ToolLoopAgent:
             group = by_name.get(result.tool_calls[0].name)
             finish_batch = group.finish_batch if group and all(call.name == group.name for call in result.tool_calls) else None
             batch_observations = []
-            invalid_service = self.service_per_call and batched and not finish_batch
-            if invalid_service or (batched and unsafe):
+            if batched and unsafe and not self.service_per_call:
                 # Reject BEFORE any work: no first write, silent drops or forked starts.
                 feedback = "本批未执行。内容写入和终结操作必须单独提交，只有声明为可批量执行的读取或资源准备可以合并。"
-                if invalid_service:
-                    feedback = "未执行本批工具。请一次调用一个工具。"
                 calls.extend(call.name for call in result.tool_calls)
                 for call_index, call in enumerate(result.tool_calls):
                     await remember(call, wire_calls[call_index]["id"], ToolObservation(feedback, ok=False))
@@ -1473,11 +1520,34 @@ class ToolLoopAgent:
                     return stopped
                 continue
 
+            # Only immutable-version readers with isolated DB sessions opt in.
+            # Validate the whole read-only set before launching any sibling.
+            # A malformed member goes through the ordinary per-item diagnostics below.
+            parallel_params = []
+            read_results = {}
+            if group_id and all(c.name in by_name and by_name[c.name].snapshot_read for c in result.tool_calls):
+                try:
+                    parallel_params = [by_name[c.name].params_model.model_validate(c.arguments)
+                                       for c in result.tool_calls]
+                except ValidationError:
+                    pass
+
+            async def inspect_member(member, validated):
+                start = time.monotonic()
+                with bind_progress(member.call_id, on_loop_event, group_id):
+                    observed = await execute(member.tool_name, validated, "")
+                duration = int((time.monotonic() - start) * 1000)
+                return member, observed, duration
+
             for call_index, call in enumerate(result.tool_calls):
                 call_id = call.id or f"call_{iteration}_{call_index}"
                 prose = response_prose if not prose_handled else ""
                 calls.append(call.name)
                 tool = by_name.get(call.name)
+                if group_id and tool and (tool.terminal or not tool.batchable):
+                    await remember(call, call_id, ToolObservation(
+                        "Not executed. Review the sibling results, then submit this action separately.", ok=False))
+                    continue
                 if tool is None:
                     if not batched:
                         await remember(call, call_id, ToolObservation(f"Unknown tool {call.name!r}; not executed.", ok=False))
@@ -1734,9 +1804,10 @@ class ToolLoopAgent:
                     )
                 elif not tool.terminal:
                     speech_parts.append(prose)
-                if self.service_per_call:
+                if self.service_per_call and not parallel_params:
                     await _emit(on_tool_call, dispatch_name)
-                await _emit(on_tool_ready, dispatch_name, params)
+                if not parallel_params:
+                    await _emit(on_tool_ready, dispatch_name, params)
                 # The composed speech: a TERMINAL call gets the ledger + this
                 # iteration's prose (it never entered the ledger — the guard
                 # above); a read gets the LEDGER AS IS — its prose either just
@@ -1749,16 +1820,38 @@ class ToolLoopAgent:
                 speech = _compose_speech(
                     speech_parts if not tool.terminal else [*speech_parts, invitation or prose]
                 )
-                if not tool.terminal:
+                if parallel_params and not read_results:
+                    # Serialise transcript writes on the turn lock. Only the
+                    # reads themselves run concurrently, on a single observed version.
+                    for member, validated in zip(members.values(), parallel_params, strict=True):
+                        await _emit(on_tool_ready, member.tool_name, validated)
+                        await _emit(on_loop_event, replace(member, state="running"))
+                        started.add(member.call_id)
+                    async with asyncio.TaskGroup() as tasks:
+                        pending = [tasks.create_task(inspect_member(member, validated))
+                                   for member, validated in zip(members.values(), parallel_params, strict=True)]
+                        for completed in asyncio.as_completed(pending):
+                            member, observed, duration = await completed
+                            read_results[member.call_id] = observed
+                            state = "completed" if observed.ok else "failed"
+                            presentation = by_name[member.tool_name].presentation
+                            await _emit(on_loop_event, replace(member, state=state, duration_ms=duration,
+                                        key=presentation.done_key if observed.ok else member.key,
+                                        user_error=observed.user_error))
+                if not tool.terminal and not parallel_params:
                     # The read's work-START stamp (ADR-108 数组位置律): the
                     # projector re-anchors the span's honest duration at
                     # execute entry — after the interim_prose seat above, so the
                     # waiter row is appended (and persisted) BEFORE the
                     # activity row's birth: 服务员话 → 读活动 → 读后回复 is
                     # array order, never a clock race.
-                    await _emit(on_loop_event, ReadExecuting(tool_name=dispatch_name, params=params, call_id=call_id))
-                with bind_progress(call_id, on_loop_event):
-                    outcome = await execute(dispatch_name, params, speech)
+                    started.add(call_id)
+                    await _emit(on_loop_event, ReadExecuting(tool_name=dispatch_name, params=params, call_id=call_id, group_id=group_id))
+                if parallel_params:
+                    outcome = read_results[call_id]
+                else:
+                    with bind_progress(call_id, on_loop_event, group_id):
+                        outcome = await execute(dispatch_name, params, speech)
                 if isinstance(outcome, WorkingDraftReviewed):
                     if not tool.draft_reader or candidate_record is None:
                         raise RuntimeError(f"{dispatch_name} returned draft evidence without draft_reader=True")
@@ -1885,15 +1978,19 @@ class ToolLoopAgent:
                         candidate_active=is_draft_update or (is_draft_merge and not outcome.ok),
                         target_tool=dispatch_name if (is_correction or is_draft_merge or is_draft_update) else None,
                     )
-                    await _emit(
-                        on_loop_event,
-                        ReadAccepted(
-                            tool_name=dispatch_name,
-                            ok=outcome.ok,
-                            receipt=outcome.receipt,
+                    if group_id and not parallel_params and not outcome.ok and outcome.user_error:
+                        await _emit(on_loop_event, replace(members[call_id],
+                                    state="provider_unknown" if outcome.provider_outcome_unknown else "failed",
+                                    user_error=outcome.user_error))
+                    elif group_id and outcome.provider_outcome_unknown:
+                        await _emit(on_loop_event, replace(members[call_id], state="provider_unknown"))
+                    if group_id and outcome.awaiting_authorization:
+                        await _emit(on_loop_event, replace(members[call_id], state="awaiting_authorization"))
+                    if not parallel_params:
+                        await _emit(on_loop_event, ReadAccepted(
+                            tool_name=dispatch_name, ok=outcome.ok, receipt=outcome.receipt,
                             awaiting_authorization=outcome.awaiting_authorization,
-                        ),
-                    )
+                        ))
                     if (
                         not self.service_per_call
                         and outcome.ok
@@ -1906,6 +2003,12 @@ class ToolLoopAgent:
                     if finish_batch and outcome.ok:
                         batch_observations.append((params, outcome))
                     if outcome.stop_after_observation:
+                        if group_id:
+                            for call_index in range(call_index + 1, len(wire_calls)):
+                                remaining = result.tool_calls[call_index]
+                                calls.append(remaining.name)
+                                await remember(remaining, wire_calls[call_index]["id"], ToolObservation(
+                                    "Not executed. The turn paused for user input.", ok=False))
                         return _finish(LoopResult(
                             prose=speech, tool_name=dispatch_name, params=params,
                             iterations=iteration + 1, calls=calls,

@@ -890,6 +890,10 @@ async def execute_step(node_id: UUID) -> None:
                         tail="failure",
                     )
                     return
+                if run and (run.context or {}).get("editor_media") and getattr(e, "user_key", None) in {
+                    "provider_image_outcome_unknown", "provider_narration_outcome_unknown",
+                }:
+                    run.context = {**run.context, "provider_outcome_unknown": True}
                 await db.refresh(node)
                 await db.commit()
                 await _cascade_skip(db, node)

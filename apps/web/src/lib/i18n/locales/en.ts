@@ -1531,6 +1531,18 @@ const en = {
      * freezes; replay without that client fact reports only the observable
      * activity span. Expanded rows are the foldCategories ×N decomposition.
      * `actionCount` is the honest fallback when no wall clock exists. */
+    recordingGroup: "Preparing narration and music…",
+    toolGroup: "{{count}} tool calls",
+    callState: {
+      provider_unknown: "Provider outcome unknown",
+      queued: "Queued",
+      running: "Running",
+      completed: "Completed",
+      failed: "Failed",
+      cancelled: "Stopped",
+      not_executed: "Not executed",
+      awaiting_authorization: "Awaiting approval",
+    },
     activityFold: {
       workedWithoutTime: "Worked",
       worked: "Worked for {{elapsed}}",

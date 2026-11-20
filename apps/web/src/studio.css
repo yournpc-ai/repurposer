@@ -73,3 +73,10 @@
 @media (max-width: 767px) {
   .ui-th-col { gap: 20px; padding: 12px 16px 24px; }
 }
+
+/* Agent Thread ToolGroup's compact disclosure and aligned per-call list. */
+.studio-tools { font-size: .8125rem; color: var(--muted-foreground); }
+.studio-tools summary { width: fit-content; cursor: pointer; padding: .375rem 0; }
+.studio-tools ol { list-style: none; margin: .25rem 0 .75rem .35rem; padding-inline-start: 1rem; border-inline-start: 1px solid var(--border); }
+.studio-tools li { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block: .25rem; }
+.studio-tools small { white-space: nowrap; font-variant-numeric: tabular-nums; }

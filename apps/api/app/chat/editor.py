@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
-from app.agents.tool_progress import current_call_id
+from app.agents.tool_progress import current_call_id, current_group_id
 from app.editing.edits import SplitClip, TemporalEdit, UpdateClip
 from app.editing.schemas import EditTarget
 from app.editing.store import (
@@ -127,6 +127,8 @@ def _editor_tool(name, description, args, key):
         description,
         args,
         terminal=False,
+        batchable=True,
+        snapshot_read=name in {"inspect_timeline", "inspect_clip"},
         presentation=ToolPresentation(
             kind="read",
             active_key="chat.activity." + key,
@@ -400,13 +402,12 @@ async def edit_clip(
     if previous is None:
         # The pointer and the immutable version live in the same store transaction.
         # Neither becomes visible unless the version passes validation and CAS.
-        presentation = WRITE_TOOLS[name].presentation
         active = await db.scalar(
             select(Message.id)
             .where(
                 Message.turn_id == opening_id,
                 Message.intent["frame"]["status"].astext == "active",
-                Message.intent["frame"]["key"].astext == presentation.active_key,
+                Message.intent["frame"]["call_id"].astext == call_id,
             )
             .order_by(Message.seq.desc())
             .limit(1)
@@ -489,6 +490,16 @@ async def execute_editor(turn, name, args):
     async with AsyncSessionLocal() as db:
         try:
             if name in WRITE_TOOLS:
+                group = current_group_id()
+                if (group and isinstance(args, InsertAudioArgs) and
+                        getattr(turn, "_generated_in_response", {}).get(str(args.source_id)) == group):
+                    raise ValueError("Use the fixed source returned by generation in the next response.")
+                previous_write = getattr(turn, "_batch_commit", None)
+                if group and previous_write and previous_write[0] == group:
+                    base = previous_write[1]
+                    target_id = getattr(args, "clip_id", None) or getattr(args, "id", None)
+                    if target_id in previous_write[2]:
+                        raise ValueError("Observe the saved split before addressing the new clip or object.")
                 if not turn.turn_id or not current_call_id():
                     raise ValueError("A persisted turn and native call identity are required.")
                 from app.chat.editor_recovery import editor_lock_key
@@ -554,6 +565,13 @@ async def execute_editor(turn, name, args):
                     "clips": dict(list(focused.items())[-24:]),
                     "applied": applied,
                 }
+                if group:
+                    new_ids = set(result["added_clips"])
+                    new_ids.update(c["object_id"] for c in result["changed_clips"] if c["clip_id"] in new_ids)
+                    if previous_write and previous_write[0] == group:
+                        new_ids.update(previous_write[2])
+                    turn._batch_commit = (group, {**base, "composition_version_id": result["version_id"],
+                                                  "content_digest": result["content_digest"]}, new_ids)
                 turn._inspected_version = result["version_id"]
                 if getattr(turn, "_editor_output_pin", None):
                     turn._editor_output_pin["version_id"] = result["version_id"]
@@ -645,4 +663,4 @@ async def execute_editor(turn, name, args):
             )
             return ToolObservation(json.dumps(evidence), images=media, valid_for_key=version_key)
         except ValueError as exc:
-            return ToolObservation(str(exc), ok=False, fold_after_delivery=True)
+            return ToolObservation(str(exc), ok=False, fold_after_delivery=True, user_error=str(exc))

@@ -203,6 +203,7 @@ class ConversationContext:
             "id": f"{self.turn_id}:{exchange.iteration}:{exchange.call_index}:{exchange.call_id}", "turn_id": str(self.turn_id),
             "at": datetime.now(UTC).isoformat(),
             "call_id": exchange.call_id, "tool": exchange.tool_name,
+            **({"group_id": exchange.group_id, "call_index": exchange.call_index} if exchange.group_id else {}),
             "arguments": exchange.arguments, "executed_arguments": exchange.executed_arguments,
             "text": observation.text, "ok": observation.ok, "media_refs": media_refs,
             "resource_keys": list(observation.context_keys), "lifetime": observation.context_lifetime,

@@ -68,6 +68,8 @@ async def report_committed_edits(db, opening):
             frame.update(status="completed", key=done[row.id])
         elif frame["status"] == "active":
             frame["status"] = "cancelled"
+        if frame.get("group_id"):
+            frame["call_state"] = "not_executed" if frame.get("call_state") == "queued" else frame["status"]
         frame["settled_at"] = datetime.now(UTC).isoformat()
         row.intent = {**row.intent, "frame": frame}
     text = (
@@ -87,18 +89,31 @@ async def report_committed_edits(db, opening):
     )
 
 
+async def settle_interrupted_members(db, turn_id):
+    active = await db.scalars(select(Message).where(
+        Message.turn_id == turn_id, Message.intent["frame"].has_key("group_id"),
+        Message.intent["frame"]["status"].astext == "active"))
+    for member in active:
+        frame = dict(member.intent["frame"])
+        frame.update(status="cancelled", settled_at=datetime.now(UTC).isoformat(),
+                     call_state="not_executed" if frame["call_state"] == "queued" else "cancelled")
+        member.intent = {**member.intent, "frame": frame}
+
+
 async def recover_interrupted_edits(db, conversation_id):
     """Called on history load and next submission. A live writer owns the
     advisory lock until its outer Chat transaction commits or rolls back."""
     recovered = await recover_media_receipts(db, conversation_id)
     media_turns = select(Message.turn_id).where(
         Message.conversation_id == conversation_id, Message.intent.has_key("editor_media"))
+    batch_turns = select(Message.turn_id).where(
+        Message.conversation_id == conversation_id, Message.intent["frame"].has_key("group_id"))
     ids = list(
         await db.scalars(
             select(Message.id).where(
                 Message.conversation_id == conversation_id,
                 Message.turn_state == "in_flight",
-                or_(Message.intent.has_key("editor_commits"), Message.id.in_(media_turns)),
+                or_(Message.intent.has_key("editor_commits"), Message.id.in_(media_turns), Message.id.in_(batch_turns)),
             )
         )
     )
@@ -129,6 +144,7 @@ async def recover_interrupted_edits(db, conversation_id):
             for receipt in media:
                 await settle_media_activity(db, receipt)
             await report_committed_edits(db, row)
+            await settle_interrupted_members(db, turn_id)
             row.turn_state = "failed"
             await db.flush()
             recovered = True
@@ -190,6 +206,9 @@ async def settle_media_activity(db, receipt):
         success = (receipt.intent.get("media_result") or {}).get("status") == "available"
         frame = {**activity.intent["frame"], "status": "completed" if success else "failed",
                  "settled_at": datetime.now(UTC).isoformat()}
+        if frame.get("group_id"):
+            result_status = (receipt.intent.get("media_result") or {}).get("status")
+            frame["call_state"] = "provider_unknown" if result_status == "provider_unknown" else frame["status"]
         if success:
             frame["key"] = tool.presentation.done_key
         activity.intent = {**activity.intent, "frame": frame}

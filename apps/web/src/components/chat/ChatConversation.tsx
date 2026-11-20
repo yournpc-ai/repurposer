@@ -374,6 +374,29 @@ export function ChatConversation({
         </MessageScrollerItem>
       )
     }
+    if (unit.rows[0]?.group_id) {
+      const members = [...unit.rows].sort((a, b) => (a.call_index ?? 0) - (b.call_index ?? 0))
+      const running = members.find((row) => row.call_state === "running")
+      const recording = members.some((m) => m.tool_name === "generate_voice") &&
+        members.some((m) => m.tool_name === "generate_music")
+      const title = running && recording ? t("chat.recordingGroup") :
+        running?.key ? t(running.key) : t("chat.toolGroup", { count: members[0].call_count })
+      return (
+        <MessageScrollerItem key={unit.rowKey}>
+          <details className="studio-tools" data-group-id={members[0].group_id}>
+            <summary>{title}</summary>
+            <ol>{members.map((row) => (
+              <li key={row.call_id} data-call-id={row.call_id} data-state={row.call_state}>
+                <span title={row.tool_name}>{row.key ? t(row.key) : row.tool_name}
+                  {row.error && <span className="block text-xs">{row.error}</span>}
+                </span>
+                <small>{t(`chat.callState.${row.call_state ?? row.status}`)}{row.duration_ms != null && ` · ${(row.duration_ms / 1000).toFixed(1)}s`}</small>
+              </li>
+            ))}</ol>
+          </details>
+        </MessageScrollerItem>
+      )
+    }
     const currentOpen =
       chatBusy &&
       unit.openTail &&

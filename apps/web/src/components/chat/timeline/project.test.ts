@@ -1080,3 +1080,14 @@ it("a failed upload never settles an adjacent different turn's Worked", () => {
   expect(units[0]).toMatchObject({ kind: "activityFold", turnId: "old-turn", failure: null })
   expect(units[1]).toMatchObject({ kind: "activity", turnId: "upload-turn", activity: { status: "failed" } })
 })
+
+it("keeps every native group member when Stop or an approval interrupts a batch", () => {
+  const rows = [
+    activityMsg("one", { group_id: "read", call_index: 0, tool_name: "inspect_clip" }),
+    activityMsg("two", { group_id: "read", call_index: 1, tool_name: "inspect_clip", status: "failed" }),
+    activityMsg("three", { group_id: "media", call_state: "awaiting_authorization", status: "cancelled" }),
+    activityMsg("four", { group_id: "media", call_state: "not_executed", status: "cancelled" }),
+  ]
+  const units = foldActivityUnits(buildConversationUnits(rows))
+  expect(units.map(unitId)).toEqual(["fold:one+two", "fold:three+four"])
+})

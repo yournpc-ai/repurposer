@@ -413,6 +413,13 @@ export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined 
   }
   return {
     activity_id: d.activity_id,
+    group_id: typeof d.group_id === "string" ? d.group_id : undefined,
+    call_id: typeof d.call_id === "string" ? d.call_id : undefined,
+    tool_name: typeof d.tool_name === "string" ? d.tool_name : undefined,
+    error: typeof d.error === "string" ? d.error : undefined,
+    call_state: typeof d.call_state === "string" ? d.call_state : undefined,
+    call_count: typeof d.call_count === "number" ? d.call_count : undefined,
+    call_index: typeof d.call_index === "number" ? d.call_index : undefined,
     kind: d.kind as ActivityRowFrame["kind"],
     status: d.status as ActivityRowFrame["status"],
     key: typeof d.key === "string" ? d.key : null,

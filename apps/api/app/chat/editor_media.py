@@ -7,7 +7,7 @@ from uuid import UUID, uuid5
 from sqlalchemy import func, select
 
 from app.agents.tool_loop import ToolObservation
-from app.agents.tool_progress import current_call_id
+from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.service import (
     _create_message, _lock_turn_for_transcript_write, latest_pending_question,
     resolve_confirmation_need, submit_confirmed_tasks,
@@ -77,11 +77,13 @@ async def settle_media_receipt(db, project, run):
     facts = receipt.intent.get("media_result")
     if facts:
         return receipt
+    outcome_unknown = bool((run.context or {}).get("provider_outcome_unknown"))
     if run.status == WorkflowStatus.COMPLETED:
         try:
             if "visual_asset_preparation" in run.context:
                 result = run.context["visual_asset_preparation"]["result"]
                 if result["failures"]:
+                    outcome_unknown = any(f.get("code") == "outcome_unknown" for f in result["failures"])
                     raise ValueError(result["failures"][0]["detail"])
                 return await _record_image(db, project, receipt, result["assets"][0])
             prep = run.context.get("music_preparation") or run.context["narration_preparation"]
@@ -94,7 +96,7 @@ async def settle_media_receipt(db, project, run):
         error = str(error or run.status.value)
     else:
         return None
-    facts = {"status": "failed", "error": error}
+    facts = {"status": "provider_unknown" if outcome_unknown else "failed", "error": error}
     receipt.intent = {**receipt.intent, "media_result": facts}
     receipt.content = error
     return receipt
@@ -119,6 +121,13 @@ async def _submit(db, project, receipt, task, quote, via):
 async def answer_media_permission(db, project, receipt, approved):
     """The answer row lock makes the exact quote and its answer single-use."""
     auth = receipt.intent["media_permission"]
+    row_id = receipt.intent.get("activity_id")
+    row = await db.get(Message, UUID(row_id), with_for_update=True) if row_id else None
+    frame = (row.intent or {}).get("frame", {}) if row else {}
+    if frame.get("call_state") == "awaiting_authorization":
+        state = "running" if approved else "cancelled"
+        row.intent = {**row.intent, "frame": {**frame, "status": "active" if approved else "cancelled",
+                                              "call_state": state}}
     if not approved:
         receipt.intent = {**receipt.intent, "media_result": {"status": "declined"}}
         return
@@ -181,6 +190,13 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
         receipt = await db.scalar(select(Message).where(
             Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
         ))
+        if not receipt and (opening.intent or {}).get("resumed_media"):
+            # A resumed model can repeat the exact request with a fresh native
+            # id. Return the existing receipt without acquiring another hold.
+            receipt = await db.scalar(select(Message).where(
+                Message.turn_id == opening.id, Message.intent["fingerprint"].astext == fingerprint,
+                Message.intent["media_result"]["status"].astext == "available",
+            ).order_by(Message.seq).limit(1))
         if receipt:
             if receipt.intent["fingerprint"] != fingerprint:
                 raise ValueError("This call already belongs to different parameters.")
@@ -223,12 +239,9 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             else:
                 task = TaskItem(tool="prepare_narration", params=params)
                 cached = await _cached_voice(project, args)
-            from app.chat.editor import EDITOR_TOOLS
-
-            active_key = next(t.presentation.active_key for t in EDITOR_TOOLS if t.name == name)
             activity_id = await db.scalar(select(Message.id).where(
                 Message.turn_id == opening.id, Message.intent["frame"]["status"].astext == "active",
-                Message.intent["frame"]["key"].astext == active_key,
+                Message.intent["frame"]["call_id"].astext == call_id,
             ).order_by(Message.seq.desc()).limit(1))
             receipt = await _create_message(
                 db, turn.conversation_id, "assistant", "", turn_id=opening.id,
@@ -306,13 +319,16 @@ async def generate_media(turn, name, args, composition, version):
                 "media": {"storage_key": snapshot.storage_key, "digest": facts["digest"]},
                 "scene_id": "editor_image", "snapshot": {"snapshot_id": str(snapshot.id)},
             }])
+    if current_group_id() and facts.get("snapshot_id") and not facts.get("cache_hit"):
+        turn.__dict__.setdefault("_generated_in_response", {})[facts["snapshot_id"]] = current_group_id()
     facts["delivered_to_chat"] = True
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest"):
         if facts.get(key):
             for token in (facts[key], facts[key][:8], facts[key][:12]):
                 labels[token] = ("这份素材", "this media")
-    return ToolObservation(json.dumps(facts), images=images, ok=facts["status"] == "available")
+    return ToolObservation(json.dumps(facts), images=images, ok=facts["status"] == "available",
+                           user_error=facts.get("error"), provider_outcome_unknown=facts["status"] == "provider_unknown")
 
 
 async def wait_for_media_result(project, receipt):
@@ -334,7 +350,7 @@ async def wait_for_media_result(project, receipt):
 
 async def continue_media_turn(db, project, receipt, **hooks):
     """Continue the original user request after an answered quote or a lost API process."""
-    from app.chat.editor_recovery import editor_lock_key, report_committed_edits, settle_media_activity
+    from app.chat.editor_recovery import editor_lock_key, report_committed_edits, settle_interrupted_members, settle_media_activity
     from app.chat.service import _plan_turn, _prefers_zh, list_conversation_messages
     from app.metering import bind_conversation_turn, fold_conversation_usage
     from app.models.schemas import ChatRequest
@@ -352,6 +368,7 @@ async def continue_media_turn(db, project, receipt, **hooks):
         if newest != receipt.id:
             return None
         await settle_media_activity(state, receipt)
+        await settle_interrupted_members(state, turn_id)
         identity = receipt.intent["editor_media"]
         latest = await state.scalar(select(Message.id).where(
             Message.conversation_id == opening.conversation_id, Message.role == "user",
@@ -380,6 +397,18 @@ async def continue_media_turn(db, project, receipt, **hooks):
         opening.intent = {**intent, "resumed_media": identity}
         await state.commit()
     conversation = await db.get(Conversation, opening.conversation_id)
+    if hooks.get("on_loop_event") is None:
+        # Worker continuation writes the same Activity rows, with no SSE subscriber.
+        from app.chat.routes import _make_activity_persister, _make_loop_event_hook, _new_activity_projector
+
+        projector = _new_activity_projector()
+        append, mirror, _ = _make_activity_persister(None, projector, conversation.id, turn_id, owner_db=db)
+        async def on_tool_call(name):
+            for frame in projector.name_known(name):
+                await mirror(frame)
+
+        hooks.update(on_tool_call=on_tool_call,
+                     on_loop_event=_make_loop_event_hook(None, projector, append, mirror))
     with bind_conversation_turn(conversation_id=conversation.id, turn_id=turn_id, project_id=project.id) as usage:
         follow_up, _, _, _ = await _plan_turn(
             db, project.user_id, conversation, project,

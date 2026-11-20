@@ -85,7 +85,7 @@ export function foldActivityUnits(
       // Active members own the live seat but are not durable evidence yet.
       // They join `rows` in place when their host settles COMPLETED.
       const rows = run
-        .filter((u) => u.activity.status === "completed")
+        .filter((u) => u.activity.group_id || u.activity.status === "completed")
         .map((u) => u.activity)
       const startedAtMs = workStart(out, run[0], defaultWorkStartedAtMs)
       // A failed activity owns its own terminal edge. Do not move the first
@@ -117,7 +117,7 @@ export function foldActivityUnits(
     run = []
   }
   for (const unit of units) {
-    if (unit.kind === "activity" && unit.activity.status === "failed" && run.length > 0 &&
+    if (unit.kind === "activity" && !unit.activity.group_id && unit.activity.status === "failed" && run.length > 0 &&
       activityOwner(run[0]) === activityOwner(unit)) {
       // One continuous segment settles into ONE failed receipt. The failure
       // remains available in its expanded details, never as a sibling status.
@@ -126,7 +126,7 @@ export function foldActivityUnits(
     }
     if (
       unit.kind === "activity" &&
-      (unit.activity.status === "completed" || unit.activity.status === "active" || !!unit.workRunId)
+      (unit.activity.group_id || unit.activity.status === "completed" || unit.activity.status === "active" || !!unit.workRunId)
     ) {
       // A WorkSegment may fold only within one explicit ownership domain.
       // Legacy rows share a non-semantic "legacy" domain (their existing
@@ -161,6 +161,7 @@ export function foldActivityUnits(
 function activityOwner(
   unit: Extract<ConversationUnit, { kind: "activity" }>,
 ): string {
+  if (unit.activity.group_id) return `turn:${unit.turnId}:group:${unit.activity.group_id}`
   if (unit.independentKind) return `independent:${unit.independentKind}`
   return unit.turnId ? `turn:${unit.turnId}` : "legacy"
 }

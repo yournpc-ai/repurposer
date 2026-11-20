@@ -79,7 +79,7 @@ export function buildConversationUnits(
       }
       continue
     }
-    if (a.status === "cancelled") continue // abandoned attempt, not a work receipt
+    if (!a.group_id && a.status === "cancelled") continue // abandoned attempt, not a work receipt
     if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役
     units.push({
       kind: "activity",

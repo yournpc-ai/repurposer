@@ -16,6 +16,13 @@ import type { SkillReference } from "@/lib/skills"
  * reasoning; accepted typed work receipts are the sole exception. */
 export interface ActivityFramePayload {
   activity_id: string
+  group_id?: string
+  call_id?: string
+  tool_name?: string
+  call_index?: number
+  call_count?: number
+  call_state?: string
+  error?: string
   seq: number
   kind: "read" | "draft" | "run" | "repair"
   status: "active" | "completed" | "failed" | "cancelled"

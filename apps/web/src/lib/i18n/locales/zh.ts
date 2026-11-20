@@ -1456,6 +1456,18 @@ const zh: Resources = {
      * `worked` 从真实工作边界计到正文首显（或无正文真实终态）并冻结；
      * 回放缺少该客户端事实时只报可观察活动跨度。展开 = 类目分解
      * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
+    recordingGroup: "正在生成旁白与配乐",
+    toolGroup: "{{count}} 项操作",
+    callState: {
+      provider_unknown: "供应商结果未知",
+      queued: "等待执行",
+      running: "执行中",
+      completed: "已完成",
+      failed: "失败",
+      cancelled: "已停止",
+      not_executed: "未执行",
+      awaiting_authorization: "等待授权",
+    },
     activityFold: {
       workedWithoutTime: "已工作",
       worked: "工作了 {{elapsed}}",

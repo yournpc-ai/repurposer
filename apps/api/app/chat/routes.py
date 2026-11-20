@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from sqlalchemy import select
 
 from app.agents.contexts import output_one_liner
-from app.agents.tool_loop import ReadExecuting
+from app.agents.tool_loop import BatchDeclared, BatchMember, ReadExecuting
 from app.chat.activity import (
     KIND_READ,
     STATUS_ACTIVE,
@@ -203,6 +203,7 @@ def _make_activity_persister(
     projector: ActivityProjector,
     conversation_id: UUID,
     turn_id: UUID | None = None,
+    owner_db=None,
 ):
     """每帧一行 + SSE 镜像 (ADR-108 §2/§3/§5)。
 
@@ -230,7 +231,8 @@ def _make_activity_persister(
                 await db.commit()
             if frame["status"] == STATUS_ACTIVE:
                 open_rows[frame["activity_id"]] = (row.id, frame)
-            await queue.put(_row_frame("append", {"row": _row_payload(row)}))
+            if queue is not None:
+                await queue.put(_row_frame("append", {"row": _row_payload(row)}))
         except TurnStopped:
             raise
         except Exception as e:  # noqa: BLE001 — additive history is best-effort
@@ -240,23 +242,80 @@ def _make_activity_persister(
                 error=str(e),
             )
 
-    async def append_open_read():
-        """The ReadExecuting seat: append the open READ span's row."""
+    async def append_open_read(event=None):
+        if isinstance(event, BatchDeclared):
+            from sqlalchemy import func
+            from app.chat.editor_recovery import editor_lock_key
+            from app.models.database import AsyncSessionLocal
+
+            if turn_id and owner_db is not None:
+                await owner_db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn_id))))
+            declared = []
+            async with AsyncSessionLocal() as db:
+                for member in event.members:
+                    frame = {
+                        "activity_id": member.call_id, "kind": KIND_READ, "status": STATUS_ACTIVE,
+                        "key": member.key, "at": datetime.now(UTC).isoformat(), "group_id": member.group_id,
+                        "call_id": member.call_id, "tool_name": member.tool_name, "call_index": member.call_index,
+                        "call_count": member.call_count, "call_state": "queued",
+                    }
+                    row = await append_activity_row(db, conversation_id, frame, turn_id=turn_id)
+                    declared.append((row, frame))
+                await db.commit()
+            for row, frame in declared:
+                open_rows[frame["activity_id"]] = (row.id, frame)
+                if queue is not None:
+                    await queue.put(_row_frame("append", {"row": _row_payload(row)}))
+            return
+        if isinstance(event, BatchMember):
+            if event.call_id in open_rows:
+                row_id, frame = open_rows[event.call_id]
+                merged = {**frame, "call_state": event.state, "key": event.key}
+                if event.user_error:
+                    merged["error"] = event.user_error[:500]
+                if event.state == "running":
+                    merged["started_at"] = datetime.now(UTC).isoformat()
+                    open_rows[event.call_id] = (row_id, merged)
+                else:
+                    open_rows.pop(event.call_id)
+                    merged["status"] = {"completed": "completed", "failed": "failed", "provider_unknown": "failed"}.get(event.state, "cancelled")
+                    merged["settled_at"] = datetime.now(UTC).isoformat()
+                    if event.duration_ms is not None:
+                        merged["duration_ms"] = event.duration_ms
+                await update_row(row_id, merged)
+            return
         desc = projector.open_activity()
         if desc is None:
             return None
         activity_id, kind, key = desc
+        if activity_id in open_rows and event and event.group_id:
+            row_id, frame = open_rows[activity_id]
+            merged = {**frame, "call_state": "running", "key": key,
+                      "started_at": datetime.now(UTC).isoformat()}
+            open_rows[activity_id] = (row_id, merged)
+            await update_row(row_id, merged)
+            return
         if kind != KIND_READ or activity_id in open_rows:
             return None
         await _append(
             {
                 "activity_id": activity_id,
+                **({"call_id": event.call_id, "tool_name": event.tool_name} if event else {}),
                 "kind": kind,
                 "status": STATUS_ACTIVE,
                 "key": key,
                 "at": datetime.now(UTC).isoformat(),
             }
         )
+
+    async def update_row(row_id, frame):
+        from app.models.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            await settle_activity_row(db, row_id, frame)
+            await db.commit()
+        if queue is not None:
+            await queue.put(_row_frame("update", {"id": str(row_id), "frame": frame}))
 
     async def mirror(frame) -> None:
         """Persist-side mirror of one emitted activity frame — the mapping
@@ -279,20 +338,16 @@ def _make_activity_persister(
             "status": frame.status,
             "key": frame.key,
             **({} if updating else {"settled_at": frame.at}),
+            **({"call_state": frame.status} if open_d.get("group_id") and not updating else {}),
         }
         if frame.duration_ms is not None:
             merged["duration_ms"] = frame.duration_ms
         if frame.receipt is not None and frame.receipt.kind != "skill_read":
             merged["receipt"] = frame.receipt.model_dump(mode="json")
         try:
-            from app.models.database import AsyncSessionLocal
-
-            async with AsyncSessionLocal() as db:
-                await settle_activity_row(db, row_id, merged)
-                await db.commit()
+            await update_row(row_id, merged)
             if updating:
                 open_rows[frame.activity_id] = (row_id, merged)
-            await queue.put(_row_frame("update", {"id": str(row_id), "frame": merged}))
         except TurnStopped:
             raise
         except Exception as e:  # noqa: BLE001 — additive history is best-effort
@@ -308,6 +363,8 @@ def _make_activity_persister(
         transcript never claims a read is still in flight forever."""
         for row_id, open_d in list(open_rows.values()):
             merged = {**open_d, "status": "cancelled", "cancelled_at": datetime.now(UTC).isoformat()}
+            if open_d.get("group_id"):
+                merged["call_state"] = "not_executed" if open_d.get("call_state") == "queued" else "cancelled"
             try:
                 from app.models.database import AsyncSessionLocal
 
@@ -328,11 +385,15 @@ def _make_loop_event_hook(queue: asyncio.Queue, projector: ActivityProjector, ap
     user-safe activity frames out — the translation lives entirely in the
     projector. ReadExecuting additionally seats the row append (ADR-108)."""
     async def on_loop_event(event) -> None:
+        if isinstance(event, (BatchDeclared, BatchMember)):
+            await append_open_read(event)
+            return
         frames = projector.feed_event(event)
         if isinstance(event, ReadExecuting):
-            await append_open_read()
+            await append_open_read(event)
         for frame in frames:
-            await queue.put(_activity_frame(frame))
+            if queue is not None:
+                await queue.put(_activity_frame(frame))
             await mirror(frame)
 
     return on_loop_event
@@ -615,6 +676,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     projector,
                     UUID(str(turn_conversation_id)),
                     turn_user_message_id,
+                    owner_db=db,
                 )
                 partial_message_id = None
 
@@ -834,6 +896,7 @@ async def _answer_stream(
                     projector,
                     UUID(str(conversation_id)),
                     answer_turn_id,
+                    owner_db=db,
                 )
                 on_delta = _make_delta_hook(queue)
                 on_tool_call = _make_tool_call_hook(queue, projector)

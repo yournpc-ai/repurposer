@@ -327,8 +327,8 @@ class ActivityProjector:
             receipt=receipt,
         )
 
-    def _start(self, kind: str, key: str | None, *, count: int | None = None) -> tuple[str, ActivityFrame]:
-        activity_id = uuid4().hex
+    def _start(self, kind: str, key: str | None, *, count: int | None = None, activity_id: str | None = None) -> tuple[str, ActivityFrame]:
+        activity_id = activity_id or uuid4().hex
         self._active[activity_id] = (kind, key, time.monotonic())
         return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key, count=count)
 
@@ -648,7 +648,7 @@ class ActivityProjector:
                     presentation,
                 )
                 keys = (display.active_key, display.done_key)
-            activity_id, frame = self._start(presentation.kind, keys[0], count=count)
+            activity_id, frame = self._start(presentation.kind, keys[0], count=count, activity_id=event.call_id if event.group_id else None)
             if presentation.steps and keys[1]:
                 self._completion_keys[activity_id] = keys[1]
             self._open_call = (name, activity_id)

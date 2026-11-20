@@ -592,7 +592,7 @@ async def test_stage_speech_precedes_activity_and_silent_calls_can_continue(monk
                         "function": {"name": "analyze_brand", "arguments": "{  }"}}],
     }
     requests = [
-        ToolGeneration("这一批不应执行。", [call("a", "read"), call("b", "read")]),
+        ToolGeneration("同时检查两项。", [call("a", "read"), call("b", "read")]),
         ToolGeneration("", [call("c", "analyze_brand")], assistant_message=original),
         ToolGeneration("", [call("again", "analyze_brand")]),
         *(ToolGeneration(f"查看素材 {i}。", [call(i, "read")]) for i in range(6)),
@@ -618,6 +618,6 @@ async def test_stage_speech_precedes_activity_and_silent_calls_can_continue(monk
         on_delta=(lambda _: None) if streaming else None,
     )
     assert original in provider.wires[2]
-    assert events[:2] == ["analyze_brand", "analyze_brand"]
-    assert events[2:] == [entry for i in range(6) for entry in (f"查看素材 {i}。", "read")] + ["answer"]
+    assert events[:5] == ["同时检查两项。", "read", "read", "analyze_brand", "analyze_brand"]
+    assert events[5:] == [entry for i in range(6) for entry in (f"查看素材 {i}。", "read")] + ["answer"]
     assert result.prose == "已完成。"

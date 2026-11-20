@@ -3450,7 +3450,8 @@ async def stop_turn_at_visible_frontier(
                 run = await db.get(WorkflowRun, run_id, with_for_update=True, populate_existing=True)
                 if run and run.project_id == project.id:
                     await cancel_run(db, run, project)
-    committed = bool((row.intent or {}).get("editor_commits")) or bool(media_rows)
+    members = {m.id for m in assistant_rows if ((m.intent or {}).get("frame") or {}).get("group_id")}
+    committed = bool(members) or bool((row.intent or {}).get("editor_commits")) or bool(media_rows)
     if not committed and not visible_prose and not visible_activity and not visible_structure:
         await db.execute(
             delete(Message)
@@ -3461,7 +3462,7 @@ async def stop_turn_at_visible_frontier(
         return "retracted"
 
     now = datetime.now(UTC).isoformat()
-    keep_ids = visible_prose | visible_activity | visible_structure | media_rows
+    keep_ids = visible_prose | visible_activity | visible_structure | media_rows | members
     delete_ids = [message.id for message in assistant_rows if message.id not in keep_ids]
     if delete_ids:
         await db.execute(
@@ -3479,9 +3480,11 @@ async def stop_turn_at_visible_frontier(
             message.question = None
             message.answer = None
             message.suggestions = []
-        if message_id in visible_activity:
+        if message_id in visible_activity or message_id in members:
             frame = dict((message.intent or {}).get("frame") or {})
             if frame.get("status") == "active":
+                if message_id in members:
+                    frame["call_state"] = "not_executed" if frame.get("call_state") == "queued" else "cancelled"
                 frame.update({"status": "cancelled", "cancelled_at": now})
                 message.intent = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
     row.intent = {
