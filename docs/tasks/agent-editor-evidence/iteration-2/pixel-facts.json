@@ -1,0 +1,78 @@
+{
+  "same_source_frame": [
+    {
+      "version": 4,
+      "id": "616f16d4-ee60-4865-9bfb-b43bf7a8b80f",
+      "absolute_seconds": 16.5,
+      "mp4_sha256": "656ff1d8077e783b0b60206002c4e435526f994e9f42c1f3d624a91f9c8d8331",
+      "subject_pixel_bounds_above_caption": [
+        64,
+        1,
+        254,
+        144
+      ],
+      "subtitle_white_pixel_count": 822,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "h264"
+        },
+        {
+          "kind": "audio",
+          "codec": "aac"
+        }
+      ]
+    },
+    {
+      "version": 5,
+      "id": "856e9874-c27d-4a96-879e-37d7d1adb18c",
+      "absolute_seconds": 16.5,
+      "mp4_sha256": "1fc647c896c249033de08742d42e048347c10409fb9a93e0143e6a3f9dc9a711",
+      "subject_pixel_bounds_above_caption": [
+        93,
+        27,
+        226,
+        144
+      ],
+      "subtitle_white_pixel_count": 821,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "h264"
+        },
+        {
+          "kind": "audio",
+          "codec": "aac"
+        }
+      ]
+    },
+    {
+      "version": 6,
+      "id": "f68e4fd3-4fdc-4962-a294-656a15841cbe",
+      "absolute_seconds": 16.5,
+      "mp4_sha256": "8cc3711010316667f5dd113adb2756cf9e9ba88a16dd7cd083fd9f97602f4ed9",
+      "subject_pixel_bounds_above_caption": [
+        75,
+        27,
+        208,
+        144
+      ],
+      "subtitle_white_pixel_count": 825,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "h264"
+        },
+        {
+          "kind": "audio",
+          "codec": "aac"
+        }
+      ]
+    }
+  ],
+  "project": {
+    "runs": 0,
+    "steps": 0,
+    "pending_brief": null
+  }
+}

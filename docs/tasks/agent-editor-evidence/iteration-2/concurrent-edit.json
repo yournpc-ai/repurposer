@@ -1,0 +1,125 @@
+{
+  "entry": "edit_clip in two independent PostgreSQL sessions against one observed head",
+  "base": {
+    "composition_id": "0ea79625-91b2-46a7-bb90-cd1565ba268b",
+    "composition_version_id": "1242aaee-13ce-4b8a-b2a8-7f76f6fa4254",
+    "content_digest": "1ed28a2d67fc38c6c053ef5e9f74692563bdb840273cbff445c2a0bfe5512526"
+  },
+  "requests": [
+    "race-0",
+    "race-1"
+  ],
+  "new_start_seconds": [
+    4,
+    5
+  ],
+  "results": [
+    {
+      "type": "StaleBase",
+      "error": "base_version_id is not the composition's current version \u2014 re-read the head and rebase"
+    },
+    {
+      "composition_id": "0ea79625-91b2-46a7-bb90-cd1565ba268b",
+      "base_version_id": "1242aaee-13ce-4b8a-b2a8-7f76f6fa4254",
+      "version_id": "75a5bac8-570f-4b95-9fc1-cb30717632c2",
+      "version": 2,
+      "content_digest": "3dde900ad082136f3cb29a11f046f96741c0a45d2e1eb022a345bf2c08ad3f83",
+      "target_before_seconds": [
+        3.0,
+        11.0
+      ],
+      "replayed": false,
+      "changed_clips": [
+        {
+          "clip_id": "elm_b",
+          "object_id": "obj_elm_b",
+          "kind": "video",
+          "track_id": "visual",
+          "track_role": "main",
+          "scene_id": "scene",
+          "scene_number": 1,
+          "linked_group_id": null,
+          "start_seconds": 5.0,
+          "end_seconds": 13.0,
+          "source": {
+            "snapshot_id": "d9cd9e9b-4c68-4ee1-b335-c420fd21b713",
+            "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e",
+            "source_range": {
+              "start": 2700000,
+              "end": 3420000
+            }
+          },
+          "layout": {
+            "x": 0.0,
+            "y": 0.0,
+            "width": 320.0,
+            "height": 180.0
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "rotation": 0.0,
+            "origin": "center"
+          },
+          "animated_properties": []
+        }
+      ],
+      "added_clips": []
+    }
+  ],
+  "versions": [
+    "1242aaee-13ce-4b8a-b2a8-7f76f6fa4254",
+    "75a5bac8-570f-4b95-9fc1-cb30717632c2"
+  ],
+  "same_call": {
+    "composition_id": "0ea79625-91b2-46a7-bb90-cd1565ba268b",
+    "base_version_id": "1242aaee-13ce-4b8a-b2a8-7f76f6fa4254",
+    "version_id": "75a5bac8-570f-4b95-9fc1-cb30717632c2",
+    "version": 2,
+    "content_digest": "3dde900ad082136f3cb29a11f046f96741c0a45d2e1eb022a345bf2c08ad3f83",
+    "target_before_seconds": [
+      3.0,
+      11.0
+    ],
+    "replayed": true,
+    "changed_clips": [
+      {
+        "clip_id": "elm_b",
+        "object_id": "obj_elm_b",
+        "kind": "video",
+        "track_id": "visual",
+        "track_role": "main",
+        "scene_id": "scene",
+        "scene_number": 1,
+        "linked_group_id": null,
+        "start_seconds": 5.0,
+        "end_seconds": 13.0,
+        "source": {
+          "snapshot_id": "d9cd9e9b-4c68-4ee1-b335-c420fd21b713",
+          "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e",
+          "source_range": {
+            "start": 2700000,
+            "end": 3420000
+          }
+        },
+        "layout": {
+          "x": 0.0,
+          "y": 0.0,
+          "width": 320.0,
+          "height": 180.0
+        },
+        "transform": {
+          "x": 0.0,
+          "y": 0.0,
+          "scale": 1.0,
+          "rotation": 0.0,
+          "origin": "center"
+        },
+        "animated_properties": []
+      }
+    ],
+    "added_clips": []
+  },
+  "changed_arguments_error": "This native call already committed different parameters."
+}

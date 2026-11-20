@@ -1,0 +1,47 @@
+{
+  "project": "452cbd62-a7ce-48d8-a0af-49f91f4943cc",
+  "composition": "ef125cb9-c770-49bb-84b3-fa6a6ad26717",
+  "version_count": 6,
+  "head": "2b4769d2-d78c-4727-b593-e79ac6e10344",
+  "pending_brief": null,
+  "workflow_runs": 0,
+  "workflow_steps": 0,
+  "turns": [
+    {
+      "id": "dcb00833-8f20-4009-bcae-78c15d195baf",
+      "state": "settled",
+      "writes": [
+        {
+          "tool": "split_clip",
+          "request": "b013ced4-bcd6-57f5-a6d9-327cef434a4e",
+          "fingerprint": "4c8bc78bb396b9814397caaaf288053c6fee4fce847b7acffe8b12fb2475d8e4",
+          "activity_row": "a8520b20-d18f-4836-93fd-8c9b30717a71"
+        },
+        {
+          "tool": "trim_clip",
+          "request": "4f81e642-5c76-5c51-ae8b-9eab07b195eb",
+          "fingerprint": "505914a903e3ca630a83851660225386b9baf879f2542bb6cb00fd6b2eefb77b",
+          "activity_row": "a71bbfe2-22c6-409c-86f5-c1dfef707ed3"
+        },
+        {
+          "tool": "move_clip",
+          "request": "07fd2a95-a7dc-53ac-a278-af25fff9217a",
+          "fingerprint": "c258f2b27de4b9e5fd23d16d6dd797df404896724146356d7ffc73e0b2abe470",
+          "activity_row": "95e575c3-22f2-4c2b-b0d4-59dfc375267f"
+        },
+        {
+          "tool": "scale",
+          "request": "052de0d7-3d75-5f76-96b2-00ac39f2310c",
+          "fingerprint": "f980939bfbaf2b520d8a19b7cd000fe33bef7793757a24e0fd4c49c2675c5493",
+          "activity_row": "82c02a05-23f1-41f3-8efe-03cd027e0eca"
+        },
+        {
+          "tool": "translate",
+          "request": "365958bf-728f-5765-b494-cf0110d6b3c7",
+          "fingerprint": "74201f16c392eb30dee42d8013f58fa6f0709cb35e4d266e23f6398113f49af0",
+          "activity_row": "27b9c1f9-d821-4d05-b881-214a8f0f7a98"
+        }
+      ]
+    }
+  ]
+}

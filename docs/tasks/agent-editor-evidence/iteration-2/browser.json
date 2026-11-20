@@ -1,0 +1,69 @@
+{
+  "messageId": "a47441f7-91ce-462f-b6b5-e7be68469be0",
+  "versionId": "f68e4fd3-4fdc-4962-a294-656a15841cbe",
+  "error": null,
+  "badResponses": [],
+  "networkFailures": [
+    {
+      "url": "http://localhost:8017/api/v1/chat/skills",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://localhost:8017/media/pricing-talk-source.mp4",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://localhost:8017/api/v1/chat/skills",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://localhost:8017/media/pricing-talk-source.mp4",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "url": "http://localhost:8017/media/pricing-talk-source.mp4",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "exceptions": [],
+  "before": {
+    "text": "第二幕的人物画面已向左移动 18 像素，尺寸、字幕和时长都保持原样。\n\n预览了 14–18 秒这段：14 秒还是第一幕的绿幕，15 秒起切到第二幕，字幕「Inside the studio」保持在下方的黑条上、位置未变。人物现在明显偏左，和右侧的吊麦之间空出了一段黑边，人物左侧也留出了空间。\n\n如果你希望人物更靠画面中心，或者左移后让黑边被背景填上，告诉我方向我再调。\n\n0:00 / 0:04",
+    "player": true,
+    "playing": true,
+    "media": [
+      {
+        "tag": "VIDEO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 0.873,
+        "error": null,
+        "src": "http://localhost:8017/media/interview.mp4#t=0,3"
+      }
+    ],
+    "size": {
+      "width": 512,
+      "height": 288
+    }
+  },
+  "after": {
+    "text": "第二幕的人物画面已向左移动 18 像素，尺寸、字幕和时长都保持原样。\n\n预览了 14–18 秒这段：14 秒还是第一幕的绿幕，15 秒起切到第二幕，字幕「Inside the studio」保持在下方的黑条上、位置未变。人物现在明显偏左，和右侧的吊麦之间空出了一段黑边，人物左侧也留出了空间。\n\n如果你希望人物更靠画面中心，或者左移后让黑边被背景填上，告诉我方向我再调。\n\n0:00 / 0:04",
+    "player": true,
+    "playing": true,
+    "media": [
+      {
+        "tag": "VIDEO",
+        "readyState": 4,
+        "networkState": 1,
+        "paused": false,
+        "currentTime": 0.8731,
+        "error": null,
+        "src": "http://localhost:8017/media/interview.mp4#t=0,3"
+      }
+    ],
+    "size": {
+      "width": 512,
+      "height": 288
+    }
+  }
+}

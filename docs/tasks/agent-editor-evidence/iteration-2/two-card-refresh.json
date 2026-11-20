@@ -1,0 +1,90 @@
+[
+  {
+    "message_id": "9ce1e1d4-859a-49e1-bdea-918f793da91e",
+    "version_id": "2b4769d2-d78c-4727-b593-e79ac6e10344",
+    "scrub": {
+      "kind": "range",
+      "start_seconds": 6.0,
+      "end_seconds": 9.5
+    },
+    "error": null,
+    "http_errors": [],
+    "uncaught_exceptions": [],
+    "before": {
+      "player_index": 0,
+      "cards_in_message": 2,
+      "player_css_px": {
+        "width": 512,
+        "height": 288
+      },
+      "playback_started": true,
+      "media": [],
+      "body": "已全部完成并核对。\n\n第二段（3–11 秒那支素材）的处理\n\n在其自身第 5 秒切开，得到前后两段。\n前半段从末尾剪短两秒：现在只保留 3.0–6.0 秒。\n后半段向后挪半秒：落在 8.5–11.5 秒。\n\n切点附近实看（6.0–9.5 秒）\n\n6.0–8.5 秒之间是全黑空档，确实存在 2.5 秒无画面。\n8.5 秒后画面恢复：一支深蓝底标题卡，绿色竖线配 \"The team workspace / Product, pricing and plans / A practical overview\"。\n这段空档是按你「剪短两秒 + 后半段后移半秒」自然产生的三段之间的间隙，不是错误。\n\n第二幕（15–18 秒）实际看到两次\n\n16.5 秒采样：人物画面已缩到 80%，整体向左偏移，左侧黑边比右侧明显更宽，右侧麦克风（黑色带黄色环）更靠近画面右边。\n前后相邻帧（约 1.0 秒与 2.0 秒处）：同样的构图，女士穿白外套、灰发、面对深蓝吸音墙背景，右侧吊着麦克风。\n字幕 \"Inside the studio\" 保持原位原大小，未做改动。\n\n画面本身是真人访谈素材（第二幕）与一张标题卡（切点后），非纯图形。\n\n0:00 / 0:03\nInside the studio\n0:00 / 0:03"
+    },
+    "after": {
+      "player_index": 0,
+      "cards_in_message": 2,
+      "player_css_px": {
+        "width": 512,
+        "height": 288
+      },
+      "playback_started": true,
+      "media": [],
+      "body": "已全部完成并核对。\n\n第二段（3–11 秒那支素材）的处理\n\n在其自身第 5 秒切开，得到前后两段。\n前半段从末尾剪短两秒：现在只保留 3.0–6.0 秒。\n后半段向后挪半秒：落在 8.5–11.5 秒。\n\n切点附近实看（6.0–9.5 秒）\n\n6.0–8.5 秒之间是全黑空档，确实存在 2.5 秒无画面。\n8.5 秒后画面恢复：一支深蓝底标题卡，绿色竖线配 \"The team workspace / Product, pricing and plans / A practical overview\"。\n这段空档是按你「剪短两秒 + 后半段后移半秒」自然产生的三段之间的间隙，不是错误。\n\n第二幕（15–18 秒）实际看到两次\n\n16.5 秒采样：人物画面已缩到 80%，整体向左偏移，左侧黑边比右侧明显更宽，右侧麦克风（黑色带黄色环）更靠近画面右边。\n前后相邻帧（约 1.0 秒与 2.0 秒处）：同样的构图，女士穿白外套、灰发、面对深蓝吸音墙背景，右侧吊着麦克风。\n字幕 \"Inside the studio\" 保持原位原大小，未做改动。\n\n画面本身是真人访谈素材（第二幕）与一张标题卡（切点后），非纯图形。\n\n0:00 / 0:03\nInside the studio\n0:00 / 0:03"
+    }
+  },
+  {
+    "message_id": "9ce1e1d4-859a-49e1-bdea-918f793da91e",
+    "version_id": "2b4769d2-d78c-4727-b593-e79ac6e10344",
+    "scrub": {
+      "kind": "range",
+      "start_seconds": 15.0,
+      "end_seconds": 18.0
+    },
+    "error": null,
+    "http_errors": [],
+    "uncaught_exceptions": [],
+    "before": {
+      "player_index": 1,
+      "cards_in_message": 2,
+      "player_css_px": {
+        "width": 512,
+        "height": 288
+      },
+      "playback_started": true,
+      "media": [
+        {
+          "tag": "VIDEO",
+          "readyState": 4,
+          "networkState": 1,
+          "paused": false,
+          "currentTime": 1.9062,
+          "error": null,
+          "src": "http://localhost:8017/media/interview.mp4#t=0,3"
+        }
+      ],
+      "body": "已全部完成并核对。\n\n第二段（3–11 秒那支素材）的处理\n\n在其自身第 5 秒切开，得到前后两段。\n前半段从末尾剪短两秒：现在只保留 3.0–6.0 秒。\n后半段向后挪半秒：落在 8.5–11.5 秒。\n\n切点附近实看（6.0–9.5 秒）\n\n6.0–8.5 秒之间是全黑空档，确实存在 2.5 秒无画面。\n8.5 秒后画面恢复：一支深蓝底标题卡，绿色竖线配 \"The team workspace / Product, pricing and plans / A practical overview\"。\n这段空档是按你「剪短两秒 + 后半段后移半秒」自然产生的三段之间的间隙，不是错误。\n\n第二幕（15–18 秒）实际看到两次\n\n16.5 秒采样：人物画面已缩到 80%，整体向左偏移，左侧黑边比右侧明显更宽，右侧麦克风（黑色带黄色环）更靠近画面右边。\n前后相邻帧（约 1.0 秒与 2.0 秒处）：同样的构图，女士穿白外套、灰发、面对深蓝吸音墙背景，右侧吊着麦克风。\n字幕 \"Inside the studio\" 保持原位原大小，未做改动。\n\n画面本身是真人访谈素材（第二幕）与一张标题卡（切点后），非纯图形。\n\n0:00 / 0:03\nInside the studio\n0:00 / 0:03"
+    },
+    "after": {
+      "player_index": 1,
+      "cards_in_message": 2,
+      "player_css_px": {
+        "width": 512,
+        "height": 288
+      },
+      "playback_started": true,
+      "media": [
+        {
+          "tag": "VIDEO",
+          "readyState": 4,
+          "networkState": 1,
+          "paused": false,
+          "currentTime": 1.9031,
+          "error": null,
+          "src": "http://localhost:8017/media/interview.mp4#t=0,3"
+        }
+      ],
+      "body": "已全部完成并核对。\n\n第二段（3–11 秒那支素材）的处理\n\n在其自身第 5 秒切开，得到前后两段。\n前半段从末尾剪短两秒：现在只保留 3.0–6.0 秒。\n后半段向后挪半秒：落在 8.5–11.5 秒。\n\n切点附近实看（6.0–9.5 秒）\n\n6.0–8.5 秒之间是全黑空档，确实存在 2.5 秒无画面。\n8.5 秒后画面恢复：一支深蓝底标题卡，绿色竖线配 \"The team workspace / Product, pricing and plans / A practical overview\"。\n这段空档是按你「剪短两秒 + 后半段后移半秒」自然产生的三段之间的间隙，不是错误。\n\n第二幕（15–18 秒）实际看到两次\n\n16.5 秒采样：人物画面已缩到 80%，整体向左偏移，左侧黑边比右侧明显更宽，右侧麦克风（黑色带黄色环）更靠近画面右边。\n前后相邻帧（约 1.0 秒与 2.0 秒处）：同样的构图，女士穿白外套、灰发、面对深蓝吸音墙背景，右侧吊着麦克风。\n字幕 \"Inside the studio\" 保持原位原大小，未做改动。\n\n画面本身是真人访谈素材（第二幕）与一张标题卡（切点后），非纯图形。\n\n0:00 / 0:03\nInside the studio\n0:00 / 0:03"
+    }
+  }
+]

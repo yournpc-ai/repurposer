@@ -1,0 +1,103 @@
+[
+  {
+    "before": {
+      "versions": [
+        "334cd31c-9ca3-4a75-b9a3-a7e97e7f13e0",
+        "db6e6861-8524-44d4-ab3e-0002c1339049"
+      ],
+      "rows": []
+    },
+    "stop_after_commit": false,
+    "turn": "675e6879-24aa-4ec9-8b7f-ff2fbb1cfc88",
+    "control": {
+      "accepted": true,
+      "turn_state": "retracted"
+    },
+    "after": {
+      "versions": [
+        "334cd31c-9ca3-4a75-b9a3-a7e97e7f13e0",
+        "db6e6861-8524-44d4-ab3e-0002c1339049"
+      ],
+      "rows": []
+    },
+    "stream_until_stop": [
+      "turn.started"
+    ]
+  },
+  {
+    "before": {
+      "versions": [
+        "334cd31c-9ca3-4a75-b9a3-a7e97e7f13e0",
+        "db6e6861-8524-44d4-ab3e-0002c1339049"
+      ],
+      "rows": []
+    },
+    "stop_after_commit": true,
+    "turn": "8dd50f7f-52f7-4532-8dd1-211bd49e0143",
+    "control": {
+      "accepted": true,
+      "turn_state": "cancelled"
+    },
+    "after": {
+      "versions": [
+        "334cd31c-9ca3-4a75-b9a3-a7e97e7f13e0",
+        "db6e6861-8524-44d4-ab3e-0002c1339049",
+        "29dc0a07-f5b2-4cad-987b-afc490ab93ad"
+      ],
+      "rows": [
+        {
+          "id": "8dd50f7f-52f7-4532-8dd1-211bd49e0143",
+          "role": "user",
+          "text": "把第二幕人物缩小至原布局的 80%，保持字幕，再播放第二幕。",
+          "state": "cancelled",
+          "frame": null,
+          "kind": null
+        },
+        {
+          "id": "6e77c6d6-d360-40fe-bfef-06ef1dbf0425",
+          "role": "assistant",
+          "text": "",
+          "state": null,
+          "frame": {
+            "at": "2026-11-20T13:33:50.066942+00:00",
+            "key": "chat.activity.scaleDone",
+            "kind": "read",
+            "status": "completed",
+            "settled_at": "2026-11-20T13:33:50.175812+00:00",
+            "activity_id": "d4926995aa604a7cb9d52869c6baab26",
+            "duration_ms": 108
+          },
+          "kind": "activity"
+        },
+        {
+          "id": "6ea67ebe-7b5d-46b0-a494-2cf6dd92d9c9",
+          "role": "assistant",
+          "text": "本轮已中断。已保存的修改有缩放（版本 3）。可以从当前作品继续。",
+          "state": null,
+          "frame": null,
+          "kind": "editor_recovery"
+        }
+      ]
+    },
+    "stream_until_stop": [
+      "turn.started",
+      "assistant.thinking",
+      "assistant.thinking",
+      "assistant.thinking",
+      "assistant.thinking",
+      "assistant.row.append",
+      "assistant.activity",
+      "assistant.activity",
+      "assistant.row.update",
+      "assistant.thinking",
+      "assistant.row.append",
+      "assistant.activity",
+      "assistant.activity",
+      "assistant.row.update",
+      "assistant.thinking",
+      "assistant.row.append",
+      "assistant.activity",
+      "assistant.activity"
+    ]
+  }
+]

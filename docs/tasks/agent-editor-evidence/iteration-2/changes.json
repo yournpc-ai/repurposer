@@ -1,0 +1,2074 @@
+{
+  "9b4083ef-3748-4543-b677-d96b8ab54e64": [
+    {
+      "version": 2,
+      "base": "9b4083ef-3748-4543-b677-d96b8ab54e64",
+      "id": "d5586d37-1d78-4ee5-b9f0-492d82057232",
+      "digest": "322c25175637bbf7cb8a3648cc88a01112d82bc2c674de293982538458574485",
+      "request": "d7b7353e-c4b7-50d6-a179-97b5ea85e6ec",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "9897c59a49a939f07cdf4a3b0942f98bbea9be81974f4f83c23b604e1c6d1123",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3420000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        },
+        "elm_b_right": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_d7b7353ec4b750d6a17997b5ea85e6ec",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "d5586d37-1d78-4ee5-b9f0-492d82057232",
+      "id": "c0f30f85-174f-4a25-b8db-2359bdd1b785",
+      "digest": "f21e724553d9ef3990754fbf3422bd6471592024501500f6066e0dc8247da792",
+      "request": "e97a7c42-1ace-5ddd-9b41-20eda289db67",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "9897c59a49a939f07cdf4a3b0942f98bbea9be81974f4f83c23b604e1c6d1123",
+        "elm_b_right": "9cd1fa8cf34403f19738a2a37ef86cb45ee2c71849d3f222af1961d4f5bc8967",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 540000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 2970000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 4,
+      "base": "c0f30f85-174f-4a25-b8db-2359bdd1b785",
+      "id": "616f16d4-ee60-4865-9bfb-b43bf7a8b80f",
+      "digest": "eb4f0191727ad43beab145896b0f69f5c13e3845489bf8fa8eff5650ddc76440",
+      "request": "233b063f-b976-5377-baf4-526c901b8ed1",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_b": "347edc54c2c08cbd0a56e642ede0eab9a78aa037c2ef7108c74823e24f009693",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "9897c59a49a939f07cdf4a3b0942f98bbea9be81974f4f83c23b604e1c6d1123",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b_right": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_d7b7353ec4b750d6a17997b5ea85e6ec",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1035000,
+              "start": 765000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_d7b7353ec4b750d6a17997b5ea85e6ec",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "7789ccd2-9b86-418b-a486-dca188641427",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 5,
+      "base": "616f16d4-ee60-4865-9bfb-b43bf7a8b80f",
+      "id": "856e9874-c27d-4a96-879e-37d7d1adb18c",
+      "digest": "bedb022351b97cea5fe783e799779c5a32f04f4bc9d29b052f8f3b94dfa7145b",
+      "request": "d3db93ea-2b8c-5ede-9900-ec84e77419a5",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_b": "347edc54c2c08cbd0a56e642ede0eab9a78aa037c2ef7108c74823e24f009693",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "38a2d5a94bcc585a04d2d7350775abd35457ea6ddcf4770ed92b7b36bcd99d66",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.7,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 6,
+      "base": "856e9874-c27d-4a96-879e-37d7d1adb18c",
+      "id": "f68e4fd3-4fdc-4962-a294-656a15841cbe",
+      "digest": "87e3afe81492fb9808d9d254307b642154e597c97c452f0795b3d22e3380d6b2",
+      "request": "1b5ef8a4-1daf-56c3-ac3e-829c2bba79c9",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_b": "347edc54c2c08cbd0a56e642ede0eab9a78aa037c2ef7108c74823e24f009693",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "38a2d5a94bcc585a04d2d7350775abd35457ea6ddcf4770ed92b7b36bcd99d66",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.7,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": -18.0,
+                "y": 0.0,
+                "scale": 0.7,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 7,
+      "base": "f68e4fd3-4fdc-4962-a294-656a15841cbe",
+      "id": "4277140a-ee52-47af-84c9-04c1c0da7a25",
+      "digest": "05f4e4b3fd7c50c6f03ee86d8358ae481c12ac2d376943c0b9e25c66027b5331",
+      "request": "4a5d0a27-e8d2-5eaf-93fb-eaa7dc0a1ea1",
+      "unchanged_clip_sha256": {
+        "elm_a": "51aaf3741571125f9cdbf11dec1c6f663e84d11564504dfcabe40919553cf58c",
+        "elm_b": "347edc54c2c08cbd0a56e642ede0eab9a78aa037c2ef7108c74823e24f009693",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "38a2d5a94bcc585a04d2d7350775abd35457ea6ddcf4770ed92b7b36bcd99d66",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": -18.0,
+                "y": 0.0,
+                "scale": 0.7,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": -18.0,
+                "y": 0.0,
+                "scale": 0.85,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "b89f47b0-4ca3-4f5f-9ea7-492580e79b1f",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ],
+  "470f6901-3296-430b-be15-d12ae3190d9c": [
+    {
+      "version": 2,
+      "base": "470f6901-3296-430b-be15-d12ae3190d9c",
+      "id": "1400d12a-8d4d-41bd-b972-db802f337195",
+      "digest": "dbbe237108b849105b36a1cd0babf982fb48c586b01bf1368dd240609b0e65e3",
+      "request": "00d57687-f24c-55b4-93ae-25cf95a7bc32",
+      "unchanged_clip_sha256": {
+        "elm_a": "4fef2c7370f41242ac082ea545e6f181d6f4c5d431f48694f6be7891d5c3e658",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "bf6c9b87a527fcbe1a5ef02a8f7de9cfc3c878b91f98651a516bb158dd42888d",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3420000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        },
+        "elm_b_right": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_00d57687f24c55b493ae25cf95a7bc32",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "1400d12a-8d4d-41bd-b972-db802f337195",
+      "id": "283f7796-d61b-45d0-aa30-8aaec38aadc3",
+      "digest": "20663bd1ac9d7acf25d1be9daf7aadebc257683b803cc86194dd7d05af220ee5",
+      "request": "3448690a-23db-5227-9912-7e9944412c7f",
+      "unchanged_clip_sha256": {
+        "elm_a": "4fef2c7370f41242ac082ea545e6f181d6f4c5d431f48694f6be7891d5c3e658",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "bf6c9b87a527fcbe1a5ef02a8f7de9cfc3c878b91f98651a516bb158dd42888d",
+        "elm_b_right": "de517f06a7bde887deba85f833b5097572fbec3ab6fcf3c9006e872c6267caee",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 540000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 2970000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 4,
+      "base": "283f7796-d61b-45d0-aa30-8aaec38aadc3",
+      "id": "96e3dd80-2162-462a-bc8f-edab91fd50d1",
+      "digest": "04ef4720e1203e5dadb197155bf6f35ca2fd31060dc4e1da3f347a6d1075cdee",
+      "request": "430a1a2d-79ae-5e8c-a002-4d812eb8d34e",
+      "unchanged_clip_sha256": {
+        "elm_a": "4fef2c7370f41242ac082ea545e6f181d6f4c5d431f48694f6be7891d5c3e658",
+        "elm_b": "a839774487c8257cba80208b6ce3ffa241b02b2aa38d19cbc82d23e5f53d705b",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "bf6c9b87a527fcbe1a5ef02a8f7de9cfc3c878b91f98651a516bb158dd42888d",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b_right": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_00d57687f24c55b493ae25cf95a7bc32",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1125000,
+              "start": 855000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_00d57687f24c55b493ae25cf95a7bc32",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "14ca42d0-dd9f-49ad-bc22-7b44098e52d0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ],
+  "27e0e613-7f66-4b62-af56-18b5ad385974": [
+    {
+      "version": 2,
+      "base": "27e0e613-7f66-4b62-af56-18b5ad385974",
+      "id": "d003b1ef-9fcf-4747-90b6-e8fd9304e2b4",
+      "digest": "6dbfae1ff520ae76075f9e5d002951474ed2f587b378d51ec5de6ddc0502ebc2",
+      "request": "c67279ed-12fe-5e3f-92d3-1b62e5e6578e",
+      "unchanged_clip_sha256": {
+        "elm_a": "b1482c7c4ad222649e3a2b51dd980045b111544e3753f5ac8036a0e8f4c0ba59",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "b782c0a317453deec1e0b2a4793dfa4e219606ea26ef1a0553226a4b856e069d",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3420000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        },
+        "elm_b_right": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_c67279ed12fe5e3f92d31b62e5e6578e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "d003b1ef-9fcf-4747-90b6-e8fd9304e2b4",
+      "id": "c5eb92f4-3059-46ed-850c-a48dbcdecc4f",
+      "digest": "3a2753f7c645a4f97b7561df7e6e4f1899983045c250e4e7af59363256b49f45",
+      "request": "042b80ab-c97c-5385-9e3a-384026e5cda9",
+      "unchanged_clip_sha256": {
+        "elm_a": "b1482c7c4ad222649e3a2b51dd980045b111544e3753f5ac8036a0e8f4c0ba59",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "b782c0a317453deec1e0b2a4793dfa4e219606ea26ef1a0553226a4b856e069d",
+        "elm_b_right": "011395a907b6c3ce613ebeb5f134904e832fca47756685769baba1fdafc969c9",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 540000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 2970000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 4,
+      "base": "c5eb92f4-3059-46ed-850c-a48dbcdecc4f",
+      "id": "d0d0eb9c-7197-4002-8a07-01654d531d49",
+      "digest": "c406f37e23989fd1218eee549ae3bb3443199685a3e68dad291d8b7f78db344c",
+      "request": "8aff186b-7600-5746-8eb3-c2845287ff69",
+      "unchanged_clip_sha256": {
+        "elm_a": "b1482c7c4ad222649e3a2b51dd980045b111544e3753f5ac8036a0e8f4c0ba59",
+        "elm_b": "b25841606163885ac60d2ae4fdaec4d0db63132664a2c31c9de3934800d29cba",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "b782c0a317453deec1e0b2a4793dfa4e219606ea26ef1a0553226a4b856e069d",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b_right": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_c67279ed12fe5e3f92d31b62e5e6578e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1035000,
+              "start": 765000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_c67279ed12fe5e3f92d31b62e5e6578e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "80311b89-9f66-4f6e-856d-42403b9cebc4",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 5,
+      "base": "d0d0eb9c-7197-4002-8a07-01654d531d49",
+      "id": "1ec625d0-0634-4996-866b-662847cdd012",
+      "digest": "35ab7c2f285b74623044edf728746378149f07c9391d9f6321463e06286b876f",
+      "request": "dd809d88-2aec-5f5e-ad10-7e60d7f27692",
+      "unchanged_clip_sha256": {
+        "elm_a": "b1482c7c4ad222649e3a2b51dd980045b111544e3753f5ac8036a0e8f4c0ba59",
+        "elm_b": "b25841606163885ac60d2ae4fdaec4d0db63132664a2c31c9de3934800d29cba",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "159ddce33d8c6a85d132c676d4327da46f544cd51c66d5e334d9b17c418fdc46",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "da297103-f92b-4336-8b99-f55e394b2dc9",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "da297103-f92b-4336-8b99-f55e394b2dc9",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 6,
+      "base": "1ec625d0-0634-4996-866b-662847cdd012",
+      "id": "7e4a569e-aa18-4673-aaaa-4fcbf185f5c8",
+      "digest": "799c2b13283ec159f17b561a99d82108f4db8d79787af2fba7d8b8eac00906db",
+      "request": "a25c7f87-47b0-5ef6-b364-577f4b54ba39",
+      "unchanged_clip_sha256": {
+        "elm_a": "b1482c7c4ad222649e3a2b51dd980045b111544e3753f5ac8036a0e8f4c0ba59",
+        "elm_b": "b25841606163885ac60d2ae4fdaec4d0db63132664a2c31c9de3934800d29cba",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "159ddce33d8c6a85d132c676d4327da46f544cd51c66d5e334d9b17c418fdc46",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "da297103-f92b-4336-8b99-f55e394b2dc9",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": -18.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "da297103-f92b-4336-8b99-f55e394b2dc9",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ],
+  "a2428c6c-d23f-472e-9330-0440023ed486": [
+    {
+      "version": 2,
+      "base": "a2428c6c-d23f-472e-9330-0440023ed486",
+      "id": "0ccfc6be-df53-4c8b-af53-03925145da86",
+      "digest": "70e7a92a06db0fcdbc6ec7613c3fe6c29589ef844bcd22d7a603f95723af9edb",
+      "request": "b013ced4-bcd6-57f5-a6d9-327cef434a4e",
+      "unchanged_clip_sha256": {
+        "elm_a": "92e46044ea8327a6058186946e4fc3cd939aaa93415a100c0506a1ceeeb1717e",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "10731025ae935e23222334777e2b6d1a3961080b626f4ca7e21914ba2814f3aa",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3420000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        },
+        "elm_b_right": {
+          "before": null,
+          "after": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_b013ced4bcd657f5a6d9327cef434a4e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 3,
+      "base": "0ccfc6be-df53-4c8b-af53-03925145da86",
+      "id": "133d576f-aa31-4472-abba-3dbc22d7507f",
+      "digest": "ee9dc222d9fa4ae74cd931efeae7e7a34cdb7c3b093a3f53787faad1c1dbc93f",
+      "request": "4f81e642-5c76-5c51-ae8b-9eab07b195eb",
+      "unchanged_clip_sha256": {
+        "elm_a": "92e46044ea8327a6058186946e4fc3cd939aaa93415a100c0506a1ceeeb1717e",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "10731025ae935e23222334777e2b6d1a3961080b626f4ca7e21914ba2814f3aa",
+        "elm_b_right": "f102f3df38e6f86554b7bdc238a7b8c7feaa550b29950792123ee062b20a327d",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b": {
+          "before": {
+            "range": {
+              "end": 720000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3150000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 540000,
+              "start": 270000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_elm_b",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 2970000,
+                "start": 2700000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 4,
+      "base": "133d576f-aa31-4472-abba-3dbc22d7507f",
+      "id": "75b26981-e4ea-4077-94f8-3399c30b9ce5",
+      "digest": "a88e42fab19d4e4f426b59a05498aa2da6025d39bfdf0c449d35e981630b5846",
+      "request": "07fd2a95-a7dc-53ac-a278-af25fff9217a",
+      "unchanged_clip_sha256": {
+        "elm_a": "92e46044ea8327a6058186946e4fc3cd939aaa93415a100c0506a1ceeeb1717e",
+        "elm_b": "7eed8c2caf526cecdbdbf1ffcb127ba32b17837f9ab70533039914792d2cdd03",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "v_speaker": "10731025ae935e23222334777e2b6d1a3961080b626f4ca7e21914ba2814f3aa",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "elm_b_right": {
+          "before": {
+            "range": {
+              "end": 990000,
+              "start": 720000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_b013ced4bcd657f5a6d9327cef434a4e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1035000,
+              "start": 765000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 320.0,
+                "height": 180.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "obj_b013ced4bcd657f5a6d9327cef434a4e",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "9f429632-d175-415d-9c88-50bd450b9be0",
+              "source_range": {
+                "end": 3420000,
+                "start": 3150000
+              },
+              "snapshot_digest": "0c6c8f88702e9d111dbccefdbb131ea2c625dcf3625d5ec0884550f1dda4080e"
+            },
+            "clip_id": "elm_b_right",
+            "scene_id": "scene",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 5,
+      "base": "75b26981-e4ea-4077-94f8-3399c30b9ce5",
+      "id": "e06b358d-def0-4098-9c55-c408f8b507f0",
+      "digest": "e57025cf3131e45e85179e9d789ea8575ee56f3f98a62726be6f9440a95af9e9",
+      "request": "052de0d7-3d75-5f76-96b2-00ac39f2310c",
+      "unchanged_clip_sha256": {
+        "elm_a": "92e46044ea8327a6058186946e4fc3cd939aaa93415a100c0506a1ceeeb1717e",
+        "elm_b": "7eed8c2caf526cecdbdbf1ffcb127ba32b17837f9ab70533039914792d2cdd03",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "15e3017b9060aedb9ab436cb9854c6a6bb223a06d0b82a2a78c61581659799c5",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "4ddfb84d-bf68-4ee0-bcab-53f4157c0eb6",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "4ddfb84d-bf68-4ee0-bcab-53f4157c0eb6",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    },
+    {
+      "version": 6,
+      "base": "e06b358d-def0-4098-9c55-c408f8b507f0",
+      "id": "2b4769d2-d78c-4727-b593-e79ac6e10344",
+      "digest": "b1769dc1c10196206d7a4eef326173479b8abba5c812394d6344a4a0f23db3b4",
+      "request": "365958bf-728f-5765-b494-cf0110d6b3c7",
+      "unchanged_clip_sha256": {
+        "elm_a": "92e46044ea8327a6058186946e4fc3cd939aaa93415a100c0506a1ceeeb1717e",
+        "elm_b": "7eed8c2caf526cecdbdbf1ffcb127ba32b17837f9ab70533039914792d2cdd03",
+        "elm_c": "51026e0ed7d3a14554a55adb76dc453e81f9ffb9ece6ecaaeab1dc9a7fee3c09",
+        "elm_b_right": "15e3017b9060aedb9ab436cb9854c6a6bb223a06d0b82a2a78c61581659799c5",
+        "subtitle_line": "e9fca323273f505708dcc0ec537a3cdeba476968e51d0bd3370911c7db7661a7"
+      },
+      "changed": {
+        "v_speaker": {
+          "before": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "4ddfb84d-bf68-4ee0-bcab-53f4157c0eb6",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          },
+          "after": {
+            "range": {
+              "end": 1620000,
+              "start": 1350000
+            },
+            "object": {
+              "fit": "contain",
+              "kind": "video",
+              "muted": false,
+              "layout": {
+                "x": 64.0,
+                "y": 0.0,
+                "width": 192.0,
+                "height": 174.0
+              },
+              "gain_db": 0.0,
+              "opacity": 1.0,
+              "object_id": "person_view",
+              "transform": {
+                "x": -18.0,
+                "y": 0.0,
+                "scale": 0.8,
+                "origin": "center",
+                "rotation": 0.0
+              }
+            },
+            "source": {
+              "snapshot_id": "4ddfb84d-bf68-4ee0-bcab-53f4157c0eb6",
+              "source_range": {
+                "end": 270000,
+                "start": 0
+              },
+              "snapshot_digest": "256fcd9bdddcbf57393ff5000b6580e2c56e51dd4999bdd9a90b62da935acb86"
+            },
+            "clip_id": "v_speaker",
+            "scene_id": "interview",
+            "animations": [],
+            "linked_group_id": null
+          }
+        }
+      },
+      "sources_unchanged": true,
+      "settings_unchanged": true,
+      "scenes_unchanged": true,
+      "transitions_unchanged": true
+    }
+  ]
+}

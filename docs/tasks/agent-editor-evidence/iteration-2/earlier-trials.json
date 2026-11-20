@@ -1,0 +1,304 @@
+[
+  {
+    "case": "temporal",
+    "turn": "a93a4cd9-cc76-45e3-9f95-aa4795e71999",
+    "activity_status_counts": {
+      "active": 9,
+      "completed": 8,
+      "failed": 1
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.splitClipDone",
+      "chat.activity.trimClipDone",
+      "chat.activity.moveClip",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.inspectingDone.projectMedia",
+      "chat.activity.inspectClipsDone"
+    ],
+    "final": "Internal server error"
+  },
+  {
+    "case": "time-final",
+    "turn": "1a2f849a-23c0-4b55-bd5c-9228f29bc8c3",
+    "activity_status_counts": {
+      "active": 17,
+      "completed": 14,
+      "failed": 3
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.splitClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.trimClipDone",
+      "chat.activity.moveClipDone",
+      "chat.activity.splitClip",
+      "chat.activity.trimClip",
+      "chat.activity.inspectClipsDone",
+      "chat.inspectingDone.projectMedia",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.moveClip"
+    ],
+    "final": "后半段往后移位被后面的片段挡住了（它在 10–13 秒，下一段紧接在 13 秒开始），你想怎么处理？"
+  },
+  {
+    "case": "visual",
+    "turn": "ba1f9dea-07cf-4d76-9dca-e23f83a913fe",
+    "activity_status_counts": {
+      "active": 19,
+      "completed": 18,
+      "failed": 1
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "本轮已达到处理次数上限，尚未完成你的请求。"
+  },
+  {
+    "case": "position",
+    "turn": "4b081050-e480-447c-ab3f-3d0165ee848b",
+    "activity_status_counts": {
+      "active": 20,
+      "completed": 19,
+      "failed": 1
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "本轮已达到处理次数上限，尚未完成你的请求。"
+  },
+  {
+    "case": "timeline",
+    "turn": "7c595a2b-28a4-4205-8fbd-dbdb7ac843b2",
+    "activity_status_counts": {
+      "active": 7,
+      "completed": 7
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.splitClipDone",
+      "chat.activity.trimClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.moveClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "三步编辑已在本轮完成，预览也跑了。\n\n**实际改动（第二段视频）**\n- 在它自己的第 5 秒切开，得到前半段与后半段。\n- 前半段从结尾剪短 2 秒：素材源 30–33 秒，时间线 3–6 秒。\n- 后半段往后挪到 9 秒开始：素材源 35–38 秒，时间线 9–12 秒。\n- 其余片段（含第三段 12 秒起的那条）保持原位未动。\n\n**切点附近预览（3–12 秒）观察**\n- 3–6 秒：画面基本全黑，看不到人物或场景内容。\n- 6 秒起：标题卡「The team workspace」重新出现并一直持续到 12 秒结束。\n- 两个切点（6 秒、9 秒）处都没有出现跳帧、黑闪或字幕残留，切接是干净的。\n\n需要留意的是：剪短后的前半段这 3 秒是纯黑画面。如果你本意是留下有内容的部分，我可以把这 2 秒从更靠前的位置裁，或把后半段再往前挪一点把黑屏挤掉。要我调吗？"
+  },
+  {
+    "case": "framing",
+    "turn": "a49a993e-88e0-4f99-835e-c628230d692b",
+    "activity_status_counts": {
+      "active": 19,
+      "completed": 19
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "本轮已达到处理次数上限，尚未完成你的请求。"
+  },
+  {
+    "case": "translate",
+    "turn": "465f56ec-dedf-4fb5-a6a3-c780d8f05d0d",
+    "activity_status_counts": {
+      "active": 19,
+      "completed": 17,
+      "failed": 2
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translate",
+      "chat.activity.translateDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone"
+    ],
+    "final": "本轮已达到处理次数上限，尚未完成你的请求。"
+  },
+  {
+    "case": "release-time",
+    "turn": "de5232f6-a814-4e31-87cb-f40fbc1c9c25",
+    "activity_status_counts": {
+      "active": 5,
+      "completed": 5
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.splitClipDone",
+      "chat.activity.trimClipDone",
+      "chat.activity.moveClipDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "三处改动都已落到时间线上，预览也跑完了（当前版本 v4）：\n\n- **切分**：第二段视频（3–6 秒位置那一段，即第 2 个片段）从它自己的第 5 秒切成两半。\n- **前半段收尾**：前半段保留 0–3 秒，即比原结尾剪短了 2 秒，现落在 3.0–6.0 秒。\n- **后半段后移**：后半段被挪到 8.5 秒开始，占 8.5–11.5 秒。\n- **其他片段**：第 1 个片段（0–3 秒的标题页）和其余片段位置未动。\n\n播放 2–12 秒的结果：\n- 2.0–3.0 秒：标题页 \"The team workspace\"（第 1 个片段）。\n- 3.0–6.0 秒：画面为全黑——被切分并修剪的前半段在预览中呈现为黑屏。\n- 6.0–8.5 秒：全黑空档（这正是后半段后移留下的间隔）。\n- 8.5–11.5 秒：标题页 \"The team workspace\" 再次出现（后半段画面与前半段内容看起来是同一帧）。\n\n需要留意两点：后半段后移后与前半段之间留出了约 2.5 秒黑场，若不想有这段空白，可以把后半段提前贴近 6 秒；另外前半段预览呈黑屏，若它本该有内容，可能需要回查该素材本身是否只有静帧或含黑场。要我调整空档或检查素材吗？"
+  },
+  {
+    "case": "release-size",
+    "turn": "aded7ad3-6984-47ec-a680-9b870124f550",
+    "activity_status_counts": {
+      "active": 19,
+      "completed": 14,
+      "failed": 5
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRangeDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.scaleDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRange",
+      "chat.activity.previewRangeDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRange",
+      "chat.activity.previewRangeDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRange",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "本轮已达到处理次数上限，尚未完成你的请求。"
+  },
+  {
+    "case": "release-xy",
+    "turn": "85ba67e3-bfd5-40e6-afcd-605eab20a18e",
+    "activity_status_counts": {
+      "active": 6,
+      "completed": 5,
+      "failed": 1
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRange",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.inspectClipDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "第二幕的人物画面已经向左平移了 18 像素，字幕和时间都没有改动。\n\n- 片段：第二幕 15–18 秒的人物镜头（15–18 秒的片段），它的静态偏移现在是 x = -18、y = 0，缩放仍为 0.25。\n- 字幕“Inside the studio”仍在 15–18 秒，位置和时序未变。\n- 已播放 15–18 秒预览：人物小窗出现在画面中间偏左的位置，其余区域为黑底，字幕条横贯底部。\n\n需要再往左一些，或者调整人物的大小/位置吗？"
+  },
+  {
+    "case": "verified-time",
+    "turn": "7b7fdf4b-784a-438c-95d3-29fb27aba5a7",
+    "activity_status_counts": {
+      "active": 6,
+      "completed": 6
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.splitClipDone",
+      "chat.activity.trimClipDone",
+      "chat.activity.moveClipDone",
+      "chat.activity.inspectClipsDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "三步都已按要求完成并保存（当前版本 28bca574，第 4 版）：\n\n- 第二段在自身第 5 秒切开，分成前半段（0–5 秒）和后半段（5 秒以后）。\n- 前半段从末尾剪短 2 秒，保留 0–3 秒，落在时间线 3–6 秒。\n- 后半段整体往后挪了半秒，现落在 8.5–11.5 秒。\n\n播放 5–11.5 秒的结果：切点附近的**空档在 6.0 秒到 8.5 秒**，这 2.5 秒画面全黑，没有任何片段覆盖（这是前半段剪短 2 秒加上后半段后移 0.5 秒共同造成的）。8.5 秒起后半段恢复，10 秒左右又出现 “The team workspace / Product, pricing and plans” 画面，和前面 5 秒处的内容衔接得上。\n\n另外顺带一提：11.5 秒之后到 13 秒之间还有一段 1.5 秒的空档（后面才接上那个形状卡片片段），它不在你指定的播放窗口内，但如果你要连起来看，注意那里也是黑的。其他片段我没有动。"
+  },
+  {
+    "case": "verified-size",
+    "turn": "a961b41d-0227-46cd-9129-fb0e1d6f9230",
+    "activity_status_counts": {
+      "active": 3,
+      "completed": 3
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.scaleDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "已缩放并播放了第二幕（15–18 秒）。\n\n- 人物画面（15–18 秒的片段，15–18 秒）：现在缩小到 75%（原布局 192×174，现为 144×131），居中放置。画面里是一位金发女士穿白色西装外套坐在带黄色防震罩的话筒前，背景是深蓝色吸音墙条纹，人物在画面中央偏上，四周留出了黑色边框，不再占满画面。\n- 字幕（15–18 秒的片段，未改动）：底部一条黑色横条，上面是白色粗体文字 \"Inside the studio\"，横条宽度基本占满画布宽度，位置和大小与之前一致。\n\n整体看人物和字幕没有互相遮挡，字幕仍完整可读。"
+  },
+  {
+    "case": "verified-xy",
+    "turn": "b947bf37-e411-4dea-b1cd-75032774dc40",
+    "activity_status_counts": {
+      "active": 3,
+      "completed": 3
+    },
+    "executed_activity_keys": [
+      "chat.activity.inspectClipsDone",
+      "chat.activity.translateDone",
+      "chat.activity.previewRangeDone"
+    ],
+    "final": "已按要求把第二幕（15–18 秒）的人物画面整体左移 18 像素，缩放仍为 0.75，字幕行和时间线位置未动。\n\n播放第二幕实际看到的结果：画面是同一位穿白大褂的女主持人，身后是蓝色吸音墙，右侧有一支带黄色海绵套的话筒，她朝左上方讲话并有轻微的手势。字幕条位于画面下方黑底处，显示「Inside the studio」，位置居中、没有随人物移动。整体人物在画面中偏左，右侧仍留有黑色空白，人物没有被裁切出框。\n\n需要留意的是，人物移动后右边露出的黑边比之前更明显一些；如果你希望人物更居中，可以把左移量减小，或同时放大一点尺寸。"
+  }
+]
