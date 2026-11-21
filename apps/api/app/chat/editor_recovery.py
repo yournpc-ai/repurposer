@@ -41,6 +41,7 @@ async def report_committed_edits(db, opening):
         "extend_still": ("延长片尾画面", "extend closing still"),
         "move_clip": ("移动片段", "move"),
         "translate": ("平移画面", "translation"),
+        "set_keyframe": ("调整关键帧", "adjust keyframe"),
         "scale": ("缩放", "scale"),
     }
     zh = _prefers_zh(opening.content)

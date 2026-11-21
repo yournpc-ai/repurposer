@@ -236,7 +236,7 @@ async def test_edit_sequence_replay_and_safe_boundaries(database, monkeypatch):
         assert "translation" in summary and "trim" in summary
 
 
-async def test_reject_edits_that_break_a_transition_or_override_keyframes(database):
+async def test_transition_boundaries_and_targeted_keyframe_edit(database):
     from app.chat.editor import WRITE_TOOLS
     from app.editing.schemas import Animation, Transition
     from app.editing.store import apply_composition_edits, content_of
@@ -319,3 +319,31 @@ async def test_reject_edits_that_break_a_transition_or_override_keyframes(databa
     async with database() as db:
         _, head = await get_video_version(db, owner_id=owner, composition_id=comp.id)
         assert head.id == first.id and head.timeline == first.timeline
+
+    # The same animated object accepts a value change at an existing tick.
+    from app.chat.editor import SetKeyframeArgs
+
+    ref = dict(composition_id=str(comp.id), composition_version_id=str(first.id),
+               content_digest=first.content_digest)
+
+    async def set_point(call_id, value):
+        async with database() as db:
+            return await edit_clip(
+                db, name="set_keyframe", project=project, opening_id=turn,
+                conversation_id=conversation.id, call_id=call_id, base=ref,
+                args=SetKeyframeArgs(clip_id=title.clip_id, animation_id="zoom", at=90000, value=value),
+            )
+
+    with pytest.raises(ValueError, match="scalar"):
+        await set_point("invalid", [2, 3])
+    result = await set_point("update", 1.1)
+    replay = await set_point("update", 1.1)
+    assert replay["replayed"] and replay["version_id"] == result["version_id"]
+    with pytest.raises(StaleBase):
+        await set_point("stale", 1.15)
+    async with database() as db:
+        _, head = await get_video_version(db, owner_id=owner, composition_id=comp.id)
+        expected = content_of(first)
+        expected.timeline.tracks[1].clips[0].animations[-1].keyframes[1].value = 1.1
+        assert head.timeline == expected.timeline.model_dump(mode="json")
+        assert head.version == first.version + 1

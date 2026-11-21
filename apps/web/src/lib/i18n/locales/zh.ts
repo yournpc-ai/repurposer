@@ -1374,6 +1374,8 @@ const zh: Resources = {
       splitClipDone: "已将片段分为两部分",
       deliverVideo: "正在交付成片",
       deliverVideoDone: "已交付成片",
+      setKeyframe: "正在调整关键帧",
+      setKeyframeDone: "已调整关键帧",
       extendStill: "正在延长片尾画面",
       extendStillDone: "已延长片尾画面",
       exportVideo: "正在导出正式 MP4",

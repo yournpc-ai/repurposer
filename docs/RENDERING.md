@@ -10,6 +10,8 @@
 
 export_video 在事务内固定版本、digest、授权上限与原生回执。Worker 按 token 和租约执行，编译后的 video-spec 只引用已固定的来源。上传后验证真实字节与流信息，成功时同事务提交成片与账本。
 
+预览窗口和正式导出共用 compile_video_spec。作品关键帧使用片段局部 tick，Renderer 在局部帧上读取量化后的值。OxValue 第二镜头已逐帧比对历史正式文件与同镜头数据的 270 帧预览。[基线实测](tasks/agent-editor-evidence/iteration-7/README.md)
+
 ## 2. 代码地图
 
 | 座位 | 职责 |

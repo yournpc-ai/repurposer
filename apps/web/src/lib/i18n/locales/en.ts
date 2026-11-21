@@ -1446,6 +1446,8 @@ const en = {
       splitClipDone: "Split the clip into two parts",
       deliverVideo: "Delivering the reviewed video",
       deliverVideoDone: "Delivered the reviewed video",
+      setKeyframe: "Adjusting a keyframe",
+      setKeyframeDone: "Adjusted a keyframe",
       extendStill: "Extending the closing still",
       extendStillDone: "Extended the closing still",
       exportVideo: "Exporting MP4",

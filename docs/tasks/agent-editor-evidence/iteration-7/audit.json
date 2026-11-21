@@ -1,0 +1,183 @@
+{
+  "audit_base": "e5f14ca3ee102173f3e3b783420d0e9e96d4f780",
+  "project_id": "837057ff-545f-44c0-a61f-9fa93ce54343",
+  "database_copy": "rep_i7_9x2iij",
+  "inspection_caller": "acceptance operator via execute_editor; no model dispatched",
+  "inspection": {
+    "version_id": "379d8dd6-6c5b-4e60-9943-58ce1b05fa82",
+    "content_digest": "a8fc3e395d173761f54f790b958791f163f58064211c26617eb7a3736d258e5c",
+    "composition_id": "de0a9309-7038-42f5-89db-e9ead37b9d0e",
+    "timebase": 90000,
+    "target_clip_id": "clp_scene_2_source",
+    "transform_animations": [
+      {
+        "animation_id": "anm_scene_2_scale",
+        "target_object_id": "obj_scene_2_source",
+        "text_part": null,
+        "property": "transform.scale",
+        "keyframes": [
+          {
+            "at": 0,
+            "value": 1.08,
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          },
+          {
+            "at": 364500,
+            "value": 1.516,
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          },
+          {
+            "at": 810000,
+            "value": 1.531,
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          }
+        ],
+        "narration_anchor": null
+      },
+      {
+        "animation_id": "anm_scene_2_position",
+        "target_object_id": "obj_scene_2_source",
+        "text_part": null,
+        "property": "transform.position",
+        "keyframes": [
+          {
+            "at": 0,
+            "value": [
+              50.3,
+              34.5
+            ],
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          },
+          {
+            "at": 364500,
+            "value": [
+              495.3,
+              150.3
+            ],
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          },
+          {
+            "at": 810000,
+            "value": [
+              505.2,
+              153.3
+            ],
+            "easing": {
+              "kind": "linear",
+              "params": null
+            }
+          }
+        ],
+        "narration_anchor": null
+      }
+    ]
+  },
+  "preview": {
+    "version": 15,
+    "window_seconds": [
+      3.5,
+      12.5
+    ],
+    "source_snapshot": "9f9d50b3-5c3b-526a-a50a-34f47fa282e0",
+    "compiled_local_keyframes": [
+      0,
+      122,
+      270
+    ],
+    "bytes": 5777091,
+    "sha256": "5c8c3e2d82b7f85ddf43ac59950b352a842939cc307c822976c914490dec8b23",
+    "decoded_frames": 270,
+    "reference_output": "c8950a65-64e6-5629-8ddd-42b02c3535f0",
+    "reference_frames_inclusive": [
+      105,
+      374
+    ],
+    "comparison": "each RGB frame resized to 384x216, corresponding pixels compared in 0..255 units",
+    "mean_frame_mae": 0.15861487089906262,
+    "max_frame_mae": 0.22988200874485595
+  },
+  "reconstructed_before_dispatch": {
+    "test": "read-only reconstruction of the original post-export context, before model dispatch",
+    "opening": "8020e91d-d1ec-4c9a-909e-f8e0331d9c45",
+    "export_receipt": "c72f535e-bd34-4e32-9151-186d22d56017",
+    "immutable_version": "9baddcf1-0f5f-4a2d-80cd-0dbdcd872e90",
+    "already_saved_this_turn": [
+      {
+        "tool": "extend_still",
+        "version": 14
+      }
+    ],
+    "revised_output": "c8950a65-64e6-5629-8ddd-42b02c3535f0",
+    "offered_tools": [
+      "answer",
+      "list_project_media",
+      "inspect_timeline",
+      "inspect_clip",
+      "preview_range",
+      "review_video",
+      "get_narration_alignment",
+      "read_conversation_context"
+    ]
+  },
+  "historical_output_chrome": [
+    {
+      "id": "ac34c5b8-7f3d-5506-8080-5b3a377e8507",
+      "version": "f3d212da-9819-426a-88e5-1d7343b376ad",
+      "play": [
+        {
+          "seconds": 0.160952,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.163995,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "e23bd4996f354465fa693b9bc4497c903cbbc0d2e5afd7c235d6fa29a1c12d0f",
+      "bytes": 18250164,
+      "frames": 1935,
+      "download_button_verified": true
+    },
+    {
+      "id": "c8950a65-64e6-5629-8ddd-42b02c3535f0",
+      "version": "9baddcf1-0f5f-4a2d-80cd-0dbdcd872e90",
+      "play": [
+        {
+          "seconds": 0.166991,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.167138,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "d475b3bdf8151424e3c2f1ccbf99db3be58b7ad022a88532097e636eb4451a2f",
+      "bytes": 18253696,
+      "frames": 1965,
+      "download_button_verified": true
+    }
+  ]
+}

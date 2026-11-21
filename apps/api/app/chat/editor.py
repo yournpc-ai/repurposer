@@ -3,7 +3,7 @@
 import json
 import re
 from fractions import Fraction
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -141,6 +141,17 @@ class ScaleArgs(ObjectArgs):
     )
 
 
+KeyframeNumber = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+
+
+class SetKeyframeArgs(ClipArgs):
+    animation_id: str = Field(min_length=1, max_length=64)
+    at: int = Field(ge=0, strict=True, description="Existing clip-local tick from inspect_clip.")
+    value: KeyframeNumber | tuple[KeyframeNumber, KeyframeNumber] = Field(
+        description="Scale multiplier or [x, y] position offset in canvas pixels."
+    )
+
+
 def _editor_tool(name, description, args, key):
     return ChatTool(
         name,
@@ -202,7 +213,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "inspect_clip",
-        "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+        "Inspect one clip, its layout, transform, whole-object scale and position keyframes (clip-local ticks) and same-track neighbors on the current version.",
         ClipArgs,
         "inspectClip",
     ),
@@ -232,6 +243,12 @@ EDITOR_TOOLS = (
         "moveClip",
     ),
     _editor_tool(
+        "set_keyframe",
+        "Change the value of one existing whole-object scale or position keyframe on the inspected clip. "
+        "Inspect its animation ID and local tick first. Preview the affected motion before and after adjusting it.",
+        SetKeyframeArgs, "setKeyframe",
+    ),
+    _editor_tool(
         "translate",
         "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
         TranslateArgs,
@@ -254,7 +271,10 @@ EDITOR_NAMES = frozenset(tool.name for tool in EDITOR_TOOLS)
 WRITE_TOOLS = {
     t.name: t
     for t in EDITOR_TOOLS
-    if t.name == "remove_clip" or t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs)
+    if t.name == "remove_clip" or t.params_model in (
+        SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
+        InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs,
+    )
 }
 
 
@@ -425,7 +445,25 @@ async def edit_clip(
         target = clips.get(args.clip_id)
         if target is None:
             raise ValueError("The selected clip does not exist in this version.")
-        if isinstance(args, ExtendStillArgs):
+        if isinstance(args, SetKeyframeArgs):
+            animations = list(target.animations)
+            animation = next((a for a in animations if a.animation_id == args.animation_id), None)
+            if (animation is None or animation.target_object_id != target.object.object_id
+                    or animation.text_part is not None
+                    or animation.property not in {"transform.scale", "transform.position"}):
+                raise ValueError("Select a whole-object scale or position animation from this clip.")
+            frames = list(animation.keyframes)
+            frame = next((f for f in frames if f.at == args.at), None)
+            if frame is None:
+                raise ValueError("Select an existing keyframe tick from this animation.")
+            if frame.value == args.value:
+                raise ValueError("The keyframe already has this value.")
+            frames[frames.index(frame)] = frame.model_copy(update={"value": args.value})
+            animations[animations.index(animation)] = animation.model_copy(update={"keyframes": frames})
+            op = UpdateClip(op="update_clip", clip_id=target.clip_id, animations=animations)
+            extra["keyframe"] = {"animation_id": animation.animation_id, "property": animation.property,
+                                 "at": frame.at, "before": frame.value, "after": args.value}
+        elif isinstance(args, ExtendStillArgs):
             if (target.object.kind not in {"text", "image", "shape"} or target.animations
                     or target.linked_group_id or getattr(target.object, "caption", None)
                     or (target.source and target.source.source_range)
@@ -730,7 +768,13 @@ async def execute_editor(turn, name, args):
                     neighbors = [item for item in clips if item[0].track_id == target[0].track_id]
                     index = neighbors.index(target)
                     page = neighbors[max(0, index - 1) : index + 2]
-                    scope = {"target_clip_id": args.clip_id}
+                    scope = {
+                        "target_clip_id": args.clip_id,
+                        "transform_animations": [
+                            a.model_dump(mode="json") for a in target[1].animations
+                            if a.text_part is None and a.property in {"transform.scale", "transform.position"}
+                        ],
+                    }
                 else:
                     page = clips[args.offset : args.offset + 24]
                     next_offset = args.offset + len(page)

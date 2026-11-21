@@ -1833,7 +1833,7 @@ Agent 查看
 
 # 11. Iteration 7+：专业剪辑能力
 
-I7 的第一条关键帧回归来自 OxValue v13。用户请求「第二镜头推近时右边标题不要被裁掉」。目标是检查并修改既有缩放、位移关键帧，复看 3.5–12.5 秒，验证右侧估值卡标题完整、其他镜头和六段旁白保持原样。I6 已验证问题识别、定位和能力边界，运动仍保留。复现使用 [v13 第 240 帧](agent-editor-evidence/iteration-6/oxvalue-v13-frame-240.jpg) 和[版本、快照及关键帧记录](agent-editor-evidence/iteration-6/final-closure.md)。
+I7 的第一条关键帧回归来自 OxValue v13。隔离副本保留 v15 head，已有点值修改已接入唯一版本写口。真实恢复与自主修复待验。[I7 证据](agent-editor-evidence/iteration-7/README.md)。用户请求「第二镜头推近时右边标题不要被裁掉」。目标是检查并修改既有缩放、位移关键帧，复看 3.5–12.5 秒，验证右侧估值卡标题完整、其他镜头和六段旁白保持原样。I6 已验证问题识别、定位和能力边界，运动仍保留。复现使用 [v13 第 240 帧](agent-editor-evidence/iteration-6/oxvalue-v13-frame-240.jpg) 和[版本、快照及关键帧记录](agent-editor-evidence/iteration-6/final-closure.md)。
 
 Iteration 6 关闭可靠执行之后，再按真实产品需求扩展：
 

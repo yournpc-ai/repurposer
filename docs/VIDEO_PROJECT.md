@@ -367,6 +367,8 @@ Animation 存在所属 Clip 内并随 Clip 移动、复制和删除；target 必
 - 现有 spring 行为可先作为受支持 easing 或确定性烘焙输入保留，不在首批强行重写；
 - AnimationPreset 只在实例化时展开为属性和关键帧，Renderer 不查 Preset 注册表。
 
+Chat 的 set_keyframe 从所选版本按 Clip、Animation 和局部整数 tick 定位，仅写整对象已有缩放或位移点的值。服务端保留其余点、easing 与其他动画，通过 UpdateClip 和版本 CAS 提交。
+
 插值求值还须冻结首关键帧之前、末关键帧之后与 Clip 边界的行为，重复时间键与非法目标/属性明确拒绝；按 §6.5 的共享 fixtures 对照 Preview/Render。首批只提供实际使用的属性与 easing，不预建通用动画编辑器。
 
 Effect 描述模糊、颜色等处理；Animation 描述属性随时间如何变化。两者可组合，但不合并概念。

@@ -1,6 +1,6 @@
 # PROGRESS — 进展、排期与需求池
 
-I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均已交付两个固定版本，Chrome 验证播放、刷新与下载。OxValue 第 2 镜头的标题裁切保留为 I7 关键帧编辑首条真实回归。费用、恢复偏差及实测边界见[最终验收记录](tasks/agent-editor-evidence/iteration-6/final-closure.md)。
+I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均已交付两个固定版本，Chrome 验证播放、刷新与下载。I7 已在隔离库复现 OxValue 第 2 镜头全段裁切基线，接入已有缩放和位移点的原生读写。真实模型中断恢复与自主修复待费用授权及实测。[I7 实测边界](tasks/agent-editor-evidence/iteration-7/README.md)。费用、恢复偏差及实测边界见[最终验收记录](tasks/agent-editor-evidence/iteration-6/final-closure.md)。
 
 **2026-11-22 成片存储策略更新**　正式导出与素材共用当前公开 TOS 桶。新成片写入 `exports/`，既有公开测试成片按原对象地址回放。成片预览使用公开直链，上传与带文件名的下载继续使用签名。项目、版本、导出费用和交付检查仍由原有接口负责。下方关于私有桶的记录属于此前的验收环境。
 
