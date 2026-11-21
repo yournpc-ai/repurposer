@@ -23,21 +23,23 @@ import asyncio
 import copy
 import sys
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 
 from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import AssetStatus, AssetType  # noqa: E402
 from app.models.tables import Asset, Output, Project, User  # noqa: E402
-from app.pipeline.asset_processing import _warm_tasks, process_asset  # noqa: E402
+from app.pipeline.asset_processing import ASSET_LEASE, _warm_tasks, process_asset  # noqa: E402
 from app.pipeline.node_runners import (  # noqa: E402
     find_reusable_understanding,
     warm_understanding,
 )
 from app.providers.storage import delete, download_to_temp, get_upload_path, save  # noqa: E402
+
+_fixture_tokens: dict[UUID, UUID] = {}
 
 VERIFY_EMAIL = "beatmap-verify@local"
 LONG_KEY = "demo/uploads/xy_2.mp4"  # 780 s keynote — the lecture leg
@@ -61,14 +63,16 @@ async def _mk_asset(db, user, project, key: str, title: str, atype=AssetType.VID
         file_url=key,
         title=title,
         processing_status=AssetStatus.PROCESSING,
+        claim_token=uuid4(), attempt=1, lease_until=func.now() + ASSET_LEASE,
     )
     db.add(asset)
     await db.flush()
+    _fixture_tokens[asset.id] = asset.claim_token
     return asset
 
 
 async def _process_and_warm(asset_id: UUID) -> None:
-    await process_asset(asset_id)
+    await process_asset(asset_id, _fixture_tokens[asset_id])
     if _warm_tasks:
         await asyncio.gather(*list(_warm_tasks), return_exceptions=True)
 
@@ -289,7 +293,7 @@ async def main() -> None:
 
         print("[leg 3] processing doc + 3 photos (extract + hashes + vision)…", flush=True)
         for image_id in image_ids:
-            await process_asset(image_id)
+            await process_asset(image_id, _fixture_tokens[image_id])
         async with AsyncSessionLocal() as db:
             doc = (
                 await db.execute(
@@ -300,7 +304,7 @@ async def main() -> None:
                 )
             ).scalars().one()
             doc_id = doc.id
-        await process_asset(doc_id)
+        await process_asset(doc_id, _fixture_tokens[doc_id])
         if _warm_tasks:
             await asyncio.gather(*list(_warm_tasks), return_exceptions=True)
 

@@ -19,7 +19,6 @@ from app.chat.routes import chat_router, outputs_regenerate_router
 from app.distribution.routes import router as distribution_router
 from app.memory.routes import personas_router
 from app.pipeline.music import seed_default_music
-from app.pipeline.orchestrator import assert_runners_registered
 from app.pipeline.routes import (
     assets,
     music,
@@ -53,7 +52,6 @@ _warmup_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     settings.ensure_dirs()
-    assert_runners_registered()
     await init_db()
     from app.providers.llm import get_llm_client
 

@@ -383,7 +383,7 @@ async def reprocess_asset(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asset not found",
         )
-    from app.pipeline.jobs import reset_asset_processing
+    from app.pipeline.asset_processing import reset_asset_processing
 
     reset_asset_processing(asset)
     await db.commit()

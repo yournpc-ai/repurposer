@@ -158,7 +158,7 @@ async def test_real_music_bytes_freeze_once_and_reuse_across_owned_chats(databas
 
 
 async def test_completed_partial_capture_reuses_digest_without_reset(database, monkeypatch):
-    from app.pipeline import jobs
+    from app.pipeline import asset_processing
     from app.pipeline.assets import create_capture_plan_asset_committed
     from app.tools.research.capture import CapturePlan, capture_plan_digest
 
@@ -192,7 +192,7 @@ async def test_completed_partial_capture_reuses_digest_without_reset(database, m
     def unexpected_reset(_asset):
         raise AssertionError('completed partial capture must not reset')
 
-    monkeypatch.setattr(jobs, 'reset_asset_processing', unexpected_reset)
+    monkeypatch.setattr(asset_processing, 'reset_asset_processing', unexpected_reset)
     assert await create_capture_plan_asset_committed(pid, uid, plan) == aid
     async with database() as db:
         stored = await db.get(Asset, aid)

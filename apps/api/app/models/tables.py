@@ -188,11 +188,9 @@ class Asset(Base):
     # attempt (chat) and the run birthplace (production prerequisite).
     processing_requested_at = Column(DateTime(timezone=True), nullable=True)
     processing_error = Column(Text, nullable=True)
-    # Poison-pill counter (R1 B4a): claims of this queue row. The crash-
-    # recovery reap keeps counting (that IS the loop being bounded); the
-    # manual reprocess seat resets to 0 (new budget). Mirrors
-    # ``workflow_steps.attempt``.
     attempt = Column(Integer, nullable=False, default=0)
+    claim_token = Column(UUID(as_uuid=True))
+    lease_until = Column(DateTime(timezone=True))
     duration_seconds = Column(Integer, nullable=True)
     # Processor extras (e.g. ASR word-level timestamps, detected language).
     meta = Column(JSON, nullable=True)

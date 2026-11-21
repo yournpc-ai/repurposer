@@ -29,21 +29,24 @@ import asyncio
 import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.pipeline import job_lease
+from app.pipeline.errors import user_line
+from app.ui_locale import display_language
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset, Project
 from app.pipeline.assets import asset_text_content
 from app.pipeline.extraction import extract_text, render_pdf_pages_and_upload
-from app.pipeline.graph import media_missing
 from app.pipeline.prosody import prosody_processor
 from app.pipeline.visual_anchors import visual_anchors_processor
 from app.pipeline.web_capture import web_capture_processor
@@ -101,16 +104,6 @@ Processor = Callable[[Asset, ProcessResult], Awaitable[ProcessResult]]
 # Strong refs for fire-and-forget warm tasks (the worker's node-task set is
 # the same pattern — a bare create_task can be GC'd mid-flight).
 _warm_tasks: set[asyncio.Task] = set()
-
-
-async def has_renderable_media(db: AsyncSession, project_id: UUID) -> bool:
-    """Whether the project has a renderable media source (file-backed).
-
-    The predicate's single home is the MEDIA birthplace requirement
-    (``graph.media_missing``); this helper keeps the project_id-shaped call
-    the chat plan path uses for the clips-needs-media clarification reason.
-    """
-    return not await media_missing(db, project_id)
 
 
 async def has_any_text_material(db: AsyncSession, project_id: UUID) -> bool:
@@ -318,24 +311,52 @@ def _processing_stage_token(processor: Processor) -> str:
     return name.removesuffix("_processor").lstrip("_")
 
 
-async def _stamp_processing_stage(
-    db: AsyncSession, asset: Asset, processor: Processor
-) -> None:
-    """Stamp the current stage into ``asset.meta.processing_stage`` and commit
-    so the client's asset poll watches the chain advance (the live now-line's
-    stage fork, ADR-095 §2 — the transient surface may be finer than the
-    persisted one). Best-effort: a stamp failure degrades to a warning — the
-    beat surface never takes the processing body down."""
-    try:
-        asset.meta = {
-            **(asset.meta if isinstance(asset.meta, dict) else {}),
-            "processing_stage": _processing_stage_token(processor),
-        }
+ASSET_LEASE = timedelta(minutes=10)
+
+
+def reset_asset_processing(asset: Asset) -> None:
+    asset.processing_status = AssetStatus.PENDING
+    asset.processing_error = None
+    asset.processing_requested_at = func.now()
+    asset.attempt = 0
+    asset.claim_token = None
+    asset.lease_until = None
+    _clear_processing_stage(asset)
+
+
+async def claim_pending_asset(db: AsyncSession) -> tuple[UUID, UUID] | None:
+    while True:
+        asset = await db.scalar(select(Asset).where(
+            Asset.processing_requested_at.is_not(None),
+            (Asset.processing_status == AssetStatus.PENDING) |
+            ((Asset.processing_status == AssetStatus.PROCESSING) &
+             (Asset.lease_until <= func.clock_timestamp())),
+        ).order_by(Asset.created_at, Asset.id).with_for_update(skip_locked=True).limit(1))
+        if asset is None:
+            return None
+        if asset.attempt > settings.asset_max_attempts:
+            project = await db.get(Project, asset.project_id) if asset.project_id else None
+            lang = display_language(None, project.language if project else None)
+            asset.processing_status = AssetStatus.FAILED
+            asset.processing_error = user_line("processing_gave_up", lang)
+            asset.claim_token = asset.lease_until = None
+            _clear_processing_stage(asset)
+            await db.commit()
+            continue
+        token = uuid4()
+        asset.processing_status = AssetStatus.PROCESSING
+        asset.processing_error = None
+        asset.claim_token = token
+        asset.attempt += 1
+        asset.lease_until = func.clock_timestamp() + ASSET_LEASE
         await db.commit()
-    except Exception as e:  # noqa: BLE001 — best-effort beat surface
-        logger.warning(
-            "processing_stage_stamp_failed", asset_id=str(asset.id), error=str(e)
-        )
+        return asset.id, token
+
+
+async def _owned_asset(db, asset_id, token):
+    return await db.scalar(select(Asset).where(*job_lease.authority(
+        Asset, asset_id, token, running=Asset.processing_status == AssetStatus.PROCESSING,
+    )).with_for_update().execution_options(populate_existing=True))
 
 
 def _clear_processing_stage(asset: Asset) -> None:
@@ -349,13 +370,13 @@ def _clear_processing_stage(asset: Asset) -> None:
 
 
 async def _record_reading_activity(db: AsyncSession, asset: Asset, status: str) -> None:
-    """Persist a settled reading ActivityFrame through the ConversationBridge.
+    """Persist a settled reading ActivityFrame in its project conversation.
     A tool-originated asset reuses its existing activity row; independent
     background processing uses the same frame shape and message writer."""
     if asset.project_id is None:
         return
     try:
-        from app.pipeline import conversation_bridge  # deferred: ADR-087 seam
+        from app.chat.service import record_asset_activity
 
         project = await db.get(Project, asset.project_id)
         if project is None:
@@ -380,7 +401,7 @@ async def _record_reading_activity(db: AsyncSession, asset: Asset, status: str) 
                 (asset.processed_at - asset.created_at).total_seconds() * 1000
             )
             duration_ms = span_ms if span_ms >= 0 else None
-        await conversation_bridge.record_asset_activity(
+        await record_asset_activity(
             db,
             project.user_id,
             asset.project_id,
@@ -456,19 +477,24 @@ async def _spawn_discovered_pages(
         )
 
 
-async def process_asset(asset_id: UUID) -> None:
-    """Run the registered processor for an asset and persist its terminal state.
+async def process_asset(asset_id: UUID, token: UUID) -> None:
+    beat = asyncio.create_task(job_lease.heartbeat(
+        AsyncSessionLocal, Asset, asset_id, token, ASSET_LEASE,
+        running=Asset.processing_status == AssetStatus.PROCESSING,
+    ))
+    try:
+        await _process_asset(asset_id, token)
+    finally:
+        beat.cancel()
+        await asyncio.gather(beat, return_exceptions=True)
 
-    Assumes the asset has already been claimed (flipped to PROCESSING). On
-    success writes the processor outputs + COMPLETED; on any error writes FAILED
-    with the message. Uses its own session — safe to call from the worker.
-    """
+
+async def _process_asset(asset_id: UUID, token: UUID) -> None:
     async with AsyncSessionLocal() as db:
-        asset = await db.get(Asset, asset_id)
+        asset = await _owned_asset(db, asset_id, token)
         if asset is None:
-            logger.warning("process_asset_missing", asset_id=str(asset_id))
             return
-
+        await db.commit()
         # 链内单下载 (2026-10-06 用户拍板) → 素材源缓存 (2026-10-07): one local
         # copy for the whole chain — processors read it off ``prior.local_path``.
         # The copy lives in the shared source cache (indexed by object key), so
@@ -485,8 +511,15 @@ async def process_asset(asset_id: UUID) -> None:
             for processor in chain:
                 # 工序信号上资产面 (ADR-095 §2): the poll-visible stage rides
                 # meta (zero schema); the terminal branches below clear it.
-                await _stamp_processing_stage(db, asset, processor)
+                asset = await _owned_asset(db, asset_id, token)
+                if asset is None:
+                    return
+                asset.meta = {**(asset.meta or {}), "processing_stage": _processing_stage_token(processor)}
+                await db.commit()
                 result.merge(await processor(asset, result))
+            asset = await _owned_asset(db, asset_id, token)
+            if asset is None:
+                return
             if result.extracted_text is not None:
                 asset.extracted_text = result.extracted_text
                 # 页面读本写回 (world-seat 律): a web_page capture's text
@@ -509,6 +542,7 @@ async def process_asset(asset_id: UUID) -> None:
                 asset.meta = result.meta
             _clear_processing_stage(asset)
             asset.processed_at = datetime.now(UTC)
+            asset.claim_token = asset.lease_until = None
             asset.processing_status = AssetStatus.COMPLETED
             asset.processing_error = None
             await db.commit()
@@ -544,6 +578,11 @@ async def process_asset(asset_id: UUID) -> None:
                 task.add_done_callback(_warm_tasks.discard)
         except Exception as e:  # noqa: BLE001 — record any failure on the row
             logger.error("asset_processing_failed", asset_id=str(asset_id), error=str(e))
+            await db.rollback()
+            asset = await _owned_asset(db, asset_id, token)
+            if asset is None:
+                return
+            asset.claim_token = asset.lease_until = None
             asset.processing_status = AssetStatus.FAILED
             asset.processing_error = str(e)
             _clear_processing_stage(asset)

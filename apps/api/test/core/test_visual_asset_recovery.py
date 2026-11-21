@@ -12,7 +12,6 @@ from app.agents.base import jinja_env
 from app.chat.video_turn_seats import video_proposal_guard
 from app.models.schemas import TaskItem, VideoDraftRef
 from app.models.tables import Project, SourceSnapshot
-from app.pipeline.orchestrator import TaskSpec, compile_graph
 from app.providers.llm.base import LLMSchemaError
 from app.tools.video import visual_assets
 from app.tools.video.media_analysis import (
@@ -164,7 +163,7 @@ async def test_website_citation_reflows_preserve_full_frozen_or_supplied_dois():
 
 
 @pytest.mark.asyncio
-async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch):
+async def test_visual_preparation_resolves_only_selected_saved_scene(monkeypatch):
     draft, specs = image_draft()
     reference = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
     candidate = {
@@ -188,9 +187,8 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
     task = TaskItem(tool="prepare_visual_assets", params={"draft_ref": reference.model_dump(mode="json"), "scene_ids": ["s2"], "review_existing": False})
     assert "directly" in video_proposal_guard([task])
     assert (await video_quote_facts(db, project, [task]))["visual_images"] == 1
-    node = compile_graph(TaskSpec(tasks=[task]))[0]
     pinned = (await pin_visual_asset_preparation(db, project, [task]))["visual_asset_preparation"]
-    assert pinned["request"] == node.spec
+    assert pinned["request"]["scene_ids"] == ["s2"]
     assert pinned["scene_assets"] == [specs[1].model_dump(mode="json")]
     legacy = task.model_copy(update={"params": {
         "draft_ref": reference.model_dump(mode="json"),

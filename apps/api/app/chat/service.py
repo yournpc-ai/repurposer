@@ -36,16 +36,13 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     ChatTurnStopRequest,
-    InferredIntent,
     Option,
     PendingPlan,
     PlanEstimate,
-    ProjectStatus,
     QuestionPayload,
     QuestionProposal,
     SkillReference,
     SuggestionRef,
-    TaskItem,
 )
 from app.models.tables import (
     Asset,
@@ -55,19 +52,14 @@ from app.models.tables import (
     Project,
     User,
     WorkflowRun,
-    WorkflowStep,
 )
-from app.pipeline.asset_processing import has_renderable_media
-from app.pipeline.graph import MEDIA, NODE_KINDS
 from app.platform.billing import CreditsInsufficientError
 from app.platform.configs import get_config
 from app.platform.conversation_context import (
     find_conversation,
-    is_pending_plan,
     latest_pending_question,
 )
 from app.platform.user_settings import read_confirmation_prefs
-from app.tools import ToolRejected
 
 logger = structlog.get_logger()
 
@@ -333,20 +325,6 @@ def _prefers_zh(text: str) -> bool:
     """Language heuristic for server-composed reply lines — the CJK check
     rides the user's own words (the turn's text), not a stored setting."""
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
-
-
-async def _safe_task_estimate(
-    db: AsyncSession, project: Project, tasks: list[TaskItem]
-) -> PlanEstimate | None:
-    """The dock payload's credits quotation, degraded like the derived
-    preview (the plan-turn's own posture): an uncompilable/unquotable chain
-    docks quote-less, never blocked."""
-    from app.pipeline.orchestrator import derive_task_estimates  # deferred
-
-    try:
-        return await derive_task_estimates(db, project, tasks)
-    except (ToolRejected, ValueError):
-        return None
 
 
 async def resolve_confirmation_need(
@@ -786,66 +764,6 @@ async def _settle_default_role_pins(db: AsyncSession, project: Project) -> None:
     if len(videos) < 2:
         return
     await _stamp_role_pins(db, project, videos[0], videos[1])
-
-
-async def _compute_plan_reasons(
-    db: AsyncSession,
-    project: Project,
-    intent: InferredIntent,
-) -> list[str]:
-    """Re-derive the soft-signal reasons for a docked plan.
-
-    Pure function over (db, project, intent) — the answer path passes the
-    Registry-native checks over the current production tools.
-    """
-    reasons: list[str] = []
-    if not intent.tasks_explicit:
-        reasons.append("chain_default")
-    has_media = await has_renderable_media(db, UUID(str(project.id)))
-    if not has_media and any(_needs_media(t.tool) for t in intent.tasks):
-        reasons.append("clips_without_media")
-    return reasons
-
-
-def _needs_media(tool: str) -> bool:
-    """True iff a tool's node requires MEDIA or materializes source.
-
-    Hoisted out of _plan_turn (2026-08-25) so the answer path's
-    ``_compute_plan_reasons`` and the plan path's carve-out can both
-    call it. Registry-native: walks ``node.requires`` + ``node.after``
-    rather than maintaining a parallel tool list (RECIPES §4.6).
-    """
-    node = NODE_KINDS.get(tool)
-    if node is None:
-        return False
-    return any(r.key == MEDIA.key for r in node.requires)
-
-
-def _run_active_text(text: str) -> str:
-    """The active-run plain line (shared by the chat dispatch's degrade and
-    the plan surface's late-turn zombie-dock guard)."""
-    return (
-        "上一批还在生成中——完成后再安排新的。"
-        if _prefers_zh(text)
-        else "A batch is still generating — once it finishes, send the next one."
-    )
-
-
-async def _active_run_line(
-    db: AsyncSession, project: Project, text: str
-) -> str | None:
-    """Late-turn guard: return the active-run line when a concurrent Start
-    birthed a run while this turn was in flight — None means the coast is
-    clear. Deliberately lock-free: locking the project row here would invert
-    the Start path's Message→Project lock order (deadlock). The millisecond
-    check-then-dock window this leaves is backstopped by create_run's own
-    serialized guard — a zombie plan confirmed later gets the clean
-    RunAlreadyActiveError 422, never a second run."""
-    from app.pipeline.orchestrator import has_active_run  # deferred: import cycle
-
-    if await has_active_run(db, project.id):
-        return _run_active_text(text)
-    return None
 
 
 def _loop_incomplete_text(text: str, result) -> str:

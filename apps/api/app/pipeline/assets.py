@@ -220,7 +220,7 @@ async def create_web_page_assets_committed_from_urls(
                 # counter + error move together — a status-only flip would
                 # re-fail terminally on the next tick) instead of birthing a
                 # duplicate row.
-                from app.pipeline.jobs import reset_asset_processing
+                from app.pipeline.asset_processing import reset_asset_processing
 
                 for a in siblings:
                     reset_asset_processing(a)
@@ -264,7 +264,7 @@ async def create_capture_plan_asset_committed(
             ):
                 return UUID(str(row.id))
         if siblings:
-            from app.pipeline.jobs import reset_asset_processing
+            from app.pipeline.asset_processing import reset_asset_processing
 
             asset = siblings[0]
             reset_asset_processing(asset)

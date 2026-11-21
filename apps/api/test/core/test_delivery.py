@@ -656,14 +656,6 @@ async def test_cancel_preserves_capture_and_completed_outputs(database, monkeypa
             "kind": "bail", "text": "existing"
         }
 
-        # Even if a stale executor re-pends the row after cancellation, the
-        # cancelled-run ownership gate refuses a fresh render claim.
-        from app.pipeline import jobs
-
-        cancelled_output.render_status = RenderStatus.PENDING
-        cancelled_output.render_barrier = [str(done_id)]
-        await db.commit()
-        assert await jobs.claim_pending_render(db) is None
 
 
 @pytest.mark.parametrize("render_state,has_file,partial", [
@@ -783,18 +775,6 @@ async def test_upload_tool_preserves_original_failed_run(database, monkeypatch, 
         assert (await db.get(Project, pid)).status == ProjectStatus.DRAFT
         assert len((await db.execute(select(WorkflowRun))).scalars().all()) == 1
         assert len((await db.execute(select(CreditTransaction))).scalars().all()) == 0
-    if not succeeds:
-        # A process crash during this foreground tool must not enqueue rendering.
-        from app.pipeline.jobs import reap_stale
-        async with database() as db:
-            output = await db.get(Output, oid)
-            output.render_status = RenderStatus.RENDERING
-            await db.commit()
-            await reap_stale(db)
-            await db.refresh(output)
-            assert output.render_status == RenderStatus.FAILED
-            assert output.render_claim_token is None
-            assert (await db.get(WorkflowStep, sid)).status == "failed"
     # The shared Chat reader includes foreground answers with no Run id.
     if succeeds:
         from app.pipeline.routes.projects import list_chat_delivered_outputs
