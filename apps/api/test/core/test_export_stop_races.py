@@ -276,3 +276,54 @@ async def test_cancel_refreshes_receipt_read_before_dispatch(database, export):
         assert stale.intent["upload_started_by"] == str(token)
         assert stale.intent["media_result"]["status"] == "provider_unknown"
         assert (await db.get(Wallet, export.owner)).balance == 92
+
+
+@pytest.mark.asyncio
+async def test_visible_export_pins_old_version_and_only_reports_reviewed_delivery(database, export, renderer):
+    from app.chat.video_turn_seats import short_video_confirmation, stamp_video_presentation
+    from app.editing.service import video_version_read
+    from app.editing.store import apply_composition_edits
+    from test.core.test_compositions import set_intent
+
+    async with database() as db:
+        project = await db.get(Project, export.pid)
+        job = await db.get(ExportJob, export.job)
+        base = job.render_spec["provenance"]
+        tool = await db.get(Message, export.rid)
+        cid = tool.conversation_id
+        shown = Message(conversation_id=cid, role="assistant", content="Storyboard", seq=1)
+        db.add(shown)
+        await db.flush()
+        read = await video_version_read(db, owner_id=export.owner, version_id=job.version_id)
+        stamp_video_presentation(project, shown, read, production_requested=True)
+        assert (await short_video_confirmation(db, project, cid, "Yes", None))["status"] == "queued"
+        await db.commit()
+    identity = await claim(database)
+    async with database() as db:
+        await apply_composition_edits(db, owner_id=export.owner, composition_id=UUID(base["composition_id"]),
+                                      base_version_id=UUID(base["composition_version_id"]), ops=[set_intent("new head")])
+    renderer.allow_prepare.set()
+    renderer.allow_put.set()
+    renderer.allow_reply.set()
+    await export_jobs.execute_export(*identity)
+    async with database() as db:
+        project = await db.get(Project, export.pid)
+        async def confirm():
+            return await short_video_confirmation(db, project, cid, "Yes", None)
+
+        read = await video_version_read(db, owner_id=export.owner, output_id=export.job)
+        assert read["composition_version_id"] == base["composition_version_id"] and not read["is_current"]
+        facts = await confirm()
+        assert facts["export_job_id"] == str(export.job) and facts["status"] == "succeeded"
+        assert facts["media_result"]["charged_credits"] == 8 and facts["output_refs"] == []
+        delivered = Message(conversation_id=cid, turn_id=export.turn, seq=4, role="assistant",
+                            content="Reviewed", intent={"output_refs": [str(export.job)], "reviewed_version": base})
+        db.add(delivered)
+        await db.flush()
+        assert (await confirm())["delivery_message_id"] == str(delivered.id)
+        unrelated = Message(conversation_id=cid, seq=5, role="user", content="Another topic")
+        db.add(unrelated)
+        await db.flush()
+        db.add(Message(conversation_id=cid, seq=6, role="assistant", turn_id=unrelated.id, content="Which one?"))
+        await db.flush()
+        assert await confirm() is None

@@ -109,13 +109,12 @@ def _native_creation_tools(tools, *, facts, readiness):
 
 def assemble_video_round(facts: dict) -> RoundAssembly:
     confirmation = facts.get("video_confirmation")
-    if confirmation and confirmation["action"] in {"wait", "stale", "already_started", "start"}:
+    if confirmation and confirmation["action"] in {"wait", "stale", "existing_export"}:
         action = confirmation["action"]
         rules = {
             "wait": "说明仍在展示该版本。",
             "stale": "说明引用的版本已过期，询问要使用哪一版。",
-            "already_started": "按已有执行回执陈述状态，交付以确切产物为准。",
-            "start": "请用户在原有费用确认中核对并批准报价。",
+            "existing_export": "按导出任务的实际状态和回执作答。有交付消息时才能说已交付。",
         }
         return RoundAssembly(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],

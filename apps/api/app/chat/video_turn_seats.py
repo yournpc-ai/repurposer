@@ -1088,49 +1088,13 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     """Resolve a brief affirmation against the last visible confirmation."""
     from sqlalchemy import select
 
-    from app.models.tables import Composition, WorkflowRun
-    from app.tools.video.production import is_short_video_affirmation
+    from app.models.tables import Composition, ExportJob, Output
 
-    if project is None or not is_short_video_affirmation(text):
+    if project is None or pending is not None or not re.fullmatch(
+        r"(?:ok(?:ay)?|yes)[.!。！]?", text.strip(), re.I
+    ):
         return None
-
-    async def already_started(run, target):
-        delivery = await db.scalar(
-            select(Message).where(
-                Message.conversation_id == conversation_id,
-                Message.intent["trigger"].astext == "run_completed",
-                Message.intent["ref"].astext == str(run.id),
-            ).order_by(Message.seq.desc()).limit(1)
-        )
-        delivery_intent = (delivery.intent or {}) if delivery is not None else {}
-        if delivery is None and run.status.value == "completed":
-            from app.pipeline.trigger_events import fire_trigger
-
-            fire_trigger(project.id, "run_completed", str(run.id))
-        return {
-            "action": "already_started",
-            **target,
-            "run_id": str(run.id),
-            "run_status": run.status.value,
-            "output_refs": delivery_intent.get("output_refs") or [],
-            "delivery_message_id": str(delivery.id) if delivery is not None else None,
-        }
-
     receipt = (project.pending_brief or {}).get("video_presentation") or {}
-    ref = {key: receipt.get(key) for key in ("composition_id", "composition_version_id", "content_digest")}
-    if all(ref.values()):
-        run = await db.scalar(
-            select(WorkflowRun).where(
-                WorkflowRun.project_id == project.id, WorkflowRun.context["editor_media"].as_string().is_(None),
-                WorkflowRun.context["version_ref"]["composition_version_id"].as_string()
-                == ref["composition_version_id"],
-            ).order_by(WorkflowRun.created_at.desc()).limit(1)
-        )
-        if run is not None and (run.context or {}).get("version_ref") == ref:
-            return await already_started(run, {
-                "base_ref": ref,
-                "presented_message_id": receipt.get("presented_message_id"),
-            })
     if not receipt.get("production_invited"):
         return None
     presented = await db.get(Message, UUID(receipt["presented_message_id"]))
@@ -1139,29 +1103,40 @@ async def short_video_confirmation(db, project, conversation_id, text, pending):
     base_ref = {key: receipt[key] for key in ("composition_id", "composition_version_id", "content_digest")}
     target = {"base_ref": base_ref, "presented_message_id": str(presented.id)}
     work = await db.get(Composition, UUID(base_ref["composition_id"]))
-    current = work is not None and str(work.current_version_id) == base_ref["composition_version_id"]
-    if pending is not None:
-        tasks = (pending.intent or {}).get("tasks") or []
-        if ((pending.question or {}).get("kind") == "task_book"
-                and receipt.get("presentation_complete")
-                and len(tasks) == 1 and tasks[0].get("tool") == "produce_video"
-                and (tasks[0].get("params") or {}).get("version_ref") == base_ref):
-            return {"action": "start" if current else "stale", "quote_message_id": str(pending.id), **target}
+    if work is None or work.origin_project_id != project.id:
         return None
-    run = await db.scalar(
-        select(WorkflowRun).where(
-            WorkflowRun.project_id == project.id,
-            WorkflowRun.context["video_presentation"]["presented_message_id"].as_string() == str(presented.id),
-        ).limit(1)
-    )
-    if run is not None:
-        return await already_started(run, target)
+    current = str(work.current_version_id) == base_ref["composition_version_id"]
     last = await db.scalar(
         select(Message).where(
             Message.conversation_id == conversation_id, Message.role == "assistant",
             Message.seq >= presented.seq, Message.intent["type"].as_string().is_distinct_from("interim_prose"),
         ).order_by(Message.seq.desc()).limit(1)
     )
+    # An acknowledgement after export refers to the visible turn. An export
+    # of the same version in another turn cannot answer a new question.
+    if last is not None and last.turn_id:
+        row = (await db.execute(
+            select(ExportJob, Message).join(Message, Message.id == ExportJob.receipt_id).where(
+                ExportJob.project_id == project.id,
+                ExportJob.version_id == UUID(base_ref["composition_version_id"]),
+                Message.conversation_id == conversation_id, Message.turn_id == last.turn_id,
+            ).order_by(Message.seq.desc()).limit(1)
+        )).first()
+        if row is not None:
+            job, tool = row
+            delivery = None
+            if job.status == "succeeded" and await db.get(Output, job.id) is not None:
+                delivery = await db.scalar(select(Message).where(
+                    Message.conversation_id == conversation_id, Message.turn_id == tool.turn_id,
+                    Message.intent["reviewed_version"].contains(base_ref),
+                    Message.intent["output_refs"].contains([str(job.id)]),
+                ).order_by(Message.seq.desc()).limit(1))
+            return {
+                **target, "action": "existing_export", "export_job_id": str(job.id),
+                "status": job.status, "media_result": (tool.intent or {}).get("media_result"),
+                "output_refs": [str(job.id)] if delivery else [],
+                "delivery_message_id": str(delivery.id) if delivery else None,
+            }
     if last is None or last.id != presented.id:
         opening = await db.get(Message, last.turn_id) if last is not None and last.turn_id else None
         prior = ((opening.intent or {}).get("video_confirmation") or {}) if opening is not None else {}
