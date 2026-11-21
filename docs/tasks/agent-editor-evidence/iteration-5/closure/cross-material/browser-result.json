@@ -1,0 +1,566 @@
+{
+  "decoded": [
+    {
+      "id": "52fe99a8-9919-427f-aad9-5177bee5d32a",
+      "sha256": "b67329164e82fc8f18947f86b9dc282af12a69f88355734dd887bdb9be66d9d7",
+      "frames": 240,
+      "storage_key": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/52fe99a8-9919-427f-aad9-5177bee5d32a-9f1421de991afff1f7cee2dbe8048c6e6cef569e6aba48399bc1edc75023ac52.mp4",
+      "local_file": "/Users/sylas/repurposer/apps/api/../../scratch/agent-editor-v1-blind/browser/52fe99a8-9919-427f-aad9-5177bee5d32a.mp4"
+    },
+    {
+      "id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+      "sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1",
+      "frames": 188,
+      "storage_key": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+      "local_file": "/Users/sylas/repurposer/apps/api/../../scratch/agent-editor-v1-blind/browser/c11346d6-674b-4263-8d1d-74ea90d1b811.mp4"
+    },
+    {
+      "id": "fe783ad8-abcf-4873-8b05-d10e9124f01c",
+      "sha256": "571b7cb76d0ce3d7829d82113dc5e03426a3494d640f6d9e51ae01a71e882d36",
+      "frames": 203,
+      "storage_key": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/fe783ad8-abcf-4873-8b05-d10e9124f01c-016dfd7a99ff6a9deb285753d15c874cb06b5c3421c30ccd2a1e2b262765a374.mp4",
+      "local_file": "/Users/sylas/repurposer/apps/api/../../scratch/agent-editor-v1-blind/browser/fe783ad8-abcf-4873-8b05-d10e9124f01c.mp4"
+    }
+  ],
+  "plays": [
+    {
+      "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/52fe99a8-9919-427f-aad9-5177bee5d32a-9f1421de991afff1f7cee2dbe8048c6e6cef569e6aba48399bc1edc75023ac52.mp4",
+      "time": 1.180091,
+      "ready": 4,
+      "paused": false,
+      "label": "seam-original"
+    },
+    {
+      "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+      "time": 1.171904,
+      "ready": 4,
+      "paused": false,
+      "label": "endcard-original-before-reload"
+    },
+    {
+      "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/fe783ad8-abcf-4873-8b05-d10e9124f01c-016dfd7a99ff6a9deb285753d15c874cb06b5c3421c30ccd2a1e2b262765a374.mp4",
+      "time": 1.16913,
+      "ready": 4,
+      "paused": false,
+      "label": "endcard-resumed-delivery"
+    },
+    {
+      "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+      "time": 1.172929,
+      "ready": 4,
+      "paused": false,
+      "label": "endcard-original-after-reload"
+    }
+  ],
+  "history": {
+    "original_output": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+    "resumed_output": "fe783ad8-abcf-4873-8b05-d10e9124f01c",
+    "original_src_preserved": true,
+    "new_output_distinct": true
+  },
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 409 (Conflict)",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8.ttf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0.otf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: the server responded with a status of 409 (Conflict)",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8.ttf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0.otf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: the server responded with a status of 409 (Conflict)",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0.otf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to font at 'https://repurposer.tos-ap-southeast-1.volces.com/fonts/noto-sans-sc/988621dc5c9a75eb6144f28faae30317a8e3421b68b28740747b3d739e2326b8.ttf' from origin 'http://localhost:3010' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED"
+  ],
+  "api_responses": [
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/notifications",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/wallet",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/skills",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/96304731-151c-4fc0-a703-6f709e2e19dd/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/96304731-151c-4fc0-a703-6f709e2e19dd/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b26a7957-a091-47e6-9025-833f94c1fd88/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A8%2C%22start_seconds%22%3A3%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/bf4446e2-4b01-484e-9b7c-d3d09072dc39/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A9.2%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b26a7957-a091-47e6-9025-833f94c1fd88/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A8%2C%22start_seconds%22%3A3%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/bf4446e2-4b01-484e-9b7c-d3d09072dc39/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A9.2%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/52fe99a8-9919-427f-aad9-5177bee5d32a/poster",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/wallet",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/notifications",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/skills",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/c11346d6-674b-4263-8d1d-74ea90d1b811/poster",
+      "status": 409
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/fe783ad8-abcf-4873-8b05-d10e9124f01c/poster",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/notifications",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/wallet",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/skills",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/c11346d6-674b-4263-8d1d-74ea90d1b811/poster",
+      "status": 409
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/fe783ad8-abcf-4873-8b05-d10e9124f01c/poster",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/wallet",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/notifications",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/skills",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/references",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/assets",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversation?project_id=e1709527-6a58-4157-95fd-12f30aa97373",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/conversations/a9c8f07b-3d06-4e03-95db-e9b5416062c6/messages",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/results",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/c11346d6-674b-4263-8d1d-74ea90d1b811/poster",
+      "status": 409
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/d797c07f-1fde-4124-bf83-4648b8c58168/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/b77fa223-571f-465a-85d6-ce696e8582fa/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.75%2C%22start_seconds%22%3A3.5%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/chat/video/versions/79fb786c-92ac-4364-9c5b-9407f4b32988/storyboard?scrub=%7B%22kind%22%3A%22range%22%2C%22end_seconds%22%3A6.25%2C%22start_seconds%22%3A0%7D",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/outputs/fe783ad8-abcf-4873-8b05-d10e9124f01c/poster",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:8120/api/v1/projects/e1709527-6a58-4157-95fd-12f30aa97373/chat/outputs",
+      "status": 200
+    }
+  ],
+  "direct_project_status": 200,
+  "direct_project_owner": "83b331b3-a5fe-4e30-8d5d-b18ab6ccd6ba"
+}

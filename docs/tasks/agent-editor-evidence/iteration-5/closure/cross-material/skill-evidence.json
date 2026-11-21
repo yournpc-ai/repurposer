@@ -1,0 +1,462 @@
+{
+  "unified-external-skill-v5": {
+    "versions": [
+      {
+        "id": "8227ae9f-59f5-4ac1-aa90-8edb36c300c6",
+        "version": 1,
+        "skill_provenance": {
+          "external_skill": {
+            "reads": [
+              {
+                "kind": "initial",
+                "path": "SKILL.md",
+                "digest": "95a8fc06f80d62d049f897e5e7fa34993f980c4eee6c6354f7ea80a17dd478d8",
+                "truncated": false
+              }
+            ],
+            "budget": {
+              "calls": 1,
+              "demo_files": 0,
+              "text_chars": 270,
+              "generations": 0,
+              "media_bytes": 0,
+              "media_files": 0
+            },
+            "policy": {
+              "mode": "adaptive",
+              "scene_count": null,
+              "duration_seconds": null,
+              "adaptation_bounds": [
+                "Keep the fixed image and declared two-second output."
+              ],
+              "generator_runtime": null
+            },
+            "skill_id": "d96a6b8f-d038-45b7-9fb9-e5c4e0e7b04f",
+            "source_uri": "https://example.invalid/scenario-fixed-image",
+            "source_hash": "1182b6ed9ad4d8c67070c85dc15d0a0512c9e01c074237324e75852aa4494f58",
+            "preview_checks": [],
+            "version_digest": "a67714487b6d759fcabae6c488c411ccaf9cb64394be97336c10a903a646b2cd",
+            "reference_paths": [
+              "SKILL.md"
+            ],
+            "source_revision": "agent-v1-unified-dynamic-composition",
+            "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc"
+          },
+          "skill_reference": {
+            "kind": "external",
+            "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc"
+          },
+          "skill_generator_resources": {
+            "clp_scene_1_skill": {
+              "resource_id": "fixed-image",
+              "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc",
+              "declaration_digest": "68a6d5d67912a7bba8d5146c75f7c88fcd0d6c2f9e14b574cef7e376ab8f71fc"
+            }
+          }
+        },
+        "settings": {
+          "fps": {
+            "den": 1,
+            "num": 30
+          },
+          "width": 1920,
+          "height": 1080,
+          "channels": 2,
+          "timebase": 90000,
+          "background": "#000000",
+          "sample_rate": 48000
+        },
+        "content": {
+          "schema_version": 1,
+          "settings": {
+            "width": 1920,
+            "height": 1080,
+            "fps": {
+              "num": 30,
+              "den": 1
+            },
+            "timebase": 90000,
+            "sample_rate": 48000,
+            "channels": 2,
+            "background": "#000000"
+          },
+          "creative_state": null,
+          "sources": [
+            {
+              "snapshot_id": "b71622c0-b666-5091-b95f-e07b6be1d488",
+              "snapshot_digest": "0ba272ada71e2c747451e371d31b8c31a50d63f9d3bdb6b7160dda3e28292957"
+            }
+          ],
+          "scenes": [
+            {
+              "scene_id": "scene_1",
+              "range": {
+                "start": 0,
+                "end": 180000
+              },
+              "intent": "fixed-image-2s",
+              "visual_description": null,
+              "speech_clip_ids": []
+            }
+          ],
+          "timeline": {
+            "tracks": [
+              {
+                "track_id": "trk_main",
+                "kind": "visual",
+                "role": "main",
+                "order": 0,
+                "clips": [
+                  {
+                    "clip_id": "clp_scene_1_skill",
+                    "range": {
+                      "start": 0,
+                      "end": 180000
+                    },
+                    "scene_id": "scene_1",
+                    "linked_group_id": null,
+                    "source": null,
+                    "object": {
+                      "kind": "generator",
+                      "object_id": "clp_scene_1_skill",
+                      "producer": "remotion-project",
+                      "code": null,
+                      "project": {
+                        "schema_version": 1,
+                        "entry": "demos/effects/fixed-image/FixedImage.tsx",
+                        "composition_id": "FixedImage",
+                        "files": [
+                          {
+                            "path": "demos/effects/fixed-image/FixedImage.tsx",
+                            "content": "import { AbsoluteFill, Composition, Img, registerRoot, staticFile, useCurrentFrame } from 'remotion';\nimport { PAGE } from '../../../template/page';\nconst FixedImage = () => {\n  const frame = useCurrentFrame();\n  return <AbsoluteFill style={{backgroundColor: '#F5F2EB'}}><Img src={staticFile(PAGE)} style={{width: '100%', height: '100%', objectFit: 'contain', transform: `translateX(${frame * 0.1}px)`}} /></AbsoluteFill>;\n};\nconst Root = () => <Composition id=\"FixedImage\" component={FixedImage} fps={30} width={1920} height={1080} durationInFrames={60} />;\nregisterRoot(Root);\n",
+                            "digest": "7b9cf702569446ba94acd86cfd36fb4f9c6096a2a312043e89fdfda089fe70f1"
+                          },
+                          {
+                            "path": "template/page.ts",
+                            "content": "export const PAGE = 'source-snapshots/page.png';\n",
+                            "digest": "e469390d2f2d9781a073469f2f6b1ac409137479bd03dd6e002b78f6c3d79c33"
+                          }
+                        ],
+                        "props": {},
+                        "props_schema": {
+                          "type": "object",
+                          "required": [],
+                          "properties": {},
+                          "additionalProperties": false
+                        },
+                        "resources": [
+                          {
+                            "path": "source-snapshots/page.png",
+                            "snapshot_id": "b71622c0-b666-5091-b95f-e07b6be1d488",
+                            "snapshot_digest": "0ba272ada71e2c747451e371d31b8c31a50d63f9d3bdb6b7160dda3e28292957",
+                            "content_type": "image/png"
+                          }
+                        ],
+                        "dependencies": {
+                          "react": "19.2.7",
+                          "remotion": "4.0.484",
+                          "react-dom": "19.2.7",
+                          "@remotion/bundler": "4.0.484",
+                          "@remotion/renderer": "4.0.484"
+                        }
+                      },
+                      "prompt": null,
+                      "provider": null,
+                      "model": null,
+                      "parameters": {},
+                      "output": {
+                        "width": 1920,
+                        "height": 1080,
+                        "fps": 30,
+                        "duration_frames": 60,
+                        "background": "#F5F2EB"
+                      },
+                      "layout": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "width": 1920.0,
+                        "height": 1080.0
+                      },
+                      "fit": "cover",
+                      "transform": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "scale": 1.0,
+                        "rotation": 0.0,
+                        "origin": "center"
+                      },
+                      "opacity": 1.0
+                    },
+                    "animations": []
+                  }
+                ]
+              }
+            ],
+            "transitions": []
+          }
+        }
+      }
+    ],
+    "sources": [
+      {
+        "id": "b71622c0-b666-5091-b95f-e07b6be1d488",
+        "kind": "image",
+        "digest": "0ba272ada71e2c747451e371d31b8c31a50d63f9d3bdb6b7160dda3e28292957",
+        "meta": {
+          "origin": "external_skill_package",
+          "content_type": "image/png",
+          "package_path": "gallery/media/effects/fixed-image.png",
+          "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc"
+        }
+      }
+    ]
+  },
+  "unified-builtin-skill": {
+    "versions": [
+      {
+        "id": "c8c33bac-2fe4-4fe8-aac1-43541d972bda",
+        "version": 1,
+        "skill_provenance": {
+          "skill_version": "1.0.0",
+          "skill_reference": {
+            "kind": "builtin",
+            "version": "1.0.0",
+            "skill_id": "text-animation"
+          }
+        },
+        "settings": {
+          "fps": {
+            "den": 1,
+            "num": 30
+          },
+          "width": 1920,
+          "height": 1080,
+          "channels": 2,
+          "timebase": 90000,
+          "background": "#000000",
+          "sample_rate": 48000
+        },
+        "content": {
+          "schema_version": 1,
+          "settings": {
+            "width": 1920,
+            "height": 1080,
+            "fps": {
+              "num": 30,
+              "den": 1
+            },
+            "timebase": 90000,
+            "sample_rate": 48000,
+            "channels": 2,
+            "background": "#000000"
+          },
+          "creative_state": null,
+          "sources": [],
+          "scenes": [
+            {
+              "scene_id": "scene_1",
+              "range": {
+                "start": 0,
+                "end": 270000
+              },
+              "intent": "Build with evidence.",
+              "visual_description": null,
+              "speech_clip_ids": []
+            }
+          ],
+          "timeline": {
+            "tracks": [
+              {
+                "track_id": "trk_main",
+                "kind": "visual",
+                "role": "main",
+                "order": 0,
+                "clips": []
+              },
+              {
+                "track_id": "trk_99803d84d2e8_00",
+                "kind": "visual",
+                "role": "title",
+                "order": 1,
+                "clips": [
+                  {
+                    "clip_id": "clp_99803d84d2e8_00",
+                    "range": {
+                      "start": 0,
+                      "end": 270000
+                    },
+                    "scene_id": "scene_1",
+                    "linked_group_id": null,
+                    "source": null,
+                    "object": {
+                      "kind": "text",
+                      "object_id": "obj_99803d84d2e8_00",
+                      "text": "Build with evidence.",
+                      "layout": {
+                        "x": 153.6,
+                        "y": 324.0,
+                        "width": 1612.8,
+                        "height": 400.0
+                      },
+                      "style": {
+                        "font_size": 88,
+                        "color": "#FFFFFF",
+                        "background": null,
+                        "weight": 600,
+                        "align": "center",
+                        "line_height": 1.2,
+                        "letter_spacing": 0.0,
+                        "stroke": null,
+                        "shadow": null,
+                        "font": {
+                          "font_id": "noto-sans-sc",
+                          "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c"
+                        }
+                      },
+                      "transform": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "scale": 1.0,
+                        "rotation": 0.0,
+                        "origin": "center"
+                      },
+                      "opacity": 1.0,
+                      "segmentation_version": "scalar-grapheme-v1",
+                      "layout_version": "explicit-line-inline-v1",
+                      "caption": null
+                    },
+                    "animations": [
+                      {
+                        "animation_id": "anm_99803d84d2e8_00_00",
+                        "target_object_id": "obj_99803d84d2e8_00",
+                        "text_part": null,
+                        "property": "opacity",
+                        "keyframes": [
+                          {
+                            "at": 0,
+                            "value": 0.0,
+                            "easing": {
+                              "kind": "cubic_bezier",
+                              "params": [
+                                0.16,
+                                1.0,
+                                0.3,
+                                1.0
+                              ]
+                            }
+                          },
+                          {
+                            "at": 54000,
+                            "value": 1.0,
+                            "easing": {
+                              "kind": "linear",
+                              "params": null
+                            }
+                          }
+                        ],
+                        "narration_anchor": null
+                      },
+                      {
+                        "animation_id": "anm_99803d84d2e8_00_01",
+                        "target_object_id": "obj_99803d84d2e8_00",
+                        "text_part": null,
+                        "property": "filter.blur",
+                        "keyframes": [
+                          {
+                            "at": 0,
+                            "value": 8.0,
+                            "easing": {
+                              "kind": "cubic_bezier",
+                              "params": [
+                                0.16,
+                                1.0,
+                                0.3,
+                                1.0
+                              ]
+                            }
+                          },
+                          {
+                            "at": 54000,
+                            "value": 0.0,
+                            "easing": {
+                              "kind": "linear",
+                              "params": null
+                            }
+                          }
+                        ],
+                        "narration_anchor": null
+                      },
+                      {
+                        "animation_id": "anm_99803d84d2e8_00_02",
+                        "target_object_id": "obj_99803d84d2e8_00",
+                        "text_part": null,
+                        "property": "transform.scale",
+                        "keyframes": [
+                          {
+                            "at": 0,
+                            "value": 1.06,
+                            "easing": {
+                              "kind": "cubic_bezier",
+                              "params": [
+                                0.16,
+                                1.0,
+                                0.3,
+                                1.0
+                              ]
+                            }
+                          },
+                          {
+                            "at": 54000,
+                            "value": 1.0,
+                            "easing": {
+                              "kind": "linear",
+                              "params": null
+                            }
+                          }
+                        ],
+                        "narration_anchor": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "transitions": []
+          }
+        }
+      }
+    ],
+    "sources": []
+  },
+  "decoded_generator_preview": {
+    "sha256": "808f974316574c197106e70454ad472c5cc790f344818e6a7174f15d5d481189",
+    "sample_frames": [
+      {
+        "seconds": 0.0,
+        "jpeg_sha256": "604a312a8e3f0d9840a5eca0c629a4b1b3d52a7c6c4ce126b2511620342f5822",
+        "pixel_difference_from_previous_bbox_px": null
+      },
+      {
+        "seconds": 1.0,
+        "jpeg_sha256": "861a4d426ccfd07f699c81fd64ed313169641d7b189cbf177017097f60323692",
+        "pixel_difference_from_previous_bbox_px": [
+          64,
+          0,
+          1226,
+          720
+        ]
+      },
+      {
+        "seconds": 1.9666666666666666,
+        "jpeg_sha256": "67dee496895200abe1b345e682ede49ab7e852db59903412d165bb8ec3e39336",
+        "pixel_difference_from_previous_bbox_px": [
+          64,
+          0,
+          1232,
+          720
+        ]
+      }
+    ],
+    "interpretation": "Different sampled pixels do not establish continuous smooth motion; a still source image does not make its Generator output static."
+  }
+}

@@ -1,0 +1,309 @@
+{
+  "first_pass": {
+    "samples": [
+      {
+        "sample_id": "single-speaker",
+        "user_text": "请看一下这段单人讲话的构图。脸和肩膀要尽量完整、自然，明显不合适就直接调整并复看。时长保持 12 秒，不要正式导出。",
+        "target": "Correct one Composition; actual source and rendered observation; visibly restore a natural complete speaker framing without changing duration; review the changed version; no Output; accurate margins and sampling claims.",
+        "independence": "Full vertical conference speaker from fixed demo bucket; not used by Agent Editor Iteration 1-5.",
+        "source": {
+          "kind": "demo",
+          "key": "demo/uploads/xiongyu.mp4",
+          "sha256": "d93626763874366e417e213d11327849f2dc568a119518c7e583e0be450bd8b2"
+        },
+        "initial_version_id": "7e95f856-1c32-4a1b-97d9-b9c02e26f3ff",
+        "turn_id": "660ae846-ff5f-4f6d-a4c5-9ca2ef2e3170",
+        "classification": "partial",
+        "reason": "Composition and duration improved; initial Chat overstated shoulder completeness and visual certainty.",
+        "versions": [
+          {
+            "id": "7e95f856-1c32-4a1b-97d9-b9c02e26f3ff",
+            "version": 1
+          },
+          {
+            "id": "008de9f7-b02c-4240-8024-99d43883e1f2",
+            "version": 2
+          },
+          {
+            "id": "c9abceda-b4a0-4347-aa21-1347e02fdede",
+            "version": 3
+          }
+        ],
+        "outputs": [],
+        "archive": "first-single-speaker.json.gz"
+      },
+      {
+        "sample_id": "two-person",
+        "user_text": "请实际看一下这段双人采访。两位人物都要完整、自然地留在画面里，明显裁切就修正并复看。保持 12 秒，不要正式导出。",
+        "target": "Observe both people in actual frames; choose the shared video object, not a guessed person ID; correct framing while preserving 12 seconds and source window; review; no Output; accurate description of both subjects.",
+        "independence": "Two-person interview from fixed demo bucket; the file only appears in the older generic journey registry, not Agent Editor 1-5 prompt/tuning evidence.",
+        "source": {
+          "kind": "demo",
+          "key": "demo/uploads/xy_1_interview_15s.mp4",
+          "sha256": "bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671"
+        },
+        "initial_version_id": "6cbe776a-9927-4bba-a381-a6d9c0f2d91e",
+        "turn_id": "389e17bc-c490-479b-99e9-5ff2bd641b09",
+        "classification": "complete",
+        "reason": "Restored both people and the full source at scale=1/x=0/y=0; reviewed; no Output.",
+        "versions": [
+          {
+            "id": "6cbe776a-9927-4bba-a381-a6d9c0f2d91e",
+            "version": 1
+          },
+          {
+            "id": "42e36f5a-ae3e-47bc-9bc3-06b60bfab720",
+            "version": 2
+          },
+          {
+            "id": "ff06c4c5-b6f3-4c80-8ddf-fd25578b6c04",
+            "version": 3
+          }
+        ],
+        "outputs": [],
+        "archive": "first-two-person.json.gz"
+      },
+      {
+        "sample_id": "subtitled-short",
+        "user_text": "检查这段带字幕的短视频，底部字幕要完整可读，不要改原声。若画面或字幕被裁切就修复并复看，然后把确切正式 MP4 审阅后交付给我。",
+        "target": "Actual subtitle/frame observation; no audio edit; repair cropping without replacing the source; review the revised Output itself and deliver once; accurate subtitle and audio-perception boundaries.",
+        "independence": "Real 4.053-second narrated Chinese captioned video from the older sequential-p2 acceptance artifacts, not an Agent Editor fixture.",
+        "source": {
+          "kind": "local",
+          "path": "artifacts/sequential-p2/first-run/review-1.mp4"
+        },
+        "initial_version_id": "eb970562-f4cb-47af-a18d-6fa3bf5cc1b2",
+        "turn_id": "af4bbb3f-2ccc-491e-9d6e-08c2974eaf3b",
+        "classification": "partial",
+        "reason": "Exact playable Output delivered, but subtitle readability remained limited and the source audio stream was silent.",
+        "versions": [
+          {
+            "id": "eb970562-f4cb-47af-a18d-6fa3bf5cc1b2",
+            "version": 1
+          },
+          {
+            "id": "f4096461-a8d9-4102-81ef-2c2b75734b6b",
+            "version": 2
+          },
+          {
+            "id": "abb19152-8c60-4712-a432-6b76f5e1da05",
+            "version": 3
+          }
+        ],
+        "outputs": [
+          {
+            "id": "842064ba-66fd-4507-94b3-27bef48af672",
+            "version_id": "abb19152-8c60-4712-a432-6b76f5e1da05"
+          }
+        ],
+        "archive": "first-subtitled-short.json.gz"
+      },
+      {
+        "sample_id": "seam-gap",
+        "user_text": "这段演示中间有剪辑接缝。请实际看片，去掉多余空档，保留两段内容和原声，复看接缝后把正式 MP4 审阅并交付给我。",
+        "target": "Observe the real gap; preserve both 4-second source windows and order; close the unintended gap without unrelated edits; review the joined current version and exact Output; deliver once.",
+        "independence": "Real conference slide/presentation footage from fixed demo bucket; two genuine source windows are separated by an actual composition gap.",
+        "source": {
+          "kind": "demo",
+          "key": "demo/uploads/xy_2_15s.mp4",
+          "sha256": "e01f7a090da3e285f0961c7ff9e3fa988244d32ef00b4824e401241edfca5435"
+        },
+        "initial_version_id": "bf4446e2-4b01-484e-9b7c-d3d09072dc39",
+        "turn_id": "1209d761-18e6-4a88-9797-e32bd86bcf2d",
+        "classification": "complete",
+        "reason": "Closed the real 1.2-second gap; preserved both four-second source windows; reviewed and delivered exact Output.",
+        "versions": [
+          {
+            "id": "bf4446e2-4b01-484e-9b7c-d3d09072dc39",
+            "version": 1
+          },
+          {
+            "id": "b26a7957-a091-47e6-9025-833f94c1fd88",
+            "version": 2
+          }
+        ],
+        "outputs": [
+          {
+            "id": "52fe99a8-9919-427f-aad9-5177bee5d32a",
+            "version_id": "b26a7957-a091-47e6-9025-833f94c1fd88"
+          }
+        ],
+        "archive": "first-seam-gap.json.gz"
+      },
+      {
+        "sample_id": "image-title-endcard",
+        "user_text": "保留这段月亮标题画面和结尾卡原文，检查有没有明显黑场、文字裁切或衔接问题，必要时直接修复并复看，然后把正式 MP4 审阅后交付给我。",
+        "target": "Preserve the real source and exact end-card text; actual observation of source, join and end card; repair visible problems only; exact Output review and one delivery; do not invent motion or audio checks.",
+        "independence": "Real gallery knowledge title animation with an independent native end card; not an Agent Editor 1-5 fixture.",
+        "source": {
+          "kind": "local",
+          "path": "apps/web/public/gallery/showcase/knowledge-explainer.mp4"
+        },
+        "initial_version_id": "d797c07f-1fde-4124-bf83-4648b8c58168",
+        "turn_id": "8079fec0-712a-40ad-8053-0cf151350766",
+        "classification": "complete",
+        "reason": "Preserved the source and end-card text; reviewed and delivered 188 video frames.",
+        "versions": [
+          {
+            "id": "d797c07f-1fde-4124-bf83-4648b8c58168",
+            "version": 1
+          },
+          {
+            "id": "30982c8d-3042-47f2-98d4-7db6fb4e39e0",
+            "version": 2
+          },
+          {
+            "id": "79fb786c-92ac-4364-9c5b-9407f4b32988",
+            "version": 3
+          }
+        ],
+        "outputs": [
+          {
+            "id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+            "version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988"
+          }
+        ],
+        "archive": "first-image-title-endcard.json.gz"
+      },
+      {
+        "sample_id": "open-speech",
+        "user_text": "这是一段真实演讲素材。请实际看片，把明显多余的黑场和构图问题处理好，保留有效讲话内容，不要添加新素材。检查最终效果并把正式 MP4 交付给我。",
+        "target": "Open but bounded: inspect actual speech frames; preserve all three 5-second source windows and their order; remove both unintended gaps; repair only observed framing issues; review the joined current version and exact Output; deliver once without generated media.",
+        "independence": "Long real stage talk from fixed demo bucket; three actual adjacent source windows include two real composition gaps. Open aesthetic direction with bounded delivery scope.",
+        "source": {
+          "kind": "demo",
+          "key": "demo/uploads/demo_talk.mp4",
+          "sha256": "c856eb6926c1aa4e1022eff3f62ca5ec58f1ee28267f42c7582d797517d33f2d"
+        },
+        "initial_version_id": "091f3d72-ff4b-47c2-8713-5007ca2206e7",
+        "turn_id": "ff34455a-39fa-42b4-9990-f6378d9a109c",
+        "classification": "failed",
+        "reason": "Twenty decisions exhausted after five scales and repeated previews; no Output and no delivery.",
+        "versions": [
+          {
+            "id": "091f3d72-ff4b-47c2-8713-5007ca2206e7",
+            "version": 1
+          },
+          {
+            "id": "6e4e3cc5-9234-44b7-ab5c-8df97c400498",
+            "version": 2
+          },
+          {
+            "id": "3c190239-eb07-4ce8-bd71-205735b9ae44",
+            "version": 3
+          },
+          {
+            "id": "e8f6c734-251e-4432-9272-c60a8ba6093c",
+            "version": 4
+          },
+          {
+            "id": "302d3723-4ae7-49de-bfe4-bd8b7a2cbed5",
+            "version": 5
+          },
+          {
+            "id": "c2890bfb-13bb-425a-a4e8-7fd086c49d9b",
+            "version": 6
+          },
+          {
+            "id": "220cdfc0-698a-4c50-ac08-327491f1d056",
+            "version": 7
+          },
+          {
+            "id": "b39d2842-53c6-44d1-bf2d-4d6131bbedce",
+            "version": 8
+          }
+        ],
+        "outputs": [],
+        "archive": "first-open-speech.json.gz"
+      }
+    ],
+    "totals": {
+      "independent_sources": 6,
+      "complete": 3,
+      "partial": 2,
+      "failed": 1,
+      "model_requests": 66,
+      "input_tokens": 805804,
+      "output_tokens": 36880,
+      "usage_usd": 0.14299900000000001,
+      "native_calls": 64,
+      "schema_valid": 64,
+      "media_capture_credits": 37,
+      "billing_note": "Application ConversationUsage and CreditTransaction amounts, not a provider invoice reconciliation."
+    }
+  },
+  "media": {
+    "seam-gap-output.mp4": {
+      "sha256": "b67329164e82fc8f18947f86b9dc282af12a69f88355734dd887bdb9be66d9d7",
+      "video_frames": 240,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 8.0,
+      "audio_streams": 1
+    },
+    "image-title-endcard-original.mp4": {
+      "sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1",
+      "video_frames": 188,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 6.266666666666667,
+      "audio_streams": 1
+    },
+    "image-title-endcard-resumed.mp4": {
+      "sha256": "571b7cb76d0ce3d7829d82113dc5e03426a3494d640f6d9e51ae01a71e882d36",
+      "video_frames": 203,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 6.766666666666667,
+      "audio_streams": 1
+    },
+    "subtitled-short-output.mp4": {
+      "sha256": "f4da5f6fcba19b0bb9b7eeabc0d1270e8448c107e96d219f3fb3ecb7c15bea95",
+      "video_frames": 120,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 4.0,
+      "audio_streams": 1
+    },
+    "two-person-final-preview.mp4": {
+      "sha256": "4bab3926abb422ec40095804a816945058d420cfd824636b14c3f47a511e5a61",
+      "video_frames": 360,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 12.0,
+      "audio_streams": 1
+    },
+    "skill-generator-preview.mp4": {
+      "sha256": "808f974316574c197106e70454ad472c5cc790f344818e6a7174f15d5d481189",
+      "video_frames": 60,
+      "width": 1920,
+      "height": 1080,
+      "video_seconds": 2.0,
+      "audio_streams": 1
+    },
+    "single-speaker-s5-preview.mp4": {
+      "sha256": "4438fab8055702c50224396db8d95ddbd05e1e392eb33d3b73b023a7f9c8caf8",
+      "video_frames": 360,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 12.0,
+      "audio_streams": 1
+    },
+    "held-out-product-preview.mp4": {
+      "sha256": "4695418627c44dd8a904fb22f2622e192363712dda12a1658816fa752f558557",
+      "video_frames": 128,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 4.266666666666667,
+      "audio_streams": 1
+    },
+    "open-speech-post-facts-output.mp4": {
+      "sha256": "1aed593328b44b95d0ad546b2c578fefbf5340ece46e8fdd3af5e64972150cdf",
+      "video_frames": 450,
+      "width": 320,
+      "height": 180,
+      "video_seconds": 15.0,
+      "audio_streams": 1
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "model_input_capability": "MiniMax native tools, image and video are enabled; understands_video_audio=false and no audio input part is exposed by the current adapter.",
+  "official_documentation": "https://platform.minimax.io/docs/api-reference/text-chat#messages documents text, image_url and video_url; no audio_url was found in the checked Chat input contract.",
+  "same_video_frame_at_one_second": true,
+  "sources": [
+    {
+      "id": "audio-voice-music",
+      "audio_fact": "Prior real narration plus a generated music bed; see Iteration 3 native insert_audio calls and the measured mixed output.",
+      "sha256": "a4c3a33a35545871fee4aec3046e5915a900696273a52c837fa3c5af52b187fb",
+      "technical": {
+        "byte_count": 113745,
+        "container": {
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "duration_seconds": 4.053
+        },
+        "sample_rate": 48000,
+        "channels": 2,
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 194560,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 194560
+          },
+          "duration_seconds": 4.053333333333334
+        },
+        "pcm_stats": {
+          "rms": 0.1169783913582245,
+          "peak": 0.708573043346405,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -16.1,
+          "true_peak_dbtp": -3.0
+        }
+      }
+    },
+    {
+      "id": "audio-same-frames-no-stream",
+      "audio_fact": "Same video stream as the real mix, with the audio stream deliberately removed for the modality boundary probe.",
+      "sha256": "928adb6f56bd711b964321cd731e07e72098f8acb054f2392154cc13c228ec61",
+      "technical": {
+        "technical_error": "audio source has no audio stream"
+      }
+    },
+    {
+      "id": "existing-aac-silence",
+      "source": "/Users/sylas/repurposer/artifacts/sequential-p2/first-run/review-1.mp4",
+      "sha256": "deb5d036ccf0311b6c7d90ba33104f66de25484acca332599c3707ede485743b",
+      "technical": {
+        "byte_count": 1111393,
+        "container": {
+          "format": "mov,mp4,m4a,3gp,3g2,mj2",
+          "duration_seconds": 4.053333
+        },
+        "sample_rate": 48000,
+        "channels": 2,
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 194560,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 194560
+          },
+          "duration_seconds": 4.053333333333334
+        },
+        "pcm_stats": {
+          "rms": 0.0,
+          "peak": 0.0,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": true
+        },
+        "loudness": {
+          "integrated_lufs": -70.0,
+          "true_peak_dbtp": null
+        }
+      }
+    }
+  ],
+  "boundary": "Audio decode, PCM statistics and loudness are technical measurements. ASR or media-construction metadata are not model hearing. No subjective listening claim is made here."
+}

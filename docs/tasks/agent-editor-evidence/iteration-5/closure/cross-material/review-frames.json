@@ -1,0 +1,26 @@
+[
+  {
+    "source": "single-speaker-s5-preview.mp4",
+    "requested_seconds": 5.966667,
+    "decoded_seconds": 5.966666666666667,
+    "file": "single-s5-frame.png"
+  },
+  {
+    "source": "two-person-final-preview.mp4",
+    "requested_seconds": 5.966667,
+    "decoded_seconds": 5.966666666666667,
+    "file": "two-person-frame.png"
+  },
+  {
+    "source": "subtitled-short-output.mp4",
+    "requested_seconds": 1.966667,
+    "decoded_seconds": 1.9666666666666666,
+    "file": "subtitled-short-frame.png"
+  },
+  {
+    "source": "open-speech-post-facts-output.mp4",
+    "requested_seconds": 7.5,
+    "decoded_seconds": 7.5,
+    "file": "open-speech-output-frame.png"
+  }
+]

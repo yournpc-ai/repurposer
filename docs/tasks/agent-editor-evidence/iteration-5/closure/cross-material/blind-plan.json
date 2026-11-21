@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "frozen_before_first_model_call": true,
+  "baseline_git": "5c2d656c58808b88ff8b69af27bcd608ac5cef90",
+  "provider": "minimax",
+  "model": "MiniMax-M3.1-Flash",
+  "sampling": {
+    "chat_temperature": 0.2,
+    "max_iterations": 20,
+    "thinking": false,
+    "reasoning_split": true,
+    "warmup": false
+  },
+  "budget": {
+    "first_pass_tasks": 6,
+    "max_provider_requests_per_task": 20,
+    "max_first_pass_input_tokens": 1500000,
+    "max_first_pass_output_tokens": 100000,
+    "max_first_pass_conversation_usd": 3.0,
+    "max_first_pass_capture_credits": 150,
+    "paid_media_generation": "not required and not authorized beyond the fixed export requests",
+    "notes": "Stop scheduling new first-pass tasks if a cap is reached; preserve the partial denominator and actual usage. Existing 20-iteration cap is not increased."
+  },
+  "classification": {
+    "success": "The requested work is completed on the correct Composition; necessary actual media is observed before editing; edits address observed problems and preserve unrelated content; the latest affected version/window is reviewed; requested export is an exact playable Output reviewed and delivered once; deterministic Chat statements match versions, ranges, pixels and measurement; no cap exhaustion, duplicate Output, capture or card; history reads preserve identity.",
+    "partial_success": "A real useful edit or Output exists but a required observation, preservation, delivery, factual-language or recovery condition is missing; or the Agent honestly stops at a demonstrated capability boundary without claiming completion. Honest stopping is reliability progress but not task success.",
+    "failure": "Wrong target, necessary media not read, incorrect or destructive edit, unrequested paid work, fabricated execution/observation facts, invalid retry loop or cap, user goal unmet, requested Output absent, duplicate billing/delivery, or history changes the original Output."
+  },
+  "samples": [
+    {
+      "id": "single-speaker",
+      "independence": "Full vertical conference speaker from fixed demo bucket; not used by Agent Editor Iteration 1-5.",
+      "source": {"kind": "demo", "key": "demo/uploads/xiongyu.mp4", "sha256": "d93626763874366e417e213d11327849f2dc568a119518c7e583e0be450bd8b2"},
+      "source_window_seconds": [0, 12],
+      "initial_visual": {"scale": 1.6, "x": -35, "y": 20, "fit": "contain"},
+      "user_text": "请看一下这段单人讲话的构图。脸和肩膀要尽量完整、自然，明显不合适就直接调整并复看。时长保持 12 秒，不要正式导出。",
+      "target": "Correct one Composition; actual source and rendered observation; visibly restore a natural complete speaker framing without changing duration; review the changed version; no Output; accurate margins and sampling claims."
+    },
+    {
+      "id": "two-person",
+      "independence": "Two-person interview from fixed demo bucket; the file only appears in the older generic journey registry, not Agent Editor 1-5 prompt/tuning evidence.",
+      "source": {"kind": "demo", "key": "demo/uploads/xy_1_interview_15s.mp4", "sha256": "bcf785816b8213f6a58495690ba94981e0e44d1d14993a457d180eff32995671"},
+      "source_window_seconds": [0, 12],
+      "initial_visual": {"scale": 1.35, "x": 65, "y": 0, "fit": "contain"},
+      "user_text": "请实际看一下这段双人采访。两位人物都要完整、自然地留在画面里，明显裁切就修正并复看。保持 12 秒，不要正式导出。",
+      "target": "Observe both people in actual frames; choose the shared video object, not a guessed person ID; correct framing while preserving 12 seconds and source window; review; no Output; accurate description of both subjects."
+    },
+    {
+      "id": "subtitled-short",
+      "independence": "Real 4.053-second narrated Chinese captioned video from the older sequential-p2 acceptance artifacts, not an Agent Editor fixture.",
+      "source": {"kind": "local", "path": "artifacts/sequential-p2/first-run/review-1.mp4"},
+      "source_window_seconds": [0, 4],
+      "initial_visual": {"scale": 1.25, "x": 0, "y": -25, "fit": "contain"},
+      "user_text": "检查这段带字幕的短视频，底部字幕要完整可读，不要改原声。若画面或字幕被裁切就修复并复看，然后把确切正式 MP4 审阅后交付给我。",
+      "target": "Actual subtitle/frame observation; no audio edit; repair cropping without replacing the source; review the revised Output itself and deliver once; accurate subtitle and audio-perception boundaries."
+    },
+    {
+      "id": "seam-gap",
+      "independence": "Real conference slide/presentation footage from fixed demo bucket; two genuine source windows are separated by an actual composition gap.",
+      "source": {"kind": "demo", "key": "demo/uploads/xy_2_15s.mp4", "sha256": "e01f7a090da3e285f0961c7ff9e3fa988244d32ef00b4824e401241edfca5435"},
+      "clips": [
+        {"source_window_seconds": [0, 4], "output_window_seconds": [0, 4]},
+        {"source_window_seconds": [4, 8], "output_window_seconds": [5.2, 9.2]}
+      ],
+      "user_text": "这段演示中间有剪辑接缝。请实际看片，去掉多余空档，保留两段内容和原声，复看接缝后把正式 MP4 审阅并交付给我。",
+      "target": "Observe the real gap; preserve both 4-second source windows and order; close the unintended gap without unrelated edits; review the joined current version and exact Output; deliver once."
+    },
+    {
+      "id": "image-title-endcard",
+      "independence": "Real gallery knowledge title animation with an independent native end card; not an Agent Editor 1-5 fixture.",
+      "source": {"kind": "local", "path": "apps/web/public/gallery/showcase/knowledge-explainer.mp4"},
+      "source_window_seconds": [0, 4.25],
+      "end_card": {"text": "Keep looking up.", "output_window_seconds": [4.25, 6.25], "scale": 1.8, "x": 30},
+      "user_text": "保留这段月亮标题画面和结尾卡原文，检查有没有明显黑场、文字裁切或衔接问题，必要时直接修复并复看，然后把正式 MP4 审阅后交付给我。",
+      "target": "Preserve the real source and exact end-card text; actual observation of source, join and end card; repair visible problems only; exact Output review and one delivery; do not invent motion or audio checks."
+    },
+    {
+      "id": "open-speech",
+      "independence": "Long real stage talk from fixed demo bucket; three actual adjacent source windows include two real composition gaps. Open aesthetic direction with bounded delivery scope.",
+      "source": {"kind": "demo", "key": "demo/uploads/demo_talk.mp4", "sha256": "c856eb6926c1aa4e1022eff3f62ca5ec58f1ee28267f42c7582d797517d33f2d"},
+      "clips": [
+        {"source_window_seconds": [30, 35], "output_window_seconds": [0, 5]},
+        {"source_window_seconds": [35, 40], "output_window_seconds": [6, 11]},
+        {"source_window_seconds": [40, 45], "output_window_seconds": [12, 17]}
+      ],
+      "user_text": "这是一段真实演讲素材。请实际看片，把明显多余的黑场和构图问题处理好，保留有效讲话内容，不要添加新素材。检查最终效果并把正式 MP4 交付给我。",
+      "target": "Open but bounded: inspect actual speech frames; preserve all three 5-second source windows and their order; remove both unintended gaps; repair only observed framing issues; review the joined current version and exact Output; deliver once without generated media."
+    }
+  ],
+  "held_out_after_fix": {
+    "id": "held-out-product",
+    "independence": "Real product close-up gallery footage; reserved before first-pass results and not used to choose first-pass fixes.",
+    "source": {"kind": "local", "path": "apps/web/public/gallery/showcase/product-promo.mp4"},
+    "source_window_seconds": [0, 4.25],
+    "initial_visual": {"scale": 1.3, "x": 0, "y": -20, "fit": "contain"},
+    "user_text": "请实际检查这段产品特写，主体和下方标题都要完整自然。若有明显裁切就修正并复看，保持原时长，不要正式导出。",
+    "target": "Independent post-fix visual generalization; correct source/version; no Output; accurate evidence and no repeated-edit loop."
+  }
+}

@@ -1,0 +1,3133 @@
+{
+  "runs": [
+    {
+      "sample_id": "unified-ordinary-v2",
+      "turn_id": "bdd3e2d6-0542-4488-bdf8-bd1e4034f3d7",
+      "provider": null,
+      "model": null,
+      "requests": 3,
+      "prompt_tokens": 24392,
+      "completion_tokens": 378,
+      "calls": [
+        {
+          "id": "call_01a1fba1454d76319e1d2dfe",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Build with evidence — 3s 静态字卡\",\"aspect\":\"16:9\",\"shots\":[{\"duration_seconds\":3,\"headline\":\"Build with evidence.\",\"text_color\":\"#FFFFFF\",\"text_preset\":\"title-lockup\",\"title_motion\":\"static\"}]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "chatcmpl-tool-9b93d6776928ba29",
+          "name": "preview_range",
+          "arguments": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 2,
+      "native_calls": 2,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [],
+      "edits": [
+        "create_video"
+      ],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "e858bdaf-9c0b-4e40-851a-6cfe48a63c55",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "8bb3f747ee3933d3eb2a2324ba082ba20a299dbb97a1b6c68905cd38db254697"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.003886,
+      "assistant": "初稿已保存（作品「Build with evidence — 3s 静态字卡」，版本 第 1 版，v1）。\n\n- 时长 3.0 秒，16:9，纯黑背景\n- 唯一元素：白色静态文字「Build with evidence.」，居中偏上，标题锁定排版，无动画\n- 未加入其他素材，无音轨内容（音频流静音，RMS 0.0）\n- 预览窗口 0–3 秒，抽样帧 1.47 秒处文字位置与颜色符合预期\n\n按要求未做正式导出，仅保存为可编辑初稿。",
+      "failed": null,
+      "archive": "unified-ordinary-v2-unified-first.json.gz"
+    },
+    {
+      "sample_id": "unified-website-v3",
+      "turn_id": "8cc50433-d1b7-49f6-85fe-029c6189b6ae",
+      "provider": null,
+      "model": null,
+      "requests": 21,
+      "prompt_tokens": 368399,
+      "completion_tokens": 14239,
+      "calls": [
+        {
+          "id": "call_d3WIfQ1Kfo96TkAQySRpXyYe",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_urls\": [\"https://www.legitevi.com/en\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_9f18b373ebfa0fa71db5bca2",
+          "name": "analyze_brand",
+          "arguments": "{\"brief\": {\"audience\": {\"value\": \"Scientists, researchers, creators/influencers, and the general public\", \"source\": \"inferred\"}, \"aspect\": {\"value\": \"16:9\", \"source\": \"user-stated\"}, \"material_state\": {\"value\": \"attached\", \"source\": \"user-stated\"}, \"narrative_mode\": {\"value\": \"mission\", \"source\": \"user-stated\"}, \"narration_language\": {\"value\": \"en\", \"source\": \"user-stated\"}, \"purpose\": {\"value\": \"官网宣传片初稿\", \"source\": \"user-stated\"}, \"subtitle_languages\": {\"item\": \"en\"}, \"target_seconds\": {\"value\": 4, \"source\": \"user-stated\"}, \"tone\": {\"value\": \"professional, mission-driven\", \"source\": \"inferred\"}}}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_74db156fdedf63fb43b7e22e",
+          "name": "create_video",
+          "arguments": "{\"name\": \"LegitEvi 官网宣传片初稿 v1\", \"aspect\": \"16:9\", \"shots\": [{\"snapshot_id\": \"f003dc6c-6878-5864-b2cd-890aae1a44a0\", \"view_id\": \"view-0\", \"element_id\": \"s0e0\", \"source_motion\": \"push\", \"duration_seconds\": 2, \"narration\": \"LegitEvi turns peer-reviewed research into short videos where every claim is verifiable.\", \"narration_language\": \"en\", \"headline\": \"LegitEvi: Where Research Powers Influence\", \"text_preset\": \"title-lockup\", \"text_color\": \"#FFFFFF\", \"title_motion\": \"entrance\"}, {\"snapshot_id\": \"f003dc6c-6878-5864-b2cd-890aae1a44a0\", \"view_id\": \"view-2\", \"element_id\": \"s2e3\", \"source_motion\": \"hold\", \"duration_seconds\": 2, \"headline\": \"Citations should be as universal as hashtags.\", \"text_preset\": \"title-lockup\", \"text_color\": \"#FFFFFF\", \"title_motion\": \"entrance\"}]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_b6ffcb61d23148e9ba7033cb",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_1c54bdcb58774f6cb07ac181",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\":\"clp_speech_scene_1\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_ac15edb756944557a662736c",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":4}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_ae4d7d108b1949dbb1bc6efe",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\":4,\"start_seconds\":0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_b1c9aef8b6d349e7a7991bfd",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\":4,\"start_seconds\":0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_88b74e41a0944687b410080a",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\":4,\"start_seconds\":0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_f612199f507440f88ef8fe3a",
+          "name": "list_project_media",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_657413cb834945a1890d0874",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":4}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_96c87b5af6ef4b2d85a9c418",
+          "name": "read_conversation_context",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_6d40f44eb6ae4ddb93388d71",
+          "name": "read_conversation_context",
+          "arguments": "{\"item_ids\":[\"8cc50433-d1b7-49f6-85fe-029c6189b6ae:9:0:call_657413cb834945a1890d0874\",\"8cc50433-d1b7-49f6-85fe-029c6189b6ae:4:1:call_ac15edb756944557a662736c\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_96ae05928c104293b7dca0aa",
+          "name": "read_conversation_context",
+          "arguments": "{\"item_ids\":[\"8cc50433-d1b7-49f6-85fe-029c6189b6ae:2:0:call_74db156fdedf63fb43b7e22e\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_219f0e7cba7c4df28db4cfc6",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":4}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_160ad4c37d884530b3d92e0e",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":2,\"end_seconds\":4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_r1obu97kfhr5_1",
+          "name": "create_video",
+          "arguments": "{\"name\": \"probe\", \"shots\": [{\"snapshot_id\": \"f003dc6c-6878-5864-b2cd-890aae1a44a0\", \"view_id\": \"view-0\", \"element_id\": \"s0e0\", \"duration_seconds\": \"2\", \"narrative_mode\": \"mission\", \"narration\": \"LegitEvi turns peer-reviewed research into short videos where every claim is verifiable.\", \"narration_language\": \"en\", \"subtitle_text\": \"LegitEvi turns peer-reviewed research into short videos where every claim is verifiable.\"}], \"aspect\": \"16:9\"}",
+          "schema_valid": false,
+          "status": null
+        },
+        {
+          "id": "call_function_r9nyimc844fs_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 2}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_function_954h79m5ir00_1",
+          "name": "list_project_media",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_3rdl3pendgfy_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 2}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_function_48psgzqqtnsn_1",
+          "name": "get_narration_alignment",
+          "arguments": "{\"alignment_id\": \"72c80e2f-5190-4976-ad32-48872396d854\"}",
+          "schema_valid": true,
+          "status": "cancelled"
+        }
+      ],
+      "schema_valid": 20,
+      "native_calls": 21,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "get_narration_alignment",
+          "cancelled"
+        ]
+      ],
+      "edits": [
+        "create_video"
+      ],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 5,
+      "versions": [
+        {
+          "id": "72c80e2f-5190-4976-ad32-48872396d854",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "ac08e024d451a63294ae942b2da7ff7df976bc1f9504df29b8565925e5802ab4"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.063803,
+      "assistant": "作品版本已保存，但本轮后续处理未完成。当前保存内容仍保留。",
+      "failed": null,
+      "archive": "unified-website-v3-unified-first.json.gz"
+    },
+    {
+      "sample_id": "unified-website-v3",
+      "turn_id": "d069a824-1488-4f5f-9b9c-eb22a84ba428",
+      "provider": null,
+      "model": null,
+      "requests": 2,
+      "prompt_tokens": 14083,
+      "completion_tokens": 101,
+      "calls": [
+        {
+          "id": "call_01a1fce09214705fb6c09548",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":2}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_01a1fce0966873418b0eca8d",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\":2,\"start_seconds\":0}",
+          "schema_valid": true,
+          "status": "failed"
+        }
+      ],
+      "schema_valid": 2,
+      "native_calls": 2,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "preview_range",
+          "failed"
+        ],
+        [
+          "preview_range",
+          "failed"
+        ]
+      ],
+      "edits": [],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "72c80e2f-5190-4976-ad32-48872396d854",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "ac08e024d451a63294ae942b2da7ff7df976bc1f9504df29b8565925e5802ab4"
+        },
+        {
+          "id": "a1c86ff4-e1b3-4e9c-b2d0-265eb9582d54",
+          "version": 2,
+          "base_version_id": "72c80e2f-5190-4976-ad32-48872396d854",
+          "content_digest": "4a8fec0368515444bae1cd08267c6fded059df648d1033161b51e9089dffa8a6"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.12246499999999999,
+      "assistant": "这次调整没有完成，我没有保存新的分镜，也没有开始制作。我已停止重复尝试。请再发一次，我会重新尝试。",
+      "failed": null,
+      "archive": "unified-website-v3-bounded-current.json.gz"
+    },
+    {
+      "sample_id": "unified-website-v4",
+      "turn_id": "8d136a8d-a4dc-4281-9630-595ab3e58b50",
+      "provider": null,
+      "model": null,
+      "requests": 21,
+      "prompt_tokens": 405259,
+      "completion_tokens": 19196,
+      "calls": [
+        {
+          "id": "call_c4456fa850fe40c8be5296bd",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_urls\": [\"https://www.legitevi.com/en\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_84aa153e46ee40cfa6aad32f",
+          "name": "analyze_brand",
+          "arguments": "{\"brief\": {\"topic\": \"Building the Global Standard for Evidence-Backed Short-Form Media\", \"audience\": {\"value\": \"<item>scientists</item><item>creators/influencers</item><item>general public</item></audience><source>inferred</source></audience><tone><value><item>authoritative</item><item>trust-building</item><item>mission-driven</item></tone><source>inferred</source></tone><production_direction><value>官网宣传片：使命叙事 — 以「研究驱动影响力」的使命主张串联网页真实画面与原生文字\", \"source\": \"user-stated\", \"purpose\": {\"value\": \"官网宣传片\", \"source\": \"user-stated\"}, \"target_seconds\": {\"value\": 4, \"source\": \"user-stated\"}, \"narrative_mode\": {\"value\": \"使命叙事\", \"source\": \"user-stated\"}, \"narration_language\": {\"value\": \"English\", \"source\": \"user-stated\"}, \"subtitle_languages\": {\"value\": [\"en\"], \"source\": \"user-stated\"}, \"aspect\": {\"value\": \"16:9\", \"source\": \"user-stated\"}, \"voice_requirements\": {\"value\": [\"英文配音\"], \"source\": \"user-stated\"}, \"must_include\": {\"value\": [\"真实网页证据\", \"网页画面\", \"原生文字\", \"user-stated\", [{\"value\": \"只用真实网页证据、网页画面和原生文字\", \"source\": \"user-stated\"}, {\"value\": \"不要生成图片\", \"source\": \"user-stated\"}, {\"value\": \"不要生成配音（用原生文字/系统语音，不调用 TTS 生成素材）\", \"source\": \"user-stated\"}, {\"value\": \"不要正式导出\", \"source\": \"user-stated\"}]]}}}}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_b2ebde54c550414a8aff13c7",
+          "name": "create_video",
+          "arguments": "{\"name\":\"LegitEvi 官网宣传片初稿（4s / 16:9 / 使命叙事）\",\"aspect\":\"16:9\",\"shots\":[{\"snapshot_id\":\"e8a93f8c-9dde-57d6-bb42-f97541891c3e\",\"view_id\":\"view-0\",\"source_fit\":\"cover\",\"source_motion\":\"push\",\"duration_seconds\":\"1.5\"},{\"snapshot_id\":\"e8a93f8c-9dde-57d6-bb42-f97541891c3e\",\"view_id\":\"view-2\",\"source_fit\":\"cover\",\"source_motion\":\"push\",\"duration_seconds\":\"2.5\",\"text_preset\":\"title-lockup\",\"headline\":\"Citations should be as universal as hashtags.\",\"supporting_text\":\"LegitEvi: Where Research Powers Influence\",\"text_color\":\"#000000\",\"title_motion\":\"entrance\",\"narration\":\"LegitEvi: Where Research Powers Influence. Citations should be as universal as hashtags.\",\"narration_language\":\"en\"}]}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_83e890c143e248299874b01e",
+          "name": "create_video",
+          "arguments": "{\"aspect\":\"16:9\",\"name\":\"LegitEvi 官网宣传片初稿（4s / 16:9 / 使命叙事）\",\"shots\":[{\"duration_seconds\":\"1.5\",\"snapshot_id\":\"e8a93f8c-9dde-57d6-bb42-f97541891c3e\",\"source_fit\":\"cover\",\"source_motion\":\"push\",\"view_id\":\"view-0\"},{\"duration_seconds\":\"2.5\",\"snapshot_id\":\"e8a93f8c-9dde-57d6-bb42-f97541891c3e\",\"source_fit\":\"cover\",\"source_motion\":\"push\",\"text_preset\":\"title-lockup\",\"title_motion\":\"entrance\",\"view_id\":\"view-2\",\"headline\":\"Citations should be as universal as hashtags.\",\"supporting_text\":\"LegitEvi: Where Research Powers Influence\",\"text_color\":\"#000000\"}]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fcd63d3a72b29e751409",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fcd643b9722eacbf1222",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_ya3ppedum37h_1",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_targets\": [{\"snapshot_id\": \"e8a93f8c-9dde-57d6-bb42-f97541891c3e\", \"view_id\": \"view-3\"}, {\"snapshot_id\": \"e8a93f8c-9dde-57d6-bb42-f97541891c3e\", \"view_id\": \"view-2\"}]}",
+          "schema_valid": false,
+          "status": null
+        },
+        {
+          "id": "call_function_ydgp3i6iyi7f_1",
+          "name": "create_video",
+          "arguments": "{\"aspect\": \"16:9\", \"name\": \"LegitEvi 官网宣传片初稿（4s / 16:9 / 使命叙事）\", \"shots\": [{\"duration_seconds\": \"1.5\", \"snapshot_id\": \"e8a93f8c-9dde-57d6-bb42-f97541891c3e\", \"source_fit\": \"cover\", \"source_motion\": \"push\", \"view_id\": \"view-0\"}, {\"duration_seconds\": \"2.5\", \"snapshot_id\": \"e8a93f8c-9dde-57d6-bb42-f97541891c3e\", \"source_fit\": \"cover\", \"source_motion\": \"push\", \"text_preset\": \"subtitle\", \"title_motion\": \"entrance\", \"view_id\": \"view-2\", \"headline\": \"Citations should be as universal as hashtags.\", \"supporting_text\": \"LegitEvi: Where Research Powers Influence\", \"text_color\": \"#000000\"}]}",
+          "schema_valid": false,
+          "status": null
+        },
+        {
+          "id": "call_function_y8ny3id7xz8g_1",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clp_1a05733ed42e_00\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_vrjtss8cz0bb_1",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_00\", \"x\": 0, \"y\": -434.4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_vrjtss8cz0bb_2",
+          "name": "trim_clip",
+          "arguments": "{\"clip_id\": \"clp_1a05733ed42e_01\", \"start\": 1.2}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_c648268cc481650e931370c2",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_01\", \"x\": 0, \"y\": -442.4}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_d9dd5e8667dc5a124c4dc90f",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_995e41e30bea72ecb73c26d0",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_01\", \"x\": 0, \"y\": -442}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_521f15cecbe357a48e300cc5",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\": 4, \"start_seconds\": 0}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_6roxcga2q6rm_1",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_00\", \"x\": 0, \"y\": -484.4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_6roxcga2q6rm_2",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_01\", \"x\": 0, \"y\": -500}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_V524VTZUYGaMJL7ujCmWibzh",
+          "name": "scale",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_01\", \"value\": 0.62}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_JzaYilh6q7mtQN7bkSgbBH3R",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_bl8ygg1uqopo_1",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_fuimb0whbcvh_1",
+          "name": "scale",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_00\", \"value\": 0.5}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_function_k2ywyaar3yba_1",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clp_scene_2_source\"}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 20,
+      "native_calls": 22,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "create_video",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "scale",
+          "failed"
+        ]
+      ],
+      "edits": [
+        "create_video",
+        "translate",
+        "trim_clip",
+        "translate",
+        "scale"
+      ],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "4230cbee-2afd-43ef-8c81-dbb5a06c2818",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "7c218dc0272115b107d4e815a531a7615d8ed7461324160237e5d7aa99917352"
+        },
+        {
+          "id": "e520617b-2f93-4e6d-b8cf-5d84684dfe7f",
+          "version": 2,
+          "base_version_id": "4230cbee-2afd-43ef-8c81-dbb5a06c2818",
+          "content_digest": "5a40e008e6636f0282fa0f6f343a232a4223aa4394c7295f43e3d73e866512a7"
+        },
+        {
+          "id": "253a2da7-39bb-4be6-a8bb-32d153d72e56",
+          "version": 3,
+          "base_version_id": "e520617b-2f93-4e6d-b8cf-5d84684dfe7f",
+          "content_digest": "067e043782320bdc653fa96d0075b9d7745162dbf87b50ea856ae95e01fb8d18"
+        },
+        {
+          "id": "007e4f74-2c65-40f1-bfac-ddbf2f22781e",
+          "version": 4,
+          "base_version_id": "253a2da7-39bb-4be6-a8bb-32d153d72e56",
+          "content_digest": "31cc96deeb37c59528818b73d8e8ce86efbbb40f4418bab6ca6887c55fa24de5"
+        },
+        {
+          "id": "c1f533b2-f943-4c8a-bce9-83c3af4c9b43",
+          "version": 5,
+          "base_version_id": "007e4f74-2c65-40f1-bfac-ddbf2f22781e",
+          "content_digest": "9cd09855ac65ecba014f1523bc1f8ebe2e0ee5b6db7eac962c917370a8c1f0a8"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.072306,
+      "assistant": "作品版本已保存，但本轮后续处理未完成。当前保存内容仍保留。",
+      "failed": null,
+      "archive": "unified-website-v4-unified-first.json.gz"
+    },
+    {
+      "sample_id": "unified-website-v4",
+      "turn_id": "c23b7b04-58a5-4e1b-813e-d382c4c026cc",
+      "provider": null,
+      "model": null,
+      "requests": 11,
+      "prompt_tokens": 125127,
+      "completion_tokens": 2754,
+      "calls": [
+        {
+          "id": "call_044e24f56a68bfd8123cad9a",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_b907dcdc25edd90ed02164d6",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clp_scene_1_source\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_b907dcdc25edd90ed02164d7",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clp_scene_2_source\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_a2acc03c6819f2ccd577cd55",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_scene_1_source\", \"x\": 8, \"y\": 0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_e3d787e1876b025ee3c4559a",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_scene_2_source\", \"x\": 8, \"y\": 0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_14779e99db89838cf0829f51",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_scene_1_source\", \"x\": 8, \"y\": 0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_bfb7c090d364269f45ee6ccc",
+          "name": "read_conversation_context",
+          "arguments": "{\"item_ids\": [], \"cursor\": 0}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_e146e6541fca2ded14784bdd",
+          "name": "read_conversation_context",
+          "arguments": "{\"item_ids\": [\"c23b7b04-58a5-4e1b-813e-d382c4c026cc:4:0:call_14779e99db89838cf0829f51\", \"c23b7b04-58a5-4e1b-813e-d382c4c026cc:2:0:call_a2acc03c6819f2ccd577cd55\", \"8d136a8d-a4dc-4281-9630-595ab3e58b50:14:0:call_function_6roxcga2q6rm_1\", \"8d136a8d-a4dc-4281-9630-595ab3e58b50:12:0:call_995e41e30bea72ecb73c26d0\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_a345fb095ac0761d5ac94ad3",
+          "name": "read_conversation_context",
+          "arguments": "{\"item_ids\": [\"8d136a8d-a4dc-4281-9630-595ab3e58b50:18:0:call_function_fuimb0whbcvh_1\", \"8d136a8d-a4dc-4281-9630-595ab3e58b50:15:0:call_V524VTZUYGaMJL7ujCmWibzh\"]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_6467eb3abb0d056f540358ca",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_scene_1_source\", \"x\": 8, \"y\": 0}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_6467eb3abb0d056f540358cb",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_1a05733ed42e_00\", \"x\": 8, \"y\": -484.4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_pevCvQrQ7QauqK2kkd8wxHfS",
+          "name": "preview_range",
+          "arguments": "{\"kind\": \"range\", \"start_seconds\": 0, \"end_seconds\": 2}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 12,
+      "native_calls": 12,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ],
+        [
+          "translate",
+          "failed"
+        ]
+      ],
+      "edits": [
+        "translate"
+      ],
+      "identical_edit_requests": 2,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "4230cbee-2afd-43ef-8c81-dbb5a06c2818",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "7c218dc0272115b107d4e815a531a7615d8ed7461324160237e5d7aa99917352"
+        },
+        {
+          "id": "e520617b-2f93-4e6d-b8cf-5d84684dfe7f",
+          "version": 2,
+          "base_version_id": "4230cbee-2afd-43ef-8c81-dbb5a06c2818",
+          "content_digest": "5a40e008e6636f0282fa0f6f343a232a4223aa4394c7295f43e3d73e866512a7"
+        },
+        {
+          "id": "253a2da7-39bb-4be6-a8bb-32d153d72e56",
+          "version": 3,
+          "base_version_id": "e520617b-2f93-4e6d-b8cf-5d84684dfe7f",
+          "content_digest": "067e043782320bdc653fa96d0075b9d7745162dbf87b50ea856ae95e01fb8d18"
+        },
+        {
+          "id": "007e4f74-2c65-40f1-bfac-ddbf2f22781e",
+          "version": 4,
+          "base_version_id": "253a2da7-39bb-4be6-a8bb-32d153d72e56",
+          "content_digest": "31cc96deeb37c59528818b73d8e8ce86efbbb40f4418bab6ca6887c55fa24de5"
+        },
+        {
+          "id": "c1f533b2-f943-4c8a-bce9-83c3af4c9b43",
+          "version": 5,
+          "base_version_id": "007e4f74-2c65-40f1-bfac-ddbf2f22781e",
+          "content_digest": "9cd09855ac65ecba014f1523bc1f8ebe2e0ee5b6db7eac962c917370a8c1f0a8"
+        },
+        {
+          "id": "a64a9d22-d731-4848-833e-e0ed2f26c865",
+          "version": 6,
+          "base_version_id": "c1f533b2-f943-4c8a-bce9-83c3af4c9b43",
+          "content_digest": "127981838f81362f7953e6bf797a373b83cc804513c73c9257f95d83e6244d2a"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.092727,
+      "assistant": "已完成（未正式导出，仅保存版本 6 + 预览 0–2 秒）。\n\n实际改动：\n- 标题文字层 1.5–4 秒的片段（1.5–4 秒的对象，文本「Citations should be as universal as hashtags.」）：静态偏移 x 由 0 → 8，y 保持 -484.4，scale 1.0 不变，作用时段 1.5–4.0 秒。已保存为版本 第 6 版。\n\n预览结果（0–2 秒窗口，实际解码帧 0.0 / 0.733 / 1.467 / 1.5 / 1.733 / 1.967 秒）：画面为两段官网截图，0–1.5 秒是首页标题区，1.5 秒起切到 about-us 区块；标题文字在 1.5 秒后可见，位置较之前右移 8 像素，无裁切迹象。该窗口音频为静音（rms 0、peak 0），我没有听到任何声音。\n\n未完成的部分（工具限制）：两张网页画面层 0–1.5 秒的对象、1.5–4 秒的对象 的位置由关键帧驱动，静态 translate 被系统以「Keyframes control this property」拒绝（上一轮两次尝试同样被拒），因此背景网页画面本身无法做整体 8 像素右移；副标题层 2.7–4 秒的对象 同样带动画位置，也无法静态平移。若需要背景画面整体右移，我可以改用其他方式（如替换为静态图片层）再调整，请确认是否要那样处理。",
+      "failed": null,
+      "archive": "unified-website-v4-unified-first-edit.json.gz"
+    },
+    {
+      "sample_id": "unified-builtin-skill",
+      "turn_id": "f01b1a3e-b035-4be8-918b-d8e05c7325fb",
+      "provider": null,
+      "model": null,
+      "requests": 3,
+      "prompt_tokens": 21982,
+      "completion_tokens": 278,
+      "calls": [
+        {
+          "id": "call_6e6f79af30c7e860061fd97c",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_da8f76fd92c3dbae002b3ba1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 3}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 2,
+      "native_calls": 2,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [],
+      "edits": [],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "c8c33bac-2fe4-4fe8-aac1-43541d972bda",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "11e0348dddd896e4d9e0929ccc9567d477a0e92ee29c00816747354bc34243a3"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.021063,
+      "assistant": "已预览当前版本 0–3 秒，未做正式导出。\n\n- 版本：v1（第 1 版），作品「Build with evidence — 文字初稿」，共 1 个文字片段（0–3 秒的片段，轨道角色 title），0.0–3.0 秒。\n- 画面：纯黑底，白色文字 “Build with evidence.” 居中偏上，0 秒起从轻微模糊/偏小过渡到 1.47 秒附近的清晰状态，2.97 秒仍在画面中部，未见裁切或偏移。\n- 音轨：存在音频流但完全静音（RMS 0.0，integrated_loudness −70 LUFS），因此无可听内容可评价。\n- 采样帧只覆盖 0.0、1.47、2.97 秒三个时点，未解码的时点表现未验证。\n\n如需调整文字内容、时长或加入旁白，告诉我具体要求即可。",
+      "failed": null,
+      "archive": "unified-builtin-skill-current-preview.json.gz"
+    },
+    {
+      "sample_id": "unified-external-skill-v7",
+      "turn_id": "ffb2a426-84a0-4248-91d0-5223b120e69d",
+      "provider": null,
+      "model": null,
+      "requests": 10,
+      "prompt_tokens": 127131,
+      "completion_tokens": 1074,
+      "calls": [
+        {
+          "id": "call_5d355c81f7b542a486226a65",
+          "name": "list_skill_shots",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_a58d51260fb8488cb1cee9a5",
+          "name": "get_skill_preview",
+          "arguments": "{\"shot_id\": \"fixed-image\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_84901dd4a1224fd89e195c64",
+          "name": "read_skill_reference",
+          "arguments": "{\"path\": \"references/shots/effects/fixed-image.md\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_e50bb1d2ab9b4b72a6639bb3",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_targets\": [{\"snapshot_id\": \"b71622c0-b666-5091-b95f-e07b6be1d488\"}]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_c9aa89d37adc44d7a11d1156",
+          "name": "create_video",
+          "arguments": "{\"name\": \"fixed-image-2s\", \"aspect\": \"16:9\", \"shots\": [{\"snapshot_id\": \"b71622c0-b666-5091-b95f-e07b6be1d488\", \"source_fit\": \"contain\", \"skill_resource\": {\"resource_id\": \"fixed-image\"}}]}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_d05fbb3d05454d2b994fe133",
+          "name": "list_project_media",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_d3a61fd61dcb4cf7a2f9c441",
+          "name": "create_video",
+          "arguments": "{\"aspect\": \"16:9\", \"name\": \"fixed-image-2s\", \"shots\": [{\"skill_resource\": {\"resource_id\": \"fixed-image\"}}]}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_1f1120cf8b284a15a0478622",
+          "name": "create_video",
+          "arguments": "{\"aspect\": \"16:9\", \"name\": \"fixed-image-2s\", \"shots\": [{\"duration_seconds\": \"2\", \"skill_resource\": {\"resource_id\": \"fixed-image\"}}]}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_40cc76d7642a4b94b6eb320b",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_253652f72b66451e872c039d",
+          "name": "preview_range",
+          "arguments": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":2}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 10,
+      "native_calls": 10,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "create_video",
+          "failed"
+        ],
+        [
+          "create_video",
+          "failed"
+        ]
+      ],
+      "edits": [
+        "create_video"
+      ],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "4ff21e88-1994-49cb-9144-c00de8178ba1",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "ae11a9386ff31882cbd2da1bcd0818f296de422a3ceff8eba1098b943adf5579"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.019714,
+      "assistant": "已按 `scenario-fixed-image` 完成。\n\n**做法**\n- 读取技能镜头 `fixed-image`（`references/shots/effects/fixed-image.md`）及其真实预览 `gallery/media/effects/fixed-image.png`（digest `0ba272a…292957`），该镜头声明受控实现为 `demos/effects/fixed-image/FixedImage.tsx`、固定展示 2 秒。\n- 用技能受控 Generator 资源 `fixed-image`（composition `FixedImage`，声明时长 2.0 秒）创建作品 `fixed-image-2s`，画布 1920×1080（16:9），单一 Scene 时长 2 秒。\n\n**结果（版本 第 1 版，composition 14e90944…）**\n- 时间线 1 个 clip 0–2 秒的对象，0.0–2.0 秒，占满画布。\n- 预览窗口 0.0–2.0 秒，采样帧 0.0 / 0.966667 / 1.966667 秒：AgentVeil 落地页完整可见（\"STOP RISKY AI AGENT ACTIONS. NOT THE WORK.\" 标题、右侧环形图与标注），画面保持同一静态页面，仅有轻微像素差异（差分框约 62–1232 px × 0–720），符合\"固定图片\"语义。\n- 音轨存在但为静音（RMS 0，LUFS −70）。\n\n**未做**：按要求未正式导出，仅保存作品并预览。项目素材列表为空，图片来源为技能包内的受控快照 `b71622c0-b666-5091-b95f-e07b6be1d488`。",
+      "failed": null,
+      "archive": "unified-external-skill-v7-unified-first.json.gz"
+    },
+    {
+      "sample_id": "unified-draft-valid",
+      "turn_id": "5ca0ff89-3215-47b6-a326-39b0f239651b",
+      "provider": null,
+      "model": null,
+      "requests": 3,
+      "prompt_tokens": 26899,
+      "completion_tokens": 635,
+      "calls": [
+        {
+          "id": "call_01a1fb8cd27776558bf8aefc",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fb8cd291768eba526006",
+          "name": "preview_range",
+          "arguments": "{\"kind\":\"range\",\"start_seconds\":0,\"end_seconds\":3}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_sdb48qbkmmd5_1",
+          "name": "answer",
+          "arguments": "{\"pending_disposition\": \"answer\"}",
+          "schema_valid": true,
+          "status": null
+        }
+      ],
+      "schema_valid": 3,
+      "native_calls": 3,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [],
+      "edits": [],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "a5a20165-9917-4982-8120-29a96931dd59",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "537af12457f6ee3dc81a8bd50252acf49c577819805d4562c9867b73d47766e7"
+        }
+      ],
+      "outputs": [],
+      "usage_usd": 0.011606,
+      "assistant": "已恢复作品「Recovered work」并完成 0–3 秒预览，未做导出。\n\n当前版本 第 1 版（v1）：\n- 时间线：1 个视频镜头 0–3 秒的片段，track_main / scene_main，起止 0.0–3.0 秒，源为 960×960 方形视频（xy_2_15s.mp4，取前 3 秒）。\n- 取景：fit=contain，源画面完整落在画布内，source_clipped_px 各边均为 0；因画布 320×180 而源为方形，左右各留边 70 像素（canvas_borders_px left=70、right=70），上下无留边。\n- 画面内容：舞台上的 WFT 主题大屏与右侧讲台上的演讲者，1.466667 秒采样帧中文字与人物清晰完整。检测到 1 张人脸（canvas_bbox_px [230.65, 100.28, 234.46, 105.14]），face_fully_visible=true、扩边区域同样未被裁切，但扩边框不代表头发与肩部完整性。\n- 音频：成片含音频轨，整体电平 integrated_lufs −16.0、true peak −3.0 dBTP、无削波；我这边未获得可感知的声音播放，因此无法主观评价听感。\n\n关于画幅与取景方式、以及是否保留原声这两个选择仍未定，本次按你「恢复并预览」的要求保持现状（16:9 + contain，保留原声），作品已保存为可编辑版本。若想改，可选：改为 cover 铺满（会裁掉上下约 280 像素源内容）、改为 1:1 方形画幅（无留边无裁切）、或改为 9:16 竖屏。",
+      "failed": null,
+      "archive": "unified-draft-valid-unified-refresh.json.gz"
+    },
+    {
+      "sample_id": "unified-draft-invalid-v4",
+      "turn_id": "1fe92201-fa57-484f-b3bf-985ba222622c",
+      "provider": null,
+      "model": null,
+      "requests": 1,
+      "prompt_tokens": 1930,
+      "completion_tokens": 482,
+      "calls": [
+        {
+          "id": "call_55f51a02548d4dd0985f4080",
+          "name": "answer",
+          "arguments": "{\"pending_disposition\": \"none\"}",
+          "schema_valid": true,
+          "status": null
+        }
+      ],
+      "schema_valid": 1,
+      "native_calls": 1,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [],
+      "edits": [],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [],
+      "outputs": [],
+      "usage_usd": 0.000579,
+      "assistant": "我看到了这次草稿恢复的结果：原记录**没有被覆盖，仍完整保留**，但那份草稿版本本身是**无效的**——它缺少至少一条音轨和至少一个片段，所以无法直接续写或另存为新版本。\n\n按规则我不能把它当成空白项目重建，也不能擅自补写一条旧创作协议没写明的方向。因此当前需要你决定一件事：接下来这份视频要怎么处理。\n\n我先把观察到的情况列清楚，方便你判断：\n\n- **原记录**：保留原样，没有被删除，也没有被\"清理\"掉。\n- **无效草稿**：没有音轨/片段，仅是一份空的骨架，不能作为生产依据。\n- **可用素材**：这一轮没有新增任何素材文本或网页链接。\n- **Brief**：现有字段还是恢复出来的默认值，没有落到具体的选题、时长或叙事方式。\n\n请选一个方向，我再往下走：\n\n1. **重新补全这份草稿**——你告诉我选题、用途、时长、旁白语言等，我按新一版补齐音轨与片段结构（相当于修复原记录，不另起新作品）。\n2. **另建一个新作品**——需要你明确说一句\"另建\"，并给出新的选题和方向，我才会创建。\n3. **先只做方案讨论**——我把创意方向、脚本结构、字幕和画幅方案写出来给你审，你确认后再落成可运行的版本。\n\n如果你想最快推进，第 1 项最省事：只要回一句话讲清楚\"这条视频是讲什么的、给谁看、多长、用什么语言讲\"，其余细节我可以按行业常规补上并标注为我的推断，你再逐条改。",
+      "failed": null,
+      "archive": "unified-draft-invalid-v4-unified-first.json.gz"
+    },
+    {
+      "sample_id": "open-speech-after-facts",
+      "turn_id": "6eeaf546-ed50-4f24-930f-8f368810a150",
+      "provider": null,
+      "model": null,
+      "requests": 21,
+      "prompt_tokens": 264271,
+      "completion_tokens": 5677,
+      "calls": [
+        {
+          "id": "call_01a1fba2e80d767bb3039ce0",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fba2e82973c28bfb9174",
+          "name": "list_project_media",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fba2efa173f0b7f0fd54",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\":\"clip_1\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fba2efa173f0b7f0fd55",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":6}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_na1zhpiwx4px_1",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\": 12, \"start_seconds\": 6}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_t1ju88isr7q3_1",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\": 17, \"start_seconds\": 12}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_8swxyrome6yh_1",
+          "name": "move_clip",
+          "arguments": "{\"clip_id\": \"clip_2\", \"time\": 5}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_68e3bb81b3d2432ba8ee3d50",
+          "name": "move_clip",
+          "arguments": "{\"clip_id\": \"clip_3\", \"time\": 10}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fba3fa2d7046b0a91375",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_01a1fba3fec075079664140f",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":15}",
+          "schema_valid": false,
+          "status": null
+        },
+        {
+          "id": "call_01a1fba405cd765f95e94d1e",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":12}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_dvci3ceely6l_1",
+          "name": "preview_range",
+          "arguments": "{\"end_seconds\": 15, \"start_seconds\": 3}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_nscx6yzm9i6j_1",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clip_1\"}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_st3h6z8eu3qd_1",
+          "name": "scale",
+          "arguments": "{\"id\": \"obj_1\", \"value\": 1.216}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_st3h6z8eu3qd_2",
+          "name": "scale",
+          "arguments": "{\"id\": \"obj_2\", \"value\": 1.216}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_st3h6z8eu3qd_3",
+          "name": "scale",
+          "arguments": "{\"id\": \"obj_3\", \"value\": 1.216}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_7a0833bce649443594073d29",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 12}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_3an71mt5ikaq_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 3, \"end_seconds\": 15}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_pz5qeta5r7rh_1",
+          "name": "inspect_timeline",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_yqs9q53cd7wn_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 4.4, \"end_seconds\": 6.4}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_43eoe5aexjgm_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 9.2, \"end_seconds\": 10.8}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_cr8bjuprrr9d_1",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 13, \"end_seconds\": 15}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_zhxukgvb45qq_1",
+          "name": "export_video",
+          "arguments": "{}",
+          "schema_valid": true,
+          "status": "completed"
+        },
+        {
+          "id": "call_function_ku88g7vrj2gf_1",
+          "name": "review_video",
+          "arguments": "{\"output_id\": \"a1428d11-8a01-49a8-a7e6-a8f09dca639b\", \"requirements\": \"真实演讲素材，删除明显多余黑场、修正构图问题，保留有效讲话内容，不添加新素材\", \"refresh\": true}",
+          "schema_valid": true,
+          "status": null
+        }
+      ],
+      "schema_valid": 23,
+      "native_calls": 24,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [],
+      "edits": [
+        "move_clip",
+        "move_clip",
+        "scale",
+        "scale",
+        "scale"
+      ],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "8b6b9869-a4e8-46c1-a7be-8a0ecf863f09",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "1dfb05112c5c9cd25145ab46d84b91a43ae831aec273755ba00d2784cc4d4dcb"
+        },
+        {
+          "id": "f32c1cad-1658-41bf-b4a6-1666980ca740",
+          "version": 2,
+          "base_version_id": "8b6b9869-a4e8-46c1-a7be-8a0ecf863f09",
+          "content_digest": "e442c38ce73c34d90d6d0f3eb7479fdccac959020582e0ce21a9fc5e3f6330e7"
+        },
+        {
+          "id": "b03a5cd8-778b-4831-8c17-420dc3ce0467",
+          "version": 3,
+          "base_version_id": "f32c1cad-1658-41bf-b4a6-1666980ca740",
+          "content_digest": "64e1754a843462891ec63ecc1a84845a67e4484be2f044130dec497731e62714"
+        },
+        {
+          "id": "6a5f6b43-830c-48a8-a08a-cbfdd35bdecc",
+          "version": 4,
+          "base_version_id": "b03a5cd8-778b-4831-8c17-420dc3ce0467",
+          "content_digest": "d9852f4e1de7845a12f7c7eb453b34315f343dac63655cf0f2bc12e438274cda"
+        },
+        {
+          "id": "bdf8731a-1f18-47e7-b473-4b511dd9bb28",
+          "version": 5,
+          "base_version_id": "6a5f6b43-830c-48a8-a08a-cbfdd35bdecc",
+          "content_digest": "a9fe6418594ec25a125b6e461e799a96a3eef7071a06c311f0dfab8fc28da383"
+        },
+        {
+          "id": "c0a981c3-f3bd-49f1-b244-393e24dd013a",
+          "version": 6,
+          "base_version_id": "bdf8731a-1f18-47e7-b473-4b511dd9bb28",
+          "content_digest": "9ccdfa499c4f7316351b185430d27a27f2e0667ba62961154849f11312b8e23c"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "a1428d11-8a01-49a8-a7e6-a8f09dca639b",
+          "version_id": "c0a981c3-f3bd-49f1-b244-393e24dd013a",
+          "render_status": "completed",
+          "files": {
+            "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/29590dba-bb09-4c63-ae84-10f09c3372ed/a1428d11-8a01-49a8-a7e6-a8f09dca639b-12a134ff14c89915d9c47c326d4bee871894edd719bfc072ec8f043bd04542dd.mp4",
+            "video_sha256": "1aed593328b44b95d0ad546b2c578fefbf5340ece46e8fdd3af5e64972150cdf"
+          }
+        }
+      ],
+      "usage_usd": 0.043047,
+      "assistant": "作品版本已保存，但本轮后续处理未完成。当前保存内容仍保留。",
+      "failed": null,
+      "archive": "open-speech-after-facts-post-facts.json.gz"
+    },
+    {
+      "sample_id": "open-speech-after-facts",
+      "turn_id": "530d208f-9842-4b56-8696-3c18ec7da53e",
+      "provider": null,
+      "model": null,
+      "requests": 5,
+      "prompt_tokens": 33164,
+      "completion_tokens": 751,
+      "calls": [
+        {
+          "id": "call_01a1fce0931775008397ad6a",
+          "name": "deliver_video",
+          "arguments": "{\"output_id\":\"a1428d11-8a01-49a8-a7e6-a8f09dca639b\"}",
+          "schema_valid": true,
+          "status": "failed"
+        },
+        {
+          "id": "call_01a1fce098e577269999cdb3",
+          "name": "review_video",
+          "arguments": "{\"output_id\":\"a1428d11-8a01-49a8-a7e6-a8f09dca639b\",\"requirements\":\"交付此前已正式导出并审阅过的 MP4，不做修改、不重新导出。核对：时长 15.0 秒，分辨率 320×180，版本为 c0a981c3-f3bd-49f1-b244-393e24dd013a。\"}",
+          "schema_valid": true,
+          "status": null
+        },
+        {
+          "id": "call_01a1fce0b48277f3bfc753b5",
+          "name": "deliver_video",
+          "arguments": "{\"output_id\":\"a1428d11-8a01-49a8-a7e6-a8f09dca639b\"}",
+          "schema_valid": true,
+          "status": "completed"
+        }
+      ],
+      "schema_valid": 3,
+      "native_calls": 3,
+      "first_schema_valid": true,
+      "rejected_or_skipped": [
+        [
+          "deliver_video",
+          "failed"
+        ]
+      ],
+      "edits": [],
+      "identical_edit_requests": 0,
+      "repeat_preview_requests": 0,
+      "versions": [
+        {
+          "id": "8b6b9869-a4e8-46c1-a7be-8a0ecf863f09",
+          "version": 1,
+          "base_version_id": null,
+          "content_digest": "1dfb05112c5c9cd25145ab46d84b91a43ae831aec273755ba00d2784cc4d4dcb"
+        },
+        {
+          "id": "f32c1cad-1658-41bf-b4a6-1666980ca740",
+          "version": 2,
+          "base_version_id": "8b6b9869-a4e8-46c1-a7be-8a0ecf863f09",
+          "content_digest": "e442c38ce73c34d90d6d0f3eb7479fdccac959020582e0ce21a9fc5e3f6330e7"
+        },
+        {
+          "id": "b03a5cd8-778b-4831-8c17-420dc3ce0467",
+          "version": 3,
+          "base_version_id": "f32c1cad-1658-41bf-b4a6-1666980ca740",
+          "content_digest": "64e1754a843462891ec63ecc1a84845a67e4484be2f044130dec497731e62714"
+        },
+        {
+          "id": "6a5f6b43-830c-48a8-a08a-cbfdd35bdecc",
+          "version": 4,
+          "base_version_id": "b03a5cd8-778b-4831-8c17-420dc3ce0467",
+          "content_digest": "d9852f4e1de7845a12f7c7eb453b34315f343dac63655cf0f2bc12e438274cda"
+        },
+        {
+          "id": "bdf8731a-1f18-47e7-b473-4b511dd9bb28",
+          "version": 5,
+          "base_version_id": "6a5f6b43-830c-48a8-a08a-cbfdd35bdecc",
+          "content_digest": "a9fe6418594ec25a125b6e461e799a96a3eef7071a06c311f0dfab8fc28da383"
+        },
+        {
+          "id": "c0a981c3-f3bd-49f1-b244-393e24dd013a",
+          "version": 6,
+          "base_version_id": "bdf8731a-1f18-47e7-b473-4b511dd9bb28",
+          "content_digest": "9ccdfa499c4f7316351b185430d27a27f2e0667ba62961154849f11312b8e23c"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "a1428d11-8a01-49a8-a7e6-a8f09dca639b",
+          "version_id": "c0a981c3-f3bd-49f1-b244-393e24dd013a",
+          "render_status": "completed",
+          "files": {
+            "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/29590dba-bb09-4c63-ae84-10f09c3372ed/a1428d11-8a01-49a8-a7e6-a8f09dca639b-12a134ff14c89915d9c47c326d4bee871894edd719bfc072ec8f043bd04542dd.mp4",
+            "video_sha256": "1aed593328b44b95d0ad546b2c578fefbf5340ece46e8fdd3af5e64972150cdf"
+          }
+        }
+      ],
+      "usage_usd": 0.061985,
+      "assistant": "已交付，未做任何修改或重新导出。\n\n- 输出：Output `a1428d11-8a01-49a8-a7e6-a8f09dca639b`（MP4，H.264 + AAC，935,798 字节）\n- 版本：c0a981c3-f3bd-49f1-b244-393e24dd013a，15.0 秒，320×180\n- 审阅核对：解码 3 帧（2.5s / 7.5s / 12.5s）分属 clip_1/2/3，顺序与 5 秒窗口衔接一致，未见黑场、明显裁切或可读文字问题；音轨可正常解码（RMS -20.3 dBFS，峰值 -2.578 dBFS）\n- 未检查范围：帧与帧之间的运动与转场连续性未逐段解码，主观音质与音画同步未做判断",
+      "failed": null,
+      "archive": "open-speech-after-facts-deliver-current.json.gz"
+    }
+  ],
+  "isolated_environment_totals_including_debug_and_repeats": {
+    "usage": [
+      5506299,
+      164449,
+      0.9246139999999998
+    ],
+    "capture_credits": 85
+  },
+  "duplicate_outputs_for_version": 0,
+  "duplicate_capture_idempotency_keys": 0,
+  "duplicate_delivery_cards_in_same_opening": 0,
+  "open_speech_delivery_cards": [
+    {
+      "turn_id": "530d208f-9842-4b56-8696-3c18ec7da53e",
+      "outputs": "[\"a1428d11-8a01-49a8-a7e6-a8f09dca639b\"]"
+    },
+    {
+      "turn_id": "ff83a5f0-6dcb-44a5-bafb-66e272b12934",
+      "outputs": "[\"a1428d11-8a01-49a8-a7e6-a8f09dca639b\"]"
+    }
+  ],
+  "video_outputs_in_isolated_history": 5,
+  "version_facts": {
+    "unified-website-v4": [
+      {
+        "id": "4230cbee-2afd-43ef-8c81-dbb5a06c2818",
+        "version": 1,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      },
+      {
+        "id": "e520617b-2f93-4e6d-b8cf-5d84684dfe7f",
+        "version": 2,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      },
+      {
+        "id": "253a2da7-39bb-4be6-a8bb-32d153d72e56",
+        "version": 3,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      },
+      {
+        "id": "007e4f74-2c65-40f1-bfac-ddbf2f22781e",
+        "version": 4,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      },
+      {
+        "id": "c1f533b2-f943-4c8a-bce9-83c3af4c9b43",
+        "version": 5,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      },
+      {
+        "id": "a64a9d22-d731-4848-833e-e0ed2f26c865",
+        "version": 6,
+        "skill_provenance": null,
+        "speech_clips": [],
+        "brand_profile": {
+          "claims": [
+            {
+              "kind": "fact",
+              "text": "Scientists transform their papers into compelling short videos. Every claim is verifiable. Every video is backed by real research. Build influence with evidence you can prove.",
+              "line_ids": [
+                "line_0016"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "We provide AI-powered infrastructure that embeds evidence directly into short-form media — transforming peer-reviewed research into engaging, platform-ready content and enabling creators to back their claims with reputable, verifiable sources.",
+              "line_ids": [
+                "line_0041"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Every short video is created from research. AI transforms scientific papers into engaging content while preserving verifiable evidence.",
+              "line_ids": [
+                "line_0028"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Each short video links directly to its source paper. Viewers can verify every claim. Creators build influence with evidence they can prove.",
+              "line_ids": [
+                "line_0029"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Turn your research papers into short videos that reach millions. Your evidence becomes content, your science gains influence. Manage all your papers on our secure platform—upload, track, and take control of your scientific work.",
+              "line_ids": [
+                "line_0025"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Create short videos backed by real scientific papers. Every claim you make can be verified. Build credibility with evidence.",
+              "line_ids": [
+                "line_0026"
+              ]
+            },
+            {
+              "kind": "fact",
+              "text": "Watch short videos you can trust. Every video links back to research. See the evidence behind every claim.",
+              "line_ids": [
+                "line_0027"
+              ]
+            }
+          ],
+          "colors": [
+            {
+              "role": "primary",
+              "value": "#DC0000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0015",
+                "line_0056"
+              ]
+            },
+            {
+              "role": "text",
+              "value": "#000000",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0035"
+              ]
+            },
+            {
+              "role": "background",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "surface",
+              "value": "#F9F9F9",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0"
+              ]
+            },
+            {
+              "role": "accent",
+              "value": "#D88F8F",
+              "source": "visual",
+              "confidence": "inferred",
+              "source_refs": []
+            }
+          ],
+          "taglines": [
+            {
+              "text": "Building the Global Standard for Evidence-Backed Short-Form Media",
+              "line_ids": [
+                "line_0000"
+              ]
+            },
+            {
+              "text": "LegitEvi: Where Research Powers Influence",
+              "line_ids": [
+                "line_0015"
+              ]
+            },
+            {
+              "text": "Our vision is simple and transformative:",
+              "line_ids": [
+                "line_0023"
+              ]
+            },
+            {
+              "text": "Citations should be as universal as hashtags.",
+              "line_ids": [
+                "line_0024"
+              ]
+            }
+          ],
+          "unknowns": [
+            "无法仅凭像素或截图确认网站实际使用的 CSS 字体文件与具体字重。",
+            "无法确认 #DC0000 是否为品牌正式定义的 CSS 品牌色；该值仅由确定性像素测量得到。",
+            "无法从当前首屏截图确认移动端布局、动画、交互状态及辅助功能实现。",
+            "无法确认 AI 生成短视频的实际样片质量、引用呈现方式或用户验证流程。",
+            "无法确认目标用户的地域、年龄、机构规模及投放渠道。"
+          ],
+          "conflicts": [],
+          "typography": [
+            {
+              "source": "visual",
+              "weight": "标题为粗体，正文为常规或中等",
+              "candidate": "接近 Inter 的现代无衬线字体",
+              "confidence": "inferred",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0000",
+                "line_0016"
+              ]
+            }
+          ],
+          "positioning": "LegitEvi 是一个面向科研人员与内容创作者的 AI 平台，将论文证据转化为可验证、可追溯的短视频媒体。",
+          "source_refs": [
+            {
+              "digest": "5ceb0323b755ac11caea7396d784383ab8c84b347b7b0161828ac105856eadc5",
+              "line_ids": [
+                "line_0000",
+                "line_0001",
+                "line_0002",
+                "line_0003",
+                "line_0004",
+                "line_0005",
+                "line_0006",
+                "line_0007",
+                "line_0008",
+                "line_0009",
+                "line_0010",
+                "line_0011",
+                "line_0012",
+                "line_0013",
+                "line_0014",
+                "line_0015",
+                "line_0016",
+                "line_0017",
+                "line_0018",
+                "line_0019",
+                "line_0020",
+                "line_0021",
+                "line_0022",
+                "line_0023",
+                "line_0024",
+                "line_0025",
+                "line_0026",
+                "line_0027",
+                "line_0028",
+                "line_0029",
+                "line_0030",
+                "line_0031",
+                "line_0032",
+                "line_0033",
+                "line_0034",
+                "line_0035",
+                "line_0036",
+                "line_0037",
+                "line_0038",
+                "line_0039",
+                "line_0040",
+                "line_0041",
+                "line_0042",
+                "line_0043",
+                "line_0044",
+                "line_0045",
+                "line_0046",
+                "line_0047",
+                "line_0048",
+                "line_0049",
+                "line_0050",
+                "line_0051",
+                "line_0052",
+                "line_0053",
+                "line_0054",
+                "line_0055",
+                "line_0056",
+                "line_0057",
+                "line_0058",
+                "line_0059",
+                "line_0060",
+                "line_0061",
+                "line_0062",
+                "line_0063"
+              ],
+              "view_ids": [
+                "view-0"
+              ],
+              "snapshot_id": "e8a93f8c-9dde-57d6-bb42-f97541891c3e"
+            }
+          ],
+          "brand_assets": [
+            {
+              "ref": "画面左上方可见文字标志“Legit Evi”：其中“Legit”为黑色，“Evi”为红色；固定文本行将其记录为“Legit”与“Evi”两个独立文本行。",
+              "kind": "wordmark",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0035",
+                "line_0036"
+              ]
+            },
+            {
+              "ref": "右下角红色圆角悬浮按钮内可见白色对话气泡图标，与“Ask LegitEvi”文字同时出现。",
+              "kind": "icon",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0049"
+              ]
+            },
+            {
+              "ref": "首屏下部可见“Download on the App Store”和“Get it on Google Play”下载徽章，分别包含 Apple 标志和 Google Play 三角形标志。",
+              "kind": "other",
+              "source_refs": [
+                "snapshot:e8a93f8c-9dde-57d6-bb42-f97541891c3e",
+                "view:view-0",
+                "line_0058",
+                "line_0059"
+              ]
+            }
+          ],
+          "content_digest": "7ad8c474d03e0392345ece99f0aaa12a24d4258de018787ef2f3b69404ae1660",
+          "schema_version": 1,
+          "extractor_version": "website-brand-v1",
+          "creative_direction": {
+            "avoid": [
+              "避免缺乏证据暗示的夸张科研视觉效果。",
+              "避免与研究可追溯性冲突的装饰性或娱乐化表达。",
+              "避免未经证据指定具体 CSS 字体、字重或品牌色。",
+              "避免在短片中加入截图未展示的产品功能或效果。"
+            ],
+            "summary": "采用克制、科技可信的极简视觉方向，以大面积近白背景、黑色粗体信息层级和高纯度红色强调建立识别，围绕“研究—证据—影响”的品牌宣言组织内容。",
+            "provenance": "inferred",
+            "media_preferences": [
+              "优先使用白或近白背景、黑色正文与红色强调色。",
+              "采用居中的大型粗体标题和简洁段落层级。",
+              "使用学术证据、论文、引用关系或可验证内容作为核心视觉主题。",
+              "保持高留白、清晰边界和少量红色交互控件。"
+            ]
+          }
+        }
+      }
+    ],
+    "unified-external-skill-v7": [
+      {
+        "id": "4ff21e88-1994-49cb-9144-c00de8178ba1",
+        "version": 1,
+        "skill_provenance": {
+          "external_skill": {
+            "reads": [
+              {
+                "kind": "initial",
+                "path": "SKILL.md",
+                "digest": "95a8fc06f80d62d049f897e5e7fa34993f980c4eee6c6354f7ea80a17dd478d8",
+                "truncated": false
+              }
+            ],
+            "budget": {
+              "calls": 1,
+              "demo_files": 0,
+              "text_chars": 270,
+              "generations": 0,
+              "media_bytes": 0,
+              "media_files": 0
+            },
+            "policy": {
+              "mode": "adaptive",
+              "scene_count": null,
+              "duration_seconds": null,
+              "adaptation_bounds": [
+                "Keep the fixed image and declared two-second output."
+              ],
+              "generator_runtime": null
+            },
+            "skill_id": "d96a6b8f-d038-45b7-9fb9-e5c4e0e7b04f",
+            "source_uri": "https://example.invalid/scenario-fixed-image",
+            "source_hash": "1182b6ed9ad4d8c67070c85dc15d0a0512c9e01c074237324e75852aa4494f58",
+            "preview_checks": [],
+            "version_digest": "a67714487b6d759fcabae6c488c411ccaf9cb64394be97336c10a903a646b2cd",
+            "reference_paths": [
+              "SKILL.md"
+            ],
+            "source_revision": "agent-v1-unified-dynamic-composition",
+            "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc"
+          },
+          "skill_reference": {
+            "kind": "external",
+            "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc"
+          },
+          "skill_generator_resources": {
+            "clp_scene_1_skill": {
+              "resource_id": "fixed-image",
+              "skill_version_id": "9cc3ab41-c57b-4b8c-a783-c399bd23d2cc",
+              "declaration_digest": "68a6d5d67912a7bba8d5146c75f7c88fcd0d6c2f9e14b574cef7e376ab8f71fc"
+            }
+          }
+        },
+        "speech_clips": [],
+        "brand_profile": null
+      }
+    ],
+    "unified-builtin-skill": [
+      {
+        "id": "c8c33bac-2fe4-4fe8-aac1-43541d972bda",
+        "version": 1,
+        "skill_provenance": {
+          "skill_version": "1.0.0",
+          "skill_reference": {
+            "kind": "builtin",
+            "version": "1.0.0",
+            "skill_id": "text-animation"
+          }
+        },
+        "speech_clips": [],
+        "brand_profile": null
+      }
+    ]
+  },
+  "engineering": {
+    "api_core": "509 passed; three existing warnings",
+    "web": "44 files / 411 tests passed; tsc --noEmit and production build passed",
+    "renderer": "20 upload and component contract tests passed",
+    "browser": "Four real plays with readyState=4 and currentTime>0; historical URL preserved after refresh"
+  },
+  "boundary": "These are fix retests and recovery checks, not additional independent first-pass samples. Local app accounting is not a provider invoice."
+}

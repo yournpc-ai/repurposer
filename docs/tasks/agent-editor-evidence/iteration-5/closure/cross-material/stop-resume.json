@@ -1,0 +1,632 @@
+{
+  "user_text": "把结尾静态标题卡再延长 0.5 秒，复看后把新的正式 MP4 交付给我。",
+  "project_id": "e1709527-6a58-4157-95fd-12f30aa97373",
+  "stop": {
+    "status": 200,
+    "body": {
+      "accepted": true,
+      "turn_state": "retracted"
+    }
+  },
+  "before": {
+    "versions": [
+      "d797c07f-1fde-4124-bf83-4648b8c58168",
+      "30982c8d-3042-47f2-98d4-7db6fb4e39e0",
+      "79fb786c-92ac-4364-9c5b-9407f4b32988"
+    ],
+    "outputs": [
+      {
+        "id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+        "type": "video",
+        "render_status": "completed",
+        "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988",
+        "files": {
+          "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+          "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1"
+        },
+        "quality": {
+          "content_review": {
+            "file": {
+              "bytes": 282539,
+              "width": 320,
+              "height": 180,
+              "video_codec": "h264",
+              "audio_codecs": [
+                "aac"
+              ],
+              "video_frames": 188,
+              "video_seconds": 6.266666666666667
+            },
+            "scope": {
+              "audio_signal_checked": true,
+              "actual_output_decoded": true,
+              "static_frames_checked": true,
+              "audio_and_av_sync_checked": false,
+              "motion_reviewed_scene_ids": [],
+              "deterministic_output_checks": true,
+              "sampled_frame_signals_checked": true,
+              "motion_and_transitions_checked": false
+            },
+            "frames": [
+              {
+                "frame": 64,
+                "digest": "1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3",
+                "frame_id": "F01",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3.jpg",
+                "time_seconds": 2.1333333333333333
+              },
+              {
+                "frame": 158,
+                "digest": "065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70",
+                "frame_id": "F02",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70.jpg",
+                "time_seconds": 5.266666666666667
+              }
+            ],
+            "summary": "已依据本次实际解码帧检查标题画面与结尾卡：F01 中月亮标题画面完整可见，标题“Why the Moon changes shape”及说明文字均未出现裁切；F02 中结尾原文“Keep looking up.”完整、居中且清晰可读。确定性媒体检查未发现平黑帧或重复帧组。由于仅提供两个离散采样帧，无法据此完整判断所有中间帧及衔接瞬间；全流音轨检测为静音，但本次用户要求及保存版本未要求配乐或旁白。现有画面未发现需要返修的明显问题，可按当前 Output 交付正式 MP4。",
+            "findings": [],
+            "output_id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+            "at_seconds": null,
+            "limitations": [
+              "Findings are based on the listed decoded frames and their actual sampling coverage, not continuous motion playback.",
+              "No ordered per-Scene motion sequence was decoded; motion between samples and inter-Scene transitions were not checked.",
+              "Flat or repeated sampled frames are candidates for inspection, not proof of a defect; an intentional final reading hold is not by itself a defect.",
+              "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+              "RMS and peak dBFS are not BS.1770 integrated LUFS."
+            ],
+            "reviewed_at": "2026-11-20T20:25:00.478640+00:00",
+            "requirements": "保留月亮标题画面与结尾卡原文\"Keep looking up.\"；检查有无明显黑场、文字裁切或衔接问题；确认后交付正式 MP4",
+            "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1",
+            "composition_id": "05aa0836-9dce-4572-97d3-d600ce7724a7",
+            "content_digest": "e75b147c311cd2d2ae40db647e42d0d0212c85ee71530171a4c352314e0d46db",
+            "schema_version": 4,
+            "motion_sampling": null,
+            "motion_scene_id": null,
+            "execution_digest": "e5f1ff087d85f3072f460923fc498dead5f42d080a0b85e85e8c6da8ad52e0cc",
+            "media_inspection": {
+              "audio": {
+                "scope": "full_stream",
+                "present": true,
+                "samples": 139239,
+                "expected": true,
+                "rms_dbfs": -240.0,
+                "decode_ok": true,
+                "peak_dbfs": -240.0,
+                "sample_rate": 22050,
+                "integrated_lufs": null,
+                "duration_seconds": 6.314694,
+                "clipped_sample_ratio": 0.0
+              },
+              "issues": [
+                {
+                  "code": "AUDIO_SILENT",
+                  "observed": "The executed spec expects sound, but the full decoded audio stream is silent."
+                }
+              ],
+              "visual": {
+                "sampled_frames": 2,
+                "flat_frame_candidates": [],
+                "repeated_frame_groups": []
+              },
+              "checker_version": "output-checks-v1"
+            },
+            "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988"
+          }
+        },
+        "workflow_step_id": "6457711a-cb28-4879-bf3f-f0f6b56e3f05"
+      }
+    ],
+    "credits": [
+      {
+        "kind": "grant",
+        "amount": "1000",
+        "idempotency_key": "user:7c4b7be0-e068-4bed-82f4-685451d832bf:signup_grant"
+      },
+      {
+        "kind": "hold",
+        "amount": "-8",
+        "idempotency_key": "run:fa9215e3-e38e-42b4-bec3-5877ae4abae2:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-16",
+        "idempotency_key": "run:87857801-509e-481b-b4f9-38e0333cf999:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-13",
+        "idempotency_key": "run:3a6710a1-0fa4-49b4-9dfa-69c04c79b49e:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture"
+      }
+    ]
+  },
+  "stopped": {
+    "versions": [
+      "d797c07f-1fde-4124-bf83-4648b8c58168",
+      "30982c8d-3042-47f2-98d4-7db6fb4e39e0",
+      "79fb786c-92ac-4364-9c5b-9407f4b32988"
+    ],
+    "outputs": [
+      {
+        "id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+        "type": "video",
+        "render_status": "completed",
+        "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988",
+        "files": {
+          "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+          "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1"
+        },
+        "quality": {
+          "content_review": {
+            "file": {
+              "bytes": 282539,
+              "width": 320,
+              "height": 180,
+              "video_codec": "h264",
+              "audio_codecs": [
+                "aac"
+              ],
+              "video_frames": 188,
+              "video_seconds": 6.266666666666667
+            },
+            "scope": {
+              "audio_signal_checked": true,
+              "actual_output_decoded": true,
+              "static_frames_checked": true,
+              "audio_and_av_sync_checked": false,
+              "motion_reviewed_scene_ids": [],
+              "deterministic_output_checks": true,
+              "sampled_frame_signals_checked": true,
+              "motion_and_transitions_checked": false
+            },
+            "frames": [
+              {
+                "frame": 64,
+                "digest": "1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3",
+                "frame_id": "F01",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3.jpg",
+                "time_seconds": 2.1333333333333333
+              },
+              {
+                "frame": 158,
+                "digest": "065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70",
+                "frame_id": "F02",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70.jpg",
+                "time_seconds": 5.266666666666667
+              }
+            ],
+            "summary": "已依据本次实际解码帧检查标题画面与结尾卡：F01 中月亮标题画面完整可见，标题“Why the Moon changes shape”及说明文字均未出现裁切；F02 中结尾原文“Keep looking up.”完整、居中且清晰可读。确定性媒体检查未发现平黑帧或重复帧组。由于仅提供两个离散采样帧，无法据此完整判断所有中间帧及衔接瞬间；全流音轨检测为静音，但本次用户要求及保存版本未要求配乐或旁白。现有画面未发现需要返修的明显问题，可按当前 Output 交付正式 MP4。",
+            "findings": [],
+            "output_id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+            "at_seconds": null,
+            "limitations": [
+              "Findings are based on the listed decoded frames and their actual sampling coverage, not continuous motion playback.",
+              "No ordered per-Scene motion sequence was decoded; motion between samples and inter-Scene transitions were not checked.",
+              "Flat or repeated sampled frames are candidates for inspection, not proof of a defect; an intentional final reading hold is not by itself a defect.",
+              "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+              "RMS and peak dBFS are not BS.1770 integrated LUFS."
+            ],
+            "reviewed_at": "2026-11-20T20:25:00.478640+00:00",
+            "requirements": "保留月亮标题画面与结尾卡原文\"Keep looking up.\"；检查有无明显黑场、文字裁切或衔接问题；确认后交付正式 MP4",
+            "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1",
+            "composition_id": "05aa0836-9dce-4572-97d3-d600ce7724a7",
+            "content_digest": "e75b147c311cd2d2ae40db647e42d0d0212c85ee71530171a4c352314e0d46db",
+            "schema_version": 4,
+            "motion_sampling": null,
+            "motion_scene_id": null,
+            "execution_digest": "e5f1ff087d85f3072f460923fc498dead5f42d080a0b85e85e8c6da8ad52e0cc",
+            "media_inspection": {
+              "audio": {
+                "scope": "full_stream",
+                "present": true,
+                "samples": 139239,
+                "expected": true,
+                "rms_dbfs": -240.0,
+                "decode_ok": true,
+                "peak_dbfs": -240.0,
+                "sample_rate": 22050,
+                "integrated_lufs": null,
+                "duration_seconds": 6.314694,
+                "clipped_sample_ratio": 0.0
+              },
+              "issues": [
+                {
+                  "code": "AUDIO_SILENT",
+                  "observed": "The executed spec expects sound, but the full decoded audio stream is silent."
+                }
+              ],
+              "visual": {
+                "sampled_frames": 2,
+                "flat_frame_candidates": [],
+                "repeated_frame_groups": []
+              },
+              "checker_version": "output-checks-v1"
+            },
+            "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988"
+          }
+        },
+        "workflow_step_id": "6457711a-cb28-4879-bf3f-f0f6b56e3f05"
+      }
+    ],
+    "credits": [
+      {
+        "kind": "grant",
+        "amount": "1000",
+        "idempotency_key": "user:7c4b7be0-e068-4bed-82f4-685451d832bf:signup_grant"
+      },
+      {
+        "kind": "hold",
+        "amount": "-8",
+        "idempotency_key": "run:fa9215e3-e38e-42b4-bec3-5877ae4abae2:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-16",
+        "idempotency_key": "run:87857801-509e-481b-b4f9-38e0333cf999:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-13",
+        "idempotency_key": "run:3a6710a1-0fa4-49b4-9dfa-69c04c79b49e:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture"
+      }
+    ]
+  },
+  "finished": {
+    "versions": [
+      "d797c07f-1fde-4124-bf83-4648b8c58168",
+      "30982c8d-3042-47f2-98d4-7db6fb4e39e0",
+      "79fb786c-92ac-4364-9c5b-9407f4b32988",
+      "b77fa223-571f-465a-85d6-ce696e8582fa"
+    ],
+    "outputs": [
+      {
+        "id": "fe783ad8-abcf-4873-8b05-d10e9124f01c",
+        "type": "video",
+        "render_status": "completed",
+        "composition_version_id": "b77fa223-571f-465a-85d6-ce696e8582fa",
+        "files": {
+          "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/fe783ad8-abcf-4873-8b05-d10e9124f01c-016dfd7a99ff6a9deb285753d15c874cb06b5c3421c30ccd2a1e2b262765a374.mp4",
+          "video_sha256": "571b7cb76d0ce3d7829d82113dc5e03426a3494d640f6d9e51ae01a71e882d36"
+        },
+        "quality": {
+          "content_review": {
+            "file": {
+              "bytes": 303668,
+              "width": 320,
+              "height": 180,
+              "video_codec": "h264",
+              "audio_codecs": [
+                "aac"
+              ],
+              "video_frames": 203,
+              "video_seconds": 6.766666666666667
+            },
+            "scope": {
+              "audio_signal_checked": true,
+              "actual_output_decoded": true,
+              "static_frames_checked": true,
+              "audio_and_av_sync_checked": false,
+              "motion_reviewed_scene_ids": [],
+              "deterministic_output_checks": true,
+              "sampled_frame_signals_checked": true,
+              "motion_and_transitions_checked": false
+            },
+            "frames": [
+              {
+                "frame": 64,
+                "digest": "1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3",
+                "frame_id": "F01",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3.jpg",
+                "time_seconds": 2.1333333333333333
+              },
+              {
+                "frame": 165,
+                "digest": "065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70",
+                "frame_id": "F02",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70.jpg",
+                "time_seconds": 5.5
+              }
+            ],
+            "summary": "已依据本次实际解码帧检查指定 Output：F02 的静态结尾标题卡显示“Keep looking up.”，文字完整、清晰、无裁切或遮挡；保存版本中该标题卡持续 4.250–6.750 秒，共 2.500 秒，符合延长 0.5 秒后的版本配置。输出为 320×180、30fps、6.7667 秒的正式 H.264/AAC MP4，包含独立音轨且可正常解码。由于仅提供两个离散抽样帧，未据此判断连续播放过程或场景间转场。用户未要求音乐或声音，确定性检查发现的静音不作为本次要求的不符项。",
+            "findings": [],
+            "output_id": "fe783ad8-abcf-4873-8b05-d10e9124f01c",
+            "at_seconds": null,
+            "limitations": [
+              "Findings are based on the listed decoded frames and their actual sampling coverage, not continuous motion playback.",
+              "No ordered per-Scene motion sequence was decoded; motion between samples and inter-Scene transitions were not checked.",
+              "Flat or repeated sampled frames are candidates for inspection, not proof of a defect; an intentional final reading hold is not by itself a defect.",
+              "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+              "RMS and peak dBFS are not BS.1770 integrated LUFS."
+            ],
+            "reviewed_at": "2026-11-21T00:52:04.775521+00:00",
+            "requirements": "结尾静态标题卡延长0.5秒；复看后交付正式MP4",
+            "video_sha256": "571b7cb76d0ce3d7829d82113dc5e03426a3494d640f6d9e51ae01a71e882d36",
+            "composition_id": "05aa0836-9dce-4572-97d3-d600ce7724a7",
+            "content_digest": "4dc680067cd17c1575d7fcff4aed8416ee935aaf2524d89de1d8e5fe94172b75",
+            "schema_version": 4,
+            "motion_sampling": null,
+            "motion_scene_id": null,
+            "execution_digest": "b6b9eb2d06f891bcfcf1a3ae9bf241d9bb99e9b70dd1aa3d24e98abcbd2ce1a7",
+            "media_inspection": {
+              "audio": {
+                "scope": "full_stream",
+                "present": true,
+                "samples": 150528,
+                "expected": true,
+                "rms_dbfs": -240.0,
+                "decode_ok": true,
+                "peak_dbfs": -240.0,
+                "sample_rate": 22050,
+                "integrated_lufs": null,
+                "duration_seconds": 6.826667,
+                "clipped_sample_ratio": 0.0
+              },
+              "issues": [
+                {
+                  "code": "AUDIO_SILENT",
+                  "observed": "The executed spec expects sound, but the full decoded audio stream is silent."
+                }
+              ],
+              "visual": {
+                "sampled_frames": 2,
+                "flat_frame_candidates": [],
+                "repeated_frame_groups": []
+              },
+              "checker_version": "output-checks-v1"
+            },
+            "composition_version_id": "b77fa223-571f-465a-85d6-ce696e8582fa"
+          }
+        },
+        "workflow_step_id": "79278eab-dcdd-49fe-8fab-658001e2aa7d"
+      },
+      {
+        "id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+        "type": "video",
+        "render_status": "completed",
+        "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988",
+        "files": {
+          "video": "7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/e1709527-6a58-4157-95fd-12f30aa97373/c11346d6-674b-4263-8d1d-74ea90d1b811-e77318dcba6881f59073151712afec76207c3bb564108a8cc494be3a40867020.mp4",
+          "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1"
+        },
+        "quality": {
+          "content_review": {
+            "file": {
+              "bytes": 282539,
+              "width": 320,
+              "height": 180,
+              "video_codec": "h264",
+              "audio_codecs": [
+                "aac"
+              ],
+              "video_frames": 188,
+              "video_seconds": 6.266666666666667
+            },
+            "scope": {
+              "audio_signal_checked": true,
+              "actual_output_decoded": true,
+              "static_frames_checked": true,
+              "audio_and_av_sync_checked": false,
+              "motion_reviewed_scene_ids": [],
+              "deterministic_output_checks": true,
+              "sampled_frame_signals_checked": true,
+              "motion_and_transitions_checked": false
+            },
+            "frames": [
+              {
+                "frame": 64,
+                "digest": "1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3",
+                "frame_id": "F01",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/1ffdf1cbd8980edefaabc985f6e97a742ac559fd6b364bacee5bf0bc82a4aad3.jpg",
+                "time_seconds": 2.1333333333333333
+              },
+              {
+                "frame": 158,
+                "digest": "065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70",
+                "frame_id": "F02",
+                "scene_id": "scene_main",
+                "storage_key": "video-review/065ed023551e71e353abe84070e4c1b8abc98bec1e555431205a49bca5070c70.jpg",
+                "time_seconds": 5.266666666666667
+              }
+            ],
+            "summary": "已依据本次实际解码帧检查标题画面与结尾卡：F01 中月亮标题画面完整可见，标题“Why the Moon changes shape”及说明文字均未出现裁切；F02 中结尾原文“Keep looking up.”完整、居中且清晰可读。确定性媒体检查未发现平黑帧或重复帧组。由于仅提供两个离散采样帧，无法据此完整判断所有中间帧及衔接瞬间；全流音轨检测为静音，但本次用户要求及保存版本未要求配乐或旁白。现有画面未发现需要返修的明显问题，可按当前 Output 交付正式 MP4。",
+            "findings": [],
+            "output_id": "c11346d6-674b-4263-8d1d-74ea90d1b811",
+            "at_seconds": null,
+            "limitations": [
+              "Findings are based on the listed decoded frames and their actual sampling coverage, not continuous motion playback.",
+              "No ordered per-Scene motion sequence was decoded; motion between samples and inter-Scene transitions were not checked.",
+              "Flat or repeated sampled frames are candidates for inspection, not proof of a defect; an intentional final reading hold is not by itself a defect.",
+              "Audio stream presence and PCM levels are measured; perceived mix quality and audio-visual synchronization are not reviewed.",
+              "RMS and peak dBFS are not BS.1770 integrated LUFS."
+            ],
+            "reviewed_at": "2026-11-20T20:25:00.478640+00:00",
+            "requirements": "保留月亮标题画面与结尾卡原文\"Keep looking up.\"；检查有无明显黑场、文字裁切或衔接问题；确认后交付正式 MP4",
+            "video_sha256": "dd00228688da1b61e437847a85c769e64cdca4c98e62ca78e5329b14d3d3dcb1",
+            "composition_id": "05aa0836-9dce-4572-97d3-d600ce7724a7",
+            "content_digest": "e75b147c311cd2d2ae40db647e42d0d0212c85ee71530171a4c352314e0d46db",
+            "schema_version": 4,
+            "motion_sampling": null,
+            "motion_scene_id": null,
+            "execution_digest": "e5f1ff087d85f3072f460923fc498dead5f42d080a0b85e85e8c6da8ad52e0cc",
+            "media_inspection": {
+              "audio": {
+                "scope": "full_stream",
+                "present": true,
+                "samples": 139239,
+                "expected": true,
+                "rms_dbfs": -240.0,
+                "decode_ok": true,
+                "peak_dbfs": -240.0,
+                "sample_rate": 22050,
+                "integrated_lufs": null,
+                "duration_seconds": 6.314694,
+                "clipped_sample_ratio": 0.0
+              },
+              "issues": [
+                {
+                  "code": "AUDIO_SILENT",
+                  "observed": "The executed spec expects sound, but the full decoded audio stream is silent."
+                }
+              ],
+              "visual": {
+                "sampled_frames": 2,
+                "flat_frame_candidates": [],
+                "repeated_frame_groups": []
+              },
+              "checker_version": "output-checks-v1"
+            },
+            "composition_version_id": "79fb786c-92ac-4364-9c5b-9407f4b32988"
+          }
+        },
+        "workflow_step_id": "6457711a-cb28-4879-bf3f-f0f6b56e3f05"
+      }
+    ],
+    "credits": [
+      {
+        "kind": "grant",
+        "amount": "1000",
+        "idempotency_key": "user:7c4b7be0-e068-4bed-82f4-685451d832bf:signup_grant"
+      },
+      {
+        "kind": "hold",
+        "amount": "-8",
+        "idempotency_key": "run:fa9215e3-e38e-42b4-bec3-5877ae4abae2:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-8",
+        "idempotency_key": "step:500c090a-60ad-4ce8-9cac-d58c665ec3e0:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-16",
+        "idempotency_key": "run:87857801-509e-481b-b4f9-38e0333cf999:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-16",
+        "idempotency_key": "step:73a28172-25b2-45aa-b209-dce2621bcce5:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-13",
+        "idempotency_key": "run:3a6710a1-0fa4-49b4-9dfa-69c04c79b49e:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-13",
+        "idempotency_key": "step:8681cbfb-5c0a-45cc-acac-fc8c70563e0d:capture"
+      },
+      {
+        "kind": "hold",
+        "amount": "-14",
+        "idempotency_key": "run:7789de3e-f919-4df0-b8cc-802abe1d6feb:hold"
+      },
+      {
+        "kind": "release",
+        "amount": "14",
+        "idempotency_key": "step:3e6ad8a4-b732-4746-9ac0-ccaf9cf96f28:capture:hold-release"
+      },
+      {
+        "kind": "capture",
+        "amount": "-14",
+        "idempotency_key": "step:3e6ad8a4-b732-4746-9ac0-ccaf9cf96f28:capture"
+      }
+    ],
+    "usage": [
+      {
+        "prompt_tokens": 124825,
+        "completion_tokens": 1992,
+        "cost_usd": "0.019919",
+        "model": "MiniMax-M3.1-Flash"
+      },
+      {
+        "prompt_tokens": 60372,
+        "completion_tokens": 823,
+        "cost_usd": "0.00955",
+        "model": "MiniMax-M3.1-Flash"
+      }
+    ]
+  }
+}
