@@ -324,10 +324,7 @@ async def generate_media(turn, name, args, composition, version):
         if receipt.question and not receipt.answer:
             # The committed question belongs to a separate submission session.
             receipt = await turn.db.get(Message, receipt.id, populate_existing=True)
-            if hasattr(turn, "settled_pending"):
-                turn.outcome = (receipt, None, turn.settled_pending, [])
-            else:
-                turn.outcome = (receipt, None, [], turn.settled_question)
+            turn.outcome = (receipt, turn.settled_pending)
             return ToolObservation("Awaiting authorization.", stop_after_observation=True, awaiting_authorization=True)
     if turn.on_row_append and (receipt.intent.get("export_job") or receipt.intent.get("media_job")) and not receipt.intent.get("media_result"):
         await turn.on_row_append(receipt)

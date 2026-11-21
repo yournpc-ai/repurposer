@@ -73,7 +73,13 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
         user.settings = {"confirm_execution": "ask"}
         await db.commit()
         ask = await opening()
-        receipt = await submit(ask)
+        ask.db = db
+        ask.settled_pending = None
+        monkeypatch.setattr(editor_media, "current_call_id", lambda: "call-1")
+        observation = await editor_media.generate_media(ask, "generate_music", args, comp, version)
+        receipt, settled = ask.outcome
+        assert observation.awaiting_authorization and settled is None
+        await db.commit()
         assert receipt.question["kind"] == "question" and receipt.workflow_run_id is None
         decline, _ = await service.answer_question(db, owner, receipt.id, OptionAnswerRequest(kind="option", option_id="decline"))
         assert decline.intent["media_result"] == {"status": "declined"}
