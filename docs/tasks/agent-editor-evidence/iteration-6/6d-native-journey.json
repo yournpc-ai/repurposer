@@ -1,0 +1,836 @@
+{
+  "source": {
+    "synthetic": "6-second moving circle drawn with PIL and encoded with PyAV",
+    "sha256": "9e25144527cef8051e38663c81d79eaf8b2b572810b1abb2e85e277ad6606c79",
+    "user": "c99df217-02c0-473f-b946-834d08dbdffc",
+    "project": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+    "asset": "61b09859-5f95-45fa-ae80-1ec604cd8094"
+  },
+  "model": "MiniMax-M3.1-Flash",
+  "project_requests": 32,
+  "prompt_samples": [
+    {
+      "opening": "a175d4f2-73f7-4d1d-a625-0cb9e254670a",
+      "request_id": "23285097-d991-456f-9bf3-e1237aade83d",
+      "selected_project_evidence_fields": {
+        "project": {
+          "title": "6D 光球穿行",
+          "project_id": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+          "user_stated_constraints": []
+        },
+        "selected": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "composition_version_id": "425f8240-ab06-40e6-a4e8-9ad20645c2f3",
+          "content_digest": "a9ba57e08517fad5884a94727ac5b59972e6f5cda4740963cae09ebf0e8dee28"
+        },
+        "fixed_media": [
+          {
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "kind": "audio",
+            "duration_ticks": 257046,
+            "alignment": {
+              "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+              "status": "READY",
+              "text": "光球正沿着基准线缓缓向前。"
+            }
+          },
+          {
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "kind": "audio",
+            "duration_ticks": 540000,
+            "title": "柔和光球背景音乐"
+          }
+        ],
+        "delivery_scope": "Save the requested work and report any requested preview. Formal export is outside this request.",
+        "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+        "media_receipts_in_call_order": [
+          {
+            "peak": 0.48585158586502075,
+            "role": "narration",
+            "text": "光球正沿着基准线缓缓向前。",
+            "digest": "293f0f5ab6ebd860016dc158910672ea5b67ca472b35bdd9b59ca225e2cf08d5",
+            "status": "available",
+            "language": "zh",
+            "voice_id": "presenter_male",
+            "cache_hit": false,
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+            "analysis_digest": "ec83ba1147f2b48afd864f856f04336e0fe47214a738b36ce7b25fa5c5fa25d8",
+            "charged_credits": 3,
+            "duration_seconds": 2.8560625,
+            "reserved_credits": 0,
+            "added_to_composition": false
+          },
+          {
+            "peak": 0.097015380859375,
+            "role": "music",
+            "score": {
+              "bpm": {
+                "den": 1,
+                "num": 90
+              },
+              "style": "ambient"
+            },
+            "digest": "92c80a68c7390bdeced908e3dfe1bf6afa370367e52c8446ee150eb1193157c2",
+            "status": "available",
+            "music_id": "72ab4e47-959f-5fd0-95ed-63b0366fdb61",
+            "cache_hit": false,
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "analysis_digest": "82e9b181c849af8d1933b04537082dbed08e38a5bffd662d1f61285d03fb5bd1",
+            "charged_credits": 0,
+            "duration_seconds": 6.0,
+            "reserved_credits": 0,
+            "added_to_composition": false
+          }
+        ]
+      },
+      "offered_tools": [
+        "ask_user",
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "opening": "dd99d3fd-d7ec-484a-8c41-df5025530399",
+      "request_id": "3d7c390f-6c56-417c-80da-b02d00e98c28",
+      "selected_project_evidence_fields": {
+        "project": {
+          "title": "6D 光球穿行",
+          "project_id": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+          "user_stated_constraints": []
+        },
+        "selected": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "composition_version_id": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+          "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81"
+        },
+        "fixed_media": [
+          {
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "kind": "audio",
+            "duration_ticks": 257046,
+            "alignment": {
+              "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+              "status": "READY",
+              "text": "光球正沿着基准线缓缓向前。"
+            }
+          },
+          {
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "kind": "audio",
+            "duration_ticks": 540000,
+            "title": "柔和光球背景音乐"
+          }
+        ],
+        "delivery_scope": "Save the requested work and report any requested preview. Formal export is outside this request.",
+        "recently_edited_clips": [
+          {
+            "clip_id": "clp_63420657bbe65dbe8d04fe8b05d0e64a",
+            "object_id": "obj_63420657bbe65dbe8d04fe8b05d0e64a",
+            "kind": "audio",
+            "start_seconds": 0.0,
+            "end_seconds": 5.0
+          }
+        ]
+      },
+      "offered_tools": [
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "opening": "7153fc4f-542c-47b1-9a82-de17d2da0a4a",
+      "request_id": "9a44439e-e598-48f5-b384-3c70c65e4cd2",
+      "selected_project_evidence_fields": {
+        "project": {
+          "title": "6D 光球穿行",
+          "project_id": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+          "user_stated_constraints": []
+        },
+        "selected": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "composition_version_id": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+          "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81"
+        },
+        "fixed_media": [
+          {
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "kind": "audio",
+            "duration_ticks": 257046,
+            "alignment": {
+              "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+              "status": "READY",
+              "text": "光球正沿着基准线缓缓向前。"
+            }
+          },
+          {
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "kind": "audio",
+            "duration_ticks": 540000,
+            "title": "柔和光球背景音乐"
+          }
+        ]
+      },
+      "offered_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "opening": "615ed2b3-3e00-47c2-80cf-c2c5df5ba65a",
+      "request_id": "ee9173af-e3b4-4d1e-b64b-a73fc631732c",
+      "selected_project_evidence_fields": {
+        "project": {
+          "title": "6D 光球穿行",
+          "project_id": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+          "user_stated_constraints": []
+        },
+        "selected": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "composition_version_id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+          "content_digest": "9edb75ce0a1426e123a762cd3f0eae7e14dd2e80e5db21327386f1dcb359c16d"
+        },
+        "fixed_media": [
+          {
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "kind": "audio",
+            "duration_ticks": 257046,
+            "alignment": {
+              "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+              "status": "READY",
+              "text": "光球正沿着基准线缓缓向前。"
+            }
+          },
+          {
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "kind": "audio",
+            "duration_ticks": 540000,
+            "title": "柔和光球背景音乐"
+          }
+        ],
+        "recently_edited_clips": [
+          {
+            "clip_id": "clp_scene_1_source",
+            "object_id": "obj_scene_1_source",
+            "kind": "video",
+            "start_seconds": 0.0,
+            "end_seconds": 5.0
+          }
+        ],
+        "preceding_reviewed_delivery": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81",
+          "composition_version_id": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+          "output_id": "7cbf6789-079b-5052-9ae9-2d571ec558e3"
+        }
+      },
+      "offered_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "opening": "e6799248-e927-409b-bd9f-768ea71b54ca",
+      "request_id": "17ccdb90-5db9-40da-9187-d0743335a282",
+      "selected_project_evidence_fields": {
+        "project": {
+          "title": "6D 光球穿行",
+          "project_id": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+          "user_stated_constraints": []
+        },
+        "selected": {
+          "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+          "composition_version_id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+          "content_digest": "9edb75ce0a1426e123a762cd3f0eae7e14dd2e80e5db21327386f1dcb359c16d"
+        },
+        "fixed_media": [
+          {
+            "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+            "kind": "audio",
+            "duration_ticks": 257046,
+            "alignment": {
+              "alignment_id": "80c1abc4-b7d7-44bc-9338-b427f2a32180",
+              "status": "READY",
+              "text": "光球正沿着基准线缓缓向前。"
+            }
+          },
+          {
+            "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+            "kind": "audio",
+            "duration_ticks": 540000,
+            "title": "柔和光球背景音乐"
+          }
+        ]
+      },
+      "offered_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    }
+  ],
+  "turns": [
+    {
+      "opening": "a175d4f2-73f7-4d1d-a625-0cb9e254670a",
+      "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "state": "failed",
+      "provider_requests": 9,
+      "calls": [
+        {
+          "call_id": "call_01a1fe781de3753bac5511db",
+          "tool_name": "get_understanding",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_01a1fe787e51768788cd453f",
+          "tool_name": "get_asset",
+          "call_state": "completed",
+          "status": "completed",
+          "group_id": "101df566-ee42-4dc4-b263-c8d158a894e9",
+          "call_index": 0
+        },
+        {
+          "call_id": "call_01a1fe787e51768788cd4540",
+          "tool_name": "prepare_video_materials",
+          "call_state": "completed",
+          "status": "completed",
+          "group_id": "101df566-ee42-4dc4-b263-c8d158a894e9",
+          "call_index": 1
+        },
+        {
+          "call_id": "call-65fb71fc-bd95-423a-941e-eecd8deb7449",
+          "tool_name": "generate_voice",
+          "call_state": "completed",
+          "status": "completed",
+          "group_id": "28313e67-b028-4ac2-91d1-b6e7262f39bf",
+          "call_index": 0
+        },
+        {
+          "call_id": "call-e331791d-046d-4d1b-9cc0-ea69313ad475",
+          "tool_name": "generate_music",
+          "call_state": "completed",
+          "status": "completed",
+          "group_id": "28313e67-b028-4ac2-91d1-b6e7262f39bf",
+          "call_index": 1
+        },
+        {
+          "call_id": "call_01a1fe78e050700e90b42768",
+          "tool_name": "create_video",
+          "call_state": null,
+          "status": "failed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_01a1fe78e57f73029e34ab5a",
+          "tool_name": "get_narration_alignment",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_01a1fe78edce7032a16f19c6",
+          "tool_name": "annotate_narration",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_f7dae210f5944e93828c3504",
+          "tool_name": "create_video",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call-8bb30621-26e0-4ba9-b30e-8f0c0cab9d5e",
+          "tool_name": "inspect_timeline",
+          "call_state": null,
+          "status": "active",
+          "group_id": null,
+          "call_index": null
+        }
+      ],
+      "deliveries": []
+    },
+    {
+      "opening": "dd99d3fd-d7ec-484a-8c41-df5025530399",
+      "request": "请从刚才已保存的光球短片继续完成原要求。复用已经生成的旁白和配乐，检查两者都已插入，再预览实际画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "state": "settled",
+      "provider_requests": 5,
+      "calls": [
+        {
+          "call_id": "call_80c6460eac5e4d29abac13b0",
+          "tool_name": "inspect_timeline",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_4bc3c32153384e1887271e80",
+          "tool_name": "insert_audio",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_5e12701c29814f649beb674d",
+          "tool_name": "inspect_timeline",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_82e37bff62404ceaa63c4bfb",
+          "tool_name": "preview_range",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        }
+      ],
+      "deliveries": []
+    },
+    {
+      "opening": "7153fc4f-542c-47b1-9a82-de17d2da0a4a",
+      "request": "我确认刚才预览的第 2 版。请把这一版正式导出为 MP4，允许本次导出费用，请实际审看成片并交付给我。",
+      "state": "settled",
+      "provider_requests": 7,
+      "calls": [
+        {
+          "call_id": "chatcmpl-tool-8fb5390bb339b927",
+          "tool_name": "export_video",
+          "call_state": null,
+          "status": "failed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "chatcmpl-tool-a7efea3e977a4459",
+          "tool_name": "preview_range",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_function_2o05xoh5wbrv_1",
+          "tool_name": "export_video",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_function_2zedvs7ip1oe_1",
+          "tool_name": "deliver_video",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        }
+      ],
+      "deliveries": [
+        {
+          "output_refs": [
+            "7cbf6789-079b-5052-9ae9-2d571ec558e3"
+          ],
+          "reviewed_at": "2026-11-21T14:27:12.908398+00:00",
+          "video_sha256": "15437c784e648336a7bd21b0979511cd0225ea25cd900d406596305cd2f7bc08",
+          "reviewed_version": {
+            "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+            "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81",
+            "composition_version_id": "dfa9db0c-427d-4bf0-9154-6176daae8781"
+          },
+          "interaction_policy_version": "interaction_constitution.v2"
+        }
+      ]
+    },
+    {
+      "opening": "615ed2b3-3e00-47c2-80cf-c2c5df5ba65a",
+      "request": "我收到了上一版。请把背景里的光球画面稍微放大一些，保留原来的旁白、音乐和时长，预览修改处，先给我看这一版。",
+      "state": "settled",
+      "provider_requests": 4,
+      "calls": [
+        {
+          "call_id": "call-9905c4fb-556e-43ea-9cbc-2e5bc7309f3f",
+          "tool_name": "inspect_timeline",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call-3975b609-8496-4858-bb4b-15d4aa8defc5",
+          "tool_name": "scale",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_01a1fe819ff17166b28fcad0",
+          "tool_name": "preview_range",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        }
+      ],
+      "deliveries": []
+    },
+    {
+      "opening": "e6799248-e927-409b-bd9f-768ea71b54ca",
+      "request": "就用刚预览的放大版。请正式导出这一版 MP4，允许本次导出费用，审片后交付。",
+      "state": "settled",
+      "provider_requests": 7,
+      "calls": [
+        {
+          "call_id": "call_f74997b306274c9997dc4818",
+          "tool_name": "export_video",
+          "call_state": null,
+          "status": "failed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_f244ff38ba1c49e2946d3dd6",
+          "tool_name": "preview_range",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_function_los88uqkv5op_1",
+          "tool_name": "export_video",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        },
+        {
+          "call_id": "call_function_euf4xggekmil_1",
+          "tool_name": "deliver_video",
+          "call_state": null,
+          "status": "completed",
+          "group_id": null,
+          "call_index": null
+        }
+      ],
+      "deliveries": [
+        {
+          "output_refs": [
+            "4ae4fa5d-e0db-5de4-87c4-000db535720f"
+          ],
+          "reviewed_at": "2026-11-21T14:29:36.025108+00:00",
+          "video_sha256": "750b968af9821390b79dafb5234df738f91d89f6fe3f8451679cb1afd94467c7",
+          "reviewed_version": {
+            "composition_id": "a1785bc8-584c-4020-aafb-7278fd525e32",
+            "content_digest": "9edb75ce0a1426e123a762cd3f0eae7e14dd2e80e5db21327386f1dcb359c16d",
+            "composition_version_id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c"
+          },
+          "interaction_policy_version": "interaction_constitution.v2"
+        }
+      ]
+    }
+  ],
+  "jobs": [
+    {
+      "job": "1cd4bdc8-1e63-5e59-89fe-1941f2a55fe6",
+      "tool": "generate_voice",
+      "receipt": "77521d95-0720-4eb5-94dc-1c13b32bb90b",
+      "native_call_id": "call-65fb71fc-bd95-423a-941e-eecd8deb7449",
+      "state": "succeeded",
+      "attempts": 1,
+      "authorized": 3,
+      "result": {
+        "role": "narration",
+        "digest": "293f0f5ab6ebd860016dc158910672ea5b67ca472b35bdd9b59ca225e2cf08d5",
+        "status": "available",
+        "snapshot_id": "4d51cdad-c41c-5214-85ff-e424e8c2139d",
+        "charged_credits": 3,
+        "duration_seconds": 2.8560625,
+        "reserved_credits": 0
+      }
+    },
+    {
+      "job": "5f7b3f24-7f9c-5ce6-ac42-bfdcd6a114c5",
+      "tool": "generate_music",
+      "receipt": "d5db2811-8435-46e8-b615-77fbfdd10648",
+      "native_call_id": "call-e331791d-046d-4d1b-9cc0-ea69313ad475",
+      "state": "succeeded",
+      "attempts": 1,
+      "authorized": 0,
+      "result": {
+        "role": "music",
+        "digest": "92c80a68c7390bdeced908e3dfe1bf6afa370367e52c8446ee150eb1193157c2",
+        "status": "available",
+        "snapshot_id": "e7f84883-7cef-56db-9647-4a6a45e132b1",
+        "charged_credits": 0,
+        "duration_seconds": 6.0,
+        "reserved_credits": 0
+      }
+    },
+    {
+      "job": "7cbf6789-079b-5052-9ae9-2d571ec558e3",
+      "tool": "export_video",
+      "receipt": "955a1ab2-a80f-4a4f-9d80-7817f8feb877",
+      "native_call_id": "call_function_2o05xoh5wbrv_1",
+      "state": "succeeded",
+      "attempts": 1,
+      "authorized": 10,
+      "result": {
+        "role": "export",
+        "status": "available",
+        "output_id": "7cbf6789-079b-5052-9ae9-2d571ec558e3",
+        "charged_credits": 10,
+        "duration_seconds": 5.0,
+        "reserved_credits": 0,
+        "composition_version_id": "dfa9db0c-427d-4bf0-9154-6176daae8781"
+      }
+    },
+    {
+      "job": "4ae4fa5d-e0db-5de4-87c4-000db535720f",
+      "tool": "export_video",
+      "receipt": "08c66f41-fed9-40a9-9ea9-559db4bec732",
+      "native_call_id": "call_function_los88uqkv5op_1",
+      "state": "succeeded",
+      "attempts": 1,
+      "authorized": 10,
+      "result": {
+        "role": "export",
+        "status": "available",
+        "output_id": "4ae4fa5d-e0db-5de4-87c4-000db535720f",
+        "charged_credits": 10,
+        "duration_seconds": 5.0,
+        "reserved_credits": 0,
+        "composition_version_id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c"
+      }
+    }
+  ],
+  "versions": [
+    {
+      "version": 1,
+      "id": "425f8240-ab06-40e6-a4e8-9ad20645c2f3",
+      "content_digest": "a9ba57e08517fad5884a94727ac5b59972e6f5cda4740963cae09ebf0e8dee28"
+    },
+    {
+      "version": 2,
+      "id": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+      "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81"
+    },
+    {
+      "version": 3,
+      "id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+      "content_digest": "9edb75ce0a1426e123a762cd3f0eae7e14dd2e80e5db21327386f1dcb359c16d"
+    }
+  ],
+  "ledger": [
+    [
+      "grant",
+      1000,
+      1000
+    ],
+    [
+      "hold",
+      -3,
+      997
+    ],
+    [
+      "release",
+      3,
+      1000
+    ],
+    [
+      "capture",
+      -3,
+      997
+    ],
+    [
+      "hold",
+      -10,
+      987
+    ],
+    [
+      "release",
+      10,
+      997
+    ],
+    [
+      "capture",
+      -10,
+      987
+    ],
+    [
+      "hold",
+      -10,
+      977
+    ],
+    [
+      "release",
+      10,
+      987
+    ],
+    [
+      "capture",
+      -10,
+      977
+    ]
+  ],
+  "workflow_runs": 0,
+  "chrome": [
+    {
+      "id": "7cbf6789-079b-5052-9ae9-2d571ec558e3",
+      "version": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+      "play": [
+        {
+          "seconds": 0.162764,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.172485,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "15437c784e648336a7bd21b0979511cd0225ea25cd900d406596305cd2f7bc08",
+      "bytes": 310373,
+      "frames": 150
+    },
+    {
+      "id": "4ae4fa5d-e0db-5de4-87c4-000db535720f",
+      "version": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+      "play": [
+        {
+          "seconds": 0.167393,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.162082,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "750b968af9821390b79dafb5234df738f91d89f6fe3f8451679cb1afd94467c7",
+      "bytes": 360911,
+      "frames": 150
+    }
+  ],
+  "first_failure": "Opening 1 failed after the saved draft when local disk writes returned ENOSPC. Opening 2 continued from the saved Composition and existing media."
+}
