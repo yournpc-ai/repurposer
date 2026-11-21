@@ -15,11 +15,14 @@ from app.config import settings
 from app.pipeline import job_lease
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Composition, CompositionVersion, ExportJob, Message, Output, Project
+from app.models.tables import Asset, Composition, CompositionVersion, ExportJob, Message, Output, Project, SourceSnapshot
 from app.pipeline.rendering import _absolutize, _probe_artifacts
+from app.platform.project_context import lock_project_for_job
 from app.platform.billing import hold_export, settle_export
 from app.providers.storage import (
+    delete_file,
     exists,
+    matches_export_location,
     presign_upload,
     private_export_key,
     private_export_root,
@@ -33,6 +36,7 @@ log = logging.getLogger(__name__)
 
 
 async def enqueue_export(db, project, receipt, spec, credits):
+    await lock_project_for_job(db, project)
     version_id = UUID(spec["provenance"]["composition_version_id"])
     try:
         if version_id in settings.public_test_export_versions:
@@ -107,7 +111,7 @@ async def enqueue_export(db, project, receipt, spec, credits):
         .where(
             ExportJob.project_id == project.id,
             ExportJob.version_id == composition.current_version_id,
-            ExportJob.status.in_(("running", "queued")),
+            ExportJob.status.in_(("running", "queued", "unknown")),
         )
         .limit(1)
     ):
@@ -196,6 +200,7 @@ async def _finish(db, job, project, status, error=None, files=None):
         reserved=job.authorized_credits,
         charged=job.authorized_credits if success else 0,
     )
+    facts.update(charged_credits=job.authorized_credits if success else 0, reserved_credits=0)
     receipt.intent = {**receipt.intent, "media_result": facts}
     zh = (project.language or "").startswith("zh")
     receipt.content = (
@@ -213,16 +218,59 @@ async def cancel_export(db, project, job_id):
         .with_for_update()
         .execution_options(populate_existing=True)
     )
-    if job and job.status in {"queued", "running"}:
-        await _finish(
-            db,
-            job,
-            project,
-            "cancelled",
-            "MP4 导出已停止。"
-            if (project.language or "").startswith("zh")
-            else "MP4 export stopped.",
-        )
+    if not job or job.status not in {"queued", "running", "unknown"}:
+        return
+    receipt = await db.get(Message, job.receipt_id, with_for_update=True, populate_existing=True)
+    if receipt.intent.get("upload_started_by"):
+        if not receipt.intent.get("export_stopped"):
+            receipt.intent = {**receipt.intent, "export_stopped": True}
+            _unconfirmed_receipt(receipt, job, project)
+        return
+    await _finish(db, job, project, "cancelled", _stopped_text(project))
+
+
+def _stopped_text(project):
+    return "MP4 导出已停止。" if (project.language or "").startswith("zh") else "MP4 export stopped."
+
+
+def _unconfirmed_receipt(receipt, job, project):
+    stopped = receipt.intent.get("export_stopped", False)
+    zh = (project.language or "").startswith("zh")
+    explanation = "上传结果待核对，预占积分保留。" if zh else "Upload outcome pending. The reservation is held."
+    receipt.content = (_stopped_text(project) + " " if stopped else "") + explanation
+    receipt.intent = {**receipt.intent, "media_result": {
+        "role": "export", "status": "provider_unknown", "stop_requested": stopped,
+        "reserved_credits": job.authorized_credits, "charged_credits": None, "error": receipt.content,
+    }}
+
+
+async def _defer_upload_check(db, job, receipt, project):
+    job.claim_token = None
+    if receipt.intent.get("upload_checks", 0) >= MAX_ATTEMPTS:
+        job.status, job.lease_until = "unknown", None
+        _unconfirmed_receipt(receipt, job, project)
+        log.warning("Export upload needs reconciliation job=%s", job.id)
+    else:
+        job.status = "queued"
+        job.lease_until = func.clock_timestamp() + LEASE
+    await db.commit()
+
+
+async def _record_upload_observation(job_id, upload_id, outcome):
+    """Accept storage evidence about the single dispatched PUT, including after claim loss."""
+    async with AsyncSessionLocal() as db:
+        job = await db.get(ExportJob, job_id, with_for_update=True)
+        if job is None or job.status not in {"running", "queued", "unknown"}:
+            return
+        receipt = await db.get(Message, job.receipt_id, with_for_update=True)
+        if receipt.intent.get("upload_started_by") != upload_id or receipt.intent.get("upload_outcome"):
+            return
+        receipt.intent = {**receipt.intent, "upload_outcome": outcome}
+        if job.status == "unknown":
+            # One new, affirmative observation allows one more settlement attempt.
+            receipt.intent = {**receipt.intent, "upload_checks": MAX_ATTEMPTS - 1}
+            job.status, job.lease_until = "queued", None
+        await db.commit()
 
 
 async def claim_export(db):
@@ -243,7 +291,7 @@ async def claim_export(db):
         .join(Project, Project.id == ExportJob.project_id)
         .where(
             Project.user_id.not_in(owners),
-            (ExportJob.status == "queued")
+            ((ExportJob.status == "queued") & (ExportJob.lease_until.is_(None) | (ExportJob.lease_until <= func.now())))
             | ((ExportJob.status == "running") & (ExportJob.lease_until <= func.now())),
         )
         .order_by(ExportJob.created_at, ExportJob.id)
@@ -252,7 +300,14 @@ async def claim_export(db):
     )
     if job is None:
         return None
-    if job.attempt >= MAX_ATTEMPTS:
+    receipt = await db.get(Message, job.receipt_id, with_for_update=True)
+    if receipt.intent.get("upload_started_by"):
+        checks = receipt.intent.get("upload_checks", 0)
+        if checks >= MAX_ATTEMPTS:
+            await _defer_upload_check(db, job, receipt, await db.get(Project, job.project_id))
+            return None
+        receipt.intent = {**receipt.intent, "upload_checks": checks + 1}
+    elif job.attempt >= MAX_ATTEMPTS:
         await _finish(
             db,
             job,
@@ -277,7 +332,7 @@ async def _heartbeat(job_id, token):
     await job_lease.heartbeat(AsyncSessionLocal, ExportJob, job_id, token, LEASE)
 
 
-async def _announce(job_id, token, en, zh):
+async def _announce(job_id, token, en, zh, *, dispatch_upload=False):
     """A progress receipt is projected only while its executor still owns the row."""
     async with AsyncSessionLocal() as db:
         job = await db.scalar(select(ExportJob).where(*_authority(job_id, token)).with_for_update())
@@ -285,6 +340,12 @@ async def _announce(job_id, token, en, zh):
             return False
         project = await db.get(Project, job.project_id)
         receipt = await db.get(Message, job.receipt_id)
+        if dispatch_upload:
+            if receipt.intent.get("export_stopped") or receipt.intent.get("upload_started_by"):
+                return False
+            receipt.intent = {**receipt.intent, "upload_started_by": str(token)}
+        if receipt.intent.get("export_stopped"):
+            return True
         receipt.content = zh if (project.language or "").startswith("zh") else en
         await db.commit()
         return True
@@ -299,9 +360,12 @@ async def execute_export(job_id, token):
                 return
             project = await db.get(Project, job.project_id)
             receipt = await db.get(Message, job.receipt_id)
-            location = receipt.intent.get("export_location")
-            spec = _absolutize(copy.deepcopy(job.render_spec))
+            location = receipt.intent["export_location"]
+            upload_id = receipt.intent.get("upload_started_by")
+            upload_outcome = receipt.intent.get("upload_outcome")
+            spec = copy.deepcopy(job.render_spec)
         try:
+            spec = _absolutize(spec)
             public_key = f"{public_test_export_root()}{project.user_id}/{project.id}/{job_id}.mp4"
             if location == public_key and job.version_id in settings.public_test_export_versions:
                 key = public_key
@@ -310,7 +374,9 @@ async def execute_export(job_id, token):
                 if location and location != key:
                     raise ValueError("The authorized export destination is unavailable.")
                 await verify_private_export_storage()
-            if not await exists(key):
+            if not upload_id:
+                if await exists(key):
+                    raise ValueError("The export destination already exists before upload dispatch.")
                 put_url = await presign_upload(
                     key,
                     content_type="video/mp4",
@@ -339,22 +405,28 @@ async def execute_export(job_id, token):
                         root + "/prepare-export", json={"spec": spec, "render_id": str(job_id)}
                     )
                     response.raise_for_status()
-                    if response.json().get("ready") is not True:
+                    if response.json().get("ready") is not True or response.json().get("single_put") is not True:
                         raise ValueError("Renderer did not confirm the artifact")
                     if not await _announce(
-                        job_id, token, "Uploading the rendered MP4.", "正在上传成片。"
+                        job_id, token, "Uploading the rendered MP4.", "正在上传成片。", dispatch_upload=True
                     ):
                         return
-                    try:
-                        response = await client.post(root + "/upload", json=payload)
+                    upload_id = str(token)
+                    response = await client.post(root + "/upload", json=payload)
+                    if not response.is_success:
+                        code = response.json().get("code")
+                        if code in {"ARTIFACT_CACHE_MISS", "HTTP_400", "HTTP_401", "HTTP_403"}:
+                            await _record_upload_observation(job_id, upload_id, "rejected")
                         response.raise_for_status()
-                        if response.json().get("video") != key:
-                            raise ValueError("Unexpected renderer acknowledgement")
-                    except httpx.HTTPError:
-                        # An interrupted response or a competing conditional PUT can
-                        # leave the exact immutable artifact ready for verification.
-                        if not await exists(key):
-                            raise
+                    if response.json().get("video") != key:
+                        raise ValueError("Unexpected renderer acknowledgement")
+                    await _record_upload_observation(job_id, upload_id, "stored")
+            elif upload_id and not upload_outcome:
+                if not await exists(key):
+                    raise ValueError("Upload outcome pending")
+                await _record_upload_observation(job_id, upload_id, "stored")
+            if upload_outcome == "rejected":
+                raise ValueError("Renderer rejected the upload")
             if not await _announce(job_id, token, "Checking the uploaded MP4.", "正在校验成片。"):
                 return
             violations, digest = await _probe_artifacts(spec, key)
@@ -365,19 +437,77 @@ async def execute_export(job_id, token):
             log.warning("Video export %s failed (%s)", job_id, type(exc).__name__)
             files = None
         async with AsyncSessionLocal() as db:
+            # Stop and deletion acquire the project before the Job. Inserting an Output
+            # also takes a project key-share lock through its foreign key.
+            await db.scalar(select(Project.id).where(Project.id == project.id)
+                            .with_for_update(read=True, key_share=True))
             job = await db.scalar(
                 select(ExportJob).where(*_authority(job_id, token)).with_for_update()
             )
-            if job:
-                await _finish(
-                    db,
-                    job,
-                    project,
-                    "succeeded" if files else "failed",
-                    None if files else "The renderer could not deliver a verified MP4.",
-                    files,
-                )
-                await db.commit()
+            if job is None:
+                return
+            receipt = await db.get(Message, job.receipt_id, with_for_update=True)
+            if receipt.intent.get("upload_started_by") and not receipt.intent.get("upload_outcome"):
+                await _defer_upload_check(db, job, receipt, project)
+                return
+            if receipt.intent.get("export_stopped"):
+                if receipt.intent.get("upload_outcome") == "stored":
+                    # A durable positive observation survives a crash after DELETE. The
+                    # sole PUT has ended and this identity can never dispatch another.
+                    if not matches_export_location(location, project.user_id, project.id, job.id):
+                        await _defer_upload_check(db, job, receipt, project)
+                        return
+                    references = (
+                        select(Output.id).where((Output.id == job.id) | (Output.files["video"].astext == location)),
+                        select(SourceSnapshot.id).where(SourceSnapshot.storage_key == location),
+                        select(Asset.id).where(Asset.file_url == location),
+                    )
+                    for query in references:
+                        if await db.scalar(query.limit(1)):
+                            await _defer_upload_check(db, job, receipt, project)
+                            return
+                    try:
+                        await delete_file(location)
+                    except (BotoCoreError, ClientError, OSError):
+                        await _defer_upload_check(db, job, receipt, project)
+                        return
+                await _finish(db, job, project, "cancelled", _stopped_text(project))
+            else:
+                await _finish(db, job, project, "succeeded" if files else "failed",
+                              None if files else "The renderer could not deliver a verified MP4.", files)
+            await db.commit()
     finally:
         beat.cancel()
         await asyncio.gather(beat, return_exceptions=True)
+
+
+async def recheck_unknown_upload(job_id: UUID) -> bool:
+    """Reopen one read-only check after an operator observes new storage evidence."""
+    async with AsyncSessionLocal() as db:
+        job = await db.get(ExportJob, job_id, with_for_update=True)
+        if job is None or job.status != "unknown":
+            return False
+        receipt = await db.get(Message, job.receipt_id, with_for_update=True)
+        project = await db.get(Project, job.project_id)
+        key = receipt.intent.get("export_location")
+        if not receipt.intent.get("upload_started_by") or not matches_export_location(
+            key, project.user_id, project.id, job.id
+        ):
+            return False
+        outcome = receipt.intent.get("upload_outcome")
+        if outcome is None and not await exists(key):
+            return False
+        receipt.intent = {**receipt.intent, "upload_outcome": outcome or "stored",
+                          "upload_checks": MAX_ATTEMPTS - 1}
+        job.status, job.lease_until = "queued", None
+        await db.commit()
+        return True
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Check one unresolved export upload in object storage.")
+    parser.add_argument("--reconcile-upload", type=UUID, required=True)
+    queued = asyncio.run(recheck_unknown_upload(parser.parse_args().reconcile_upload))
+    print("Queued for settlement." if queued else "No change.")

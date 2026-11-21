@@ -3,12 +3,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Float, Integer, cast, delete, func, or_, select, update
+from sqlalchemy import Float, Integer, String, cast, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
+    AssetStatus,
     BulkDeleteRequest,
+    PublicationState,
     ChatOutputEntry,
     ProjectCreate,
     ProjectResponse,
@@ -22,6 +24,11 @@ from app.models.tables import (
     CompositionVersion,
     Conversation,
     ConversationUsage,
+    CreditTransaction,
+    ExportJob,
+    MediaJob,
+    NarrationAlignment,
+    SourceSnapshot,
     Message,
     Output,
     Persona,
@@ -38,9 +45,6 @@ from app.pipeline.outputs import (
     is_chat_video_output,
     output_to_response,
     workflow_step_to_response,
-)
-from app.platform.billing import (
-    release_run,
 )
 from app.platform.configs import get_config
 from app.platform.conversation_context import (
@@ -275,90 +279,105 @@ async def update_project(
     return project
 
 
-async def _delete_project_rows(db: DBDep, project: Project, user_id: UUID) -> None:
-    """The ONE deletion seat for a project (single + bulk doors share it).
-    Child rows go in FK-safe order, then the project; asset files are
-    unlinked individually since we need each file_url before deletion.
-    operations (journal, NO ACTION on both its FKs) and publications
-    (RESTRICT on output) must go BEFORE outputs; workflow_steps cascade
-    from runs, conversations/messages cascade from the project. The caller
-    owns the transaction boundary (no commit here)."""
-    project_id = UUID(str(project.id))
-    from app.models.tables import ExportJob
-    from app.pipeline.export_jobs import cancel_export
-    await db.execute(select(Project.id).where(Project.id == project_id).with_for_update())
-    for job_id in await db.scalars(select(ExportJob.id).where(ExportJob.project_id == project_id)):
-        await cancel_export(db, project, job_id)
-    await db.execute(delete(ExportJob).where(ExportJob.project_id == project_id))
-    result = await db.execute(select(Asset).where(Asset.project_id == project_id))
-    for asset in result.scalars().all():
-        await delete_file(asset.file_url)
+async def _jobs_settled(db, project_ids, user_id):
+    for model, ref_key in ((MediaJob, "media_job_id"), (ExportJob, "export_id")):
+        jobs = (await db.execute(
+            select(model, Message.intent).join(Message, Message.id == model.receipt_id)
+            .where(model.project_id.in_(project_ids)).order_by(model.id)
+        )).all()
+        if not jobs:
+            continue
+        if any(job.status not in {"succeeded", "failed", "cancelled"} for job, _ in jobs):
+            return False
+        reference = CreditTransaction.ref[ref_key].astext
+        totals = (await db.execute(
+            select(reference, CreditTransaction.kind, func.sum(CreditTransaction.amount))
+            .join(model, cast(model.id, String) == reference)
+            .where(model.project_id.in_(project_ids), CreditTransaction.user_id == user_id,
+                   CreditTransaction.kind.in_(("hold", "release", "capture")))
+            .group_by(reference, CreditTransaction.kind)
+        )).all()
+        amounts = {(key, kind): amount for key, kind, amount in totals}
+        for job, intent in jobs:
+            result = (intent or {}).get("media_result") or {}
+            expected = "available" if job.status == "succeeded" else job.status
+            if result.get("status") != expected:
+                return False
+            charged = job.authorized_credits if job.status == "succeeded" else 0
+            if model is MediaJob:
+                if result.get("reserved_credits") != 0 or result.get("charged_credits") is None:
+                    return False
+                charged = result["charged_credits"]
+            key = str(job.id)
+            if (amounts.get((key, "hold"), 0) != -job.authorized_credits
+                    or amounts.get((key, "release"), 0) != job.authorized_credits
+                    or amounts.get((key, "capture"), 0) != -charged):
+                return False
+    return True
 
-    await db.execute(delete(Publication).where(Publication.project_id == project_id))
-    await db.execute(delete(Output).where(Output.project_id == project_id))
-    # Credits (ADR-055): the ledger is append-only and outlives run rows, so
-    # release every un-settled hold BEFORE the cascade deletes the runs — a
-    # frozen hold would have no terminal left to settle at (orphan hold,
-    # BILLING §8). RUNNING runs stay with their in-flight worker: its
-    # finalize path settles from the ledger even after the row is gone.
-    run_ids = (
-        await db.execute(
-            select(WorkflowRun.id).where(
-                WorkflowRun.project_id == project_id,
-                WorkflowRun.status != WorkflowStatus.RUNNING,
-            )
-        )
-    ).scalars().all()
-    for rid in run_ids:
-        await release_run(db, user_id=user_id, run_id=rid)
-    await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id == project_id))
-    await db.execute(delete(Asset).where(Asset.project_id == project_id))
-    # conversation_usage is the conversation layer's COGS ledger (ADR-117
-    # D3): append-only, outlives the project — the column is nullable by
-    # design for project-less surfaces, so unhook, never delete.
-    await db.execute(
-        update(ConversationUsage)
-        .where(ConversationUsage.project_id == project_id)
-        .values(project_id=None)
+
+async def _delete_projects(db: AsyncSession, ids: list[UUID], user_id: UUID) -> None:
+    ids = sorted(set(ids))
+    owned = (await db.scalars(
+        select(Project.id).where(Project.id.in_(ids), Project.user_id == user_id)
+        .order_by(Project.id).with_for_update()
+    )).all()
+    if len(owned) != len(ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    run_ref = CreditTransaction.ref["run_id"].astext
+    busy = (
+        select(Asset.id).where(Asset.project_id.in_(ids), or_(
+            Asset.processing_status == AssetStatus.PROCESSING,
+            (Asset.processing_status == AssetStatus.PENDING) & Asset.processing_requested_at.is_not(None),
+        )),
+        select(NarrationAlignment.id).join(SourceSnapshot, SourceSnapshot.id == NarrationAlignment.audio_snapshot_id)
+        .where(SourceSnapshot.origin_project_id.in_(ids), NarrationAlignment.status.in_(("PENDING", "PROCESSING"))),
+        select(Publication.id).where(Publication.project_id.in_(ids),
+            Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING))),
+        select(WorkflowRun.id).join(CreditTransaction, run_ref == cast(WorkflowRun.id, String))
+        .where(WorkflowRun.project_id.in_(ids), CreditTransaction.user_id == user_id,
+               CreditTransaction.kind.in_(("hold", "release")))
+        .group_by(WorkflowRun.id).having(func.sum(CreditTransaction.amount) != 0),
+        select(WorkflowRun.id).where(WorkflowRun.project_id.in_(ids), WorkflowRun.status.in_(
+            (WorkflowStatus.PENDING, WorkflowStatus.RUNNING, WorkflowStatus.WAITING_HUMAN))),
     )
-    await db.delete(project)
+    conflict = ("该项目仍有正在执行或待核对费用的任务，暂时无法删除。"
+                if (current_ui_language() or "").startswith("zh")
+                else "This project has active work or unsettled charges. Try again after settlement.")
+    if not await _jobs_settled(db, ids, user_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, conflict)
+    for query in busy:
+        if await db.scalar(query.limit(1)):
+            raise HTTPException(status.HTTP_409_CONFLICT, conflict)
+
+    files = (await db.scalars(select(Asset.file_url).where(Asset.project_id.in_(ids)))).all()
+    await db.execute(delete(MediaJob).where(MediaJob.project_id.in_(ids)))
+    await db.execute(delete(ExportJob).where(ExportJob.project_id.in_(ids)))
+    await db.execute(delete(Publication).where(Publication.project_id.in_(ids)))
+    await db.execute(delete(Output).where(Output.project_id.in_(ids)))
+    await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id.in_(ids)))
+    await db.execute(delete(Asset).where(Asset.project_id.in_(ids)))
+    await db.execute(update(ConversationUsage).where(ConversationUsage.project_id.in_(ids)).values(project_id=None))
+    await db.execute(delete(Project).where(Project.id.in_(ids)))
+    await db.commit()
+    for key in files:
+        await delete_file(key)
+    for project_id in ids:
+        await delete_project_files(project_id, user_id)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
+    project_id: UUID, db: DBDep, current_user: User = Depends(get_current_user_required),
 ) -> None:
-    """Delete project and all associated assets."""
-    project = await get_project_for_user(
-        db, project_id, current_user.id
-    )
-    await _delete_project_rows(db, project, current_user.id)
-    await db.commit()
-
-    # Remove project upload directory after DB commit
-    await delete_project_files(project_id, current_user.id)
+    await _delete_projects(db, [project_id], current_user.id)
 
 
 @router.post("/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
 async def bulk_delete_projects(
-    request: BulkDeleteRequest,
-    db: DBDep,
-    current_user: User = Depends(get_current_user_required),
+    request: BulkDeleteRequest, db: DBDep, current_user: User = Depends(get_current_user_required),
 ) -> None:
-    """Delete a batch of projects (the grid's multi-select bar). Ownership
-    for every id is checked BEFORE a single row is touched — one unknown or
-    foreign id 404s the whole request, then one transaction deletes the
-    set (no silent partial passes)."""
-    projects = [
-        await get_project_for_user(db, pid, current_user.id) for pid in request.ids
-    ]
-    for project in projects:
-        await _delete_project_rows(db, project, current_user.id)
-    await db.commit()
-    for pid in request.ids:
-        await delete_project_files(pid, current_user.id)
+    await _delete_projects(db, request.ids, current_user.id)
 
 
 @router.get("/{project_id}/chat/outputs", response_model=list[ChatOutputEntry])

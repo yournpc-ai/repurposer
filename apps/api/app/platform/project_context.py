@@ -26,6 +26,16 @@ def persona_context_from_row(persona: Persona | None) -> PersonaContext | None:
     return PersonaContext.model_validate(persona)
 
 
+async def lock_project_for_job(db: AsyncSession, project: Project) -> None:
+    """Hold the project through admission. A concurrent delete owns the conflicting row lock."""
+    project_id = await db.scalar(
+        select(Project.id).where(Project.id == project.id, Project.user_id == project.user_id)
+        .with_for_update(read=True, key_share=True, skip_locked=True)
+    )
+    if project_id is None:
+        raise ValueError("The project is unavailable for new jobs.")
+
+
 async def get_project_for_user(
     db: AsyncSession,
     project_id: UUID,

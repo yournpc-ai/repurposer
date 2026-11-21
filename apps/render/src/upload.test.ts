@@ -84,6 +84,22 @@ test("a concurrent create-only upload keeps the first object", async () => {
   });
 });
 
+test("a conditional export PUT is issued once after a lost response, 503 or redirect", async () => {
+  for (const failure of ["socket", "503", "307"]) {
+    let attempts = 0;
+    await uploadServer(async (req, res) => {
+      assert.equal(req.headers["if-none-match"], "*");
+      for await (const _chunk of req) { /* consume the real body before failing */ }
+      attempts++;
+      if (failure === "socket") req.socket.destroy();
+      else res.writeHead(Number(failure), { location: "/other" }).end();
+    }, async (url, file) => {
+      await assert.rejects(uploadFile(url, file, "video/mp4", true), UploadError);
+      assert.equal(attempts, 1);
+    });
+  }
+});
+
 test("persistent service failures stop after four attempts and preserve the file", async () => {
   let attempts = 0;
   await uploadServer((req, res) => {

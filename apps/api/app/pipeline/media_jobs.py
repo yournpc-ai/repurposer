@@ -11,6 +11,7 @@ from app.pipeline import job_lease
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import PlanEstimate
 from app.models.tables import MediaJob, Message, Project, VideoNarration
+from app.platform.project_context import lock_project_for_job
 from app.platform.billing import credits_for_cost, estimate_usd_range, hold_media, settle_media
 from app.tools.video.narration import narration_billable_upper_bound, prepare_original_narration
 from app.tools.video.narration_store import NarrationOutcomeUnknown
@@ -70,6 +71,7 @@ async def _unit_credits(db, units):
 
 
 async def enqueue_media(db, project, receipt, params, credits):
+    await lock_project_for_job(db, project)
     kind = receipt.intent["tool"]
     await db.execute(text("select pg_advisory_xact_lock(66063001)"))
     active = select(MediaJob.id).where(
@@ -161,10 +163,10 @@ async def cancel_media(db, project, job_id):
     job = await db.scalar(
         select(MediaJob)
         .where(MediaJob.id == job_id, MediaJob.project_id == project.id)
-        .with_for_update()
+        .with_for_update().execution_options(populate_existing=True)
     )
     if job and job.status in ("running", "queued"):
-        receipt = await db.get(Message, job.receipt_id, with_for_update=True)
+        receipt = await db.get(Message, job.receipt_id, with_for_update=True, populate_existing=True)
         uncertain = receipt.intent.get("provider_started")
         await _terminal(
             db,

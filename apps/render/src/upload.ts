@@ -48,7 +48,9 @@ export async function uploadFile(url: string, filePath: string, contentType?: st
   const buffer = await fs.readFile(filePath);
   const deadline = performance.now() + TOTAL_TIMEOUT_MS;
   let lastError: UploadError | undefined;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  // The export worker reconciles the one conditional PUT by its immutable key.
+  const attempts = createOnly ? 1 : MAX_ATTEMPTS;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const remaining = Math.floor(deadline - performance.now());
     if (remaining <= 0) break;
     const dispatcher = dispatcherFor(url, ATTEMPT_TIMEOUT_MS);
@@ -57,6 +59,7 @@ export async function uploadFile(url: string, filePath: string, contentType?: st
     try {
       const resp = await fetch(url, {
         method: "PUT", body: buffer,
+        redirect: createOnly ? "error" : "follow",
         headers: { ...(contentType ? { "Content-Type": contentType } : {}),
           ...(createOnly ? { "If-None-Match": "*" } : {}) },
         dispatcher,
@@ -72,7 +75,7 @@ export async function uploadFile(url: string, filePath: string, contentType?: st
     } catch (error) {
       const code = uploadErrorCode(error);
       lastError = error instanceof UploadError ? error : new UploadError(code, { cause: error });
-      if (!(retryable || TRANSIENT_CODES.has(code)) || attempt === MAX_ATTEMPTS) {
+      if (!(retryable || TRANSIENT_CODES.has(code)) || attempt === attempts) {
         throw lastError;
       }
     } finally {

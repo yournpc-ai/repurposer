@@ -171,7 +171,7 @@ app.post(["/render", "/prepare-export", "/upload"], async (req, res) => {
       (outDir) => renderVideo(parsed.data, outDir, "video"),
     );
     if (prepareOnly) {
-      res.json({ ready: true });
+      res.json({ ready: true, single_put: true });
       return;
     }
     const video = outputs!.video!;
