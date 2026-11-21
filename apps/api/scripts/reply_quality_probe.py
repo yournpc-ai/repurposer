@@ -9,7 +9,7 @@
 Preflight（同 真实用户旅程）:
 - 活 API（JOURNEY_API_BASE，默认 127.0.0.1:8000——JOURNEY_API_BASE 同
    真实用户旅程 的环境变量名）;
-- dev worker 在跑（S-warm 的 fixture 视频要真 ASR + 真 warm + 真触发回合,
+- dev worker 在跑（S-processed 的 fixture 视频要真 ASR + 真 warm + 真触发回合,
   全程约 5-10 分钟——这不是卡顿，是真实链路）;
 - demo 桶可达（fixture 源 demo/uploads/demo_talk.mp4）。
 fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scenario/
@@ -23,20 +23,20 @@ fixture 纪律（memory: delete_project 毁共享 key 坑）: 源片先拷 scena
          风险加权序: en→zh / mixed→zh 先行, zh→zh / en→en 基线,
          zh→en / mixed→en 末位——事故①②活在 ZH 答复里）
 - S-adv  素材处理中建议: 传片即问「这个视频你有什么建议」(截图图1 同句)
-- S-warm 理解落地触发回合（主战场,对标 Pexo 图5 的编辑视角评述）
+- S-processed 理解落地触发回合（主战场,对标 Pexo 图5 的编辑视角评述）
 
 质量尺 v1（RUBRIC_VERSION 随尺变更递增——基线文件记录版本,跨版本 diff
 只比共有维度）:
   det（代码判,无偏锚）:
-  D1 time_anchors            [S-warm] 应答含素材内时间锚(1:18 / 第2分钟 类;
+  D1 time_anchors            [S-processed] 应答含素材内时间锚(1:18 / 第2分钟 类;
                               秒数区间与裸时长不算锚——正则分不开落点与规格)
   D2 menu_grounding          [all]    产物名命中菜单表（S-cap 期望 ≥3）且无
                               平台编造（echo 防编造律 ADR-060 的确定性镜像:
-  D3 prose_dock_consistency  [S-warm] 散文点名的产物 ⊆ suggestion 标签里的产物
+  D3 prose_dock_consistency  [S-processed] 散文点名的产物 ⊆ suggestion 标签里的产物
   judged（LLM judge,0/1/2 + 一句证据）:
-  J1 verdict_first           [S-adv,S-warm] 判定先行 + 带拒绝项
-  J2 editorial_facts         [S-adv,S-warm] 剪辑相关事实 vs 内容摘要
-  J3 negative_judgment       [S-warm] 明确说了哪段不值得留/不要怎么做
+  J1 verdict_first           [S-adv,S-processed] 判定先行 + 带拒绝项
+  J2 editorial_facts         [S-adv,S-processed] 剪辑相关事实 vs 内容摘要
+  J3 negative_judgment       [S-processed] 明确说了哪段不值得留/不要怎么做
   J4 single_next_step        [all]    收尾收敛到一个明确决策点(带选项卡的
                               回合 = 散文干净收进卡,卡即决策点)
   J5 direct_answer           [S-cap]  直接回答先行+接担忧+口语节奏+开放邀请收尾
@@ -141,33 +141,33 @@ PLATFORM_BAN = [
 
 DIMENSIONS: dict[str, dict] = {
     "D1": {
-        "name": "time_anchors", "kind": "det", "scenarios": {"S-warm"},
+        "name": "time_anchors", "kind": "det", "scenarios": {"S-processed"},
         "what": "应答含素材内时间锚（1:18 / 0-3秒 / 3.5–4.5秒 类）",
     },
     "D2": {
         "name": "menu_grounding", "kind": "det",
-        "scenarios": CAP_ALL | {"S-adv", "S-warm"},
+        "scenarios": CAP_ALL | {"S-adv", "S-processed"},
         "what": "产物名命中菜单表且无平台编造",
     },
     "D3": {
-        "name": "prose_dock_consistency", "kind": "det", "scenarios": {"S-warm"},
+        "name": "prose_dock_consistency", "kind": "det", "scenarios": {"S-processed"},
         "what": "散文点名的产物 ⊆ suggestion 标签里的产物",
     },
     "J1": {
-        "name": "verdict_first", "kind": "judged", "scenarios": {"S-adv", "S-warm"},
+        "name": "verdict_first", "kind": "judged", "scenarios": {"S-adv", "S-processed"},
         "what": "判定先行 + 带拒绝项（0=纯描述 1=有判定无拒绝项 2=判定+拒绝项）",
     },
     "J2": {
-        "name": "editorial_facts", "kind": "judged", "scenarios": {"S-adv", "S-warm"},
+        "name": "editorial_facts", "kind": "judged", "scenarios": {"S-adv", "S-processed"},
         "what": "剪辑相关事实 vs 内容摘要（0=纯摘要 1=混合 2=剪辑事实为主）",
     },
     "J3": {
-        "name": "negative_judgment", "kind": "judged", "scenarios": {"S-warm"},
+        "name": "negative_judgment", "kind": "judged", "scenarios": {"S-processed"},
         "what": "明确负向判断（0=无 1=隐含 2=明确+理由）",
     },
     "J4": {
         "name": "single_next_step", "kind": "judged",
-        "scenarios": {"S-cap", "S-adv", "S-warm"},
+        "scenarios": {"S-cap", "S-adv", "S-processed"},
         # v2 校准（基线实证）: 带选项卡的回合,选项卡本身就是那个决策点
         # (ADR-081)——问的是散文是否干净收进卡(无悬空引导句、无与选项竞争
         # 的第二问),不是「选项只能有一个」。
@@ -184,7 +184,7 @@ DIMENSIONS: dict[str, dict] = {
     },
     "J6": {
         "name": "semantic_roles", "kind": "judged",
-        "scenarios": CAP_ALL | {"S-adv", "S-warm"},
+        "scenarios": CAP_ALL | {"S-adv", "S-processed"},
         # v6 新增（批 D 事故①②仪表）：措辞质感的测量座——场景面只锁形态,
         # 推荐 vs 指令的角色判定归本维度（断言面分工,简报批 D 施工点 5）。
         "what": "语义角色守位——五对角色：推荐=一词可收尾的提议,非替用户拍板的指令；提问=邀请,非命令；默认值=可改的可见事实,非被迫之选；选项=可选可忽略,非已决定；观察=有据事实,非超出证据的断言（0=任一角色塌成禁态 1=边缘含混 2=出现的角色全部守位,未出现的角色不扣分）",
@@ -375,9 +375,9 @@ async def scenario_cap(ctx: Ctx, scenario: str) -> dict:
             "suggestions": [], "lang_cell": cell}
 
 
-async def scenario_adv_and_warm(ctx: Ctx, warm_timeout: float) -> list[dict]:
-    """S-adv + S-warm 共享一次真实处理周期: 传片(PENDING)即问 → 建议应答
-    (S-adv) → worker 真 ASR → 真 warm → 真触发回合 (S-warm)。"""
+async def scenario_adv_and_processed(ctx: Ctx) -> list[dict]:
+    """S-adv + S-processed 共享一次真实处理周期: 传片(PENDING)即问 → 建议应答
+    (S-adv) → worker 真 ASR → 真 warm → 真触发回合 (S-processed)。"""
     adv_prompt = "这个视频你有什么建议"
     pid = await ctx.new_project("rq-S-adv-warm")
     fixture_prefix = f"scenario/rq-{uuid.uuid4().hex[:8]}"
@@ -396,53 +396,13 @@ async def scenario_adv_and_warm(ctx: Ctx, warm_timeout: float) -> list[dict]:
             "reply": adv_reply, "suggestions": []}]
 
     await wait_asset_status(asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED})
-    # warm 只为处理成功的素材点火(S16 FAILED 先例: warm 永不触发)——失败则
-    # S-warm 直接标 skipped,不在 poll 上空等一个超时。
-    async with AsyncSessionLocal() as db:
-        from app.models.tables import Asset
-
-        asset_row = await db.get(Asset, uuid.UUID(asset_id))
-        final_status = (
-            asset_row.processing_status if asset_row is not None else None
-        )
-    if final_status != AssetStatus.COMPLETED:
-        out.append({"scenario": "S-warm", "user_prompt": "(trigger turn)",
-                    "reply": "", "suggestions": [],
-                    "skipped": f"asset processing ended {final_status} — "
-                    "the warm never fires for a failed asset"})
-        return out
-
-    # 触发回合 poll(trigger=understanding_warmed; 新会话至多一条,不必对
-    # ref)。pending plan 落桌 = 触发合法沉默(ADR-080 第二谓词)——那是可报告
-    # 的产品行为,不是 probe 故障: 标 skipped 记原因。
-    deadline = asyncio.get_event_loop().time() + warm_timeout
-    review = None
-    while asyncio.get_event_loop().time() < deadline:
-        for m in await ctx.messages(cid):
-            intent = m.get("intent") or {}
-            if (intent.get("type") == "trigger_review"
-                    and intent.get("trigger") == "understanding_warmed"):
-                review = m
-                break
-        if review is not None:
-            break
-        await asyncio.sleep(3)
-    if review is None:
-        plan = ((await ctx.conversation(pid)).json().get("pending_question")
-                or {})
-        reason = ("silenced: a plan docked (ADR-080 silence is product "
-                  "behavior)" if plan.get("kind") == "task_book"
-                  else f"timeout {warm_timeout}s (worker/warm/trigger chain?)")
-        out.append({"scenario": "S-warm", "user_prompt": "(trigger turn)",
-                    "reply": "", "suggestions": [], "skipped": reason})
-        return out
-    suggestions = [
-        o.get("label", "")
-        for o in ((review.get("question") or {}).get("options") or [])
-    ]
-    out.append({"scenario": "S-warm", "user_prompt": "(trigger turn)",
-                "reply": (review.get("content") or "").strip(),
-                "suggestions": suggestions})
+    prompt = "素材处理之后，你怎么看？请按真实片段给我剪辑建议。"
+    reviewed = await ctx.chat(pid, prompt)
+    reply = reviewed.get("assistant_message") or {}
+    out.append({"scenario": "S-processed", "user_prompt": prompt,
+                "reply": (reply.get("content") or "").strip(),
+                "suggestions": [option.get("label", "") for option in
+                                (reply.get("question") or {}).get("options", [])]})
     return out
 
 
@@ -548,8 +508,8 @@ def diff_baseline(name: str, captures: list[dict]) -> None:
 async def main() -> None:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--scenario",
-                        default=",".join([*CAP_VARIANTS, "S-adv", "S-warm"]),
-                        help="comma list (default: S-cap 语言矩阵全格 + S-adv + S-warm)")
+                        default=",".join([*CAP_VARIANTS, "S-adv", "S-processed"]),
+                        help="comma list (default: S-cap 语言矩阵全格 + S-adv + S-processed)")
     parser.add_argument("--save-baseline", metavar="NAME",
                         help="save this run as the named baseline")
     parser.add_argument("--diff", metavar="NAME",
@@ -558,8 +518,6 @@ async def main() -> None:
                         help="det half only (no LLM judge calls)")
     parser.add_argument("--keep", action="store_true",
                         help="keep the scenario projects (default: cleanup)")
-    parser.add_argument("--warm-timeout", type=float, default=480.0,
-                        help="S-warm trigger poll bound (seconds)")
     args = parser.parse_args()
 
     wanted = {s.strip() for s in args.scenario.split(",") if s.strip()}
@@ -577,13 +535,13 @@ async def main() -> None:
                 captures.append({"scenario": cap_id, "user_prompt": "",
                                  "reply": "", "suggestions": [],
                                  "error": f"{type(e).__name__}: {e}"})
-        if {"S-adv", "S-warm"} & wanted:
+        if {"S-adv", "S-processed"} & wanted:
             try:
-                for c in await scenario_adv_and_warm(ctx, args.warm_timeout):
+                for c in await scenario_adv_and_processed(ctx):
                     if c["scenario"] in wanted:
                         captures.append(c)
             except Exception as e:  # noqa: BLE001 — per-scenario isolation
-                for name in ("S-adv", "S-warm"):
+                for name in ("S-adv", "S-processed"):
                     if name in wanted and not any(
                         c["scenario"] == name for c in captures
                     ):

@@ -28,10 +28,6 @@ async def wait_asset_status(
         await asyncio.sleep(3)
 
 
-def is_plan_dock(msg: dict) -> bool:
-    return bool(msg.get("question")) and msg["question"].get("kind") == "task_book" and not msg.get("answer")
-
-
 import argparse
 
 
@@ -93,8 +89,8 @@ from app.models.tables import (  # noqa: E402
     User,
     UserSkill,
     Wallet,
-    WorkflowRun,
-    WorkflowStep,
+    ExportJob,
+    MediaJob,
     now_utc,
 )
 
@@ -104,7 +100,6 @@ from app.models.schemas import (  # noqa: E402
     AssetType,
     MaterialUnderstanding,
     RenderStatus,
-    WorkflowStatus,
 )
 
 
@@ -471,53 +466,42 @@ async def topup_wallet(user_id: uuid.UUID, amount: int = 200000) -> None:
         await db.commit()
 
 
-async def wait_run_terminal(run_id: str, timeout: float = 90.0) -> str:
-    """Poll a run to a terminal state (fixture runs fail fast at preprocess —
-    scenario/ bytes never exist). Stray-run retry loops must settle a
-    wrong-tool run before the next turn, or the active-run guard eats it."""
-    terminal = {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}
-    for _ in range(int(timeout / 2)):
+async def count_exports(pid: str) -> int:
+    async with AsyncSessionLocal() as db:
+        return await db.scalar(select(func.count()).select_from(ExportJob).where(
+            ExportJob.project_id == uuid.UUID(pid)
+        ))
+
+
+async def completed_job(ctx: Ctx, pid: str, turn: dict, tool: str):
+    """Observe the job of this opening. An exact outstanding quote goes through Chat."""
+    opening = uuid.UUID(turn["user_message"]["id"])
+    model = ExportJob if tool == "export_video" else MediaJob
+    deadline = asyncio.get_running_loop().time() + 900
+    answered = set()
+    while asyncio.get_running_loop().time() < deadline:
         async with AsyncSessionLocal() as db:
-            run = await db.get(WorkflowRun, uuid.UUID(run_id))
-            if run is not None and run.status in terminal:
-                return str(run.status)
+            owned_receipts = (
+                select(Message.id).join(Conversation)
+                .where(Conversation.project_id == uuid.UUID(pid), Conversation.user_id == ctx.user_id,
+                       Message.turn_id == opening, Message.intent["tool"].astext == tool)
+            )
+            job = (await db.scalars(select(model).where(
+                model.project_id == uuid.UUID(pid), model.receipt_id.in_(owned_receipts),
+            ))).one_or_none()
+            if job and job.status not in ("queued", "running"):
+                check(job.status == "succeeded" and job.attempt > 0,
+                      f"{tool} worker succeeded on the original opening", (job.id, job.status, job.attempt))
+                return job
+            quote_id = await db.scalar(owned_receipts.where(
+                Message.intent.has_key("media_permission"), Message.answer.is_(None),
+            ))
+        if quote_id and quote_id not in answered:
+            response = await ctx.answer(str(quote_id), {"kind": "option", "option_id": "approve"})
+            check(response.is_success, f"approve {tool} on its original message", response.status_code)
+            answered.add(quote_id)
         await asyncio.sleep(2)
-    return "TIMEOUT"
-
-
-async def count_runs(pid: str) -> int:
-    async with AsyncSessionLocal() as db:
-        rows = (
-            (
-                await db.execute(
-                    select(WorkflowRun.id).where(WorkflowRun.project_id == uuid.UUID(pid))
-                )
-            )
-            .all()
-        )
-        return len(rows)
-
-
-async def run_row(run_id: str) -> dict:
-    async with AsyncSessionLocal() as db:
-        run = await db.get(WorkflowRun, uuid.UUID(run_id))
-        check(run is not None, f"run {run_id} exists")
-        return {"status": str(run.status), "context": run.context or {}}
-
-
-async def step_rows(run_id: str) -> list[dict]:
-    async with AsyncSessionLocal() as db:
-        rows = (
-            await db.execute(
-                select(WorkflowStep)
-                .where(WorkflowStep.run_id == uuid.UUID(run_id))
-                .order_by(WorkflowStep.seq)
-            )
-        ).scalars().all()
-        return [
-            {"id": str(s.id), "kind": s.kind, "status": s.status, "spec": s.spec or {}, "error": s.error}
-            for s in rows
-        ]
+    raise JourneyFailure(f"{tool} for opening {opening} did not finish within 900s")
 
 
 async def outputs_of(pid: str, type_: str) -> list[Output]:
@@ -606,10 +590,7 @@ def check_stream_law(
             "content, or rode the interim_prose channel — ADR-104)",
             f"{concat[:120]!r} vs {content[:120]!r}",
         )
-    elif multi_round or (
-        not streamed and stream.completed and stream.completed.get("run_id")
-        and ((stream.completed.get("user_message") or {}).get("intent") or {}).get("video_confirmation")
-    ):
+    elif multi_round:
         check(
             bool(content.strip()),
             f"{label}: a zero-delta settled turn needs its final prose in the envelope",
@@ -647,32 +628,6 @@ def check_turn_stream_law(
             f"{label}: a TEXT ask's bare question appends at compose "
             "(blank-line join), never streamed",
             f"{''.join(stream.deltas)[:120]!r} vs {content[:120]!r}",
-        )
-        return
-    if question.get("kind") == "task_book":
-        streamed = "".join(stream.deltas).strip()
-        interim_prose_text = {c.strip() for c in stream.interim_prose_rows}
-        check(
-            not streamed
-            or content.startswith(streamed)
-            or streamed in interim_prose_text,
-            f"{label}: task_book turn's iteration-0 speech prefixes the "
-            "content or rode the interim_prose channel (ADR-104)",
-            f"{streamed[:120]!r} vs {content[:120]!r}",
-        )
-        notices = [
-            block.get("text") or "" for block in blocks or []
-            if block.get("kind") == "system_notice"
-        ]
-        check(
-            any(text.startswith(("（估价", "(Estimated", "(From", "(Credits")) for text in notices),
-            f"{label}: the estimate is a structured system block, never assistant prose",
-            {"content": content[-120:], "blocks": blocks},
-        )
-        check(
-            not content.strip().startswith(("（估价", "(Estimated", "(From", "(Credits")),
-            f"{label}: the assistant body excludes the system estimate",
-            content[-120:],
         )
         return
     check_stream_law(stream, content, label)
@@ -897,74 +852,11 @@ _INT_EXPLORATION_PROMPTS = (
 
 
 def check_dock_shape(msg: dict, label: str) -> None:
-    """dock 形态律（journey 公共断言——每个回合信封自动携带）：
-
-    - task_book 计划行自完备：链随 intent 列（非空）+ derived 列表；
-      estimate_credits 在场时良构——total = [low, high] 非负有
-      序、per_task 按任务序对齐（None ≡ 零报价），且 **Σ per_task ≡
-      total**（报价对账律，orchestrator 前缀编译差分三面同源）。
-    - 选项问结构律：1–5 选项（决断 ≤3 / 探索 ≤5 的分族节奏归 prompt
-      法条座位，journey 只守结构外界）/ label 非空 ≤40 / recommended_id
-      至多其一且指在 docked 选项上 / 载荷永不携带执行参数（负形 lint
-      ——shadow plan 是本档的定义性违界）。
-
-    default_path 恒在律不在此（ask 家族专属——trigger 建议 dock 是另
-    一族，归各旅程的场景级断言）。"""
+    """Check option identity, structure, and scope on persisted questions."""
     q = msg.get("question") or {}
     if not q:
         return
-    if q.get("kind") == "task_book":
-        tasks = ((msg.get("intent") or {}).get("tasks")) or []
-        check(
-            bool(tasks),
-            f"{label}: the plan dock self-carries the chain (intent column)",
-            msg.get("intent"),
-        )
-        check(
-            isinstance(q.get("derived"), list),
-            f"{label}: the plan dock's derived preview rides as a list",
-            q,
-        )
-        est = q.get("estimate_credits")
-        if est is not None:
-            total = est.get("total")
-            check(
-                isinstance(total, list)
-                and len(total) == 2
-                and all(isinstance(v, int) for v in total)
-                and 0 <= total[0] <= total[1],
-                f"{label}: estimate total is a non-negative ordered [low, high]",
-                est,
-            )
-            per_task = est.get("per_task")
-            if per_task is not None:
-                check(
-                    len(per_task) == len(tasks),
-                    f"{label}: per_task aligns with the task list by index",
-                    est,
-                )
-                lows = highs = 0
-                for entry in per_task:
-                    check(
-                        entry is None
-                        or (
-                            isinstance(entry, list)
-                            and len(entry) == 2
-                            and all(isinstance(v, int) for v in entry)
-                            and 0 <= entry[0] <= entry[1]
-                        ),
-                        f"{label}: each per_task entry is null or a [low, high] range",
-                        est,
-                    )
-                    if entry is not None:
-                        lows += entry[0]
-                        highs += entry[1]
-                check(
-                    (lows, highs) == (total[0], total[1]),
-                    f"{label}: Σ per_task ≡ total exactly (报价对账律)",
-                    est,
-                )
-    elif q.get("kind") == "question":
+    if q.get("kind") == "question":
         options = q.get("options") or []
         if options:
             check(
@@ -1025,22 +917,16 @@ def check_turn_stream_laws(stream: "StreamTurn", label: str) -> None:
     check_dock_shape(msg, label)
 
 
-async def wait_trigger_review(
-    ctx: Ctx, conversation_id: str, run_id: str, timeout: float = 90.0
-) -> dict | None:
-    """Poll the conversation for the run-completed trigger turn's review row
-    (ADR-077 判词③ T3): the pipeline fires the proactive turn fire-and-forget
-    at run terminal, and the agent's wrap_up persists an assistant row whose
-    intent dump is ``{type: "trigger_review", trigger, ref, suggestions}``.
-    Returns the message row, or None on timeout."""
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        for m in await ctx.messages(conversation_id):
-            intent = m.get("intent") or {}
-            if intent.get("type") == "trigger_review" and intent.get("ref") == run_id:
-                return m
+async def wait_delivery(ctx: Ctx, conversation_id: str, output: Output, timeout: float = 120.0) -> dict:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        for message in await ctx.messages(conversation_id):
+            intent = message.get("intent") or {}
+            if (intent.get("output_refs") == [str(output.id)]
+                    and (intent.get("reviewed_version") or {}).get("composition_version_id") == str(output.composition_version_id)):
+                return message
         await asyncio.sleep(2)
-    return None
+    raise JourneyFailure(f"no reviewed delivery for Output {output.id}")
 
 
 async def check_incremental_design_turn(ctx: Ctx, turn: dict, label: str) -> None:
@@ -1356,7 +1242,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
           "the real picker exposes the complete promo-video Skill", skills)
     skill_ref = promo["reference"]
 
-    # Copy-only message-first variant: a second arc without another paid Run.
+    # Copy-only message-first variant: a second arc without another authorized export.
     pid_copy = await ctx.new_project("builtin_promo_skill message-first copy promo")
     copy_text = "A practical course for clearer product launches. Join the next workshop."
     copy_turn = await ctx.chat(
@@ -1366,7 +1252,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         f"copy in order: {copy_text} Do not produce a video.",
         skill=skill_ref,
     )
-    check(copy_turn.get("run_id") is None and await count_runs(pid_copy) == 0,
+    check(await count_exports(pid_copy) == 0,
           "message-first first design starts no production", copy_turn)
     copy_read, _ = await ctx.acknowledge_video_presentation(
         copy_turn    )
@@ -1391,7 +1277,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
     copy_user = next(row for row in copy_history if row.get("role") == "user")
     check(copy_user.get("skill") == skill_ref,
           "the explicit Skill chip persists on the real user message", copy_user)
-    check(await count_runs(pid_copy) == 0,
+    check(await count_exports(pid_copy) == 0,
           "the complete message-first journey remains Run-free after its ACK", None)
 
     # Product-evidence mixed-material variant and the one real production.
@@ -1417,7 +1303,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         skill=skill_ref,
         mentions=mentions,
     )
-    check(first_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "the complete first product storyboard holds with zero Run", first_turn)
     first_read, _ = await ctx.acknowledge_video_presentation(
         first_turn    )
@@ -1449,7 +1335,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         "supplied product image with the next-step copy. Keep those same three real "
         "sources, no narration and no music. Save the storyboard only; do not produce.",
     )
-    check(redraft_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "the open structural redraft starts no production", redraft_turn)
     redraft_read, _ = await ctx.acknowledge_video_presentation(
         redraft_turn    )
@@ -1482,7 +1368,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         "choice, source and timing unchanged. Save one revised storyboard only; "
         "do not produce.",
     )
-    check(text_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "targeted text revision remains draft-only", text_turn)
     await ctx.acknowledge_video_presentation(text_turn)
     versions = await composition_versions_of(pid)
@@ -1498,7 +1384,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         "Music library so I can listen and compare them. Do not select or apply "
         "one, change the storyboard or produce a video in this turn.",
     )
-    check(music_search_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "BGM candidate presentation starts no production", music_search_turn)
     check(len(await composition_versions_of(pid)) == 3,
           "BGM candidate presentation creates no CompositionVersion", None)
@@ -1538,7 +1424,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         "from any sound-effect tracks. Use a real source window that fits the "
         "current work and save one revised storyboard only; do not produce.",
     )
-    check(music_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "ordinal Music selection/application remains draft-only", music_turn)
     await ctx.acknowledge_video_presentation(music_turn)
     versions = await composition_versions_of(pid)
@@ -1572,34 +1458,17 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
     # Production is born ONLY from this later explicit user message through Chat.
     production_request = "Produce this exact current storyboard now."
     produce_turn = await ctx.chat(pid, production_request)
-    run_id = produce_turn.get("run_id")
-    check(run_id is not None,
-          "the later explicit production message starts the ordinary authorized Run",
-          produce_turn)
-    check(len(await composition_versions_of(pid)) == 4,
-          "production does not redesign or add another draft version", None)
-    check(await count_runs(pid) == 1,
-          "the whole design/redraft/revision journey has exactly one paid Run", None)
-    run = await run_row(run_id)
-    run_context = run["context"]
-    check(run_context.get("version_ref") == {
+    job = await completed_job(ctx, pid, produce_turn, "export_video")
+    check(len(await composition_versions_of(pid)) == 4 and await count_exports(pid) == 1,
+          "export preserves all four versions and starts one ExportJob", job.id)
+    provenance = job.render_spec["provenance"]
+    check(job.version_id == versions[3].id and provenance == {
         "composition_id": str(composition_id),
         "composition_version_id": str(versions[3].id),
         "content_digest": versions[3].content_digest,
-    }, "the Run pins the exact reviewed v4, never current-by-implication", run_context)
-    production_user = produce_turn.get("user_message") or {}
-    check(run_context.get("video_authorized_by") == production_user.get("id"),
-          "the persisted authorization names the later explicit production message",
-          {"context": run_context, "user": production_user})
-
-    final = await wait_run_terminal(run_id, timeout=900.0)
-    check(final == "completed", "the sole promo production Run completes", final)
-    steps = await step_rows(run_id)
-    produce_step = next((step for step in steps if step["kind"] == "produce_video"), None)
-    check(produce_step is not None and produce_step["status"] == "done",
-          "the Chat-born produce_video step completes", steps)
+    }, "the authorized export pins the reviewed v4", provenance)
     video_outputs = await outputs_of(pid, "video")
-    check(len(video_outputs) == 1, "one paid Run lands exactly one video Output", None)
+    check(len(video_outputs) == 1, "one authorized export lands exactly one video Output", None)
     output = video_outputs[0]
     check(output.render_status == RenderStatus.COMPLETED
           and bool((output.files or {}).get("video"))
@@ -1607,21 +1476,12 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
           and output.composition_version_id == versions[3].id,
           "the delivered Output is complete and pins the authorized v4",
           {"render_status": str(output.render_status), "files": output.files})
-    check((output.render_spec or {}).get("provenance") == run_context.get("version_ref"),
-          "Output and Run carry the same immutable version provenance", output.render_spec)
+    check((output.render_spec or {}).get("provenance") == provenance,
+          "Output and ExportJob carry the same immutable version provenance", output.render_spec)
 
-    delivery = await wait_trigger_review(
-        ctx, produce_turn["conversation_id"], run_id, timeout=120.0
-    )
-    check(delivery is not None, "the real run-completed delivery arrives", None)
-    delivery_intent = delivery.get("intent") or {}
-    check(delivery.get("workflow_run_id") == run_id
-          and delivery_intent.get("type") == "trigger_review"
-          and delivery_intent.get("trigger") == "run_completed"
-          and delivery_intent.get("output_refs") == [str(output.id)],
-          "this delivery message alone owns its exact Output ref", delivery)
+    delivery = await wait_delivery(ctx, produce_turn["conversation_id"], output)
+    check(output.id == job.id, "the committed Output belongs to this export", output.id)
 
-    # A refresh/history read preserves the same ownership; no Run-neighbour fallback.
     refreshed = await ctx.messages(produce_turn["conversation_id"])
     refreshed_delivery = next(row for row in refreshed if row.get("id") == delivery.get("id"))
     check((refreshed_delivery.get("intent") or {}).get("output_refs") == [str(output.id)],
@@ -1653,7 +1513,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
         "but do not produce it.",
         mentions=[{"type": "output", "id": str(output.id), "label": "Delivered promo"}],
     )
-    check(post_turn.get("run_id") is None and await count_runs(pid) == 1,
+    check(await count_exports(pid) == 1,
           "post-delivery @output revision creates no second production", post_turn)
     await ctx.acknowledge_video_presentation(post_turn)
     versions = await composition_versions_of(pid)
@@ -1878,7 +1738,7 @@ export const FixedImage = () => <AbsoluteFill><Img src={'fixed.png'} /></Absolut
               and (rejected.json().get("detail") or {}).get("code") == "skill.unavailable",
               "cross-owner explicit Chat binding fails before any Agent/LLM turn",
               rejected.text)
-        check(await count_runs(other_pid) == 0
+        check(await count_exports(other_pid) == 0
               and not await composition_versions_of(other_pid),
               "cross-owner rejection creates no work or Run", None)
     finally:
@@ -1900,7 +1760,7 @@ export const FixedImage = () => <AbsoluteFill><Img src={'fixed.png'} /></Absolut
         "not produce a video.",
         skill=external_ref,
     )
-    check(design_turn.get("run_id") is None and await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "external fixed-image design never starts production", design_turn)
     read, _ = await ctx.acknowledge_video_presentation(design_turn)
     _check_complete_video_storyboard(read, "external fixed-image design")
@@ -1947,7 +1807,7 @@ export const FixedImage = () => <AbsoluteFill><Img src={'fixed.png'} /></Absolut
           and (snapshot.meta or {}).get("package_path") == media_path,
           "first real use materializes a fresh owner/package-pinned SourceSnapshot",
           snapshot.meta if snapshot else None)
-    check(await count_runs(pid) == 0,
+    check(await count_exports(pid) == 0,
           "the external-Skill journey remains a short zero-Run design", None)
 
 
@@ -2229,7 +2089,7 @@ async def _p1_revise(ctx: Ctx, pid: str, message: str, label: str, expected_vers
     versions = await composition_versions_of(pid)
     check(len(versions) == expected_version,
           f"{label}: saves exactly version {expected_version}", message)
-    check(await count_runs(pid) == 0 and not await outputs_of(pid, "video"),
+    check(await count_exports(pid) == 0 and not await outputs_of(pid, "video"),
           f"{label}: no Run or video Output starts", None)
     return turn, versions[-1]
 
@@ -2335,7 +2195,7 @@ async def promo_p1_first_draft(ctx: Ctx) -> None:
     read, _ = await ctx.acknowledge_video_presentation(turn)
     _check_complete_video_storyboard(read, "real-video four-second first draft")
     versions = await composition_versions_of(pid)
-    check(len(versions) == 1 and await count_runs(pid) == 0 and not await outputs_of(pid, "video"),
+    check(len(versions) == 1 and await count_exports(pid) == 0 and not await outputs_of(pid, "video"),
           "the four-second video draft saves once with zero Runs/Outputs", pid)
     content = content_of(versions[0])
     clips = [
@@ -2415,7 +2275,7 @@ async def promo_p1_continuation(ctx: Ctx) -> None:
     check(first_stream.completed is not None and first_stream.failed is None,
           "exact-copy SSE draft completes", first_stream.failed)
     first = first_stream.completed
-    check(not await composition_versions_of(pid) and await count_runs(pid) == 0,
+    check(not await composition_versions_of(pid) and await count_exports(pid) == 0,
           "the first exact-copy turn retains a draft without saving or producing", pid)
     first_calls = _p1_report_tokens("exact_copy_initial_draft", first)
     _p1_assert_generic_design_wire(first_calls)
@@ -2445,7 +2305,7 @@ async def promo_p1_continuation(ctx: Ctx) -> None:
         "Only clarify the draft; do not save a version and do not produce.",
     )
     clarify_calls = _p1_report_tokens("exact_copy_non_streaming_clarification", clarify)
-    check(not await composition_versions_of(pid) and clarify.get("run_id") is None,
+    check(not await composition_versions_of(pid) and await count_exports(pid) == 0,
           "the non-streaming clarification neither saves nor produces", pid)
     clarified_draft = await _p1_active_draft(ctx, clarify)
     clarified_receipt = await _p1_skill_receipt(ctx, pid, skill_ref)
@@ -2500,7 +2360,7 @@ async def promo_p1_continuation(ctx: Ctx) -> None:
     _check_complete_video_storyboard(read, "third-turn exact-copy save")
     versions = await composition_versions_of(pid)
     check(len(versions) == 1 and not content_of(versions[0]).sources
-          and await count_runs(pid) == 0 and not await outputs_of(pid, "video"),
+          and await count_exports(pid) == 0 and not await outputs_of(pid, "video"),
           "third turn saves exactly one copy-only version with zero Runs/Outputs", pid)
     expected = "A practical course for clearer product launches. Join the next workshop."
     check(_native_copy_without_whitespace(content_of(versions[0])) == expected.replace(" ", ""),
@@ -2560,7 +2420,7 @@ async def promo_p1_revision(ctx: Ctx) -> None:
     question_id = str((assistant.get("question") or {}).get("id") or assistant.get("id") or "")
     check(bool(assistant.get("question")) and question_id,
           "ambiguous title target creates a real ask_user question row", ambiguous)
-    check(len(await composition_versions_of(pid)) == 4 and await count_runs(pid) == 0,
+    check(len(await composition_versions_of(pid)) == 4 and await count_exports(pid) == 0,
           "ambiguous target creates no version or Run", None)
     _p1_report_tokens("ordinary_revision_title_ambiguity", ambiguous)
     print("P1_REVISION_PROJECT", json.dumps({"project_id": pid, "question_id": question_id}))
@@ -2908,7 +2768,7 @@ async def sequential_oxvalue_draft_review(ctx: Ctx) -> None:
               and new_clips["clp_review_web"].object == old_clips["clp_review_web"].object
               and new_clips["clp_review_web"].source == old_clips["clp_review_web"].source,
               "P2 changes only the target camera animation and preserves its frozen source", None)
-        check(await count_runs(pid) == 0, "P2 creates no production Run", None)
+        check(await count_exports(pid) == 0, "P2 creates no export job", None)
         async with AsyncSessionLocal() as db:
             outputs = await db.scalar(select(func.count(Output.id)).where(Output.project_id == uuid.UUID(pid)))
         check(outputs == 0, "P2 creates no formal Output", outputs)
@@ -2983,7 +2843,7 @@ async def sequential_oxvalue_draft_review(ctx: Ctx) -> None:
               and title_clips["clp_review_web"] == new_clips["clp_review_web"]
               and title_clips["clp_input_headline"] == new_clips["clp_input_headline"],
               "P2 title text is exact and prior repair/other text stay intact", None)
-        check(await count_runs(pid) == 0, "P2 two turns create no production Run", None)
+        check(await count_exports(pid) == 0, "P2 two turns create no export job", None)
         async with AsyncSessionLocal() as db:
             outputs = await db.scalar(select(func.count(Output.id)).where(Output.project_id == uuid.UUID(pid)))
         check(outputs == 0, "P2 two turns create no formal Output", outputs)
@@ -3100,7 +2960,7 @@ async def _external_generator_journey(
     check(len(await composition_versions_of(pid)) == 1, "preview is read-only", None)
     async with AsyncSessionLocal() as db:
         outputs = await db.scalar(select(func.count()).select_from(Output).where(Output.project_id == uuid.UUID(pid)))
-    check(await count_runs(pid) == outputs == 0, "zero Run and Output", outputs)
+    check(await count_exports(pid) == outputs == 0, "zero exports and Outputs", outputs)
     print(f"  Version {version.id}, assistant message {turn['assistant_message'].get('id')}, local Scrub ready")
 
 
@@ -3207,7 +3067,7 @@ async def promo_generic_cutover_probe(ctx: Ctx) -> None:
         _check_only_text_revision(content, content_of(history[-1]), native_titles[0].clip_id, edited_title)
         async with AsyncSessionLocal() as db:
             outputs = await db.scalar(select(func.count()).select_from(Output).where(Output.project_id == uuid.UUID(pid)))
-        check(await count_runs(pid) == outputs == 0, "the generic authoring and edit start no production", pid)
+        check(await count_exports(pid) == outputs == 0, "the generic authoring and edit start no production", pid)
         print(f"  {label}: versions {history[0].id}, {history[-1].id}", flush=True)
 
 
@@ -3239,7 +3099,7 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
               "an autonomous first draft does not turn background music into a user decision", declared_names)
     read, ack = await ctx.acknowledge_video_presentation(first)
     _check_complete_video_storyboard(read, "website Promo first storyboard")
-    check(ack.get("accepted") and await count_runs(pid) == 0,
+    check(ack.get("accepted") and await count_exports(pid) == 0,
           "the storyboard is presented before a Run exists", ack)
     versions = await composition_versions_of(pid)
     check(len(versions) == 1, "one saved storyboard", versions)
@@ -3263,28 +3123,20 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
 
     approved = await ctx.chat(pid, "OK")
     _p1_report_tokens("promo_short_ok", approved)
-    if approved.get("run_id") is None:
-        question = (approved.get("assistant_message") or {}).get("question") or {}
-        check(question.get("kind") == "task_book", "OK yields a real production quote", approved)
-        approved = await ctx.chat(pid, "Yes")
-        _p1_report_tokens("promo_short_yes", approved)
-    run_id = approved.get("run_id")
-    check(run_id is not None and await count_runs(pid) == 1, "one authorized production Run", approved)
+    job = await completed_job(ctx, pid, approved, "export_video")
+    check(await count_exports(pid) == 1, "one authorized ExportJob", job.id)
     production_speech = (approved.get("assistant_message") or {}).get("content") or ""
     check(not any(marker in production_speech for marker in ("dock call", "Re-issuing", "empty payload", "extra title field")),
           "production confirmation does not expose tool-argument repair narration", production_speech)
-    print(f"  Run {run_id}", flush=True)
-    run = await run_row(run_id)
-    check(run["context"].get("version_ref") == read["base_ref"],
-          "the Run pins the approved version", run["context"])
-    check(await wait_run_terminal(run_id, timeout=900.0) == "completed", "production completes", run_id)
+    check(job.render_spec["provenance"] == read["base_ref"],
+          "the export pins the approved version", job.render_spec["provenance"])
     videos = await outputs_of(pid, "video")
     check(len(videos) == 1 and videos[0].render_status == RenderStatus.COMPLETED
           and bool((videos[0].files or {}).get("video"))
           and videos[0].composition_version_id == versions[0].id,
           "one delivered playable video pins the storyboard", videos)
-    check((videos[0].render_spec or {}).get("provenance") == run["context"].get("version_ref"),
-          "Run and Output render input pin the same version and digest", videos[0].render_spec)
+    check((videos[0].render_spec or {}).get("provenance") == job.render_spec["provenance"],
+          "ExportJob and Output render input pin the same version and digest", videos[0].render_spec)
     import av
     import hashlib
     import io
@@ -3310,10 +3162,9 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
         "bytes": len(encoded), "sha256": hashlib.sha256(encoded).hexdigest(),
         "video": video_facts, "audio": audio.model_dump(mode="json"),
     }, ensure_ascii=False), flush=True)
-    delivered = await wait_trigger_review(ctx, first["conversation_id"], run_id, timeout=120.0)
+    delivered = await wait_delivery(ctx, first["conversation_id"], videos[0])
     check(delivered and (delivered.get("intent") or {}).get("output_refs") == [str(videos[0].id)],
           "delivery returns the exact Output to the original Chat", delivered)
-    _p1_report_tokens("promo_auto_delivery", run_id)
     check(len(await composition_versions_of(pid)) == 1, "production does not redesign", pid)
     print(f"  Delivered Output {videos[0].id}, message {delivered['id']}", flush=True)
 
@@ -3323,15 +3174,13 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
     check(any(marker in repeated_speech for marker in ("completed", "ready", "完成", "已就绪"))
           and not any(marker in repeated_speech for marker in ("underway", "while it renders", "仍在渲染", "正在制作")),
           "repeating confirmation reports the actual completed delivery", repeated_speech)
-    check(await count_runs(pid) == 1 and len(await outputs_of(pid, "video")) == 1
+    check(await count_exports(pid) == 1 and len(await outputs_of(pid, "video")) == 1
           and len(await composition_versions_of(pid)) == 1,
-          "repeating Yes neither starts another Run nor changes the delivered version", repeated)
+          "repeating Yes neither starts another export nor changes the delivered version", repeated)
     history = await ctx.messages(first["conversation_id"])
     deliveries = [
         message for message in history
-        if (message.get("intent") or {}).get("trigger") == "run_completed"
-        and (message.get("intent") or {}).get("ref") == run_id
-        and (message.get("intent") or {}).get("output_refs") == [str(videos[0].id)]
+        if (message.get("intent") or {}).get("output_refs") == [str(videos[0].id)]
     ]
     check(len(deliveries) == 1 and deliveries[0]["id"] == delivered["id"],
           "repeating confirmation does not duplicate the automatic delivery", [item["id"] for item in deliveries])
@@ -3363,7 +3212,7 @@ async def uploaded_video_editing(ctx: Ctx) -> None:
         "Please transcribe and analyze this uploaded video so I can edit it.",
         mentions=[{"type": "asset", "id": asset_id, "label": "Uploaded talk"}],
     )
-    check(analysis.get("run_id") is None, "material understanding starts no production Run", analysis)
+    check(await count_exports(pid) == 0, "material understanding starts no export job", analysis)
     status = await wait_asset_status(asset_id, {AssetStatus.COMPLETED, AssetStatus.FAILED})
     check(status == AssetStatus.COMPLETED, "worker completes real ASR", status)
     async with AsyncSessionLocal() as db:
@@ -3383,7 +3232,7 @@ async def uploaded_video_editing(ctx: Ctx) -> None:
     )
     read, _ = await ctx.acknowledge_video_presentation(first)
     versions = await composition_versions_of(pid)
-    check(len(versions) == 1 and first.get("run_id") is None,
+    check(len(versions) == 1 and await count_exports(pid) == 0,
           "the semantic selection saves one draft without production", first)
     content = content_of(versions[0])
     source = next(
@@ -3416,14 +3265,7 @@ async def uploaded_video_editing(ctx: Ctx) -> None:
         "Freeze the audio and obtain its real sentence/word alignment for review. "
         "Do not change the Composition or produce a video yet.",
     )
-    narration_run_id = second.get("run_id")
-    if narration_run_id is None and is_plan_dock(second.get("assistant_message") or {}):
-        answer = await ctx.answer(second["assistant_message"]["id"], {"kind": "start"})
-        check(answer.status_code == 200, "authorize narration preparation", answer.text)
-        narration_run_id = answer.json()["answered_question"].get("workflow_run_id")
-    check(narration_run_id is not None, "ordinary authorization starts narration preparation", second)
-    check(await wait_run_terminal(narration_run_id) == WorkflowStatus.COMPLETED,
-          "narration preparation Run completes", second)
+    await completed_job(ctx, pid, second, "generate_voice")
     versions = await composition_versions_of(pid)
     check(len(versions) == 1, "narration preparation alone does not change the work", second)
     async with AsyncSessionLocal() as db:
@@ -3443,7 +3285,7 @@ async def uploaded_video_editing(ctx: Ctx) -> None:
         "and the original sound, save the revised storyboard only, and do not synthesize "
         "another narration or produce a video.",
     )
-    check(placement.get("run_id") is None,
+    check(await count_exports(pid) == 0,
           "placing the already-prepared narration starts no additional Run", placement)
     versions = await composition_versions_of(pid)
     check(len(versions) >= 2, "READY narration and aligned captions create a new saved version", placement)
@@ -3500,41 +3342,19 @@ async def uploaded_video_editing(ctx: Ctx) -> None:
           "the ordinary narration Clip retains its real playable duration", dialogue)
 
     approved = await ctx.chat(pid, "OK, produce this exact saved version.")
-    run_id = approved.get("run_id") or (approved.get("assistant_message") or {}).get("workflow_run_id")
-    if run_id is None:
-        async with AsyncSessionLocal() as db:
-            existing = await db.scalar(
-                select(WorkflowRun)
-                .where(
-                    WorkflowRun.project_id == uuid.UUID(pid),
-                    WorkflowRun.context["version_ref"]["composition_version_id"].as_string() == str(versions[-1].id),
-                )
-                .order_by(WorkflowRun.created_at.desc()).limit(1)
-            )
-        run_id = str(existing.id) if existing is not None else None
-    if run_id is None and is_plan_dock(approved.get("assistant_message") or {}):
-        answer = await ctx.answer(approved["assistant_message"]["id"], {"kind": "start"})
-        check(answer.status_code == 200, "start the pinned production", answer.text)
-        run_id = answer.json()["answered_question"].get("workflow_run_id")
-    check(run_id is not None, "ordinary confirmation starts one production Run", approved)
-    check(await wait_run_terminal(run_id) == WorkflowStatus.COMPLETED,
-          "the saved version produces successfully", run_id)
+    job = await completed_job(ctx, pid, approved, "export_video")
     videos = await outputs_of(pid, "video")
     check(len(videos) == 1 and videos[0].render_status == RenderStatus.COMPLETED,
           "one completed video Output", [str(item.id) for item in videos])
     output = videos[0]
     check(output.composition_version_id == versions[-1].id,
           "the Output pins the exact saved version", output.composition_version_id)
-    run = await run_row(run_id)
-    check(run["context"].get("version_ref", {}).get("composition_version_id") == str(versions[-1].id),
-          "the Run pins the same version", run["context"].get("version_ref"))
-
-    delivered = await wait_trigger_review(ctx, approved["conversation_id"], run_id, timeout=120.0)
-    check(delivered is not None and (delivered.get("intent") or {}).get("output_refs") == [str(output.id)],
-          "the completed Run returns its one video to the original Chat", delivered)
+    check(job.version_id == versions[-1].id and job.id == output.id,
+          "the job and Output pin the saved version", job.version_id)
+    delivered = await wait_delivery(ctx, approved["conversation_id"], output)
 
     repeated = await ctx.chat(pid, "OK")
-    check(await count_runs(pid) >= 2 and len(await outputs_of(pid, "video")) == 1,
+    check(await count_exports(pid) == 1 and len(await outputs_of(pid, "video")) == 1,
           "repeated confirmation adds no second video Output", repeated)
     deliveries = [
         message for message in await ctx.messages(repeated["conversation_id"])

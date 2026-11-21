@@ -32,7 +32,7 @@ from app.models.schemas import (
     ChatResponse,
     ChatTurnStopRequest,
     Option,
-    PendingPlan,
+    ProjectBrief,
     PlanEstimate,
     QuestionPayload,
     QuestionProposal,
@@ -454,9 +454,9 @@ def _backfill_brief_slot(project: Project, slot: str, value: str) -> None:
     Creates the brief-only row when none exists (defensive — the ask dock
     normally wrote one)."""
     stored = (
-        PendingPlan.model_validate(project.pending_brief)
+        ProjectBrief.model_validate(project.pending_brief)
         if isinstance(project.pending_brief, dict)
-        else PendingPlan()
+        else ProjectBrief()
     )
     update = Brief()
     normalized: Any = value
@@ -561,7 +561,7 @@ def _validate_group_answers(
 
 
 def _backfill_brief_group(project: Project, question: QuestionPayload, answers: list) -> None:
-    stored = PendingPlan.model_validate(project.pending_brief or {})
+    stored = ProjectBrief.model_validate(project.pending_brief or {})
     by_slot = {item.slot: item for item in question.items}
     for answer in answers:
         update = Brief()
@@ -599,7 +599,7 @@ async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project
     from app.models.schemas import CreativeState
     from app.models.tables import SourceSnapshot
 
-    stored = PendingPlan.model_validate(project.pending_brief or {})
+    stored = ProjectBrief.model_validate(project.pending_brief or {})
     if infer_task_kind(stored.prompt) != "website_promo":
         return
     state = creative_state_for_pending(stored) or CreativeState()
@@ -634,7 +634,7 @@ async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project
 # (slot="asset_role") or an @-mention; the pins are settled by CODE ONLY — the
 # LLM frames the question but its options are built here (id = asset id), and
 # the answer decodes by id, never by a guessed filename. reference 常驻可回读:
-# the pins ride PendingPlan → TaskSpec → run.context verbatim, and the
+# the pins ride ProjectBrief → TaskSpec → run.context verbatim, and the
 # skeleton row itself is content-addressed (the read tool re-reads it any
 # time). Roles are reversible between runs (a fresh mention re-pins).
 
@@ -696,16 +696,16 @@ async def _stamp_role_pins(
     source: Asset,
     exemplar: Asset | None,
 ) -> None:
-    """The ONE role-pin write (判词④): the PendingPlan seats + the exemplar's
+    """The ONE role-pin write (判词④): the ProjectBrief seats + the exemplar's
     warm fire (the skeleton materializes before any run asks; the claim gate
     holds the run until processing drains, and the processing-completion
     seat re-fires the warm for a still-processing exemplar). Both settle
     paths — the answer's pick and the bail's default — write through here,
     and nothing else does."""
     stored = (
-        PendingPlan.model_validate(project.pending_brief)
+        ProjectBrief.model_validate(project.pending_brief)
         if isinstance(project.pending_brief, dict)
-        else PendingPlan()
+        else ProjectBrief()
     )
     stored.source_asset_id = str(source.id)
     stored.exemplar_asset_id = str(exemplar.id) if exemplar is not None else None
@@ -2383,8 +2383,7 @@ async def chat(
 
     Single public entry point (JSON path): prepare the turn (locate/create
     the conversation, settle any pending question deterministically),
-    then execute it (intent agent proposes, compile_graph adjudicates, one
-    commit). The SSE path calls the two phases itself so prose deltas can
+    then execute the native tool calls against that opening. The SSE path calls the two phases itself so prose deltas can
     stream between them.
     """
     prepared = await prepare_chat_turn(db, user_id, request)

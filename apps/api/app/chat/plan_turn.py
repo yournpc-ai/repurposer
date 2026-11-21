@@ -54,9 +54,8 @@ from app.models.schemas import (
     CreativeState,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
-    InferredIntent,
     MaterialUnderstanding,
-    PendingPlan,
+    ProjectBrief,
     PlanAnswerArgs,
     PlanAskArgs,
     AlignRecordingArgs,
@@ -145,9 +144,8 @@ class PlanTurn:
         self._video_call_counter: int = 0
         # Turn state (filled by the assembly below and the executions):
         self.text = ""
-        self.stored: PendingPlan | None = None
+        self.stored: ProjectBrief | None = None
         self.pending_q: Message | None = None
-        self.plan_pending = False
         self.assets: list[Asset] = []
         self.has_text_material = False
         self.persona: Persona | None = None
@@ -162,7 +160,6 @@ class PlanTurn:
         self.outcome: PlanTurnOutcome | None = None
         self.saw_rootless_rejection = False
         self.echo_override: str | None = None
-        self.reasons_extra: list[str] = []
         # 资产角色 (ADR-078 判词④): this turn's mention-settled exemplar pin
         # (None = no asset mention this turn — the stored plan's pins ride).
         self.mention_exemplar_id: str | None = None
@@ -175,10 +172,10 @@ class PlanTurn:
 
     # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
-    def _current_pending(self) -> PendingPlan | None:
-        """Read the latest PendingPlan after independently committed writes."""
+    def _current_pending(self) -> ProjectBrief | None:
+        """Read the latest ProjectBrief after independently committed writes."""
         self.stored = (
-            PendingPlan.model_validate(self.project.pending_brief)
+            ProjectBrief.model_validate(self.project.pending_brief)
             if isinstance(self.project.pending_brief, dict)
             else None
         )
@@ -226,14 +223,6 @@ class PlanTurn:
         # answer tool's reply gets the reminder tail). A pending task_book is
         # this path's own confirmation target (G-1), never a judgment subject.
         pending_q = await latest_pending_question(db, self.conversation_id)
-        # Remember a pending task_book before the null below: raising a fresh
-        # plain question would supersede the plan row and orphan the
-        # confirmation (S5, 2026-09-12) — the ask_user execution rejects
-        # while either kind is pending.
-        self.plan_pending = (
-            pending_q is not None
-            and (pending_q.question or {}).get("kind") == "task_book"
-        )
         if pending_q is not None and (pending_q.question or {}).get("kind") != "question":
             pending_q = None
         self.pending_q = pending_q
@@ -402,13 +391,6 @@ class PlanTurn:
         # — panel edits survive because the LLM preserves what the message does
         # not revise (chat revisions always win; the field-level merge machinery
         # died with the slots grammar).
-        prior = request.prior_intent or (stored.intent if stored else None)
-        # The LLM revises the exact chain, not a prose digest — ship the JSON.
-        presented_plan = (
-            json.dumps([t.model_dump(mode="json") for t in prior.tasks], ensure_ascii=False)
-            if prior is not None and prior.tasks
-            else None
-        )
         # The brief the router reads (ADR-052 B2): the stored brief with the
         # material state freshly code-stamped (the router reads it for the root
         # judgment, never proposes it). This turn's own proposal merges in the
@@ -453,32 +435,12 @@ class PlanTurn:
         self.confirmation = read_confirmation_prefs(
             user_row.settings if user_row is not None else None
         )
-        # The docked decision package (iter-2 ⑦): when a plan-sourced dock is
-        # on the table, its Content Plans render as the package block so a
-        # change ask can name its plan_id (revise_plan's唯一指认面 — the LLM
-        # never invents an id).
-        plans_lines: list[str] | None = None
-        if stored is not None and stored.plans:
-            lines = []
-            for p in stored.plans:
-                outputs = ", ".join(
-                    str(o.get("kind", "?"))
-                    + (f" ({o['language']})" if o.get("language") else "")
-                    for o in (p.get("outputs") or [])
-                )
-                lines.append(
-                    f"- plan_id {p.get('plan_id')}: "
-                    f"{p.get('title') or '(unnamed)'} — {outputs}"
-                )
-            plans_lines = lines or None
         self.infer_kwargs = dict(
             message=self.suggestion_note or "",
             brief=brief_in,
             persona=persona,
             pending_question=pending_q,
             filename=filename,
-            presented_plan=presented_plan,
-            plans_lines=plans_lines,
             recent=recent_lines or None,
             # The transform-target rule's authoritative signal (同源语言护栏 —
             # the plan surface's only other language hint is the filename).
@@ -496,14 +458,13 @@ class PlanTurn:
             # the plan's draft graph lives beside the conversation — the
             # review invitation may name that home; None/"chat" = the
             # surface-neutral law stands.
-            surface=request.surface,
             # ADR-117 D1 — the confirmation-settings fact (the system
             # template's mode-conditional close law reads it).
             confirmation=self.confirmation,
         )
 
     def _role_pins(self) -> dict[str, str | None]:
-        """The role pins to persist on a PendingPlan write (判词④ — the same
+        """The role pins to persist on a ProjectBrief write (判词④ — the same
         preserve law as persona_id: a turn that never touched the roles must
         not clobber an earlier settle). Mention this turn > stored."""
         stored = self.stored
@@ -909,7 +870,7 @@ class PlanTurn:
         # ANY ask while a question is still pending is an interjection, never
         # a new dock — docking supersedes the pending row, and for a
         # task_book that orphans the confirmation.
-        if self.plan_pending or self.pending_q is not None:
+        if self.pending_q is not None:
             return (
                 "a question of yours is still awaiting the user's answer — "
                 "this message is an interjection, not a new question. Call "
@@ -964,23 +925,18 @@ class PlanTurn:
             )
 
         from app.editing.service import video_carry_state  # deferred: editing seam
-        self.project.pending_brief = PendingPlan(
+        self.project.pending_brief = ProjectBrief(
             # The birth prompt stays frozen (stored.prompt wins) — the
             # accumulated narrative retired with the brief switch.
             prompt=stored.prompt if stored and stored.prompt else self.text,
-            intent=stored.intent if stored else None,
             brief=merged_brief,
             creative_state=creative_state_with_brief(
                 creative_state_for_pending(stored) or CreativeState(), merged_brief
             ),
-            reasons=stored.reasons if stored else [],
             persona_id=(
                 self.request.persona_id
                 or (stored.persona_id if stored else None)
             ),
-            derived=stored.derived if stored else [],
-            plans=stored.plans if stored else [],
-            plan_task_map=stored.plan_task_map if stored else None,
             # The versioned storyboard survives an interjection ask verbatim
             # (review hold included — only a proposal dock releases it).
             **video_carry_state(stored),
@@ -1004,12 +960,6 @@ class PlanTurn:
             slot=params.slot,
             default_path=params.default_path,
         )
-        intent = InferredIntent(
-            action="ask",
-            ask=ask,
-            brief=params.brief,
-            material_text=params.material_text,
-        )
         assistant_message = await _dock_question(
             self.db,
             self.conversation_id,
@@ -1025,7 +975,7 @@ class PlanTurn:
                 items=group_items,
                 group_digest=group_digest,
             ),
-            intent=intent.model_dump(mode="json"),
+            intent={"ask": ask.model_dump(mode="json")},
         )
         self.outcome = (assistant_message, self.settled_pending)
         return None
@@ -1167,35 +1117,20 @@ class PlanTurn:
 
             from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
             from app.editing.service import video_carry_state  # deferred: editing seam
-            self.project.pending_brief = PendingPlan(
+            self.project.pending_brief = ProjectBrief(
                 prompt=stored.prompt if stored and stored.prompt else self.text,
-                intent=stored.intent if stored else None,
                 brief=merged_brief,
                 creative_state=creative_state_with_brief(
                     creative_state_for_pending(stored) or CreativeState(), merged_brief
                 ),
-                reasons=stored.reasons if stored else [],
                 persona_id=(
                     self.request.persona_id
                     or (stored.persona_id if stored else None)
                 ),
-                derived=stored.derived if stored else [],
-                plans=stored.plans if stored else [],
-                plan_task_map=stored.plan_task_map if stored else None,
                 **video_carry_state(stored),
                 **self._role_pins(),
             ).model_dump(mode="json")
             topic_ask = _topic_gate_question(self.text)
-            topic_intent = InferredIntent(
-                action="ask",
-                ask=QuestionProposal(
-                    question=topic_ask["question"],
-                    options=[],
-                    allow_freeform=True,
-                    slot="topic",
-                    default_path=topic_ask["default_path"],
-                ),
-            )
             assistant_message = await _dock_question(
                 self.db,
                 self.conversation_id,
@@ -1208,7 +1143,7 @@ class PlanTurn:
                     slot="topic",
                     default_path=topic_ask["default_path"],
                 ),
-                intent=topic_intent.model_dump(mode="json"),
+                intent={"ask": topic_ask},
             )
             return assistant_message, self.settled_pending
         assistant_message = await _create_message(

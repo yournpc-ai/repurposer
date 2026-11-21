@@ -32,7 +32,7 @@ from app.models.schemas import (
     ExternalSkillReference,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
-    PendingPlan,
+    ProjectBrief,
     AlignRecordingArgs,
     ReviewVideoArgs,
     SearchSfxArgs,
@@ -493,11 +493,11 @@ async def analyze_brand_seat(*, project: Project, args: Any, user_text: str) -> 
     )
     from app.chat.service import merge_brief
     from app.models.database import AsyncSessionLocal
-    from app.models.schemas import CreativeState, PendingPlan, seal_creative_state
+    from app.models.schemas import CreativeState, ProjectBrief, seal_creative_state
     from app.providers.llm.base import LLMError
     from app.tools.video.brand import BrandEvidenceError, analyze_brand
 
-    stored = PendingPlan.model_validate(project.pending_brief or {})
+    stored = ProjectBrief.model_validate(project.pending_brief or {})
     current = creative_state_for_pending(stored) or CreativeState()
     source_text = user_text if urls_from_text(user_text) else stored.prompt or user_text
     brief = merge_brief(
@@ -522,7 +522,7 @@ async def analyze_brand_seat(*, project: Project, args: Any, user_text: str) -> 
         current_project = await db.get(Project, project.id, with_for_update=True)
         if current_project is None or current_project.user_id != project.user_id:
             return ToolObservation("Brand analysis could not save: project unavailable", ok=False)
-        latest = PendingPlan.model_validate(current_project.pending_brief or {})
+        latest = ProjectBrief.model_validate(current_project.pending_brief or {})
         latest_state = creative_state_for_pending(latest) or CreativeState()
         latest_source_text = (
             user_text if urls_from_text(user_text) else latest.prompt or source_text
@@ -980,14 +980,14 @@ async def annotate_narration_seat(
 def stamp_video_presentation(
     project: Project, message: Message | None, read: dict[str, Any] | None,
     *, production_requested: bool = False, observed_ranges: list[dict] | None = None,
-) -> PendingPlan | None:
+) -> ProjectBrief | None:
     """The presentation association (ADR-145 phase B; the film stamp's
     sibling): fires from a runner's finish when a video design/revision
     beat this turn is owed its presentation and a TERMINAL speech row
     actually persisted. Two writes ride the turn's one transaction: the
     receipt on ``pending_brief.video_presentation`` (with the presenting
     row's id filled in) and the storyboard block on that row. Returns the
-    updated PendingPlan, or None when nothing was owed / no row persisted.
+    updated ProjectBrief, or None when nothing was owed / no row persisted.
     A rejection stop that presents the saved version's complete facts is a
     presentation row too; a degrade without that presentation never stamps.
 
@@ -1019,7 +1019,7 @@ def stamp_video_presentation(
         if read.get(key):
             receipt[key] = read[key]
     receipt["presented_message_id"] = str(message.id)
-    stored = PendingPlan.model_validate(project.pending_brief or {})
+    stored = ProjectBrief.model_validate(project.pending_brief or {})
     updated = stored.model_copy(update={"video_presentation": receipt})
     project.pending_brief = updated.model_dump(mode="json")
     return updated

@@ -12,6 +12,7 @@ from app.models.tables import Output, Project, Publication, User
 from app.pipeline.output_posters import ensure_output_poster
 from app.pipeline.outputs import (
     composition_version_number,
+    export_file_referenced,
     output_to_response,
 )
 from app.platform.project_context import get_output_for_user
@@ -82,11 +83,10 @@ async def delete_output(
     ).limit(1))
     if pending:
         raise HTTPException(status.HTTP_409_CONFLICT, "This video has a scheduled publication or a pending platform result.")
-    files = output.files or {}
-    keys = (files.get("video"), files.get("image"), (output.publishing or {}).get("cover_image_url"))
+    video_key = (output.files or {}).get("video")
+    owns_video = matches_export_location(video_key, current_user.id, output.project_id, output.id)
     await db.execute(delete(Publication).where(Publication.output_id == output.id))
     await db.delete(output)
     await db.commit()
-    for key in keys:
-        if key:
-            await delete_file(key)
+    if owns_video and not await export_file_referenced(db, video_key, output_id):
+        await delete_file(video_key)

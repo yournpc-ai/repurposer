@@ -19,7 +19,6 @@ function followUp(overrides: Partial<QuestionMessage>): QuestionMessage {
     content: null,
     question: null,
     answer: null,
-    workflow_run_id: null,
     created_at: "2026-09-28T10:00:00Z",
     ...overrides,
   }
@@ -40,16 +39,6 @@ describe("answerEnvelopeProse", () => {
     ).toBe("Done, your post is ready.\n\n")
   })
 
-  it("task_book dock: the echo prose is the raw content (it differs from the bare question)", () => {
-    expect(
-      answerEnvelopeProse(
-        followUp({
-          content: "Here is the plan I prepared. ",
-          question: { kind: "task_book" },
-        }),
-      ),
-    ).toBe("Here is the plan I prepared. ")
-  })
 
   it("options question with framing: the framing prose is the echo", () => {
     expect(
@@ -169,7 +158,6 @@ describe("spliceAnswerEnvelope", () => {
       answeredRow,
       followUp: followUp({
         content: "Here is the plan.",
-        workflow_run_id: "run1",
         seq: 22,
       }),
     })
@@ -180,7 +168,6 @@ describe("spliceAnswerEnvelope", () => {
     // Content truth replacement + identity stamping + at re-anchor.
     expect(out[2]).toMatchObject({
       content: "Here is the plan.",
-      runId: "run1",
       seq: 22,
       at: "2026-09-28T10:00:00Z",
       streaming: false,
@@ -252,7 +239,7 @@ describe("spliceAnswerEnvelope", () => {
     expect(out[2].streaming).toBe(false)
   })
 
-  it("no QA row (task_book start / text question): the optimistic block leaves the flow", () => {
+  it("no QA row (text question): the optimistic block leaves the flow", () => {
     const out = spliceAnswerEnvelope(base, {
       optimisticId: "opt1",
       previewId: "prev1",
@@ -273,7 +260,6 @@ describe("spliceAnswerEnvelope", () => {
       content: "Here is the",
       streaming: false,
     })
-    expect(out[2].runId).toBeUndefined()
     expect(out[2].at).toBe("2026-09-28T09:59:01Z")
   })
 

@@ -4,7 +4,7 @@
 
 ## Agent + Tool 唯一创作架构、后台执行退役与五面一体施工总合同
 
-**状态：Iteration 1–5 已有真实成功样本；首次跨素材完整通过率 3/6；当前进行 Iteration 6D。原生媒体和导出在隔离库有 Job 验证记录，十用户和新素材全旅程待验收。**
+**状态：Iteration 1–5 已有真实成功样本；首次跨素材完整通过率 3/6；当前进行 Iteration 6D。旧执行表已在隔离库删除。双 Worker 十用户混合负载已实测；新素材有成片交付、硬刷新和续改记录，首次用户请求曾因磁盘写满中断。各门禁按对应提交记录。**
 
 **施工基线：2026-11-21，`main@fdd21443bed58a8b3a1eea1f7322d501e27f5e91`。开工时必须重新核对远端与本地 HEAD，不得将此 SHA 永久视为最新版本。**
 
@@ -400,7 +400,7 @@ Agent 能够：
 
 既有 Worker、SourceSnapshot、对齐和账本仍被复用。
 
-本轮只是删除了模型可见媒体 Dock 和模拟 Start，尚未彻底退役内部 Workflow。
+Iteration 3 当时仍借用旧执行内核。现行工具的执行与字段见下文 6D。
 
 证据：
 
@@ -766,7 +766,7 @@ updated_at
 
 不为了统一形式重复保存同一状态。
 
-如果 MediaJob 与 ExportJob 共享最小执行机制，可以使用统一的作业记录。
+MediaJob 和 ExportJob 各自保留领域记录，只共享必要的 claim、lease 与 fencing 技术函数。
 
 不得让所有平台后台任务也强制迁移到这张表。
 
@@ -1038,7 +1038,7 @@ Renderer 有自己的并发资源上限。
 
 # 6. Worker 现有职责最终裁决
 
-本次审查确认 `apps/api/app/worker.py` 当前承担资产处理、Workflow 节点、正式渲染、旁白对齐、定时发布、支付告警和 staging 清理等职责。
+现行 Worker 承担素材处理、旁白对齐、MediaJob、ExportJob、Publication、支付告警和 staging 清理。
 
 不能把这些业务全部当作旧 Workflow 一起删除。
 
@@ -1781,6 +1781,12 @@ Activity 由 MediaJob 的真实状态投影。
 若某些 Workflow 仍被独立非 Agent 业务使用，必须明确其消费者，不能谎称全仓已经删除。
 
 删除旧执行表、外键、模型、API、Prompt 与订阅，在独立库实测 DDL 和干净部署。共享库和在途资金须单独确认归属。
+
+### 6D 执行与验收记录
+
+隔离库已运行删除旧执行表与关系的 DDL，API 和 Worker 仅检查安装的 schema revision。双 Worker 十用户混合负载中四项付费或有报价的 Job 各认领一次，实际合计 15 积分。正式成片已通过真实文件、摘要与 Chrome 回放验证。首轮不中断完成率与其他未验收能力按实际样本分别记录。详见 [6D 施工记录](agent-editor-evidence/iteration-6/6d.md)。
+
+公开发布的用户授权属于一次平台发帖。若请求发出后失去回执，原 Publication 进入待核对状态。仅按已有平台凭证核对；无可靠 ID 时保留项目、成片和原发帖记录，由运维登记已核实结果。用户取消、项目删除和再次发布均不能越过该未决边界。
 
 ### Worker 收口
 

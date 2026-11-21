@@ -20,7 +20,7 @@ from app.models.schemas import (
     BriefSlotSource,
     CreativeState,
     GroupAnswerRequest,
-    PendingPlan,
+    ProjectBrief,
     QuestionPayload,
     question_group_digest,
     seal_creative_state,
@@ -70,7 +70,7 @@ def website_pending():
         ),
         source_refs=[ref],
     ))
-    return PendingPlan(
+    return ProjectBrief(
         prompt=f"给 {URL} 做一只宣传片",
         creative_state=state,
     )
@@ -172,7 +172,7 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
             id=uuid4(),
             user_id=user.id,
             title="Website promo",
-            pending_brief=PendingPlan().model_dump(mode="json"),
+            pending_brief=ProjectBrief().model_dump(mode="json"),
         )
         conversation = Conversation(id=uuid4(), user_id=user.id, project_id=project.id)
         payload = group_payload()
@@ -221,7 +221,7 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
         assert continuations[0][0]["content"] == "给官网做一支宣传片"
         for item in payload.items:
             assert f"{item.question} {item.options[0].label}" in continuations[0][-1]["content"]
-        stored = PendingPlan.model_validate((await db.get(Project, project_id)).pending_brief)
+        stored = ProjectBrief.model_validate((await db.get(Project, project_id)).pending_brief)
         assert stored.brief.production_direction.value == "官网推广 · 用真实案例演示产品"
         assert stored.brief.target_seconds.value == 30
         assert stored.brief.narration_language.value == "en"
@@ -293,7 +293,7 @@ async def _answer_group_bail(database, monkeypatch, answers):
                 answers=answers,
             ),
         )
-        stored = PendingPlan.model_validate((await db.get(Project, project_id)).pending_brief)
+        stored = ProjectBrief.model_validate((await db.get(Project, project_id)).pending_brief)
     return answered, stored
 
 
@@ -379,7 +379,7 @@ def test_extended_single_slot_backfill_preserves_slot_types_and_creative_state()
     project = Project(id=uuid4(), user_id=uuid4(), title="Single slots")
     _backfill_brief_slot(project, "target_seconds", "60 seconds")
     _backfill_brief_slot(project, "subtitle_languages", "English")
-    stored = PendingPlan.model_validate(project.pending_brief)
+    stored = ProjectBrief.model_validate(project.pending_brief)
     assert stored.brief.target_seconds.value == 60
     assert stored.brief.subtitle_languages.value == ["en"]
     assert stored.creative_state is not None

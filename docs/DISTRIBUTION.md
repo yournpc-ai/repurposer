@@ -78,7 +78,7 @@ ai_disclosure: bool              # ADR-026：clip-spec 分类器推导，非用�
                                  # 提交审核时（draft→pending_review）重新推导——
                                  # 防建单后 clip 重渲染（如补 dub）导致标记陈旧
 state: Enum("draft", "pending_review", "approved", "scheduled",
-            "publishing", "published", "failed", "cancelled")
+            "publishing", "unknown", "published", "failed", "cancelled")
 scheduled_at: datetime | None    # 用户选定的发布时间（展示/审计值）
 due_at: datetime | None          # worker 认领谓词（唯一时间源）：初始 = scheduled_at，
                                  # 失败退避时改写为下次重试时间
@@ -109,8 +109,9 @@ draft ──提交审核──► pending_review ──通过──► approved 
                                             平台回执 post_id ◄── 成功     失败 ──► failed
                                             ▼                            │
                                         published          attempt<N: 退避后回 scheduled
-                                        （终态）             超限/用户取消 ──► cancelled
-任何 published 之前的状态 ──用户取消──► cancelled
+                                        （终态）             可核实的失败 ──► failed
+公开发布请求已发出、结果无法确认 ──► unknown
+尚可安全撤销的发布单 ──用户取消──► cancelled
 ```
 
 规则：
@@ -228,7 +229,7 @@ class PlatformAdapter(Protocol):
 | `POST /publications/{id}/submit` | 提交审核【机构模式 P2；此时重新推导 ai_disclosure】 | draft → pending_review |
 | `POST /publications/{id}/approve` / `reject` | 审核【机构模式 P2；reject 必填 reason】 | → approved / → draft |
 | `POST /publications/{id}/schedule` | 定时或立即（写 scheduled_at + due_at） | approved → scheduled |
-| `POST /publications/{id}/cancel` | 取消（published 前任意态） | → cancelled |
+| `POST /publications/{id}/cancel` | 取消尚可安全撤销的发布单 | → cancelled |
 | `POST /publications/{id}/retry` | 失败后手动重试（重置 attempt_count，due 立即；有 platform_job_id 时 worker 走对账轮询而非重发，§7） | failed → scheduled |
 | `GET /publications?state=&project_id=` | 列表（审核队列页 = `state=pending_review`） | — |
 | `GET /publications/{id}` | 详情 + publication_events 时间线 | — |
@@ -250,7 +251,7 @@ create_publication(project_id, target, channel_id, overrides)
 submit(pub_id, user_id)                      # 【机构模式 P2】draft→pending_review；重推导 ai_disclosure
 approve(pub_id, reviewer) / reject(...)      # 【机构模式 P2】reject 必填 reason
 schedule(pub_id, user_id, when)              # approved→scheduled；due_at = scheduled_at
-cancel(pub_id, user_id)                      # published 前任意态 → cancelled
+cancel(pub_id, user_id)                      # 无平台待核对操作且尚未发布 → cancelled
 
 # ── worker 侧（同进程第四认领源，§6）─────────────────────
 claim_due_publications()                     # SKIP LOCKED；每轮循环最先查

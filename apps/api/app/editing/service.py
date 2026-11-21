@@ -487,12 +487,12 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
 
 # ---------------------------------------------------------------------------
 # The presentation receipt (§2.3 — the generic confirmation state's video
-# slice) and its carry across PendingPlan rewrites
+# slice) and its carry across ProjectBrief rewrites
 # ---------------------------------------------------------------------------
 
 
 def video_carry_state(stored: Any) -> dict[str, Any]:
-    """The video presentation receipt preserved verbatim across a PendingPlan
+    """The video presentation receipt preserved verbatim across a ProjectBrief
     rewrite (the film_carry_state sibling): a dock/ask/degrade write never
     drops which version was presented where."""
     return {

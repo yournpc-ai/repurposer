@@ -1121,13 +1121,13 @@ async def list_chat_references(
 ) -> dict:
     """The existing mention picker gets a small owner-scoped global feed."""
     from app.models.tables import Asset, CompositionVersion, Output
-    from app.pipeline.outputs import is_chat_video_output, visible_outputs_stmt
+    from app.pipeline.outputs import is_delivered_output, visible_outputs_stmt
     assets = (await db.scalars(select(Asset).where(Asset.user_id == current_user.id)
         .order_by(Asset.created_at.desc()).limit(100))).all()
     outputs = (await db.scalars(visible_outputs_stmt().join(Project, Output.project_id == Project.id)
         .where(Project.user_id == current_user.id)
         .order_by(Output.created_at.desc()).limit(100))).all()
-    delivered = [output for output in outputs if is_chat_video_output(output)]
+    delivered = [output for output in outputs if is_delivered_output(output)]
     version_ids = list(dict.fromkeys(
         output.composition_version_id for output in delivered
         if output.composition_version_id is not None
@@ -1261,8 +1261,8 @@ async def complete_video_presentation(
     await db.refresh(project, with_for_update=True)
     await db.refresh(message, with_for_update=True)
     from app.editing.service import video_version_read
-    from app.models.schemas import PendingPlan
-    stored = PendingPlan.model_validate(project.pending_brief or {})
+    from app.models.schemas import ProjectBrief
+    stored = ProjectBrief.model_validate(project.pending_brief or {})
     receipt = stored.video_presentation or {}
     expected = str(data.composition_version_id)
     read = await video_version_read(db, owner_id=current_user.id,

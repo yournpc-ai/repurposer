@@ -485,7 +485,7 @@ async def test_analyze_brand_seat_commits_state_independently_without_mutating_s
         BrandTypography,
         MediaInput,
         MediaInputType,
-        PendingPlan,
+        ProjectBrief,
     )
     from app.models.tables import Project, SourceSnapshot, User
     from app.tools.video.brand_agent import BrandProfileExtraction, brand_profile_agent
@@ -498,7 +498,7 @@ async def test_analyze_brand_seat_commits_state_independently_without_mutating_s
             id=uuid4(),
             user_id=user.id,
             title="LegitEvi",
-            pending_brief=PendingPlan().model_dump(mode="json"),
+            pending_brief=ProjectBrief().model_dump(mode="json"),
         )
         db.add(project)
         await db.flush()
@@ -577,7 +577,7 @@ async def test_analyze_brand_seat_commits_state_independently_without_mutating_s
         assert observation.images == ()
 
     async with database() as db:
-        stored = PendingPlan.model_validate((await db.get(Project, project_id)).pending_brief)
+        stored = ProjectBrief.model_validate((await db.get(Project, project_id)).pending_brief)
         assert stored.creative_state is not None
         assert stored.creative_state.content_digest
         assert stored.creative_state.brief.target_seconds.value == 60
@@ -821,7 +821,7 @@ async def test_analyze_brand_seat_recovers_source_and_brief_from_pending_prompt(
     database, monkeypatch
 ):
     from app.chat.video_turn_seats import analyze_brand_seat
-    from app.models.schemas import AnalyzeBrandArgs, PendingPlan
+    from app.models.schemas import AnalyzeBrandArgs, ProjectBrief
     from app.models.tables import Project, User
 
     prompt = (
@@ -835,7 +835,7 @@ async def test_analyze_brand_seat_recovers_source_and_brief_from_pending_prompt(
             id=uuid4(),
             user_id=user.id,
             title="Resume brand analysis",
-            pending_brief=PendingPlan(prompt=prompt).model_dump(mode="json"),
+            pending_brief=ProjectBrief(prompt=prompt).model_dump(mode="json"),
         )
         db.add(project)
         await db.commit()
@@ -866,7 +866,7 @@ async def test_analyze_brand_seat_recovers_source_and_brief_from_pending_prompt(
     assert captured["brief"].narration_language.value == "en"
     assert captured["brief"].subtitle_languages.value == ["en"]
     async with database() as db:
-        stored = PendingPlan.model_validate((await db.get(Project, project_id)).pending_brief)
+        stored = ProjectBrief.model_validate((await db.get(Project, project_id)).pending_brief)
         assert stored.creative_state is not None
         assert stored.creative_state.brief.target_seconds.value == 60
         assert stored.creative_state.brand_profile == result_profile

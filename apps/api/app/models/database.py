@@ -32,16 +32,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-def get_alembic_config() -> AlembicConfig:
-    """Return an Alembic config pointing at the project migrations."""
-    alembic_cfg = AlembicConfig("alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-    return alembic_cfg
-
-
 async def require_current_schema() -> None:
     """API and Worker startup only read the installed revision."""
-    expected = ScriptDirectory.from_config(get_alembic_config()).get_current_head()
+    expected = ScriptDirectory.from_config(AlembicConfig("alembic.ini")).get_current_head()
     async with engine.connect() as connection:
         actual = await connection.run_sync(lambda conn: MigrationContext.configure(conn).get_current_revision())
     if actual != expected:

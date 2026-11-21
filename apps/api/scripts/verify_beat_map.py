@@ -197,7 +197,6 @@ async def main() -> None:
         assert len(rows) == 1, f"expected 1 warmed understanding, got {len(rows)}"
         row = rows[0]
         assert row.project_id == project_a_id
-        assert row.workflow_step_id is None, "warm row must carry no step lineage"
         assert (row.source_ref or {}).get("warmed") is True
         digest = (row.source_ref or {})["asset_hash"]
         payload = row.payload

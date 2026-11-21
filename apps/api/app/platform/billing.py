@@ -25,16 +25,7 @@ logger = structlog.get_logger()
 
 
 class CreditsInsufficientError(ValueError):
-    """User-level shortfall at the hold gate (birthplace 422).
-
-    Carries the structured 422 payload (BILLING §7): ``{code:
-    "credits.insufficient", balance, required}``. A ValueError so create_run's
-    handlers degrade gracefully; every user-facing path converts it to the
-    typed 422 (typed endpoints raise it directly; the chat dispatch's
-    ``_create_run_from_tasks`` is the single conversion funnel there) and the
-    dock renders its grey row. Strictly the USER-level "积分不足" — never
-    conflated with a provider 402.
-    """
+    """Insufficient user credits at reservation time, with the balance and required amount."""
 
     def __init__(self, *, balance: int, required: int) -> None:
         super().__init__(f"credits.insufficient: balance {balance}, required {required}")

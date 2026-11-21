@@ -15,7 +15,8 @@ from app.config import settings
 from app.pipeline import job_lease
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
-from app.models.tables import Asset, Composition, CompositionVersion, ExportJob, Message, Output, Project, SourceSnapshot
+from app.models.tables import Composition, CompositionVersion, ExportJob, Message, Output, Project
+from app.pipeline.outputs import export_file_referenced
 from app.pipeline.rendering import _absolutize, _probe_artifacts
 from app.platform.project_context import lock_project_for_job
 from app.platform.billing import hold_export, settle_export
@@ -461,16 +462,7 @@ async def execute_export(job_id, token):
                     if not matches_export_location(location, project.user_id, project.id, job.id):
                         await _defer_upload_check(db, job, receipt, project)
                         return
-                    references = (
-                        select(Output.id).where((Output.id == job.id) | (Output.files["video"].astext == location)),
-                        select(SourceSnapshot.id).where(SourceSnapshot.storage_key == location),
-                        select(Asset.id).where(Asset.file_url == location),
-                    )
-                    for query in references:
-                        if await db.scalar(query.limit(1)):
-                            # The dispatch is settled. A surviving consumer owns the bytes.
-                            break
-                    else:
+                    if not await export_file_referenced(db, location, job.id):
                         try:
                             head = await object_head(location)
                             if head and head.get("Metadata", {}).get("export-upload") == receipt.intent["upload_started_by"]:

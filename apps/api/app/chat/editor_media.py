@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
@@ -19,12 +20,33 @@ from app.pipeline.media_jobs import KINDS, enqueue_media, media_quote
 from app.tools.video.audio_playback import playback_item
 
 
+def _requests_paid_media(words, tool):
+    """Recognize a direct request for this medium; ambiguous scope uses its quote."""
+    medium_en, medium_zh = {
+        "generate_voice": (r"voiceover|voice-over|narration|recording", r"旁白|配音|录音"),
+        "generate_image": (r"image|picture|illustration", r"图片|图像|插图"),
+        "generate_music": (r"music|score", r"音乐|配乐"),
+    }[tool]
+    # Conditional requests, existing material and quoted speech cannot grant
+    # a new paid operation. The user can authorize the exact quote instead.
+    if re.search(r"\b(?:if|unless|instead|existing|without|not|never|don't|avoid|whether)\b|[?？]|如果|除非|已经|不要|不用|不必|别", words, re.I):
+        return False
+    request = rf"^(?:please\s+)?(?:generate|create|record|make)\s+(?:(?:an?|the|short|new|english|chinese)\s+){{0,5}}(?:{medium_en})\b"
+    chinese = rf"^(?:请|帮我|请帮我)?(?:生成|制作|录制|录|画)(?:一(?:段|张|句)|新的|简短的|中文|英文){{0,4}}(?:{medium_zh})"
+    # Require an unambiguous end of the requested noun, e.g. “image of ...”.
+    # “Generate an image prompt” and “录制旁白的教程” ask for different work.
+    ending = r"(?:[.!。！]?\s*$|\s+(?:of|depicting|saying|reading)\s+)"
+    zh_ending = r"(?:[。！!]?\s*$|[：:，,])"
+    return bool(re.match(request + ending, words.strip(), re.I)
+                or re.match(chinese + zh_ending, words.strip()))
+
+
 async def _record_audio(db, project, receipt, result, request):
     music = "score_spec" in result
     role = "music" if music else "narration"
     item = await playback_item(db, project, role, result, request)
     facts = {
-        "status": "available", "role": role, "snapshot_id": item["snapshot_id"],
+        "status": "available", "project_id": str(project.id), "role": role, "snapshot_id": item["snapshot_id"],
         "digest": item["digest"], "duration_seconds": item["duration_seconds"],
         "analysis_digest": item["analysis_digest"], "peak": max(item["peaks"]),
         "cache_hit": result["cache_hit"], "added_to_composition": False,
@@ -54,7 +76,7 @@ async def _record_image(db, project, receipt, asset):
         raise ValueError("The image snapshot does not match its fixed source.")
     await visual_asset_result_images([asset])
     review = asset["content_review"]
-    facts = {"status": "available", "role": "image", "snapshot_id": str(snapshot.id), "digest": snapshot.digest,
+    facts = {"status": "available", "project_id": str(project.id), "role": "image", "snapshot_id": str(snapshot.id), "digest": snapshot.digest,
              "dimensions": asset["analysis"]["media_facts"]["dimensions"], "review": review["status"],
              "review_summary": review["summary"], "cache_hit": asset.get("cache_hit", False),
              "added_to_composition": False}
@@ -68,7 +90,7 @@ async def _record_image(db, project, receipt, asset):
 async def deliver_video(db, turn, output_id, base):
     import hashlib
     from app.tools.video.review import read_output_video
-    from app.pipeline.run_review import output_is_delivered
+    from app.pipeline.outputs import is_delivered_output
 
     group = current_group_id()
     if group and group == getattr(turn, "_video_review_group", None):
@@ -78,7 +100,7 @@ async def deliver_video(db, turn, output_id, base):
             or any(report.get(k) != v for k, v in base.items())):
         raise ValueError("Delivery requires a review of this exact Output and selected version.")
     output = await db.scalar(select(Output).where(Output.id == output_id, Output.project_id == turn.project.id))
-    if output is None or not output_is_delivered(output) or output.render_spec.get("provenance") != base:
+    if output is None or not is_delivered_output(output) or output.render_spec.get("provenance") != base:
         raise ValueError("The reviewed Output is unavailable.")
     data = await read_output_video(output.files["video"])
     if hashlib.sha256(data).hexdigest() != report["video_sha256"]:
@@ -205,8 +227,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 if head != version.id or turn._video_base_ref["content_digest"] != version.content_digest:
                     raise ValueError("The work has changed. Inspect its current version.")
             pending = await latest_pending_question(db, turn.conversation_id)
-            if pending and ((pending.question or {}).get("kind") == "task_book" or
-                            (pending.intent or {}).get("media_permission")):
+            if pending and (pending.intent or {}).get("media_permission"):
                 raise ValueError("Resolve the outstanding authorization before generating more media.")
             preview = None
             if name == "export_video":
@@ -274,25 +295,31 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             # export call alone does not establish a user request to spend.
             export_needs_consent = False
             if name == "export_video" and not asks_for_export(opening.content or ""):
-                selected_output = getattr(turn, "_editor_output_pin", None) or {}
-                prior = getattr(turn, "preceding_delivery", None) or {}
                 confirmed = (opening.intent or {}).get("video_confirmation") or {}
                 export_needs_consent = not (
-                    ((selected_output.get("output_id") or prior.get("composition_id") == composition_id)
-                     and (opening.intent or {}).get("editor_commits"))
-                    or confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
+                    confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
                 )
             recovering = bool((opening.intent or {}).get("resumed_media"))
-            recovery_quote = recovering and estimate.total[1] > 0
-            fixed_reuse = recovering and estimate.total[1] == 0 and name in {"generate_voice", "generate_image"}
-            if recovery_quote or export_needs_consent or (need.requires_confirmation and not fixed_reuse):
+            paid = estimate.total[1] > 0
+            another_paid_call = False
+            if paid and name in KINDS:
+                another_paid_call = await db.scalar(select(Message.id).where(
+                    Message.turn_id == opening.id, Message.id != receipt.id,
+                    Message.intent["tool"].astext == name,
+                    (Message.intent.has_key("media_job") | Message.intent.has_key("media_permission")),
+                ).limit(1)) is not None
+            needs_media_consent = paid and name in KINDS and (
+                recovering or another_paid_call or not _requests_paid_media(opening.content or "", name)
+            )
+            fixed_reuse = recovering and not paid and name in {"generate_voice", "generate_image"}
+            if (recovering and paid) or needs_media_consent or export_needs_consent or (need.requires_confirmation and not fixed_reuse):
                 zh = (project.language or "").startswith("zh")
                 text = (f"允许这次素材生成吗？最多使用 {need.quote_high} 积分。" if zh else
                         f"Authorize this media generation for up to {need.quote_high} credits?")
                 if name == "export_video":
                     text = (f"允许导出这个版本的 MP4 吗？最多使用 {need.quote_high} 积分。" if zh else
                             f"Authorize MP4 export of this version for up to {need.quote_high} credits?")
-                if recovery_quote and name in KINDS:
+                if name in KINDS:
                     zh_name, en_name = {"generate_voice": ("旁白", "narration"), "generate_music": ("音乐", "music"),
                                         "generate_image": ("图片", "image")}[name]
                     detail = args.model_dump(mode="json", exclude_none=True)

@@ -697,38 +697,6 @@ class MessageListResponse(BaseModel):
     items: list[ChatMessageResponse]
 
 
-class TaskListProposal(BaseModel):
-    """Intent agent output, state A: run new tasks (→ compile_graph mode②).
-
-    ``tasks=[]`` is the legal "ask back" state (CHAT_ARCH §7) — an ambiguous
-    instruction gets a plain reply in ``summary``, not a run.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _tolerate_null_name(cls, data: Any) -> Any:
-        """读容忍 (打字机律牙①): the LLM writes "name": null when it means
-        to skip it — a rejection here costs the funnel's repair round,
-        which never streams (the prose would pop in as one blob)."""
-        if isinstance(data, dict) and data.get("name") is None:
-            data = dict(data)
-            data.pop("name", None)
-        return data
-
-    type: Literal["task_list"] = "task_list"
-    tasks: list[TaskItem] = Field(default_factory=list)
-    summary: str
-    # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
-    # run's deliverable, in the interface language ("中文 LinkedIn 帖子" /
-    # "Chinese LinkedIn post"). It titles the run's receipt and completion
-    # line — display copy comes from the proposer's FRESH reading of the
-    # turn, never from a frozen-params template. "" = unnamed (readers fall
-    # back to the chain-derived label).
-    name: str = ""
-
-
 class QuestionProposal(BaseModel):
     """Intent agent output, state C: a structured question (→ QuestionDock).
 
@@ -799,88 +767,12 @@ class QuestionProposal(BaseModel):
     # a brief). ADR-078 判词④ adds ``asset_role``: the 角色消歧 ask — which
     # uploaded video is the source and which the reference case. Its options
     # are CODE-BUILT (id = asset id, _build_role_question) so the answer
-    # settles the PendingPlan pins deterministically; the LLM only frames
+    # settles the ProjectBrief pins deterministically; the LLM only frames
     # the speech. ``default_path`` is 提问策略 ③'s schema tooth: the skip
     # path, consumed by the dock's × and the interjection reminder tail —
     # machine-readable only, the prose never carries it.
     slot: BriefQuestionSlot | Literal["asset_role"] | None = None
     default_path: str = ""
-
-
-class AnswerProposal(BaseModel):
-    """Intent agent output, state D: a direct informational answer (G-4).
-
-    Pure information — capability questions, run-progress readouts (the
-    context carries the per-step status section, G-2), explanations of
-    existing outputs, small talk. Nothing is dispatched, no run starts, no
-    question docks: the text lands as a plain assistant message, the same
-    archival shape as a plan-path answer turn (B1). The boundary against
-    the other states is a prompt rule: work requests go to task_list /
-    edit_ops, ambiguous readings go to ask — answer is never the lazy out.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["answer"] = "answer"
-    text: str
-
-
-
-
-IntentProposal = Annotated[
-    TaskListProposal | QuestionProposal | AnswerProposal,
-    Field(discriminator="type"),
-]
-"""The five-state discriminated union the chat intent agent returns (§3, N-18 + N-21; state E = ADR-057 wiring ops)."""
-
-
-class IntentResult(BaseModel):
-    """Envelope for the single tool-calling-style LLM call (MiniMax JSON mode
-    needs a concrete model, so the union lives one level down). Tolerates a
-    bare proposal (models sometimes drop the wrapper)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _wrap_bare_proposal(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "proposal" not in data and "type" in data:
-            return {"proposal": data}
-        return data
-
-    proposal: IntentProposal
-    # 插话支持 (ADR-053 R2): when the context shows a pending question, the
-    # agent's judgment on whether THIS message settles it — judgment is the
-    # LLM's, settlement is code's (the retired autoResume freeform
-    # masking's honest successor). "answer" = the message ENGAGES the
-    # question (2026-09-27 一问拍一体化 — 原话一视同仁: answers it, hands
-    # the choice back to the agent, or discusses its options — the code
-    # settles the row freeform with the user's own words verbatim; a parked
-    # interrupt's answer wakes its run); "skip" = an explicit decline (code
-    # settles it as a bail — the text question's only ×, since it docks no
-    # pill); "none" = a clearly unrelated interjection (the question stays
-    # pending and the reply gets the code-composed reminder tail).
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-
-
-# ---------------------------------------------------------------------------
-# Chat tool params (ADR-077 判词② — action union 的机械翻译)
-# ---------------------------------------------------------------------------
-# The action unions above (InferredIntent / IntentResult) translated into
-# tool-call parameters: the type field = the tool's name, the per-state
-# fields = the params. The ADR-071 ⑤ signpost INVERTS on this wire: under
-# json_object the schema never reached the model (prompt literals were the
-# only spec); under native tool_calls these models compile into the tool
-# schemas the provider sees — the Field descriptions here ARE model-facing
-# documentation, keep them in lockstep with the system templates.
-#
-# Speech moved channels: prose / summary / answer text ride the content
-# channel (it streams — the typewriter law holds natively), so these models
-# carry NO speech field. A misplaced "prose"/"type"/"kind" habit key is
-# read-tolerated at the loop boundary (agents/tool_loop.py), never here.
-# The envelope seats ride the call they belong to: brief / material_text on
-# the plan-path tools, pending_disposition on both paths' tools (2026-09-27
-# 一问拍一体化 — the plan path gained its seats in the zombie-card fix).
 
 
 def tolerate_null_keys(data: Any, *keys: str) -> Any:
@@ -988,68 +880,6 @@ class PlanAskArgs(BaseModel):
         default="none",
         description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
     )
-
-
-class PresentPlanArgs(BaseModel):
-    """方案阶段的 present_plan 参数。展示草案并等待确认，此调用本身不会启动 Run。引出方案的说明写在消息正文中，不放入参数。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(
-            tolerate_null_keys(
-                data, "tasks", "specific_instruction", "tasks_explicit", "name", "material_text", "material_urls", "pending_disposition", "production_intent"
-            )
-        )
-
-    tasks: list[TaskItem] = Field(
-        default_factory=list,
-        description="已获授权的任务链：produce_video、prepare_narration、prepare_visual_assets 或 prepare_music。",
-    )
-    specific_instruction: str | None = Field(
-        default=None,
-        description="从提示中提炼的自由文本指令。",
-    )
-    tasks_explicit: bool = Field(
-        default=False,
-        description="用户自己明确点名作品时为 true。任务链源于默认提案时为 false。",
-    )
-    name: str = Field(
-        default="",
-        description="用界面语言以 2–6 个词组成简短名词短语，命名方案交付的作品。它会作为 Run 回执标题，不使用工具名。",
-    )
-    brief: Brief | None = Field(
-        default=None,
-        description="本轮 Brief 更新。仅填写有依据的字段并注明来源，只有用户原话明确陈述了该值时才用 user-stated。",
-    )
-    material_text: str | None = Field(
-        default=None,
-        description="用户本轮明确声明为自有素材的逐字原文。其他情况填 null。",
-    )
-    material_urls: list[str] | None = Field(
-        default=None,
-        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
-    )
-    production_intent: bool | None = Field(
-        default=None,
-        description=(
-            "用户是否要求现在制作该作品？只有明确请求或委托制作时才填 true，例如“按这版制作”“go ahead”“直接做，细节你决定”。纯修改、仅审阅（如“先给我看方案”）或讨论均填 false。"
-            "auto/ask 设置只影响是否需要单独批准，不会产生制作意图。没有制作请求时，已展示的方案等待用户表态，保留开始按钮。视频分镜设计或修订若无当前制作意图，完整展示后用 answer 结束，不展示制作方案。必须填写此判断。"
-        ),
-    )
-
-
-
-
-# ---------------------------------------------------------------------------
-# Video Project (ADR-145 phase B): the CompositionVersion chain's chat tools.
-# ---------------------------------------------------------------------------
 
 
 class VideoVersionRef(BaseModel):
@@ -1597,32 +1427,6 @@ class SuggestionItem(BaseModel):
     )
 
 
-def dock_worthy_suggestions(items: list[SuggestionItem]) -> list[SuggestionItem]:
-    """The wrap_up suggestions validator (校验分层律 — WrapUpArgs consumes
-    it): a label is the option row's visible text AND
-    the user's pick riding into the continuation — blank labels are dropped
-    (the model means "fewer options"), an overlong one rejects into the loop
-    (the option row cannot carry it). Extra recommendation marks drop
-    silently (cosmetic — never worth a repair round)."""
-    cleaned = []
-    for item in items:
-        item.label = item.label.strip()
-        if item.label:
-            cleaned.append(item)
-    if any(len(item.label) > 40 for item in cleaned):
-        raise ValueError("a suggestion label is at most 40 characters")
-    recommended_seen = False
-    for item in cleaned:
-        if item.recommended and recommended_seen:
-            item.recommended = False
-        recommended_seen = recommended_seen or item.recommended
-    return cleaned
-
-
-class StartRunArgs(BaseModel):
-    """方案阶段的 start_run 参数，用于启动已确认方案的 Run。"""
-
-    model_config = ConfigDict(extra="forbid")
 class PlanAnswerArgs(BaseModel):
     """方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。"""
 
@@ -1648,47 +1452,6 @@ class PlanAnswerArgs(BaseModel):
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
-    )
-
-
-class ProposeTasksArgs(BaseModel):
-    """对话阶段的 propose_tasks 参数，采用 TaskListProposal 的结构，摘要写入消息正文。可用空 tasks 表示回问；一个问题就能作出判断时优先用 ask_user。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "tasks", "name", "specific_instruction", "material_urls", "pending_disposition", "production_intent")
-
-    tasks: list[TaskItem] = Field(
-        default_factory=list,
-        description="按执行顺序排列的提案工具链，每个作品对应一个任务。",
-    )
-    material_urls: list[str] | None = Field(
-        default=None,
-        description="用户此轮明确作为制作素材提供的网页 URL。逐字复制各 URL，系统会采集为项目素材。仅供讨论的链接不计入。其他情况填 null。",
-    )
-    specific_instruction: str | None = Field(
-        default=None,
-        description=(
-            "为生成器提炼的简短额外指令。只写任务参数尚未表达的约束或重点，不复述请求本身。没有额外内容时省略。"
-        ),
-    )
-    name: str = Field(
-        default="",
-        description="用界面语言以 2–6 个词组成简短名词短语，命名这次运行交付的作品，不用工具名。",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
-    )
-    production_intent: bool | None = Field(
-        default=None,
-        description=(
-            "用户是否要求现在制作该作品？只有明确请求或委托制作时才填 true，例如“按这版制作”“go ahead”“直接做，细节你决定”。纯修改、仅审阅（如“先给我看方案”）或讨论均填 false。"
-            "auto/ask 设置只影响是否需要单独批准，不会产生制作意图。没有制作请求时，已展示的方案等待用户表态，保留开始按钮。视频分镜设计或修订若无当前制作意图，完整展示后用 answer 结束，不展示制作方案。必须填写此判断。"
-        ),
     )
 
 
@@ -1742,57 +1505,6 @@ class ChatAnswerArgs(BaseModel):
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
-    )
-
-
-class RetryUploadArgs(BaseModel):
-    """retry_upload 参数，用于重传已渲染完成但上传失败的成片。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "output_id", "pending_disposition")
-
-    output_id: UUID | None = Field(
-        default=None,
-        description="@output 指向的确切 ID。最近失败的 Run 只有一个上传失败项时可省略，由系统解析。不得编造 ID。",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
-    )
-
-
-class WrapUpArgs(BaseModel):
-    """``wrap_up`` params (trigger turns only) — the proactive turn's ONE
-    terminal call. The review itself is your spoken message (the content
-    channel); only the next-step option labels ride here.
-
-    选项语法统一律 (ADR-081, 2026-09-17): suggestions dock as a real options
-    question (OptionDock, numbered 1/2/3), never as pills; the pill form
-    (send/download actions) is retired, a landed output's download lives on
-    its canvas card's factsbar. 一问拍一体化 (2026-09-27): each suggestion
-    carries its one-line reason and at most one is marked recommended — the
-    dock carries the judgment, the speech's verdict names the same lean."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "suggestions")
-
-    @field_validator("suggestions")
-    @classmethod
-    def _labels_are_dock_worthy(cls, items: list[SuggestionItem]) -> list[SuggestionItem]:
-        return dock_worthy_suggestions(items)
-
-    suggestions: list[SuggestionItem] = Field(
-        default_factory=list,
-        max_length=3,
-        description="提供 0–3 个有实际阅读依据的下一步选项。每项用用户口吻写不超过 40 字符的标签，附一行理由，只标记唯一推荐项。不要套用通用清单。",
     )
 
 
@@ -1860,76 +1572,10 @@ class ChatRequest(BaseModel):
     # assembly (the stale check + the provenance note; a pick is never
     # silently adopted nor silently dropped).
     suggestion_ref: SuggestionRef | None = None
-    # Plan-path transports (intent-surface-unification W3 — carry only, never
-    # persisted on the message):
-    # The review panel's current plan (the user may have hand-edited the
-    # chain). Panel edits ARE task-list mutations (ADR-043) — the panel's
-    # chain is shown to the intent router as the presented plan and re-emitted
-    # whole on every revision, so hand edits survive unless the message
-    # revises them; None = the stored pending brief is presented, if any.
-    prior_intent: "InferredIntent | None" = None
-
-    @field_validator("prior_intent", mode="before")
-    @classmethod
-    def _strip_policy_stamp(cls, v: Any) -> Any:
-        """Read tolerance (ADR-099 戳的回声): the docked plan's intent carries
-        the ``interaction_policy_version`` observation stamp (stamped by
-        ``_create_message`` on every assistant row); the panel echoes the
-        intent back verbatim as ``prior_intent`` — drop the stamp before the
-        router shape's extra=forbid court, exactly like the auto-start
-        read-back."""
-        if isinstance(v, dict):
-            v = {k: val for k, val in v.items() if k != "interaction_policy_version"}
-        return v
     # The composer's persona choice rides the first message; written into the
     # pending brief only when the plan path docks a plan (a later turn
     # omitting it never clobbers the stored choice).
     persona_id: UUID | None = None
-    # The sender's surface (2026-09-25 canvas↔chat 联动, user ruling): the
-    # client judges it from the page width (panel form = the plan's canvas
-    # lives beside the conversation). "canvas" lets the turn's review
-    # invitation name that home; "chat"/None stays surface-neutral. A
-    # transport fact — never persisted on the message.
-    surface: Literal["canvas", "chat"] | None = None
-    # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
-    # every run is an autonomous continuation. The field stays so old
-    # clients keep passing it without a 422 (extra="forbid"); the value is
-    # accepted and IGNORED, never carried into the run.
-    autonomy: Literal["auto", "review"] | None = None
-
-
-class TaskItem(BaseModel):
-    """模型提出的一个任务，由注册工具及其参数组成（CHAT_ARCH §3）。compile_graph 根据 app/tools/__init__.py 检查工具是否存在、参数和拓扑是否有效。模型不写节点规格。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        # ADR-109 §5: a param-less tool comes back with params '' (or null)
-        # instead of {} — normalize before validation (打字机律牙① read
-        # tolerance extended to plan params: one schema rejection here used
-        # to cost a whole rejected iteration and its streamed prose). The
-        # null-as-string dialect ("language": "null") scrubs at the same
-        # seat: a junk token must never reach spec stamps, spec prompts, or
-        # a product's language column; an empty string means "absent" here
-        # too (every registry param falls back to its default).
-        if isinstance(data, dict):
-            data = dict(data)
-            if not data.get("params"):
-                data.pop("params", None)
-            elif isinstance(data["params"], dict):
-                data["params"] = {
-                    k: v
-                    for k, v in data["params"].items()
-                    if not (
-                        isinstance(v, str) and (is_null_token(v) or not v.strip())
-                    )
-                }
-        return data
-
-    tool: str
-    params: dict = Field(default_factory=dict)
 
 
 class ChatResponse(BaseModel):
@@ -2294,90 +1940,6 @@ def seal_creative_state(state: CreativeState) -> CreativeState:
 CompositionContent.model_rebuild(_types_namespace={"CreativeState": CreativeState})
 
 
-class InferredIntent(BaseModel):
-    """Intent payload: draft, clarify, answer or confirm, plus production tasks.
-
-    ``tasks`` is the production grammar; outputs are derived from the graph.
-    ``ask`` carries one clarification interaction, potentially grouped by the
-    active tool contract. ``answer`` is informational; ``start`` confirms.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_optional_fields(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)
-        for key in ("tasks", "name", "tasks_explicit"):
-            if data.get(key) is None:
-                data.pop(key, None)
-        brief = data.get("brief")
-        if brief is not None:
-            try:
-                Brief.model_validate(brief)
-            except Exception:
-                logger.warning("brief_dropped", brief=json.dumps(brief, default=str)[:500])
-                data["brief"] = None
-        return data
-
-    action: Literal["ask", "draft", "answer", "start"] = Field(
-        default="draft",
-        description=(
-            "判断用户是在要求创作或完善方案（draft）、询问工具能力（answer）、在确认阶段明确同意执行所提方案（start，修改要求不算确认），还是必须先澄清一个最影响质量的问题（ask）。"
-        ),
-    )
-    ask: QuestionProposal | None = Field(
-        default=None,
-        description=(
-            "action 为 ask 时的澄清交互，包括当前规范规定的分组表单。其他操作均填 null。"
-        ),
-    )
-    answer: str | None = Field(
-        default=None,
-        description=(
-            "面向用户的回复。action 为 answer 时直接回答；为 draft 时用正文引出并复述方案；为 start 或 ask 时填 null。"
-        ),
-    )
-    material_text: str | None = Field(
-        default=None,
-        description=(
-            "用户明确声明为自有素材的逐字原文，例如“这是我的文字稿……”。未明确将粘贴文本作为素材时填 null，单纯请求不属于素材。action 为 start 或 ask 时填 null。"
-        ),
-    )
-    tasks: list[TaskItem] = Field(
-        default_factory=list,
-        description=(
-            "已授权的任务链，按执行顺序列出 produce_video、prepare_narration 或 prepare_visual_assets。start、answer、ask 调用留空。"
-        ),
-    )
-    specific_instruction: str | None = Field(
-        default=None,
-        description="从提示中提炼的自由文本指令。answer、start、ask 时填 null。",
-    )
-    tasks_explicit: bool = Field(
-        default=False,
-        description=(
-            "用户自己明确点名作品时为 true，任务链源于默认提案时为 false。"
-        ),
-    )
-    # Advisory brief slots preserve user-stated and inferred source facts.
-    # brief (ADR-052 B2): the router's full-update proposal — emit only the
-    # slots you have a view on this turn, each with
-    # its source (user-stated ONLY when the user's own words literally state
-    # the value). Code merges by source precedence; a slot you leave out
-    # (or set null) keeps its stored value. Null for start/answer calls.
-    brief: Brief | None = None
-    # LLM 建图时命名 (2026-09-09, ADR-058): a compact noun phrase naming the
-    # plan's deliverable, in the interface language ("中文 LinkedIn 帖子" /
-    # "Chinese LinkedIn post") — it titles the run's receipt and completion
-    # line. Display copy comes from the proposer's FRESH reading of the
-    # turn, never from a frozen-params template. "" = unnamed (readers fall
-    # back to the chain-derived label). Null-equivalent for start/ask/answer.
-    name: str = ""
-
-
 class PlanEstimate(BaseModel):
     """Dock 载荷的估价面 (BILLING §7, ADR-055): the plan's credits
     quotation, code-supplied (the estimate fold × PRICING × the consumption
@@ -2455,77 +2017,17 @@ def missing_brief_question_items(
     return missing
 
 
-class PendingPlan(BaseModel):
-    """Unconfirmed plan persisted on ``projects.pending_brief``.
-
-    Written by the chat plan path on draft-action turns (an
-    answer-action turn never overwrites the stored plan), cleared once the
-    run starts. Lets a user who left the plan-confirmation chat resume it
-    exactly, from any device. Ask-action turns write a brief-only row
-    (``intent=None``): the merged brief persists while the clarification is
-    docked, and the answer's backfill lands on it.
-    """
+class ProjectBrief(BaseModel):
+    """User constraints, material roles and the exact storyboard presentation."""
 
     model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _drop_legacy_flags(cls, data: Any) -> Any:
-        """Rows stored before the B4 cleanup carry a redundant
-        ``needs_clarification`` bool (always derivable from ``reasons``) —
-        drop it on read; it is never written anymore."""
-        if isinstance(data, dict):
-            data = {k: v for k, v in data.items() if k != "needs_clarification"}
-        return data
-
     prompt: str = ""
-    # Null on brief-only rows (ADR-052 B2: an ask-turn write — the brief
-    # merged, no plan drafted yet). A row with intent=None is never startable
-    # and never re-docked as a plan.
-    intent: InferredIntent | None = None
-    # brief (ADR-052 B2): the dialog's structured state — slots with
-    # provenance, merged by code every plan turn (merge_brief). The task
-    # chain and derived preview above stay the plan's own rows (原样).
     brief: Brief = Field(default_factory=Brief)
     creative_state: CreativeState | None = None
-    reasons: list[str] = Field(default_factory=list)
     persona_id: UUID | None = None
-    # 资产角色 pins (ADR-078 判词④): which attached video is the user's OWN
-    # material (source) and which is the reference exemplar whose craft the
-    # run reverse-compiles. Settled by CODE only — the role question's answer
-    # (service._settle_role_pins) or an @-mention (plan_turn's assemble) —
-    # never by the LLM; stamped verbatim onto the TaskSpec at run start.
-    # Roles are reversible between runs (a fresh mention re-pins). None =
-    # unsettled (a multi-video remix asks the role question first).
     source_asset_id: str | None = None
     exemplar_asset_id: str | None = None
-    # Derived preview (ADR-043): the dry-run-compiled graph's user-facing
-    # projection — what this chain will produce — computed at dock time
-    # (outputs are derived, never declared). Rows: {"type": "video"|"clips"|
-    # "post"|"quotes"|"carousel"|"article", "variant": "subs"|"dub"|None,
-    # "language"?, "count"?, "bilingual"?}. Empty on legacy rows.
-    derived: list[dict] = Field(default_factory=list)
-    # 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): the Content Plans behind the
-    # compiled chain (plan_id / title / state / outputs — the LLM-named
-    # product semantics), stamped at dock time so the reading layer survives
-    # a refresh (the restore path reads pending_brief, never the question
-    # row). Empty on the router-drafted rows (读容忍).
-    plans: list[dict] = Field(default_factory=list)
-    # R20 修订路由器基材 (iter-3 E1/E2, N-58): plan_id → the plan's
-    # half-open task range in the docked chain — born with the dock-time
-    # compile, carried verbatim into the Confirmed Scope Snapshot at Start.
-    # None on router-drafted / legacy rows — the revision router degrades
-    # honestly to the @output channel (读容忍).
-    plan_task_map: dict[str, list[int]] | None = None
     video_presentation: dict | None = None
-    # The frozen cut's other half (冻结场内切点 = 冻结时间轴同一继承律):
-    # the reveal words' landing beats, one entry per scene (None per
-    # non-reveal scene); consumed fail-closed by the run whenever the kept
-    # cut covers a reveal scene. Read-tolerant: absent on pre-envelope
-    # rows.
-
-
-
 
 
 class ProjectBase(BaseModel):
@@ -3126,7 +2628,7 @@ class ProjectResultsResponse(BaseModel):
     project: ProjectResponse
     prompt: str | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
-    pending_brief: PendingPlan | None = None
+    pending_brief: ProjectBrief | None = None
 
 
 # ---------------------------------------------------------------------------

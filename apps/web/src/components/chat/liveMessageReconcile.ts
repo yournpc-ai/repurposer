@@ -12,7 +12,7 @@ import type {
   MessageBlock,
 } from "./timeline/types"
 import { stampServerMessageId } from "./timeline/identity"
-import { triggerOutputRefs } from "./timeline/history"
+import { deliveryOutputRefs } from "./timeline/history"
 
 export { prependMissingHistory, stampServerMessageId } from "./timeline/identity"
 
@@ -42,62 +42,6 @@ export function isFreshPolledRow(
   return seq != null && observedBefore != null && seq > observedBefore
 }
 
-/** Generic watch windows speak only for the new tail. Run review is the one
- * scoped exception: its delivery may already precede a newer user turn, but
- * it still belongs to this run and is inserted by seq rather than dropped. */
-export function shouldAdmitPolledTrigger({
-  fresh,
-  reviewRunId,
-  rowRunId,
-}: {
-  fresh: boolean
-  reviewRunId: string | null
-  rowRunId: string | null | undefined
-}): boolean {
-  return reviewRunId == null ? fresh : rowRunId === reviewRunId
-}
-
-/** A recovery delivery carries the server's persistent upload-retry number.
- * The initial terminal transition is attempt zero; no timestamp participates. */
-export function deliveryUploadRetryCount(ref: string | undefined): number | null {
-  if (ref == null || ref.length === 0) return 0
-  const match = /:upload-retry-(\d+)$/.exec(ref)
-  if (!match) return ref.includes(":upload-retry-") ? null : 0
-  const count = Number(match[1])
-  return Number.isSafeInteger(count) ? count : null
-}
-
-export function isCurrentRunAttemptDelivery(
-  message: Pick<OverlayMessage, "runId" | "runDelivery" | "runDeliveryRef">,
-  runId: string | null,
-  uploadRetryCount: number,
-): boolean {
-  return (
-    runId != null &&
-    message.runId === runId &&
-    message.runDelivery === true &&
-    deliveryUploadRetryCount(message.runDeliveryRef) === uploadRetryCount
-  )
-}
-
-/** Live review still settles only after the existing drained-suggestions edge;
- * a hydrated delivery is already a historical fact and never waits 60s. */
-export function runReviewerLanded(
-  messages: OverlayMessage[],
-  runId: string | null,
-  uploadRetryCount: number,
-): boolean {
-  return messages.some(
-    (message) =>
-      isCurrentRunAttemptDelivery(message, runId, uploadRetryCount) &&
-      (message.suggestions !== undefined || message.hydrated === true),
-  )
-}
-
-export function hasAnyRunDelivery(messages: OverlayMessage[], runId: string | null): boolean {
-  return runId != null && messages.some((message) => message.runId === runId && message.runDelivery === true)
-}
-
 /** Birth adapter for server-born prose recovery. Content still enters through
  * the caller's typewriter; structured references arrive with the same row. */
 export function buildRecoveredProseMessage({
@@ -105,20 +49,14 @@ export function buildRecoveredProseMessage({
   seq,
   createdAt,
   turnId,
-  runId,
   blocks,
-  runDelivery,
-  runDeliveryRef,
   outputRefs,
 }: {
   id: string
   seq?: number | null
   createdAt?: string
   turnId?: string | null
-  runId?: string | null
   blocks?: MessageBlock[]
-  runDelivery: boolean
-  runDeliveryRef?: string
   outputRefs?: string[]
 }): OverlayMessage {
   return {
@@ -129,13 +67,9 @@ export function buildRecoveredProseMessage({
     streaming: true,
     seq: seq ?? undefined,
     at: createdAt,
-    runId,
     turnId: turnId ?? undefined,
     blocks: blocks?.length ? blocks : undefined,
-    runDelivery,
-    runDeliveryRef,
     outputRefs,
-    independentKind: runDelivery ? "trigger" : undefined,
   }
 }
 
@@ -175,7 +109,7 @@ export function stampMessagePresentation(
   message: { id: string; blocks?: MessageBlock[]; intent?: unknown },
 ): OverlayMessage[] {
   const blocks = message.blocks?.length ? message.blocks : undefined
-  const outputRefs = triggerOutputRefs(message.intent)
+  const outputRefs = deliveryOutputRefs(message.intent)
   if (!blocks && outputRefs.length === 0) return messages
   const targetId = messages.some((row) => row.id === previewId) ? previewId : message.id
   return messages.map((row) => row.id === targetId ? {

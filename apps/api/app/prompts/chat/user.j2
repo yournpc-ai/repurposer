@@ -40,28 +40,12 @@
 {%- if confirmation_line %}
 {{ confirmation_line }}
 {%- endif %}
-{%- if presented_plan %}
-已向用户展示并等待确认的方案（JSON 任务链）：{{ presented_plan }}
-这是当前方案，可能包含用户直接在面板中的修改，对话中不会留下这些修改的记录。输出完整的修订链。用户没提到的任务及参数（工具、数量、语言、角度）照旧；诸如“只要两个场景”“字幕改成德语”“去掉配音”等修改要逐项准确落实。以最新用户消息为准。
-{%- endif %}
-{%- if plans_lines %}
-你整理的决策方案正待确认。以下 Content Plans 中的 plan_id 是指定修订目标的唯一合法来源，不得编造：
-{{ plans_lines|join('\n') }}
-{%- endif %}
 {%- if pending_lines %}
 你之前的问题仍待回答，先结合它理解本条消息。如果用户给出了待填字段的值，在 Brief 更新中提出该值并将 source 设为 'user-stated'。如果只是无关插话，则独立处理本条消息，保留原字段和待回答状态，用户会收到提醒。
 {{ pending_lines|join('\n') }}
 {%- endif %}
 {% if message %}用户消息：{{ message }}{% endif %}
-{%- if surface_line %}
-{{ surface_line }}
-{%- endif %}
 {% elif mode == "conversation" %}上下文：
 {{ context_text }}
 
-{% if message %}用户消息：{{ message }}{% endif %}{% elif mode == "event" or mode == "delivery" %}上下文：
-{{ context_text }}
-
-[系统事件，本轮没有用户消息]：{{ event_line }}
-请用用户在上述对话中使用的语言回答。
-{% endif %}
+{% if message %}用户消息：{{ message }}{% endif %}{% endif %}

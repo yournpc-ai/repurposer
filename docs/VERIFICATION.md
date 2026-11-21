@@ -32,9 +32,7 @@
 #### 已知方差与覆盖边界
 
 - 真实旅程的模型输出方差是开放观察项，不自动放大为新的 release regression；每次仍需在当前 HEAD 按当前旅程名称归因。
-- 以下风险目前没有完整活旅程自动化看护：计费失败、孤儿 hold 回收、run 执行权仲裁、turn durability、SSE 断流复连、repair 静默/泄漏。相关纯函数覆盖不能冒充全链覆盖；是否补入矩阵须按用户旅程归属评估。
-- 保留历史消息的环境，migrate_activity_log_rows.py 退役前仍须迁移与回放证明；本轮已授权 reset 的无用户环境可重建空数据，不承担旧行兼容回填。reset 未执行不等于旧行已清零。
-- trigger `/event/sync` 无 Activity 行是 parity 观察，不自动等同于缺陷或新需求。
+- 以下风险目前没有完整活旅程自动化看护：计费失败、孤儿 hold 回收、Job 执行权仲裁、turn durability、SSE 断流复连、repair 静默/泄漏。相关纯函数覆盖不能冒充全链覆盖；是否补入矩阵须按用户旅程归属评估。
 
 ### 1.4 运行纪律
 
@@ -71,7 +69,7 @@ MiniMax 与 DeepSeek 共用 `app/providers/llm/trace.py`；`LLM_TRACE_PATH` 指�
 uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/model-call UUID> --out ../../artifacts/model-traces/<id>
 ```
 
-可用 `--trace <jsonl路径>` 指定记录。导出只读，不调用模型、不重新发送 Chat、不修改作品。旧记录缺少 project_id 时，仅通过既有 conversations 表解析 project → conversation；每个调用导出 request/response/error、完整 message 文本、各 tool schema、inventory 与总索引。没有响应记录写 pending，不将其等同于进程仍在执行；项目终态仍须读 Turn/Run。
+可用 `--trace <jsonl路径>` 指定记录。导出只读，不调用模型、不重新发送 Chat、不修改作品。旧记录缺少 project_id 时，仅通过既有 conversations 表解析 project → conversation；每个调用导出 request/response/error、完整 message 文本、各 tool schema、inventory 与总索引。没有响应记录写 pending，不将其等同于进程仍在执行；项目终态仍须读 opening 与 Job。
 
 首次模型请求前的静态 Skill 文件装配记录 `initial_chat_dependency_started/completed/interrupted`，带 project/conversation/turn 身份、读取名、状态和耗时；不执行长耗时采集、不冒充模型工具活动。素材准备归普通 ToolLoop：首轮模型先发言并调用工具，等待明确结果后才请求下一轮；取消不继续。首轮上下文保留根方法/索引/模板原文，实际图片随准备工具结果交付。基础层回归比较完整共享来源及哈希，不设提示词长度目标。
 
@@ -94,7 +92,7 @@ uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/mod
 |:---|:---|:---|
 | 应用组合根可启动 | `test/core/test_app_boot.py` | 活 API 健康检查与真实请求 |
 | 支付、积分、计量与报价 | `test_payments.py` / `test_metering.py` / `test_pricing.py` | `credits_boundary`；真实 webhook、费用确认与钱包台账 |
-| 执行身份、交付、渲染归属与产物检查 | `test_execution_fencing.py` / `test_run_authority.py` / `test_delivery.py` / `test_render_ownership.py` / `test_render_probe.py` / `test_output_checks.py` / `test_staging.py` | 明确授权的制作旅程；worker 恢复、上传重试与真实媒体 |
+| 执行身份、交付、渲染归属与产物检查 | `test_export_stop_races.py` / `test_project_job_deletion.py` / `test_delivery.py` / `test_render_probe.py` / `test_output_checks.py` / `test_staging.py` | 明确授权的制作旅程；worker 恢复、上传重试与真实媒体 |
 | 上传、媒体准备与导入 | `test_media_preparation.py` / `test_media_import.py` / `test_web_capture.py` | `material_to_clips` / `remix`；真实上传进度、失败与删除 |
 | 内置与外部 Skill、包权限和读取边界 | `test_skill_store.py` / `test_skill_packages.py` / `test_skill_catalog.py` | `builtin_promo_skill` / `external_skill`；恶意包与真实 Skill 多轮对话 |
 | Composition、版本、预览与 video-spec | `test_compositions.py` / `test_previews.py` / `test_video_spec.py` / `test_generator.py` | `temporal_revision` / `builtin_promo_skill`；浏览器预览、Scrub 与最终视听 |
@@ -103,19 +101,9 @@ uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/mod
 
 真实旅程注册表还覆盖迷失用户、探索、无素材写作、研究、咨询、修订、访谈、时间编辑与能力拒绝等主流程。新增旅程必须来自真实用户需求；新增核心测试必须能指出其保护的用户合同，不能仅为内部实现形态提高覆盖率。
 
-## 3. Charge Semantics 等价登记（ADR-063 终读）
+## 3. Job 与费用
 
-**当前实现下 `charge_semantics_ready ≡ has_pending_plan`——这是当前合同
-空间中的故意等价，不是测试缺失。**
-
-- ADR-063：estimate 可 deferred（NULL estimate = 诚实 Deferred 披露面），收费语义随 pending plan 的 dock 即已完整披露，**estimate 完整性不阻塞 PLAN_READY**；`always_confirm_above` 触发独立费用确认；NULL 不可报价族仅在 execution=ask 或 credits=ask 时确认，auto/auto 不另设确认。
-- 推论：`PLAN_READY=true ∧ charge_semantics_ready=false` 在当前产品实现中
-  是**不可达状态**；四合取的 charge conjunct 不提供独立运行时分叉，其
-  独立性由合同层保留（未来引入独立收费语义准备态时它才有牙）。
-- 若未来要支持「Plan Ready + 费用语义未完整 + Canvas 可审阅 + Confirm
-  disabled」：那是 **ADR-063 / ADR-087 的产品合同翻案**，不是普通 bug
-  fix——先拍板再动代码，届时本条目与等价钉同批改写。
-- 该等价是当前产品合同；若实现引入独立收费语义准备态，必须先修订上述 ADR，再调整核心测试与真实旅程。
+检查原授权、所有者、实际 Job、钱包预占与最终 capture/release。Stop 与外部副作用按先提交的事务裁定。API/Worker 强杀、双 Worker、待核对和项目删除必须在真实隔离 PostgreSQL 中验证。
 
 ## 4. 未闭环验收与实现差异
 
@@ -159,7 +147,6 @@ Canonical：CHAT_ARCHITECTURE §8.5/§8.8，ADR-081/099/100/116。
 - 第二轮的官网澄清最多五题，一次提交创作方向、时长、配音语言、字幕语言和画幅。媒体流程按已结算 Run 的草稿 ID/digest 恢复，支持原速 TTS 和 READY cues、跨幕重定时与电子配乐。缓存和新生成音频经过同一 Chat 交付入口，审批、取消和阻断状态随会话恢复。
 - 项目 `83a1bc90-266e-4082-b180-3be7b6e7170e` 的历史记录停在图片恢复，没有 TTS/BGM 或试听卡。后续的定向工具循环与前端组件检查覆盖了精确恢复、多 Run 和波形显示。最终改动由用户从新 Chat 验收，本次未提交新的真实制作请求、调用真实 TTS 或生成验收用 BGM。
 - 项目 `ff0604d5-2d2a-4947-a5d6-4374e0bea74c` 的两次图片 Run 完成了五幕准备与两幕返工。首幕图已读回，分镜写入仍返回 `source_not_ready`，后台结束续行，音频任务和 Chat 播放卡均为零。该项目记录的是修复前的结果。本次改动之后的音频交付等待用户实际验收。
-- 项目 `4762c3f6-eadc-4054-9b25-776b54005018` 一次作答选择 30 秒。官网分镜入口在引用校验前抛出 `NameError`，制作 Run 和音频卡均为零。修复后，用该项目原分镜参数和真实截图摘要做只读回放。第五幕混用网页 ID 时得到逐幕纠错提示，改用 `view-3` 的图片 ID 后，六幕草稿和 SVG 预检通过。临时数据库回归经 Chat 工具入口覆盖了选取截图、创建草稿、单幕规格更新和图片计划。回放没有启动制作 Run，第二轮音频交付仍待真实 Chat 验收。
 
 - 一次集中作答后的自主验收以 [Iteration 2 子合同 §0](tasks/website-promo-iteration2-media-slice.md#0-目标任务与迭代纪律) 为准。项目 `7dd2a1f1-75ea-4b21-8525-c0881d4f4e73` 的真实 Chat 诊断经人工 Start 取得两张 PNG（Run `be93f484-06ad-4efe-8467-e7150eaff0e0`），SVG 技术通过但内容审阅不可用，MiniMax 内容失败。随后有人为恢复提示，计划 Start 返回 422，未创建新的 Run。该诊断明确计为自主旅程失败。
 - 图片计划改为按 draft_ref 和 scene_ids 解析服务器规格，保存旧计划兼容。补审复用固定 PNG、Snapshot 和媒体分析，只保存新报告。针对性图片恢复和官网入口 wire 共 6 项通过。未重跑真实 Chat 或 provider，未验证自动 Start/结算续行、验收停点、第二轮真实音频或后续成片。
@@ -188,34 +175,15 @@ Canonical：CHAT_ARCHITECTURE §3.5/§8，ADR-102/113。
 - 当前素材/咨询旅程、相关核心测试与 Web 检查仍待完成；不恢复 material-wait 事故套件。
 - live：① 寒暄/能力问答零 worker 事件与素材处理；② 视频提问出现真实 read-active，等待实际 ASR 后同回合 grounded answer/诚实失败；③ 同素材追问 digest 命中、零等待。
 - ④ 硬刷新每条 opening/user message 恰好出现一次，不丢不重；⑤ 无素材读取问题的上传不产生处理活动或虚假叙事；⑥ 素材读取回合只有一个 read Activity 生命周期，回答有依据，不逐资产重复叙事。
-- ⑦ ask_user 不可见/散文宣告 default-path，不复读内部法条；⑧ in-flight beat 被抑制时，无 in-flight 的合法 run-birth beat 仍可出现；⑨ read/plan 都没有独立 transcript 节点/卡，资产卡只反映真实状态。
 - worker 停摆导致无限等待仍是登记风险；超时/取消/降级不在本整理批擅改。ASR GPU/云加速为独立运营评估，不作为本验收完成项。
 
 ## 5. 共享机制与 UI 的当前验收
 
 这些检查尚未闭环，不继承旧批次完成状态。旧 task 的过程、固定事故项目与旧数据救援工单不再是新架构施工前置；仍需的行为合同在各母文档/ADR，下面只登记当下验收和未定事项。
 
-### 5.1 Render ownership 与恢复
+### 5.1 导出与交付
 
-Canonical：RENDERING、ADR-096。静态 owner/屏障包含同 output 全部写者；非 owner 失败不得交付部分 spec，track 局部原子写和完整 ClipSpec 校验继续有效，reconcile 不替代正常 compiler/runner。
-
-待验：owner/其他写者启动及完成的两种顺序、写者失败阻断、屏障等待中取消、run 恢复不重复执行、fork owner 只等自己的写者；并发不同 track 不丢更新、同 track 冲突有诊断、联合约束复校；空/缺文件、spec 版本失配、归档或跨 run 在飞渲染不误认领。真实 worker/live 与纯测试证据分开。
-
-无实际用户环境不再要求恢复特定历史 dev 产物；该操作工单退出，不记“已恢复”，也不把一次性裸 SQL 修复推广为正常路径。
-
-### 5.2 Product artifact 身份
-
-Canonical：ADR-097、MODULE_ARCHITECTURE。work_key/artifact_key/artifact_name/artifact_role 与 fill_key 独立；is_product_node 与 role 分层，无 key 为 unknown；名称按 ADR-058 手改撤名。成员不能从 rank/邻接/时间戳/共享 output/fill_key 猜出，display lineage 不参与调度/stale 闭包。
-
-待验：fresh 视频→金句短片只有真实目标交付卡与 companion，transcript 在资产卡；同 output 只属一张交付卡、fork 独立、archive 可追溯、每 artifact 至多一个 activity owner；改变 rank/边序等不改成员；transcript overlay 不因 display 边错误失效。readiness 术语须有真实事实。跨产物 product_artifact/artifact_version 表是 OPEN，不能与 Composition 同期默认建另一套作品层。
-
-### 5.3 Product graph、staging 与可选 Canvas
-
-Canonical：ADR-086/098/113、CHAT_ARCHITECTURE §5。fresh graph 禁 task_book/transcript/纯执行节点；rank 唯一，lineage/ctx 不参与 rank 与 RunOp，布局不能影响执行；effective/display 只读，settled-rank freeze、append-only 与 source→target reveal 顺序保留。
-
-待验：多文件上传/真实进度/失败重试/删除/attach 阻塞、PUT 成功未 attach 的 TTL 回收且不删已引用 key；fresh 图资产/产物身份一致；恶意反向 frame 不改 RunOp 拓扑与隐藏 modifier 顺序；server display_ranks 与前端投影同 fixture 同数、单成员 cohort 无幽灵 corridor、并行 writer/新增成员不移动旧卡、素材删除 reflow 为具名后果；背景 refetch 不动相机。移动端纯 Chat、深浅主题与真实 Start 都要验证。
-
-空 frame 出生保障、缺帧 dev 失败/prod rank 回退、按 rank reveal/reduced-motion、同族分组/长边/settled 居中仅为后续需求，不把旧 C-3/Batch D 当成新视频前置。禁止服务端逐节点 drip-feed、第二 rank 或为排线造语义节点。
+核对确切预览、ExportJob 所钉版本、Renderer 生成的 MP4、Output 字节摘要、Agent 审阅及交付消息。实际播放与下载在 Chrome 硬刷新后分别检查。多版本、多用户与恢复使用原 Job 和消息身份。
 
 ### 5.4 素材卡、Transcript 与精确编辑边界
 
@@ -235,18 +203,11 @@ Checkpoint 五路承重覆盖：非终态非空散文合法参数且有 channel 
 
 fresh 首/后续 conversation 分别检查 FK/seq、刷新切 tab、WorkSegment 与 failed/cancelled；保留历史的环境才要求活动旧行迁移及回放证明。无用户 reset 路径不需要迁移事故项目。
 
-### 5.6 Lifecycle 与后续 hygiene
+### 5.6 活动和恢复
 
-Canonical：ADR-087/089/117/139。待验 derived/reasons、PLAN_READY≠CONFIRMATION_READY、missing stamp=unknown、估价完整性非 PLAN_READY 前置；/generate 的历史 context.tasks 不得在无有效 confirmed/approved provenance 时充当授权，生产暴露尚未核实，需修实现或明确重裁。
-
-scope 不可证保持 unproven；targeted tasks=None、legacy slot-run 安全 false negative 不强行放行。pipeline↛chat，trigger 白名单仅 run_completed/run_failed/craft_decompiled。旧 plan-card disclosure 按当前面清理由真实旅程复核。旧 HOLD/相位退休记录不是当前证据，按 fresh 行为重验，不复做过时施工。
-
-若删除 _read_face，先证明目标实例 generator/processor/agent/modifier/materialize 及旧 toolset 无消费者/存量；允许本轮授权 reset 后查零，不伪造迁移或已执行。已应用 Alembic 历史保留；无用户旧数据不再要求兼容搬运，仍保留数据的其他环境须先读容忍再收窄，不得混用授权范围。
-
-后续 hygiene 不入关键路径：按职责拆 chat/service、models/schemas、graph_fill；Message.intent union；edit_output 事务对称性（失败零残留或明确 ADR 例外）；ChatDock 仅按依赖需要评估。逐缝小提交、行为不变，compile/import/依赖门与受影响旅程验证，不能损坏草稿保活、SSE、授权与唯一写口。
+刷新读取原 opening 的消息与各工具独立回执。API 中断或双 Worker 的测试须核对唯一续行、版本、固定媒体、费用和交付次数。
 
 ### 5.7 现有 UI 自足与锚卡
 
-Canonical：UI_GUIDELINES、CHAT_ARCHITECTURE、ADR-118/122/143。待验移动纯 Chat 上传→授权→生成→delivered/partial/failed→修订；unknown 能力、无 world、pending plan、缺/重复 output_refs、失败不出假锚卡。桌面 auto/chat 切换按当前渲染能力，不钉历史设备；锚卡只是收据投影，N 个平铺/稳定去重，无新订阅、合集卡或第二 live 状态源。
 
 真实 MediaLightbox 播放、跨 Home/Lightbox 声音互斥、离屏暂停所有权、copy/免责声明、双主题/无横溢、MentionEditor 不 remount、背景相机不动、WorkSegment 正确收口都未自动通过。交付正文始终只讲实际结果，不给界面引导或内部 ID。Home 真片状态只读 home-creation-entry-refresh；空货架/假 Queue/mic/反馈按钮不复活。

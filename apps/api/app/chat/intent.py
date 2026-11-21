@@ -16,7 +16,6 @@ def _assemble_plan_turn(
     persona: Persona | None = None,
     pending_question: Message | None = None,
     filename: str | None = None,
-    presented_plan: str | None = None,
     recent: list[str] | None = None,
     file_language: str | None = None,
     material_excerpt: str | None = None,
@@ -24,8 +23,6 @@ def _assemble_plan_turn(
     speaker_form_lines: list[str] | None = None,
     asset_lines: list[str] | None = None,
     material_pending_line: str | None = None,
-    plans_lines: list[str] | None = None,
-    surface: str | None = None,
     confirmation: tuple[str, str] | None = None,
 ):
     """Plan-turn inputs (ADR-052 B2 D2-C2 — the brief is the state).
@@ -48,10 +45,6 @@ def _assemble_plan_turn(
     the pending slot IS the answer (code settles the row), anything else is
     an interjection (the question stays open, the reply gets the reminder
     tail).
-    ``presented_plan``: one-line digest of the docked plan, when one is
-    on the table — the start/revise call needs to SEE the plan being
-    confirmed, not imagine it (a bare "开始吧" after a vague first turn
-    otherwise reads as "go draft it").
     ``recent``: the conversation's latest rounds (pre-formatted lines,
     current message excluded) — the material/content judgment needs to SEE
     what just happened (e.g. the assistant asking for source material), not
@@ -82,16 +75,6 @@ def _assemble_plan_turn(
     every file is readable. The router never infers readiness from absent
     evidence (the missing excerpt/understanding was the only signal, and
     absence invited「I can't read it」improvisation).
-    ``plans_lines``: the docked decision package's plan roster (iter-2 ⑦)
-    — plan_id + title + outputs digest per plan, rendered as the package
-    block so a change ask can name its revise_plan target; None when the
-    dock on the table is router-drafted (no Content Plans behind it).
-    ``surface``: the sender's surface (2026-09-25 canvas↔chat 联动, user
-    ruling — the client judges it from the page width). "canvas" renders
-    the surface line: the plan is laid out as an inspectable graph beside
-    the conversation, so the review invitation may name that home (the
-    system template's law governs the usage); anything else renders
-    nothing and the surface-neutral default stands.
     ``confirmation``: the user's two confirmation prefs (ADR-117 D1 —
     (execution, credits) ∈ {auto, ask}) — rendered as one fact line the
     system template's mode-conditional close law reads; None renders
@@ -178,8 +161,6 @@ def _assemble_plan_turn(
             "persona_lines": persona_lines,
             "pending_lines": pending_lines,
             "filename": filename,
-            "presented_plan": presented_plan,
-            "plans_lines": plans_lines,
             "recent": recent,
             "file_language": file_language,
             "material_excerpt": material_excerpt,
@@ -187,19 +168,6 @@ def _assemble_plan_turn(
             "speaker_form_lines": speaker_form_lines,
             "asset_lines": asset_lines,
             "material_pending_line": material_pending_line,
-            # The surface FACT (2026-09-25; 用户话术改口 2026-09-27 — v4.2
-            # 封板⑪: the user's word is workspace/工作空间, the internal
-            # enum stays "canvas"): a plain statement of where the plan
-            # sits when the client reports the workspace. 2026-10-15 清扫
-            # (画蛇添足裁决): this line is the workspace noun's ONLY seat —
-            # the system templates carry no conditional naming law, so a
-            # chat-surface turn's prompt contains zero workspace tokens and
-            # the model cannot point at a home it never saw.
-            "surface_line": (
-                "当前对话与方案工作空间并列，展示的方案也以可检查的图显示在那里。可按用户的语言称“工作空间”或“the workspace”，不用方位词。"
-                if surface == "canvas"
-                else None
-            ),
             # The confirmation-settings FACT (ADR-117 D1): the system
             # template carries the mode-conditional close law (one law,
             # one seat); this line is only the world fact it keys on.

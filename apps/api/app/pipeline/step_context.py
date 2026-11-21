@@ -1,11 +1,4 @@
-"""Runner-side mechanical helpers shared by node runners (ADR-039 P1 split).
-
-Multimodal input collection, asset listing/digest, misc row helpers. Context
-ASSEMBLY lives in the harness layer (``agents/contexts.py``:
-``generation_context`` there, the chat intent context there too); this
-module keeps the media/digest mechanics. The output-type vocabulary lives on
-the node classes (``pipeline/graph.py``, N-32).
-"""
+"""Multimodal source inputs and project asset facts for Chat and asset processing."""
 
 import hashlib
 import mimetypes
@@ -19,9 +12,8 @@ from app.models.schemas import (
     AssetType,
     MediaInput,
 )
-from app.models.tables import Asset, Persona, Project
+from app.models.tables import Asset, Project
 from app.providers.storage import download_to_temp, file_to_data_url
-from app.pipeline.assets import asset_text_content
 
 # Media snippets above these thresholds are not sent directly to the multimodal
 # model; we rely on ASR transcripts / extracted text instead. These limits are
@@ -30,27 +22,6 @@ from app.pipeline.assets import asset_text_content
 # the user still gets results from the transcript even for large files.
 _MAX_DIRECT_VIDEO_SECONDS = 600  # 10 minutes
 _MAX_DIRECT_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
-
-
-def _truncate(value: str | None, max_len: int) -> str | None:
-    """Truncate a string to fit a SQL column, returning None for empty values."""
-    if value is None:
-        return None
-    value = value.strip()
-    if not value:
-        return None
-    return value[:max_len]
-
-
-def _count_words(value: object) -> int:
-    """Whitespace token count over every string in a payload (display-only)."""
-    if isinstance(value, str):
-        return len(value.split())
-    if isinstance(value, dict):
-        return sum(_count_words(v) for v in value.values())
-    if isinstance(value, list):
-        return sum(_count_words(v) for v in value)
-    return 0
 
 
 async def list_assets(db: AsyncSession, project_id: UUID) -> list[Asset]:
@@ -234,43 +205,3 @@ async def collect_asset_media(assets: list[Asset]) -> list[MediaInput]:
             if item:
                 inputs.append(item)
     return inputs
-
-
-async def _estimate_facts(db: AsyncSession, project: Project) -> dict:
-    """Compile-time quotation facts (P4, N-34), assembled once per create_run.
-
-    Counts and lengths only — no media downloads, no payload reads beyond the
-    clip rows' duration/caption text. Each node's ``estimate(ctx)`` picks what
-    it needs; ``spec`` and ``input_kinds`` ride per node at the call site.
-    """
-    assets = await list_assets(db, project.id)
-    texts = [t for a in assets if (t := asset_text_content(a))]
-    # Mirrors collect_asset_media's feed surface (no downloads): images with a
-    # file, one item per slide page, videos within the direct-feed duration.
-    media_count = sum(
-        1
-        for a in assets
-        if (a.type == AssetType.IMAGE and a.file_url)
-        or (
-            a.type == AssetType.VIDEO
-            and a.file_url
-            and (a.duration_seconds or 0) <= _MAX_DIRECT_VIDEO_SECONDS
-        )
-    ) + sum(len(a.slide_pages or []) for a in assets if a.type == AssetType.SLIDES)
-
-    persona = await db.get(Persona, project.persona_id) if project.persona_id else None
-    # The dub chain reuses a bound voice_id; anything else pays one clone
-    # (worst case — a cached sample.meta.voice_id would make the actual 0).
-    voice_id = ((persona.voice or {}).get("voice_id")) if persona else None
-
-    clips: list[dict] = []
-    output_seconds: dict[str, float] = {}
-    return {
-        "text_chars": sum(len(t) for t in texts),
-        "text_count": len(texts),
-        "media_count": media_count,
-        "persona_exists": persona is not None,
-        "voice_clone_needed": not voice_id,
-        "clips": clips,
-        "output_seconds": output_seconds,
-    }

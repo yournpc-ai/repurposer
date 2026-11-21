@@ -60,9 +60,7 @@ export interface ChatTurnBody {
    * project (ADR-038 — the single identity payload; the skin follows the
    * persona). */
   persona_id?: string
-  surface?: "chat"
   /** The Studio Thread always sends false. */
-  prior_intent?: unknown
 }
 
 export interface StreamChatOptions {

@@ -10,7 +10,9 @@
 
 - 6C 隔离验收使用 PostgreSQL 5966。合成文字卡经原生导出处理函数、ExportJob 和 Renderer 写入现有 TOS；按不可变版本配置公开测试许可。对象匿名 GET 为 200，其他用户访问应用的 Output、签发与下载入口均为 403。事故旁白历史回放和原库删除盘点等待只读实例或一致性备份。[真实 TOS 导出记录](tasks/agent-editor-evidence/iteration-6/public-test-export.json)
 
-- 6C 在隔离库完成三类 MediaJob 的实际生成、跨项目图片隔离、原生多调用、进程强杀与恢复费用确认。事故原库回放仍开放，6D 待开始。[媒体验收及首错](tasks/agent-editor-evidence/iteration-6/media.md)
+- 6C 在隔离库完成三类 MediaJob 的实际生成、跨项目图片隔离、原生多调用、进程强杀与恢复费用确认。事故原库仅供历史研究。[媒体验收及首错](tasks/agent-editor-evidence/iteration-6/media.md)
+
+- 6D 已在隔离 PostgreSQL 删除旧执行表、Graph/Run 接口和 Worker 编排。十用户窗口 41 个请求、四项 Job、合计 15 积分，最终预占为零。新素材首轮与续改分开验收。已知失败和恢复记录以 [6D 实测](tasks/agent-editor-evidence/iteration-6/6d.md) 为准。
 
 - **当前产品主线为 Agent Editor v1。** 六个独立素材原始首次验收仍为 3 完整、2 部分、1 失败，跨素材普遍稳定尚未证明。三条未完整通过任务已完成首错归因和最小闭环：开放演讲复测在 17 次请求内交付、字幕本轮目标完整，但开放与单人仍有视觉误述；两个新增独立素材主任务达成。接缝、片尾卡和媒体生成回归被 Worker fencing/固定音频恢复故障阻断，不能算作保持成功。主观音频、自然语言事实和开放任务稳定性仍开放。[主合同](tasks/new-agent.md) · [首错归因与最小闭环](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md)
 
@@ -24,7 +26,7 @@
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前** | **Agent Editor · 首错归因与最小闭环** | 六个独立素材原始首次仍为 3 完整、2 部分、1 失败，不回填分母。单人是最终视觉陈述过强，字幕是审阅已指出硬要求未满足后仍交付且漏报，开放演讲首错是已有作品上误用 `create_video`。本轮仅调整现有停止/未满足项 Prompt，并在固定源预览补源音频事实。原话复测中字幕本轮目标完整，开放 17 次请求交付但仍有留边误述，单人仍有手部误述；两个新增独立素材主任务达成。双人视觉编辑与 API 续改保持；接缝、片尾卡、媒体生成三项回归因 Worker fencing/固定音频恢复失控未通过。当前 API core 509、Web 44 文件/411、Renderer 28 通过，三份新 Output 实播/硬刷新、Stop 和 Studio 续发已核验。开放审美、主观音频、自然语言事实与 Worker 故障仍未关闭。 | [首错、五面、费用与开放项](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md) |
+| 历史验收 | **Agent Editor · 首错归因与最小闭环** | 六个独立素材原始首次仍为 3 完整、2 部分、1 失败，不回填分母。单人是最终视觉陈述过强，字幕是审阅已指出硬要求未满足后仍交付且漏报，开放演讲首错是已有作品上误用 `create_video`。本轮仅调整现有停止/未满足项 Prompt，并在固定源预览补源音频事实。原话复测中字幕本轮目标完整，开放 17 次请求交付但仍有留边误述，单人仍有手部误述；两个新增独立素材主任务达成。双人视觉编辑与 API 续改保持；接缝、片尾卡、媒体生成三项回归因 Worker fencing/固定音频恢复失控未通过。当前 API core 509、Web 44 文件/411、Renderer 28 通过，三份新 Output 实播/硬刷新、Stop 和 Studio 续发已核验。开放审美、主观音频、自然语言事实与 Worker 故障仍未关闭。 | [首错、五面、费用与开放项](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md) |
 | 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **官网品牌宣传片批 1A：装配修复、集中澄清、品牌档案与创作状态继承** | Readiness 三阶段、真实 PNG analyze_brand、扩展 Brief/CreativeState、集中问题组前后端和版本/Run 继承已落码；fake provider golden wire 通过，`test/core` 437 项与 Web 410 项通过，TypeScript 通过。真实 LegitEvi BrandProfile 含实测 `#DC0000`、“接近 Inter”和原始宣言；数字 option_id 整组提交已验证标签回填、六项 user-stated、preview/正式 digest 一致、过期/重复 409 与刷新恢复，当时 readiness=design_video（现 create_video）。旧批 1A 验收止于集中作答与本批状态恢复；当前首稿与后续编辑由 Agent Editor v1 主线统一，真实网站行为与能力限制见续批证据。开发库已确认 h8e5a2c4d7f1，生产 migration/恢复和本批真实浏览器问题组仍未验证 | [任务合同](tasks/website-promo-evidence-brief-workflow.md) / [验证登记](VERIFICATION.md#411-官网品牌宣传片基础链iteration-1a) |
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |

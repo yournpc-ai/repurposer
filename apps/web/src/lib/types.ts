@@ -163,7 +163,6 @@ export interface OutputQuality {
 export interface Output {
   id: string
   project_id: string
-  workflow_step_id: string | null
   type: string
   /** null = unpinned (legacy rows / the scrubbed null-as-string plan token)
    * — the factsbar's language chip simply stays off. */
@@ -182,7 +181,6 @@ export interface Output {
   source_ref: OutputSourceRef | null
   render_spec: unknown | null
   render_status: string | null
-  render_error: string | null
   quality: OutputQuality | null
   publishing: OutputPublishing
   /** Server-derived display aspect (产物展示统一, 2026-08-27): "9:16" |
@@ -197,56 +195,6 @@ export interface ChatOutputEntry {
   output_id: string
   /** Null = the persisted exact reference is unavailable; never substitute latest. */
   output: Output | null
-}
-
-export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped" | "waiting"
-
-/** One safe, replayable produce_video stage inside a step attempt. */
-export interface ProductionStage {
-  event_id: string
-  kind: string
-  run_id: string
-  step_id: string
-  attempt: number
-  seq: number
-  status: "running" | "completed" | "failed"
-  started_at: string
-  finished_at: string | null
-  reused?: boolean | null
-  item_count?: number | null
-  reused_count?: number | null
-  scene_id?: string | null
-}
-
-/** One step of a run's execution plan (ADR-028) — the user-facing step. */
-export interface WorkflowStep {
-  id: string
-  kind: string
-  status: StepStatus
-  seq: number
-  attempt?: number
-  error: string | null
-  cost: Record<string, number> | null
-  stage?: string | null
-  /** Quantified one-liner (e.g. "Selected 3 clips · 87s total"). */
-  summary?: string | null
-  /** The runner's structured "nothing to do" declaration (2026-09-10 receipt
-   * whisper tier) — stamped at the same seat as the "…skipped" summary. */
-  noop?: boolean | null
-  /** Output row ids this node produced (execution/delivery facts, not Chat ownership). */
-  output_refs?: string[]
-  /** DAG edges: upstream step ids (the run's execution DAG). */
-  inputs?: string[]
-  /** Credits derivation (ADR-055, BILLING §7 — serialization-folded, never
-   * persisted): the step's quotation [low, high] / metered actual in
-   * credits. estimate_credits null = never quoted; cost_credits null =
-   * nothing metered yet. */
-  estimate_credits?: [number, number] | null
-  cost_credits?: number | null
-  started_at: string | null
-  finished_at: string | null
-  scene_index?: number | null
-  production_stages?: ProductionStage[]
 }
 
 export interface BrandTemplate {

@@ -36,7 +36,7 @@ from app.models.tables import (
 )
 from app.pipeline.outputs import (
     chat_delivery_output_ids,
-    is_chat_video_output,
+    is_delivered_output,
     output_to_response,
 )
 from app.platform.billing import settled_job_amounts
@@ -317,7 +317,7 @@ async def list_chat_delivered_outputs(
             Output.id.in_(refs),
         ).order_by(Output.created_at, Output.id))
     ).scalars().all())
-    by_id = {output.id: output for output in outputs if is_chat_video_output(output)}
+    by_id = {output.id: output for output in outputs if is_delivered_output(output)}
     extant_ids = {output.id for output in outputs}
     version_ids = list(dict.fromkeys(
         output.composition_version_id for output in by_id.values()

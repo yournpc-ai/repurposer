@@ -27,55 +27,11 @@ export function buildConversationUnits(
   messages: OverlayMessage[],
 ): ConversationUnit[] {
   const units: ConversationUnit[] = []
-  const deliveries = new Map<string, OverlayMessage>()
-  const receipts = new Map<string, OverlayMessage>()
-  const nextAnswer = new Map<string, OverlayMessage>()
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
-    if (m.mediaProgress) {
-      if (m.runId) receipts.set(m.runId, m)
-      continue
-    }
-    if (m.mediaOpeningId && m.content.trim() && !m.activity) nextAnswer.set(m.mediaOpeningId, m)
-    if (m.runId && m.runDelivery && m.content.trim()) deliveries.set(m.runId, m)
-    if (m.activity?.kind === "run" && m.runId && m.turnId) {
-      const answer = nextAnswer.get(m.turnId)
-      if (answer && !deliveries.has(m.runId)) deliveries.set(m.runId, answer)
-    }
-    if (m.role === "user") nextAnswer.clear()
-  }
   for (const m of messages) {
-    if (m.activityDisplayHeld || m.mediaProgress) continue
-    if (m.runId && m.activity?.kind === "run") {
-      const answer = deliveries.get(m.runId)
-      const completed = !!answer || receipts.has(m.runId)
-      const end = answer?.clientVisibleAtMs ?? (answer?.at ? Date.parse(answer.at) : undefined)
-      const start = m.at ? Date.parse(m.at) : undefined
-      const receipt = receipts.get(m.runId)
-      const taskEnd = receipt?.at ? Date.parse(receipt.at) : end
-      const elapsed = start != null && taskEnd != null && taskEnd >= start ? taskEnd - start : undefined
-      units.push({
-        kind: "activity", rowKey: m.birthKey ?? m.id, turnId: m.turnId, workRunId: m.runId,
-        workEndedAtMs: end != null && Number.isFinite(end) ? end : undefined,
-        activity: {
-          ...m.activity, status: completed ? "completed" : m.activity.status === "cancelled" ? "cancelled" : "active",
-          key: completed ? `${m.activity.key}Done` : m.activity.key, duration_ms: elapsed,
-        },
-      })
-      continue
-    }
+    if (m.activityDisplayHeld) continue
     const a = m.activity
     if (a === undefined) {
       units.push({ kind: "message", message: m })
-      if (m.continuationTurnId && m.content.trim() && (m.hydrated || m.proseDrainedAtMs != null)) {
-        // The stage answered, but the original request is still executing.
-        // Give the next work segment an anchor that its first tool will inherit.
-        const key = `continue:${m.serverMessageId ?? m.id}`
-        units.push({
-          kind: "activity", turnId: m.continuationTurnId, rowKey: key,
-          activity: { activity_id: key, kind: "run", status: "active", key: null, at: m.at },
-        })
-      }
       continue
     }
     if (!a.group_id && a.status === "cancelled") continue // abandoned attempt, not a work receipt

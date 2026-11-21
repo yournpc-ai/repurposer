@@ -12,7 +12,6 @@
  * persisted rows and never owns layout. */
 
 import { messageAssetsFromAttachments, type MessageAttachment } from "@/lib/chatAttachments"
-import { continuationTurnId, journeyMark, journeyTranscriptRow, mediaProgress, preparationActivity, sceneOrder } from "../mediaJourneyMessages"
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityReceipt,
@@ -25,7 +24,6 @@ import type {
   OverlayMessage,
   QuestionAnswer,
   QuestionMessage,
-  SuggestionPill,
   VideoReviewIssueCode,
   VideoReviewReceipt,
   VideoRevisionReceipt,
@@ -36,17 +34,12 @@ import type {
 export function answeredQuestionText(
   answer: QuestionAnswer,
   t: (key: string) => string,
-  /** The answered question carried a run (interrupt): its bail stops the
-   * run, it doesn't send the project back to draft — different copy. */
-  hasRun?: boolean,
 ): { text: string; muted: boolean } {
   if (answer.kind === "bail") {
     if (answer.text === "superseded") {
       return { text: t("chat.qa.superseded"), muted: true }
     }
-    return hasRun
-      ? { text: t("chat.qa.stopped"), muted: true }
-      : { text: t("chat.qa.cancelled"), muted: true }
+    return { text: t("chat.qa.cancelled"), muted: true }
   }
   // The interrupt expiry sweep's auto-answer (machine marker, same pattern
   // as "superseded") — a system decision, rendered muted.
@@ -89,36 +82,7 @@ function selectedOptionLabel(message: QuestionMessage): string | undefined {
   return message.question?.options?.find((option) => option.id === message.answer?.option_id)?.label
 }
 
-/** The trigger dump on an assistant row's intent column ({type:
- * "trigger_review", trigger, ref, suggestions}). Read tolerance: anything
- * off-shape parses to undefined (a plain assistant row), never a crash. */
-export function triggerSuggestions(intent: unknown): SuggestionPill[] | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "trigger_review") return undefined
-  const raw = Array.isArray(data.suggestions) ? data.suggestions : []
-  return raw
-    .map((s) => (s ?? {}) as Record<string, unknown>)
-    .filter(
-      (s) =>
-        typeof s.label === "string" &&
-        (s.action === "send" || s.action === "download")
-    )
-    .map((s) => ({
-      label: s.label as string,
-      action: s.action as "send" | "download",
-      text: (s.text as string | null) ?? null,
-      output_id: (s.output_id as string | null) ?? null,
-    }))
-}
-
-export function triggerDeliveryRef(intent: unknown): string | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
-  return data.type === "trigger_review" && typeof data.ref === "string"
-    ? data.ref
-    : undefined
-}
-
-export function triggerOutputRefs(intent: unknown): string[] {
+export function deliveryOutputRefs(intent: unknown): string[] {
   const data = (intent ?? {}) as Record<string, unknown>
   if (!Array.isArray(data.output_refs)) {
     return []
@@ -751,22 +715,10 @@ export function mapHistoryRows(
   // a LATER turn's selection event repaints the earlier card's highlight
   // (the surface is one seat; rows never move).
   const cardBySetId = new Map<string, OverlayMessage>()
-  let workerOpeningId: string | undefined
-  for (const raw of rows) {
-    const progress = mediaProgress(raw)
-    const mark = journeyMark(raw)
-    const m = journeyTranscriptRow(raw)
-    // Every projection of one persisted row carries its transcript position,
-    // including an echo + QA pair. Recovered live rows can therefore find
-    // their existing successor without re-deriving order from timestamps.
-    const continuation = continuationTurnId(m, workerOpeningId)
-    if (m.role === "user" || mark) workerOpeningId = mark?.state === "active" ? mark.openingId : undefined
+  for (const m of rows) {
     const pushRow = (row: OverlayMessage): OverlayMessage => {
       const positioned = {
         ...row,
-        ...(progress ? { mediaProgress: true } : {}),
-        ...(mark ? { mediaOpeningId: mark.openingId, sceneOrder: sceneOrder(raw) } : {}),
-        ...(continuation ? { continuationTurnId: continuation } : {}),
         turnId: m.turn_id ?? undefined,
         serverMessageId: m.id,
         hydrated: true,
@@ -792,54 +744,24 @@ export function mapHistoryRows(
     } else if (m.question) {
       const hasOptions = (m.question.options?.length ?? 0) > 0 || (m.question.items?.length ?? 0) > 0
       if (m.answer) {
-        if (m.question.kind === "task_book") {
-          // echo 实体化 (2026-09-04, A3): the row's content IS the
-          // echo prose (A1) — replay it as its own flow message so
-          // the confirm beat survives a refresh. NO QA archive:
-          // task_book 的 start 确认（chat 文本 / pill 手势同）不是
-          // option 选择——QA 块只归真问答（2026-09-05 用户拍板），
-          // 薄书的记录 = echo + 用户原话 + run 收据行。
-          const activity = preparationActivity(m)
-          if ((m.content ?? "").trim() || activity) {
-            pushRow({
-              id: `${m.id}-echo`,
-              role: "assistant",
-              activity,
-              content: m.content ?? "",
-              // The start's workflow_run_id rides the replay (parity
-              // with the plain-row branch): the stamp is the
-              // run↔message association the detached RunBlock archive reads.
-              runId: m.workflow_run_id,
-              at: m.created_at,
-              // The answered video dock's canonical storyboard block
-              // replays with its echo (Video Project phase B) — the card
-              // resolves the SAVED version's DTO, never the prose.
-              blocks: m.blocks?.length ? m.blocks : undefined,
-            })
-          }
-        } else if (hasOptions) {
+        if (hasOptions) {
           // ask 三分解剖: the framing prose replays as its own flow
           // message first (it sat above the dock live), then the QA
           // block quotes the BARE question — a refresh reads like the
           // live flow did.
           const echo = questionEcho(m)
-          if (echo || triggerOutputRefs(m.intent).length > 0) {
+          if (echo || deliveryOutputRefs(m.intent).length > 0) {
             pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
               content: echo ?? "",
-              runId: m.workflow_run_id,
-              runDelivery: triggerSuggestions(m.intent) !== undefined,
-              runDeliveryRef: triggerDeliveryRef(m.intent),
-              outputRefs: triggerOutputRefs(m.intent),
-              independentKind: triggerSuggestions(m.intent) !== undefined ? "trigger" : undefined,
+              outputRefs: deliveryOutputRefs(m.intent),
               at: m.created_at,
             })
           }
           const display = answeredQuestionText(
             m.answer,
             ctx.t,
-            !!m.workflow_run_id,
           )
           pushRow({
             id: m.id,
@@ -864,8 +786,7 @@ export function mapHistoryRows(
             id: m.id,
             role: "assistant",
             content: m.content ?? "",
-            runId: m.workflow_run_id,
-            outputRefs: triggerOutputRefs(m.intent),
+            outputRefs: deliveryOutputRefs(m.intent),
             at: m.created_at,
           })
         }
@@ -877,38 +798,20 @@ export function mapHistoryRows(
           id: m.id,
           role: "assistant",
           content: m.content ?? "",
-          runId: m.workflow_run_id,
-          outputRefs: triggerOutputRefs(m.intent),
+          outputRefs: deliveryOutputRefs(m.intent),
           at: m.created_at,
-        })
-      } else if (m.question.kind === "task_book" && (m.blocks?.length ?? 0) > 0) {
-        // Video Project phase B: a PENDING produce dock's turn replays its
-        // reply prose AND its canonical storyboard block — the revived card
-        // re-presents after a refresh/reconnect, and its presentation
-        // completion ACK is the authorized delayed-start's only trigger.
-        // Without this row the held start could never fire post-refresh.
-        pushRow({
-          id: `${m.id}-echo`,
-          role: "assistant",
-          content: m.content ?? "",
-          at: m.created_at,
-          blocks: m.blocks,
         })
       } else if (m.question.kind === "question") {
         // A pending OPTIONS question docks (the pill revives via the
         // pending_question fetch) — its framing prose replays as a
         // flow message so the refresh reads like the live flow did.
         const echo = questionEcho(m)
-        if (echo || triggerOutputRefs(m.intent).length > 0) {
+        if (echo || deliveryOutputRefs(m.intent).length > 0) {
           pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
             content: echo ?? "",
-            runId: m.workflow_run_id,
-            runDelivery: triggerSuggestions(m.intent) !== undefined,
-            runDeliveryRef: triggerDeliveryRef(m.intent),
-            outputRefs: triggerOutputRefs(m.intent),
-            independentKind: triggerSuggestions(m.intent) !== undefined ? "trigger" : undefined,
+            outputRefs: deliveryOutputRefs(m.intent),
             at: m.created_at,
           })
         }
@@ -1001,14 +904,8 @@ export function mapHistoryRows(
         id: m.id,
         role: "assistant",
         content: m.content ?? "",
-        runId: m.workflow_run_id,
-        runDelivery: triggerSuggestions(m.intent) !== undefined,
-        runDeliveryRef: triggerDeliveryRef(m.intent),
-        outputRefs: triggerOutputRefs(m.intent),
-        independentKind: triggerSuggestions(m.intent) !== undefined ? "trigger" : undefined,
+        outputRefs: deliveryOutputRefs(m.intent),
         at: m.created_at,
-        // from its intent dump — undefined on every other shape.
-        suggestions: triggerSuggestions(m.intent),
         // The presenting row's storyboard block references replay with it
         // (the card resolves its DTO client-side; absent on legacy rows).
         blocks: m.blocks?.length ? m.blocks : undefined,

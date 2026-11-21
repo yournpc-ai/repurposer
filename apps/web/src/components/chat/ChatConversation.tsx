@@ -2,7 +2,7 @@
  * The dock owns form geometry and state; this component owns no second message
  * truth and mounts no additional scroller. */
 
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { Download } from "lucide-react"
 
@@ -28,7 +28,6 @@ import { deliveredOutputsForRefs } from "@/lib/anchorCards"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import type { Output } from "@/lib/types"
 import { skillOptionForReference, type SkillOption } from "@/lib/skills"
-import type { InferredIntent } from "./chatProtocol"
 import { AssistantText } from "./rows/AssistantText"
 import { FocusRow, TurnErrorRow } from "./rows/MetaRow"
 import { UserBubble } from "./rows/UserMessage"
@@ -64,11 +63,6 @@ function ScrollerSendBridge({
 }
 
 interface ChatConversationProps {
-  planVersions: { messageId: string; plan: InferredIntent }[]
-  renderPlanVersion: (
-    version: { messageId: string; plan: InferredIntent },
-    index: number,
-  ) => ReactNode
   conversationUnits: ConversationUnit[]
   chatOutputs: Output[]
   skillOptions: SkillOption[]
@@ -125,8 +119,6 @@ function useChatStatusLabel(label: string | null, standalone: boolean) {
 }
 
 export function ChatConversation({
-  planVersions,
-  renderPlanVersion,
   conversationUnits,
   chatOutputs,
   skillOptions,
@@ -308,13 +300,6 @@ export function ChatConversation({
           </>
         )}
       </MessageScrollerItem>
-      {planVersions.map((version, index) =>
-        version.messageId === m.id ? (
-          <MessageScrollerItem key={`${m.id}-plan-v${index + 1}`}>
-            {renderPlanVersion(version, index)}
-          </MessageScrollerItem>
-        ) : null
-      )}
     </Fragment>
     )
   }

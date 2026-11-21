@@ -103,7 +103,7 @@ describe("SFX candidate live/history parity", () => {
   })
 
   it("replays the persisted set after its final reply and selection adds no card", () => {
-    const base = { question: null, answer: null, workflow_run_id: null }
+    const base = { question: null, answer: null }
     const rows: HistoryRow[] = [
       {
         ...base,

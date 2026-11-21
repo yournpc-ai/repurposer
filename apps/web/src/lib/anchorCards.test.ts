@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 import {
   anchorCardOf,
@@ -12,14 +12,12 @@ import {
   approxWordCount,
   deliveredOutputsForRefs,
   isDeliveredOutput,
-  zeroDeliveryVideoOutputs,
 } from "./anchorCards"
 
 function output(partial: Partial<Output>): Output {
   return {
     id: "o1",
     project_id: "p1",
-    workflow_step_id: null,
     type: "video",
     language: null,
     status: "done",
@@ -29,26 +27,11 @@ function output(partial: Partial<Output>): Output {
     source_ref: null,
     render_spec: null,
     render_status: null,
-    render_error: null,
     quality: null,
     publishing: {},
     created_at: "2026-10-13T00:00:00Z",
     updated_at: null,
     ...partial,
-  }
-}
-
-function step(output_refs: string[]): WorkflowStep {
-  return {
-    id: "step-1",
-    kind: "render",
-    status: "done",
-    seq: 1,
-    error: null,
-    cost: null,
-    started_at: null,
-    finished_at: null,
-    output_refs,
   }
 }
 
@@ -63,61 +46,6 @@ describe("delivery-message Output refs", () => {
     ]
     expect(deliveredOutputsForRefs(["b", "pending", "post", "quote", "a", "b"], rows).map((row) => row.id)).toEqual(["b", "a"])
     expect(deliveredOutputsForRefs([], rows)).toEqual([])
-  })
-})
-
-describe("zero-delivery video fallback", () => {
-  const rows = [
-    output({ id: "ready", type: "video", render_status: "completed", files: { video: "/ready.mp4" } }),
-    output({ id: "pending", type: "video", render_status: "rendering" }),
-    output({ id: "empty", type: "video", render_status: "completed", files: {} }),
-    output({ id: "post", type: "audio", payload: {} }),
-  ]
-  const steps = [step(["ready", "pending", "empty", "post", "ready"])]
-
-  it("never appears between live terminal and bounded review settlement", () => {
-    expect(zeroDeliveryVideoOutputs({
-      steps,
-      outputs: rows,
-      terminal: true,
-      reviewSettled: false,
-      hasDelivery: false,
-    })).toEqual([])
-    expect(zeroDeliveryVideoOutputs({
-      steps,
-      outputs: rows,
-      terminal: false,
-      reviewSettled: true,
-      hasDelivery: false,
-    })).toEqual([])
-  })
-
-  it("shows only real delivered chat videos after settlement, without empty cards", () => {
-    expect(zeroDeliveryVideoOutputs({
-      steps,
-      outputs: rows,
-      terminal: true,
-      reviewSettled: true,
-      hasDelivery: false,
-    }).map((row) => row.id)).toEqual(["ready"])
-    expect(zeroDeliveryVideoOutputs({
-      steps: [step(["pending", "empty", "post"])],
-      outputs: rows,
-      terminal: true,
-      reviewSettled: true,
-      hasDelivery: false,
-    })).toEqual([])
-  })
-
-  it("any delivery disables the Run surface; late ownership leaves one card", () => {
-    expect(zeroDeliveryVideoOutputs({
-      steps,
-      outputs: rows,
-      terminal: true,
-      reviewSettled: true,
-      hasDelivery: true,
-    })).toEqual([])
-    expect(deliveredOutputsForRefs(["ready"], rows).map((row) => row.id)).toEqual(["ready"])
   })
 })
 

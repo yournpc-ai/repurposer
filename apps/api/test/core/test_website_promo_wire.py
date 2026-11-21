@@ -19,7 +19,7 @@ from app.models.schemas import (
     CreativeState,
     MediaInput,
     MediaInputType,
-    PendingPlan,
+    ProjectBrief,
     QuestionPayload,
     seal_creative_state,
 )
@@ -286,7 +286,7 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
         id=uuid4(),
         user_id=owner_id,
         title="LegitEvi",
-        pending_brief=PendingPlan(
+        pending_brief=ProjectBrief(
             creative_state=state,
             brief=state.brief,
         ).model_dump(mode="json"),
@@ -296,7 +296,7 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
         pick = item.options[1 if item.slot in {"target_seconds", "subtitle_languages"} else 0]
         answers.append(BriefAnswerItem(slot=item.slot, kind="option", option_id=pick.id, text=pick.label))
     _backfill_brief_group(project, payload, answers)
-    state = PendingPlan.model_validate(project.pending_brief).creative_state
+    state = ProjectBrief.model_validate(project.pending_brief).creative_state
     assert state.brief.production_direction.value == "官网推广 · 用真实案例演示产品"
     assert state.brief.target_seconds.value == 60
     assert state.brief.narration_language.value == "en"

@@ -57,12 +57,12 @@ async def test_create_video_preserves_creative_state_and_external_skill(database
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     from types import SimpleNamespace
     from app.chat.editor_create import create_video
-    from app.models.schemas import CreativeState, ExternalSkillReference, PendingPlan
+    from app.models.schemas import CreativeState, ExternalSkillReference, ProjectBrief
     from app.skills.external import SkillPolicy
 
     owner = await _user(database)
     state = CreativeState()
-    pending = PendingPlan(creative_state=state, brief=state.brief)
+    pending = ProjectBrief(creative_state=state, brief=state.brief)
     project_id = await _project(database, owner)
     async with database() as db:
         project = await db.get(Project, project_id)
@@ -118,7 +118,7 @@ async def test_create_video_preserves_creative_state_and_external_skill(database
 @pytest.mark.asyncio
 async def test_website_source_becomes_editable_version_with_user_constraints(database, monkeypatch):
     from app.chat.readiness import brief_with_user_constraints
-    from app.models.schemas import PendingPlan
+    from app.models.schemas import ProjectBrief
     from app.models.tables import Output, SourceSnapshot
 
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
@@ -140,7 +140,7 @@ async def test_website_source_becomes_editable_version_with_user_constraints(dat
         db.add(source)
         project = await db.get(Project, project_id)
         brief = brief_with_user_constraints(text)
-        project.pending_brief = PendingPlan(prompt=text, brief=brief).model_dump(mode="json")
+        project.pending_brief = ProjectBrief(prompt=text, brief=brief).model_dump(mode="json")
         conversation = Conversation(user_id=owner, project_id=project_id)
         db.add(conversation)
         await db.commit()

@@ -133,7 +133,7 @@ class Project(Base):
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
     tone_snapshot = Column(JSON, nullable=True)
     # Unconfirmed plan + original prompt from /projects/{id}/intent
-    # (PendingPlan shape). Cleared when /generate starts the run; its
+    # (ProjectBrief shape). Cleared when /generate starts the run; its
     # presence on a draft project is what "awaiting confirmation" means.
     pending_brief = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)

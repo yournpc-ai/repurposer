@@ -31,7 +31,7 @@ afterEach(() => { cleanup(); vi.mocked(apiFetch).mockReset() })
 
 it("restores an in-flight native job and stops its original opening after refresh", async () => {
   const time = "2026-11-21T12:00:00Z"
-  const base = { question: null, answer: null, workflow_run_id: null }
+  const base = { question: null, answer: null }
   const rows: HistoryRow[] = [
     { ...base, id: "opening", seq: 1, role: "user", turn_state: "in_flight", content: "record", created_at: time },
     { ...base, id: "activity", seq: 2, role: "assistant", turn_id: "opening", content: "", created_at: time,

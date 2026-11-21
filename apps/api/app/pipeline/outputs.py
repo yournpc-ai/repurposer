@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.models.schemas import OutputResponse
-from app.models.tables import CompositionVersion, Output
+from app.models.tables import Asset, CompositionVersion, Output, SourceSnapshot
 
 
 def visible_outputs_stmt() -> Select:
@@ -45,15 +45,33 @@ def chat_delivery_output_ids(messages: list) -> list[UUID]:
 
 def is_delivered_output(output: Output) -> bool:
     render_status = getattr(output.render_status, "value", output.render_status)
+    provenance = {
+        "composition_id": str(output.composition_id or ""),
+        "composition_version_id": str(output.composition_version_id or ""),
+        "content_digest": (output.payload or {}).get("composition_digest"),
+    }
+    spec = output.render_spec or {}
     return (
         output.type == "video"
+        and all(provenance.values())
+        and spec.get("family") == "video"
+        and spec.get("provenance") == provenance
         and render_status == "completed"
         and bool((output.files or {}).get("video"))
     )
 
 
-def is_chat_video_output(output: Output) -> bool:
-    return is_delivered_output(output)
+async def export_file_referenced(db, location, output_id):
+    for query in (
+        select(Output.id).where((Output.id == output_id) | (Output.files["video"].astext == location)
+                                | (Output.files["image"].astext == location)
+                                | (Output.publishing["cover_image_url"].astext == location)),
+        select(SourceSnapshot.id).where(SourceSnapshot.storage_key == location),
+        select(Asset.id).where(Asset.file_url == location),
+    ):
+        if await db.scalar(query.limit(1)):
+            return True
+    return False
 
 
 def output_to_response(

@@ -294,10 +294,6 @@ export type MessageBlock = ImagePreviewBlock | VideoStoryboardBlock | SystemNoti
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
-  mediaProgress?: boolean
-  mediaOpeningId?: string
-  sceneOrder?: string[]
-  continuationTurnId?: string
 
   id: string
   /** The RENDER key law (2026-10-19 interim_prose-flicker fix): React keys the
@@ -321,11 +317,6 @@ export interface OverlayMessage {
   /** Facts that keep their own block type even when they carry a turn
    * association (QA/candidate), or have no user-turn owner (trigger). */
   independentKind?: "qa" | "candidate" | "trigger"
-  runId?: string | null
-  /** A trigger delivery row owns its Run's single historical card seat. */
-  runDelivery?: boolean
-  /** Persistent trigger ref; upload-retry-N identifies the recovery attempt. */
-  runDeliveryRef?: string
   /** Exact products delivered by THIS message. An empty array is an honest
    * zero-delivery result; missing refs never reopen Run-level ownership. */
   outputRefs?: string[]
@@ -443,39 +434,9 @@ export interface SuggestionPill {
   output_id?: string | null
 }
 
-/** Derived preview row (ADR-043): the server dry-run-compiles the chain at
- * dock time and projects what it will MAKE — the card's "you'll get"
- * section. `video` = the whole-source materialization (整条视频). */
-export interface DerivedRow {
-  type: string
-  variant?: "subs" | "dub" | null
-  language?: string | null
-  count?: number | null
-  bilingual?: boolean
-}
-
-/** 决策包阅读层 (iter-2 ③, ADR-089 §4 R16): one Content Plan's user-safe
- * summary — the product semantics the agent named (title + outputs),
- * mirrored from the exploration rows. The compiled task chain stays the
- * EVIDENCE layer (expandable under the plans). */
-export interface DecisionPlanRow {
-  plan_id: string
-  title: string
-  state: string
-  outputs: {
-    kind: string
-    language?: string | null
-    caption_mode?: string | null
-    dub?: boolean | null
-    aspect?: string | null
-    brief?: string | null
-  }[]
-  issues?: string[]
-}
-
 /** The typed question payload mirrored from the API (messages.question). */
 export interface QuestionPayload {
-  kind: "task_book" | "question"
+  kind: "question"
   /** The BARE question (ask 三分解剖 ②): the dock's title and the QA
    * archive's Q line. Absent on legacy rows and task_book docks — those
    * store the question (or the echo prose) AS the content; every reader
@@ -491,42 +452,7 @@ export interface QuestionPayload {
    * recommends — the dock renders its muted suffix. Absent on question
    * rows from before B3 (normalizeBrief tolerates). */
   recommended_id?: string | null
-  /** The dock's credits quotation (BILLING §7): task_book only — total
-   * [low, high] + the per-task marginal range aligned by task index (Σ
-   * per_task ≡ total exactly; null = the task adds no quoted cost). */
-  estimate_credits?: {
-    total: [number, number]
-    per_task: ([number, number] | null)[]
-  } | null
-  /** 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
-   * dock time; the plan card renders its valued slots. Absent on question
-   * rows from before B3 (normalizeBrief tolerates). */
-  brief?: unknown
-  /** 计划行自完备 (2026-09-08, 方案 B): task_book only — the derived
-   * preview ("you'll get") stamped at dock time. Absent on rows docked
-   * before the seal — the recovery pending-brief fetch is the fallback. */
-  derived?: DerivedRow[]
-  /** task_book only: the needs-clarification reason KEYS (data, localized
-   * at render — never baked into the row's content). */
-  reasons?: string[]
-  /** 授权前移 (ADR-117 §4): task_book only — the presentation-time
-   * confirmation stamp. `requires_confirmation` is the Start pill's render
-   * source (the client never derives the need itself); absent on rows docked
-   * before the stamp (读容忍 → treated as owed: those docks all predated
-   * the auto regime). The legacy auto-only `first_draft_review` reason reads as
-   * no independent debt. Other `confirm_reason` values key the pill's label
-   * family; `quote_high` feeds the priced label; `unquotable` forces the
-   * deferred-pricing label (never a fabricated number). */
-  requires_confirmation?: boolean
-  confirm_reason?: string
-  quote_high?: number | null
-  unquotable?: boolean
-  /** 决策包阅读层 (iter-2 ③): task_book only — the Content Plans behind
-   * the compiled chain; empty on the router-drafted docks (读容忍). */
-  plans?: DecisionPlanRow[]
-  /** 分镜 echo (dock echo 形态): task_book only — assistant prose stays in
-   * content; the estimate rides a system_notice block and replays with the
-   * echo while the dock revives via the pending fetch. */
+
 }
 
 /** A question-carrying chat message (the ask_user machinery): the dock's pending
@@ -537,14 +463,9 @@ export interface QuestionMessage {
   /** Server-resolved explicit Skill on a user row (including a unique
    * natural-language match); the live row replays this same reference. */
   skill?: SkillReference | null
-  /** The row's intent JSONB: task_book docks stamp the presented chain
-   * here (计划行自完备, 方案 B — the envelope's row IS the whole plan
-   * card, no second fetch); ask questions stash their replay payload.
-   * Null on rows docked before the seal. */
   intent?: unknown
   question: QuestionPayload | null
   answer: QuestionAnswer | null
-  workflow_run_id: string | null
   /** Opening user-turn association, when this row belongs to one. */
   turn_id?: string | null
   /** 建议谱系交互块 (ADR-099 §4): the row's persisted non-blocking
@@ -601,7 +522,6 @@ export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | {
       kind: "activity"
-      workRunId?: string
       activity: ActivityRowFrame
       rowKey: string
       turnId?: string
@@ -612,7 +532,6 @@ export type ConversationUnit =
   | {
       kind: "activityFold"
       liveActivity?: ActivityRowFrame
-      workRunIds?: string[]
       rows: ActivityRowFrame[]
       /** A contiguous failure settles this same segment; isolated failures
        * remain standalone activity units instead. */

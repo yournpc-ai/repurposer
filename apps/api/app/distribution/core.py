@@ -349,7 +349,7 @@ async def create_publication(
 async def cancel_publication(
     db: AsyncSession, pub_id: UUID, user_id: UUID
 ) -> Publication:
-    """Cancel any pre-published order (published is terminal, §3.3)."""
+    """Cancel only while there is no outstanding external publication."""
     pub = await db.get(Publication, pub_id, with_for_update=True, populate_existing=True)
     if pub is None or pub.user_id != user_id:
         raise DistributionError("publication_not_found")

@@ -517,7 +517,6 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
           role: "assistant",
           content: "delivered",
           at: "2026-09-23T08:10:00Z",
-          runId: "run-1",
         },
       ]),
     )

@@ -187,3 +187,24 @@ async def test_media_stop_reads_committed_provider_start_before_releasing_hold(d
         await stopping.commit()
         assert receipt.intent["media_result"]["status"] == "provider_unknown"
         assert (await stopping.get(Wallet, uid)).balance == 93
+
+
+@pytest.mark.asyncio
+async def test_delete_output_keeps_snapshot_owned_bytes(database, monkeypatch):
+    from app.providers.storage import public_test_export_root
+
+    uid, pid, _ = await seed(database)
+    unlink = AsyncMock()
+    monkeypatch.setattr(import_module("app.pipeline.routes.outputs"), "delete_file", unlink)
+    async with database() as db:
+        output = await db.scalar(select(Output).where(Output.project_id == pid))
+        key = f"{public_test_export_root()}{uid}/{pid}/{output.id}.mp4"
+        output.files = {"video": key}
+        snapshot = await db.scalar(select(SourceSnapshot).where(SourceSnapshot.origin_project_id == pid))
+        snapshot.storage_key = key
+        await db.commit()
+        async with client_for(database, uid) as client:
+            assert (await client.delete(f"/outputs/{output.id}")).status_code == 204
+        unlink.assert_not_awaited()
+        await db.refresh(snapshot)
+        assert snapshot.storage_key == key

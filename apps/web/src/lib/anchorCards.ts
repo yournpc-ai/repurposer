@@ -1,4 +1,4 @@
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { Output } from "@/lib/types"
 
 export interface AnchorCardData {
   outputId: string
@@ -54,24 +54,6 @@ export function deliveredOutputsForRefs(
     .map((id) => byId.get(id))
     .filter((output): output is Output => output != null)
     .filter(isChatVideoOutput)
-}
-
-export function zeroDeliveryVideoOutputs({
-  steps,
-  outputs,
-  terminal,
-  reviewSettled,
-  hasDelivery,
-}: {
-  steps: WorkflowStep[]
-  outputs: Output[]
-  terminal: boolean
-  reviewSettled: boolean
-  hasDelivery: boolean
-}): Output[] {
-  if (!terminal || !reviewSettled || hasDelivery) return []
-  const refs = steps.flatMap((step) => step.output_refs ?? [])
-  return deliveredOutputsForRefs(refs, outputs)
 }
 
 export function anchorLabel(

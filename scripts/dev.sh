@@ -160,16 +160,6 @@ else
   echo "  (Make sure Postgres is reachable on 5432 yourself.)"
 fi
 
-# --- database migrations ---------------------------------------------------
-# Apply Alembic migrations before starting the API so schema issues surface
-# immediately rather than inside the FastAPI lifespan.
-if port_in_use 5432 || with_timeout 5 docker ps >/dev/null 2>&1; then
-  echo "Applying database migrations..."
-  ( cd "$ROOT/apps/api" && uv run alembic upgrade head ) || echo "Migration step exited (continuing anyway)."
-else
-  echo "Postgres does not appear to be available — skipping migrations."
-fi
-
 # --- per-service log files --------------------------------------------------
 # 2026-10-16 取证教训: 终端 scrollback 不是台账——一次 37 分钟的链上失败
 # (film 分镜起草穷举) 的 violation codes 随窗口关闭灭失。每个服务 tee 一份

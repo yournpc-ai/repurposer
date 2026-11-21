@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { mapHistoryRows, triggerOutputRefs, type HistoryRow } from "./history"
+import { mapHistoryRows, deliveryOutputRefs, type HistoryRow } from "./history"
 import { buildConversationBlocks, buildConversationUnits, conversationBlockUnits } from "./project"
 import type { OverlayMessage } from "./types"
 
@@ -22,7 +22,6 @@ function row(overrides: Partial<HistoryRow>): HistoryRow {
     content: null,
     question: null,
     answer: null,
-    workflow_run_id: null,
     ...overrides,
   }
 }
@@ -108,44 +107,6 @@ describe("user rows", () => {
 
 })
 
-describe("answered task_book rows — echo, never a QA block", () => {
-  it("replays the echo prose as its own flow message with the run stamp", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "here is the plan",
-          question: { kind: "task_book" },
-          answer: { kind: "start" },
-          workflow_run_id: "run-1",
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([
-      expect.objectContaining({
-        id: "m1-echo",
-        role: "assistant",
-        content: "here is the plan",
-        runId: "run-1",
-      }),
-    ])
-  })
-
-  it("an empty echo pushes nothing (no ghost row)", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "  ",
-          question: { kind: "task_book" },
-          answer: { kind: "start" },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([])
-  })
-})
-
 describe("answered OPTIONS questions — echo first, then the QA archive", () => {
   it("framing prose replays above the collapsed QA block", () => {
     const out = mapHistoryRows(
@@ -165,7 +126,6 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
     )
     expect(out).toHaveLength(2)
     expect(out[0]).toMatchObject({ id: "m1-echo", content: "let me ask you something", seq: 9 })
-    expect(out[0].runDelivery).toBe(false)
     expect(out[1]).toMatchObject({
       id: "m1",
       seq: 9,
@@ -173,36 +133,6 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
     })
   })
 
-  it("a trigger delivery echo keeps its run identity", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "your clips are ready",
-          question: {
-            kind: "question",
-            question: "what next?",
-            options: [{ id: "a", label: "A" }],
-          },
-          answer: { kind: "option", option_id: "a" },
-          workflow_run_id: "run-delivery",
-          intent: {
-            type: "trigger_review",
-            ref: "run-delivery",
-            output_refs: ["output-a"],
-            suggestions: [{ label: "A", action: "send", text: "A" }],
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out[0]).toMatchObject({
-      id: "m1-echo",
-      runId: "run-delivery",
-      runDelivery: true,
-      runDeliveryRef: "run-delivery",
-      outputRefs: ["output-a"],
-    })
-  })
 
   it("replays partial and recovery Outputs at their own delivery array positions", () => {
     const out = mapHistoryRows(
@@ -210,20 +140,17 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
         row({
           id: "delivery-a",
           content: "A is ready",
-          workflow_run_id: "run-1",
-          intent: { type: "trigger_review", output_refs: ["output-a"] },
+          intent: { output_refs: ["output-a"] },
         }),
         row({
           id: "delivery-b",
           content: "B is ready",
-          workflow_run_id: "run-1",
-          intent: { type: "trigger_review", output_refs: ["output-b"] },
+          intent: { output_refs: ["output-b"] },
         }),
         row({
           id: "missing-refs",
           content: "old receipt",
-          workflow_run_id: "run-old",
-          intent: { type: "trigger_review" },
+          intent: {},
         }),
       ],
       ctx,
@@ -235,33 +162,28 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
     ])
   })
 
-  it("live and hydrated history produce the same Run anchor, message order and per-delivery refs", () => {
+  it("live and hydrated history produce the same message order and per-delivery refs", () => {
     const persisted = [
-      row({ id: "birth", content: "Starting", workflow_run_id: "run-1", seq: 1 }),
+      row({ id: "birth", content: "Starting", turn_id: "opening", seq: 1 }),
       row({
         id: "delivery-a",
         content: "A is ready",
-        workflow_run_id: "run-1",
-        intent: { type: "trigger_review", output_refs: ["output-a"] },
+        intent: { output_refs: ["output-a"] },
         seq: 2,
       }),
       row({
         id: "delivery-b",
         content: "B is ready",
-        workflow_run_id: "run-1",
-        intent: { type: "trigger_review", output_refs: ["output-b"] },
+        intent: { output_refs: ["output-b"] },
         seq: 3,
       }),
     ]
     const live: OverlayMessage[] = [
-      { id: "birth", role: "assistant", content: "Starting", runId: "run-1", seq: 1 },
+      { id: "birth", role: "assistant", content: "Starting", turnId: "opening", seq: 1 },
       {
         id: "delivery-a",
         role: "assistant",
         content: "A is ready",
-        runId: "run-1",
-        runDelivery: true,
-        independentKind: "trigger",
         outputRefs: ["output-a"],
         seq: 2,
       },
@@ -269,9 +191,6 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
         id: "delivery-b",
         role: "assistant",
         content: "B is ready",
-        runId: "run-1",
-        runDelivery: true,
-        independentKind: "trigger",
         outputRefs: ["output-b"],
         seq: 3,
       },
@@ -398,12 +317,6 @@ describe("OPTIONS answer single-display projection", () => {
       ],
       [row({ id: "u1", role: "user", content: "English", turn_id: "u1" })],
       [
-        optionQuestion({
-          question: { kind: "task_book", options: [{ id: "en", label: "English" }] },
-        }),
-        row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
-      ],
-      [
         optionQuestion(),
         row({ id: "between", content: "another persisted row" }),
         row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
@@ -486,73 +399,12 @@ describe("pending questions", () => {
     ])
   })
 
-  it("a pending trigger delivery echo keeps its run identity", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "your clips are ready",
-          question: {
-            kind: "question",
-            question: "what next?",
-            options: [{ id: "a", label: "A" }],
-          },
-          workflow_run_id: "run-delivery",
-          intent: {
-            type: "trigger_review",
-            ref: "run-delivery:upload-retry-1",
-            output_refs: ["output-a"],
-            suggestions: [{ label: "A", action: "send", text: "A" }],
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([
-      expect.objectContaining({
-        id: "m1-echo",
-        runId: "run-delivery",
-        runDelivery: true,
-        runDeliveryRef: "run-delivery:upload-retry-1",
-        outputRefs: ["output-a"],
-      }),
-    ])
-  })
 
-  it("a pending task_book row replays nothing (the dock owns the live plan)", () => {
-    const out = mapHistoryRows(
-      [row({ content: "plan", question: { kind: "task_book" } })],
-      ctx,
-    )
-    expect(out).toEqual([])
-  })
 
 
 })
 
 describe("plain assistant rows + legacy trigger pills", () => {
-  it("plain rows pass through with the run stamp; trigger pills rebuild from the intent dump", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          content: "review this",
-          workflow_run_id: "run-9",
-          seq: 7,
-          intent: {
-            type: "trigger_review",
-            suggestions: [
-              { label: "post it", action: "send", text: "post it" },
-              { label: "bad shape" }, // filtered out — off-shape
-            ],
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out[0]).toMatchObject({ runId: "run-9", seq: 7 })
-    expect(out[0].suggestions).toEqual([
-      { label: "post it", action: "send", text: "post it", output_id: null },
-    ])
-  })
 
   it("off-shape intent → suggestions undefined (read tolerance, never a crash)", () => {
     const out = mapHistoryRows(
@@ -571,10 +423,9 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
     const out = mapHistoryRows(
       [
         row({
-          content: "plan",
-          question: { kind: "task_book" },
-          answer: { kind: "start" },
-          workflow_run_id: "run-1",
+          content: "Authorized",
+          question: { kind: "question", options: [{id: "approve", label: "Allow"}] },
+          answer: { kind: "option", option_id: "approve" },
         }),
         row({ role: "user", content: "go" }),
         row({ content: "done" }),
@@ -585,11 +436,8 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "id",
       "role",
       "content",
-      "runId",
       // Delivery transcript ownership only — not a lifecycle/readiness signal.
-      "runDelivery",
       // Persistent recovery identity (upload-retry-N), never a readiness stamp.
-      "runDeliveryRef",
       // This delivery row's persisted product ids — content, not readiness.
       "outputRefs",
       // Turn identity + history hydration metadata — not lifecycle/readiness.
@@ -1006,7 +854,7 @@ describe("activity array rows (ADR-108 — 每帧一行)", () => {
 
 
 it("upload results attach to the current answer without a Run anchor", () => {
-  expect(triggerOutputRefs({ type: "answer", output_refs: ["uploaded-video"] }))
+  expect(deliveryOutputRefs({ type: "answer", output_refs: ["uploaded-video"] }))
     .toEqual(["uploaded-video"])
   const messages = mapHistoryRows([row({
     id: "upload-answer", role: "assistant", content: "上传好了",

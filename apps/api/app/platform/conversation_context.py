@@ -1,13 +1,4 @@
-"""Conversation-store read protocol (ADR-087 §6; MODULE_ARCH §4「Pipeline 只读」).
-
-The Agent Interface OWNS ``conversations`` / ``messages`` — every WRITE
-lives in ``app.chat.service`` (the pipeline's runtime/transport reaches the
-few it needs through ``app.pipeline.conversation_bridge``). The READ shapes
-below are the store's shared read protocol: pipeline's read access is
-contract-sanctioned (§4 — run-association display, the lifecycle stamp's
-chat facts, the original-prompt read), and one seat keeps one query shape
-from forking across layers. Zero writes here, ever.
-"""
+"""Owned conversation, pending question and project prompt reads."""
 
 from uuid import UUID
 
@@ -49,20 +40,10 @@ async def latest_pending_question(
             Message.question.isnot(None),
             Message.answer.is_(None),
         )
-        .order_by(Message.created_at.desc())
+        .order_by(Message.seq.desc())
         .limit(1)
     )
     return result.scalar_one_or_none()
-
-
-def is_pending_plan(message: Message | None) -> bool:
-    """A startable confirmation target (G-1): an unanswered task_book
-    question — the only question kind a prose "start it" may answer."""
-    return (
-        message is not None
-        and message.answer is None
-        and (message.question or {}).get("kind") == "task_book"
-    )
 
 
 async def get_project_prompt(db: AsyncSession, project_id: UUID) -> str | None:
@@ -75,7 +56,7 @@ async def get_project_prompt(db: AsyncSession, project_id: UUID) -> str | None:
             Conversation.asset_id.is_(None),
             Message.role == "user",
         )
-        .order_by(Message.created_at.asc())
+        .order_by(Message.seq.asc())
         .limit(1)
     )
     message = result.scalar_one_or_none()

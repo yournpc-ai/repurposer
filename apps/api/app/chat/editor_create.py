@@ -36,7 +36,11 @@ class FirstShot(CompositionSceneAuthoring):
                                            description="Exact duration of a still or title.")
     text_color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
     title_motion: Literal["static", "entrance"] = "static"
-    source_motion: Literal["hold", "push"] = "hold"
+    source_motion: Literal["hold", "push"] = Field(
+        default="hold",
+        description="Hold preserves the source framing, including motion already recorded in footage. "
+                    "Push adds animated camera movement. Choose it only for an intended extra camera push.",
+    )
 
 
 class CreateVideoArgs(BaseModel):
@@ -54,12 +58,12 @@ def _creation_context(db, turn):
     from app.models.schemas import (
         BuiltInSkillReference,
         ExternalSkillReference,
-        PendingPlan,
+        ProjectBrief,
     )
     from app.skills.loading import load_skill_creative_context
 
     pending = turn.project.pending_brief
-    creative_state = creative_state_for_pending(PendingPlan.model_validate(pending)) if pending else None
+    creative_state = creative_state_for_pending(ProjectBrief.model_validate(pending)) if pending else None
     reference = getattr(turn, "skill", None)
     provenance = {}
     skill = None

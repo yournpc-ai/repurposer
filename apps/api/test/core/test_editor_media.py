@@ -478,3 +478,39 @@ async def test_recovered_paid_request_requires_bound_confirmation_with_auto_acco
         assert await db.scalar(select(func.count()).select_from(MediaJob)) == 1
         assert list(await db.scalars(select(CreditTransaction.amount).where(
             CreditTransaction.ref["media_job_id"].astext == execution.intent["media_job"]))) == [-3]
+
+
+@pytest.mark.parametrize("words", [
+    'Record a voiceover saying "generate an image".',
+    "Generate an image prompt for an amber circle.",
+    "请生成一张图片的提示词。",
+])
+@pytest.mark.asyncio
+async def test_unrequested_paid_image_uses_exact_quote(database, monkeypatch, words):
+    from app.chat.editor import GenerateImageArgs
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        user = await db.get(User, owner)
+        user.settings = {"confirm_execution": "auto", "confirm_credits": "never"}
+        convo = Conversation(project_id=project.id, user_id=owner)
+        db.add(convo)
+        await db.commit()
+        opening = await service._create_message(db, convo.id, "user", words)
+        opening.turn_state = "in_flight"
+        await db.commit()
+        turn = SimpleNamespace(project=project, user_id=owner, turn_id=opening.id, conversation_id=convo.id)
+        args = GenerateImageArgs(prompt="A small amber circle")
+        receipt = await editor_media.submit_editor_media(turn, "generate_image", args, None, None, "unrequested-image")
+        assert receipt.question["options"][0]["id"] == "approve"
+        assert receipt.intent["media_permission"]["quote"]["total"][1] > 0
+        replay = await editor_media.submit_editor_media(turn, "generate_image", args, None, None, "unrequested-image")
+        assert replay.id == receipt.id
+        await service.answer_question(db, owner, receipt.id, OptionAnswerRequest(kind="option", option_id="decline"))
+        assert await db.scalar(select(func.count()).select_from(MediaJob)) == 0
+        assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(
+            CreditTransaction.kind.in_(("capture", "hold")))) == 0

@@ -5,15 +5,12 @@ import {
   buildRecoveredActivityRow,
   buildRecoveredProseMessage,
   insertRecoveredMessage,
-  isCurrentRunAttemptDelivery,
   isFreshPolledRow,
   isTurnOwner,
   observedMessageSeq,
   prependMissingHistory,
   reconcilePersistedFailure,
   releaseTurnOwner,
-  runReviewerLanded,
-  shouldAdmitPolledTrigger,
   stampServerMessageId,
   stampMessagePresentation,
 } from "./liveMessageReconcile"
@@ -32,7 +29,7 @@ function message(
   }
 }
 
-describe("run review poll admission", () => {
+describe("message poll admission", () => {
   it("does not revive an activity from before the observed tail", () => {
     expect(isFreshPolledRow(6, 14)).toBe(false)
     expect(isFreshPolledRow(6, null)).toBe(false)
@@ -48,46 +45,6 @@ describe("run review poll admission", () => {
     expect(observedMessageSeq(null, [message("old", 4), message("local")])).toBe(4)
   })
 
-  it("scopes run review speech to its own run without backfilling generic watches", () => {
-    expect(
-      shouldAdmitPolledTrigger({ fresh: false, reviewRunId: null, rowRunId: "run-1" }),
-    ).toBe(false)
-    expect(
-      shouldAdmitPolledTrigger({ fresh: false, reviewRunId: "run-1", rowRunId: "run-1" }),
-    ).toBe(true)
-    expect(
-      shouldAdmitPolledTrigger({ fresh: true, reviewRunId: "run-1", rowRunId: "run-2" }),
-    ).toBe(false)
-  })
-})
-
-describe("same-run recovery delivery identity", () => {
-  const failed = message("failed-delivery", 10, {
-    runId: "run-1",
-    runDelivery: true,
-    runDeliveryRef: "run-1",
-    suggestions: [],
-  })
-  const retry = message("retry-delivery", 20, {
-    runId: "run-1",
-    runDelivery: true,
-    runDeliveryRef: "run-1:upload-retry-1",
-    suggestions: [],
-  })
-
-  it("the first failure does not seal a historical recovery attempt", () => {
-    expect(runReviewerLanded([failed], "run-1", 0)).toBe(true)
-    expect(runReviewerLanded([failed], "run-1", 1)).toBe(false)
-    expect(isCurrentRunAttemptDelivery(failed, "run-1", 1)).toBe(false)
-    expect(runReviewerLanded([failed, retry], "run-1", 1)).toBe(true)
-  })
-
-  it("a live row waits for its real drain while hydrated QA is already settled", () => {
-    const live = { ...retry, suggestions: undefined }
-    expect(runReviewerLanded([live], "run-1", 1)).toBe(false)
-    expect(runReviewerLanded([{ ...live, hydrated: true }], "run-1", 1)).toBe(true)
-    expect(runReviewerLanded([{ ...live, runId: "run-2", hydrated: true }], "run-1", 1)).toBe(false)
-  })
 })
 
 describe("polled activity identity", () => {
@@ -186,7 +143,6 @@ describe("recovered prose placement", () => {
       createdAt: "2026-10-30T00:00:00Z",
       turnId: "turn-1",
       blocks,
-      runDelivery: false,
     })
     expect(row).toMatchObject({
       id: "recovered-1",
@@ -200,14 +156,10 @@ describe("recovered prose placement", () => {
   it("keeps the recovered delivery's own Output refs", () => {
     const row = buildRecoveredProseMessage({
       id: "delivery-b",
-      runId: "run-1",
-      runDelivery: true,
       outputRefs: ["output-b"],
     })
     expect(row).toMatchObject({
       id: "delivery-b",
-      runId: "run-1",
-      runDelivery: true,
       outputRefs: ["output-b"],
     })
   })
@@ -259,7 +211,7 @@ describe("recovered prose placement", () => {
   })
 })
 
-describe("run terminal recovery journey", () => {
+describe("delivery during message recovery", () => {
   it("ignores an old material row while landing the new delivery after the visible start", () => {
     const previous = [message("start", 14)]
     const oldActivity = message("old-web-page", 6, {

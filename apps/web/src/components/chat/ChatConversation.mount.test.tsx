@@ -39,7 +39,7 @@ afterEach(() => { cleanup(); vi.useRealTimers() })
 function props(rows: OverlayMessage[], extra: Partial<ComponentProps<typeof ChatConversation>> = {}): ComponentProps<typeof ChatConversation> {
   return {
     conversationUnits: foldActivityUnits(buildConversationUnits(rows)),
-    planVersions: [], renderPlanVersion: () => null, chatOutputs: [], skillOptions: [],
+    chatOutputs: [], skillOptions: [],
     openOutputViewer: vi.fn(), chatBusy: false,
     onSuggestionClick: vi.fn(), onStructureVisible: vi.fn(),
     presentationRecovery: null,
@@ -49,10 +49,10 @@ function props(rows: OverlayMessage[], extra: Partial<ComponentProps<typeof Chat
   }
 }
 const user: OverlayMessage = { id: "user", role: "user", content: "Make a video", turnId: "turn" }
-const opening: OverlayMessage = { id: "opening", role: "assistant", content: "Starting", turnId: "turn", runId: "run" }
+const opening: OverlayMessage = { id: "opening", role: "assistant", content: "Starting", turnId: "turn" }
 
 it("keeps user outside one assistant container with prose and work inside", () => {
-  const rows: OverlayMessage[] = [user, { ...opening, runId: null }, {
+  const rows: OverlayMessage[] = [user, opening, {
     id: "activity", role: "assistant", content: "", turnId: "turn",
     activity: { activity_id: "a1", kind: "read", status: "completed", key: "chat.activity.uploadDone" },
   }, { id: "result", role: "assistant", content: "Done", turnId: "turn" }]
@@ -65,7 +65,7 @@ it("keeps user outside one assistant container with prose and work inside", () =
 
 it("does not give an empty streaming speech row its own flex gap", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
-  const rows: OverlayMessage[] = [user, { ...opening, runId: null }, {
+  const rows: OverlayMessage[] = [user, opening, {
     id: "completed-capture", role: "assistant", content: "", turnId: "turn",
     activity: { activity_id: "a1", kind: "read", status: "completed", key: "chat.activity.videoCapturePlanDone" },
   }, {
@@ -87,7 +87,7 @@ it("does not give an empty streaming speech row its own flex gap", () => {
 
 it("keeps thinking below a submitted questionnaire when the continuation reuses the turn id", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] })
-  const rows: OverlayMessage[] = [user, { ...opening, runId: null }, {
+  const rows: OverlayMessage[] = [user, opening, {
     id: "answers", role: "assistant", content: "", turnId: "turn", independentKind: "qa",
     qa: { question: "Brief", answer: "Demo", muted: false, items: [{ question: "Purpose?", answer: "Demo" }] },
   }]

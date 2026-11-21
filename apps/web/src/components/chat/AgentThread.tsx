@@ -3,16 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  ChevronDown,
-  ChevronUp,
-  History,
-  Image,
   Loader2,
-  Mic2,
   Plus,
   Undo2,
   Upload,
-  Video,
   X,
 } from "lucide-react"
 
@@ -66,8 +60,6 @@ import {
 } from "@/components/mentions/MentionEditor"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Message, MessageContent } from "@/components/ui/message"
 import {
   Attachment,
   AttachmentAction,
@@ -89,9 +81,7 @@ import {
   answeredQuestionIdFromIntent,
   isNonRenderIntent,
   activityAssetKey,
-  triggerDeliveryRef,
-  triggerOutputRefs,
-  triggerSuggestions,
+  deliveryOutputRefs,
   questionEcho,
   bareQuestion,
   groupAnswerDisplay,
@@ -99,8 +89,6 @@ import {
 } from "./timeline/history"
 import type {
   BriefAnswerItem,
-  DerivedRow,
-  DecisionPlanRow,
   OverlayMessage,
   ProjectAsset,
   QuestionMessage,
@@ -136,11 +124,6 @@ import {
   upsertActivityFrame,
 } from "./activityReducer"
 import {
-  normalizeIntent,
-  type InferredIntent,
-  type TaskItem,
-} from "./chatProtocol"
-import {
   QuestionDock,
 } from "@/components/chat/QuestionDock"
 import { type NowRowPayload } from "@/components/chat/ActivityStream"
@@ -156,29 +139,6 @@ import {
 } from "@/lib/stagedFiles"
 import { putWithProgress } from "@/lib/stagingUploads"
 import { useFileDrop } from "@/lib/useFileDrop"
-
-/** Derived preview row (ADR-043): the server dry-run-compiles the chain at
- * dock time and projects what it will MAKE — the card's "you'll get"
- * section. `video` = production of an exact saved CompositionVersion. */
-
-const TOOL_META: Record<string, {
-  Icon: typeof Video
-  labelKey: string
-  langParam?: "language"
-}> = {
-  produce_video: { Icon: Video, labelKey: "chat.videoStoryboard.video" },
-  prepare_narration: {
-    Icon: Mic2,
-    labelKey: "chat.productionStages.speech_media",
-    langParam: "language",
-  },
-  prepare_visual_assets: {
-    Icon: Image,
-    labelKey: "chat.productionStages.visual_assets",
-  },
-}
-
-/** The panel geometry's persistence key (float | docked) — 2026-09-06. */
 
 /** Dead-stream detection (2026-10-15, 4427f90f 事故取证): the server
  * guarantees ONE frame at least every 15s (the bare-{} thinking keepalive),
@@ -360,8 +320,7 @@ function StagedAttachmentChip({
  * grouped items dock as before. */
 export function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage | null {
   return q &&
-    (q.question?.kind !== "question" ||
-      (q.question?.options?.length ?? 0) > 0 ||
+    ((q.question?.options?.length ?? 0) > 0 ||
       (q.question?.items?.length ?? 0) > 0)
     ? q
     : null
@@ -374,132 +333,21 @@ interface AgentThreadProps {
    * /chat message on mount (mentions + persona choice ride along). Null on
    * restored sessions — the conversation is already on the server. */
   firstMessage?: FirstMessageHandoff | null
-  initialIntent?: InferredIntent | null
   /** A zero-visible Stop retracted the handed-over first Turn. Clear the
    * router handoff so a refresh cannot auto-send the restored draft again. */
   onFirstMessageRetracted?: () => void
-  onProjectChanged: (runId?: string | null) => void | Promise<void>
+  onProjectChanged: () => void | Promise<void>
 
-}
-
-/** A superseded plan version in the flow: one slim chip row that expands
- * into a read-only snapshot with a restore action. The live plan is always
- * the bottom-most card; these chips are its history (2026-08-05 ruling —
- * chat edits the plan, nothing is locked, old versions stay visible). */
-function PlanVersionChip({
-  n,
-  plan,
-  summary,
-  expanded,
-  onToggle,
-  onRestore,
-  taskLabel,
-}: {
-  n: number
-  plan: InferredIntent
-  summary: string
-  expanded: boolean
-  onToggle: () => void
-  onRestore: () => void
-  taskLabel: (task: TaskItem) => string
-}) {
-  const { t } = useTranslation()
-  return (
-    <Message align="start">
-      <MessageContent>
-        <div className="w-full">
-          <button
-            type="button"
-            onClick={onToggle}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <History className="h-3.5 w-3.5 shrink-0" />
-            <span className="shrink-0 font-medium">
-              {t("generationOverlay.planVersion", { n })}
-            </span>
-            <span className="min-w-0 truncate">{summary}</span>
-            {expanded ? (
-              <ChevronUp className="ml-auto h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0" />
-            )}
-          </button>
-          {expanded && (
-            <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted p-4">
-              <div className="flex flex-col gap-1.5">
-                {plan.tasks.map((task, i) => {
-                  const meta = TOOL_META[task.tool]
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 text-xs">
-                      {meta ? (
-                        <meta.Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                      ) : null}
-                      <span>{taskLabel(task)}</span>
-                    </div>
-                  )
-                })}
-                {plan.specific_instruction ? (
-                  <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {plan.specific_instruction}
-                  </p>
-                ) : null}
-              </div>
-              <div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={onRestore}
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                  {t("generationOverlay.versionRestore")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </MessageContent>
-    </Message>
-  )
 }
 
 export function AgentThread({
   projectId,
-  prompt,
   firstMessage,
-  initialIntent,
   onFirstMessageRetracted,
   onProjectChanged,
 }: AgentThreadProps) {
   const { openCreditTopup } = useSettingsDialog()
   const { t } = useTranslation()
-  // Restore mount (Phase 1, acceptance #4; Phase 3 Batch B): the dock's only
-  // view fork is "a run is attached" vs plain chat — a transport fact
-  // (initialRunId), never a lifecycle judgment. The CONFIRM beat is derived
-  // (confirmActive below); RUN lIVENESS reads the run's own SSE facts
-  // (terminal/status). No phase machine lives here anymore.
-  const [intent, setIntent] = useState<InferredIntent>(() =>
-    initialIntent
-      ? normalizeIntent(initialIntent)
-      : {
-          action: "draft",
-          answer: null,
-          tasks: [],
-          specific_instruction: prompt,
-        }
-  )
-  // (ADR-111 §3: the pending STATE machine stays the correctness floor
-  // server-side — paid boundary / refresh rebuild / revision anchor; the
-  // dock payload's brief/derived/reasons/plans mirrors retired with the
-  // card that rendered them — nothing reads them here anymore.)
-  // intentReady = a real inference has landed (a restored session hands one
-  // over; a fresh navigation gets it from the first /chat turn's refetch) —
-  // it gates the confirm beat (confirmActive) and the revision anchor
-  // chips. Attach mode starts ready.
-  const [intentReady, setIntentReady] = useState(!!initialIntent)
-  // ask_user 机器: the pending question docks above the input (task_book in
-  // the confirm beat; plain questions from the chat loop afterwards); the
-  // answered one collapses into the flow as an answered question.
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [questionGroupDrafts, setQuestionGroupDrafts] = useState<Record<string, BriefAnswerItem[]>>({})
   const groupDraftsHydrationRef = useRef({ projectId: "", skipSave: true })
@@ -685,7 +533,7 @@ export function AgentThread({
             serverMessageId: row.id,
             role: "assistant" as const,
             content: row.content ?? "",
-            outputRefs: triggerOutputRefs(row.intent),
+            outputRefs: deliveryOutputRefs(row.intent),
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
             proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview") ? Date.now() : undefined,
             turnId,
@@ -844,28 +692,6 @@ export function AgentThread({
     },
     [],
   )
-  // Plan versions (2026-08-05 refinement-flow rework; 2026-08-06 in-flight
-  // rework): the LIVE plan renders as the bottom-most card while settled;
-  // during an in-flight turn it UNPINS — anchored inline right after the
-  // echo bubble that docked it (above the new user bubble + thinking row),
-  // so the stale confirm dock can hide and the flow reads chronologically.
-  // When the turn lands, the superseded plan collapses into a version chip
-  // at that same anchor (expandable read-only snapshot, restorable — chat
-  // edits the plan, nothing is locked) and the fresh card pins bottom.
-  // livePlanMessageId = the echo bubble of the turn that docked the current
-  // plan; null on restored sessions (no bubble exists → the card carries its
-  // own echo line and stays pinned).
-  const [livePlanMessageId, setLivePlanMessageId] = useState<string | null>(null)
-  const [planVersions, setPlanVersions] = useState<
-    { messageId: string; plan: InferredIntent }[]
-  >([])
-  const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
-  // The demotion snapshot must capture the plan as it stands AT DOCK TIME
-  // (the panel stays editable while a refinement turn is in flight).
-  const intentRef = useRef(intent)
-  useEffect(() => {
-    intentRef.current = intent
-  }, [intent])
   // Mid-conversation uploads (the chat input's attach button) STAGE inside
   // the input group as lifecycle chips (uploading → done/error) and ride the
   // next send — picking a file never sends anything by itself.
@@ -929,7 +755,6 @@ export function AgentThread({
         id: string
         content?: string | null
         created_at?: string
-        workflow_run_id?: string | null
         turn_id?: string | null
         intent?: unknown
         blocks?: QuestionMessage["blocks"]
@@ -945,18 +770,13 @@ export function AgentThread({
     ) => {
       const row = wire
       noteObservedSeq(row.seq)
-      const runDelivery = triggerSuggestions(row.intent) !== undefined
-      const runDeliveryRef = triggerDeliveryRef(row.intent)
       const message = buildRecoveredProseMessage({
         id: row.id,
         seq: row.seq,
         createdAt: row.created_at,
         turnId: row.turn_id,
-        runId: row.workflow_run_id,
         blocks: row.blocks,
-        runDelivery,
-        runDeliveryRef,
-        outputRefs: triggerOutputRefs(row.intent),
+        outputRefs: deliveryOutputRefs(row.intent),
       })
       setMessages((prev) => insertRecoveredMessage(prev, message, { fresh }))
       const text = (row.content ?? "").trim()
@@ -996,46 +816,21 @@ export function AgentThread({
     [noteObservedSeq, noteSpeechVisible],
   )
 
-  /** The panel's task plan + reasons live on the project (pending_brief) —
-   * refetched after every plan-path turn (first inference, refinements).
-   * `derived` is the server-compiled preview riding the same row. */
-  const fetchPendingBrief = useCallback(async (): Promise<{
-    intent: unknown
-    brief?: unknown
-    reasons?: string[]
-    persona_id?: string | null
-    derived?: DerivedRow[]
-    plans?: DecisionPlanRow[]
-    video_presentation?: VideoPresentationRecoveryFact | null
-  } | null> => {
-    try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
-        toast: false,
-      })
-      if (!res.ok) return null
-      const data = (await res.json()) as { pending_brief?: {
-        intent: unknown
-        brief?: unknown
-        reasons?: string[]
-        persona_id?: string | null
-        derived?: DerivedRow[]
-        plans?: DecisionPlanRow[]
-        video_presentation?: VideoPresentationRecoveryFact | null
-      } | null }
-      return data.pending_brief ?? null
-    } catch {
-      return null
-    }
-  }, [projectId])
-
   const refreshPresentationRecovery = useCallback(async () => {
     const generation = ++presentationRecoveryGenRef.current
-    const pending = await fetchPendingBrief()
-    if (generation === presentationRecoveryGenRef.current) {
-      setPresentationRecovery(pending?.video_presentation ?? null)
+    try {
+      const response = await apiFetch(`/api/v1/projects/${projectId}/results`, { toast: false })
+      if (!response.ok) return
+      const data = await response.json() as {
+        pending_brief?: { video_presentation?: VideoPresentationRecoveryFact | null } | null
+      }
+      if (generation === presentationRecoveryGenRef.current) {
+        setPresentationRecovery(data.pending_brief?.video_presentation ?? null)
+      }
+    } catch {
+      // A failed refresh leaves the last confirmed presentation visible.
     }
-    return pending
-  }, [fetchPendingBrief])
+  }, [projectId])
 
   useEffect(() => {
     void refreshPresentationRecovery()
@@ -1472,44 +1267,6 @@ export function AgentThread({
     [assets, chatOutputs, globalReferences, t],
   )
 
-  // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
-  // the failed step rows carry the humanized error in-flow (provider 错误
-  // 人话化梯), no toast on top; success hands off to the page (refetch →
-  // the landed products show on the canvas) and the run's completion recalls
-  // a tucked-away panel (the lastAgentKey mechanism below).
-  const taskLabel = useCallback(
-    (task: TaskItem) => {
-      const meta = TOOL_META[task.tool]
-      let label = meta ? t(meta.labelKey) : task.tool
-      const lang = meta?.langParam ? task.params[meta.langParam] : undefined
-      if (typeof lang === "string" && lang) {
-        label += ` (${t(`languages.${lang}`, { defaultValue: lang })})`
-      }
-      if (typeof task.params.count === "number") label += ` ×${task.params.count}`
-      return label
-    },
-    [t]
-  )
-
-  const summarizePlan = useCallback(
-    (plan: InferredIntent) => plan.tasks.map(taskLabel).join(", "),
-    [taskLabel]
-  )
-
-  /** Display-copy law (ADR-058): the proposer's fresh LLM name leads; the
-   * chain-derived label is the fallback for unnamed (legacy) intents. */
-  const titleOf = useCallback(
-    (plan: InferredIntent) => plan.name || summarizePlan(plan),
-    [summarizePlan],
-  )
-
-
-  /** The receipt/recap title (ADR-058): stamped from the BIRTHING proposal
-   * at run birth — the run's own truth, immune to later intent drift (a
-   * chat-dispatch turn never touches the dock's plan state; the next
-   * refinement plan must not retitle an archived receipt). Null = fall back
-   * to the live plan's title (plan-confirm starts are fresh by construction). */
-
   /** Land the user-level shortfall as the in-flow grey row (BILLING §7 — the
    * 422's typed form, never a toast): the meta:"error" seat turn.failed
    * already uses. The question stays docked (the server settled nothing and
@@ -1536,29 +1293,6 @@ export function AgentThread({
     },
     [t, openCreditTopup],
   )
-
-  // 确认 = 纯口头 (ADR-111 §2 — dock 确认卡面整族退役): the Start button,
-  // the estimate pill and the panel/mobile plan card are gone — the plan's
-  // review face is the CANVAS (draft nodes born at dock carry the chain and
-  // their per-node quotes) and the confirm gesture is the user's own words
-  // (口头确认律 ADR-092: a natural yes rides sendChat to the router's
-  // start_run — the same machine the retired pill used). No Cancel either
-  // (non-blocking law unchanged): "don't start" is said by not starting —
-  // keep chatting, walk away, or delete the project.
-
-  /** Restore a superseded version as the current plan — the chip's snapshot
-   * becomes the panel's plan (it rides the next refine as prior_intent, and
-   * Start uses it directly). Nothing is locked; older versions stay in the
-   * flow as chips. */
-  const restoreVersion = (index: number) => {
-    const version = planVersions[index]
-    if (!version) return
-    setIntent(version.plan)
-    setExpandedVersion(null)
-    toast.success(
-      t("generationOverlay.versionRestored", { n: index + 1 })
-    )
-  }
 
   const pushMessage = (message: Omit<OverlayMessage, "id">) => {
     // Live pushes anchor at "now"; the QA archive anchors at the question's
@@ -1729,9 +1463,7 @@ export function AgentThread({
     message: QuestionMessage,
   ): Omit<OverlayMessage, "id"> | null => {
     if (!message.answer) return null
-    const isPlan = message.question?.kind === "task_book"
     // task-book start confirmations never archive as QA (ruling above).
-    if (isPlan) return null
     if (
       message.question?.kind === "question" &&
       (message.question?.options?.length ?? 0) === 0 &&
@@ -1739,7 +1471,7 @@ export function AgentThread({
     ) {
       return null
     }
-    const display = answeredQuestionText(message.answer, t, !!message.workflow_run_id)
+    const display = answeredQuestionText(message.answer, t)
     return {
       role: "assistant",
       content: "",
@@ -1795,11 +1527,10 @@ export function AgentThread({
         if (!opts?.echoCarried) {
           pushMessage({
             role: "assistant",
-            outputRefs: triggerOutputRefs(message.intent),
+            outputRefs: deliveryOutputRefs(message.intent),
             proseDrainedAtMs: Date.now(),
             content: message.content ?? "",
             turnId: message.turn_id ?? undefined,
-            runId: message.workflow_run_id,
             seq: message.seq ?? undefined,
             blocks: message.blocks?.length ? message.blocks : undefined,
           })
@@ -1813,10 +1544,10 @@ export function AgentThread({
         // Rows whose content IS the bare question (code-composed, legacy)
         // carry no echo — the pill's title already says it.
         const echo = questionEcho(message)
-        if (echo || triggerOutputRefs(message.intent).length > 0) {
+        if (echo || deliveryOutputRefs(message.intent).length > 0) {
           pushMessage({
             role: "assistant",
-            outputRefs: triggerOutputRefs(message.intent),
+            outputRefs: deliveryOutputRefs(message.intent),
             proseDrainedAtMs: Date.now(),
             content: echo ?? "",
             turnId: message.turn_id ?? undefined,
@@ -1826,36 +1557,7 @@ export function AgentThread({
         }
       }
       setPendingQuestion(message)
-      if (message.question.kind === "task_book") {
-        // A plan docked — the server stamped the draft graph in the same
-        // transaction: tell the page so its flip gate sees it (K5 图先展示
-        // 后运行 — the world morphs on the draft graph, not just on runs).
-        void projectChangedRef.current()
-        // 计划行自完备 (2026-09-08, 方案 B): the docked row IS the whole
-        // plan — the chain on the row's `intent` column. The live path
-        // renders it straight off the envelope (one turn = one call);
-        // the pending-brief fetch is the RECOVERY seat only, kept as the
-        // fallback for rows docked before the seal (intent column null).
-        // Phase 3 Batch B (裁决 1): docking NO LONGER raises a "confirm"
-        // phase — the confirm beat derives from the stamp's PLAN_READY
-        // (confirmActive), so a dock envelope alone never opens the beat
-        // (task_book exists ≠ PLAN_READY). The intent state still lands
-        // here; the stamp's refetch (project refresh above) flips the
-        // surface.
-        if (message.intent) {
-          setIntent(normalizeIntent(message.intent))
-          setIntentReady(true)
-          void refreshPresentationRecovery()
-        } else {
-          const pending = await refreshPresentationRecovery()
-          if (pending) {
-            setIntent(normalizeIntent(pending.intent))
-            setIntentReady(true)
-            // No "plan updated" filler line on refinements — the turn's own
-            // streamed echo bubble already says what changed.
-          }
-        }
-      }
+
       return
     }
     // A plain prose reply. echoCarried: the turn's finalized preview bubble
@@ -1866,10 +1568,9 @@ export function AgentThread({
         serverMessageId: message.id,
         seq: message.seq ?? undefined,
         turnId: message.turn_id ?? undefined,
-        outputRefs: triggerOutputRefs(message.intent),
+        outputRefs: deliveryOutputRefs(message.intent),
         proseDrainedAtMs: Date.now(),
         content: message.content ?? "",
-        runId: message.workflow_run_id,
         blocks: message.blocks?.length ? message.blocks : undefined,
       })
     }
@@ -2028,7 +1729,6 @@ export function AgentThread({
      * envelope's created_at is never re-anchored (ordering never reads at). */
     const finalizePreview = (
       content?: string,
-      runId?: string | null,
       seq?: number | null,
       serverMessageId?: string,
     ) => {
@@ -2047,7 +1747,6 @@ export function AgentThread({
             ? {
                 ...m,
                 content: content ?? m.content,
-                runId: runId === undefined ? m.runId : runId,
                 turnId: turnOwner.serverId ?? turnOwner.localId ?? m.turnId,
                 seq: seq == null ? m.seq : seq,
                 streaming: false,
@@ -2065,7 +1764,6 @@ export function AgentThread({
      * question follows, exactly like a streamed turn. */
     const paceSettledProse = async (
       content: string,
-      runId?: string | null,
       seq?: number | null,
       serverMessageId?: string,
     ) => {
@@ -2077,7 +1775,7 @@ export function AgentThread({
         setMessages((prev) => stampServerMessageId(prev, streamId, serverMessageId))
       }
       await segments.drain()
-      finalizePreview(content, runId, seq, serverMessageId)
+      finalizePreview(content, seq, serverMessageId)
     }
     /** 打字机律·工具线重述牙③ (T2b 感知族): the loop's accumulated speech may
      * EXTEND the streamed preview — words spoken before a kept read call are
@@ -2125,7 +1823,6 @@ export function AgentThread({
           // The sender's surface (2026-09-25 canvas↔chat 联动): panel form
           // = the plan's canvas lives beside this conversation — the reply
           // may name it; every other form stays surface-neutral.
-          surface: "chat",
         },
         {
           signal: ctrl.signal,
@@ -2300,24 +1997,16 @@ export function AgentThread({
           // real echo via echoCarried — the live view diverged from the DB).
           await paceUnstreamedTail(message.content ?? "")
           if (!ownsTurn()) return
-          finalizePreview(message.content || undefined, undefined, message.seq, message.id)
+          finalizePreview(message.content || undefined, message.seq, message.id)
           stampEnvelopeBlocks(message)
-          if (message.question.kind === "task_book") {
-            if (intentReady && livePlanMessageId) {
-              setPlanVersions((prev) => [
-                ...prev,
-                { messageId: livePlanMessageId, plan: intentRef.current },
-              ])
-            }
-            setLivePlanMessageId(streamId)
-          }
+
         } else {
           // Zero-delta turn (the funnel's repair round never streams): the
           // echo rides the typewriter anyway — the dock waits for it to
           // drain, so the prose leads and the question follows (打字机律).
           const settledEcho = questionEcho(message)
           if (settledEcho) {
-            await paceSettledProse(settledEcho, undefined, message.seq, message.id)
+            await paceSettledProse(settledEcho, message.seq, message.id)
             if (!ownsTurn()) return
             stampEnvelopeBlocks(message)
           } else {
@@ -2343,7 +2032,6 @@ export function AgentThread({
         if (!ownsTurn()) return
         finalizePreview(
           message.content ?? "",
-          message.workflow_run_id,
           message.seq,
           message.id,
         )
@@ -2354,7 +2042,6 @@ export function AgentThread({
         if (settled) {
           await paceSettledProse(
             message.content ?? "",
-            message.workflow_run_id,
             message.seq,
             message.id,
           )
@@ -2907,7 +2594,6 @@ export function AgentThread({
   const handleBailQuestion = async () => {
     if (!pendingQuestion || answering) return
     setAnswering(true)
-    const wasPlan = pendingQuestion.question?.kind === "task_book"
     const groupDigest = pendingQuestion.question?.group_digest ?? null
     const isGroup = (pendingQuestion.question?.items?.length ?? 0) > 0 && groupDigest !== null
     const body = isGroup
@@ -2944,7 +2630,6 @@ export function AgentThread({
         return
       }
       const data = (await res.json()) as { answered_question: QuestionMessage }
-      const hadRun = !!pendingQuestion.workflow_run_id
       setPendingQuestion(null)
       if (groupDigest) {
         setQuestionGroupDrafts((previous) => Object.fromEntries(
@@ -2953,9 +2638,7 @@ export function AgentThread({
       }
       // A task_book bail tears the draft graph down server-side — the page
       // morphs back to the chat world (K5 条款: bail 拆图).
-      if (wasPlan) void projectChangedRef.current()
       pushAnsweredQuestion(data.answered_question)
-      if (hadRun) toast.info(t("generationOverlay.stopped"))
     } finally {
       setAnswering(false)
     }
@@ -3299,22 +2982,6 @@ export function AgentThread({
   const canStop = (chatBusy && abortRef.current !== null) || recoveredJobTurn !== null
   const chatScroller = (
     <ChatConversation
-      planVersions={planVersions}
-      renderPlanVersion={(version, index) => (
-        <PlanVersionChip
-          n={index + 1}
-          plan={version.plan}
-          summary={titleOf(version.plan)}
-          expanded={expandedVersion === index}
-          onToggle={() =>
-            setExpandedVersion(
-              expandedVersion === index ? null : index
-            )
-          }
-          onRestore={() => restoreVersion(index)}
-          taskLabel={taskLabel}
-        />
-      )}
       conversationUnits={conversationUnits}
       chatOutputs={chatOutputs}
       skillOptions={skillOptions}
@@ -3364,11 +3031,7 @@ export function AgentThread({
         onAnswer={handleOptionAnswer}
         answering={answering}
         onBail={handleBailQuestion}
-        bailLabel={
-          pillQuestion.workflow_run_id
-            ? t("questionDock.bail")
-            : t("questionDock.skip")
-        }
+        bailLabel={t("questionDock.skip")}
         onFreeform={handleFreeformAnswer}
         freeformDisabled={chatBusy}
       />

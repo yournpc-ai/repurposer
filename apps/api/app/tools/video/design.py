@@ -166,7 +166,7 @@ class CompositionSceneAuthoring(BaseModel):
     )
     narration_snapshot_id: UUID | None = Field(
         default=None,
-        description="经 prepare_narration 准备的固定音频 SourceSnapshot。将其放为普通 dialogue AudioObject，并配以对齐的原生字幕。",
+        description="用于逐句字幕的固定旁白 SourceSnapshot。只在字幕对齐 READY 时与 narration_alignment_id 一起填写。如果只需要声音，保存画面后用 insert_audio 添加固定音频。",
     )
     narration_alignment_id: UUID | None = Field(
         default=None,
