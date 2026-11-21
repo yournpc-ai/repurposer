@@ -1,0 +1,157 @@
+{
+  "failed-image-title-endcard.json.gz": {
+    "project": "0a6bac95-d0d3-48f7-a517-547797e1677e",
+    "turn": "905ff0bc-4b0a-4fb4-9ed4-6385d8a6abeb",
+    "calls": [
+      [
+        "call_function_5xcp5v8k38pz_1",
+        "export_video",
+        "{}"
+      ],
+      [
+        "call_function_f0y3bx4lhncy_1",
+        "export_video",
+        "{}"
+      ]
+    ],
+    "rows": [
+      {
+        "run": "7200b6ab-9979-4367-bb96-f264574b1bda",
+        "status": "CANCELLED",
+        "kind": "produce_video",
+        "attempt": 239,
+        "started_at": "2026-11-21 02:44:03.422168+00:00",
+        "created_at": "2026-11-21 08:49:12.402003+00:00",
+        "finished_at": "2026-11-21 08:58:19.537322+00:00",
+        "claim_token": null,
+        "earliest_retained_stage_attempt": 39,
+        "ledger": "[[\"hold\", -13], [\"release\", 13]]",
+        "outputs": 0
+      },
+      {
+        "run": "bbe90089-97ad-4276-bd18-c38d4961e052",
+        "status": "CANCELLED",
+        "kind": "produce_video",
+        "attempt": 508,
+        "started_at": "2026-11-21 02:54:20.007750+00:00",
+        "created_at": "2026-11-21 08:58:22.174340+00:00",
+        "finished_at": "2026-11-21 09:08:36.849165+00:00",
+        "claim_token": null,
+        "earliest_retained_stage_attempt": 17,
+        "ledger": "[[\"hold\", -13], [\"release\", 13]]",
+        "outputs": 0
+      }
+    ]
+  },
+  "failed-media-generation.json.gz": {
+    "project": "da506313-9592-4bbf-9ce7-1878bf405f48",
+    "turn": "c4ed07bb-504d-459f-a56f-84c03a860061",
+    "calls": [
+      [
+        "call_04fbc741782c400d8ff268c8",
+        "generate_voice",
+        "{\"text\": \"Evidence guides every cut.\", \"language\": \"en\", \"voice_id\": \"presenter_male\"}"
+      ],
+      [
+        "call_061aa7dfb7404ea6adadf069",
+        "generate_music",
+        "{\"duration_seconds\": 2, \"style\": \"light_electronic\", \"bpm\": 100, \"name\": \"Light electronic bed\"}"
+      ]
+    ],
+    "rows": [
+      {
+        "run": "4e84067b-0587-4d1e-bd3a-0c267844a90f",
+        "status": "CANCELLED",
+        "kind": "prepare_narration",
+        "attempt": 671,
+        "started_at": "2026-11-21 02:44:03.507096+00:00",
+        "created_at": "2026-11-21 08:48:58.518530+00:00",
+        "finished_at": "2026-11-21 08:58:19.572314+00:00",
+        "claim_token": null,
+        "earliest_retained_stage_attempt": 10,
+        "ledger": "[[\"hold\", -3], [\"release\", 3]]",
+        "outputs": 0
+      },
+      {
+        "run": "310a4150-9235-46df-a0db-2ec352716843",
+        "status": "COMPLETED",
+        "kind": "prepare_music",
+        "attempt": 26,
+        "started_at": "2026-11-21 08:58:59.608558+00:00",
+        "created_at": "2026-11-21 08:58:20.439692+00:00",
+        "finished_at": "2026-11-21 08:59:00.271233+00:00",
+        "claim_token": "874d37b8-d2db-4e45-87d3-d5c95224104b",
+        "earliest_retained_stage_attempt": 6,
+        "ledger": null,
+        "outputs": 0
+      }
+    ]
+  },
+  "failed-seam-gap.json.gz": {
+    "project": "f5e79530-4b47-4f5b-a0d7-9b710f9607e1",
+    "turn": "eca8e2b5-e270-4f69-8084-3d062c988e77",
+    "calls": [
+      [
+        "call_function_1ph04s91itkb_1",
+        "export_video",
+        "{}"
+      ],
+      [
+        "call_function_q0eq0xghbphl_1",
+        "export_video",
+        "{}"
+      ]
+    ],
+    "rows": [
+      {
+        "run": "709d1512-fb40-4e30-aafc-289d05823445",
+        "status": "CANCELLED",
+        "kind": "produce_video",
+        "attempt": 262,
+        "started_at": "2026-11-21 02:44:03.418053+00:00",
+        "created_at": "2026-11-21 08:49:04.179067+00:00",
+        "finished_at": "2026-11-21 08:58:19.496050+00:00",
+        "claim_token": null,
+        "earliest_retained_stage_attempt": 9,
+        "ledger": "[[\"hold\", -16], [\"release\", 16]]",
+        "outputs": 0
+      },
+      {
+        "run": "a9a86a46-065a-4f0d-a5d2-14e74c093b97",
+        "status": "CANCELLED",
+        "kind": "produce_video",
+        "attempt": 647,
+        "started_at": "2026-11-21 02:54:20.004930+00:00",
+        "created_at": "2026-11-21 08:58:22.065414+00:00",
+        "finished_at": "2026-11-21 09:08:36.824674+00:00",
+        "claim_token": null,
+        "earliest_retained_stage_attempt": 2,
+        "ledger": "[[\"hold\", -16], [\"release\", 16]]",
+        "outputs": 0
+      }
+    ]
+  },
+  "narration": [
+    {
+      "status": "done",
+      "id": "194ab666-753e-4c7e-99b3-de36f0cd41e5",
+      "usage_characters": 26,
+      "has_trace": true,
+      "audio_digest": "08279a42c8f8631ba2e30d5178643e23c74a4694b6ee746668f6e37bfb4b86e1",
+      "matching_snapshots": 4,
+      "matching_assets": 4
+    }
+  ],
+  "skew_seconds": 23699,
+  "isolated_reproduction": {
+    "workers": 1,
+    "attempt": 2,
+    "first_token": "3398d819-78e8-4f9f-9a43-147a56e05558",
+    "after_tick": [
+      "pending",
+      null
+    ],
+    "second_token": "04832e4b-6a33-4465-bcb3-f43e27456b95",
+    "first_commit_allowed": false
+  }
+}
