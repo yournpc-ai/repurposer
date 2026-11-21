@@ -22,7 +22,7 @@ vi.mock("./blocks/ComponentSlot", () => ({
     <div>{slot.kind === "systemNotice" ? slot.block?.text : "Delivered video"}</div>
   ),
 }))
-vi.mock("@/components/ui/message-scroller", () => {
+vi.mock("@/components/chat/MessageScroller", () => {
   const Container = ({ children, className }: { children?: ReactNode; className?: string }) => <div className={className}>{children}</div>
   const Item = ({ children, className }: { children?: ReactNode; className?: string }) => (
     <div data-slot="message-scroller-item" className={className}>{children}</div>
@@ -32,6 +32,7 @@ vi.mock("@/components/ui/message-scroller", () => {
     MessageScrollerContent: Container, MessageScrollerItem: Item, MessageScrollerViewport: Container,
     MessageScrollerButton: () => null,
     useMessageScroller: () => ({ scrollToEnd: vi.fn() }),
+    useMessageScrollerViewportAnchor: () => vi.fn(),
   }
 })
 
@@ -151,4 +152,34 @@ it("renders system notices after assistant prose through the shared component sl
   const response = screen.getByText("Here is the answer.").closest('[data-slot="assistant-response"]')!
   expect(response.contains(screen.getByText("Still waiting for your answer."))).toBe(true)
   expect(screen.getByText("Here is the answer.").textContent).not.toContain("Still waiting")
+})
+
+it("keeps native receipts in declaration order and scopes job outcomes to the original opening and call", () => {
+  const member = (id: string, index: number, callState: string): OverlayMessage => ({
+    id: "member-" + id, turnId: "opening", role: "assistant", content: "",
+    activity: { activity_id: id, call_id: id, group_id: "batch", call_index: index,
+      tool_name: "export_video", kind: "read", status: "completed", call_state: callState, key: null },
+  })
+  const rows: OverlayMessage[] = [
+    member("second", 1, "not_executed"), member("first", 0, "completed"),
+    { id: "stopped", turnId: "opening", role: "assistant", content: "",
+      activity: { activity_id: "stopped", call_id: "stopped", tool_name: "generate_voice",
+        kind: "read", status: "cancelled", key: null } },
+    { id: "uncertain", turnId: "opening", role: "assistant", content: "Reservation held",
+      jobReceipt: { callId: "first", status: "provider_unknown", reservedCredits: 10 } },
+    { id: "other", turnId: "another-opening", role: "assistant", content: "",
+      jobReceipt: { callId: "first", role: "export", outputId: "fixed-output", status: "available" } },
+  ]
+  const open = vi.fn()
+  const view = render(<ChatConversation {...props(rows, { openOutputViewer: open })} />)
+  const group = view.container.querySelector('[data-group-id="batch"]')!
+  expect(Array.from(group.querySelectorAll<HTMLElement>("[data-call-id]"), (el) =>
+    [el.dataset.callId, el.dataset.status])).toEqual([["first", "unknown"], ["second", "notExecuted"]])
+  expect(view.container.querySelectorAll("[data-call-id]")).toHaveLength(4)
+  expect(view.container.querySelector('[data-call-id="stopped"]')?.getAttribute("data-status")).toBe("cancelled")
+  expect(screen.getByText("Reservation held")).toBeDefined()
+  const output = view.container.querySelector('[data-status="outputGenerated"]')!
+  act(() => (output.querySelector("button") as HTMLButtonElement).click())
+  act(() => screen.getByRole("button", { name: "common.preview" }).click())
+  expect(open).toHaveBeenCalledWith("fixed-output")
 })

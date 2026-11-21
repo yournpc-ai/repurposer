@@ -19,7 +19,7 @@ vi.mock("react-i18next", async (original) => ({
 }))
 vi.mock("@/components/settings/settings-dialog-context", () => ({ useSettingsDialog: () => ({ openCreditTopup: vi.fn() }) }))
 vi.mock("@/components/mentions/MentionEditor", () => ({ MentionEditor: () => null }))
-vi.mock("@/components/ui/message-scroller", () => {
+vi.mock("@/components/chat/MessageScroller", () => {
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>
   return {
     MessageScroller: Container, MessageScrollerProvider: Container, MessageScrollerContent: Container,

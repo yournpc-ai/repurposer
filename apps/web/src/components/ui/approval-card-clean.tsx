@@ -5,10 +5,12 @@ import { useTranslation } from "react-i18next"
 import { Button } from "./button-clean"
 
 /** Controlled projection of one server authorization. Amounts include their currency or credit unit. */
-export function ApprovalCard({ title, quote, limit, status, submitting, onDecision }: {
+export function ApprovalCard({ title, quote, limit, approveLabel, declineLabel, status, submitting, onDecision }: {
   title: string
-  quote: string
-  limit: string
+  quote?: string
+  limit?: string
+  approveLabel?: string
+  declineLabel?: string
   status: "pending" | "approved" | "denied"
   submitting: boolean
   onDecision: (approve: boolean) => void
@@ -22,16 +24,16 @@ export function ApprovalCard({ title, quote, limit, status, submitting, onDecisi
         <div className="ui-apc__card">
           <h3 className="ui-apc__title" id={titleId}>{title}</h3>
           <p className="ui-apc__desc" role="status">{t(`agentReceipt.${status}`)}</p>
-          <div className="ui-apc__preview">
+          {(quote || limit) && <div className="ui-apc__preview">
             <dl className="ui-apc__details">
-              <div className="ui-apc__detail"><dt>{t("agentReceipt.quote")}</dt><dd>{quote}</dd></div>
-              <div className="ui-apc__detail"><dt>{t("agentReceipt.limit")}</dt><dd>{limit}</dd></div>
+              {quote && <div className="ui-apc__detail"><dt>{t("agentReceipt.quote")}</dt><dd>{quote}</dd></div>}
+              {limit && <div className="ui-apc__detail"><dt>{t("agentReceipt.limit")}</dt><dd>{limit}</dd></div>}
             </dl>
-          </div>
+          </div>}
           {status === "pending" && <div className="ui-apc__foot">
             <div className="ui-apc__actions">
-              <Button disabled={submitting} variant="secondary" onClick={() => onDecision(false)}>{t("agentReceipt.decline")}</Button>
-              <Button disabled={submitting} onClick={() => onDecision(true)}>{t("agentReceipt.approve")}</Button>
+              <Button disabled={submitting} variant="secondary" onClick={() => onDecision(false)}>{declineLabel ?? t("agentReceipt.decline")}</Button>
+              <Button disabled={submitting} onClick={() => onDecision(true)}>{approveLabel ?? t("agentReceipt.approve")}</Button>
             </div>
           </div>}
         </div>
@@ -42,6 +44,8 @@ export function ApprovalCard({ title, quote, limit, status, submitting, onDecisi
 
 const css = /* css */ `
 .ui-apc {
+  flex: 1;
+  min-width: 0;
   --ui-apc-tray: var(--aui-subtle, #f0f0f0);
   --ui-apc-bg: var(--aui-surface, #ffffff);
   --ui-apc-ink: var(--aui-ink, #171717);
@@ -116,8 +120,8 @@ const css = /* css */ `
   line-height: 20px;
   letter-spacing: -0.011em;
   text-align: start;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .ui-apc__desc {
   margin: 1px 0 0;

@@ -1,5 +1,8 @@
 const en = {
   agentReceipt: {
+    job: "Media operation",
+    chargedCredits: "Charged credits · {{count}}",
+    reservedCredits: "Reserved credits · {{count}}",
     accepted: "Awaiting execution",
     queued: "Queued",
     running: "Running",

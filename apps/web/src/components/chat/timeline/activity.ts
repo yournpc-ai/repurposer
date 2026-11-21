@@ -114,6 +114,13 @@ export function foldActivityUnits(
     run = []
   }
   for (const unit of units) {
+    // A declared single call is independently inspectable, including while
+    // running or after Stop. Only explicit group members share a tool card.
+    if (unit.kind === "activity" && unit.activity.call_id && !unit.activity.group_id) {
+      flush()
+      out.push(unit)
+      continue
+    }
     if (unit.kind === "activity" && !unit.activity.group_id && unit.activity.status === "failed" && run.length > 0 &&
       activityOwner(run[0]) === activityOwner(unit)) {
       // One continuous segment settles into ONE failed receipt. The failure

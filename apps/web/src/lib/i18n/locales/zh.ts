@@ -2,6 +2,9 @@ import type { Resources } from "./en"
 
 const zh: Resources = {
   agentReceipt: {
+    job: "媒体操作",
+    chargedCredits: "已结算积分 · {{count}}",
+    reservedCredits: "预占积分 · {{count}}",
     accepted: "待执行",
     queued: "排队",
     running: "运行中",

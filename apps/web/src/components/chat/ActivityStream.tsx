@@ -36,6 +36,7 @@ import type {
   ActivityReceipt,
   ActivityRowFrame,
   ComponentClipReceipt,
+  NativeJobReceipt,
   MusicSearchReceipt,
   MusicSelectionReceipt,
   SfxImportReceipt,
@@ -45,7 +46,10 @@ import type {
 } from "./timeline/types"
 import { activityCategoryKey, activityFailureKey, foldCategories } from "./timeline/activity"
 import { formatElapsed } from "@/components/chat/workTiming"
-import { useMessageScrollerViewportAnchor } from "@/components/ui/message-scroller"
+import { useMessageScrollerViewportAnchor } from "@/components/chat/MessageScroller"
+import { Button } from "@/components/ui/button-clean"
+import { ThinkingLoader } from "@/components/ui/thinking-loader-clean"
+import { ToolCallCard, ToolCallGroup, type ToolCallStatus } from "@/components/ui/tool-call-card-clean"
 import { cn } from "@/lib/utils"
 
 /** Per-kind glyphs (2026-09-24 user ruling, OriginCut parity — 查看项目资源
@@ -472,6 +476,96 @@ function ActivityEvidence({ receipt }: { receipt: ActivityReceipt }) {
   }
 }
 
+const callStatuses: Readonly<Record<string, ToolCallStatus | undefined>> = {
+  accepted: "accepted", queued: "queued", active: "running", running: "running",
+  completed: "success", succeeded: "success", failed: "error", cancelled: "cancelled",
+  awaiting_authorization: "pending", declined: "denied", provider_unknown: "unknown",
+  not_executed: "notExecuted",
+}
+
+function jobStatus(job: NativeJobReceipt): ToolCallStatus {
+  if (job.status === "available") return job.role === "export" ? "outputGenerated" : "success"
+  if (job.status === "dependencies_not_ready") return "notExecuted"
+  return callStatuses[job.status] ?? "unknown"
+}
+
+function JobDetails({ job, onOpen }: { job: NativeJobReceipt; onOpen?: (id: string) => void }) {
+  const { t } = useTranslation()
+  const output = job.outputId
+  return (
+    <>
+      {job.chargedCredits !== undefined && <p>{t("agentReceipt.chargedCredits", { count: job.chargedCredits })}</p>}
+      {job.reservedCredits !== undefined && job.reservedCredits > 0 && (
+        <p>{t("agentReceipt.reservedCredits", { count: job.reservedCredits })}</p>
+      )}
+      {output && job.role === "export" && job.status === "available" && onOpen && (
+        <Button size="sm" variant="secondary" onClick={() => onOpen(output)}>{t("common.preview")}</Button>
+      )}
+    </>
+  )
+}
+
+export function JobReceiptCard({ job, onOpen }: { job: NativeJobReceipt; onOpen: (id: string) => void }) {
+  const { t } = useTranslation()
+  return (
+    <ToolCallCard
+      callId={job.callId}
+      name={job.operation ? t(`chat.toolName.${job.operation}`, { defaultValue: job.operation.replaceAll("_", " ") }) : t("agentReceipt.job")}
+      status={jobStatus(job)}
+    >
+      <JobDetails job={job} onOpen={onOpen} />
+    </ToolCallCard>
+  )
+}
+
+/** Native declaration order and member outcomes survive both live updates and replay. */
+export function NativeToolReceipts({ rows, grouped, onOpen }: { rows: ActivityRowFrame[]; grouped?: boolean; onOpen?: (id: string) => void }) {
+  const { t } = useTranslation()
+  const groupRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const anchor = useMessageScrollerViewportAnchor(groupRef, false)
+  const ordered = [...rows].sort((a, b) => (a.call_index ?? 0) - (b.call_index ?? 0))
+  const cards = ordered.map((row) => {
+    const name = row.tool_name
+      ? t(`chat.toolName.${row.tool_name}`, { defaultValue: row.tool_name.replaceAll("_", " ") })
+      : activityText(row, t)
+    return (
+      <ToolCallCard
+        key={row.call_id ?? row.activity_id}
+        callId={row.call_id}
+        name={name}
+        status={row.jobReceipt ? jobStatus(row.jobReceipt) : row.receipt?.kind === "video_revision" && row.status === "completed"
+          ? "versionSaved" : callStatuses[row.call_state ?? row.status] ?? "unknown"}
+        duration={row.duration_ms}
+      >
+        {row.error && <p>{row.error}</p>}
+        {row.key && !row.error && !row.call_state && !row.jobReceipt && <p>{activityText(row, t)}</p>}
+        {row.jobReceipt && <JobDetails job={row.jobReceipt} onOpen={onOpen} />}
+        {row.receipt && <ActivityEvidence receipt={row.receipt} />}
+      </ToolCallCard>
+    )
+  })
+  if (!grouped) return <>{cards}</>
+  const running = ordered.find((row) => row.call_state === "running")
+  const recording = ordered.some((row) => row.tool_name === "generate_voice") &&
+    ordered.some((row) => row.tool_name === "generate_music")
+  return (
+    <div ref={groupRef} data-group-id={ordered[0]?.group_id}>
+      <ToolCallGroup
+        open={open}
+        onOpenChange={(next) => {
+          anchor(groupRef.current)
+          setOpen(next)
+        }}
+        label={t("chat.toolGroup", { count: ordered[0]?.call_count ?? ordered.length })}
+        runningLabel={recording ? t("chat.recordingGroup") : running?.key ? t(running.key) : undefined}
+      >
+        {cards}
+      </ToolCallGroup>
+    </div>
+  )
+}
+
 /** One work segment in BOTH poses, shared by chat activities and background
  * runs. The header owns the lifecycle; each adapter owns its details. Chat
  * keeps latent tool rows while live and category rows when settled. A run
@@ -556,21 +650,11 @@ export function WorkSegmentRow({
             : undefined
         }
       >
-        {live ? (
-          <span className="flex h-3 w-3 shrink-0 items-center justify-center">
-            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-          </span>
-        ) : null}
-        <span
-          className={cn(
-            "min-w-0 truncate transition-colors",
-            live && "shimmer",
-            "group-hover/row:text-foreground",
-            !live && expandable && open && "text-foreground",
-          )}
-        >
-          {label}
-        </span>
+        {live && typeof label === "string" ? (
+          <ThinkingLoader label={label} />
+        ) : (
+          <span className="min-w-0 truncate">{label}</span>
+        )}
         {live && liveTrailing ? (
           <span className="shrink-0 tabular-nums text-meta-foreground">
             · {liveTrailing}

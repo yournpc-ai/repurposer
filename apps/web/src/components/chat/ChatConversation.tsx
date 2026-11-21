@@ -6,15 +6,14 @@ import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { Download } from "lucide-react"
 
-import { ActivityRow, activityText, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, activityText, JobReceiptCard, NativeToolReceipts, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { ComponentSlot } from "./blocks/ComponentSlot"
 import type { RegisterStructureVisibility } from "./structureVisibility"
 import { AssistantResponse } from "./blocks/AssistantResponse"
 import { TurnBlock } from "./blocks/TurnBlock"
-import { Button } from "@/components/ui/button"
-import { Message, MessageContent } from "@/components/ui/message"
+import { Button } from "@/components/ui/button-clean"
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -23,7 +22,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
   useMessageScroller,
-} from "@/components/ui/message-scroller"
+} from "@/components/chat/MessageScroller"
 import { deliveredOutputsForRefs } from "@/lib/anchorCards"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import type { Output } from "@/lib/types"
@@ -43,8 +42,7 @@ import { deliveryOutputReveal, hasMessageOutputs, type VideoPresentationRecovery
 /** Send-time follow re-arm (2026-09-24, user-reported auto-scroll failures).
  * The scroller library only auto-follows while its mode is "following-
  * bottom", which disengages the moment the viewport sits >8px off the
- * bottom — and items' content-visibility intrinsic-size estimates can hold
- * the geometry there (the stray ↓ button reads the same drift). SENDING is
+ * bottom. SENDING is
  * the user's explicit "take me to the live edge" intent, so every send
  * calls scrollToEnd: the library's own entry both jumps AND re-engages
  * following-bottom (the just-appended bubble is then caught by the
@@ -153,6 +151,7 @@ export function ChatConversation({
           slot={{
             kind: "output",
             key: `delivery-output:${m.id}`,
+            reviewedVersionId: m.reviewedVersionId,
             outputs: deliveredOutputsForRefs(m.outputRefs ?? [], chatOutputs),
             ...deliveryOutputReveal(m),
           }}
@@ -170,6 +169,7 @@ export function ChatConversation({
     if (
       m.role === "assistant" &&
       !m.qa &&
+      !m.jobReceipt &&
       m.meta == null &&
       !m.content &&
       deliveryOutputSlot == null &&
@@ -189,6 +189,7 @@ export function ChatConversation({
           m.role === "assistant" && m.content ? "" : undefined
         }
       >
+        {m.jobReceipt && <JobReceiptCard job={m.jobReceipt} onOpen={openOutputViewer} />}
         {m.qa ? (
           <>
             <AnsweredQuestion
@@ -207,7 +208,7 @@ export function ChatConversation({
             {m.creditTopup && (
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => openCreditTopup(m.creditTopup)}
               >
@@ -242,27 +243,25 @@ export function ChatConversation({
                 as the user's next message; download = the output cards'
                 own channel. Never a second intent surface. */}
             {m.suggestions && m.suggestions.length > 0 ? (
-              <Message align="start">
-                <MessageContent>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {m.suggestions.map((s, index) => (
-                      <Button
-                        key={`${m.id}-s${index}`}
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 rounded-md"
-                        disabled={s.action === "send" && chatBusy}
-                        onClick={() => onSuggestionClick(s)}
-                      >
-                        {s.action === "download" ? (
-                          <Download className="size-3.5" />
-                        ) : null}
-                        {s.label}
-                      </Button>
-                    ))}
-                  </div>
-                </MessageContent>
-              </Message>
+              <div className="ui-th-message">
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {m.suggestions.map((s, index) => (
+                    <Button
+                      key={`${m.id}-s${index}`}
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1.5 rounded-md"
+                      disabled={s.action === "send" && chatBusy}
+                      onClick={() => onSuggestionClick(s)}
+                    >
+                      {s.action === "download" ? (
+                        <Download className="size-3.5" />
+                      ) : null}
+                      {s.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             ) : null}
             {/* Candidate Surface (v4.2 C8-c): the candidate card anchors
                 under its turn's reply — replayed from the candidates_log
@@ -313,30 +312,16 @@ export function ChatConversation({
     if (unit.kind === "activity") {
       return (
         <MessageScrollerItem key={unit.rowKey}>
-          <ActivityRow activity={unit.activity} />
+          {unit.activity.call_id
+            ? <NativeToolReceipts onOpen={openOutputViewer} rows={[unit.activity]} />
+            : <ActivityRow activity={unit.activity} />}
         </MessageScrollerItem>
       )
     }
     if (unit.rows[0]?.group_id) {
-      const members = [...unit.rows].sort((a, b) => (a.call_index ?? 0) - (b.call_index ?? 0))
-      const running = members.find((row) => row.call_state === "running")
-      const recording = members.some((m) => m.tool_name === "generate_voice") &&
-        members.some((m) => m.tool_name === "generate_music")
-      const title = running && recording ? t("chat.recordingGroup") :
-        running?.key ? t(running.key) : t("chat.toolGroup", { count: members[0].call_count })
       return (
         <MessageScrollerItem key={unit.rowKey}>
-          <details className="studio-tools" data-group-id={members[0].group_id}>
-            <summary>{title}</summary>
-            <ol>{members.map((row) => (
-              <li key={row.call_id} data-call-id={row.call_id} data-state={row.call_state}>
-                <span title={row.tool_name}>{t(`chat.toolName.${row.tool_name}`, { defaultValue: row.tool_name?.replaceAll("_", " ") ?? "" })}
-                  {row.error && <span className="block text-xs">{row.error}</span>}
-                </span>
-                <small>{t(`chat.callState.${row.call_state ?? row.status}`)}{row.duration_ms != null && (row.duration_ms < 1000 ? ` · ${row.duration_ms} ms` : ` · ${(row.duration_ms / 1000).toFixed(1)} s`)}</small>
-              </li>
-            ))}</ol>
-          </details>
+          <NativeToolReceipts onOpen={openOutputViewer} rows={unit.rows} grouped />
         </MessageScrollerItem>
       )
     }

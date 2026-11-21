@@ -29,38 +29,6 @@
   }
 }
 
-/* The results dock's parked glass (ADR-041 D4 一体容器, 2026-08-15 走查拍板)
- * — one persistent input dock over the calm dotted canvas, not a transient
- * overlay over arbitrary content: enough translucency for the canvas's
- * texture to read through the frost. NO shadow — the dock is the same input
- * group's third parking spot as the home composer and inherits its
- * hero-flat rule (hairline only); the ring rides the component, not this
- * recipe. */
-@utility dock-surface {
-  /* Light: a gray fill (the muted ladder step) — page-level floats must read
-     against the WHITE canvas by FILL, not by their hairline (white-on-white
-     translucent white = zero fill contrast = the ring reads as "a border").
-     The frost stays so canvas texture still whispers through. */
-  background-color: color-mix(in oklch, var(--muted) 82%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  backdrop-filter: blur(24px) saturate(1.4);
-
-  @variant dark {
-    background-color: color-mix(in oklch, var(--popover) 55%, transparent);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
-    backdrop-filter: blur(28px) saturate(1.4);
-  }
-
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    background-color: var(--muted);
-
-    @variant dark {
-      background-color: var(--popover);
-    }
-  }
-}
-
-
 /* Thin scroller (2026-09-06, FLORA-parity): 6px rounded thumb at 12%
  * foreground on a transparent track — quiet scroll chrome for the dock
  * family (message viewport / editor / history). Overlay-style: no
@@ -504,11 +472,6 @@ body {
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-icon-chip: var(--icon-chip);
-  --color-lineage: var(--lineage);
-  --color-track-video: var(--track-video);
-  --color-track-video-foreground: var(--track-video-foreground);
-  --color-track-audio: var(--track-audio);
-  --color-track-audio-foreground: var(--track-audio-foreground);
   --color-success: var(--success);
   --color-success-subtle: var(--success-subtle);
   --color-warning: var(--warning);
@@ -609,18 +572,6 @@ body {
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
   --icon-chip: var(--aui-surface);
-  /* Lineage cross-highlight (ADR-113 §6): the canvas's ONE hue — hovering a
-   * deliverable card's video-lane block lights the source asset card's
-   * overlapping strip blocks / cue rows in amber. Semantic token, both
-   * schemes; never a per-instance color value. */
-  --lineage: oklch(0.92 0.11 92);
-  /* NLE 检视轴道块 (ADR-115): the video lane's kept-segment blocks read in
-   * lavender, the modifier lanes (music/dub) in pink — pastel fill + deep
-   * same-hue foreground, both schemes; never a per-instance color value. */
-  --track-video: oklch(0.85 0.075 293);
-  --track-video-foreground: oklch(0.42 0.16 290);
-  --track-audio: oklch(0.87 0.07 350);
-  --track-audio-foreground: oklch(0.45 0.15 350);
   --radius: var(--aui-radius);
   --inverse: #202020;
   --inverse-foreground: var(--aui-surface);
@@ -648,11 +599,6 @@ body {
   --landing-header-background: #171612;
   --landing-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
   --icon-chip: var(--aui-subtle);
-  --lineage: oklch(0.85 0.13 90 / 22%);
-  --track-video: oklch(0.4 0.08 293);
-  --track-video-foreground: oklch(0.86 0.08 293);
-  --track-audio: oklch(0.42 0.08 350);
-  --track-audio-foreground: oklch(0.87 0.08 350);
   --inverse: var(--aui-subtle);
   --inverse-foreground: var(--aui-ink);
 }

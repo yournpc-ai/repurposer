@@ -21,6 +21,7 @@ import type {
   CandidateMemberPayload,
   CandidateSurface,
   ComponentClipReceipt,
+  NativeJobReceipt,
   OverlayMessage,
   QuestionAnswer,
   QuestionMessage,
@@ -74,6 +75,32 @@ export function answeredQuestionIdFromIntent(intent: unknown): string | undefine
   return typeof data.answered_question_id === "string" && data.answered_question_id
     ? data.answered_question_id
     : undefined
+}
+
+export function nativeJobReceipt(intent: unknown): NativeJobReceipt | undefined {
+  const data = intent as Record<string, unknown> | null
+  if (typeof data?.native_call_id !== "string") return
+  const result = data.media_result as Record<string, unknown> | undefined
+  const status = result?.status ?? data.media_status
+  if (typeof status !== "string") return
+  return {
+    callId: data.native_call_id,
+    operation: typeof data.operation === "string" ? data.operation : undefined,
+    status,
+    role: typeof result?.role === "string" ? result.role : undefined,
+    outputId: typeof result?.output_id === "string" ? result.output_id : undefined,
+    chargedCredits: typeof result?.charged_credits === "number" ? result.charged_credits : undefined,
+    reservedCredits: typeof result?.reserved_credits === "number" ? result.reserved_credits : undefined,
+  }
+}
+
+export function messageReceiptFacts(intent: unknown) {
+  const jobReceipt = nativeJobReceipt(intent)
+  const reviewed = (intent as { reviewed_version?: { composition_version_id?: unknown } } | null)?.reviewed_version
+  return {
+    ...(jobReceipt && { jobReceipt }),
+    ...(typeof reviewed?.composition_version_id === "string" && { reviewedVersionId: reviewed.composition_version_id }),
+  }
 }
 
 export function deliveryOutputRefs(intent: unknown): string[] {
@@ -598,9 +625,11 @@ export function mapHistoryRows(
   // (the surface is one seat; rows never move).
   const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
+    const facts = m.role === "assistant" ? messageReceiptFacts(m.intent) : undefined
     const pushRow = (row: OverlayMessage): OverlayMessage => {
       const positioned = {
         ...row,
+        ...(row.id === m.id && facts),
         turnId: m.turn_id ?? undefined,
         serverMessageId: m.id,
         hydrated: true,
@@ -701,7 +730,6 @@ export function mapHistoryRows(
       // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
       // aggregate logs skip silently — never an empty bubble.
       if (isNonRenderIntent(m.intent)) continue
-      if ((m.intent as { media_status?: string } | null)?.media_status === "accepted") continue
       const intentType = ((m.intent ?? {}) as Record<string, unknown>).type
       // 失败行回放: a persisted turn-failure row replays as the SAME grey
       // meta row the live turn.failed frame renders — a refresh keeps the

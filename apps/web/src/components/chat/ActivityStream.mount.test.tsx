@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest"
 import { WorkSegmentRow } from "./ActivityStream"
 
 const { anchor } = vi.hoisted(() => ({ anchor: vi.fn() }))
-vi.mock("@/components/ui/message-scroller", () => ({
+vi.mock("@/components/chat/MessageScroller", () => ({
   useMessageScrollerViewportAnchor: () => anchor,
 }))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))

@@ -4,7 +4,6 @@
 
 import { Streamdown } from "streamdown"
 
-import { Message, MessageContent } from "@/components/ui/message"
 import { cn } from "@/lib/utils"
 import { shouldAnimateEntrance } from "../timeline/reveal"
 
@@ -18,20 +17,18 @@ export function AssistantText({
   hydrated?: boolean
 }) {
   return (
-    <Message align="start">
-      <MessageContent>
-        <Streamdown
-          mode={streaming ? "streaming" : "static"}
-          isAnimating={streaming}
-          className={cn(
-            "text-sm leading-relaxed",
-            shouldAnimateEntrance(hydrated) &&
-              "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
-          )}
-        >
-          {text}
-        </Streamdown>
-      </MessageContent>
-    </Message>
+    <div className="ui-th-message">
+      <Streamdown
+        mode={streaming ? "streaming" : "static"}
+        isAnimating={streaming}
+        className={cn(
+          "text-sm leading-relaxed",
+          shouldAnimateEntrance(hydrated) &&
+            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+        )}
+      >
+        {text}
+      </Streamdown>
+    </div>
   )
 }

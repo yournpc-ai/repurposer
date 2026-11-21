@@ -18,6 +18,7 @@ export type ToolCallStatus = "accepted" | "queued" | "running" | "success" | "er
 export type ToolCallCardProps = {
   /** Tool name as the agent calls it, shown in mono – e.g. "search_web" */
   name: string;
+  callId?: string;
   /** Short human summary – e.g. "Searched the web for 'CRM pricing 2026'" */
   summary?: ReactNode;
   /** Icon in the tile on the left – defaults to a wrench */
@@ -56,6 +57,7 @@ export type ToolCallGroupProps = {
 
 export function ToolCallCard({
   name,
+  callId,
   summary,
   icon,
   status,
@@ -96,6 +98,7 @@ export function ToolCallCard({
   return (
     <div
       className={["ui-tclc", className].filter(Boolean).join(" ")}
+      data-call-id={callId}
       data-status={status}
       data-open={open || undefined}
     >

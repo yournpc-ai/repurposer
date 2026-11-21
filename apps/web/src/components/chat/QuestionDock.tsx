@@ -34,6 +34,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, ArrowRight, Check, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { ApprovalCard } from "@/components/ui/approval-card-clean"
 import { Button } from "@/components/ui/button-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { Card } from "@/components/ui/card-clean"
@@ -51,6 +52,7 @@ export interface DockOption {
 
 interface OptionDockProps {
   kind: "question"
+  mediaApproval?: boolean
   /** The question's human text (LLM-written user data, shown as-is). */
   question: string
   options: DockOption[]
@@ -84,6 +86,7 @@ interface OptionDockProps {
 
 function OptionForm({
   question,
+  mediaApproval,
   options,
   recommendedId,
   onAnswer,
@@ -113,7 +116,13 @@ function OptionForm({
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
           channel. */}
       <div className="flex items-start gap-3 text-sm leading-6">
-        <span className="min-w-0 flex-1 break-words">{question}</span>
+        {mediaApproval ? (
+          <ApprovalCard title={question} status="pending" submitting={answering}
+            approveLabel={options.find((option) => option.id === "approve")?.label}
+            declineLabel={options.find((option) => option.id === "decline")?.label}
+            onDecision={(allow) => onAnswer(allow ? "approve" : "decline")}
+          />
+        ) : <span className="min-w-0 flex-1 break-words">{question}</span>}
         {onBail ? (
           <IconButton
             icon={<X />}
@@ -126,7 +135,7 @@ function OptionForm({
       {options.length > 0 ? (
         // Full-width options keep long labels within the dock.
         <div className="mt-4 flex flex-col gap-1.5">
-          {options.map((option, index) => (
+          {!mediaApproval && options.map((option, index) => (
             <Card key={option.id} selected={answering && pickedId === option.id}>
               <button
                 type="button"

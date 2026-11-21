@@ -8,7 +8,6 @@
 
 import { useTranslation } from "react-i18next"
 
-import { Message, MessageContent } from "@/components/ui/message"
 import { cn } from "@/lib/utils"
 import { shouldAnimateEntrance } from "./timeline/reveal"
 
@@ -35,61 +34,59 @@ export function AnsweredQuestion({
 }: AnsweredQuestionProps) {
   const { t } = useTranslation()
   return (
-    <Message align="end">
-      <MessageContent className="items-end">
-        {/* The settled choice belongs to the user's side of the transcript,
-            including the question context quoted above it. The Q/A chips stay
-            on the left, so the original optical padding does not mirror with
-            the bubble's host alignment. */}
-        <div className={cn(
-          "w-fit max-w-[85%] space-y-2 rounded-lg bg-muted py-2.5 pl-3 pr-10 text-sm",
-          shouldAnimateEntrance(hydrated) &&
-            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
-        )}>
-          {items?.length ? items.map((item, index) => (
-            <div key={`${item.question}-${index}`} className="space-y-2">
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("chat.qa.q")}
-                </span>
-                <p className="min-w-0 break-words leading-relaxed text-muted-foreground">{item.question}</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("chat.qa.a")}
-                </span>
-                <p className={cn("min-w-0 break-words leading-relaxed", item.muted ? "text-muted-foreground" : "text-foreground")}>
-                  {item.answer}
-                </p>
+    <div className="ui-th-message items-end">
+      {/* The settled choice belongs to the user's side of the transcript,
+          including the question context quoted above it. The Q/A chips stay
+          on the left, so the original optical padding does not mirror with
+          the bubble's host alignment. */}
+      <div className={cn(
+        "w-fit max-w-[85%] space-y-2 rounded-lg bg-muted py-2.5 pl-3 pr-10 text-sm",
+        shouldAnimateEntrance(hydrated) &&
+          "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+      )}>
+        {items?.length ? items.map((item, index) => (
+          <div key={`${item.question}-${index}`} className="space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("chat.qa.q")}
+              </span>
+              <p className="min-w-0 break-words leading-relaxed text-muted-foreground">{item.question}</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("chat.qa.a")}
+              </span>
+              <p className={cn("min-w-0 break-words leading-relaxed", item.muted ? "text-muted-foreground" : "text-foreground")}>
+                {item.answer}
+              </p>
+            </div>
+          </div>
+        )) : (
+          <>
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("chat.qa.q")}
+              </span>
+              <div className="min-w-0">
+                <p className="leading-relaxed text-muted-foreground">{question}</p>
+                {questionDetail ? (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                    {questionDetail}
+                  </p>
+                ) : null}
               </div>
             </div>
-          )) : (
-            <>
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("chat.qa.q")}
-                </span>
-                <div className="min-w-0">
-                  <p className="leading-relaxed text-muted-foreground">{question}</p>
-                  {questionDetail ? (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
-                      {questionDetail}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("chat.qa.a")}
-                </span>
-                <p className={cn("min-w-0 break-words leading-relaxed", muted ? "text-muted-foreground" : "text-foreground")}>
-                  {answer}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </MessageContent>
-    </Message>
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("chat.qa.a")}
+              </span>
+              <p className={cn("min-w-0 break-words leading-relaxed", muted ? "text-muted-foreground" : "text-foreground")}>
+                {answer}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

@@ -23,7 +23,6 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 
-import { Message, MessageContent } from "@/components/ui/message"
 import { cn } from "@/lib/utils"
 import {
   AudioCandidateSurface,
@@ -95,83 +94,81 @@ function TranscriptCandidateSurfaceCard({
   const shown = expanded ? members : members.slice(0, VISIBLE_COUNT)
 
   return (
-    <Message align="start">
-      <MessageContent>
-        {/* Register parity with AnsweredQuestion: an in-flow bg-muted block
-            hugging its content (fill-first — no ring, no shadow), the same
-            entrance beat. */}
-        <div className={cn(
-          "w-fit max-w-[85%] rounded-lg bg-muted py-1.5",
-          shouldAnimateEntrance(hydrated) &&
-            "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
-        )}>
-          <div
-            className={cn(
-              "flex flex-col",
-              expanded && "max-h-64 overflow-y-auto thin-scroll",
-            )}
-          >
-            {shown.map((member, index) => {
-              const selected = surface.selected.includes(index)
-              return (
-                <div
-                  key={index}
+    <div className="ui-th-message">
+      {/* Register parity with AnsweredQuestion: an in-flow bg-muted block
+          hugging its content (fill-first — no ring, no shadow), the same
+          entrance beat. */}
+      <div className={cn(
+        "w-fit max-w-[85%] rounded-lg bg-muted py-1.5",
+        shouldAnimateEntrance(hydrated) &&
+          "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300",
+      )}>
+        <div
+          className={cn(
+            "flex flex-col",
+            expanded && "max-h-64 overflow-y-auto thin-scroll",
+          )}
+        >
+          {shown.map((member, index) => {
+            const selected = surface.selected.includes(index)
+            return (
+              <div
+                key={index}
+                className={cn(
+                  "flex items-start gap-2.5 rounded-md px-3 py-1.5",
+                  // 选择态 = 行高亮 (C8-c): the --accent step, one token
+                  // both themes — never a drawn stroke.
+                  selected && "bg-accent",
+                )}
+              >
+                {/* ordinal 是地址: the two-digit visual address the user's
+                    「第二个」 speaks to. */}
+                <span
                   className={cn(
-                    "flex items-start gap-2.5 rounded-md px-3 py-1.5",
-                    // 选择态 = 行高亮 (C8-c): the --accent step, one token
-                    // both themes — never a drawn stroke.
-                    selected && "bg-accent",
+                    "mt-0.5 shrink-0 tabular-nums text-xs",
+                    selected ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
-                  {/* ordinal 是地址: the two-digit visual address the user's
-                      「第二个」 speaks to. */}
-                  <span
-                    className={cn(
-                      "mt-0.5 shrink-0 tabular-nums text-xs",
-                      selected ? "text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0">
-                    {/* One clamped line-block: the range prefix rides INSIDE
-                        the clamp (line-clamp needs the box) so a two-line
-                        excerpt keeps its range attached. */}
-                    <span className="line-clamp-2 text-sm leading-relaxed">
-                      <span className="mr-1.5 text-xs tabular-nums text-muted-foreground">
-                        {formatRange(member.start, member.end)}
-                      </span>
-                      {member.speaker ? (
-                        <span className="text-muted-foreground">
-                          {member.speaker} ·{" "}
-                        </span>
-                      ) : null}
-                      {member.excerpt}
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div className="min-w-0">
+                  {/* One clamped line-block: the range prefix rides INSIDE
+                      the clamp (line-clamp needs the box) so a two-line
+                      excerpt keeps its range attached. */}
+                  <span className="line-clamp-2 text-sm leading-relaxed">
+                    <span className="mr-1.5 text-xs tabular-nums text-muted-foreground">
+                      {formatRange(member.start, member.end)}
                     </span>
-                  </div>
+                    {member.speaker ? (
+                      <span className="text-muted-foreground">
+                        {member.speaker} ·{" "}
+                      </span>
+                    ) : null}
+                    {member.excerpt}
+                  </span>
                 </div>
-              )
-            })}
-          </div>
-          {overflow > 0 ? (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="mt-0.5 flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronDown
-                className={cn(
-                  "size-3.5 transition-transform",
-                  expanded && "rotate-180",
-                )}
-              />
-              {expanded
-                ? t("chat.candidates.less")
-                : t("chat.candidates.more", { count: overflow })}
-            </button>
-          ) : null}
+              </div>
+            )
+          })}
         </div>
-      </MessageContent>
-    </Message>
+        {overflow > 0 ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-0.5 flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                expanded && "rotate-180",
+              )}
+            />
+            {expanded
+              ? t("chat.candidates.less")
+              : t("chat.candidates.more", { count: overflow })}
+          </button>
+        ) : null}
+      </div>
+    </div>
   )
 }

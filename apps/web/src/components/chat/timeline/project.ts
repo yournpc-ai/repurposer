@@ -10,6 +10,7 @@ import {
   isRunSpanRow,
 } from "./activity"
 import type {
+  NativeJobReceipt,
   ConversationBlock,
   ConversationUnit,
   OverlayMessage,
@@ -27,18 +28,34 @@ export function buildConversationUnits(
   messages: OverlayMessage[],
 ): ConversationUnit[] {
   const units: ConversationUnit[] = []
+  const jobs = new Map<string, NativeJobReceipt>()
+  const activityCalls = new Set<string>()
+  for (const message of messages) {
+    if (!message.turnId) continue
+    if (message.jobReceipt) jobs.set(JSON.stringify([message.turnId, message.jobReceipt.callId]), message.jobReceipt)
+    if (message.activity?.call_id && !message.activityDisplayHeld) {
+      activityCalls.add(JSON.stringify([message.turnId, message.activity.call_id]))
+    }
+  }
   for (const m of messages) {
     if (m.activityDisplayHeld) continue
     const a = m.activity
     if (a === undefined) {
-      units.push({ kind: "message", message: m })
+      if (m.jobReceipt && activityCalls.has(JSON.stringify([m.turnId, m.jobReceipt.callId]))) {
+        // The call card owns the receipt. Its execution message still owns prose and fixed media.
+        if (!m.content && !m.blocks?.length && !m.qa && !m.outputRefs?.length) continue
+        units.push({ kind: "message", message: { ...m, jobReceipt: undefined } })
+      } else {
+        units.push({ kind: "message", message: m })
+      }
       continue
     }
-    if (!a.group_id && a.status === "cancelled") continue // abandoned attempt, not a work receipt
-    if (isDraftSpanRow(a) || isRunSpanRow(a)) continue // 落定即退役
+    if (!a.call_id && !a.group_id && a.status === "cancelled") continue // abandoned attempt, not a work receipt
+    if (!a.call_id && (isDraftSpanRow(a) || isRunSpanRow(a))) continue // 落定即退役
+    const jobReceipt = a.call_id && jobs.get(JSON.stringify([m.turnId, a.call_id]))
     units.push({
       kind: "activity",
-      activity: a,
+      activity: jobReceipt ? { ...a, jobReceipt } : a,
       rowKey: m.birthKey ?? m.id,
       turnId: m.turnId,
       independentKind: m.independentKind,

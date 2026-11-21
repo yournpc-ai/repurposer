@@ -217,11 +217,23 @@ export interface QuestionAnswer {
   answered_at?: string
 }
 
+/** Receipt fields exposed on an execution message by ChatMessageResponse. */
+export interface NativeJobReceipt {
+  callId: string
+  operation?: string
+  status: string
+  role?: string
+  outputId?: string
+  chargedCredits?: number
+  reservedCredits?: number
+}
+
 /** One persisted activity row's render frame (ADR-108 数组行). Current
  * activity rows and normalized legacy rows share this single shape. Array
  * position IS the order, so live-channel `seq` bookkeeping is optional;
  * `name`/`total` ride the activity's interpolation fields. */
 export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
+  jobReceipt?: NativeJobReceipt
   seq?: number
   name?: string
   total?: number
@@ -294,6 +306,7 @@ export type MessageBlock = ImagePreviewBlock | VideoStoryboardBlock | SystemNoti
 
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
+  jobReceipt?: NativeJobReceipt
 
   id: string
   /** The RENDER key law (2026-10-19 interim_prose-flicker fix): React keys the
@@ -319,6 +332,7 @@ export interface OverlayMessage {
   independentKind?: "qa" | "candidate" | "trigger"
   /** Exact products delivered by THIS message. An empty array is an honest
    * zero-delivery result; missing refs never reopen Run-level ownership. */
+  reviewedVersionId?: string
   outputRefs?: string[]
   /** Server-persisted message id for a live speech/structure row. The local id
    * keeps React/typewriter identity; this id is the only valid Stop frontier key. */
@@ -564,6 +578,7 @@ export type ComponentSlot =
     }
   | {
       kind: "output"
+      reviewedVersionId?: string
       key: string
       outputs: Output[]
       priorDrained: boolean

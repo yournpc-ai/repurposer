@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  Loader2,
   Plus,
   Undo2,
   Upload,
@@ -60,22 +59,17 @@ import {
 } from "@/components/mentions/MentionEditor"
 import { toast } from "sonner"
 
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentContent,
-  AttachmentDescription,
-  AttachmentGroup,
-  AttachmentMedia,
-  AttachmentTitle,
-} from "@/components/ui/attachment"
+import { Button } from "@/components/ui/button-clean"
+import { Card, CardHeader } from "@/components/ui/card-clean"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
 import { ChatOutputViewer } from "@/components/chat/ChatOutputViewer"
 import { createSpeechSegments, isSpeechSegmentRow } from "./timeline/speech"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import {
   mapHistoryRows,
+  messageReceiptFacts,
   activityRowFrame,
   answeredQuestionText,
   answeredQuestionIdFromIntent,
@@ -255,63 +249,30 @@ function StagedAttachmentChip({
         ? `${typeLabel} · ${formatChipDuration(meta.duration)}`
         : typeLabel
   return (
-    <Attachment
-      size="sm"
-      state={
-        item.status === "uploading"
-          ? "uploading"
-          : item.status === "error"
-            ? "error"
-            : "done"
-      }
-    >
-      <AttachmentMedia variant={meta.thumbUrl ? "image" : "icon"}>
-        {meta.thumbUrl ? <img src={meta.thumbUrl} alt="" /> : <Icon />}
-      </AttachmentMedia>
-      <AttachmentContent>
-        <AttachmentTitle>{item.file.name}</AttachmentTitle>
-        {item.status === "uploading" ? (
-          /* Composer/recipe parity (2026-09-24 用户拍板): the uploading
-             chip speaks its REAL percent (XHR progress), spinner + numeral
-             in the description slot — the bare shimmer was illegible. */
-          <AttachmentDescription className="flex items-center gap-1">
-            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-            <span className="tabular-nums">
-              {Math.round(item.progress * 100)}%
-            </span>
-          </AttachmentDescription>
-        ) : (
-          <AttachmentDescription>{metaLine}</AttachmentDescription>
-        )}
-      </AttachmentContent>
-      <AttachmentActions
-        // FLORA hover anatomy (2026-09-06): the chip chrome (× / retry)
-        // reveals on hover — a clean tile at rest, chrome on demand. Error
-        // state keeps its actions always visible (a hidden retry is a dead
-        // end); focus-within covers keyboard users.
-        className={
-          item.status === "error"
-            ? "opacity-100"
-            : "opacity-0 transition-opacity group-hover/attachment:opacity-100 focus-within:opacity-100"
-        }
-      >
-        {item.status === "error" && (
-          <AttachmentAction
-            aria-label={t("generationOverlay.retryUpload")}
-            onClick={onRetry}
-          >
-            <Undo2 />
-          </AttachmentAction>
-        )}
-        <AttachmentAction
-          aria-label={t("generationOverlay.removeAttachment")}
-          onClick={onRemove}
-        >
-          <X />
-        </AttachmentAction>
-      </AttachmentActions>
-    </Attachment>
+    <Card className="max-w-full" data-upload-state={item.status}>
+      <CardHeader
+        titleAs="p"
+        title={item.file.name}
+        description={item.status === "uploading" ? (
+          <span role="status"><Spinner size={12} /> {Math.round(item.progress * 100)}%</span>
+        ) : metaLine}
+        icon={meta.thumbUrl ? <img src={meta.thumbUrl} alt="" className="size-8 rounded object-cover" /> : <Icon />}
+        action={<div className="flex">
+          {item.status === "error" && (
+            <IconButton icon={<Undo2 />} label={t("generationOverlay.retryUpload")} onClick={onRetry} />
+          )}
+          <IconButton icon={<X />} label={t("generationOverlay.removeAttachment")} onClick={onRemove} />
+        </div>}
+      />
+    </Card>
   )
+}
+
+function isMediaApproval(message: QuestionMessage) {
+  const intent = message.intent as { native_call_id?: unknown } | null
+  const options = message.question?.options ?? []
+  return typeof intent?.native_call_id === "string" && options.length === 2 &&
+    options.some((option) => option.id === "approve") && options.some((option) => option.id === "decline")
 }
 
 /** 形态律 (ADR-053 R1): a TEXT question (options/items-empty) never docks —
@@ -499,7 +460,7 @@ export function AgentThread({
       setActivities((prev) => sweepActivities(prev, status))
       setMessages((prev) =>
         prev.map((m) =>
-          m.activity?.status === "active"
+          m.activity?.status === "active" && !m.activity.call_id
             ? { ...m, activity: { ...m.activity, status } }
             : m
         ),
@@ -522,16 +483,24 @@ export function AgentThread({
     const turnId = row.turn_id ? adoptCurrentTurnId(row.turn_id) : undefined
     const frame = activityRowFrame(row.intent)
     if (!frame) {
-      if (row.role !== "assistant" || (!row.content && !row.blocks?.length)) return
+      const facts = messageReceiptFacts(row.intent)
+      const { jobReceipt } = facts
+      if (row.role !== "assistant" || (!jobReceipt && !row.content && !row.blocks?.length)) return
       setMessages((prev) => {
         const reconciled = reconcileCurrentTurnRows(prev)
-        if (reconciled.some((m) => m.id === row.id)) return reconciled
+        if (reconciled.some((m) => m.id === row.id)) {
+          if (!jobReceipt) return reconciled
+          return reconciled.map((m) => m.id === row.id
+            ? { ...m, jobReceipt, content: row.content ?? m.content, blocks: row.blocks ?? m.blocks }
+            : m)
+        }
         return [
           ...reconciled,
           {
             id: row.id,
             serverMessageId: row.id,
             role: "assistant" as const,
+            ...facts,
             content: row.content ?? "",
             outputRefs: deliveryOutputRefs(row.intent),
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
@@ -777,6 +746,7 @@ export function AgentThread({
         turnId: row.turn_id,
         blocks: row.blocks,
         outputRefs: deliveryOutputRefs(row.intent),
+        intent: row.intent,
       })
       setMessages((prev) => insertRecoveredMessage(prev, message, { fresh }))
       const text = (row.content ?? "").trim()
@@ -905,11 +875,13 @@ export function AgentThread({
         if (!cancelled) {
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
-            const frames = new Map(history.filter((m) => m.activity)
-              .map((m) => [m.id, m.activity]))
-            setMessages((prev) => prependMissingHistory(prev.map((m) =>
-              m.activity?.status === "active" && frames.has(m.serverMessageId ?? m.id)
-                ? { ...m, activity: frames.get(m.serverMessageId ?? m.id) } : m), history))
+            const receipts = new Map(history.map((row) => [row.id, row]))
+            setMessages((prev) => prependMissingHistory(prev.map((m) => {
+              const row = receipts.get(m.serverMessageId ?? m.id)
+              if (row?.jobReceipt && m.jobReceipt) return { ...m, jobReceipt: row.jobReceipt, content: row.content, blocks: row.blocks }
+              if (row?.activity && m.activity?.status === "active") return { ...m, activity: row.activity }
+              return m
+            }), history))
           }
         }
       } catch {
@@ -1568,6 +1540,7 @@ export function AgentThread({
         serverMessageId: message.id,
         seq: message.seq ?? undefined,
         turnId: message.turn_id ?? undefined,
+        ...messageReceiptFacts(message.intent),
         outputRefs: deliveryOutputRefs(message.intent),
         proseDrainedAtMs: Date.now(),
         content: message.content ?? "",
@@ -2344,14 +2317,15 @@ export function AgentThread({
     currentActivityRowKeysRef.current = new Set()
     const workRowKeys = currentActivityRowKeysRef.current
     let terminalAtMs: number | null = null
-    setPendingQuestion(null)
+    const mediaApproval = isMediaApproval(question)
+    if (!mediaApproval) setPendingQuestion(null)
     setMessages((prev) => [...prev, {
       id: optimisticId,
       role: "assistant",
       content: "",
       turnId: question.turn_id ?? undefined,
       independentKind: "qa",
-      qa: buildQaBlock(question, displayText, false, group),
+      qa: mediaApproval ? undefined : buildQaBlock(question, displayText, false, group),
       at: new Date().toISOString(),
       clientVisibleAtMs: Date.now(),
     }])
@@ -2440,6 +2414,7 @@ export function AgentThread({
       })
       if (!ownsTurn()) return
       terminalAtMs = Date.now()
+      if (mediaApproval) setPendingQuestion(null)
       if (body.kind === "group") {
         setQuestionGroupDrafts((previous) => Object.fromEntries(
           Object.entries(previous).filter(([key]) => !key.endsWith(`:${body.group_digest}`)),
@@ -2796,7 +2771,7 @@ export function AgentThread({
 
     // Sending = explicit "take me to the live edge" intent (2026-09-24):
     // re-arm the scroller's following-bottom mode AND jump — the library's
-    // 8px stickiness (plus content-visibility's height estimates) otherwise
+    // 8px stickiness otherwise
     // leaves the viewport stranded mid-flow with the ↓ pill showing.
     scrollerSendRef.current?.()
     void sendChat(text, {
@@ -3018,6 +2993,7 @@ export function AgentThread({
         kind="question"
         plain
         question={bareQuestion(pillQuestion)}
+        mediaApproval={isMediaApproval(pillQuestion)}
         options={pillQuestion.question?.options ?? []}
         items={pillQuestion.question?.items ?? []}
         groupDigest={pillQuestion.question?.group_digest ?? null}
@@ -3053,7 +3029,7 @@ export function AgentThread({
           send button, error chips offer retry; × removes (and deletes
           the already-created asset). */}
       {staged.length > 0 && (
-        <AttachmentGroup className="px-1 pb-2">
+        <div className="flex flex-wrap gap-2 px-1 pb-2">
           {staged.map((s) => (
             <StagedAttachmentChip
               key={s.localId}
@@ -3062,7 +3038,7 @@ export function AgentThread({
               onRemove={() => removeStaged(s)}
             />
           ))}
-        </AttachmentGroup>
+        </div>
       )}
       {/* Two-band anatomy (2026-09-06 user ruling, ElevenLabs parity —
           FINAL): text band on top (FULL width, top-aligned) + control strip
@@ -3175,57 +3151,18 @@ export function AgentThread({
     </>
   )
 
-  // Radius: the input container is rounded-xl in EVERY form (2026-09-06,
-  // two-band ElevenLabs anatomy — the rest box is genuinely two bands:
-  // full-width text + the in-flow control strip, and the 2026-09-02 law
-  // says a capsule on multi-row content is broken geometry). The dock's
-  // stadium exception retired with the one-row rest it belonged to; the
-  // law itself survives for truly one-row boxes. Radius still transitions
-  // with the box for any future shape change.
-  const inputRadius = "rounded-xl"
-
   return (
     <>
     <div ref={chatContainerRef} tabIndex={-1} className="ui-th-body" data-slot="agent-thread">
       <div className="min-h-0 flex-1">
-            {openingHistory === "failed" && <button className="p-3 text-sm underline" onClick={() => setHistoryAttempt((n) => n + 1)}>{t("common.retryHistory")}</button>}
+            {openingHistory === "failed" && <Button variant="secondary" size="sm" onClick={() => setHistoryAttempt((n) => n + 1)}>{t("common.retryHistory")}</Button>}
         {chatScroller}
       </div>
       <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 pt-2">
-          {/* The question pill — its own floating layer (拆粘): detached from
-              the input container with a small-but-clear gap (mb-2.5 = 10px,
-              user两轮裁定: 6px 太近、原型 12px 太大). rounded-xl both kinds
-              (user-ruled 2026-09-02: the STADIUM belongs to the collapsed
-              input group below, not to the question pill — a tall option
-              list in a capsule is broken geometry anyway). Same dock-surface
-              frost + subtle border recipe. */}
-          {pillDock && (
-            <div className="dock-surface mb-2.5 overflow-hidden rounded-xl border border-subtle">
-              {pillDock}
-            </div>
-          )}
-          {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):
-              the container owns ONLY the resident input row (+ the staged
-              chips band when present) — the question floats as its own pill
-              above. dock-surface:
-              translucent enough that the canvas's dot grid reads through
-              the frost; the subtle border is the separator — NO shadow in
-              either mode (2026-10-14 user ruling: the light-mode shadow-xl
-              measured invisible bottom-center on the white canvas and read
-              as a gray smudge at the corners — dirt, not elevation; dark
-              already cast nothing). 形态律 (ADR-053 R1 阻塞形态, 2026-09-04
-              翻回): while an OPTIONS question is pending the input row
-              morphs away — with no second band the container is empty, so
-              the whole box hides rather than leaving a frost sliver (the
-              editor stays mounted inside, DOM-owned draft intact). */}
-          <div
-            className={cn(
-              "dock-surface relative overflow-hidden border border-subtle transition-[border-radius] duration-300 ease-out motion-reduce:transition-none",
-              fileDragging &&
-                "border-2 border-dashed border-foreground/30 ",
-              inputRadius,
-              pillDock && "hidden"
-            )}
+          {pillDock && <div className="mb-2 max-h-[55dvh] overflow-y-auto">{pillDock}</div>}
+          <Card
+            className={cn("relative w-full", fileDragging && "outline-2 outline-dashed outline-ring")}
+            style={pillDock ? { display: "none" } : undefined}
             {...fileDropProps}
           >
             {/* Drop affordance — composer parity (2026-09-24): the floating
@@ -3248,8 +3185,8 @@ export function AgentThread({
                 is absent (pillQuestion's kind filter), so there the input
                 must stay live (a typed answer settles via the slot
                 handshake). */}
-            <div className={cn("p-2", pillDock && "hidden")}>{inputBody}</div>
-          </div>
+            {inputBody}
+          </Card>
       </div>
     </div>
       <ChatOutputViewer
