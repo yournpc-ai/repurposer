@@ -10,7 +10,7 @@ from app.chat.turn_tools import _video_material_tools
 from app.models import database as database_module
 from app.models.schemas import AssetStatus, AssetType, PrepareVideoMaterialsArgs
 from app.models.tables import Asset, Conversation, Message, Project, User
-from app.pipeline.lifecycle import confirmation_need
+from app.chat.service import confirmation_need
 from app.tools.video.design import _ready_web_pages
 
 
@@ -188,7 +188,7 @@ async def test_ready_web_pages_waits_for_discovered_children(database):
         assert {asset.id for asset in rows} == {parent.id, child.id}
 
 
-def test_unquotable_confirmation_follows_auto_and_ask_preferences():
+def test_unbounded_native_quote_requires_confirmation_for_all_preferences():
     automatic = confirmation_need(
         execution="auto", credits="auto", quote_high=None,
         unquotable=True, always_confirm_above=5000,
@@ -206,7 +206,7 @@ def test_unquotable_confirmation_follows_auto_and_ask_preferences():
         unquotable=False, always_confirm_above=5000,
     )
 
-    assert automatic.requires_confirmation is False
+    assert automatic.requires_confirmation and automatic.reason == "unquotable"
     assert execution_ask.requires_confirmation is True
     assert execution_ask.reason == "unquotable"
     assert credits_ask.requires_confirmation is True

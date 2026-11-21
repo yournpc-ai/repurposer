@@ -3,13 +3,8 @@
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
-
-
-if TYPE_CHECKING:
-    from app.pipeline.lifecycle import ConfirmationNeed
-
 import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import delete, or_, select
@@ -326,34 +321,39 @@ def _prefers_zh(text: str) -> bool:
     return any("一" <= ch <= "鿿" for ch in text)  # CJK Unified Ideographs
 
 
+@dataclass(frozen=True)
+class ConfirmationNeed:
+    requires_confirmation: bool
+    reason: str = ""
+    quote_high: int | None = None
+    unquotable: bool = False
+
+
+def confirmation_need(
+    *,
+    execution: str,
+    credits: str,
+    quote_high: int | None,
+    unquotable: bool,
+    always_confirm_above: int,
+) -> ConfirmationNeed:
+    if unquotable:
+        return ConfirmationNeed(True, "unquotable", quote_high, True)
+    if quote_high is not None and quote_high > always_confirm_above:
+        return ConfirmationNeed(True, "above_guardrail", quote_high)
+    if credits == "ask" and (quote_high or 0) > 0:
+        return ConfirmationNeed(True, "credits_pref", quote_high)
+    if execution == "ask":
+        return ConfirmationNeed(True, "execution_pref", quote_high)
+    return ConfirmationNeed(False, "", quote_high, False)
+
+
 async def resolve_confirmation_need(
     db: AsyncSession,
     user_id: UUID,
     estimate: PlanEstimate | None,
-    production_intent: bool | None = True,
-    unmet_condition: bool = False,
-    copy_drift: bool = False,
-    require_quote: bool = False,
-) -> "ConfirmationNeed":
-    """The dock's confirmation conjunct (ADR-117 §4): read the user's two
-    prefs + the guardrail config, fold the quote, run the pure law. The
-    result is stamped onto the docked question's payload at presentation
-    time — the client's pill predicate and the start gate both read THAT
-    stamp, never a re-derivation.
-
-    ``production_intent`` (ADR-139): the dock seats pass the birth turn's
-    assertion verbatim (None = unasserted → the safe-side hold); the
-    fallback default ``True`` covers non-dock re-dock seats (the start_run
-    misfire re-dock never auto-starts, so its stamp only re-derives the
-    prefs law). ``unmet_condition`` (7276ef13 ③): the dock seats pass the
-    birth turn's design shortfall (a requested change was refused this
-    turn) — the conditional authorization never auto-spends on the
-    unfixed version. ``copy_drift`` (7276ef13 定点收尾②): the dock seats
-    pass the birth turn's drift hold (the published copy drifted from the
-    user-verifiable original) — auto start holds until the user sees the
-    drift note and chooses."""
-    from app.pipeline.lifecycle import ConfirmationNeed, confirmation_need
-
+) -> ConfirmationNeed:
+    """Apply the account approval preferences and spending limit to this tool quote."""
     user = await db.get(User, user_id)
     execution, credits = read_confirmation_prefs(
         user.settings if user is not None else None
@@ -361,17 +361,12 @@ async def resolve_confirmation_need(
     guardrail = await get_config(db, "billing.always_confirm_above")
     quote_high = int(estimate.total[1]) if estimate is not None else None
     unquotable = estimate is None or any(t is None for t in estimate.per_task)
-    if require_quote and unquotable:
-        return ConfirmationNeed(True, "unquotable", quote_high, True)
     return confirmation_need(
         execution=execution,
         credits=credits,
         quote_high=quote_high,
         unquotable=unquotable,
         always_confirm_above=guardrail,
-        production_intent=production_intent,
-        unmet_condition=unmet_condition,
-        copy_drift=copy_drift,
     )
 
 

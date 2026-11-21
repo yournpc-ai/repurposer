@@ -3259,38 +3259,13 @@ class RunResponse(BaseModel):
 
 
 class ProjectAssetStatus(BaseModel):
-    """Lightweight per-asset processing status for the results page.
-
-    Lets the results page render the transcribing/parsing phase of the
-    loading state while the generation run waits for assets to settle.
-    """
-
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     type: AssetType
     processing_status: AssetStatus
     processing_error: str | None = None
-
-
-class LifecycleStamp(BaseModel):
-    """The server-named lifecycle projection (ADR-087 §2, Phase 1) — one
-    truth, many readers. The four CONFIRMATION_READY conjuncts are
-    independent fields (门禁三: never one boolean); ``state`` is the
-    presentation rollup, ``blockers`` the first-class reason channel
-    (U1: FAILED ≠ generic not-ready)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    state: Literal["preparing", "plan_ready", "confirmation_ready", "running"]
-    material_ready: bool
-    plan_ready: bool
-    confirmation_scope_ready: bool
-    charge_semantics_ready: bool
-    no_active_conflicting_run: bool
-    confirmation_ready: bool
-    blockers: list[str] = Field(default_factory=list)
-    charge: dict = Field(default_factory=dict)
+    processing_requested_at: datetime | None = None
 
 
 class ProjectResultsResponse(BaseModel):
@@ -3300,10 +3275,8 @@ class ProjectResultsResponse(BaseModel):
 
     project: ProjectResponse
     prompt: str | None = None
-    latest_run: RunResponse | None = None
     assets: list[ProjectAssetStatus] = Field(default_factory=list)
     pending_brief: PendingPlan | None = None
-    lifecycle: LifecycleStamp | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  Check,
   ChevronDown,
   ChevronUp,
   History,
@@ -165,8 +164,7 @@ import {
 import { type NowRowPayload } from "@/components/chat/ActivityStream"
 import { ChatConversation } from "./ChatConversation"
 import { assetTypeIcon } from "./rows/UserMessage"
-import type { ChatAttachment, ChatOutputEntry, LifecycleStamp, Output } from "@/lib/types"
-import { isPlanReady } from "@/lib/lifecycleStamp"
+import type { ChatAttachment, ChatOutputEntry, Output } from "@/lib/types"
 import {
   acceptsStagedFile,
   fileIconFor,
@@ -402,12 +400,6 @@ interface AgentThreadProps {
    * router handoff so a refresh cannot auto-send the restored draft again. */
   onFirstMessageRetracted?: () => void
   onProjectChanged: (runId?: string | null) => void | Promise<void>
-  /** The server-named lifecycle stamp (ADR-087 §2, Phase 1): the confirm
-   * beat's derived gate (confirmActive) reads it — the dock never derives
-   * lifecycle locally. Null on the
-   * pre-first-fetch frame (the page's loading gate holds the mount, so this
-   * is always settled before the confirm beat can show). */
-  lifecycle?: LifecycleStamp | null
 
 }
 
@@ -499,7 +491,6 @@ export function AgentThread({
   initialIntent,
   initialRunId,
   onFirstMessageRetracted,
-  lifecycle,
   onProjectChanged,
 }: AgentThreadProps) {
   const { openCreditTopup } = useSettingsDialog()
@@ -1013,7 +1004,6 @@ export function AgentThread({
   // by the ruling: the conservative direction, and the birthplace 422 guards
   // for real. No lifecycle decision is ever re-derived locally.
   const runAttached = runId != null && !terminal
-  const confirmActive = intentReady && isPlanReady(lifecycle) && !runAttached
 
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
@@ -2679,15 +2669,6 @@ export function AgentThread({
           // = the plan's canvas lives beside this conversation — the reply
           // may name it; every other form stays surface-neutral.
           surface: "chat",
-          // 环境能力位 (ADR-118 §6): the raw can-host-canvas read rides
-          // every send — pre-reveal desktop is surface="chat" yet CAN host
-          // the canvas; the server's canvas_visible = this ∧ world-liveness.
-          prior_intent:
-            // The panel's current chain rides while the confirm beat is
-            // live (裁决 1 derived predicate — never a phase read).
-            confirmActive
-              ? intent
-              : undefined,
         },
         {
           signal: ctrl.signal,
@@ -3766,65 +3747,6 @@ export function AgentThread({
       ? pendingQuestion
       : null
 
-  // 确认 pill (ADR-117 §4 — 画板 C): the ONLY chrome the confirm beat keeps.
-  // Render predicate = the dock's presentation-time stamp
-  // (`requires_confirmation` — the client NEVER derives the need itself):
-  // auto without an independent confirmation debt hides it; the first Film
-  // draft's review wait adds no extra pill. Ask, awaiting-production,
-  // guardrail and unquotable stamps still show it. Legacy rows predate the
-  // stamp → read as owed (读容忍 in the conservative direction: a waiting
-  // dock keeps its affordance). A persisted first_draft_review stamp came
-  // only from the retired auto-only override, never from ask or a stronger
-  // debt; read it as no independent confirmation debt as well.
-  // The beat gate (confirmActive) still rules — the pill never opens on a
-  // frame the server hasn't named ready, and never over a live run.
-  const planPill =
-    pendingQuestion &&
-    !dockSettled &&
-    pendingQuestion.question?.kind === "task_book" &&
-    !pendingQuestion.answer &&
-    (pendingQuestion.question?.requires_confirmation ?? true) &&
-    pendingQuestion.question?.confirm_reason !== "first_draft_review"
-      ? pendingQuestion
-      : null
-  const confirmPillActive = confirmActive && planPill != null
-  // The label family keys on the stamped reason: money reasons carry the
-  // price (quote_high is the server fold's high end — never a client
-  // computation); the NULL family announces the deferred quote; a bare
-  // execution-ask rides the plain verb. (D1: 执行=ask → 不带价; 费用=ask /
-  // 守卫线 → 带价.)
-  const planPillLabel = (() => {
-    const q = planPill?.question
-    if (!q) return ""
-    if (q.unquotable) return t("generationOverlay.confirmPillStartDeferred")
-    const priced =
-      q.confirm_reason === "credits_pref" ||
-      q.confirm_reason === "above_guardrail"
-    return priced && q.quote_high != null
-      ? t("generationOverlay.confirmPillStartPriced", { n: q.quote_high })
-      : t("generationOverlay.confirmPillStart")
-  })()
-
-  // Start is an ordinary user message. The existing sendChat turn carries
-  // the panel's current intent; only the next LLM turn may call start_run.
-  const handleConfirmPill = () => {
-    const text = planPillLabel.trim()
-    if (!confirmPillActive || chatBusy || answering || !text) return
-    const rollbackId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: rollbackId,
-        role: "user",
-        content: text,
-        at: new Date().toISOString(),
-      },
-    ])
-
-    scrollerSendRef.current?.()
-    void sendChat(text, { rollbackId })
-  }
-
   // The NON-run timeline (ADR-108): every transcript row renders at its array
   // position. Run anchors join this same unit stream in ChatConversation's
   // block projection; no timestamp-based insertion lives here.
@@ -4252,34 +4174,6 @@ export function AgentThread({
           {pillDock && (
             <div className="dock-surface mb-2.5 overflow-hidden rounded-xl border border-subtle">
               {pillDock}
-            </div>
-          )}
-          {/* 确认 pill (ADR-117 §4 — 画板 C): the confirm beat's only chrome,
-              shown exactly when the dock's stamp says a beat is owed
-              (requires_confirmation — never client-derived). NON-blocking
-              like every task_book pill before it: the input stays live
-              below (a chat message revises the plan; "don't start" is said
-              by not starting). Same floating-layer family as the question
-              pill (dock-surface frost + subtle border, mb-2.5 gap). The text
-              slot carries the plan's title (LLM-named, ADR-058's lawful
-              source) — never a restated question: the echo's closing beat
-              above already asked it. The click IS the user saying
-              「确认生成」 through the one sendChat channel. */}
-          {confirmPillActive && (
-            <div className="dock-surface mb-2.5 overflow-hidden rounded-xl border border-subtle">
-              <div className="flex items-center gap-2.5 px-4 py-2.5">
-                <Check className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {planSummary}
-                </span>
-                <Button
-                  size="sm"
-                  disabled={chatBusy || answering}
-                  onClick={handleConfirmPill}
-                >
-                  {planPillLabel}
-                </Button>
-              </div>
             </div>
           )}
           {/* The input container — 输入框独立层律 (2026-09-02, user-ruled):

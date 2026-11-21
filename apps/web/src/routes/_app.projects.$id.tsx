@@ -3,24 +3,15 @@ import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AgentThread } from "@/components/chat/AgentThread"
-import { normalizeIntent } from "@/components/chat/chatProtocol"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
 import { apiFetch } from "@/lib/api"
 import type { FirstMessageHandoff } from "@/lib/chatAttachments"
-import type { LifecycleStamp, Project } from "@/lib/types"
-
-interface WorkflowRun {
-  id: string
-  status: string
-  context: { origin?: string; editor_media?: string; instruction?: string } | null
-}
+import type { Project } from "@/lib/types"
 
 interface ProjectResults {
   project: Project
   prompt: string | null
-  latest_run: WorkflowRun | null
-  pending_brief?: { prompt: string; intent: unknown } | null
-  lifecycle?: LifecycleStamp | null
+  assets: { processing_status: string; processing_requested_at: string | null }[]
 }
 
 export const Route = createFileRoute("/_app/projects/$id")({
@@ -59,17 +50,16 @@ function ProjectThreadPage({ projectId }: { projectId: string }) {
     void fetchResults()
   }, [projectId, fetchResults])
 
-  const latestRun = results?.latest_run ?? null
-  const runActive = latestRun != null && ["pending", "running", "waiting_human"].includes(latestRun.status)
-
-  const lifecycle = results?.lifecycle ?? null
-  const materialPending = lifecycle?.blockers.includes("material_pending") ?? false
+  const materialPending = results?.assets.some((asset) =>
+    asset.processing_status === "processing" ||
+    (asset.processing_status === "pending" && asset.processing_requested_at != null)
+  )
 
   useEffect(() => {
-    if (!materialPending || results?.latest_run) return
+    if (!materialPending) return
     const interval = setInterval(() => { void fetchResults() }, 2500)
     return () => clearInterval(interval)
-  }, [materialPending, results?.latest_run, fetchResults])
+  }, [materialPending, fetchResults])
 
   if (loading) {
     return <div className="grid h-full place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
@@ -78,24 +68,19 @@ function ProjectThreadPage({ projectId }: { projectId: string }) {
     return <div className="grid h-full place-items-center bg-background text-destructive">{error || "Project not found"}</div>
   }
 
-  const { project, prompt, pending_brief: pendingBrief } = results
-  const attachedRun = runActive && latestRun.context?.origin !== "node_revise" && !latestRun.context?.editor_media
-    ? latestRun : null
-
+  const { project, prompt } = results
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background">
       <ProjectMenu
         projectId={project.id}
         title={project.title}
-        runActive={runActive}
         onRenamed={(title) => setResults((current) => current ? { ...current, project: { ...current.project, title } } : current)}
         onDeleted={() => navigate({ to: "/projects" })}
       />
 
       <AgentThread
         projectId={projectId}
-        lifecycle={lifecycle}
-        prompt={firstMessage?.text ?? pendingBrief?.prompt ?? attachedRun?.context?.instruction ?? prompt ?? ""}
+        prompt={firstMessage?.text ?? prompt ?? ""}
         firstMessage={firstMessage}
         onFirstMessageRetracted={() => {
           void navigate({
@@ -105,8 +90,6 @@ function ProjectThreadPage({ projectId }: { projectId: string }) {
             state: {} as Record<string, unknown>,
           })
         }}
-        initialIntent={pendingBrief?.intent ? normalizeIntent(pendingBrief.intent) : undefined}
-        initialRunId={attachedRun?.id}
         onProjectChanged={fetchResults}
       />
     </div>

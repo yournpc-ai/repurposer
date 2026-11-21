@@ -260,7 +260,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 estimate = await export_quote(db, spec)
             else:
                 estimate = await media_quote(db, name, params, project=project)
-            need = await resolve_confirmation_need(db, turn.user_id, estimate, require_quote=True)
+            need = await resolve_confirmation_need(db, turn.user_id, estimate)
             quote = estimate.model_dump(mode="json") if estimate else None
             if not quote:
                 raise ValueError("A bounded media quote is unavailable.")

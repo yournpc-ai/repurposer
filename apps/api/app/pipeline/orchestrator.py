@@ -29,27 +29,6 @@ from app.platform.billing import (
 
 logger = structlog.get_logger()
 
-async def has_active_run(
-    db: AsyncSession, project_id, *, exclude_run_id: UUID | None = None
-) -> bool:
-    """The active-run predicate (PENDING/RUNNING — WAITING_HUMAN is parked,
-    not executing). Shared by create_run's guard and the plan surface's
-    late-turn zombie-dock check; callers needing serialization take the
-    project row lock first. ``exclude_run_id`` (the resume arbitration seat,
-    R1 B3) keeps a resuming run from counting ITSELF as the blocker — a
-    RUNNING run holding a waiting node must not dead-lock its own resume."""
-    clauses = [
-        WorkflowRun.project_id == project_id,
-        WorkflowRun.status.in_([WorkflowStatus.PENDING, WorkflowStatus.RUNNING]),
-    ]
-    if exclude_run_id is not None:
-        clauses.append(WorkflowRun.id != exclude_run_id)
-    row = (
-        await db.execute(select(WorkflowRun.id).where(*clauses).limit(1))
-    ).first()
-    return row is not None
-
-
 async def cancel_run(
     db: AsyncSession,
     run: WorkflowRun,

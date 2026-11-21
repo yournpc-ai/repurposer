@@ -16,7 +16,6 @@ from app.models.schemas import (
     ProjectResponse,
     ProjectResultsResponse,
     ProjectUpdate,
-    RunResponse,
     WorkflowStatus,
 )
 from app.models.tables import (
@@ -36,23 +35,13 @@ from app.models.tables import (
     Publication,
     User,
     WorkflowRun,
-    WorkflowStep,
 )
-from app.pipeline.lifecycle import project_lifecycle
 from app.pipeline.outputs import (
-    aggregate_step_cost,
     chat_delivery_output_ids,
     is_chat_video_output,
     output_to_response,
-    workflow_step_to_response,
 )
-from app.platform.configs import get_config
-from app.platform.conversation_context import (
-    find_conversation,
-    get_project_prompt,
-    is_pending_plan,
-    latest_pending_question,
-)
+from app.platform.conversation_context import get_project_prompt
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, is_export_location, presign_download, matches_export_location, resolve_stored_url
 from app.ui_locale import current_ui_language
@@ -121,23 +110,17 @@ async def list_projects(
     # Projects are private to their owner; anonymous users see nothing.
     if not current_user:
         return []
-    # Empty-project filter (intent-surface-unification W4): the composer
-    # creates the project BEFORE the first chat message lands — a project
-    # with no conversation messages and no runs is an abandoned shell
-    # (send → close), not a project. It reappears once the first message
-    # or run exists, so the create→first-message window is invisible here.
     has_messages = (
         select(Message.id)
         .join(Conversation, Message.conversation_id == Conversation.id)
         .where(Conversation.project_id == Project.id)
         .exists()
     )
-    has_runs = select(WorkflowRun.id).where(WorkflowRun.project_id == Project.id).exists()
     query = (
         select(Project, thumb.c.output_id, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
         .where(Project.user_id == current_user.id)
-        .where(or_(has_messages, has_runs))
+        .where(has_messages)
     )
     if persona_id:
         query = query.where(Project.persona_id == persona_id)
@@ -180,7 +163,7 @@ async def get_project_results(
     db: DBDep,
     current_user: User | None = Depends(get_current_user),
 ) -> dict:
-    """Aggregate project results: metadata, prompt, outputs, latest run + steps."""
+    """Read the owned project, original instruction, presentation and asset status."""
     project = await get_project_for_user(
         db, project_id, current_user.id if current_user else None
     )
@@ -188,33 +171,6 @@ async def get_project_results(
     # The original prompt is the first user message in the project-scoped conversation.
     prompt = await get_project_prompt(db, project_id)
 
-    latest_run_result = await db.execute(
-        select(WorkflowRun)
-        .where(WorkflowRun.project_id == project_id)
-        .order_by(WorkflowRun.created_at.desc())
-        .limit(1)
-    )
-    latest_run = latest_run_result.scalar_one_or_none()
-    steps: list[WorkflowStep] = []
-    if latest_run is not None:
-        steps = list(
-            (
-                await db.execute(
-                    select(WorkflowStep)
-                    .where(WorkflowStep.run_id == latest_run.id)
-                    .order_by(WorkflowStep.seq)
-                )
-            ).scalars().all()
-        )
-    latest_run_resp = None
-    if latest_run is not None:
-        latest_run_resp = RunResponse.model_validate(latest_run)
-        ratio = await get_config(db, "credits.per_cost_usd")
-        latest_run_resp.steps = [workflow_step_to_response(step, ratio=ratio) for step in steps]
-        latest_run_resp.cost = aggregate_step_cost(steps)
-
-    # Asset processing statuses power the overlay's pre-run placeholder (the
-    # transcribing/parsing phase before the generation run's steps exist).
     assets_result = await db.execute(
         select(Asset).where(Asset.project_id == project_id).order_by(Asset.created_at)
     )
@@ -223,39 +179,9 @@ async def get_project_results(
     return {
         "project": project,
         "prompt": prompt,
-        "latest_run": latest_run_resp,
         "assets": assets,
         "pending_brief": project.pending_brief,
-        # Lifecycle Projection (ADR-087 §2, Phase 1): the server-named
-        # stamp rides the same frame — additive; clients keep their old
-        # derivations until the dual-read switch.
-        "lifecycle": await _lifecycle_stamp(db, project),
     }
-
-
-# ---- Lifecycle Projection stamp (ADR-087 §2, Phase 1) -----------------------
-
-async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
-    """Assemble the server-named lifecycle stamp for one read frame.
-
-    The Agent Interface facts (the docked plan row) are fetched through the
-    conversation store's shared read protocol (``app.platform.conversation_context``)
-    and passed IN — the projection module itself never imports chat
-    (dependency direction, ADR-087 §6)."""
-    conversation = await find_conversation(db, project.user_id, project.id)
-    pending = (
-        await latest_pending_question(db, UUID(str(conversation.id)))
-        if conversation is not None
-        else None
-    )
-    stamp = await project_lifecycle(
-        db,
-        project,
-        pending_question=pending,
-        pending_plan=is_pending_plan(pending),
-        ui_language=current_ui_language() or "en",
-    )
-    return stamp.to_payload()
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
