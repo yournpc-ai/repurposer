@@ -1,35 +1,20 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover } from "@/components/ui/popover-clean"
+import { Tooltip } from "@/components/ui/tooltip-clean"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 
-/** Composer leaf — the circle button + function tooltip + frosted panel
- * trinity (absorbs the structure HomeComposer repeated three times:
- * Assets / Persona). The base-ui render chain (Tooltip >
- * TooltipTrigger render={PopoverTrigger render={button}}) is load-bearing —
- * do not "simplify" it; the triggers merge their handlers through exactly
- * this nesting. Stateless buttons (2026-08-30 ruling): no count, no value
- * text — the selection is read inside each frosted panel. */
 interface ComposerPanelButtonProps {
   icon: LucideIcon
-  /** aria-label AND tooltip copy. */
   label: string
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   tooltipSide?: "top" | "bottom"
   popoverSide?: "top" | "bottom"
   align?: "start" | "center" | "end"
-  /** Panel width — the composer panels unified on w-88 (2026-09-23; the
-   * Assets panel's w-80 was the outlier). */
-  panelWidth?: string
   tabIndex?: number
   "data-tour"?: string
   children: ReactNode
@@ -43,37 +28,37 @@ export function ComposerPanelButton({
   tooltipSide = "top",
   popoverSide = "bottom",
   align = "start",
-  panelWidth = "w-88",
   tabIndex,
   "data-tour": dataTour,
   children,
 }: ComposerPanelButtonProps) {
+  const panelId = useId()
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <PopoverTrigger
-              render={
-                <ComposerIconButton
-                  icon={icon}
-                  label={label}
-                  tabIndex={tabIndex}
-                  data-tour={dataTour}
-                />
-              }
-            />
-          }
+    <span className="inline-flex">
+      <Tooltip content={label} side={tooltipSide} disabled={open}>
+        <ComposerIconButton
+          label={label}
+          icon={icon}
+          title=""
+          tabIndex={tabIndex}
+          data-tour={dataTour}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+          onClick={() => onOpenChange(!open)}
         />
-        <TooltipContent side={tooltipSide}>{label}</TooltipContent>
       </Tooltip>
-      <PopoverContent
+      <Popover
+        id={panelId}
+        aria-label={label}
+        open={open}
+        onClose={() => onOpenChange(false)}
         side={popoverSide}
         align={align}
-        className={panelWidth}
+        width="22rem"
       >
         {children}
-      </PopoverContent>
-    </Popover>
+      </Popover>
+    </span>
   )
 }

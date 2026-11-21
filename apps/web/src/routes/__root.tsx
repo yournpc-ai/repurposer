@@ -2,7 +2,6 @@ import { HeadContent, Scripts, createRootRoute, Outlet } from "@tanstack/react-r
 import { createServerFn } from "@tanstack/react-start"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
-import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { I18nProvider } from "@/lib/i18n/I18nProvider"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
@@ -75,14 +74,12 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <I18nProvider lang={lang}>
-        <TooltipProvider>
-          <AuthProvider>
-            <SettingsDialogProvider>
-              <Outlet />
-            </SettingsDialogProvider>
-            <Toaster />
-          </AuthProvider>
-        </TooltipProvider>
+        <AuthProvider>
+          <SettingsDialogProvider>
+            <Outlet />
+          </SettingsDialogProvider>
+          <Toaster />
+        </AuthProvider>
       </I18nProvider>
     </ThemeProvider>
   )

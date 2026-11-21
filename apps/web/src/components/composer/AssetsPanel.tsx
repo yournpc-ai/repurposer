@@ -1,8 +1,11 @@
 "use client"
 
 import { useRef } from "react"
+import { Button } from "@/components/ui/button-clean"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
 import { useTranslation } from "react-i18next"
-import { Loader2, Plus, X } from "lucide-react"
+import { Plus, X } from "lucide-react"
 
 import {
   ASSETS_ACCEPT,
@@ -50,14 +53,13 @@ export function AssetsPanel({
         }}
       />
 
-      <button
-        type="button"
+      <Button
+        variant="secondary"
         onClick={() => inputRef.current?.click()}
-        className="flex h-10 items-center justify-center gap-1.5 rounded-md border border-dashed border-foreground/15 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        icon={<Plus />}
       >
-        <Plus className="h-3.5 w-3.5" />
-        <span className="text-xs">{t("composer.assetsUpload")}</span>
-      </button>
+        {t("composer.assetsUpload")}
+      </Button>
 
       {items.length > 0 && (
         <div className="mt-1 flex max-h-56 flex-col gap-0.5 overflow-y-auto no-scrollbar">
@@ -133,7 +135,7 @@ function AssetPanelRow({
         </span>
         {item.status === "uploading" ? (
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Spinner size={12} />
             {Math.round(item.progress * 100)}%
           </span>
         ) : item.status === "error" ? (
@@ -150,14 +152,12 @@ function AssetPanelRow({
           </span>
         )}
       </span>
-      <button
-        type="button"
+      <IconButton
+        icon={<X />}
+        label={`${t("common.remove")} ${file.name}`}
+        size="sm"
         onClick={onRemove}
-        className="flex-none rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground"
-        aria-label={`Remove ${file.name}`}
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
+      />
     </div>
   )
 }

@@ -34,9 +34,10 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, ArrowRight, Check, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button-clean"
+import { TextField } from "@/components/ui/text-field-clean"
+import { Card } from "@/components/ui/card-clean"
+import { IconButton } from "@/components/ui/icon-button-clean"
 import type { BriefAnswerItem, BriefQuestionItem } from "./timeline/types"
 
 /** One option on a structured question (mirrors the API's Option). */
@@ -114,89 +115,70 @@ function OptionForm({
       <div className="flex items-start gap-3 text-sm leading-6">
         <span className="min-w-0 flex-1 break-words">{question}</span>
         {onBail ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="-mr-1.5 -mt-1.5 shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label={bailLabel ?? t("questionDock.bail")}
+          <IconButton
+            icon={<X />}
+            label={bailLabel ?? t("questionDock.bail")}
             disabled={answering}
             onClick={onBail}
-          >
-            <X className="size-3.5" />
-          </Button>
+          />
         ) : null}
       </div>
       {options.length > 0 ? (
         // Full-width options keep long labels within the dock.
         <div className="mt-4 flex flex-col gap-1.5">
           {options.map((option, index) => (
-            <Button
-              key={option.id}
-              variant="ghost"
-              disabled={answering}
-              onClick={() => {
-                setPickedId(option.id)
-                onAnswer(option.id)
-              }}
-              className={cn(
-                "h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md px-3 py-3 text-left text-sm font-normal hover:bg-accent",
-                answering && pickedId === option.id
-                  ? "bg-accent disabled:opacity-100"
-                  : "bg-card"
-              )}
-            >
-              {/* Position numbers also support typed option selection. */}
-              <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
-                {index + 1}
-              </span>
-              <span className="min-w-0 break-words leading-5">
-                {option.label}
-                {recommendedId === option.id ? (
-                  <span className="ml-1.5 text-xs text-muted-foreground">
-                    · {t("questionDock.recommended")}
-                  </span>
-                ) : null}
-                {/* 一问拍一体化 (2026-09-27): the reason line rides UNDER the
+            <Card key={option.id} selected={answering && pickedId === option.id}>
+              <button
+                type="button"
+                disabled={answering}
+                onClick={() => {
+                  setPickedId(option.id)
+                  onAnswer(option.id)
+                }}
+                className="flex w-full items-start gap-3 rounded-[inherit] p-3 text-start disabled:opacity-60"
+              >
+                {/* Position numbers also support typed option selection. */}
+                <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 break-words leading-5">
+                  {option.label}
+                  {recommendedId === option.id ? (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      · {t("questionDock.recommended")}
+                    </span>
+                  ) : null}
+                  {/* 一问拍一体化 (2026-09-27): the reason line rides UNDER the
                     label (Claude-Card parity) — muted, wrapping with the
                     row, never a second color of text. */}
-                {option.description ? (
-                  <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-                    {option.description}
-                  </span>
+                  {option.description ? (
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                      {option.description}
+                    </span>
+                  ) : null}
+                </span>
+                {answering && pickedId === option.id ? (
+                  <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground" />
                 ) : null}
-              </span>
-              {answering && pickedId === option.id ? (
-                <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground" />
-              ) : null}
-            </Button>
+              </button>
+            </Card>
           ))}
           {/* Freeform answers share the option text alignment and submit on Enter. */}
           {onFreeform ? (
-            <div className="flex min-h-11 w-full items-center gap-3 rounded-md border border-subtle px-3 py-3 transition-colors focus-within:border-ring focus-within:outline-2 focus-within:outline-ring/30">
-              <span className="flex size-5 shrink-0 items-center justify-center text-meta-foreground">
-                <Pencil className="size-3.5" />
-              </span>
-              {/* dark:bg-transparent is NOT redundant with bg-transparent:
-                  the Input base carries bg-input/20 + dark:bg-input/30, and
-                  a bare bg-transparent loses to the dark variant (the
-                  variant-pairing law, same trap as hover) — without it the
-                  "Something else…" field shows a filled box on the dark
-                  theme (2026-09-04 用户拍板). */}
-              <Input
-                value={freeform}
-                onChange={(e) => setFreeform(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                    e.preventDefault()
-                    submitFreeform()
-                  }
-                }}
-                placeholder={t("chat.choicePlaceholder")}
-                aria-label={t("chat.choicePlaceholder")}
-                disabled={answering || freeformDisabled}
-                className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
-              />
-            </div>
+            <TextField
+              prefix={<Pencil />}
+              value={freeform}
+              onChange={(e) => setFreeform(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  submitFreeform()
+                }
+              }}
+              placeholder={t("chat.choicePlaceholder")}
+              aria-label={t("chat.choicePlaceholder")}
+              disabled={answering || freeformDisabled}
+            />
           ) : null}
         </div>
       ) : null}
@@ -207,7 +189,6 @@ function OptionForm({
 export function QuestionDock(props: OptionDockProps) {
   return props.items?.length ? <QuestionGroupForm {...props} /> : <OptionForm {...props} />
 }
-
 
 function QuestionGroupForm(props: OptionDockProps) {
   const { t } = useTranslation()
@@ -227,9 +208,7 @@ function QuestionGroupForm(props: OptionDockProps) {
 
   const answered = (slot: string) => {
     const answer = answers.find((candidate) => candidate.slot === slot)
-    return answer?.kind === "option"
-      ? !!answer.option_id
-      : !!(answer?.text ?? "").trim()
+    return answer?.kind === "option" ? !!answer.option_id : !!(answer?.text ?? "").trim()
   }
   const canSubmit = items.every((item) => item.required === false || answered(item.slot))
   const updateAnswer = (slot: string, answer?: BriefAnswerItem) => {
@@ -242,20 +221,20 @@ function QuestionGroupForm(props: OptionDockProps) {
   }
 
   return (
-    <div className={props.plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"} role="group" aria-label={props.question}>
+    <div
+      className={props.plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"}
+      role="group"
+      aria-label={props.question}
+    >
       <div className="flex items-start gap-3 text-xs leading-5 text-muted-foreground">
         <span className="min-w-0 flex-1 break-words">{props.question}</span>
         {props.onBail ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="-mr-1.5 -mt-1.5 shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label={props.bailLabel ?? t("questionDock.bail")}
+          <IconButton
+            icon={<X />}
+            label={props.bailLabel ?? t("questionDock.bail")}
             disabled={props.answering}
             onClick={props.onBail}
-          >
-            <X className="size-3.5" />
-          </Button>
+          />
         ) : null}
       </div>
       <div className="mt-3 flex flex-col gap-4">
@@ -267,64 +246,57 @@ function QuestionGroupForm(props: OptionDockProps) {
             {(item.options ?? []).map((option, index) => {
               const selected = answer?.kind === "option" && answer.option_id === option.id
               return (
-                <Button
-                  key={option.id}
-                  variant="ghost"
-                  disabled={props.answering}
-                  aria-pressed={selected}
-                  onClick={() => {
-                    updateAnswer(item.slot, { slot: item.slot, kind: "option", option_id: option.id })
-                    if (!lastPage) setPage((current) => Math.min(pageCount - 1, current + 1))
-                  }}
-                  className={cn(
-                    "h-auto min-h-11 w-full items-start justify-start gap-3 whitespace-normal rounded-md border px-3 py-3 text-left text-sm font-normal",
-                    selected
-                      ? "border-primary/25 bg-primary/10 text-primary hover:bg-primary/15"
-                      : "border-transparent bg-card hover:bg-accent"
-                  )}
-                >
-                  <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 break-words leading-5">
-                    {option.label}
-                    {item.recommended_id === option.id ? (
-                      <span className="ml-1.5 text-xs text-muted-foreground">· {t("questionDock.recommended")}</span>
-                    ) : null}
-                    {option.description ? (
-                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{option.description}</span>
-                    ) : null}
-                  </span>
-                  {selected ? <Check className="size-4 shrink-0 self-center" aria-hidden="true" /> : null}
-                </Button>
+                <Card key={option.id} selected={selected}>
+                  <button
+                    type="button"
+                    disabled={props.answering}
+                    aria-pressed={selected}
+                    onClick={() => {
+                      updateAnswer(item.slot, { slot: item.slot, kind: "option", option_id: option.id })
+                      if (!lastPage) setPage((current) => Math.min(pageCount - 1, current + 1))
+                    }}
+                    className="flex w-full items-start gap-3 rounded-[inherit] p-3 text-start disabled:opacity-60"
+                  >
+                    <span className="flex size-5 shrink-0 items-center justify-center self-start text-xs tabular-nums text-meta-foreground">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 break-words leading-5">
+                      {option.label}
+                      {item.recommended_id === option.id ? (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          · {t("questionDock.recommended")}
+                        </span>
+                      ) : null}
+                      {option.description ? (
+                        <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                          {option.description}
+                        </span>
+                      ) : null}
+                    </span>
+                    {selected ? <Check className="size-4 shrink-0 self-center" aria-hidden="true" /> : null}
+                  </button>
+                </Card>
               )
             })}
             {item.allow_freeform !== false ? (
-              <div className="flex min-h-11 w-full items-center gap-3 rounded-md border border-subtle px-3 py-3 transition-colors focus-within:border-ring focus-within:outline-2 focus-within:outline-ring/30">
-                <span className="flex size-5 shrink-0 items-center justify-center text-meta-foreground">
-                  <Pencil className="size-3.5" />
-                </span>
-                <Input
-                  value={answer?.kind === "freeform" ? answer.text ?? "" : ""}
-                  onChange={(event) => {
-                    const text = event.target.value
-                    updateAnswer(item.slot, text
-                      ? { slot: item.slot, kind: "freeform", text }
-                      : undefined)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                      event.preventDefault()
-                      if (lastPage) submit()
-                      else setPage((current) => Math.min(pageCount - 1, current + 1))
-                    }
-                  }}
-                  placeholder={t("chat.choicePlaceholder")}
-                  aria-label={item.question}
-                  disabled={props.answering || props.freeformDisabled}
-                  className="h-5 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:outline-none md:text-sm dark:bg-transparent"
-                />
-              </div>
+              <TextField
+                prefix={<Pencil />}
+                value={answer?.kind === "freeform" ? (answer.text ?? "") : ""}
+                onChange={(event) => {
+                  const text = event.target.value
+                  updateAnswer(item.slot, text ? { slot: item.slot, kind: "freeform", text } : undefined)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault()
+                    if (lastPage) submit()
+                    else setPage((current) => Math.min(pageCount - 1, current + 1))
+                  }
+                }}
+                placeholder={t("chat.choicePlaceholder")}
+                aria-label={item.question}
+                disabled={props.answering || props.freeformDisabled}
+              />
             ) : null}
           </div>
         </fieldset>
@@ -344,12 +316,23 @@ function QuestionGroupForm(props: OptionDockProps) {
           {t("questionDock.page", { current: pageIndex + 1, total: pageCount })}
         </span>
         {lastPage ? (
-          <Button size="sm" className="justify-self-end px-4 font-normal" disabled={!canSubmit || props.answering} onClick={submit}>
+          <Button
+            size="sm"
+            className="justify-self-end px-4 font-normal"
+            disabled={!canSubmit || props.answering}
+            onClick={submit}
+          >
             {props.answering ? <Loader2 className="size-3.5 animate-spin" /> : null}
             {t("questionDock.submit")}
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="justify-self-end gap-1.5 px-2 font-normal" disabled={props.answering} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-self-end gap-1.5 px-2 font-normal"
+            disabled={props.answering}
+            onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+          >
             {t("questionDock.next")}
             <ArrowRight className="size-3.5" />
           </Button>

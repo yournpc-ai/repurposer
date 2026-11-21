@@ -401,8 +401,7 @@ export function HomeComposer({
         </div>
 
         <ComposerSendButton
-          className="absolute"
-          style={{ bottom: 12, right: 12 }}
+          style={{ position: "absolute", bottom: 12, right: 12 }}
           data-tour="composer-send"
           disabled={isGenerating}
           generating={isGenerating}

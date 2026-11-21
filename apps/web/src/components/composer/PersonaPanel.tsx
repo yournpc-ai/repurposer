@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Check, Users, Wand2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/ui/avatar-clean"
 
 /** The persona shape this picker reads. The API already returns all of these
  * (PersonaContext); the composer previously typed it down to {id, name}. */
@@ -128,10 +128,7 @@ function PersonaPanelRow({
         selected ? "bg-accent" : "hover:bg-accent/50"
       )}
     >
-      <Avatar className="h-9 w-9">
-        {persona.avatar_url ? <AvatarImage src={persona.avatar_url} alt={persona.name} /> : null}
-        <AvatarFallback>{persona.name.slice(0, 1)}</AvatarFallback>
-      </Avatar>
+      <Avatar name={persona.name} src={persona.avatar_url ?? undefined} size={32} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-medium text-foreground">
           {persona.name}

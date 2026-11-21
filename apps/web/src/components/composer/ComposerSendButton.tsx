@@ -1,51 +1,15 @@
 "use client"
 
-import { forwardRef, type ComponentProps } from "react"
 import { ArrowUp, Square } from "lucide-react"
+import { IconButton, type IconButtonProps } from "@/components/ui/icon-button-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-
-/** Composer leaf — THE send button, shared by the home composer and the
- * chat dock (2026-09-23 unification; previously two copies whose glyphs
- * even differed: home size-5, dock h-4.5 w-4.5). One size for the whole
- * control row (h-9 / 36px), one glyph size (size-4.5, matching the circle
- * icon buttons), one spinner recipe. The two shells keep their own disabled
- * logic (home: launching only; dock: empty-text-no-attachments / uploads in
- * flight) and pass the verdict in — the leaf owns no policy. The dock may
- * switch this same seat to its stop action while an abortable stream is active. */
-interface ComposerSendButtonProps
-  extends Omit<ComponentProps<typeof Button>, "children"> {
-  /** Spinner state (launch/stream in flight). */
+type ComposerSendButtonProps = Omit<IconButtonProps, "icon"> & {
   generating?: boolean
-  /** Stop state for the dock's current abortable stream. */
   stop?: boolean
-  /** aria-label (chat.send / chat.stop / composer send copy). */
-  label: string
 }
 
-export const ComposerSendButton = forwardRef<
-  HTMLButtonElement,
-  ComposerSendButtonProps
->(function ComposerSendButton(
-  { generating, stop, label, className, ...props },
-  ref,
-) {
-  return (
-    <Button
-      ref={ref}
-      size="icon"
-      aria-label={label}
-      className={cn("h-9 w-9 shrink-0 rounded-full transition-colors", className)}
-      {...props}
-    >
-      {stop ? (
-        <Square className="size-4.5 fill-current" />
-      ) : generating ? (
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-      ) : (
-        <ArrowUp className="size-4.5" />
-      )}
-    </Button>
-  )
-})
+export function ComposerSendButton({ generating, stop, ...props }: ComposerSendButtonProps) {
+  const icon = stop ? <Square fill="currentColor" /> : generating ? <Spinner /> : <ArrowUp />
+  return <IconButton variant="primary" icon={icon} {...props} />
+}
