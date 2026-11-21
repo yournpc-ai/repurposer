@@ -79,13 +79,26 @@ def _native_creation_tools(tools, *, facts, readiness):
         readiness.task_kind == "website_promo" and readiness.brand_profile_ready
         and readiness.brief_missing_slots
     )
+    fixed_voice = any(r.get("role") == "narration" and r.get("status") == "available"
+                      for r in facts.get("media_receipts") or [])
+    aligned_voice = any((r.get("alignment") or {}).get("status") == "READY" for _, r in resources)
     projected = []
     for tool in tools:
         if tool.name == "create_video":
             def creation_wire(description, parameters, *, constraints=constraints):
                 parameters = _explicit_constraint_wire(parameters, constraints, include_fixed=True)
+                hidden = set()
                 if not external or not settings.component_bake_enabled:
-                    parameters = prune_wire_parameters(parameters, {"skill_resource"})
+                    hidden.add("skill_resource")
+                if fixed_voice:
+                    hidden.update({"narration", "narration_voice_id", "narration_language"})
+                    description += " 本轮旁白已固定，保存画面后可用 insert_audio 放入原音。"
+                if fixed_voice and not aligned_voice:
+                    hidden.update({"narration_snapshot_id", "narration_alignment_id"})
+                shot = parameters["$defs"]["FirstShot"]
+                for field in hidden:
+                    shot["properties"].pop(field, None)
+                parameters = prune_wire_parameters(parameters, set())
                 if not external:
                     description += "未绑定外部 Skill，不使用 skill_resource。"
                 elif not settings.component_bake_enabled:

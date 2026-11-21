@@ -76,12 +76,6 @@ export function answeredQuestionIdFromIntent(intent: unknown): string | undefine
     : undefined
 }
 
-/** The selected option's original label, never the formatted answer line. */
-function selectedOptionLabel(message: QuestionMessage): string | undefined {
-  if (message.answer?.kind !== "option" || !message.answer.option_id) return undefined
-  return message.question?.options?.find((option) => option.id === message.answer?.option_id)?.label
-}
-
 export function deliveryOutputRefs(intent: unknown): string[] {
   const data = (intent ?? {}) as Record<string, unknown>
   if (!Array.isArray(data.output_refs)) {
@@ -361,7 +355,6 @@ export function parseActivityReceipt(value: unknown): ActivityReceipt | undefine
  * bubble). */
 export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type === "material_beat") return legacyActivityRowFrame(data)
   if (data.type !== "activity") return undefined
   const d = (data.frame ?? {}) as Record<string, unknown>
   const KINDS = new Set(["read", "draft", "run", "repair"])
@@ -397,87 +390,11 @@ export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined 
   }
 }
 
-/** Intent types that never render (ADR-108 greenfield 口径):
- * ``activity_forensics`` rows are the server-side rejection ledger (audit
- * only); legacy ``activity_log`` aggregate rows were materialized into
- * per-frame rows by the W5 migration — an unmigrated leftover accepts the
- * loss rather than rendering an empty bubble. */
-const NON_RENDER_INTENT_TYPES = new Set(["activity_forensics", "activity_log"])
-
 export function isNonRenderIntent(intent: unknown): boolean {
   const data = (intent ?? {}) as Record<string, unknown>
-  return typeof data.type === "string" && NON_RENDER_INTENT_TYPES.has(data.type)
+  return data.type === "activity_forensics"
 }
 
-function legacyActivityRowFrame(intent: unknown): ActivityRowFrame | undefined {
-  const data = (intent ?? {}) as Record<string, unknown>
-  if (data.type !== "material_beat") return undefined
-  const status = data.status === "failed" ? ("failed" as const) : ("completed" as const)
-  const count = typeof data.count === "number" ? data.count : undefined
-  const total = typeof data.total === "number" ? data.total : undefined
-  const name = typeof data.name === "string" ? data.name : undefined
-  const duration_ms =
-    typeof data.duration_ms === "number" ? data.duration_ms : undefined
-  const ref = typeof data.ref === "string" ? data.ref : "beat"
-  // The beat's own birth stamp: a beat whose span STARTS before
-  // its row lands (the storyboard draft) carries `at` so the fold's clock
-  // measures the real span, never the landing instant. Absent on beats
-  // whose span starts at landing — the row's created_at falls in.
-  const at = typeof data.at === "string" ? data.at : undefined
-  if (data.beat === "reading") {
-    // 动词分叉 (批「动词」): the persisted intent carries asset_type (absent
-    // on rows predating the fork — read tolerance: they fall to the base key).
-    const assetType =
-      typeof data.asset_type === "string" ? data.asset_type : undefined
-    return {
-      activity_id: `beat-reading-${ref}`,
-      seq: 0,
-      kind: "read",
-      status,
-      key:
-        status === "failed"
-          ? activityAssetKey("chat.material.readingFailed", assetType)
-          : total != null && total > 1
-            ? activityAssetKey("chat.material.readingDoneProgress", assetType)
-            : activityAssetKey("chat.material.readingDone", assetType),
-      count,
-      total,
-      name,
-      duration_ms,
-      assetType,
-    }
-  }
-  if (data.beat === "understanding") {
-    return {
-      activity_id: `beat-understanding-${ref}`,
-      seq: 0,
-      kind: "read",
-      status,
-      key: "chat.material.understandingDone",
-      count,
-    }
-  }
-  // 起草落定节拍（legacy 回放）: a film dock's deferred draft
-  // settled — the row replays as this settled activity unit, its `at`
-  // carrying the REAL drafting span's start. The draft KIND survives
-  // 落定即退役's filter: that retirement keys on chat.activity.* plan-draft
-  // spans, never on a born-settled beat.
-  if (data.beat === "storyboard_drafting") {
-    return {
-      activity_id: `beat-storyboard-${ref}`,
-      seq: 0,
-      kind: "draft",
-      status,
-      key: "chat.storyboard.draftingDone",
-      duration_ms,
-      at,
-    }
-  }
-  return undefined
-}
-
-/** The material activity's verb follows the asset type. The same key
- * suffix applies to live and normalized legacy frames. */
 export function activityAssetKey(base: string, assetType?: string | null): string {
   return assetType === "video" || assetType === "audio"
     ? `${base}_${assetType}`
@@ -659,36 +576,6 @@ export interface HistoryRow extends QuestionMessage {
   skill?: SkillReference | null
 }
 
-/** Strict read tolerance for old rows only: the next persisted user row must
- * repeat the selected option label verbatim. This never assigns turn ownership. */
-function legacyOptionAnswerAssociations(rows: HistoryRow[]): Map<string, string> {
-  const associations = new Map<string, string>()
-  for (let index = 0; index + 1 < rows.length; index += 1) {
-    const question = rows[index]
-    const user = rows[index + 1]
-    if (
-      question.role !== "assistant" ||
-      question.question?.kind !== "question" ||
-      question.answer?.kind !== "option" ||
-      user.role !== "user"
-    ) {
-      continue
-    }
-    const label = selectedOptionLabel(question)
-    const answerText = question.answer.text
-    const isExactOptionAnswer =
-      answerText == null || answerText === "" || answerText === label
-    if (
-      label !== undefined &&
-      isExactOptionAnswer &&
-      user.content === label
-    ) {
-      associations.set(user.id, question.id)
-    }
-  }
-  return associations
-}
-
 /** Map the conversation's message rows to flow items (confirm-phase archive
  * replay, B1): the durable record rebuilds the flow so a refresh or another
  * device no longer loses capability answers / past refinements. 形态律
@@ -706,11 +593,6 @@ export function mapHistoryRows(
   ctx: { t: (key: string) => string },
 ): OverlayMessage[] {
   const history: OverlayMessage[] = []
-  const legacyAnsweredQuestionIds = legacyOptionAnswerAssociations(rows)
-  const hasAggregateMaterialPreparation = rows.some((message) => {
-    const key = activityRowFrame(message.intent)?.key
-    return key === "chat.activity.videoMaterialsDone" || key === "chat.activity.viewWebPageDone"
-  })
   // C8-c fold: candidate set id → the OverlayMessage anchoring its card, so
   // a LATER turn's selection event repaints the earlier card's highlight
   // (the surface is one seat; rows never move).
@@ -733,8 +615,7 @@ export function mapHistoryRows(
         role: "user",
         content: m.content ?? "",
         skill: m.skill ?? undefined,
-        answeredQuestionId:
-          answeredQuestionIdFromIntent(m.intent) ?? legacyAnsweredQuestionIds.get(m.id),
+        answeredQuestionId: answeredQuestionIdFromIntent(m.intent),
         at: m.created_at,
         focus: m.focus_output ?? undefined,
         // Sent attachments persist on the message row — re-render the
@@ -822,13 +703,6 @@ export function mapHistoryRows(
       if (isNonRenderIntent(m.intent)) continue
       if ((m.intent as { media_status?: string } | null)?.media_status === "accepted") continue
       const intentType = ((m.intent ?? {}) as Record<string, unknown>).type
-      // 退役分镜块 (dock echo 形态): legacy storyboard block rows (usually
-      // empty content) skip silently — an old project shows only the old
-      // storyboard_ready markdown row. A legacy draft-failure row's real
-      // prose falls through and replays as ordinary text (no marker); an
-      // empty one skips (no-empty-bubble law).
-      if (intentType === "storyboard") continue
-      if (intentType === "storyboard_draft_failed" && !(m.content ?? "").trim()) continue
       // 失败行回放: a persisted turn-failure row replays as the SAME grey
       // meta row the live turn.failed frame renders — a refresh keeps the
       // failure's stage and its lawful next step instead of dropping them.
@@ -843,13 +717,6 @@ export function mapHistoryRows(
         })
         continue
       }
-      if (
-        hasAggregateMaterialPreparation &&
-        intentType === "material_beat" &&
-        (m.intent as { beat?: string } | undefined)?.beat === "reading"
-      ) {
-        continue
-      }
       const frame = activityRowFrame(m.intent)
       if (frame !== undefined) {
         pushRow({
@@ -861,7 +728,7 @@ export function mapHistoryRows(
         })
         continue
       }
-      if (intentType === "activity" || intentType === "material_beat") {
+      if (intentType === "activity") {
         if (!(m.content ?? "").trim()) continue
       }
       // Candidate Surface 回放 (v4.2 C8-c): the turn's candidates_log events

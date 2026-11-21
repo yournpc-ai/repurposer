@@ -1058,6 +1058,25 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
     assert not edit.stream_prose and edit.project_reply is not None
 
 
+def test_fixed_recording_is_available_before_word_alignment():
+    from app.agents.tool_loop import ContextSnapshot, tool_spec
+    from app.chat.intent import intent_router
+
+    audio = {"kind": "audio", "snapshot_id": "fixed", "alignment": {"status": "PROCESSING"}}
+    snapshot = ContextSnapshot("fresh", resources=(("audio", audio),))
+    from app.chat.prompts import assemble_video_round
+
+    projected = assemble_video_round({
+        "tools": intent_router.tools, "snapshot": snapshot, "user_text": "Create the video with this recording",
+        "media_receipts": [{"role": "narration", "status": "available", "snapshot_id": "fixed"}],
+    })
+    tools = {tool.name: tool for tool in projected.tools}
+    shot = tool_spec(tools["create_video"])["function"]["parameters"]["$defs"]["FirstShot"]["properties"]
+    assert not {"narration", "narration_alignment_id", "narration_snapshot_id"} & shot.keys()
+    assert "inspect_timeline" not in tools and "insert_audio" not in tools
+    assert "fixed" in projected.context
+
+
 def test_native_create_projection_keeps_skill_context(installed_promo):
     from types import SimpleNamespace
     from app.agents.tool_loop import ContextSnapshot

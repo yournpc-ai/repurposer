@@ -4,7 +4,7 @@
 
 ## 模型如何接手作品
 
-chat/plan_turn.py 组装当前消息、项目素材、已知 Brief 及其来源、最近消息、待回答问题和费用偏好。chat/editor.py 和 chat/turn_tools.py 声明的原生工具经 agents/tool_loop.py 发给 Provider。模型通过 inspect_project、inspect_timeline 等实际读取定位作品；编辑从所选版本和 digest 经 apply_composition_edits 写入新版本。preview_range 返回该版本在指定窗口内的真实观察。模型自选的细节保持建议身份，只有用户说出的约束可作为用户要求。实际请求样本见[模型请求与作品旅程](tasks/agent-editor-evidence/iteration-6/6d-native-journey.json)。
+chat/plan_turn.py 组装当前消息、项目素材、已知 Brief 及其来源、最近消息、待回答问题和费用偏好。chat/editor.py 和 chat/turn_tools.py 声明的原生工具经 agents/tool_loop.py 发给 Provider。模型通过 list_project_media、inspect_timeline 等实际读取定位作品；编辑从所选版本和 digest 经 apply_composition_edits 写入新版本。preview_range 返回该版本在指定窗口内的真实观察。模型自选的细节保持建议身份，只有用户说出的约束可作为用户要求。实际请求样本见[模型请求与作品旅程](tasks/agent-editor-evidence/iteration-6/6d-native-journey.json)。
 
 ## 媒体、授权和交付
 

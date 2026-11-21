@@ -279,26 +279,6 @@ describe("OPTIONS answer single-display projection", () => {
     })
   })
 
-  it("repairs only the old adjacent, verbatim option-label shape", () => {
-    const mapped = mapHistoryRows([
-      optionQuestion(),
-      row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
-      followingReply(),
-    ], ctx)
-    expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBe("q1")
-    expect(visibleMessageIds(mapped)).toEqual(["q1", "a1"])
-  })
-
-  it("keeps empty answer text as old-row read tolerance", () => {
-    const mapped = mapHistoryRows([
-      optionQuestion({ answer: { kind: "option", option_id: "en", text: "" } }),
-      row({ id: "u1", role: "user", content: "English", turn_id: "u1" }),
-      followingReply(),
-    ], ctx)
-    expect(mapped.find((message) => message.id === "u1")?.answeredQuestionId).toBe("q1")
-    expect(visibleMessageIds(mapped)).toEqual(["q1", "a1"])
-  })
-
   it("never lets an expired machine answer inherit the legacy option fallback", () => {
     const mapped = mapHistoryRows([
       optionQuestion({ answer: { kind: "option", option_id: "en", text: "expired" } }),
@@ -474,59 +454,6 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
   })
 })
 
-describe("legacy storyboard rows (dock echo 形态)", () => {
-  it("an intent.type='storyboard' block row skips silently — old projects show only the storyboard_ready markdown row", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          id: "sb-1",
-          intent: {
-            type: "storyboard",
-            version: 1,
-            storyboard: { name: "board", scenes: [{ type: "words", seconds: 3 }] },
-            pages: ["https://example.com"],
-          },
-        }),
-        row({ id: "r1", content: "review this" }),
-      ],
-      ctx,
-    )
-    expect(out.map((m) => m.id)).toEqual(["r1"])
-  })
-
-  it("a legacy storyboard_draft_failed row's prose replays as ordinary text (no marker)", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          id: "sb-fail",
-          content: "the storyboard draft failed",
-          intent: { type: "storyboard_draft_failed" },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toEqual([
-      expect.objectContaining({ id: "sb-fail", content: "the storyboard draft failed" }),
-    ])
-  })
-
-  it("an empty storyboard_draft_failed row skips (no-empty-bubble law)", () => {
-    const out = mapHistoryRows(
-      [row({ content: "", intent: { type: "storyboard_draft_failed" } })],
-      ctx,
-    )
-    expect(out).toEqual([])
-  })
-
-  it("an unknown empty material beat skips — never an empty bubble", () => {
-    const out = mapHistoryRows(
-      [row({ content: "", intent: { type: "material_beat", beat: "mystery" } })],
-      ctx,
-    )
-    expect(out).toEqual([])
-  })
-})
-
 describe("turn_failed rows (失败行回放)", () => {
   it("a persisted turn-failure row replays as the grey meta error row", () => {
     const out = mapHistoryRows(
@@ -550,211 +477,6 @@ describe("turn_failed rows (失败行回放)", () => {
       ctx,
     )
     expect(out).toEqual([])
-  })
-})
-
-describe("material beats (2026-09-24 素材节拍入库)", () => {
-  it("a persisted beat row replays as a settled activity payload, never a bubble", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          id: "beat-1",
-          created_at: "2026-09-24T10:00:00Z",
-          intent: {
-            type: "material_beat",
-            beat: "reading",
-            status: "completed",
-            name: "keynote.mp4",
-            count: 1,
-            total: 2,
-            ref: "asset-1",
-          },
-        }),
-        row({
-          id: "beat-2",
-          created_at: "2026-09-24T10:03:00Z",
-          intent: {
-            type: "material_beat",
-            beat: "understanding",
-            status: "completed",
-            count: 2,
-            ref: "digest-9",
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toHaveLength(2)
-    expect(out[0].content).toBe("")
-    expect(out[0].activity).toMatchObject({
-      kind: "read",
-      status: "completed",
-      key: "chat.material.readingDoneProgress",
-      count: 1,
-      total: 2,
-      name: "keynote.mp4",
-      at: "2026-09-24T10:00:00Z",
-    })
-    expect(out[1].activity).toMatchObject({
-      kind: "read",
-      status: "completed",
-      key: "chat.material.understandingDone",
-      count: 2,
-    })
-  })
-
-  it("a lone file drops the progress form; a failed read takes the failed key", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          intent: {
-            type: "material_beat",
-            beat: "reading",
-            status: "completed",
-            name: "a.pdf",
-            count: 1,
-            total: 1,
-            ref: "asset-1",
-          },
-        }),
-        row({
-          id: "beat-f",
-          intent: {
-            type: "material_beat",
-            beat: "reading",
-            status: "failed",
-            name: "b.mov",
-            ref: "asset-2",
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out[0].activity?.key).toBe("chat.material.readingDone")
-    expect(out[1].activity).toMatchObject({
-      status: "failed",
-      key: "chat.material.readingFailed",
-      name: "b.mov",
-    })
-  })
-
-  it("动词分叉 (批「动词」 2026-09-27): the persisted asset_type forks the verb key", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          intent: {
-            type: "material_beat",
-            beat: "reading",
-            status: "completed",
-            name: "talk.mp4",
-            ref: "asset-v",
-            asset_type: "video",
-          },
-        }),
-        row({
-          id: "beat-a",
-          intent: {
-            type: "material_beat",
-            beat: "reading",
-            status: "completed",
-            name: "podcast.mp3",
-            ref: "asset-a",
-            asset_type: "audio",
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out[0].activity?.key).toBe("chat.material.readingDone_video")
-    expect(out[1].activity?.key).toBe("chat.material.readingDone_audio")
-  })
-
-  it("an off-shape beat dump with prose degrades to a plain assistant row (read tolerance)", () => {
-    const out = mapHistoryRows(
-      [row({ content: "a note", intent: { type: "material_beat", beat: "mystery" } })],
-      ctx,
-    )
-    expect(out[0].activity).toBeUndefined()
-    expect(out[0].content).toBe("a note")
-  })
-
-  it("storyboard_drafting (legacy): a draft-kind settled beat carrying its REAL start stamp", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          id: "beat-sb",
-          created_at: "2026-10-16T10:01:30Z",
-          intent: {
-            type: "material_beat",
-            beat: "storyboard_drafting",
-            status: "completed",
-            ref: "q-9",
-            duration_ms: 90_000,
-            at: "2026-10-16T10:00:00Z",
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out).toHaveLength(1)
-    // The draft kind with a chat.storyboard.* key survives 落定即退役's
-    // chat.activity.* filter, and the fold's clock reads the beat's own
-    // `at` (the draft's start), never the landing row's created_at.
-    expect(out[0].activity).toMatchObject({
-      kind: "draft",
-      status: "completed",
-      key: "chat.storyboard.draftingDone",
-      duration_ms: 90_000,
-      at: "2026-10-16T10:00:00Z",
-    })
-  })
-
-  it("storyboard_drafting without `at` falls back to the row's created_at (read tolerance)", () => {
-    const out = mapHistoryRows(
-      [
-        row({
-          id: "beat-sb-legacy",
-          created_at: "2026-10-16T10:01:30Z",
-          intent: {
-            type: "material_beat",
-            beat: "storyboard_drafting",
-            status: "completed",
-            ref: "q-9",
-          },
-        }),
-      ],
-      ctx,
-    )
-    expect(out[0].activity?.kind).toBe("draft")
-    expect(out[0].activity?.at).toBe("2026-10-16T10:01:30Z")
-  })
-  it.each(["chat.activity.videoMaterialsDone", "chat.activity.viewWebPageDone"])(
-    "deduplicates a legacy material beat already covered by %s", (key) => {
-    const out = mapHistoryRows([
-      row({
-        id: "aggregate",
-        intent: {
-          type: "activity",
-          frame: {
-            activity_id: "prepare-1",
-            kind: "read",
-            status: "completed",
-            key,
-          },
-        },
-      }),
-      row({
-        id: "late-material",
-        intent: {
-          type: "material_beat",
-          beat: "reading",
-          status: "completed",
-          ref: "asset-child",
-        },
-      }),
-    ], ctx)
-
-    expect(out.map((message) => message.id)).toEqual(["aggregate"])
   })
 })
 
@@ -833,16 +555,12 @@ describe("activity array rows (ADR-108 — 每帧一行)", () => {
     expect(out).toHaveLength(0)
   })
 
-  it("never-render rows skip: the rejection forensics ledger and legacy aggregate logs", () => {
+  it("never-render rows skip: the rejection forensics ledger", () => {
     const out = mapHistoryRows(
       [
         row({
           id: "fx",
           intent: { type: "activity_forensics", ref: "u1", rejections: [{ reason: "x" }] },
-        }),
-        row({
-          id: "legacy",
-          intent: { type: "activity_log", ref: "u1", frames: [frame({ seq: 1 })] },
         }),
         row({ id: "r1", content: "answer" }),
       ],

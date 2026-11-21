@@ -44,6 +44,7 @@ from app.models.tables import (
     Conversation,
     Message,
     MessageSeqCounter,
+    Output,
     Project,
     User,
     Composition,
@@ -2556,18 +2557,10 @@ async def resolve_suggestion_note(
             for a in asset_ids
             if a in found
         )
-    new_understanding = (
-        await db.execute(
-            select(Message.id)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.intent["type"].astext == "material_beat",
-                Message.intent["beat"].astext == "understanding",
-                Message.created_at > source.created_at,
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none() is not None
+    new_understanding = project_id is not None and await db.scalar(
+        select(Output.id).where(Output.project_id == project_id, Output.type == "material_understanding",
+                                Output.created_at > source.created_at).limit(1)
+    ) is not None
     edited_since = project_id is not None and await db.scalar(
         select(CompositionVersion.id).join(Composition, Composition.id == CompositionVersion.composition_id)
         .where(Composition.origin_project_id == project_id, CompositionVersion.created_at > source.created_at)
@@ -2598,9 +2591,6 @@ async def resolve_suggestion_note(
 
 ACTIVITY_ROW_TYPE = "activity"
 ACTIVITY_FORENSICS_TYPE = "activity_forensics"
-# Legacy aggregate type — read only by the W5 migration script
-# (scripts/migrate_activity_log_rows.py); never written anymore.
-ACTIVITY_LOG_TYPE = "activity_log"
 
 
 async def append_activity_row(
