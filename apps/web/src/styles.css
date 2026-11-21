@@ -13,27 +13,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Shared surface for all floating layers (Popover / DropdownMenu / Dialog /
- * Select / Sheet): the raised surface token, restrained frost and the Arc
- * floating shadow. Components merge `className` last, so callers can override
- * per instance. The high-opacity tint preserves the raised tonal step while
- * the blur lets immediate context melt through.
- */
+/* Shared surface for remaining portalled controls. */
 @utility overlay-surface {
-  background-color: color-mix(in oklch, var(--popover) 92%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: var(--arc-shadow-floating);
-
-  @variant dark {
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
-    backdrop-filter: blur(28px) saturate(1.4);
-  }
-
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    background-color: var(--popover);
-  }
+  background: var(--aui-overlay);
+  box-shadow: var(--aui-shadow-popover);
 }
 
 @utility landing-header-glass {
@@ -560,27 +543,18 @@ body {
 }
 
 @theme inline {
-  --font-sans: var(--arc-font-body);
-  --font-heading: var(--arc-font-display);
-  --text-xs: var(--arc-text-xs);
-  --text-sm: var(--arc-text-sm);
-  --text-base: var(--arc-text-base);
-  --text-lg: var(--arc-text-lg);
-  --text-xl: var(--arc-text-xl);
-  --text-2xl: var(--arc-text-2xl);
-  --text-3xl: var(--arc-text-3xl);
-  --text-4xl: var(--arc-text-4xl);
-  --text-5xl: var(--arc-text-5xl);
-  --tracking-display: var(--arc-tracking-display);
-  --tracking-body: var(--arc-tracking-body);
-  --leading-display: var(--arc-leading-display);
-  --leading-body: var(--arc-leading-body);
-  --ease-enter: var(--arc-ease-enter);
-  --spacing: var(--arc-space-1);
-  --shadow-resting: var(--arc-shadow-resting);
-  --shadow-raised: var(--arc-shadow-raised);
-  --shadow-floating: var(--arc-shadow-floating);
-  --shadow-control-thumb: var(--arc-control-thumb-shadow);
+  --font-sans: var(--aui-font);
+  --font-heading: var(--aui-font);
+  --tracking-display: -0.03em;
+  --tracking-body: -0.01em;
+  --leading-display: 1.1;
+  --leading-body: 1.4;
+  --ease-enter: var(--aui-ease);
+  --spacing: 0.25rem;
+  --shadow-resting: var(--aui-shadow-card);
+  --shadow-raised: var(--aui-shadow-card);
+  --shadow-floating: var(--aui-shadow-popover);
+  --shadow-control-thumb: var(--aui-shadow-card);
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -601,13 +575,13 @@ body {
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
-  --color-control-on: var(--arc-control-on);
-  --color-control-glyph: var(--arc-control-glyph);
-  --color-control-track: var(--arc-control-track);
-  --color-control-track-hover: var(--arc-control-track-hover);
-  --color-control-thumb: var(--arc-control-thumb);
-  --color-control-thumb-on: var(--arc-control-thumb-on);
-  --color-control-fill: var(--arc-control-fill);
+  --color-control-on: var(--aui-primary);
+  --color-control-glyph: var(--aui-on-primary);
+  --color-control-track: var(--aui-subtle);
+  --color-control-track-hover: var(--aui-border-strong);
+  --color-control-thumb: var(--aui-surface);
+  --color-control-thumb-on: var(--aui-on-primary);
+  --color-control-fill: var(--aui-primary);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
   --color-icon-chip: var(--icon-chip);
@@ -649,8 +623,8 @@ body {
   --radius-2xl: 1.125rem;
   --radius-3xl: 1.375rem;
   --radius-4xl: 1.625rem;
-  --radius-control: 0.5rem;
-  --radius-panel: 0.625rem;
+  --radius-control: var(--aui-radius);
+  --radius-panel: var(--aui-radius-lg);
   --radius-surface: 1rem;
   --radius-pill: 9999px;
 }
@@ -658,139 +632,65 @@ body {
 :root {
   color-scheme: light;
 
-  /* Arc foundation. Components consume the semantic aliases below, not these
-   * source tokens directly. Neutral surfaces and text are zero-chroma OKLCH;
-   * the public landing's paper surface is the sole warm foundation token. */
-  --arc-neutral-0: oklch(1 0 0);
-  --arc-neutral-1: oklch(0.99 0 0);
-  --arc-neutral-2: oklch(0.978 0 0);
-  --arc-neutral-3: oklch(0.958 0 0);
-  --arc-neutral-4: oklch(0.915 0 0);
-  --arc-neutral-5: oklch(0.84 0 0);
-  --arc-neutral-6: oklch(0.72 0 0);
-  --arc-neutral-7: oklch(0.59 0 0);
-  --arc-neutral-8: oklch(0.46 0 0);
-  --arc-neutral-9: oklch(0.34 0 0);
-  --arc-neutral-10: oklch(0.23 0 0);
-  --arc-neutral-11: oklch(0.15 0 0);
-  --arc-paper-0: #f9f8f6;
-  --arc-background: var(--arc-neutral-0);
-  --arc-surface: var(--arc-neutral-0);
-  --arc-surface-raised: var(--arc-neutral-0);
-  --arc-surface-muted: var(--arc-neutral-2);
-  --arc-foreground: var(--arc-neutral-11);
-  --arc-text-secondary: var(--arc-neutral-8);
-  --arc-text-muted: var(--arc-neutral-7);
-  --arc-border: oklch(0.935 0 0);
-  --arc-border-subtle: oklch(0.965 0 0);
-  --arc-border-strong: oklch(0.82 0 0);
-  --arc-accent: oklch(0.33 0 0);
-  --arc-accent-strong: oklch(0.24 0 0);
-  --arc-accent-subtle: oklch(0.33 0 0 / 0.1);
-  --arc-accent-foreground: var(--arc-background);
-  --arc-focus-ring: transparent;
-  --arc-control-on: oklch(0.23 0 0);
-  --arc-control-glyph: oklch(1 0 0);
-  --arc-control-track: oklch(0.895 0 0);
-  --arc-control-track-hover: oklch(0.86 0 0);
-  --arc-control-thumb: oklch(1 0 0);
-  --arc-control-thumb-on: oklch(1 0 0);
-  --arc-control-fill: var(--arc-control-on);
-  --arc-control-on-subtle: color-mix(in oklab, var(--arc-control-on) 10%, transparent);
-  --arc-control-thumb-shadow:
-    0 0 0.5px oklch(0 0 0 / 0.07),
-    0 1px 2px oklch(0 0 0 / 0.14),
-    0 2px 6px oklch(0 0 0 / 0.06);
-  --arc-success: oklch(0.49 0.19 150);
-  --arc-success-subtle: oklch(0.95 0.025 150);
-  --arc-warning: oklch(0.58 0.18 75);
-  --arc-danger: oklch(0.54 0.21 25);
-  --arc-shadow-resting: 0 1px 2px oklch(0 0 0 / 0.035);
-  --arc-shadow-raised:
-    0 6px 18px oklch(0 0 0 / 0.065),
-    0 1px 3px oklch(0 0 0 / 0.035);
-  --arc-shadow-floating:
-    0 20px 48px oklch(0 0 0 / 0.105),
-    0 3px 10px oklch(0 0 0 / 0.045);
-  --arc-series-1: #1f7def;
-  --arc-series-2: #7128a5;
-  --arc-series-3: #e58f00;
-  --arc-series-4: #009e84;
-  --arc-gradient-from: oklch(0.9 0.045 300);
-  --arc-gradient-to: oklch(0.92 0.045 65);
-  --arc-gradient: linear-gradient(100deg, var(--arc-gradient-from), var(--arc-gradient-to));
-  --arc-gradient-foreground: oklch(0.22 0.01 300);
-  --arc-gradient-soft: linear-gradient(135deg, oklch(0.975 0.016 300), oklch(0.98 0.016 65));
-  --arc-gradient-line: linear-gradient(100deg, oklch(0.83 0.06 300), oklch(0.86 0.06 65));
-  --arc-gradient-ink: linear-gradient(100deg, oklch(0.47 0.1 300), oklch(0.5 0.09 55));
-  --arc-space-1: 0.25rem;
-  --arc-space-2: 0.5rem;
-  --arc-space-3: 0.75rem;
-  --arc-space-4: 1rem;
-  --arc-space-5: 1.25rem;
-  --arc-space-6: 1.5rem;
-  --arc-space-8: 2rem;
-  --arc-space-10: 2.5rem;
-  --arc-space-12: 3rem;
-  --arc-space-16: 4rem;
-  --arc-space-20: 5rem;
-  --arc-space-24: 6rem;
-  --arc-font-display: "Geist Variable", sans-serif;
-  --arc-font-body: "Inter Variable", sans-serif;
-  --arc-text-xs: 0.75rem;
-  --arc-text-sm: 0.875rem;
-  --arc-text-base: 1rem;
-  --arc-text-lg: 1.125rem;
-  --arc-text-xl: 1.375rem;
-  --arc-text-2xl: 1.75rem;
-  --arc-text-3xl: 2.25rem;
-  --arc-text-4xl: 3.25rem;
-  --arc-text-5xl: 4.5rem;
-  --arc-tracking-display: -0.03em;
-  --arc-tracking-body: -0.01em;
-  --arc-leading-display: 1.1;
-  --arc-leading-body: 1.4;
-  --arc-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* shadcn semantic roles. Quiet fills share surface-muted: hover states,
-   * wells, chips and secondary surfaces intentionally speak one tonal step. */
-  --background: var(--arc-background);
-  --landing-background: var(--arc-paper-0);
+  --aui-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --aui-radius: 6px;
+  --aui-radius-lg: 12px;
+  --aui-ease: cubic-bezier(.25, 1, .5, 1);
+  --aui-ink: #202020;
+  --aui-muted: #626262;
+  --aui-primary: #202020;
+  --aui-on-primary: #fcfcfc;
+  --aui-surface: #fff;
+  --aui-overlay: #fff;
+  --aui-subtle: #f5f5f5;
+  --aui-border: rgb(0 0 0 / 8%);
+  --aui-border-strong: rgb(0 0 0 / 16%);
+  --aui-focus: #0060e2;
+  --aui-danger: #c4320a;
+  --aui-success: #16794d;
+  --aui-warning: #925900;
+  --aui-success-soft: #eaf7ef;
+  --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 5%);
+  --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 10%);
+
+  --background: var(--aui-surface);
+  --landing-background: #f9f8f6;
   --landing-header-background: #f2f1ee;
   /* Media overlays stay constant across page themes. */
-  --media-scrim: var(--arc-neutral-11);
-  --media-foreground: var(--arc-neutral-3);
+  --media-scrim: #202020;
+  --media-foreground: #fafafa;
   --media-muted-foreground: color-mix(in oklab, var(--media-foreground) 62%, transparent);
-  --media-control: color-mix(in oklab, var(--arc-neutral-11) 68%, transparent);
-  --media-control-hover: color-mix(in oklab, var(--arc-neutral-11) 82%, transparent);
+  --media-control: color-mix(in oklab, #202020 68%, transparent);
+  --media-control-hover: color-mix(in oklab, #202020 82%, transparent);
   --media-control-foreground: var(--media-foreground);
-  --foreground: var(--arc-foreground);
-  --card: var(--arc-surface);
-  --card-foreground: var(--arc-foreground);
-  --popover: var(--arc-surface-raised);
-  --popover-foreground: var(--arc-foreground);
-  --primary: var(--arc-control-on);
-  --primary-foreground: var(--arc-control-glyph);
-  --secondary: var(--arc-surface-muted);
-  --secondary-foreground: var(--arc-foreground);
-  --muted: var(--arc-surface-muted);
-  --inset: var(--arc-surface-muted);
-  --muted-foreground: var(--arc-text-secondary);
-  --meta-foreground: var(--arc-text-muted);
-  --accent: var(--arc-surface-muted);
-  --accent-foreground: var(--arc-foreground);
-  --success: var(--arc-success);
-  --success-subtle: var(--arc-success-subtle);
-  --warning: var(--arc-warning);
-  --destructive: var(--arc-danger);
-  --border: var(--arc-border);
-  --border-subtle: var(--arc-border-subtle);
-  --border-strong: var(--arc-border-strong);
-  --input: var(--arc-border);
-  --ring: var(--arc-border-strong);
+  --foreground: var(--aui-ink);
+  --card: var(--aui-surface);
+  --card-foreground: var(--aui-ink);
+  --popover: var(--aui-overlay);
+  --popover-foreground: var(--aui-ink);
+  --primary: var(--aui-primary);
+  --primary-foreground: var(--aui-on-primary);
+  --secondary: var(--aui-subtle);
+  --secondary-foreground: var(--aui-ink);
+  --muted: var(--aui-subtle);
+  --inset: var(--aui-subtle);
+  --muted-foreground: var(--aui-muted);
+  --meta-foreground: var(--aui-muted);
+  --accent: var(--aui-subtle);
+  --accent-foreground: var(--aui-ink);
+  --success: var(--aui-success);
+  --success-subtle: var(--aui-success-soft);
+  --warning: var(--aui-warning);
+  --destructive: var(--aui-danger);
+  --border: var(--aui-border);
+  --border-subtle: var(--aui-border);
+  --border-strong: var(--aui-border-strong);
+  --input: var(--aui-border);
+  --ring: var(--aui-focus);
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
-  --icon-chip: var(--arc-surface);
+  --icon-chip: var(--aui-surface);
   /* Lineage cross-highlight (ADR-113 §6): the canvas's ONE hue — hovering a
    * deliverable card's video-lane block lights the source asset card's
    * overlapping strip blocks / cue rows in amber. Semantic token, both
@@ -803,76 +703,53 @@ body {
   --track-video-foreground: oklch(0.42 0.16 290);
   --track-audio: oklch(0.87 0.07 350);
   --track-audio-foreground: oklch(0.45 0.15 350);
-  --chart-1: var(--arc-series-1);
-  --chart-2: var(--arc-series-2);
-  --chart-3: var(--arc-series-3);
-  --chart-4: var(--arc-series-4);
-  --chart-5: var(--arc-text-muted);
-  --radius: 0.625rem;
-  --sidebar: var(--arc-background);
-  --sidebar-foreground: var(--arc-foreground);
-  --sidebar-primary: var(--arc-accent);
-  --sidebar-primary-foreground: var(--arc-accent-foreground);
-  --sidebar-accent: var(--arc-surface-muted);
-  --sidebar-accent-foreground: var(--arc-foreground);
-  --sidebar-border: var(--arc-border-subtle);
-  --sidebar-ring: var(--arc-border-strong);
-  --inverse: var(--arc-neutral-11);
-  --inverse-foreground: var(--arc-neutral-0);
+  --chart-1: #1f7def;
+  --chart-2: #7128a5;
+  --chart-3: #e58f00;
+  --chart-4: #009e84;
+  --chart-5: var(--aui-muted);
+  --radius: var(--aui-radius);
+  --sidebar: var(--aui-subtle);
+  --sidebar-foreground: var(--aui-ink);
+  --sidebar-primary: var(--aui-ink);
+  --sidebar-primary-foreground: var(--aui-on-primary);
+  --sidebar-accent: var(--aui-subtle);
+  --sidebar-accent-foreground: var(--aui-ink);
+  --sidebar-border: var(--aui-border);
+  --sidebar-ring: var(--aui-border-strong);
+  --inverse: #202020;
+  --inverse-foreground: var(--aui-surface);
 }
 
 .dark {
   color-scheme: dark;
-  --arc-background: oklch(0.19 0 0);
+  --aui-ink: #ededed;
+  --aui-muted: #aaa9ad;
+  --aui-primary: #e8e8ea;
+  --aui-on-primary: #161618;
+  --aui-surface: #1c1c1e;
+  --aui-overlay: #242426;
+  --aui-subtle: #29292c;
+  --aui-border: rgb(255 255 255 / 10%);
+  --aui-border-strong: rgb(255 255 255 / 22%);
+  --aui-focus: #72a7ff;
+  --aui-danger: #ff8a7a;
+  --aui-success: #77d9a3;
+  --aui-warning: #ffce80;
+  --aui-success-soft: #24392c;
+  --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 40%);
+  --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 40%);
   --landing-background: oklch(0.12 0 0);
   --landing-header-background: #171612;
-  --arc-surface: oklch(0.215 0 0);
-  --arc-surface-raised: oklch(0.24 0 0);
-  --arc-surface-muted: oklch(0.26 0 0);
-  --arc-foreground: oklch(0.96 0 0);
-  --arc-text-secondary: oklch(0.77 0 0);
-  --arc-text-muted: oklch(0.64 0 0);
-  --arc-border: oklch(0.29 0 0);
-  --arc-border-subtle: oklch(0.25 0 0);
-  --arc-border-strong: oklch(0.4 0 0);
-  --arc-accent: oklch(0.8 0 0);
-  --arc-accent-strong: oklch(0.91 0 0);
-  --arc-accent-subtle: oklch(0.8 0 0 / 0.13);
-  --arc-control-on: oklch(0.93 0 0);
-  --arc-control-glyph: oklch(0.19 0 0);
-  --arc-control-track: oklch(0.33 0 0);
-  --arc-control-track-hover: oklch(0.37 0 0);
-  --arc-control-thumb: oklch(0.97 0 0);
-  --arc-control-thumb-on: oklch(0.19 0 0);
-  --arc-control-fill: oklch(0.62 0 0);
-  --arc-control-thumb-shadow:
-    0 0 0.5px oklch(0 0 0 / 0.3),
-    0 1px 2px oklch(0 0 0 / 0.35),
-    0 2px 6px oklch(0 0 0 / 0.2);
-  --arc-success: oklch(0.78 0.18 150);
-  --arc-success-subtle: oklch(0.29 0.035 150);
-  --arc-warning: oklch(0.83 0.17 80);
-  --arc-danger: oklch(0.76 0.2 25);
-  --arc-shadow-resting: 0 1px 2px oklch(0 0 0 / 0.18);
-  --arc-shadow-raised: 0 8px 22px oklch(0 0 0 / 0.22);
-  --arc-shadow-floating: 0 22px 55px oklch(0 0 0 / 0.34);
-  /* Same categorical hues as light, re-stepped for the dark surface. */
-  --arc-series-2: #8c46c3;
-  --arc-series-3: #d07b00;
-  --arc-gradient-from: oklch(0.38 0.05 300);
-  --arc-gradient-to: oklch(0.4 0.045 60);
-  --arc-gradient-foreground: oklch(0.96 0.005 300);
-  --arc-gradient-soft: linear-gradient(135deg, oklch(0.235 0.016 300), oklch(0.24 0.014 65));
-  --arc-gradient-line: linear-gradient(100deg, oklch(0.48 0.06 300), oklch(0.52 0.055 65));
-  --arc-gradient-ink: linear-gradient(100deg, oklch(0.82 0.07 300), oklch(0.86 0.065 70));
-  --icon-chip: var(--arc-surface-muted);
+  --landing-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
+  --icon-chip: var(--aui-subtle);
   --lineage: oklch(0.85 0.13 90 / 22%);
   --track-video: oklch(0.4 0.08 293);
   --track-video-foreground: oklch(0.86 0.08 293);
   --track-audio: oklch(0.42 0.08 350);
   --track-audio-foreground: oklch(0.87 0.08 350);
-  --inverse: var(--arc-surface-muted);
-  --inverse-foreground: var(--arc-foreground);
+  --inverse: var(--aui-subtle);
+  --inverse-foreground: var(--aui-ink);
 }
 
 /* The public page has its own quieter surface while inheriting every other
@@ -887,14 +764,14 @@ body {
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--arc-font-body);
-    letter-spacing: var(--arc-tracking-body);
-    line-height: var(--arc-leading-body);
+    font-family: var(--aui-font);
+    letter-spacing: -0.01em;
+    line-height: 1.4;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--arc-font-display);
-    letter-spacing: var(--arc-tracking-display);
-    line-height: var(--arc-leading-display);
+    font-family: var(--aui-font);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
   }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
@@ -960,10 +837,10 @@ body {
   }
 }
 .placeholder-roll-in {
-  animation: placeholder-roll-in 0.5s var(--arc-ease-enter) both;
+  animation: placeholder-roll-in 0.5s var(--aui-ease) both;
 }
 .placeholder-roll-out {
-  animation: placeholder-roll-out 0.5s var(--arc-ease-enter) both;
+  animation: placeholder-roll-out 0.5s var(--aui-ease) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .placeholder-roll-in {

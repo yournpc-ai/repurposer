@@ -7,6 +7,7 @@ import type { ChatMention } from "@/lib/mentions"
 import { BUILTIN_SKILL_VERSIONS, fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { consumeLandingCreate } from "@/lib/landingCreate"
 
+import { Button } from "@/components/ui/button-clean"
 import { HomeComposer } from "@/components/home/HomeComposer"
 import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
@@ -83,12 +84,12 @@ function Home() {
       </div>
       <div className="mt-5 flex flex-wrap justify-center gap-2" data-tour="home-recipes">
         {examples.map(({ skillId, label, demo }) => (
-          <button key={demo} type="button" className="rounded-full border px-3 py-2 text-sm text-muted-foreground hover:bg-accent"
+          <Button key={demo} variant="secondary"
             onClick={() => handlePrefill(`recipes.shelf.demos.${demo}.prompt`,
               skillOptionForReference({ kind: "builtin", skill_id: skillId, version: BUILTIN_SKILL_VERSIONS[skillId] }, skillOptions),
               { replaceDraft: true })}>
             {t(`recipes.shelf.subs.${label}`)}
-          </button>
+          </Button>
         ))}
       </div>
     </section>
