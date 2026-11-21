@@ -9,18 +9,12 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import type { Variants } from "motion/react"
 
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { LogoMark } from "@/components/LogoMark"
-import { apiPost } from "@/lib/api"
+import { Button } from "@/components/ui/button-clean"
+import { Dialog } from "@/components/ui/dialog-clean"
+import { TextField } from "@/components/ui/text-field-clean"
+
+
+import { apiPost, errorDetail } from "@/lib/api"
 import { setAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +38,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   const [step, setStep] = useState<"email" | "code">("email")
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [loading, setLoading] = useState<"send" | "verify" | null>(null)
+  const [error, setError] = useState("")
   const [countdown, setCountdown] = useState(0)
   const inputsRef = useRef<Array<HTMLInputElement | null>>([])
   const reduce = useReducedMotion()
@@ -60,6 +55,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   }, [countdown > 0])
 
   const reset = () => {
+    setError("")
     setEmail("")
     setDigits(Array(CODE_LENGTH).fill(""))
     setStep("email")
@@ -79,16 +75,22 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
 
   const sendCode = async () => {
     if (!email.trim() || loading) return
+    setError("")
     setLoading("send")
     try {
       const res = await apiPost("/api/v1/auth/send-code", {
         email: email.trim(),
-      })
-      if (!res.ok) return // sonner already surfaced the server detail
+      }, { toast: false })
+      if (!res.ok) {
+        setError(errorDetail(await res.json().catch(() => null), t("common.requestFailed")))
+        return
+      }
       setDigits(Array(CODE_LENGTH).fill(""))
       setSentTo(email.trim())
       setStep("code")
       setCountdown(RESEND_COOLDOWN_SECONDS)
+    } catch {
+      setError(t("common.networkError"))
     } finally {
       setLoading(null)
     }
@@ -96,16 +98,18 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
 
   const verify = async (value: string) => {
     if (value.length !== CODE_LENGTH || loading) return
+    setError("")
     setLoading("verify")
     try {
       const res = await apiPost("/api/v1/auth/verify-code", {
         email: email.trim(),
         code: value,
-      })
+      }, { toast: false })
       if (!res.ok) {
+        setError(errorDetail(await res.json().catch(() => null), t("common.requestFailed")))
         // Wrong code: clear + refocus on digit 1 so the user retypes.
         // The focus is deferred a tick so the input has been re-enabled
-        // (loading cleared in finally) first. Sonner carries the message.
+        // (loading cleared in finally) first.
         setDigits(Array(CODE_LENGTH).fill(""))
         setTimeout(() => focusInput(0), 0)
         return
@@ -114,6 +118,8 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
       setAuth(data.token, data.user)
       handleOpenChange(false)
       onSuccess?.()
+    } catch {
+      setError(t("common.networkError"))
     } finally {
       setLoading(null)
     }
@@ -212,12 +218,9 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
   )
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader className="sr-only">
-          <DialogTitle>{t("login.title")}</DialogTitle>
-          <DialogDescription>{t("login.subtitle")}</DialogDescription>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={handleOpenChange} size="sm" closeLabel={t("common.close")}
+      title={t(step === "email" ? "login.title" : "login.codeTitle")}
+      description={step === "email" ? t("login.subtitle") : undefined}>
 
         <AnimatePresence mode="wait" initial={false}>
           {step === "email" ? (
@@ -229,13 +232,8 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
               exit="exit"
               className="flex flex-col justify-center"
             >
-              <LogoMark className="h-10 w-10" />
-              <h2 className="mt-5 text-xl font-semibold tracking-tight">
-                {t("login.title")}
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {t("login.subtitle")}
-              </p>
+              
+              
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
@@ -244,10 +242,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                 }}
                 className="mt-6"
               >
-                <Label htmlFor="login-email" className="mb-1.5 block">
-                  {t("login.emailLabel")}
-                </Label>
-                <Input
+                <TextField label={t("login.emailLabel")}
                   id="login-email"
                   type="email"
                   autoComplete="email"
@@ -260,7 +255,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                 />
                 <Button
                   type="submit"
-                  className="mt-4 h-11 w-full"
+                  loading={loading === "send"} size="lg" className="mt-4 w-full"
                   disabled={!email.trim() || loading !== null}
                 >
                   {loading === "send" ? (
@@ -306,10 +301,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
               exit="exit"
               className="flex flex-col items-center justify-center text-center"
             >
-              <LogoMark className="h-10 w-10" />
-              <h2 className="mt-5 text-xl font-semibold tracking-tight">
-                {t("login.codeTitle")}
-              </h2>
+              
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 <Trans
                   i18nKey="login.codeSubtitle"
@@ -336,7 +328,7 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
                 </motion.div>
                 <Button
                   type="submit"
-                  className="mt-7 h-11 w-full"
+                  loading={loading === "verify"} size="lg" className="mt-7 w-full"
                   disabled={!isComplete || loading !== null}
                 >
                   {loading === "verify"
@@ -373,7 +365,8 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
             </motion.div>
           )}
         </AnimatePresence>
-      </DialogContent>
+        {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+
     </Dialog>
   )
 }

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import { CircleCheck } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import {
   Dialog,
   DialogContent,

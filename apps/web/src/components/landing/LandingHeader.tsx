@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { LogoMark } from "@/components/LogoMark"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import { cn } from "@/lib/utils"
 import { LANDING_HEADER_CONTAINER } from "./layout"
 import { useLandingCreate } from "./useLandingCreate"
@@ -42,7 +42,7 @@ export function LandingHeader() {
       <nav aria-label={t("landing.entry.navigation")} className="hidden items-center justify-self-center gap-8 md:flex">
         {[["#pricing", "pricing"], ["#faq", "faq"]].map(([href, key]) => <a key={href} href={href} className="text-sm transition-colors hover:text-muted-foreground">{t(`landing.nav.${key}`)}</a>)}
       </nav>
-      <div className="hidden items-center justify-self-end gap-3 md:flex">{!condensed && <><ThemeToggle /><LanguageSwitcher /></>}<Button size="default" className="rounded-full px-5 text-sm font-normal" onClick={() => create()}>{t("landing.headerCta")}</Button></div>
+      <div className="hidden items-center justify-self-end gap-3 md:flex">{!condensed && <><ThemeToggle /><LanguageSwitcher /></>}<Button size="md" className="rounded-full px-5 text-sm font-normal" onClick={() => create()}>{t("landing.headerCta")}</Button></div>
       <MobileNavigation />
     </div>
   </header>

@@ -9,7 +9,7 @@ import {
   DeleteProjectDialog,
   RenameProjectDialog,
 } from "@/components/project/project-dialogs"
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge-clean"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -153,7 +153,7 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
                 ) : null}
                 {showVideo && videoReady && project.thumbnail_duration != null && (
                   <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-                    <Badge variant="secondary" className="rounded-md tabular-nums">
+                    <Badge tone="neutral" className="rounded-md tabular-nums">
                       {formatDuration(project.thumbnail_duration)}
                     </Badge>
                   </div>

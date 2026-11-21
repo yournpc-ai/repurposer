@@ -3,9 +3,9 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Mic2, Plus } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import { EmptyState } from "@/components/ui/empty-state"
-import { Input } from "@/components/ui/input"
+import { TextField } from "@/components/ui/text-field-clean"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -24,7 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge-clean"
 import { apiFetch } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 
@@ -101,11 +101,11 @@ function PersonasPage() {
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label htmlFor="name">{t("personas.labelName")}</Label>
-                    <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                    <TextField id="name" value={name} onChange={(e) => setName(e.target.value)} required />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="title">{t("personas.labelTitle")}</Label>
-                    <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <TextField id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="language">{t("common.language")}</Label>
@@ -170,11 +170,11 @@ function PersonasPage() {
                   </div>
                 </div>
                 <div className="mt-4 flex items-center gap-2">
-                  <Badge variant="secondary" className="rounded-md">
+                  <Badge tone="neutral" className="rounded-md">
                     {t(`personaDetail.tones.${persona.emotional_tone}`)}
                   </Badge>
                   <Badge
-                    variant="secondary"
+                    tone="neutral"
                     className="rounded-md uppercase"
                   >
                     {persona.language}

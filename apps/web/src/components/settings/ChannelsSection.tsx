@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next"
 
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge-clean"
+import { Button } from "@/components/ui/button-clean"
+import { Card } from "@/components/ui/card-clean"
 import { apiDelete } from "@/lib/api"
 import { connectChannel, PLATFORMS, useChannels } from "@/lib/channels"
 
@@ -44,12 +44,12 @@ export function ChannelsSection() {
                   {PLATFORM_LABELS[platform]}
                 </div>
                 {account && !expired && (
-                  <Badge className="rounded-md" variant="secondary">
+                  <Badge className="rounded-md" tone="neutral">
                     {t("channels.connected")}
                   </Badge>
                 )}
                 {expired && (
-                  <Badge className="rounded-md" variant="destructive">
+                  <Badge className="rounded-md" tone="danger">
                     {t("channels.expired")}
                   </Badge>
                 )}
@@ -76,7 +76,7 @@ export function ChannelsSection() {
                     </div>
                     {expired ? (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         className="h-9"
                         onClick={() => connectChannel(platform)}
@@ -96,7 +96,7 @@ export function ChannelsSection() {
                   </>
                 ) : (
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
                     className="h-9"
                     onClick={() => connectChannel(platform)}

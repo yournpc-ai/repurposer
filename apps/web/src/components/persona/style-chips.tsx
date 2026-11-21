@@ -2,9 +2,9 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Ban, Plus, Quote, X } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button-clean"
+import { TextField } from "@/components/ui/text-field-clean"
+import { TextArea } from "@/components/ui/text-area-clean"
 
 /**
  * Style list editors (persona form tab): the AI-refined list fields render
@@ -83,7 +83,7 @@ export function ChipList({
     <div className="flex flex-wrap items-center gap-2">
       {items.map((item, i) =>
         ed.editIndex === i ? (
-          <Input
+          <TextField
             key={i}
             autoFocus
             value={ed.editDraft}
@@ -124,7 +124,7 @@ export function ChipList({
         <span className="text-sm text-muted-foreground">{emptyText}</span>
       )}
       {ed.adding ? (
-        <Input
+        <TextField
           autoFocus
           value={ed.draft}
           onChange={(e) => ed.setDraft(e.target.value)}
@@ -163,9 +163,9 @@ export function QuoteCardList({ items, onChange, addLabel, emptyText }: ListEdit
         <div key={i} className="flex items-start gap-3 rounded-lg bg-muted p-4">
           <Quote className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           {ed.editIndex === i ? (
-            <Textarea
+            <TextArea
               autoFocus
-              rows={2}
+              minRows={2}
               value={ed.editDraft}
               onChange={(e) => ed.setEditDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -203,9 +203,9 @@ export function QuoteCardList({ items, onChange, addLabel, emptyText }: ListEdit
         <p className="text-sm text-muted-foreground">{emptyText}</p>
       )}
       {ed.adding ? (
-        <Textarea
+        <TextArea
           autoFocus
-          rows={2}
+          minRows={2}
           value={ed.draft}
           onChange={(e) => ed.setDraft(e.target.value)}
           onKeyDown={(e) => {

@@ -7,17 +7,17 @@ import { toast } from "sonner"
 
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { TextField } from "@/components/ui/text-field-clean"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
+import { TextArea } from "@/components/ui/text-area-clean"
 import { apiPost } from "@/lib/api"
 import { connectChannel, PLATFORMS, useChannels } from "@/lib/channels"
 import { cn } from "@/lib/utils"
@@ -204,7 +204,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                       </button>
                     ) : (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         className="h-7 text-xs"
                         onClick={() => connectChannel(platform)}
@@ -240,7 +240,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                   <Label htmlFor={`publish-title-${platform}`}>
                     {t("publish.titleLabel")}
                   </Label>
-                  <Input
+                  <TextField
                     id={`publish-title-${platform}`}
                     value={drafts[platform].title}
                     onChange={(e) =>
@@ -252,9 +252,9 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                   <Label htmlFor={`publish-caption-${platform}`}>
                     {t("publish.captionLabel")}
                   </Label>
-                  <Textarea
+                  <TextArea
                     id={`publish-caption-${platform}`}
-                    rows={5}
+                    minRows={5}
                     value={drafts[platform].caption}
                     onChange={(e) =>
                       updateDraft(platform, { caption: e.target.value })
@@ -265,7 +265,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                   <Label htmlFor={`publish-hashtags-${platform}`}>
                     {t("publish.hashtagsLabel")}
                   </Label>
-                  <Input
+                  <TextField
                     id={`publish-hashtags-${platform}`}
                     value={drafts[platform].hashtags}
                     onChange={(e) =>
@@ -287,7 +287,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
 
         <div className="flex justify-end gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="h-9"
             onClick={() => onOpenChange(false)}

@@ -5,7 +5,7 @@ import { ArrowRight, Zap } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import {
   Popover,
   PopoverContent,

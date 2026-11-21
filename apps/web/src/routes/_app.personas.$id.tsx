@@ -25,9 +25,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { TextField } from "@/components/ui/text-field-clean"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextArea } from "@/components/ui/text-area-clean"
 import {
   Select,
   SelectContent,
@@ -450,7 +450,7 @@ function PersonaDetailPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="sentence_style">{t("personaDetail.sentenceStyle")}</Label>
-                      <Input
+                      <TextField
                         id="sentence_style"
                         value={sentenceStyle}
                         onChange={(e) => setSentenceStyle(e.target.value)}
@@ -508,7 +508,7 @@ function PersonaDetailPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="audience">{t("personaDetail.audience")}</Label>
-                    <Input
+                    <TextField
                       id="audience"
                       value={audience}
                       onChange={(e) => setAudience(e.target.value)}
@@ -518,7 +518,7 @@ function PersonaDetailPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="cta">{t("personaDetail.cta")}</Label>
-                    <Input
+                    <TextField
                       id="cta"
                       value={cta}
                       onChange={(e) => setCta(e.target.value)}
@@ -528,11 +528,11 @@ function PersonaDetailPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="guidelines">{t("personaDetail.guidelines")}</Label>
-                    <Textarea
+                    <TextArea
                       id="guidelines"
                       value={guidelines}
                       onChange={(e) => setGuidelines(e.target.value)}
-                      rows={4}
+                      minRows={4}
                       placeholder={t("personaDetail.guidelinesPlaceholder")}
                     />
                   </div>
@@ -655,7 +655,7 @@ function PersonaDetailPage() {
           <DialogHeader>
             <DialogTitle>{t("personaDetail.renameTitle")}</DialogTitle>
           </DialogHeader>
-          <Input
+          <TextField
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {

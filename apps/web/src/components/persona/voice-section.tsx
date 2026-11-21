@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Mic, Upload } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import {
   Card,
   CardContent,
@@ -178,7 +178,7 @@ export function VoiceSection({
             <Check className="h-4 w-4 shrink-0 text-primary" />
           )}
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="h-9 shrink-0"
             disabled={busy}

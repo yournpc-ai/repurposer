@@ -2,15 +2,9 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button-clean"
+import { Dialog } from "@/components/ui/dialog-clean"
+import { TextField } from "@/components/ui/text-field-clean"
 
 /** Shared rename/delete dialogs for a project — used by ProjectCard (list)
  * and ProjectMenu (detail page chrome). The parent owns open state and gets
@@ -62,12 +56,8 @@ export function RenameProjectDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t("projects.renameTitle")}</DialogTitle>
-        </DialogHeader>
-        <Input
+    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.renameTitle")}>
+        <TextField
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
@@ -76,15 +66,14 @@ export function RenameProjectDialog({
           placeholder={t("projects.renamePlaceholder")}
           autoFocus
         />
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
           <Button size="sm" disabled={!value.trim() || busy} onClick={handleRename}>
             {busy ? t("common.saving") : t("common.save")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </div>
     </Dialog>
   )
 }
@@ -124,23 +113,18 @@ export function DeleteProjectDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t("projects.deleteConfirm")}</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.deleteConfirm")}>
         <p className="text-sm text-muted-foreground">
           {t("projects.deleteDesc", { title })}
         </p>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
           <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
             {busy ? t("common.loading") : t("common.delete")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </div>
     </Dialog>
   )
 }
@@ -183,25 +167,18 @@ export function DeleteProjectsDialog({
 
   const count = projectIds.length
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>
-            {t("projects.selection.deleteConfirm", { count })}
-          </DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.selection.deleteConfirm", { count })}>
         <p className="text-sm text-muted-foreground">
           {t("projects.selection.deleteDesc")}
         </p>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
           <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
             {busy ? t("common.loading") : t("common.delete")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </div>
     </Dialog>
   )
 }

@@ -2,15 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2 } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner-clean"
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select } from "@/components/ui/select-clean"
 import { apiGet, apiPut } from "@/lib/api"
 
 /** Assistant section of the shared SettingsDialog (ADR-117 §1): the two
@@ -95,26 +89,13 @@ export function AssistantSection() {
           {t(descKey)}
         </p>
       </div>
-      <Select
+      {saving === key && <Spinner label={t("common.saving")} />}
+      <Select size="sm" aria-label={t(labelKey)}
+        options={[{ value: "auto", label: t("assistant.mode.auto") }, { value: "ask", label: t("assistant.mode.ask") }]}
         value={prefs?.[key] ?? "auto"}
-        onValueChange={(v) => void update(key, v as ConfirmMode)}
+        onChange={(value) => void update(key, value as ConfirmMode)}
         disabled={prefs === null || saving !== null}
-      >
-        <SelectTrigger
-          size="sm"
-          aria-label={t(labelKey)}
-          className="flex-none gap-1.5 border-0 bg-muted px-2.5 text-xs hover:bg-accent dark:bg-muted dark:hover:bg-accent"
-        >
-          {saving === key && (
-            <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-          )}
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} align="end">
-          <SelectItem value="auto">{t("assistant.mode.auto")}</SelectItem>
-          <SelectItem value="ask">{t("assistant.mode.ask")}</SelectItem>
-        </SelectContent>
-      </Select>
+      />
     </div>
   )
 

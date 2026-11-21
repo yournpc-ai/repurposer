@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next"
 import { Check, Loader2, Pause, Play, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { TextField } from "@/components/ui/text-field-clean"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
+import { Switch } from "@/components/ui/switch-clean"
 import { apiFetch } from "@/lib/api"
 import { formatDuration } from "@/lib/utils"
 
@@ -125,10 +125,7 @@ export function MusicPanel({
 
   return (
     <div className="space-y-4">
-      <label className="flex items-center justify-between">
-        <span className="text-sm">{t("personaDetail.skin.music.enable")}</span>
-        <Switch checked={enabled} onCheckedChange={onEnabledChange} />
-      </label>
+      <Switch placement="end" label={t("personaDetail.skin.music.enable")} checked={enabled} onChange={(event) => onEnabledChange(event.target.checked)} />
 
       {enabled ? (
         <>
@@ -211,7 +208,7 @@ export function MusicPanel({
             <p className="px-0.5 text-xs text-muted-foreground">
               {t("personaDetail.skin.music.generate")}
             </p>
-            <Input
+            <TextField
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t("personaDetail.skin.music.titlePlaceholder")}
@@ -219,7 +216,7 @@ export function MusicPanel({
               disabled={generating}
             />
             <div className="flex items-center gap-2">
-              <Input
+              <TextField
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={t("personaDetail.skin.music.generatePrompt")}

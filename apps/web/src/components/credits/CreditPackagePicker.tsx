@@ -4,14 +4,10 @@ import { useEffect, useState } from "react"
 import { Info } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { Button } from "@/components/ui/button-clean"
+import { TextField } from "@/components/ui/text-field-clean"
+import { Skeleton } from "@/components/ui/skeleton-clean"
+import { Tooltip } from "@/components/ui/tooltip-clean"
 import {
   createCheckoutSession,
   fetchCreditPackages,
@@ -99,9 +95,9 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
   if (loading) {
     return (
       <div className="space-y-4" aria-label={t("common.loading")}>
-        <Skeleton className="h-12.5 w-full" />
-        <Skeleton className="h-11 w-full" />
-        <Skeleton className="ml-auto h-11 w-48" />
+        <Skeleton height={50} />
+        <Skeleton height={44} />
+        <Skeleton height={44} width="12rem" className="ml-auto" />
       </div>
     )
   }
@@ -139,10 +135,8 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
     <div className="space-y-5">
       <div>
         <div className="relative">
-          <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-xl text-muted-foreground">
-            {formatCurrencySymbol(inputCurrency, i18n.language)}
-          </span>
-          <Input
+          <TextField
+            prefix={formatCurrencySymbol(inputCurrency, i18n.language)}
             type="text"
             inputMode="decimal"
             autoComplete="off"
@@ -155,7 +149,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
               setAmountInput(event.target.value)
               setSelectedKey(null)
             }}
-            className="h-12.5 rounded-md bg-muted pl-10 pr-4 text-2xl font-semibold tabular-nums md:text-2xl dark:bg-muted"
+            size="lg"
             placeholder="0.00"
           />
         </div>
@@ -175,24 +169,8 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
                 ? amountRange
                 : ""}
           </p>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={t("credits.rateInfo")}
-                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-                />
-              }
-            >
-              <Info className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent side="top" align="start" className="max-w-64">
-              <div className="space-y-1">
-                <p>{conversion}</p>
-                <p>{amountRange}</p>
-              </div>
-            </TooltipContent>
+          <Tooltip content={<>{conversion}<br />{amountRange}</>} side="top">
+            <button type="button" aria-label={t("credits.rateInfo")}><Info className="size-4" /></button>
           </Tooltip>
         </div>
       </div>
@@ -209,7 +187,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
               <Button
                 key={item.key}
                 type="button"
-                variant={checked ? "default" : "secondary"}
+                variant={checked ? "primary" : "secondary"}
                 size="lg"
                 aria-pressed={checked}
                 disabled={purchasing}

@@ -13,10 +13,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { TextField } from "@/components/ui/text-field-clean"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
+import { Switch } from "@/components/ui/switch-clean"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Select,
@@ -325,7 +325,7 @@ function SizeControl({
         onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
         className="flex-1"
       />
-      <Input
+      <TextField
         type="number"
         min={min}
         max={max}
@@ -592,7 +592,7 @@ export function SkinEditor({
                   />
                 </label>
               </div>
-              <Input
+              <TextField
                 value={skin.captionColor}
                 onChange={(e) => update("captionColor", e.target.value)}
                 placeholder="#ffffff"
@@ -606,7 +606,8 @@ export function SkinEditor({
               <GroupLabel>{t("personaDetail.skin.groups.title")}</GroupLabel>
               <Switch
                 checked={skin.titleEnabled}
-                onCheckedChange={(v) => update("titleEnabled", v)}
+                aria-label={t("personaDetail.skin.groups.title")}
+                onChange={(event) => update("titleEnabled", event.target.checked)}
               />
             </div>
             {skin.titleEnabled && (
@@ -637,7 +638,8 @@ export function SkinEditor({
                   <GroupLabel>{t(`personaDetail.skin.groups.${slot}`)}</GroupLabel>
                   <Switch
                     checked={skin[enabledKey]}
-                    onCheckedChange={(v) => update(enabledKey, v)}
+                    aria-label={t(`personaDetail.skin.groups.${slot}`)}
+                    onChange={(event) => update(enabledKey, event.target.checked)}
                   />
                 </div>
                 {skin[enabledKey] && (
@@ -661,7 +663,7 @@ export function SkinEditor({
                     </Field>
                     {skin[kindKey] === "text" ? (
                       <Field label={t(`personaDetail.skin.introOutro.${textKey}`)}>
-                        <Input
+                        <TextField
                           value={skin[textKey]}
                           onChange={(e) => update(textKey, e.target.value)}
                           placeholder={t(
@@ -680,7 +682,7 @@ export function SkinEditor({
                     )}
                     {skin[kindKey] !== "video" && (
                       <Field label={t("personaDetail.skin.introOutro.duration")}>
-                        <Input
+                        <TextField
                           type="number"
                           min={0.5}
                           max={10}
