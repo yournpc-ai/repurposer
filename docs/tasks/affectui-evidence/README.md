@@ -1,5 +1,27 @@
 # affectUI Clean 迁移验收
 
+## U3-B、U4 最终集成验收 · 2026-11-22
+
+**UI 代码和技术验收通过，整条新作交付旅程有条件通过。** 新项目完成素材上传和编辑，音乐与旁白进入不同的固定版本。新版本正式导出在私有存储门禁处停止；没有产生可审阅、交付的新 Output。两个已经交付的历史版本在当前 UI 重新播放、续签和下载成功。后文各切片的“待交接”“未验证”保留为当时的记录。[本次浏览器、回执与文件校验数据](./u3-u4-integration.json)
+
+Editor 在 `e932584a` 将 Chat 相关文件标记为 RELEASED。UI 提交为 `a2c6f641`（Agent Thread 和旧通用组件退役）、`f33b4654`（素材提及和回执错误详情）、`44645969`（连续文件选择和粘贴）。本次在共享 main 原地施工，只提交所列 UI 路径。隔离 API 位于 19861，PostgreSQL 5966 的验收库为 `rep_6d_qmopb4`，迁移版本为 `j6d05_project_brief`。共享 8000、Worker、数据库配置、Editor 工作树内容均保持原归属。用户接手推送。[逐文件交接](../agent-editor-evidence/iteration-6/ui-handoff.md)
+
+| 验收面 | 当前前端的实际结果 |
+|---|---|
+| Tool | 两个真实历史项目各有 4 组 9 项、3 组 7 项。逐项对照持久化的 opening、call ID、声明索引与状态。桌面键盘、平板和手机触摸均可展开和关闭；同名不同调用的跨 opening 归属另有挂载回归。 |
+| Context | 标准开发来源的 Home 直传 PUT 200。签名、创建项目、绑定附件和 Chat 各一次，库内一条 opening、一份附件。在 375 像素视口粘贴和拖入两个不同文件，分别 PUT 200，草稿完整。项目内 Shift+Enter、粘贴文本、素材 mention、Skill 与 Enter 发送经实际 POST 和数据库核对。资产无 title 时从项目内对应 ID 取显示名。 |
+| Chat | 使用 Clean Thread 布局、Thinking、ToolCallCard/Group、受控 ApprovalCard、附件与结果组件。Markdown、原生流、播放器与历史沿用原入口。授权显示服务端原问题与上限。同意和拒绝发送给原问题 ID，历史决定以回执为准。 |
+| Execution | 分别拒绝和同意两条音乐授权，刷新后同意独立的旁白授权。音乐与旁白 Job 均一次成功，实际结算 0 与 1 积分。v1、v2、v3 分别固定 1、2、3 个来源。新导出在预览后获得最多 8 积分的授权，服务器返回 private_storage_unavailable，ExportJob 计数为 0，硬刷新仍显示失败及原原因。 |
+| Recovery | Stop 向真实 opening 发送一次 POST，无可保留内容的 opening 被撤回，已存作品继续可读。6D 的模拟供应商在提交后遭进程强杀，隔离故障库持久化了 provider_unknown。Chrome 通过实际 FastAPI 历史接口回放，刷新前后均为一条未知回执，预占 3 积分、结算未知。该次仅转发 GET，关闭 lifespan，数据库请求使用回滚事务。 |
+| UI 与媒体 | 1280/768/375、中文与英文、明暗、reduced-motion、键盘及触摸视口。两条真实音频播放时钟前进且可暂停；1920 像素图片可打开，Escape 后焦点回到原按钮。两个历史 Output 各解码 150 帧，硬刷新后的下载 SHA-256 和对应固定版本一致。推进客户端时钟触发真实签名续期。系统主题切换、全屏与选区另见独立组件浏览器证据。 |
+
+**回归修复。** 真实长历史中，工具组开合后行高估算会让触摸落到相邻组，已移除消息行的估算高度。按“从列表进入详情 → reload 到 document commit → 立即后退”复核，三种视口都返回列表，未观察到 hydration 异常。另修复了 React 批处理下连续选文件时第二个上传可能不启动，并增加同批重复文件只上传一次的回归。
+
+**退役扫描。** 在 `apps/web/src` 按别名及相对路径解析旧模块消费者。旧 Button、Input、Dialog、Select、Popover、Tooltip、Slider、Avatar、Label、Attachment、Bubble、Marker、Message、旧 MessageScroller 路径均为 0。Git 跟踪的旧通用视觉封装剩余 0；Tour 与 Sonner 分别保留引导与反馈。Base UI 直接引用为 1 条、1 个文件，对应 Tour 所用 Popover 交互原语。Arc token 为 0。最后移除了 5 个旧组件文件，将滚动与视口定位行为迁入 Chat，删除 dock-surface、studio-tools 和 5 个失效样式变量，移除直接依赖 class-variance-authority。开工即存在的未跟踪 thinking-loader.tsx 没有消费者，未纳入提交。未新增 Chat Store、Job Store 或 Zustand。
+
+**技术验证。** Web TypeScript、42 个测试文件的 339 项测试、客户端与 SSR 生产构建均通过。真实对象存储在临时来源端口拒绝预检，失败时草稿和重试入口可用；允许的 localhost:3000 来源上传成功。此次手机验收使用 Chrome 触摸视口，实体软键盘与系统 IME 未验证。当前新版本从私有存储导出到审片交付仍未通过，不扩大公开桶授权。历史 Output 与新导出分别记录。
+
+
 ## U3-A 与独立 U4 切片
 
 **有条件通过。** 开工时本地 main、origin/main 与远端引用同为 `935aab92`。本轮在共享 main 原地提交，使用逐文件 pathspec。Editor 的 API、AgentThread、ChatConversation、timeline 与流协议归 Editor。其并行提交和未提交修改保持原归属。共享 8000 与 dev_worker 保持暂停。UI 联调尚未收到带数据库、迁移与端口的隔离 API 交接。

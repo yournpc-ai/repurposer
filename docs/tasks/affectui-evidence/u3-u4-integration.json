@@ -1,0 +1,302 @@
+{
+  "uiCommits": [
+    "a2c6f641",
+    "f33b4654",
+    "44645969"
+  ],
+  "handoff": "e932584a",
+  "postgresRevision": "j6d05_project_brief",
+  "apiPort": 19861,
+  "browser": "Chrome, Playwright",
+  "toolGroups": [
+    [
+      {
+        "width": 1280,
+        "theme": "light",
+        "language": "en",
+        "groups": 4,
+        "members": 9,
+        "states": [
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      },
+      {
+        "width": 768,
+        "theme": "dark",
+        "language": "zh",
+        "groups": 4,
+        "members": 9,
+        "states": [
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      },
+      {
+        "width": 375,
+        "theme": "dark",
+        "language": "en",
+        "groups": 4,
+        "members": 9,
+        "states": [
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      }
+    ],
+    [
+      {
+        "width": 1280,
+        "theme": "light",
+        "language": "en",
+        "groups": 3,
+        "members": 7,
+        "states": [
+          "error",
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      },
+      {
+        "width": 768,
+        "theme": "dark",
+        "language": "zh",
+        "groups": 3,
+        "members": 7,
+        "states": [
+          "error",
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      },
+      {
+        "width": 375,
+        "theme": "dark",
+        "language": "en",
+        "groups": 3,
+        "members": 7,
+        "states": [
+          "error",
+          "notExecuted",
+          "success"
+        ],
+        "refreshBack": true,
+        "pageErrors": 0
+      }
+    ]
+  ],
+  "homeUpload": {
+    "origin": "http://localhost:3000",
+    "firstPartyTransport": "IPv4 loopback proxy to workspace Vite; storage PUT direct from Chrome",
+    "stagingSignatures": 1,
+    "putStatus": 200,
+    "projectCreates": 1,
+    "attachRequests": 1,
+    "chatPosts": 1,
+    "pageErrors": 0
+  },
+  "mobileFileInputs": [
+    {
+      "gesture": "paste",
+      "status": 200,
+      "viewport": 375,
+      "draftRetained": true
+    },
+    {
+      "gesture": "drop",
+      "status": 200,
+      "viewport": 375,
+      "draftRetained": true
+    }
+  ],
+  "composerContext": {
+    "mentions": [
+      {
+        "type": "asset",
+        "id": "08da18db-56f4-4a76-9872-7b0da2c93146",
+        "label": "d9e809bb56f6f633c77f6d1717d9ad3a6ccea074408bf06429b1aef7ca2d04ca.mp3"
+      }
+    ],
+    "skill": {
+      "kind": "builtin",
+      "skill_id": "promo-video",
+      "version": "bdd94be16d60fa8f"
+    },
+    "message": "@d9e809bb56f6f633c77f6d1717d9ad3a6ccea074408bf06429b1aef7ca2d04ca.mp3 \nSummarize the existing edit in one sentence. Keep the current composition and media.",
+    "storedMention": [
+      {
+        "id": "08da18db-56f4-4a76-9872-7b0da2c93146",
+        "type": "asset",
+        "label": "d9e809bb56f6f633c77f6d1717d9ad3a6ccea074408bf06429b1aef7ca2d04ca.mp3",
+        "quote": null,
+        "region": null
+      }
+    ],
+    "storedSkill": {
+      "kind": "builtin",
+      "version": "bdd94be16d60fa8f",
+      "skill_id": "promo-video"
+    }
+  },
+  "approvalMediaHistory": {
+    "home": [
+      {
+        "opening_count": 1,
+        "attachments": 1
+      }
+    ],
+    "approvals": [
+      {
+        "id": "9d9f1c9e-827d-419e-bb2d-ecd49eb83fca",
+        "content": "Generate music for “ambient” for up to 0 credits?",
+        "choice": "decline"
+      },
+      {
+        "id": "594da451-8175-4fe8-8b3d-56d808840b00",
+        "content": "Generate music for “ambient” for up to 0 credits?",
+        "choice": "approve"
+      },
+      {
+        "id": "0b21c41d-afef-4bdf-874f-18b1bb04ab3c",
+        "content": "Generate narration for “Orbit.” for up to 1 credits?",
+        "choice": "approve"
+      }
+    ],
+    "mediaJobs": [
+      {
+        "id": "6fd93ed6-1309-546f-8a4a-e870d11e4128",
+        "kind": "generate_music",
+        "status": "succeeded",
+        "attempt": 1,
+        "authorized_credits": 0,
+        "charged": "0",
+        "call_id": "call_f5f04fa7fe4e4eca93a74468"
+      },
+      {
+        "id": "ccb62373-9901-5ad8-bded-0b4915ef46dd",
+        "kind": "generate_voice",
+        "status": "succeeded",
+        "attempt": 1,
+        "authorized_credits": 1,
+        "charged": "1",
+        "call_id": "call_af75e6a7512d4cdeaf0018b6"
+      }
+    ],
+    "versions": [
+      {
+        "id": "34487d53-90c6-4c26-bcc5-3a6f65cd3022",
+        "version": 1,
+        "source_count": 1
+      },
+      {
+        "id": "12dce314-c78c-44da-842c-e03331cdc03d",
+        "version": 2,
+        "source_count": 2
+      },
+      {
+        "id": "c209255a-69f2-41dd-a213-69aec3ff3a8b",
+        "version": 3,
+        "source_count": 3
+      }
+    ],
+    "stopOpeningPresent": false,
+    "audio": [
+      {
+        "seconds": 0.084562,
+        "paused": true
+      },
+      {
+        "seconds": 0.118564,
+        "paused": true
+      }
+    ],
+    "image": {
+      "width": 1920,
+      "escapeFocusReturned": true
+    }
+  },
+  "providerUnknownReplay": {
+    "database": "rep_6d_fault_dd8b02e3b1",
+    "persistedWrites": 0,
+    "transport": "GET through FastAPI ASGI, lifespan disabled, request transaction rolled back",
+    "provider": "Editor simulated TTS, OS process kill after submit",
+    "callId": "fault-voice",
+    "status": "provider_unknown",
+    "reserved": 3,
+    "charged": null,
+    "reload": true
+  },
+  "currentVersionExport": {
+    "callId": "call_function_pcwrc2fcdi6g_1",
+    "status": "error",
+    "reason": "private_storage_unavailable",
+    "serverText": "Private export storage is unavailable. No credits were reserved.",
+    "exportJobs": 0,
+    "approvedLimit": 8,
+    "hardRefresh": true
+  },
+  "historicalOutputs": [
+    {
+      "id": "7cbf6789-079b-5052-9ae9-2d571ec558e3",
+      "version": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+      "play": [
+        {
+          "seconds": 0.181392,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.161965,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "15437c784e648336a7bd21b0979511cd0225ea25cd900d406596305cd2f7bc08",
+      "bytes": 310373,
+      "frames": 150,
+      "clock_advanced_renewal": true,
+      "download_button_verified": true
+    },
+    {
+      "id": "4ae4fa5d-e0db-5de4-87c4-000db535720f",
+      "version": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+      "play": [
+        {
+          "seconds": 0.175807,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        },
+        {
+          "seconds": 0.163637,
+          "width": 1920,
+          "height": 1080,
+          "ready": 4
+        }
+      ],
+      "sha256": "750b968af9821390b79dafb5234df738f91d89f6fe3f8451679cb1afd94467c7",
+      "bytes": 360911,
+      "frames": 150,
+      "clock_advanced_renewal": true,
+      "download_button_verified": true
+    }
+  ],
+  "verification": {
+    "testFiles": 42,
+    "passed": 339,
+    "tsc": true,
+    "clientAndServerBuild": true
+  }
+}
