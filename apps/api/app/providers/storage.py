@@ -17,7 +17,6 @@ Key layout:
 
 import asyncio
 import base64
-import json
 import mimetypes
 import os
 import tempfile
@@ -122,10 +121,8 @@ def _normalize_key(key: str | None) -> str:
     value = (key or "").lstrip("/")
     if is_export_location(value):
         bucket, _, path = value.removeprefix("tos://").partition("/")
-        if bucket == settings.s3_bucket_name and path.startswith(PUBLIC_TEST_EXPORT_PREFIX):
-            return path
-        if bucket != settings.s3_private_export_bucket or bucket == settings.s3_bucket_name or not path.startswith(PRIVATE_EXPORT_PREFIX):
-            raise ValueError("Unknown private object location.")
+        if bucket != settings.s3_bucket_name or not path.startswith((EXPORT_PREFIX, LEGACY_EXPORT_PREFIX)):
+            raise ValueError("Unknown export object location.")
         return path
     return value
 
@@ -207,74 +204,34 @@ async def get_output_path(project_id: UUID, user_id: UUID | str, filename: str) 
 # ---------------------------------------------------------------------------
 
 
-PUBLIC_TEST_EXPORT_PREFIX = "public-test-exports/"
-PRIVATE_EXPORT_PREFIX = "private-exports/"
+EXPORT_PREFIX = "exports/"
+LEGACY_EXPORT_PREFIX = "public-test-exports/"
 
 
 def is_export_location(key: str | None) -> bool:
     return bool(key and key.startswith("tos://"))
 
 
-def private_export_key(owner: UUID, project: UUID, output: UUID) -> str:
-    return f"{private_export_root()}{owner}/{project}/{output}.mp4"
-
-
-def public_test_export_root() -> str:
-    return f"tos://{settings.s3_bucket_name}/{PUBLIC_TEST_EXPORT_PREFIX}"
+def export_root(prefix: str = EXPORT_PREFIX) -> str:
+    return f"tos://{settings.s3_bucket_name}/{prefix}"
 
 
 def matches_export_location(key: str | None, owner: UUID, project: UUID, output: UUID) -> bool:
     suffix = f"{owner}/{project}/{output}.mp4"
-    if key == public_test_export_root() + suffix:
-        return True
-    return bool(settings.s3_private_export_bucket and
-                settings.s3_private_export_bucket != settings.s3_bucket_name and
-                key == private_export_root() + suffix)
-
-
-def _private_bucket() -> str:
-    bucket = settings.s3_private_export_bucket
-    if not bucket or bucket == settings.s3_bucket_name:
-        raise ValueError("Private export storage is not configured.")
-    return bucket
-
-
-def private_export_root() -> str:
-    return f"tos://{_private_bucket()}/{PRIVATE_EXPORT_PREFIX}"
+    return key in (export_root() + suffix, export_root(LEGACY_EXPORT_PREFIX) + suffix)
 
 
 def _bucket(key: str) -> str:
     if is_export_location(key):
-        _normalize_key(key)  # Validate the explicit bucket and its reserved namespace.
-        return key.removeprefix("tos://").split("/", 1)[0]
+        _normalize_key(key)
     return settings.s3_bucket_name
-
-
-async def verify_private_export_storage() -> None:
-    """Dedicated export bucket. Reject public grants and unverifiable policies before a hold or PUT."""
-    bucket = _private_bucket()
-    client = _get_s3_client()
-    acl = await asyncio.to_thread(client.get_bucket_acl, Bucket=bucket)
-    owner = acl["Owner"]["ID"]
-    if any(g["Grantee"].get("Type") != "CanonicalUser" or g["Grantee"].get("ID", "") != owner
-           for g in acl["Grants"]):
-        raise ValueError("Private export storage grants access outside its owner.")
-    try:
-        response = await asyncio.to_thread(client.get_bucket_policy, Bucket=bucket)
-    except ClientError as exc:
-        if exc.response["Error"]["Code"] == "NoSuchBucketPolicy":
-            return
-        raise
-    statements = json.loads(response["Policy"])["Statement"]
-    if any(statement.get("Effect") != "Deny" for statement in statements):
-        raise ValueError("Private export storage has an unverified policy grant.")
 
 
 def public_url(key: str | None) -> str | None:
     """Return the public read URL for an object key."""
     if not key:
         return None
-    if is_export_location(key):
+    if is_export_location(key) and not key.startswith((export_root(), export_root(LEGACY_EXPORT_PREFIX))):
         return None
     base = settings.s3_public_url.rstrip("/")
     return f"{base}/{_normalize_key(key)}"
@@ -370,8 +327,6 @@ async def presign_download(
         "Bucket": _bucket(key),
         "Key": _normalize_key(key),
     }
-    if is_export_location(key):
-        params["ResponseCacheControl"] = "private, no-store"
     if filename:
         from urllib.parse import quote
 
@@ -651,9 +606,8 @@ async def delete_project_files(project_id: UUID, user_id: UUID | str) -> None:
     """Delete all files for a project."""
     await delete_prefix(get_project_upload_dir(project_id, user_id))
     await delete_prefix(get_project_output_dir(project_id, user_id))
-    await delete_prefix(f"{public_test_export_root()}{user_id}/{project_id}/")
-    if settings.s3_private_export_bucket:
-        await delete_prefix(f"{private_export_root()}{user_id}/{project_id}/")
+    for prefix in (EXPORT_PREFIX, LEGACY_EXPORT_PREFIX):
+        await delete_prefix(f"{export_root(prefix)}{user_id}/{project_id}/")
 
 
 async def delete_persona_files(persona_id: UUID, user_id: UUID | str) -> None:

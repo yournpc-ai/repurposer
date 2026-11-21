@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 
 from app.config import settings
 from app.pipeline import job_lease
@@ -26,10 +26,8 @@ from app.providers.storage import (
     matches_export_location,
     object_head,
     presign_upload,
-    private_export_key,
-    private_export_root,
-    public_test_export_root,
-    verify_private_export_storage,
+    export_root,
+    LEGACY_EXPORT_PREFIX,
 )
 
 LEASE = timedelta(seconds=45)
@@ -39,30 +37,6 @@ log = logging.getLogger(__name__)
 
 async def enqueue_export(db, project, receipt, spec, credits):
     await lock_project_for_job(db, project)
-    version_id = UUID(spec["provenance"]["composition_version_id"])
-    try:
-        if version_id in settings.public_test_export_versions:
-            root = public_test_export_root()
-        else:
-            await verify_private_export_storage()
-            root = private_export_root()
-    except (ValueError, ClientError, BotoCoreError):
-        error = (
-            "私有成片存储尚未就绪，未预占费用。"
-            if (project.language or "").startswith("zh")
-            else "Private export storage is unavailable. No credits were reserved."
-        )
-        receipt.content = error
-        receipt.intent = {
-            **receipt.intent,
-            "media_result": {
-                "role": "export",
-                "status": "failed",
-                "code": "private_storage_unavailable",
-                "error": error,
-            },
-        }
-        return
     owner = project.user_id
     ref = spec["provenance"]
     preview = receipt.intent["export_preview"]
@@ -73,7 +47,10 @@ async def enqueue_export(db, project, receipt, spec, credits):
             .where(
                 Output.project_id == project.id,
                 Output.composition_version_id == UUID(ref["composition_version_id"]),
-                Output.files["video"].as_string().startswith(root),
+                or_(
+                    Output.files["video"].as_string().startswith(export_root()),
+                    Output.files["video"].as_string().startswith(export_root(LEGACY_EXPORT_PREFIX)),
+                ),
                 ExportJob.status == "succeeded",
                 ExportJob.render_spec == spec,
             )
@@ -83,6 +60,8 @@ async def enqueue_export(db, project, receipt, spec, credits):
     ).first()
     if prior:
         output, receipt_id = prior
+        if not matches_export_location(output.files["video"], owner, project.id, output.id):
+            raise ValueError("The saved MP4 does not belong to this Output.")
         failures, digest = await _probe_artifacts(spec, output.files["video"])
         if failures or digest != output.files.get("video_sha256"):
             raise ValueError("The saved MP4 no longer matches its verified bytes.")
@@ -149,7 +128,7 @@ async def enqueue_export(db, project, receipt, spec, credits):
         "正在排队导出 MP4。" if (project.language or "").startswith("zh") else "MP4 export queued."
     )
     receipt.intent = {**receipt.intent, "export_job": str(identity),
-                      "export_location": f"{root}{owner}/{project.id}/{identity}.mp4"}
+                      "export_location": f"{export_root()}{owner}/{project.id}/{identity}.mp4"}
 
 
 async def _finish(db, job, project, status, error=None, files=None):
@@ -368,14 +347,9 @@ async def execute_export(job_id, token):
             spec = copy.deepcopy(job.render_spec)
         try:
             spec = _absolutize(spec)
-            public_key = f"{public_test_export_root()}{project.user_id}/{project.id}/{job_id}.mp4"
-            if location == public_key and job.version_id in settings.public_test_export_versions:
-                key = public_key
-            else:
-                key = private_export_key(project.user_id, project.id, job_id)
-                if location and location != key:
-                    raise ValueError("The authorized export destination is unavailable.")
-                await verify_private_export_storage()
+            if not matches_export_location(location, project.user_id, project.id, job_id):
+                raise ValueError("The authorized export destination is unavailable.")
+            key = location
             if not upload_id:
                 if await exists(key):
                     raise ValueError("The export destination already exists before upload dispatch.")

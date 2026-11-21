@@ -149,7 +149,6 @@ async def test_export_blocks_delete_until_reservation_is_released(database, clea
     uid, pid, receipt_id = await seed(database)
     await _snapshots(database, uid)
     comp, version, _ = await _create(database, uid, pid)
-    monkeypatch.setattr(export_jobs.settings, "public_test_export_versions", frozenset({version.id}))
     ref = {"composition_id": str(comp.id), "composition_version_id": str(version.id), "content_digest": version.content_digest}
     async with database() as db:
         receipt = await db.get(Message, receipt_id)
@@ -191,14 +190,14 @@ async def test_media_stop_reads_committed_provider_start_before_releasing_hold(d
 
 @pytest.mark.asyncio
 async def test_delete_output_keeps_snapshot_owned_bytes(database, monkeypatch):
-    from app.providers.storage import public_test_export_root
+    from app.providers.storage import export_root
 
     uid, pid, _ = await seed(database)
     unlink = AsyncMock()
     monkeypatch.setattr(import_module("app.pipeline.routes.outputs"), "delete_file", unlink)
     async with database() as db:
         output = await db.scalar(select(Output).where(Output.project_id == pid))
-        key = f"{public_test_export_root()}{uid}/{pid}/{output.id}.mp4"
+        key = f"{export_root()}{uid}/{pid}/{output.id}.mp4"
         output.files = {"video": key}
         snapshot = await db.scalar(select(SourceSnapshot).where(SourceSnapshot.origin_project_id == pid))
         snapshot.storage_key = key

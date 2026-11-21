@@ -233,9 +233,6 @@ async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(datab
 
 @pytest.mark.asyncio
 async def test_export_quote_replay_competing_openings_and_stop(database, monkeypatch):
-    from unittest.mock import AsyncMock
-    monkeypatch.setattr("app.pipeline.export_jobs.settings.s3_private_export_bucket", "export-test")
-    monkeypatch.setattr("app.pipeline.export_jobs.verify_private_export_storage", AsyncMock())
     from app.models.tables import ExportJob
     from app.chat.editor import ExportVideoArgs
     from app.editing.store import apply_composition_edits

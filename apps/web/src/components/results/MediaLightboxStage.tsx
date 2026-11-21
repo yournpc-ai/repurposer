@@ -916,7 +916,7 @@ function MediaFrame({
     let live = true
     if (accessPath) {
       void authorizePlayback(accessPath).then(({ url, expires_in }) => {
-        if (live) setGrant({ path: accessPath, url, expiresAt: Date.now() + expires_in * 1000 })
+        if (live) setGrant({ path: accessPath, url, expiresAt: expires_in == null ? Infinity : Date.now() + expires_in * 1000 })
       }).catch(() => { if (live) setGrant(null) })
     }
     return () => { live = false }

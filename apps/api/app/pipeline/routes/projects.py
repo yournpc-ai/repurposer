@@ -42,7 +42,7 @@ from app.pipeline.outputs import (
 from app.platform.billing import settled_job_amounts
 from app.platform.conversation_context import get_project_prompt
 from app.platform.project_context import get_project_for_user
-from app.providers.storage import delete_file, delete_project_files, is_export_location, presign_download, matches_export_location, resolve_stored_url
+from app.providers.storage import delete_file, delete_project_files, is_export_location, matches_export_location, resolve_stored_url
 from app.ui_locale import current_ui_language
 
 router = APIRouter()
@@ -136,7 +136,7 @@ async def list_projects(
         resp = ProjectResponse.model_validate(project)
         if is_export_location(video_url):
             if matches_export_location(video_url, current_user.id, project.id, output_id):
-                resp.thumbnail_url = await presign_download(video_url)
+                resp.thumbnail_url = resolve_stored_url(video_url)
         else:
             resp.thumbnail_url = resolve_stored_url(video_url)
         resp.thumbnail_duration = duration

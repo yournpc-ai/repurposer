@@ -195,7 +195,7 @@ export function playbackPath(url: string | undefined | null): string | null {
 export async function authorizePlayback(path: string, download = false) {
   const response = await apiGet(path + (download ? "?download=true" : ""), { cache: "no-store" })
   if (!response.ok) throw new Error("Could not authorize Output playback")
-  return await response.json() as { url: string; expires_in: number }
+  return await response.json() as { url: string; expires_in: number | null }
 }
 
 export async function downloadFile(

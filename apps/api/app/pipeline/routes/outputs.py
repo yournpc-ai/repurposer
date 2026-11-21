@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 
-from app.config import settings
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import OutputPosterResponse, OutputResponse, PublicationState
 from app.models.tables import Output, Project, Publication, User
@@ -42,9 +41,11 @@ async def playback(output_id: UUID, db: DBDep, response: Response, download: boo
     if not matches_export_location(key, current_user.id, output.project_id, output.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export file unavailable")
     response.headers["Cache-Control"] = "private, no-store"
-    ttl = settings.private_playback_ttl_seconds
-    url = await presign_download(key, ttl=ttl, filename=f"{output.id}.mp4" if download else None)
-    return {"url": url, "expires_in": ttl}
+    if download:
+        ttl = 300
+        url = await presign_download(key, ttl=ttl, filename=f"{output.id}.mp4")
+        return {"url": url, "expires_in": ttl}
+    return {"url": resolve_stored_url(key), "expires_in": None}
 
 
 @router.post("/{output_id}/poster", response_model=OutputPosterResponse)
@@ -60,7 +61,7 @@ async def ensure_poster(
         key = await ensure_output_poster(output)
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    poster_url = await presign_download(key) if is_export_location(key) else resolve_stored_url(key)
+    poster_url = resolve_stored_url(key)
     if poster_url is None:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Poster URL could not be resolved")
     return OutputPosterResponse(output_id=output.id, poster_url=poster_url)

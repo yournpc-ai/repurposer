@@ -23,7 +23,6 @@ async def export(database, monkeypatch):
     owner, pid, rid = await seed(database)
     await _snapshots(database, owner)
     comp, version, _ = await _create(database, owner, pid)
-    monkeypatch.setattr(export_jobs.settings, "public_test_export_versions", frozenset({version.id}))
     monkeypatch.setattr(export_jobs, "AsyncSessionLocal", database)
     monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
     ref = {"composition_id": str(comp.id), "composition_version_id": str(version.id),
