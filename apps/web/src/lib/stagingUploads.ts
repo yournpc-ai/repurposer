@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 
 import { apiFetch } from "@/lib/api"
-import { probeMediaDims } from "@/lib/stagedFiles"
+import { probeMediaDims, stagedFileKey } from "@/lib/stagedFiles"
 
 /**
  * useStagingUploads — the pre-project upload staging lifecycle (Product Flow
@@ -88,6 +88,7 @@ export function useStagingUploads() {
   // safe: Node's global crypto provides randomUUID, and the id never
   // reaches the HTML.
   const sessionId = useMemo(() => crypto.randomUUID(), [])
+  const pickedIds = useRef(new Map<string, string>())
   const [staged, setStaged] = useState<StagingUpload[]>([])
 
   const runUpload = useCallback(
@@ -145,14 +146,15 @@ export function useStagingUploads() {
     (picked: File[]) => {
       if (picked.length === 0) return
       const additions: StagingUpload[] = []
-      setStaged((prev) => {
-        const existing = new Set(prev.map((s) => `${s.file.name}:${s.file.size}`))
-        for (const file of picked) {
-          if (existing.has(`${file.name}:${file.size}`)) continue
-          additions.push({ localId: crypto.randomUUID(), file, status: "uploading", progress: 0 })
-        }
-        return [...prev, ...additions]
-      })
+      for (const file of picked) {
+        const key = stagedFileKey(file)
+        if (pickedIds.current.has(key)) continue
+        const localId = crypto.randomUUID()
+        pickedIds.current.set(key, localId)
+        additions.push({ localId, file, status: "uploading", progress: 0 })
+      }
+      if (!additions.length) return
+      setStaged((prev) => [...prev, ...additions])
       for (const s of additions) void runUpload(s.localId, s.file)
     },
     [runUpload],
@@ -161,6 +163,8 @@ export function useStagingUploads() {
   /** × : drop the chip; an already-uploaded object is deleted best-effort
    * (staged ≠ attached — it must not linger past its TTL). */
   const removeStaged = useCallback((item: StagingUpload) => {
+    const key = stagedFileKey(item.file)
+    if (pickedIds.current.get(key) === item.localId) pickedIds.current.delete(key)
     setStaged((prev) => prev.filter((s) => s.localId !== item.localId))
     if (item.key) {
       void apiFetch(`/api/v1/uploads/staging?key=${encodeURIComponent(item.key)}`, {
@@ -184,7 +188,10 @@ export function useStagingUploads() {
 
   /** Send consumes (chip law ②): clear local state after a successful
    * attach — the objects are now asset-referenced, so the reaper skips them. */
-  const clearStaged = useCallback(() => setStaged([]), [])
+  const clearStaged = useCallback(() => {
+    pickedIds.current.clear()
+    setStaged([])
+  }, [])
 
   return { staged, addFiles, removeStaged, retryStaged, clearStaged }
 }

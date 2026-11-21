@@ -114,6 +114,23 @@ describe("useStagingUploads lifecycle", () => {
     expect(result.current.staged.some((s) => s.status !== "done")).toBe(false)
   })
 
+  it("starts each distinct upload once when two selections arrive in one render batch", async () => {
+    vi.stubGlobal("XMLHttpRequest", FakeXHR)
+    probeMock.mockResolvedValue(undefined)
+    const { result } = renderHook(() => useStagingUploads())
+    const first = videoFile()
+    const second = new File(["second"], "second.mp4", { type: "video/mp4" })
+    act(() => {
+      result.current.addFiles([first, first])
+      result.current.addFiles([first, second])
+    })
+    await flush()
+    expect(result.current.staged.map((item) => [item.file.name, item.status])).toEqual([
+      [first.name, "done"], [second.name, "done"],
+    ])
+    expect(FakeXHR.instances).toHaveLength(2)
+  })
+
   it("PUT ok + probe never settles → timeout degrades to done (probe hang class)", async () => {
     vi.useFakeTimers()
     vi.stubGlobal("XMLHttpRequest", FakeXHR)

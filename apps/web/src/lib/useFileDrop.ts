@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent } from "react"
+import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from "react"
 
 /**
  * useFileDrop — the shared drag-drop upload gesture (2026-09-24, user
@@ -53,6 +53,13 @@ export function useFileDrop(
     onFiles(Array.from(e.dataTransfer.files))
   }
 
+  const onPaste = (e: ReactClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files)
+    if (!files.length) return
+    e.preventDefault()
+    if (!disabled) onFiles(files)
+  }
+
   useEffect(() => {
     const prevent = (e: globalThis.DragEvent) => {
       if (e.dataTransfer?.types.includes("Files")) e.preventDefault()
@@ -65,5 +72,5 @@ export function useFileDrop(
     }
   }, [])
 
-  return { dragging, dropProps: { onDragEnter, onDragOver, onDragLeave, onDrop } }
+  return { dragging, dropProps: { onDragEnter, onDragOver, onDragLeave, onDrop, onPaste } }
 }

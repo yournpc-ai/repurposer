@@ -110,7 +110,7 @@ export function probeMediaDims(
   })
 }
 
-const keyOf = (file: File) => `${file.name}:${file.size}`
+export const stagedFileKey = (file: File) => `${file.name}:${file.size}`
 
 /** Client-side metadata probe for a staged file. Local and cheap: images
  * resolve instantly (object URL); video/audio read element metadata, and a
@@ -196,7 +196,7 @@ export function useStagedFileMeta(file: File): StagedFileMeta {
     URL.revokeObjectURL(url)
     return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyOf(file)])
+  }, [stagedFileKey(file)])
 
   return meta
 }
