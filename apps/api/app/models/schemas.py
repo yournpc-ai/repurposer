@@ -3309,10 +3309,10 @@ class OutputResponse(BaseModel):
         """Resolve stored object keys in files/publishing to public URLs."""
         from app.providers.storage import resolve_stored_url
 
-        from app.providers.storage import is_private_export
+        from app.providers.storage import is_export_location
 
         for key in ("video", "image"):
-            if key == "video" and is_private_export(self.files.get(key)):
+            if key == "video" and is_export_location(self.files.get(key)):
                 self.files[key] = f"/api/v1/outputs/{self.id}/playback"
             elif self.files.get(key):
                 self.files[key] = resolve_stored_url(self.files[key])

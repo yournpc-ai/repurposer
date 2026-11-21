@@ -20,7 +20,7 @@ from app.pipeline.outputs import (
     output_to_response,
 )
 from app.platform.project_context import get_output_for_user
-from app.providers.storage import delete_file, is_private_export, presign_download, private_export_key, resolve_stored_url
+from app.providers.storage import delete_file, is_export_location, presign_download, matches_export_location, resolve_stored_url
 
 router = APIRouter()
 
@@ -43,8 +43,8 @@ async def playback(output_id: UUID, db: DBDep, response: Response, download: boo
                    current_user: User = Depends(get_current_user_required)):
     output = await get_output_for_user(db, output_id, current_user.id)
     key = (output.files or {}).get("video")
-    if key != private_export_key(current_user.id, output.project_id, output.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Private export file unavailable")
+    if not matches_export_location(key, current_user.id, output.project_id, output.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Export file unavailable")
     response.headers["Cache-Control"] = "private, no-store"
     ttl = settings.private_playback_ttl_seconds
     url = await presign_download(key, ttl=ttl, filename=f"{output.id}.mp4" if download else None)
@@ -58,13 +58,13 @@ async def ensure_poster(
 ) -> OutputPosterResponse:
     output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
     video_key = (output.files or {}).get("video")
-    if is_private_export(video_key) and video_key != private_export_key(current_user.id, output.project_id, output.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Private export file unavailable")
+    if is_export_location(video_key) and not matches_export_location(video_key, current_user.id, output.project_id, output.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Export file unavailable")
     try:
         key = await ensure_output_poster(output)
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    poster_url = await presign_download(key) if is_private_export(key) else resolve_stored_url(key)
+    poster_url = await presign_download(key) if is_export_location(key) else resolve_stored_url(key)
     if poster_url is None:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Poster URL could not be resolved")
     return OutputPosterResponse(output_id=output.id, poster_url=poster_url)

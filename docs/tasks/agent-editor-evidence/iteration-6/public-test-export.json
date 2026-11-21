@@ -1,0 +1,41 @@
+{
+  "input": "Synthetic 320x180 text card, one second",
+  "entry": "native tool handler, direct worker claim and execute, real Renderer and TOS",
+  "output": "fe0bb224-92ef-51dc-9d97-ddf15722c4e8",
+  "version": "1db856d4-6caa-484e-9210-87f7472a7b78",
+  "status": "succeeded",
+  "attempt": 1,
+  "files": {
+    "video": "tos://repurposer/public-test-exports/06491798-08fd-43da-ae0b-c2238524ee05/bf4f8f8c-2256-4cbb-aef1-ae6f07fffa01/fe0bb224-92ef-51dc-9d97-ddf15722c4e8.mp4",
+    "video_sha256": "3d5af8c6bcf445611f6dbf1c793c8b979ce75821e65537d6f520d54daa9d625d"
+  },
+  "workflow_runs": 0,
+  "ledger": [
+    [
+      "hold",
+      -2
+    ],
+    [
+      "release",
+      2
+    ],
+    [
+      "capture",
+      -2
+    ]
+  ],
+  "owner": [
+    200,
+    200,
+    200
+  ],
+  "other": [
+    403,
+    403,
+    403
+  ],
+  "download_bytes": 47681,
+  "sha256": "3d5af8c6bcf445611f6dbf1c793c8b979ce75821e65537d6f520d54daa9d625d",
+  "anonymous": 200,
+  "chrome_played": true
+}

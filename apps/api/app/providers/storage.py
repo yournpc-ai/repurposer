@@ -120,9 +120,11 @@ def _unique_key(prefix: str, filename: str) -> str:
 def _normalize_key(key: str | None) -> str:
     """Strip leading slashes from a key."""
     value = (key or "").lstrip("/")
-    if is_private_export(value):
+    if is_export_location(value):
         bucket, _, path = value.removeprefix("tos://").partition("/")
-        if bucket != _private_bucket() or not path.startswith(PRIVATE_EXPORT_PREFIX):
+        if bucket == settings.s3_bucket_name and path.startswith(PUBLIC_TEST_EXPORT_PREFIX):
+            return path
+        if bucket != settings.s3_private_export_bucket or bucket == settings.s3_bucket_name or not path.startswith(PRIVATE_EXPORT_PREFIX):
             raise ValueError("Unknown private object location.")
         return path
     return value
@@ -205,15 +207,29 @@ async def get_output_path(project_id: UUID, user_id: UUID | str, filename: str) 
 # ---------------------------------------------------------------------------
 
 
+PUBLIC_TEST_EXPORT_PREFIX = "public-test-exports/"
 PRIVATE_EXPORT_PREFIX = "private-exports/"
 
 
-def is_private_export(key: str | None) -> bool:
+def is_export_location(key: str | None) -> bool:
     return bool(key and key.startswith("tos://"))
 
 
 def private_export_key(owner: UUID, project: UUID, output: UUID) -> str:
     return f"{private_export_root()}{owner}/{project}/{output}.mp4"
+
+
+def public_test_export_root() -> str:
+    return f"tos://{settings.s3_bucket_name}/{PUBLIC_TEST_EXPORT_PREFIX}"
+
+
+def matches_export_location(key: str | None, owner: UUID, project: UUID, output: UUID) -> bool:
+    suffix = f"{owner}/{project}/{output}.mp4"
+    if key == public_test_export_root() + suffix:
+        return True
+    return bool(settings.s3_private_export_bucket and
+                settings.s3_private_export_bucket != settings.s3_bucket_name and
+                key == private_export_root() + suffix)
 
 
 def _private_bucket() -> str:
@@ -228,9 +244,9 @@ def private_export_root() -> str:
 
 
 def _bucket(key: str) -> str:
-    if is_private_export(key):
+    if is_export_location(key):
         _normalize_key(key)  # Validate the explicit bucket and its reserved namespace.
-        return _private_bucket()
+        return key.removeprefix("tos://").split("/", 1)[0]
     return settings.s3_bucket_name
 
 
@@ -258,7 +274,7 @@ def public_url(key: str | None) -> str | None:
     """Return the public read URL for an object key."""
     if not key:
         return None
-    if is_private_export(key):
+    if is_export_location(key):
         return None
     base = settings.s3_public_url.rstrip("/")
     return f"{base}/{_normalize_key(key)}"
@@ -351,7 +367,7 @@ async def presign_download(
         "Bucket": _bucket(key),
         "Key": _normalize_key(key),
     }
-    if is_private_export(key):
+    if is_export_location(key):
         params["ResponseCacheControl"] = "private, no-store"
     if filename:
         from urllib.parse import quote
@@ -485,7 +501,7 @@ def source_cache_path(key: str) -> Path:
     service's stage.ts mirrors this one hashing law)."""
     import hashlib
 
-    normalized = key if is_private_export(key) else _normalize_key(key)
+    normalized = key if is_export_location(key) else _normalize_key(key)
     suffix = Path(normalized).suffix if len(Path(normalized).suffix) <= 8 else ""
     digest = hashlib.sha1(normalized.encode()).hexdigest()
     return SOURCE_CACHE_DIR / f"{digest}{suffix}"
@@ -500,7 +516,7 @@ async def download_to_cache(key: str | None) -> Path | None:
     """
     if not key:
         return None
-    normalized = key if is_private_export(key) else _normalize_key(key)
+    normalized = key if is_export_location(key) else _normalize_key(key)
     dest = source_cache_path(normalized)
     if dest.exists() and dest.stat().st_size > 0:
         # LRU touch — eviction sorts by mtime.
@@ -632,6 +648,7 @@ async def delete_project_files(project_id: UUID, user_id: UUID | str) -> None:
     """Delete all files for a project."""
     await delete_prefix(get_project_upload_dir(project_id, user_id))
     await delete_prefix(get_project_output_dir(project_id, user_id))
+    await delete_prefix(f"{public_test_export_root()}{user_id}/{project_id}/")
     if settings.s3_private_export_bucket:
         await delete_prefix(f"{private_export_root()}{user_id}/{project_id}/")
 

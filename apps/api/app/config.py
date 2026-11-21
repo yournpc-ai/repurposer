@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -65,6 +66,7 @@ class Settings(BaseSettings):
 
     # S3-compatible object storage (Volcengine TOS, AWS S3, MinIO, etc.)
     s3_endpoint_url: str
+    public_test_export_versions: frozenset[UUID] = frozenset()
     s3_private_export_bucket: str | None = None
     private_playback_ttl_seconds: int = Field(default=300, ge=5, le=300)
     s3_bucket_name: str

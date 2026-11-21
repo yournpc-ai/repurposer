@@ -22,6 +22,7 @@ from app.providers.storage import (
     presign_upload,
     private_export_key,
     private_export_root,
+    public_test_export_root,
     verify_private_export_storage,
 )
 
@@ -31,8 +32,13 @@ log = logging.getLogger(__name__)
 
 
 async def enqueue_export(db, project, receipt, spec, credits):
+    version_id = UUID(spec["provenance"]["composition_version_id"])
     try:
-        await verify_private_export_storage()
+        if version_id in settings.public_test_export_versions:
+            root = public_test_export_root()
+        else:
+            await verify_private_export_storage()
+            root = private_export_root()
     except (ValueError, ClientError, BotoCoreError):
         error = (
             "私有成片存储尚未就绪，未预占费用。"
@@ -60,7 +66,7 @@ async def enqueue_export(db, project, receipt, spec, credits):
             .where(
                 Output.project_id == project.id,
                 Output.composition_version_id == UUID(ref["composition_version_id"]),
-                Output.files["video"].as_string().startswith(private_export_root()),
+                Output.files["video"].as_string().startswith(root),
                 ExportJob.status == "succeeded",
                 ExportJob.render_spec == spec,
             )
@@ -135,7 +141,8 @@ async def enqueue_export(db, project, receipt, spec, credits):
     receipt.content = (
         "正在排队导出 MP4。" if (project.language or "").startswith("zh") else "MP4 export queued."
     )
-    receipt.intent = {**receipt.intent, "export_job": str(identity)}
+    receipt.intent = {**receipt.intent, "export_job": str(identity),
+                      "export_location": f"{root}{owner}/{project.id}/{identity}.mp4"}
 
 
 async def _finish(db, job, project, status, error=None, files=None):
@@ -305,10 +312,18 @@ async def execute_export(job_id, token):
             if not job:
                 return
             project = await db.get(Project, job.project_id)
+            receipt = await db.get(Message, job.receipt_id)
+            location = receipt.intent.get("export_location")
             spec = _absolutize(copy.deepcopy(job.render_spec))
         try:
-            key = private_export_key(project.user_id, project.id, job_id)
-            await verify_private_export_storage()
+            public_key = f"{public_test_export_root()}{project.user_id}/{project.id}/{job_id}.mp4"
+            if location == public_key and job.version_id in settings.public_test_export_versions:
+                key = public_key
+            else:
+                key = private_export_key(project.user_id, project.id, job_id)
+                if location and location != key:
+                    raise ValueError("The authorized export destination is unavailable.")
+                await verify_private_export_storage()
             if not await exists(key):
                 put_url = await presign_upload(
                     key,
