@@ -1,4 +1,8 @@
-# Iteration 6A · 执行消费者与首错审计
+# Iteration 6 · Agent 执行与验收
+
+[6D 验收与已知限制](6d-acceptance.md) · [逐片代码、调用方与数据库变更](6d.md) · [Chat 文件交接](ui-handoff.md) · [6B 导出](export.md) · [6C 媒体](media.md)
+
+## 6A 历史现场与首错审计
 
 2026-11-21，main 基线 fdd21443。三个原始 gzip 的模型 response、原生 call ID、参数、持久消息与原验收库逐个关联。可复查值见 [audit.json](audit.json)。取证没有重发 TTS、补扣款或修改历史回执。
 

@@ -1,6 +1,6 @@
 # PROGRESS — 进展、排期与需求池
 
-> 更新至 2026-11-21。Agent Editor 的施工顺序、作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
+> 更新至 2026-11-22。Agent Editor 的施工顺序、作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
 
 ## 0. 当前里程碑与施工序列
 
@@ -12,7 +12,7 @@
 
 - 6C 在隔离库完成三类 MediaJob 的实际生成、跨项目图片隔离、原生多调用、进程强杀与恢复费用确认。事故原库仅供历史研究。[媒体验收及首错](tasks/agent-editor-evidence/iteration-6/media.md)
 
-- 6D 已在隔离 PostgreSQL 删除旧执行表、Graph/Run 接口和 Worker 编排。十用户窗口 41 个请求、四项 Job、合计 15 积分，最终预占为零。新素材首轮与续改分开验收。已知失败和恢复记录以 [6D 实测](tasks/agent-editor-evidence/iteration-6/6d.md) 为准。
+- 6D 已从 Agent 主线删除 Workflow/Graph/Run/Step。隔离库从零安装、两次十用户窗口、同项目边生成或边导出边编辑及原 opening 交付均有实测记录。五个新项目的用户旅程、实际积分、首错及重试按样本登记。[6D 验收](tasks/agent-editor-evidence/iteration-6/6d-acceptance.md) · [Chat 文件交接](tasks/agent-editor-evidence/iteration-6/ui-handoff.md)
 
 - **当前产品主线为 Agent Editor v1。** 六个独立素材原始首次验收仍为 3 完整、2 部分、1 失败，跨素材普遍稳定尚未证明。三条未完整通过任务已完成首错归因和最小闭环：开放演讲复测在 17 次请求内交付、字幕本轮目标完整，但开放与单人仍有视觉误述；两个新增独立素材主任务达成。接缝、片尾卡和媒体生成回归被 Worker fencing/固定音频恢复故障阻断，不能算作保持成功。主观音频、自然语言事实和开放任务稳定性仍开放。[主合同](tasks/new-agent.md) · [首错归因与最小闭环](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md)
 
@@ -32,8 +32,6 @@
 | **当前** | **网页采集批 1：通用协议、部分成功与集合采集** | `capture_web` 已改用 CaptureRequest；服务端自动 baseline/scale/血缘，逐 output/member/state 与写盘部分成功，有界 issues 进入 Asset/Snapshot 和即时结果；支持共同 blank plate、普通/透明纹理，单 Generator 固定资源上限 64 且既有字节预算不变。纯采集/Generator/app-boot focused 107 项已通过；digest 复用与结果投影两个 DB 用例断言均通过，但临时库 fixture 收尾未正常退出；数据库 focused、完整 core 与真实 Chat 素材采集/首稿仍待当前环境或用户验收。批 2 `page_script` 未实现，正式 Composition/Renderer 未改 | [采集合同](VIDEO_PROJECT.md#92-网页理解与镜头素材采集两阶段) / [统一视频合同](tasks/skill-package-promo-video.md) |
 | **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
 | **当前** | **Landing 对话式视频叙事与内测商业面** | 暖白底三层 Hero（Rookie Cut 品牌与新主标题）、四类 Tab 自动演示/独立背景、340svh 固定滚动叙事、静态 Gallery（当前不挂载）、正文 FAQ、简洁 CTA 与参考三列 Footer 已落码。演示使用公开候选样片与交互投影，未验证为真实 Chat 回放或修改后成片；真实类别样片与多轮交付仍按 P6+P7 验收。既有 TypeScript 与 landingCreate 定向检查通过；最新 Header/Hero 视觉调整尚未复跑静态检查或浏览器验收，桌面首屏/Tab/FAQ/Footer、其余尺寸、双主题、reduced-motion、媒体播放与登录预填完整旅程均待复验。Footer 未配置项目仅保留文字座位，发布前需真实链接或移除；公开 1,000 开户赠额前核对数据库配置；支付与公开授权门未关闭 | [当前合同](LANDING.md) |
-| 已有实现，随 4B–4D 复验 | **Chat TurnBlock 与可见 Stop 收口** | 回复容器结构已落码：TurnBlock 分离用户与 AssistantResponse，回复内部持有正文/Worked/组件槽位；RunBlock 组合明确关联且连续的开场、工作面与逐消息交付，独立 QA/跨回合消息不重排。ChatConversation 已移除相邻工作块间距补偿；RunCard 统一 attached/detached 入口，交接不重挂载工作组件、不重复订阅。Chat/stream 22 files / 269 tests 通过；Web tsc 最新被范围外 MentionChip 两项 unused 阻断，全量 Web 425 passed / 2 failed（首页旧文案、媒体选区浮点断言）；媒体选区已继续接入选区外 mask、实时尺寸、「引用选区」chip、消息正文/结构化 region、普通 Chat 与 Video Project 上下文及 prompt 语义；region 只寄存在 chip，删除 chip 同步清除正文摘要和全部结构化选区草稿。上述 Web 读数早于本轮接入，需重跑；真实呈现由用户验收。独立上传 tool、消息自有 output_refs、Stop frontier、授权与费用边界不变。剩余多段回复、Run 收段视口、中途 QA/多次交付、上传/Stop、慢历史/刷新及全形态用户验收；全量 Run cancel/resume 并发重构不在本批 | [长期行为法](CHAT_ARCHITECTURE.md#810-turnblock--runblock-与渐进揭示) / [施工与验收](tasks/chat-turn-block-implementation.md) |
-| 开放 | 共享执行、图与产物验收 | render owner/并行写入/恢复、产物成员、staging、fresh graph、rank/RunOp 解耦、lifecycle/授权证明仍需真实验证；staging GC 已移出 worker 认领等待并改为 8 路有界用户前缀 listing，定向纯测试已补但未运行。旧批次状态不作当前证据；无用户旧数据按本轮授权 reset，不再保留指定事故产物救援与业务搬运工单，reset 未执行不等于已清零 | [共享验收](VERIFICATION.md#5-共享机制与-ui-的当前验收) |
 | 开放 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) |
 | 开放 | Agent Working Loop 持续闭环 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
 | 开放 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟；chat `retry_upload` 已改为当前回合的独立上传工具与状态行，走 /upload 并保留原 Run/失败步骤；缓存 miss 不重渲染。定向 API 121 项、历史回放 44 项及 Web/render tsc 通过，新上传 UI 真实浏览器旅程尚未复验；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |

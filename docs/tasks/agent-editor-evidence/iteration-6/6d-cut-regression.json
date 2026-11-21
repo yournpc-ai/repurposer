@@ -1,0 +1,242 @@
+{
+  "project": "0fe18b46-a602-4ef7-8d0a-b271a7f8b3f8",
+  "opening": "dadac64f-ef91-4285-a64f-cda0b226d6a5",
+  "request": "Trim the first 0.25 seconds off the start of the first moving-ball clip. Then move the trimmed clip back to timeline time zero, keeping the second clip in place. Shift only the first clip’s picture 48 pixels to the right. Save and preview the first second. No new media or export.",
+  "state": "settled",
+  "native_calls": [
+    {
+      "request": "95f6df25-e849-475f-8fa7-6ed6c3f41d3c",
+      "call_id": "call_01a1fed7cc607197822a3681",
+      "name": "inspect_timeline"
+    },
+    {
+      "request": "7536e634-502f-4cb7-9024-aa82e2248223",
+      "call_id": "call_01a1fed7d3fa774bb3a2f798",
+      "name": "trim_clip"
+    },
+    {
+      "request": "e89caa8e-6dff-4553-ad1c-9195c644d343",
+      "call_id": "chatcmpl-tool-a9b54927475d86dd",
+      "name": "move_clip"
+    },
+    {
+      "request": "49b4f8d5-4803-40c5-a54b-0e21042fb56b",
+      "call_id": "call_3a9158cf93c1482eae8a0ff3",
+      "name": "translate"
+    },
+    {
+      "request": "a9d858dc-e8d1-43bb-b6bb-c39a082794de",
+      "call_id": "call_01a1fed7fe0770d6b97cf756",
+      "name": "preview_range"
+    }
+  ],
+  "versions": [
+    {
+      "v": 1,
+      "id": "23940ce1-6efe-4419-a17b-fbe681fbfa6e",
+      "digest": "6dcd457cc9f66e840245ab934397cf3a1c3e46761866af95d0fe042c3b57a880",
+      "clips": [
+        {
+          "id": "clp_scene_1_source",
+          "range": {
+            "end": 270000,
+            "start": 0
+          },
+          "source": {
+            "end": 270000,
+            "start": 0
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "v": 2,
+      "id": "a5849a08-be76-4d90-8043-0c7aa74054b1",
+      "digest": "ef277aa3f65266fc8c7dddd47f05594c012bf6f433d8382c9edf2dca7e12f8f0",
+      "clips": [
+        {
+          "id": "clp_scene_1_source",
+          "range": {
+            "end": 135000,
+            "start": 0
+          },
+          "source": {
+            "end": 135000,
+            "start": 0
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        },
+        {
+          "id": "clp_scene_1_source_right",
+          "range": {
+            "end": 270000,
+            "start": 135000
+          },
+          "source": {
+            "end": 270000,
+            "start": 135000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "v": 3,
+      "id": "72da9253-1c7e-4ced-a264-ce839382c1cf",
+      "digest": "83f631a0f991ef51b6e34565729ccb787779b8b47109e96540fda1bdcd8c3869",
+      "clips": [
+        {
+          "id": "clp_scene_1_source",
+          "range": {
+            "end": 135000,
+            "start": 22500
+          },
+          "source": {
+            "end": 136500,
+            "start": 24000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        },
+        {
+          "id": "clp_scene_1_source_right",
+          "range": {
+            "end": 270000,
+            "start": 135000
+          },
+          "source": {
+            "end": 270000,
+            "start": 135000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "v": 4,
+      "id": "6dc91af4-cf8b-470a-af0c-347ab34ae2b2",
+      "digest": "ab529b33ec1469ddbb9da9741211c0ba8a566cf84ab26e1cc4d0b444faedc3d2",
+      "clips": [
+        {
+          "id": "clp_scene_1_source",
+          "range": {
+            "end": 112500,
+            "start": 0
+          },
+          "source": {
+            "end": 136500,
+            "start": 24000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        },
+        {
+          "id": "clp_scene_1_source_right",
+          "range": {
+            "end": 270000,
+            "start": 135000
+          },
+          "source": {
+            "end": 270000,
+            "start": 135000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "v": 5,
+      "id": "575fcf09-a141-41bb-a1da-25e43d2149ec",
+      "digest": "d29801084ba2eeb428b385d7c7f352eee655fbe0a194e316bcdd9d15fc5d9cca",
+      "clips": [
+        {
+          "id": "clp_scene_1_source",
+          "range": {
+            "end": 112500,
+            "start": 0
+          },
+          "source": {
+            "end": 136500,
+            "start": 24000
+          },
+          "transform": {
+            "x": 48.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        },
+        {
+          "id": "clp_scene_1_source_right",
+          "range": {
+            "end": 270000,
+            "start": 135000
+          },
+          "source": {
+            "end": 270000,
+            "start": 135000
+          },
+          "transform": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "origin": "center",
+            "rotation": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "preview": {
+    "version_id": "575fcf09-a141-41bb-a1da-25e43d2149ec",
+    "mp4_sha256": "b99258ed197602a1058b8b0122ca723c122ef828f832cf470cccab0d8ab5b7ec",
+    "sample_seconds": [
+      0.0,
+      0.466667,
+      0.966667
+    ],
+    "audio_stream_present": true
+  }
+}

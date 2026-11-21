@@ -1,0 +1,531 @@
+{
+  "database": "127.0.0.1:5966/rep_6d_qmopb4",
+  "api": "127.0.0.1:19861",
+  "worker_processes": 2,
+  "worker_attribution": "attempt is the persisted claim count. Individual worker PIDs were not recorded per claim.",
+  "requests": 40,
+  "responses": {
+    "200": 38,
+    "201": 1,
+    "404": 1
+  },
+  "duration_s": 55.451,
+  "people": [
+    {
+      "role": "edit1",
+      "user": "9d675996-626f-4951-a48e-857b52ec2dc5",
+      "project": "0d09b78e-338b-4d08-8e62-3d341f427101",
+      "turn": "f4d6ede2-b94a-469f-813b-2d00b837771f",
+      "start": 0.024,
+      "end": 6.903,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 4,
+        "assistant.row.append": 2,
+        "assistant.activity": 4,
+        "assistant.row.update": 2,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_8ed30868d62d442c98492ed7",
+          "tool_name": "inspect_timeline"
+        },
+        {
+          "call_id": "call_49f07b041fbb4e11be797d01",
+          "tool_name": "scale"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "07297206-e255-4dad-ae36-e7c2582eae69",
+          "content_digest": "c3f16bf03e73c258285f40f626524d3d93ffbaed4e6c967ecfbc56675fcb7a2a"
+        },
+        {
+          "version": 2,
+          "id": "802baf34-fbaa-4aff-bffc-4bcfc9d0906e",
+          "content_digest": "f94271a96df7070128a342517ab6d4e2f0f2193d3ffdbe687b03e05b5c2b79f5"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "edit2",
+      "user": "5e9cf882-8218-4021-996d-68346f2ad900",
+      "project": "0fe18b46-a602-4ef7-8d0a-b271a7f8b3f8",
+      "turn": "52070664-9b5d-4aaa-913b-390094e967b5",
+      "start": 0.061,
+      "end": 6.905,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 2,
+        "assistant.row.append": 2,
+        "assistant.activity": 4,
+        "assistant.row.update": 2,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_771e58634a153c4c04b85814",
+          "tool_name": "inspect_timeline"
+        },
+        {
+          "call_id": "call_777775782bdf93d0ec3dca3e",
+          "tool_name": "split_clip"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "23940ce1-6efe-4419-a17b-fbe681fbfa6e",
+          "content_digest": "6dcd457cc9f66e840245ab934397cf3a1c3e46761866af95d0fe042c3b57a880"
+        },
+        {
+          "version": 2,
+          "id": "a5849a08-be76-4d90-8043-0c7aa74054b1",
+          "content_digest": "ef277aa3f65266fc8c7dddd47f05594c012bf6f433d8382c9edf2dca7e12f8f0"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "media1",
+      "user": "2a142413-be20-4f49-ad3a-23bd682fb176",
+      "project": "7619e882-e435-4c9e-9d1e-39164eda1611",
+      "turn": "a35b1905-5034-4ceb-a19d-8282f4d4768c",
+      "start": 0.068,
+      "end": 55.451,
+      "wallet": {
+        "balance": 997,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 11,
+        "assistant.row.append": 4,
+        "assistant.activity": 2,
+        "assistant.row.update": 1,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fecfacd47150b49e9db0",
+          "tool_name": "generate_voice"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": [
+        {
+          "id": "a4ae3be8-7e5a-5cd2-848b-4a97816f4e11",
+          "tool": "generate_voice",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 3,
+          "receipt": "7f858231-de39-493d-8c71-c511754290c6",
+          "call_id": "call_01a1fecfacd47150b49e9db0",
+          "facts": {
+            "role": "narration",
+            "digest": "6a0b221ed4d96f0cec7bc654c282cf81158919abe9b77701e757a3ee01aa8126",
+            "status": "available",
+            "snapshot_id": "b86db712-3b13-5c2f-9d1e-e4419deb7d42",
+            "charged_credits": 3,
+            "duration_seconds": 1.96209375,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -3
+            ],
+            [
+              "release",
+              3
+            ],
+            [
+              "capture",
+              -3
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "media2",
+      "user": "06c39ebb-5ecf-4cb7-a38f-378ead8734dc",
+      "project": "f4561bc7-0d8a-4d58-afbf-8c8df8fe7736",
+      "turn": "3d812054-4557-45de-b843-cab3ca26740c",
+      "start": 0.075,
+      "end": 12.52,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 5,
+        "assistant.row.append": 4,
+        "assistant.activity": 2,
+        "assistant.row.update": 1,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fecfac857340a81c5309",
+          "tool_name": "generate_music"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": [
+        {
+          "id": "5b178cba-5e15-53ff-a01a-d84a714798e4",
+          "tool": "generate_music",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "receipt": "a7695748-4e2a-4593-900a-8ffe308d704f",
+          "call_id": "call_01a1fecfac857340a81c5309",
+          "facts": {
+            "role": "music",
+            "digest": "21bf2332d74c325ec2916b602d589c35bd4d8c8d46539abc330ff6a067941aaf",
+            "status": "available",
+            "snapshot_id": "ddf9ab35-4922-5b46-b031-ffc7494848a2",
+            "charged_credits": 0,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": []
+        }
+      ]
+    },
+    {
+      "role": "export1",
+      "user": "d805c63f-d08e-4031-af31-84f633e1f38d",
+      "project": "53042497-f81b-469d-91c8-8a46e0b08e74",
+      "turn": "729316b5-b15f-4baa-9f82-c21f060f364b",
+      "start": 0.082,
+      "end": 42.58,
+      "wallet": {
+        "balance": 994,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.row.append": 11,
+        "assistant.thinking": 6,
+        "assistant.row.update": 6,
+        "assistant.activity": 12,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fecfac6572c2a794840d",
+          "tool_name": "preview_range",
+          "call_state": "completed",
+          "call_index": 0,
+          "group_id": "295ced10-3c4e-402a-8dc0-faaf2802c450"
+        },
+        {
+          "call_id": "call_01a1fecfacc27623a9ef7e74",
+          "tool_name": "inspect_timeline",
+          "call_state": "completed",
+          "call_index": 1,
+          "group_id": "295ced10-3c4e-402a-8dc0-faaf2802c450"
+        },
+        {
+          "call_id": "call_function_q8s3qsxkp8wp_1",
+          "tool_name": "export_video"
+        },
+        {
+          "call_id": "call_function_2f8wvynp08h1_1",
+          "tool_name": "deliver_video"
+        }
+      ],
+      "delivery_refs": [
+        [
+          "d7765ed5-8d96-5986-92a2-4186ade37578"
+        ]
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "d6bc9bc0-c45a-4f46-9d9e-093e79e3ac4e",
+          "content_digest": "a2495f84e44b8f7f41ddb3f4479089c5a824d7d34500bb73d9e571001abe1edf"
+        }
+      ],
+      "jobs": [
+        {
+          "id": "d7765ed5-8d96-5986-92a2-4186ade37578",
+          "tool": "export_video",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 6,
+          "receipt": "3f2c7057-3346-4b46-8b4a-8dfa19b0afe3",
+          "call_id": "call_function_q8s3qsxkp8wp_1",
+          "facts": {
+            "role": "export",
+            "status": "available",
+            "output_id": "d7765ed5-8d96-5986-92a2-4186ade37578",
+            "charged_credits": 6,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -6
+            ],
+            [
+              "release",
+              6
+            ],
+            [
+              "capture",
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "export2",
+      "user": "8f141b92-c4f0-4306-aa8a-2093466fa3e4",
+      "project": "71c048a7-606e-42dd-87ac-1aa76df1193f",
+      "turn": "8b5f1514-5dcd-4ae0-9ce1-bb78067536b5",
+      "start": 0.088,
+      "end": 27.838,
+      "wallet": {
+        "balance": 994,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 8,
+        "assistant.row.append": 10,
+        "assistant.activity": 8,
+        "assistant.row.update": 3,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_b608399eecfc4ed0ba07c550",
+          "tool_name": "preview_range"
+        },
+        {
+          "call_id": "call_function_lm31t7y30hgn_1",
+          "tool_name": "export_video"
+        },
+        {
+          "call_id": "call_function_enepab8zw2th_1",
+          "tool_name": "deliver_video"
+        }
+      ],
+      "delivery_refs": [
+        [
+          "13197c70-1fd8-5858-98fc-a53fccf44866"
+        ]
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "68d9eba1-538f-4582-becc-d97e6d0464eb",
+          "content_digest": "9e3acb73e90932a3d75e4990cdd26374c44e2d9633c6ed588598c0c1344cbe63"
+        }
+      ],
+      "jobs": [
+        {
+          "id": "13197c70-1fd8-5858-98fc-a53fccf44866",
+          "tool": "export_video",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 6,
+          "receipt": "596a872c-f86c-49b0-b46c-a4f5cdf6a985",
+          "call_id": "call_function_lm31t7y30hgn_1",
+          "facts": {
+            "role": "export",
+            "status": "available",
+            "output_id": "13197c70-1fd8-5858-98fc-a53fccf44866",
+            "charged_credits": 6,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -6
+            ],
+            [
+              "release",
+              6
+            ],
+            [
+              "capture",
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "preview",
+      "user": "01751514-6be9-479f-8b4c-1d1850d9e8f4",
+      "project": "a0f48cbb-ab9f-4768-9070-f65ba864851b",
+      "turn": "a7da36d2-bc07-49cd-8b4b-fc8f483a0181",
+      "start": 0.093,
+      "end": 17.271,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.row.append": 2,
+        "assistant.thinking": 2,
+        "assistant.row.update": 4,
+        "assistant.activity": 4,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_7176f5ad099e446d9b809e81",
+          "tool_name": "inspect_timeline",
+          "call_state": "completed",
+          "call_index": 0,
+          "group_id": "d44b0c34-9520-4e3a-a9e0-deccbb2e9fc3"
+        },
+        {
+          "call_id": "call_9ead3aa5c4ee44baa077f17d",
+          "tool_name": "preview_range",
+          "call_state": "completed",
+          "call_index": 1,
+          "group_id": "d44b0c34-9520-4e3a-a9e0-deccbb2e9fc3"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "59857fb0-965a-4363-9bd8-6e625bb3f715",
+          "content_digest": "3c83b08f1e7c4e881b87c4e2d248303849061e6564596c5ff8c65d2606431a40"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "asset",
+      "user": "e65cadf8-6135-4e4b-accf-2d1c5974ee5e",
+      "project": "d578702f-6134-43b9-809c-ecd224892848",
+      "start": 0.097,
+      "end": 3.041,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "asset_status": "completed",
+      "requests": 6,
+      "versions": [],
+      "jobs": []
+    },
+    {
+      "role": "stop",
+      "user": "ec0e81a5-c132-4ec1-baca-c4a22533247b",
+      "project": "46b18c54-5653-4717-86d9-5fde4e1b56f5",
+      "turn": "385f6bca-32a5-413b-bf63-56645eeeab80",
+      "start": 0.102,
+      "end": 4.026,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "stopped": {
+        "accepted": true,
+        "turn_state": "retracted"
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 5
+      },
+      "requests": 4,
+      "opening_state": null,
+      "tools": [],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": []
+    },
+    {
+      "role": "history",
+      "user": "62c2901d-96e1-4feb-a202-b041e43e2dd0",
+      "project": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+      "start": 0.108,
+      "end": 6.683,
+      "wallet": {
+        "balance": 977,
+        "held": 0
+      },
+      "foreign_http": 404,
+      "outputs": [
+        "4d413c65-6386-55cc-b24c-6293da5f3b99",
+        "30ed87dd-1ae6-567a-93e8-a1bc3c7064a2"
+      ],
+      "requests": 9,
+      "versions": [
+        {
+          "version": 1,
+          "id": "d79f38cd-6b8e-4670-847d-24dcaa8adb74",
+          "content_digest": "40e2b6fa6e528b95b94d4b6e7e6e140402183c1f245e5b3cd663359181a524f0"
+        },
+        {
+          "version": 2,
+          "id": "3e77da05-3465-461b-b548-a2e01019d81b",
+          "content_digest": "8a6e044f83e4aa0e9157514cf67f125e6be6a0a050e47d6b201556e4e45b48de"
+        },
+        {
+          "version": 3,
+          "id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+          "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+        },
+        {
+          "version": 4,
+          "id": "85e713f0-1443-4c79-87eb-de398255541a",
+          "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+        }
+      ],
+      "jobs": []
+    }
+  ],
+  "schema": "j6d05_project_brief",
+  "absent_tables": [
+    "workflow_runs",
+    "workflow_steps"
+  ],
+  "jobs": 4,
+  "claims": 4,
+  "capture": 15,
+  "setup": "Five initial compositions were prepared via native Chat. The export1 user requested existing footage only. The first opening offered a one-credit placeholder narration and saved no version. A second identical request did not save a version while the question was outstanding. The quote was declined. After the scope/schema fix a third identical request saved v1 with zero setup media jobs. Setup is excluded from the concurrent window."
+}

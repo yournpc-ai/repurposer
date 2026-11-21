@@ -4,9 +4,9 @@
 
 ## Agent + Tool 唯一创作架构、后台执行退役与五面一体施工总合同
 
-**状态：Iteration 1–5 已有真实成功样本；首次跨素材完整通过率 3/6；当前进行 Iteration 6D。旧执行表已在隔离库删除。双 Worker 十用户混合负载已实测；新素材有成片交付、硬刷新和续改记录，首次用户请求曾因磁盘写满中断。各门禁按对应提交记录。**
+**状态：Iteration 1–5 已有真实成功样本；首次跨素材完整通过率 3/6；6D 的本地架构与指定真实旅程已有验收记录。五个全新项目中，三个交付后续改并再次交付；其中两个经过重试或恢复。各次首次失败、用户批准与拒绝、后续恢复及验证环境分别记录。**
 
-**施工基线：2026-11-21，`main@fdd21443bed58a8b3a1eea1f7322d501e27f5e91`。开工时必须重新核对远端与本地 HEAD，不得将此 SHA 永久视为最新版本。**
+**6A 施工基线：2026-11-21，`main@fdd21443bed58a8b3a1eea1f7322d501e27f5e91`。开工时必须重新核对远端与本地 HEAD，不得将此 SHA 永久视为最新版本。**
 
 **产品目标：2027 年具有专业剪辑能力、以自然语言为主要交互的 AI 剪辑师。**
 
@@ -150,58 +150,9 @@ Agent 自己观察结果，决定下一步。
 
 ### 第二次破坏性收口的原因
 
-虽然模型已经不再直接理解 Run，部分原生 Tool 的后台实现仍然走：
+6A 审计时，原生调用仍需先生成 TaskItem、编译 Graph，再由 Run 与 Step 启动 Worker。历史测试里，Step 认领与回收使用了不同的时钟，合法执行权被反复撤销。接缝、片尾卡和固定旁白的首错及原记录见 [6A 审计](agent-editor-evidence/iteration-6/README.md)。
 
-```text
-Native Tool
-  ↓
-TaskItem
-  ↓
-submit_confirmed_tasks
-  ↓
-create_run
-  ↓
-compile_graph
-  ↓
-WorkflowRun
-  ↓
-WorkflowStep
-  ↓
-Worker
-  ↓
-Run settlement
-  ↓
-Chat continuation
-```
-
-例如当前 `export_video` 仍会通过 `editor_media.py` 创建内部 `produce_video` 任务。
-
-用户只要求导出一个固定 CompositionVersion，却仍要创建 WorkflowRun、WorkflowStep 和执行图。
-
-更严重的是，同一任务的完成依赖多种状态的组合：
-
-```text
-Run.status
-  × Step.status
-  × Graph node.status
-  × Output.render_status
-  × Chat resume status
-```
-
-这种状态结构不再符合新产品的心智。
-
-当前 Worker 回归已经出现：
-
-- `workflow_step_fenced` 反复发生；
-- Step attempt 达到数百次；
-- 原本成功的接缝导出失败；
-- 原本成功的片尾卡导出失败；
-- 固定旁白恢复无法完成；
-- Run 被取消而没有正式 Output。
-
-这些是本次架构收口的直接动机。
-
-但尚未证明每个故障的唯一根因都来自旧 Workflow。施工必须先调查实际首错节点，不允许把架构判断冒充故障归因。
+6B 将正式导出交给 ExportJob，6C 将三类生成交给 MediaJob，6D 删除其余执行入口、镜像状态及旧回执恢复逻辑。生产当前版本时，Agent 依据原生 Tool 的回执继续编辑、审片或交付。
 
 ### 正式裁决
 
@@ -1784,7 +1735,7 @@ Activity 由 MediaJob 的真实状态投影。
 
 ### 6D 执行与验收记录
 
-隔离库已运行删除旧执行表与关系的 DDL，API 和 Worker 仅检查安装的 schema revision。双 Worker 十用户混合负载中四项付费或有报价的 Job 各认领一次，实际合计 15 积分。正式成片已通过真实文件、摘要与 Chrome 回放验证。首轮不中断完成率与其他未验收能力按实际样本分别记录。详见 [6D 施工记录](agent-editor-evidence/iteration-6/6d.md)。
+隔离库已实际删除旧表与关系。API 与 Worker 启动时只检查 revision。两次十用户窗口分别完成 41 和 40 个请求，均有四个 Job 各认领一次，各扣 15 积分。同项目并发导出的审片和交付绑定原 opening 的 Output，即使作品已经继续修改。原 opening 重放同版本导出使用原回执，另一版本的付费导出需要单独授权。生成期间可以继续保存新版本；生成完毕按确切快照呈现。 审阅指定 Output 时，从原 opening 和写入该作品版本的用户消息读取要求。助手选择的旁白、名称、分镜不能升级为用户硬要求。交付已有 MP4 的回执分别标明原导出扣额与本 opening 扣额。详见 [6D 验收](agent-editor-evidence/iteration-6/6d-acceptance.md) 和 [分片记录](agent-editor-evidence/iteration-6/6d.md)。
 
 公开发布的用户授权属于一次平台发帖。若请求发出后失去回执，原 Publication 进入待核对状态。仅按已有平台凭证核对；无可靠 ID 时保留项目、成片和原发帖记录，由运维登记已核实结果。用户取消、项目删除和再次发布均不能越过该未决边界。
 

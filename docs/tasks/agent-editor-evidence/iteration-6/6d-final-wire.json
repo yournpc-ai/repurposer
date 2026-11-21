@@ -1,0 +1,1841 @@
+{
+  "project": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+  "native_tools_seen_on_this_project": {
+    "ask_user": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "询问一个确定目标所需的问题。",
+      "argument_names": [
+        "question",
+        "options",
+        "allow_freeform",
+        "recommended_id",
+        "default_path",
+        "pending_disposition"
+      ],
+      "required": [
+        "question"
+      ],
+      "schema_sha256": "3c9c008f03ae7a39f9dfb44dbc9ee47c828f4c8373be9844de000375c29c61c7"
+    },
+    "answer": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+      "argument_names": [
+        "pending_disposition"
+      ],
+      "required": [],
+      "schema_sha256": "17384a4ebeee8c527f725538cf4b4aaa756a2d50bef63f9c9588e4dc3241ea55"
+    },
+    "get_understanding": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "读取项目素材分析（概述、论旨、主题、受众、可引用原话），再总结素材或根据素材推荐。若素材仍在处理中，会等到分析就绪才返回，本轮即可据此作答。",
+      "argument_names": [],
+      "required": [],
+      "schema_sha256": "efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49"
+    },
+    "get_asset": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "读取素材的处理状态、语言、时长和开头文本。项目只有一个文件素材时可省略 ID；有多个时返回带 ID 的清单。",
+      "argument_names": [
+        "asset_id"
+      ],
+      "required": [],
+      "schema_sha256": "1b36d98aa08ee0f858bc618f7844801a49e76997f33430295c77e02dbbd26166"
+    },
+    "search_transcript": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "按主题检索项目转写文本（确定性关键词检索），返回带起止时间和逐字原文的候选段落，供判断选用。",
+      "argument_names": [
+        "query",
+        "asset_id"
+      ],
+      "required": [
+        "query"
+      ],
+      "schema_sha256": "d3bb0156fbe3a0d3978f941881d8d5d7a4fb7ad96bd7c26b0ff45c3953056569"
+    },
+    "list_project_media": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+      "argument_names": [
+        "ids",
+        "offset"
+      ],
+      "required": [],
+      "schema_sha256": "662c17da6fb177785de940b1e14840259a1756430ca2b923b026848d2651b5e8"
+    },
+    "prepare_video_materials": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "准备所选网页，并导入选定素材、已交付视频或曲库音乐以供剪辑。等待 URL 采集完成。结果含当前所有者范围内的 SourceSnapshot 标识，可用作工具参数。视频默认提供有限的代表静帧，不能据此声称连续审片。仅用户明确要求连续检查源视频时用 video_observation=continuous。search_music 或 select_music 返回的 Music ID 传入 material_music_ids，不传 material_asset_ids。只返回已完成资源或明确失败，不返回待处理。复用已导入的媒体，后续设计被拒绝不影响已准备好的资源。只读现有媒体，不合成或渲染。",
+      "argument_names": [
+        "material_urls",
+        "material_asset_ids",
+        "material_output_ids",
+        "material_music_ids",
+        "material_targets",
+        "video_observation"
+      ],
+      "required": [],
+      "schema_sha256": "5db37552a7b3ac1f8d921f7294a5de1e7b5e56d78b117c07cca6d40b97d1c749"
+    },
+    "generate_image": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+      "argument_names": [
+        "prompt",
+        "svg",
+        "evidence_snapshot_id"
+      ],
+      "required": [
+        "prompt"
+      ],
+      "schema_sha256": "0d2a17947b70a029563ce3cd7778edbe4c6ed1a1b7a68140d5e9d7e242ff5f38"
+    },
+    "generate_voice": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+      "argument_names": [
+        "text",
+        "language",
+        "voice_id"
+      ],
+      "required": [
+        "text",
+        "language"
+      ],
+      "schema_sha256": "89ce07cc55998c6bb586fbb05a106b537d8aa8ab44596ff80a2bc23139afe707"
+    },
+    "generate_music": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+      "argument_names": [
+        "duration_seconds",
+        "style",
+        "bpm",
+        "name"
+      ],
+      "required": [
+        "duration_seconds",
+        "style"
+      ],
+      "schema_sha256": "99195d32500c8e702a52c602949b37b04e2471f0fe9997be0f694e9fbdcfd508"
+    },
+    "review_video": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+      "argument_names": [
+        "output_id",
+        "requirements",
+        "at_seconds",
+        "motion_scene_id",
+        "refresh",
+        "pending_disposition"
+      ],
+      "required": [
+        "output_id",
+        "requirements"
+      ],
+      "schema_sha256": "4bc294912fb3cc5625d68096ddf53e8c713a805e3829a1a72bb7c1a9ff4a258c"
+    },
+    "align_recording": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "Align the exact transcript with an explicitly referenced recording.",
+      "argument_names": [
+        "text",
+        "audio_asset_id"
+      ],
+      "required": [
+        "text",
+        "audio_asset_id"
+      ],
+      "schema_sha256": "a8e9da719ec47326a581b213f310ac3dbee7a462d0b27db4e946db466ccc596f"
+    },
+    "get_narration_alignment": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。",
+      "argument_names": [
+        "alignment_id",
+        "pending_disposition"
+      ],
+      "required": [
+        "alignment_id"
+      ],
+      "schema_sha256": "d3bd988ece84c90f719b887dae1efc801b24bac09dcec8521a81cf4a52b10108"
+    },
+    "annotate_narration": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。",
+      "argument_names": [
+        "alignment_id",
+        "expected_timing_digest",
+        "sentences",
+        "pending_disposition"
+      ],
+      "required": [
+        "alignment_id",
+        "expected_timing_digest",
+        "sentences"
+      ],
+      "schema_sha256": "815c5cacf0013823cc1124dd2a5656031dd6c627f764f44f9f9dddf0de046d2e"
+    },
+    "read_conversation_context": {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+      "argument_names": [
+        "item_ids",
+        "cursor"
+      ],
+      "required": [],
+      "schema_sha256": "6991d37b5f320a92541e9ca9707798f07eb82e8e4151c1f94f2e77f331f88d7d"
+    },
+    "create_video": {
+      "wire_request": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+      "description": "Create the first editable version from ordered shots. A title card only needs headline, duration_seconds and text_color. Save without exporting. 本轮旁白已固定，保存画面后可用 insert_audio 放入原音。未绑定外部 Skill，不使用 skill_resource。",
+      "argument_names": [
+        "name",
+        "shots",
+        "pending_disposition"
+      ],
+      "required": [
+        "name",
+        "shots"
+      ],
+      "schema_sha256": "c9dc3659d6301d53856146a40f36fedd25b0535c29d8f481592e43d12637857b"
+    },
+    "extend_still": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Extend the closing static image, shape or title by additional seconds. Other tracks retain their duration.",
+      "argument_names": [
+        "clip_id",
+        "seconds"
+      ],
+      "required": [
+        "clip_id",
+        "seconds"
+      ],
+      "schema_sha256": "685842571c17709b26ceb9fa77a9c0e6ab9b11979211053265b1e5ec88617c24"
+    },
+    "bind_clip_source": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Bind a fixed project snapshot to a pending voice or image clip. Preserve timing and layout; inspect the saved version before export.",
+      "argument_names": [
+        "clip_id",
+        "source_id"
+      ],
+      "required": [
+        "clip_id",
+        "source_id"
+      ],
+      "schema_sha256": "f4bccc3971f44a4a245795c731e3861ffa23ac1fde68fcded9e54e6a9dd1dd70"
+    },
+    "insert_audio": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+      "argument_names": [
+        "source_id",
+        "start_seconds",
+        "duration_seconds",
+        "gain_db"
+      ],
+      "required": [
+        "source_id",
+        "start_seconds"
+      ],
+      "schema_sha256": "dadf88f65b61b395305f5a3f356f17a6e9051ad6076fc79bb7ac14076a1cd262"
+    },
+    "inspect_timeline": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+      "argument_names": [
+        "offset"
+      ],
+      "required": [],
+      "schema_sha256": "2ce876976b2cc1e7f24a81e48b2503b69dff6da150f98cd55b10f8b1e708803f"
+    },
+    "inspect_clip": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Inspect one clip, its layout, transform, animation properties and same-track neighbors on the current version.",
+      "argument_names": [
+        "clip_id"
+      ],
+      "required": [
+        "clip_id"
+      ],
+      "schema_sha256": "6ae9945d1fc84dd1d00e97872228b67e33311acb09776fac1ec47ef1160bf0b8"
+    },
+    "split_clip": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+      "argument_names": [
+        "clip_id",
+        "time"
+      ],
+      "required": [
+        "clip_id",
+        "time"
+      ],
+      "schema_sha256": "d39effe4296bc21cc21fa990811b22e3f21f8415db7d3af280f26354ce101f3f"
+    },
+    "trim_clip": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+      "argument_names": [
+        "clip_id",
+        "start",
+        "end"
+      ],
+      "required": [
+        "clip_id"
+      ],
+      "schema_sha256": "948becf3b536df97c076e1cc0ebd8e791fa0c5a04e2dca7584f317472f50e129"
+    },
+    "move_clip": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+      "argument_names": [
+        "clip_id",
+        "time"
+      ],
+      "required": [
+        "clip_id",
+        "time"
+      ],
+      "schema_sha256": "e2e786f6cf26f4ae8054c3a061c6b30eb314b14bbdfca656beae0d092641d9b4"
+    },
+    "translate": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+      "argument_names": [
+        "id",
+        "x",
+        "y"
+      ],
+      "required": [
+        "id",
+        "x",
+        "y"
+      ],
+      "schema_sha256": "84ba2ba0eefebb4ebe3ab908507b6a1c23803a4fddd538d0eb01bf0fa9d6379d"
+    },
+    "scale": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+      "argument_names": [
+        "id",
+        "value"
+      ],
+      "required": [
+        "id",
+        "value"
+      ],
+      "schema_sha256": "08ae68bc542acfbc9eb494486d43659266570208e41ff6097499cc64ad095747"
+    },
+    "preview_range": {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+      "argument_names": [
+        "kind",
+        "start_seconds",
+        "end_seconds"
+      ],
+      "required": [
+        "start_seconds",
+        "end_seconds"
+      ],
+      "schema_sha256": "86bfba884317e04ac54ac454e66331e0b1d2ee898b6740f401a623cd4a434c57"
+    },
+    "deliver_video": {
+      "wire_request": "6db614cb-830f-41b1-9e39-8fd7bf7a4751",
+      "description": "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
+      "argument_names": [
+        "output_id"
+      ],
+      "required": [
+        "output_id"
+      ],
+      "schema_sha256": "7ef2937b3101d1620e4157c8d7e0d12275cfe42b900d7e085a0ebd057bc3f3d1"
+    },
+    "export_video": {
+      "wire_request": "6db614cb-830f-41b1-9e39-8fd7bf7a4751",
+      "description": "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
+      "argument_names": [],
+      "required": [],
+      "schema_sha256": "7abbbbed97965ced08bbb0b788037157eb3ef039652d4e93d12abfea8a40d6da"
+    }
+  },
+  "request_samples": [
+    {
+      "wire_request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        }
+      ],
+      "selected": {},
+      "fixed_media": [],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "get_understanding",
+        "get_asset",
+        "search_transcript",
+        "list_project_media",
+        "prepare_video_materials",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {},
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        }
+      ],
+      "media_receipts_in_call_order": [
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "duration_seconds": 3.575875,
+          "role": "narration",
+          "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+          "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+          "status": "available",
+          "added_to_composition": false,
+          "text": "琥珀色的光球，正沿着弧线向前移动。"
+        }
+      ],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "get_understanding",
+        "get_asset",
+        "search_transcript",
+        "list_project_media",
+        "prepare_video_materials",
+        "create_video",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "d79f38cd-6b8e-4670-847d-24dcaa8adb74",
+        "content_digest": "40e2b6fa6e528b95b94d4b6e7e6e140402183c1f245e5b3cd663359181a524f0"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "duration_seconds": 3.575875,
+          "role": "narration",
+          "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+          "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+          "status": "available",
+          "added_to_composition": false,
+          "text": "琥珀色的光球，正沿着弧线向前移动。"
+        }
+      ],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "461bb1ee-23ae-435c-a652-21d60d648a2c",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "duration_seconds": 3.575875,
+          "role": "narration",
+          "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+          "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+          "status": "available",
+          "added_to_composition": false,
+          "text": "琥珀色的光球，正沿着弧线向前移动。"
+        }
+      ],
+      "already_saved_this_turn": [
+        {
+          "version": 2,
+          "tool": "insert_audio",
+          "arguments": {
+            "source_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+            "start_seconds": 0.6,
+            "gain_db": 0.0
+          }
+        },
+        {
+          "version": 3,
+          "tool": "insert_audio",
+          "arguments": {
+            "source_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+            "start_seconds": 0.0,
+            "duration_seconds": 5.0,
+            "gain_db": -8.0
+          }
+        }
+      ],
+      "observed_preview": {},
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "7b9b0739-a68e-4b45-aaed-adc32669a9dd",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "duration_seconds": 3.575875,
+          "role": "narration",
+          "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+          "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+          "status": "available",
+          "added_to_composition": false,
+          "text": "琥珀色的光球，正沿着弧线向前移动。"
+        }
+      ],
+      "already_saved_this_turn": [
+        {
+          "version": 2,
+          "tool": "insert_audio",
+          "arguments": {
+            "source_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+            "start_seconds": 0.6,
+            "gain_db": 0.0
+          }
+        },
+        {
+          "version": 3,
+          "tool": "insert_audio",
+          "arguments": {
+            "source_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+            "start_seconds": 0.0,
+            "duration_seconds": 5.0,
+            "gain_db": -8.0
+          }
+        }
+      ],
+      "observed_preview": {
+        "version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "mp4_sha256": "196416201d50d8bd7072845b4e5071ab674967acfa890ded93f27cb35044f558",
+        "window_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "sample_seconds": [
+          0.0,
+          2.466667,
+          4.966667
+        ],
+        "audio_available_to_model": false
+      },
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "79b4bf12-1980-4c87-bee7-53e36ac26269",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "duration_seconds": 3.575875,
+          "role": "narration",
+          "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+          "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+          "status": "available",
+          "added_to_composition": false,
+          "text": "琥珀色的光球，正沿着弧线向前移动。"
+        },
+        {
+          "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "charged_credits": 0,
+          "reserved_credits": 0,
+          "duration_seconds": 10.0,
+          "role": "music",
+          "digest": "5da4d6fa06aba00833d7c82d260cfa61c2eb0bf66f40e2f486dbc20bddf2d7fa",
+          "analysis_digest": "1b40ff5deebafe09e2d4c06f772cc873e363e0dac5a96f2e22e5e4b4b1d358f8",
+          "status": "available",
+          "added_to_composition": false
+        }
+      ],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "list_project_media",
+        "extend_still",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "6db614cb-830f-41b1-9e39-8fd7bf7a4751",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "94068fbf-66a8-4970-b811-970be553819a",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "确认导出刚才预览的第 3 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "ef6f47cc-02f3-4361-9dfe-3f2153d3ab4b",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "94068fbf-66a8-4970-b811-970be553819a",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "确认导出刚才预览的第 3 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {
+        "version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "mp4_sha256": "196416201d50d8bd7072845b4e5071ab674967acfa890ded93f27cb35044f558",
+        "window_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "sample_seconds": [
+          0.0,
+          2.466667,
+          4.966667
+        ],
+        "audio_available_to_model": false
+      },
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "95142653-f28f-4ec2-82af-2ff90b6e5d27",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "9b0d26d1-1518-4776-a6bc-0a09da9aba18",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+        "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "d20e842f-923c-45b5-b39f-5a3a8361f24f",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "9b0d26d1-1518-4776-a6bc-0a09da9aba18",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": [
+        {
+          "version": 4,
+          "tool": "scale",
+          "arguments": {
+            "id": "obj_scene_1_source",
+            "value": 1.1
+          },
+          "transform_before": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "rotation": 0.0,
+            "origin": "center"
+          },
+          "transform_after": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "rotation": 0.0,
+            "origin": "center"
+          }
+        }
+      ],
+      "observed_preview": {},
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "d97e8406-4f67-4418-a0d4-f7359ff77344",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "9b0d26d1-1518-4776-a6bc-0a09da9aba18",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": [
+        {
+          "version": 4,
+          "tool": "scale",
+          "arguments": {
+            "id": "obj_scene_1_source",
+            "value": 1.1
+          },
+          "transform_before": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.0,
+            "rotation": 0.0,
+            "origin": "center"
+          },
+          "transform_after": {
+            "x": 0.0,
+            "y": 0.0,
+            "scale": 1.1,
+            "rotation": 0.0,
+            "origin": "center"
+          }
+        }
+      ],
+      "observed_preview": {
+        "version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "mp4_sha256": "3594e7cad1f9e1eb46f52af7ca3360c2a44ce1522c40f9ff4b92714bf0484e5a",
+        "window_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "sample_seconds": [
+          0.0,
+          2.466667,
+          4.966667
+        ],
+        "audio_available_to_model": false
+      },
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "cc3f6400-a926-4b26-82d1-6ed0c88301e6",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "c223f6ee-ca5d-460e-927d-79df854ee02e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "确认导出刚才预览的第 4 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {},
+      "available_tools": [
+        "ask_user",
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    },
+    {
+      "wire_request": "4ebed1d7-cdb8-4ec4-b072-a9d6b7d79bcf",
+      "model": "MiniMax-M3.1-Flash",
+      "opening": "c223f6ee-ca5d-460e-927d-79df854ee02e",
+      "project": {
+        "title": "6D 弧线上的琥珀色圆球",
+        "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+        "user_stated_constraints": []
+      },
+      "original_user_request": "确认导出刚才预览的第 4 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+      "assets": [
+        {
+          "asset_id": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+          "type": "video",
+          "name": null
+        },
+        {
+          "asset_id": "770c2012-7c6b-49bd-bd68-bccd8b6603f6",
+          "type": "audio",
+          "name": null
+        }
+      ],
+      "selected": {
+        "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+        "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+      },
+      "fixed_media": [
+        {
+          "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "kind": "audio",
+          "duration_ticks": 321829
+        },
+        {
+          "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+          "kind": "audio",
+          "duration_ticks": 900000,
+          "title": "轻柔弧线光球背景音乐"
+        }
+      ],
+      "media_receipts_in_call_order": [],
+      "already_saved_this_turn": null,
+      "observed_preview": {
+        "version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+        "mp4_sha256": "3594e7cad1f9e1eb46f52af7ca3360c2a44ce1522c40f9ff4b92714bf0484e5a",
+        "window_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "sample_seconds": [
+          0.0,
+          2.466667,
+          4.966667
+        ],
+        "audio_available_to_model": false
+      },
+      "available_tools": [
+        "answer",
+        "list_project_media",
+        "deliver_video",
+        "extend_still",
+        "export_video",
+        "bind_clip_source",
+        "insert_audio",
+        "generate_image",
+        "generate_voice",
+        "generate_music",
+        "inspect_timeline",
+        "inspect_clip",
+        "split_clip",
+        "trim_clip",
+        "move_clip",
+        "translate",
+        "scale",
+        "preview_range",
+        "review_video",
+        "align_recording",
+        "get_narration_alignment",
+        "annotate_narration",
+        "read_conversation_context"
+      ]
+    }
+  ],
+  "returned_observations": [
+    {
+      "request_after_observation": "7b9b0739-a68e-4b45-aaed-adc32669a9dd",
+      "call": "call_bf28d4e079294e23b081cc54",
+      "name": "preview_range",
+      "version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+      "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "clp_7275011588105e32add497d5c578599a",
+          "clp_95c0428562c55b43acd94537009c59a8",
+          "clp_scene_1_source"
+        ]
+      },
+      "mp4_sha256": "196416201d50d8bd7072845b4e5071ab674967acfa890ded93f27cb35044f558",
+      "sample_frames": [
+        {
+          "seconds": 0.0,
+          "jpeg_sha256": "464f50987fbb4cacc9b7cd1b204ed68ce391f01e6e53ff1a40b71eea020f15dd",
+          "pixel_difference_from_previous_bbox_px": null
+        },
+        {
+          "seconds": 2.466667,
+          "jpeg_sha256": "816048b5825520a121bf12736b73f2fc33adbb169874d5f9af9853df6ac7f2ae",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        },
+        {
+          "seconds": 4.966667,
+          "jpeg_sha256": "843744c2bb042fe2b5f74bbdbdef3ee33068c146e4cf0604f4bf5bc7787683ba",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        }
+      ],
+      "audio_stream_present": true,
+      "audio_available_to_model": false,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.10895087095099054,
+          "peak": 0.7685534954071045,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.5,
+          "true_peak_dbtp": -2.3
+        }
+      }
+    },
+    {
+      "request_after_observation": "ef6f47cc-02f3-4361-9dfe-3f2153d3ab4b",
+      "call": "call_01a1fec4344e77b08222588d",
+      "name": "preview_range",
+      "version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+      "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "clp_7275011588105e32add497d5c578599a",
+          "clp_95c0428562c55b43acd94537009c59a8",
+          "clp_scene_1_source"
+        ]
+      },
+      "mp4_sha256": "196416201d50d8bd7072845b4e5071ab674967acfa890ded93f27cb35044f558",
+      "sample_frames": [
+        {
+          "seconds": 0.0,
+          "jpeg_sha256": "464f50987fbb4cacc9b7cd1b204ed68ce391f01e6e53ff1a40b71eea020f15dd",
+          "pixel_difference_from_previous_bbox_px": null
+        },
+        {
+          "seconds": 2.466667,
+          "jpeg_sha256": "816048b5825520a121bf12736b73f2fc33adbb169874d5f9af9853df6ac7f2ae",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        },
+        {
+          "seconds": 4.966667,
+          "jpeg_sha256": "843744c2bb042fe2b5f74bbdbdef3ee33068c146e4cf0604f4bf5bc7787683ba",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        }
+      ],
+      "audio_stream_present": true,
+      "audio_available_to_model": false,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.10895087095099054,
+          "peak": 0.7685534954071045,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.5,
+          "true_peak_dbtp": -2.3
+        }
+      }
+    },
+    {
+      "request_after_observation": "d97e8406-4f67-4418-a0d4-f7359ff77344",
+      "call": "call_fc41b1fed93f495c84adbf13",
+      "name": "preview_range",
+      "version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+      "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "clp_7275011588105e32add497d5c578599a",
+          "clp_95c0428562c55b43acd94537009c59a8",
+          "clp_scene_1_source"
+        ]
+      },
+      "mp4_sha256": "3594e7cad1f9e1eb46f52af7ca3360c2a44ce1522c40f9ff4b92714bf0484e5a",
+      "sample_frames": [
+        {
+          "seconds": 0.0,
+          "jpeg_sha256": "b0041eb1993f8f62e09e76fc0957bf91922d2dbed36cae9e98057da770dfbafc",
+          "pixel_difference_from_previous_bbox_px": null
+        },
+        {
+          "seconds": 2.466667,
+          "jpeg_sha256": "85b7d7a81fb416241365970697062be0d61242a898c3567399cb5b5351d7e983",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        },
+        {
+          "seconds": 4.966667,
+          "jpeg_sha256": "16895027997bcc6476cb2b222caacf040bc209ca4e7144f9c5c9ed9a31054d26",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        }
+      ],
+      "audio_stream_present": true,
+      "audio_available_to_model": false,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.10895087095099054,
+          "peak": 0.7685534954071045,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.5,
+          "true_peak_dbtp": -2.3
+        }
+      }
+    },
+    {
+      "request_after_observation": "4ebed1d7-cdb8-4ec4-b072-a9d6b7d79bcf",
+      "call": "call_3d456e5fd4f048d6ab3b26dd",
+      "name": "preview_range",
+      "version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+      "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+      "scope": {
+        "target": {
+          "kind": "range",
+          "start_seconds": 0.0,
+          "end_seconds": 5.0
+        },
+        "source_range_seconds": {
+          "start": 0.0,
+          "end": 5.0
+        },
+        "isolated_object": false,
+        "clip_ids": [
+          "clp_7275011588105e32add497d5c578599a",
+          "clp_95c0428562c55b43acd94537009c59a8",
+          "clp_scene_1_source"
+        ]
+      },
+      "mp4_sha256": "3594e7cad1f9e1eb46f52af7ca3360c2a44ce1522c40f9ff4b92714bf0484e5a",
+      "sample_frames": [
+        {
+          "seconds": 0.0,
+          "jpeg_sha256": "b0041eb1993f8f62e09e76fc0957bf91922d2dbed36cae9e98057da770dfbafc",
+          "pixel_difference_from_previous_bbox_px": null
+        },
+        {
+          "seconds": 2.466667,
+          "jpeg_sha256": "85b7d7a81fb416241365970697062be0d61242a898c3567399cb5b5351d7e983",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        },
+        {
+          "seconds": 4.966667,
+          "jpeg_sha256": "16895027997bcc6476cb2b222caacf040bc209ca4e7144f9c5c9ed9a31054d26",
+          "pixel_difference_from_previous_bbox_px": [
+            0,
+            0,
+            1280,
+            720
+          ]
+        }
+      ],
+      "audio_stream_present": true,
+      "audio_available_to_model": false,
+      "mixed_audio": {
+        "decode": {
+          "fully_decoded": true,
+          "sample_count": 242688,
+          "actual_range_samples": {
+            "start": 0,
+            "end": 242688
+          },
+          "duration_seconds": 5.056
+        },
+        "pcm_stats": {
+          "rms": 0.10895087095099054,
+          "peak": 0.7685534954071045,
+          "clipped_sample_count": 0,
+          "clipped_sample_ratio": 0.0,
+          "is_silent": false
+        },
+        "loudness": {
+          "integrated_lufs": -15.5,
+          "true_peak_dbtp": -2.3
+        }
+      }
+    }
+  ],
+  "final_review_contract": {
+    "code": "fd437031",
+    "opening": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+    "project": "5b3f25b6-8189-4971-8d78-37882b7e370e",
+    "declaration": {
+      "provider_request": "276b0a2d-4f0f-434b-a01a-2aa72fa7ef80",
+      "parameters": {
+        "additionalProperties": false,
+        "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+        "properties": {
+          "output_id": {
+            "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+            "format": "uuid",
+            "title": "Output Id",
+            "type": "string"
+          },
+          "at_seconds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+            "title": "At Seconds"
+          },
+          "motion_scene_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+            "title": "Motion Scene Id"
+          },
+          "refresh": {
+            "default": false,
+            "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+            "title": "Refresh",
+            "type": "boolean"
+          },
+          "pending_disposition": {
+            "default": "none",
+            "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+            "enum": [
+              "answer",
+              "skip",
+              "none"
+            ],
+            "title": "Pending Disposition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "output_id"
+        ],
+        "title": "ReviewVideoArgs",
+        "type": "object"
+      }
+    },
+    "review_video_call": {
+      "call": "call_function_kicu91inhx2x_1",
+      "name": "review_video",
+      "args": {
+        "output_id": "6bba57d6-37bf-537a-b80a-f392d6eac083"
+      }
+    },
+    "deliver_video_call": {
+      "call": "call_function_lluuvt1j6jwh_1",
+      "name": "deliver_video",
+      "args": {
+        "output_id": "6bba57d6-37bf-537a-b80a-f392d6eac083"
+      }
+    },
+    "delivery_seen_by_model": {
+      "request": "d8b44037-9b76-4418-b8e7-69a66c7c5e10",
+      "result": {
+        "output_id": "6bba57d6-37bf-537a-b80a-f392d6eac083",
+        "composition_id": "7253be85-cd92-431c-9d2c-06cc9e30ab1a",
+        "composition_version_id": "4600ddd8-e594-45c5-bc1c-6c819b3bb8d9",
+        "content_digest": "839b2dc9a4d8070410e43c6914dae8790c99096d8c15568cbca830e9ce97af71",
+        "delivered_to_chat": true,
+        "export_charged_this_opening": 10,
+        "original_export_charge": 10
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "database": "rep_6d_apicrash_7a7b035bc2",
+  "request": "Generate a 3-second gentle ambient music cue. Return the music only.",
+  "opening": "95906447-f68e-4c37-8373-ab372cb31206",
+  "project": "dff08441-436b-44cd-8de2-d2f4b3ce67b6",
+  "job": "91d16fb0-8160-52de-bedd-d2bd26920c6c",
+  "receipt_id": "ab967f04-a411-446a-9266-32a83730553f",
+  "native_call_id": "call-e6b08d2f-8f1a-4528-81d5-5d267f009a6d",
+  "before_kill": "queued",
+  "api_exit": -9,
+  "transport_after_kill": "RemoteProtocolError",
+  "workers": [
+    3135,
+    3136
+  ],
+  "recovered_opening": "settled",
+  "resume_marker": "91d16fb0-8160-52de-bedd-d2bd26920c6c",
+  "final_job": "succeeded",
+  "claims": 1,
+  "snapshot": "b46af7f7-6f34-5731-982a-8230a28b14c4",
+  "charged_credits": 0,
+  "counts": {
+    "media_jobs": 1,
+    "export_jobs": 0,
+    "outputs": 0,
+    "capture_rows": 0,
+    "user_openings": 1,
+    "execution_receipts": 1
+  },
+  "history_receipt_status": "available",
+  "provider_request_after_restart": "010a736b-aa4e-47dd-82b5-061de441c056",
+  "original_user_request": "Generate a 3-second gentle ambient music cue. Return the music only.",
+  "receipts_in_provider_request": [
+    {
+      "role": "music",
+      "status": "available",
+      "project_id": "dff08441-436b-44cd-8de2-d2f4b3ce67b6",
+      "snapshot_id": "b46af7f7-6f34-5731-982a-8230a28b14c4",
+      "charged_credits": 0,
+      "duration_seconds": 3.0
+    }
+  ]
+}

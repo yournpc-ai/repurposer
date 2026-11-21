@@ -39,7 +39,7 @@
 - **进程卫生**：`uv run` 包装器被 kill 可能留下孤儿 worker；手工 harness 使用 `start_new_session` + `killpg`，结束时核对实际进程。
 - **dev 退出自动重启**：`scripts/dev.sh` 为 API、worker、render、Web 各持一个 supervisor，服务退出后间隔 2 秒重启；再次启动先经 `$TMPDIR/repurposer-dev-supervisors/` 清理旧 supervisor，再清理服务家族，避免旧进程复活成双实例。日志只在整栈启动时截断，单次自动重启继续追加。supervisor 只处理进程退出，**不是代码热加载**；修改 worker 消费的代码后仍须按上条在无活跃任务时重启 worker。
 - **live / 付费预检**：同时核对服务健康、进程加载的代码新鲜度和当前 schema/migration；修改 worker 消费的代码后必须重启 worker。进程“在运行”不证明它已加载当前代码，未取得根因前不得重复付费重试。
-- **证据分级**：函数调用、state updater 已调度、React 已 commit、内容用户可见、ACK/状态已持久化、Run terminal、delivery 可见与媒体可播放是不同事实。DTO/HTTP 200 只证明其响应层级；每个验收结论必须对应实际取得的证据，旧自动门结果不得写成当前 HEAD 证据。
+- **证据分级**：函数调用、state updater 已调度、React 已 commit、内容用户可见、ACK/状态已持久化、MediaJob / ExportJob 终态、delivery 可见与媒体可播放是不同事实。DTO/HTTP 200 只证明其响应层级；每个验收结论必须对应实际取得的证据，旧自动门结果不得写成当前 HEAD 证据。
 - **归因先行**：一条假设只配一个能证伪它的实验。两个独立实验仍未推进归因，就停止新建业务版本、浏览器探针或付费执行，回到真实 payload 与代码状态链；不得为探针机械创建新版本，也不得在未证明机制相关时调整实现顺序。
 - **配额**：全量真实旅程可能产生显著模型费用；合并改动后一次跑，所有真实模型 HTTP 计入预算，warmup 默认关闭。付费运行需明确授权。
 - **探针采样**：需要比较 provider/prompt 时采用 round-robin，避免顺序批把 provider 漂移误判为改动效果；保留原始读数。
@@ -111,58 +111,14 @@ uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/mod
 
 ### 4.1 选项唯一座位
 
-Canonical：CHAT_ARCHITECTURE §8.5/§8.8，ADR-081/099/100/116。
-
-- **实现差异待核对**：conversation_mode.j2 的小写字母选项 ID 指令与 check_options_dock 的数字语法覆盖须按 ADR-081 对账；本次未修改 prompt/守卫，不能宣称已修复。
-- ADR-099 只保留三种现行终态形态与 trigger-only provenance；四层架构、交互宪法、Speech Commit Protocol 与默认吸收边界继续有效。NAMING 的 suggestion_ref/source_state 与终态形态须收窄到 trigger，不恢复 answer+suggestions。
-- 自动检查至少包含 trigger 点击→下一回合编译、stale trigger 的具名原因、数字 id 与 1–5 结构外界、历史 answer replay 安全；这些检查归入当前核心合同或真实旅程，不恢复独立内部套件。
-- live：浏览问题产生可用 dock（推荐、×/pencil 退出、合法且不外露宣告的 default path）；能力问答/闲聊只产纯 answer；有效 suggestion trigger 可 dock/点选/解算；历史 answer 硬刷新只读散文，无建议卡和崩溃。run_completed 不作为建议来源，使用 run_failed/craft_decompiled。
-
-### 4.1.1 官网品牌宣传片基础链（Iteration 1A）
-
-- fake provider golden wire 覆盖新 URL source_preparing、正文/PNG 就绪后的 briefing、缺失字段单组澄清、完整输入不重复提问、采集失败、非 website_promo 和普通“宣传片”不绑定固定 Skill；断言实际 System/User 顺序、工具白名单和 PNG media inputs，不断言模型文案。语言规则只住 System 顶层，user message 不重复注入。
-- 当前定向检查：`test_website_promo_wire.py` 5 tests、`test_activity.py + test_previews.py` 26 tests、`test_projects.py` 1 test；另有 `test_question_groups.py` 与共享核心回归。Web 覆盖 QuestionDock 每页一问、自动前进、primary 选中态、勾选图标、整组一次提交和 QA 的 `option_id → option.label` 映射；TypeScript 通过。这里只记录实际运行的定向结果，不沿用历史全量计数。
-- 授权纯函数已覆盖 auto/auto 的 NULL 估价不请求、execution=ask / credits=ask 的 NULL 请求，以及 auto/auto 超守卫线仍请求。Dock 与 Start gate 使用同一个 `requires_confirmation`，不再把 NULL 写成任何档必确认。
-- 真实 LegitEvi 证据与 BrandProfile 已通过：实际 SourceSnapshot 和生产 `analyze_brand_seat` 形成包含 `#DC0000`（visual/inferred）、“接近 Inter”和原始宣言的档案。组跳过默认路径仍有效；数字选项整组提交另在项目 `655521c2-a0dd-46df-b8d8-cc85e77fbd17` 实测通过：preview/正式 digest 均为 `fd03d465…f395`，六槽在 PendingPlan 与 CreativeState 一致且均为 `user-stated`，target_seconds=30、subtitle_languages=[en]、aspect=16:9，其余文本槽保留所选标签；过期 digest/重复结算均 409，刷新后 pending=null，readiness 恢复 `design_video`。证据见 `scratch/website-promo-batch1-canonical-answers-20261117/`。
-- 批 1 的验收终点是证据/BrandProfile、集中答案原子结算及本批状态刷新恢复；真实 trace 同时证明三组带图工具结果只完整送达一次，随后折叠。首稿写作、draft_repair、正式制作和 Iteration 2 媒体均属于尚未开始的后续迭代，不对其作通过/失败结论，不添加相关本批测试，也不将其问题列为批 1 阻塞。现有 answer 接口的自动续行发生在边界之外；本批未执行 produce_video 或真实 PNG/TTS 媒体生成。
-- 本地开发库已确认 `h8e5a2c4d7f1 (head)`；生产 migration 与 migration 后恢复未验证。真实浏览器 full/panel/双主题/移动端和连续视听未运行。未提交选择只保证同标签 sessionStorage 刷新恢复，不跨设备同步；只有整组提交或跳过才调用 answer API。
-
-### 4.1.2 官网宣传片 Iteration 2 上轮：语义分镜与双来源图片
-
-- 已落码当前工作草稿的 N 幕 `SceneAssetSpec`、真实 scene_id 校验、显式 15 秒/两幕/24fps 约束、普通 plan/Start/Run 图片准备、逐幕缓存/attempt/恢复、受控 SVG 执行体、MiniMax submitted/unknown 保护、不可变 PNG SourceSnapshot、图片 MediaAnalysisReport 和独立 ContentReview。报告与 Snapshot 引用采用内容寻址存储，未新增主表/migration，未实现正式 ImageObject 绑定、CompositionVersion、音频/视频探针、Scene 渲染或 produce_video。
-- 函数级 fake 定向曾实测 **20 passed, 1 deselected**：18 项本轮用例与 2 项既有模糊/完整入口 golden wire，覆盖 N=5 分批与局部失效、权限、Start/Stop、SVG 安全/digest、MiniMax fake cache/unknown/计量、分析与审阅身份、损坏媒体、fail/advisory 不重做及首次完整回模后折叠。新增函数级测试文件与驱动脚本已按要求删除，旧计数不再是当前可复验命令；新模块 ruff、命中 Python 文件 py_compile 和本轮 diff whitespace 检查通过。后续只从真实 Chat 输入验收。
-- fake 证据边界：SVG 使用 fake deterministic rasterizer 后实际解码 PNG；MiniMax 使用 fake provider。函数/临时数据库测试中的 PNG、Snapshot 和报告不是任务 1/2 的真实出口，不能覆盖下面的真实失败。
-- 2026-11-18 真实执行未通过。任务 1 项目 `dfe21df7-64be-472c-8eac-855f08477f61` 已在真实官网证据/BrandProfile 后出现六字段问题组，仍待真实用户作答。任务 2 项目 `80ad9110-354f-4ae8-aa91-1d2ec7b6aea2` 有 Brief、双来源 draft `a11262a79678…a885` 和真实 trace，但 visual Run `c34edab4…`、`3d854ec6…`、`8dd66899…`、`d7d86129…` 均失败，没有合格 SVG；最后的默认 Chromium 缺失已改为复用 `resolve_chrome_path()`，未重新验收。
-- 目标项目 `0ff95f17-578d-4a15-94f6-3b89b1777d48` 的六字段 Dock 缺失已修为同时接受 options/items。当前 QuestionDock 每页恰好一问，选项点击自动前进，选中项使用 primary token 和右侧勾选图标，末页手动一次提交；QA 通过 `option_id → option.label` 显示人话。`QuestionDock.mount.test.tsx` 4 tests passed，历史时间线 46 tests passed，TypeScript 通过。真实 Chrome 复验显示 `1 / 6` 且首屏只有用途一项，无浏览器错误。该 UI 修复不改变下述媒体未通过结论。
-- 两张实际 MiniMax PNG 为 Snapshot `44bb7a0e-d60b-5eec-bf1e-8dc1bb5e7f5d` / `6a129078…f3d1` 与 `bd1b079e-48f8-50c1-97d7-efac9f566167` / `956062ac…7141`。实际读图分别为小三角形、含文字且缺方向连接/引用回环，内容均不合格；当时 ContentReview 均为 `unavailable`（schema 拒收），不是 pass。按现有美元分项核算，真实用量费用合计 **USD 0.651669**：任务 1 USD 0.027243、任务 2 会话 USD 0.617426、MiniMax 图片固定费用 USD 0.007；审阅 step 的 tokens 有记录但未单列美元金额。大量恢复和直接执行属过度工作。地基未复核通过，不得进入中轮。
-
-### 4.1.3 官网宣传片 Iteration 2 第二轮：Narration、BGM 与波形
-
-- 项目 `33377e7c-cce2-4df8-9b20-5bdd79882a58` 的四次原始字幕选项分别放入当前问卷格式，经过签发、序列化、读回和作答。四组分别保留 2、2、2、1 个选项和原始文字。单语代码保存为单元素数组，双语选项保存两个代码。问卷定向测试覆盖一次提交、逐题自由填写与跳过。
-- 项目 `3dae9c0d-3545-4fc6-8c55-84f6594c6e46` 与 `89c185da-ab92-4d39-aa9e-121302a32fdb` 的用户开场、品牌分析后首次请求的系统提示与工具定义一致。前者在 `2a70ff4d-1cf2-4a01-8250-eb632c6272fb` 的响应正文写出问卷调用标记，原生工具调用数为零，下一次响应直接请求创建分镜，原 Chat 没有集中问卷。在前者冻结的网页和品牌档案上离线回放时，入口拦住了直接创建分镜的请求。当前格式另有集成测试：同样的两次错误响应之后，只有含五项的原生 `ask_user` 执行成功。定向测试另覆盖已作答、已跳过、完整要求和部分已知的制作要求。真实项目未重启。
-- 项目 `89c185da-ab92-4d39-aa9e-121302a32fdb` 的只读回放使用旁白 Run `adc6cb9f-8239-4e95-8456-609aff61a36d`。首批六幕原音共 46.428 秒，用户目标 30 秒。最后的 39 秒草稿中，第 1、4 幕需补录，其余四幕原音合计 30.743 秒。仅调整旁白续跑时的比对确认，首次录音批次的模型请求与该次改动前的基线逐字节相同。模拟 Chat 验证了改稿、局部补录、跨 Run 恢复、READY 时序确认和配乐任务提交，重复完成通知只提交一次。本次回放未重启历史项目，真实补录与配乐试听仍待验收。
-- 项目 `81d1b4c0-6e60-48fc-91de-a91538a7abfa` 一次作答选择 30 秒。首轮图片 Run `1a675c56-fa5b-4c16-a3e1-24fbea3320bf` 六幕均退回，开场选到了下载页尾。自动换图后，Run `04ea91db-aa45-4b60-894c-5a2de39b8f98` 的第二幕通过，其余五幕耗尽两次尝试。复审将后续叠加的标题、标记或署名当作原图必备内容；准备的 PNG 也确实仍是 2880×1800。原项目有两次图片 Run，零音频快照，原 Chat 零张试听卡。
-- 修复后的只读回放从该项目的冻结来源读出换图后的六张 PNG，逐张核对摘要。旧尺寸缓存被拒绝，六张都等比缩至 1728×1080，置于 1920×1080 画布中央，两侧各留 96 像素。定向回归覆盖跨网页同名视图、截图重新制备与缓存读回、审阅范围，以及证据不匹配时的一次返工和最终阻断。回放没有改写历史结果。新审阅能否放行、逐幕旁白、READY 对齐、模型重定时和 BGM 的真实 Chat 交付仍待验收。
-- 项目 `e19cf15a-c448-497a-8802-597adddb9f4f` 一次作答选择 30 秒，图片 Run `ab1420ce-8ce1-4d39-837c-2ed24e8384ab` 完成六幕审阅，六张均为 pass。首幕旁白 Run `7df70b64-2090-4cd3-8341-3facc3a93070` 已生成并缓存 152 字符的原音，在响度分析阶段因 worker 缺少 FFmpeg 失败。原 Chat 有零张试听卡。修复依赖、真峰值参数和管道输入格式后，用相同 MP3（SHA-256 `4c7c80e760f225d1b298bdc76e100985480173181917dc8ebd35e26620326447`）在隔离数据库完成音频快照与首幕试听消息写入，重新读回 9.63628125 秒、48 个波形点、−22.0 LUFS、−5.2 dBTP。诊断复用缓存，新增 TTS 用量为零。真实 Chat 中的 READY 对齐、模型重定时、BGM 及刷新回听仍待验收。
-- 第二轮的官网澄清最多五题，一次提交创作方向、时长、配音语言、字幕语言和画幅。媒体流程按已结算 Run 的草稿 ID/digest 恢复，支持原速 TTS 和 READY cues、跨幕重定时与电子配乐。缓存和新生成音频经过同一 Chat 交付入口，审批、取消和阻断状态随会话恢复。
-- 项目 `83a1bc90-266e-4082-b180-3be7b6e7170e` 的历史记录停在图片恢复，没有 TTS/BGM 或试听卡。后续的定向工具循环与前端组件检查覆盖了精确恢复、多 Run 和波形显示。最终改动由用户从新 Chat 验收，本次未提交新的真实制作请求、调用真实 TTS 或生成验收用 BGM。
-- 项目 `ff0604d5-2d2a-4947-a5d6-4374e0bea74c` 的两次图片 Run 完成了五幕准备与两幕返工。首幕图已读回，分镜写入仍返回 `source_not_ready`，后台结束续行，音频任务和 Chat 播放卡均为零。该项目记录的是修复前的结果。本次改动之后的音频交付等待用户实际验收。
-
-- 一次集中作答后的自主验收以 [Iteration 2 子合同 §0](tasks/website-promo-iteration2-media-slice.md#0-目标任务与迭代纪律) 为准。项目 `7dd2a1f1-75ea-4b21-8525-c0881d4f4e73` 的真实 Chat 诊断经人工 Start 取得两张 PNG（Run `be93f484-06ad-4efe-8467-e7150eaff0e0`），SVG 技术通过但内容审阅不可用，MiniMax 内容失败。随后有人为恢复提示，计划 Start 返回 422，未创建新的 Run。该诊断明确计为自主旅程失败。
-- 图片计划改为按 draft_ref 和 scene_ids 解析服务器规格，保存旧计划兼容。补审复用固定 PNG、Snapshot 和媒体分析，只保存新报告。针对性图片恢复和官网入口 wire 共 6 项通过。未重跑真实 Chat 或 provider，未验证自动 Start/结算续行、验收停点、第二轮真实音频或后续成片。
-
-- 项目 `9cba6a15-79b0-4a13-b922-f953279fbc30` 在一次作答后自动启动图片 Run `8b643ee7-cf52-4c2e-ad25-c22f1620349b`。五张 PNG 均可解码，但 XML 命名空间前缀在 HTML 内联时令 SVG 排版和图形丢失；四幕正式审阅失败，第三幕因审阅回包字段不合规而不可用。新增原生 SVG 视口与 PNG 尺寸验证，旧版 SVG 缓存重新光栅化，其他来源保留固定图。五份原始 SVG 均经本地 Chromium 复验，恢复原布局。图片恢复与官网入口定向检查共 9 项通过。未从 Chat 重启旅程，未调用真实审阅或其他 provider，未进入音频。
-
-- 项目 `36d9b2b5-f10e-4e72-a391-172c57b25145` 的失败已纳入定向回归。图片探测的确切任务由服务端交给既有计划、报价与授权检查。计划被拒后留在当前阶段，Run 的结算事件沿原始制作请求续行。图片未通过时禁止进入音频，当前实现止于音频，正式保存与渲染留到后续轮次。图片恢复、官网入口与续行定向检查共 14 项通过，覆盖工具门与重复结算，尚无真实自主音频出口或浏览器试听证据。
-
-- 项目 `029cdef6-70d3-4674-a120-d995764e5229` 已验证自动启动，原 Run 在第三幕 SVG 重复 `rx` 处失败。修复后逐幕预检、批次保留成功与失败结果、未知供应商结果的只读恢复、结算续行和 SVG 字幕区几何均纳入定向测试。本次未提交真实 Chat，未执行音频或成片。
+按实际 Chat 检查原问题身份、组内答案、批准与拒绝、报价、持久回执和硬刷新。来源准备、Brief、媒体和成片的验收分别记录到对应项目。6D 对真实进程和用户请求的检查见 [6D 验收](tasks/agent-editor-evidence/iteration-6/6d-acceptance.md)。
 
 ### 4.2 授权、会话计量与配置
 
 Canonical：CHAT_ARCHITECTURE §3.1，BILLING §6.5/§7，ADR-117/139；Video 首稿按 VIDEO_PROJECT 的呈现与授权合同。
 
 - 设置读写覆盖缺席/非法值/部分键/同会话生效，确认控件只在 Settings「助手」，composer/dock 不出现偏好开关。
-- auto/ask × quote=0/正价 × 守卫线 × NULL × 有无制作意图：服务端矩阵与真实 Chat 各覆盖代表路径；dock Start、口头/typed answer 共用 gate，Video 首稿不得同回合开工，confirmed_via/scope 证明真实。
+- auto/ask × quote=0/正价 × 守卫线 × NULL × 有无制作意图：服务端矩阵与真实 Chat 各覆盖代表路径；在原生调用与回答费用问题两条入口验证确切操作、报价和授权范围。
 - 真实回合检查 conversation_usage：每回合一行，tokens/cache/cost/model/project 归属正确，多迭代聚合、无调用空回合零行、记录失败不打断回复；永不上用户账单/UI，不替代 agent_calls。
 - context 窗口边界与世界状态幸存需要核心覆盖；预算是否调整由真实 usage 分布决定，保持 prefix-cache 稳定顺序，滚动摘要不能代替溢出证据。
 - 费用四面同源、NULL/守卫线文案诚实，积分余额/冻结/台账一致；工作段、Dock 两形态、打字机与信封权威不回退。

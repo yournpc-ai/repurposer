@@ -30,7 +30,7 @@
 1. **少量能力组合出丰富作品**：优先建设素材、时间、叠放、文字/图形、动画、声音与可再生产媒体等可复用能力。代表样片是阶段验收，不是永久模板上限；不为单条参考片预建完整 NLE、3D 引擎、特效库或通用插件平台。
 2. **原生内容与媒体生产互补**：需要精确独立修改的文字、图形等保留原生身份；复杂、特殊、变化快的画面可通过程序或模型生产为媒体，并保留可再次生产的来源。创作层统一用 `GeneratorObject` 表达后者，具体边界见 §4.3.2。
 3. **代码也是创作材料**：受控程序路线须允许 Agent 根据需求编写、修改视觉程序，经预览反馈改善结果，不能只调用开发者预置效果。`draw-2d` 承载受控 2D 绘制；`remotion-project` 允许 Agent 按讲稿、文案和素材编写完整 Remotion 工程，包括多文件、多组件、共享 helper、Composition 注册与内部时间线。工程在上游隔离烘焙为固定媒体，最终 video-spec 仍无 React/Remotion。执行图的拓扑与权限仍由系统代码裁决；创作自由不等于业务调度、计费、数据库、动态依赖、网络或任意文件权限。
-4. **生成可增量，保存与制作必须固定**：首稿通过多次有界工具调用形成同一个服务端工作草稿；每一步只校验和修改所属范围，完整呈现前做一次全量校验，并经唯一写口保存一个不可变 CompositionVersion。制作前默认只呈现 Storyboard、修改摘要和必要静态代表帧；动态检查只针对明确 Scene/Clip 时间窗或独立 Object 的可选 Scrub，完整成片动态预览永不提供。只有动态需求需要比较/澄清、用户修改后需要核对局部结果，或用户明确要求看特定效果时才放出局部预览；通用效果示例可走 Preset 候选。反馈只修订目标范围。用户明确制作后才由 produce_video 钉版本、程序、输入与执行摘要，恢复/重试不追 current、不重新设计。预览的调用、资源与费用有界并复用既有计量；内容、图、Run、队列、渲染与交付不新增平行生产链。
+4. **保存与制作固定到版本**。create_video 创建作品。Agent 通过原生编辑工具修改当前作品，通过 preview_range 观察具体版本与时间窗。正式导出使用独立费用授权和版本固定的 ExportJob。
    首稿默认完整校验、保存并呈现分镜。模型遇到影响交付、可通过真实画面确认的具体动态疑点，或用户明确要求查看某个效果时，才检查对应幕或接缝。开启按幕审片后按播放顺序推进，复用仍有效的证据。保存后的 Chat 反馈以目标作品当前版本为基准，执行定向编辑，按需核对受影响的局部。当前接线与剩余验收见 [当前视频合同](tasks/skill-package-promo-video.md)。
 5. **模型独立是领域边界，不是全模型已支持的声明**：作品、Skill、编辑操作不绑定某个模型品牌；文本/代码创作模型与媒体生产模型可不同，provider 能力、私有参数和用量留在适配边界。按真实消费者接入和验证，不先搭全供应商框架，也不承诺任意模型都有相同能力与质量。
 6. **分开验收表达、执行、创作、编辑**：能保存不等于能渲染，能渲染不等于 Chat 能稳定创作，媒体可播放不等于内部元素可编辑。每批说明四层的实际出口、证据与未支持项；通过动态预览和必要试听判断结果，静帧/结构检查不代替视听验收。
@@ -115,41 +115,10 @@ Composition 使用独立 id 与 owner，`origin_project_id` 记录来源而不�
 
 ### 2.2 唯一写口与并发
 
-所有 LLM 创作与修订、确定性手势和未来 Markdown 组件提交都经 `apply_composition_edits` 落版。**生成原子性不等于保存原子性**：工作草稿可以逐步生成，CompositionVersion 仍一次完整校验、一次原子提交。
+create_video 校验首稿、项目权限、素材快照和用户约束，保存 Composition 与第一版。每个编辑 Tool 以 opening、原生 call ID 和当前 base_ref 提交修改。服务端定位目标 Clip 与来源，使用 apply_composition_edits 校验内容、插入不可变版本并以 CAS 更新 head。失败时可以读取实际 head 再作决定。
 
-```text
-首稿 / 开放重稿：
-design_video(draft_ref?, settings?/sources?/完整实体写入/稳定 id 删除, save=false)
-→ 服务端保留同一个未提交工作草稿
-→ 每次只校验本次实体及其可独立判断的来源/时间/权限约束
-→ 返回新的 draft_ref 与有界摘要，不生成 CompositionVersion
+预览绑定版本、摘要和时间窗。导出提交时固定版本与输入，后续编辑可以继续推进 head。审片与交付读取原 opening 的 Output 和版本。Skill、Renderer 与工具循环共用这套内容和版本事实。
 
-完整呈现前：
-design_video(draft_ref, save=true)
-→ 解算不可变 SourceSnapshot 身份与 digest
-→ 对组装后的完整 Composition 做 schema + 内容校验
-→ apply_composition_edits 一次性插入不可变 CompositionVersion
-→ 完整分镜进入反馈循环；仅在创作意图需要时附精确版本局部 Scrub/代表帧
-
-已保存版本的定向修订：
-base_ref(composition_id, version_id, content_digest)
-+ 当前目标所需的一批直接 Ops
-+ request_id
-→ 服务端解算目标、选区、来源、时间与布局
-→ 原子应用并校验完整 Composition
-→ 插入一个新 CompositionVersion
-→ 条件更新 Composition.current_version
-```
-
-- 工作草稿复用 ConversationContext，不新建 Draft/AuthoringSession 表或另一作品根。草稿不是版本，不进入正式 Storyboard 呈现、制作或交付；成功保存后退役。
-- 首稿与开放重稿保留 `scene_plan/scene` 和必要的完整实体写入：每次只携带当前设置、来源或创作范围，未提供的范围保持原值；所有内容写入先经 `save=false` 合并，`save=true` 只携带当前 `draft_ref` 与允许的非内容保存参数。需要整体替换时，Object、Animation、Keyframe 随完整所属 Clip 提交，完整 Track 自带完整 Clips。
-- 内置 promo-video 与其他无声明 Generator 的创作共用 `scene_plan / scene` 高层协议：首次以 `scene_plan + source_ids` 决定叙事顺序并建立草稿，随后每次只写当前 `scene` 的来源、取景、原生文案和既有 Preset；`music_snapshot_id` 只接受现有 Music 流程准备好的 audio Snapshot。`save=true` 只保存当前 `draft_ref`，服务端确定性展开 Tracks/Clips/Objects、布局、时间窗与动画，完整校验后经唯一写口落版。模型不得提交 raw Track/Clip/Animation/Keyframe、布局、timebase、track order 或通用 motion/placement 字段袋。
-- 服务端固定 Skill 版本并绑定当前用户约束、来源身份、digest 与时间事实；原生展开不执行 demo TSX。高层参数候选由现有纠错机制处理，非法展开作为宿主缺陷失败闭，不向模型泄漏底层修复协议。Generator 仍按自身局部任务读取参考源码。
-- 保存版的原生编辑按用户要求解算目标对象、选区与时间，携带当前版本进入唯一写口。不明确的目标由用户澄清。
-- 首稿 schema/语义错误与保存版局部错误都回到当前工作草稿或当前 base_ref，只修正报错范围。`fresh_design`、`rejected_candidate_ref` 和“首稿结构错误必须整片重交”不再是恢复合同。高层参数候选由现有 `correct_tool_candidate` 修正；合法高层输入若展开出非法 Op/Composition，则作为 builder 缺陷失败闭，不让模型修底层字段。
-- 直接 Op 是受 schema 约束的原子修改协议，不是模型自由编写执行程序。需要现场编写视觉公式或专用代码时，只能进入目标 Clip 的受控 Generator，经隔离 runner 生产固定媒体；不得借 Op 获得任意 Shell、数据库、调度、网络或渲染器权限。
-- 每个新实体先做自身 schema 和可独立判断的规则校验；跨 Scene/Track/Clip 的覆盖、全局容量、呈现完整性与最终渲染约束在 `save=true` 时统一校验。权限、owner、不可变来源、摘要、并发、幂等、计费与 Generator 隔离不因增量创作延后或绕过。
-- 过期 base_ref/draft_ref、并发覆盖和非法字段失败闭；跨 Chat 编辑同一 Composition 使用同一当前版本条件更新。
 - 相同 owner/Composition/request_id 的同一提交重试返回已提交结果；同 key 不同载荷拒绝。请求幂等与并发检查分开，不能用过期版本错误代替成功请求的恢复。
 - change_set 由系统比较 base/result 得出，不由模型自报。未触碰的 Scenes、Tracks、Clips、Objects 保持原值；确定性地刷新或清空受影响的描述/派生字段不视为额外创作。
 - 新版本不反向改写已提交的导出 或已交付 Output。Output 钉 `composition_id + composition_version_id + content_digest`，其 `project_id` 记录本次制作所在 Chat；旧 Output 在新制作真实完成前保持可用。
@@ -314,7 +283,7 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 | 可编辑图形 MG | 原生图形/路径与 Animation | 按代表场景添加最小受支持图元，参数可编辑；不预建完整矢量设计系统 |
 | 受控 2D/3D 程序画面、模型生产画面 | GeneratorObject → 固定媒体 | 保留程序/请求与参数，显式生产后参与合成；内部修改需改来源并重新生产。当前实际 producer 为 draw-2d 的受限 2D 绘图命令、隔离部署下的 remotion-project 多文件 TSX 与 image-generation 的 MiniMax image-01 单图请求 |
 
-**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `draw-2d`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；已接 `remotion-project`：Agent 编写受控多文件 TSX，在部署同时开启 API 与真实隔离 runner 时烘焙为固定 MP4/PNG；也已接 `image-generation`：保存 MiniMax `image-01` 的 16:9 单图请求，经既有 Run 授权后真实生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；通用 target × move/trim/delete/time_map × ripple/source policy 已落码，原生/Web 输出时间映射与固定 Audio 显式 1× 裁取复用同一写口，Speech、Generator、VideoObject 的时长映射失败闭，验证状态见施工合同。其他模型、生成视频、通用媒体 rate 和自由 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
+**当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `draw-2d`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；已接 `remotion-project`：Agent 编写受控多文件 TSX，在部署同时开启 API 与真实隔离 runner 时烘焙为固定 MP4/PNG；也已接 `image-generation`：保存 MiniMax `image-01` 的 16:9 单图请求，经原生图片工具授权后生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；通用 target × move/trim/delete/time_map × ripple/source policy 已落码，原生/Web 输出时间映射与固定 Audio 显式 1× 裁取复用同一写口，Speech、Generator、VideoObject 的时长映射失败闭，验证状态见施工合同。其他模型、生成视频、通用媒体 rate 和自由 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
 
 代表性出口分为两类，均须经过 Chat 设计、审阅、制作与局部修订：
 
@@ -347,7 +316,7 @@ draw-2d 的来源字段为 `producer/code/parameters/output`，program_digest �
 
 旋转轨道消费者已验证 Agent 原创三轨道、几何符号及差速/反向运动；初版与 `speed_multiplier` 修订各有独立 program digest 和精确预览，固定媒体与原生 Text/Image 同版合成，重试准备复用同一固定媒体而不重新创作。该出口是 run-less 领域消费者证据，不代表正式 Chat 计费旅程已通过。
 
-image-generation 当前只声明 `producer/prompt/provider/model/parameters/output`，首个消费者固定 provider=`minimax`、model=`image-01`、16:9 单图，不暴露种子、参考图或任意供应商参数。设计与修订只保存请求；授权图片生成缺失固定媒体时先在对应执行键持久化 `submitted` 标记，再发出一次非幂等生成 POST。MiniMax 同步 image-01 接口未文档化幂等键、客户端请求 ID 或历史结果查询；传输/响应解析失败，或恢复时只读到 submitted 而没有固定媒体，均按“结果未确认”失败闭，不自动再次提交，不把未知供应商消费记成 0 或 1 张。该标记只保证同一执行键的恢复不盲重放，不承诺供应商恰好一次执行；用户明确重新生成仍须新 Run 和独立执行命名空间。
+image-generation 当前只声明 `producer/prompt/provider/model/parameters/output`，首个消费者固定 provider=`minimax`、model=`image-01`、16:9 单图，不暴露种子、参考图或任意供应商参数。设计与修订只保存请求；授权图片生成缺失固定媒体时先在对应执行键持久化 `submitted` 标记，再发出一次非幂等生成 POST。MiniMax 同步 image-01 接口未文档化幂等键、客户端请求 ID 或历史结果查询；传输/响应解析失败，或恢复时只读到 submitted 而没有固定媒体，均按“结果未确认”失败闭，不自动再次提交，不把未知供应商消费记成 0 或 1 张。该标记只保证同一执行键的恢复不盲重放，不承诺供应商恰好一次执行；用户明确重新生成须绑定新的原生调用，按该请求重新取得费用授权。
 
 图片生成成功后，Agent 从媒体回执取得所属项目、固定 SourceSnapshot、实际尺寸和 digest，再决定是否绑定到内容。供应商未知时按原记录核对。
 
@@ -452,7 +421,7 @@ TextObject
 - 有真实 BeatGrid 时优先吸附真实节拍；只有 BPM 时才按均匀拍长推导。
 - snap 后统一量化到输出时间/帧；不得由 API 与 Renderer 各自 round。当前 snap_cut 读取该版本音乐 SourceSnapshot.meta.beat_grid，将源时间节拍经音乐 source_range 映射到输出时间，在显式容差内吸附所选相邻切点；BPM 仅在无真实 beats 时按均匀拍长推导，无两者则明确不吸附。总长、独立文字和音乐不自动 ripple。
 - 没有音乐不伪造 BPM；BPM 不代替 fps，也不自动改变所有 Object 动画。
-- 本地 Music 的试听比较经 `show_music_candidates` 只呈现真实候选，后续普通消息的序号选择经 `select_music` 解算持久化成员；应用时由 prepare 冻结 Music 字节，再由 `revise_video.add_audio(role="music")` 形成新版本。BGM 与 SFX 都是原生 AudioObject Clip，但分别位于 music/effect 轨；候选与选曲本身不产生制作意图。
+- 本地 Music 的试听比较经 `show_music_candidates` 只呈现真实候选，后续普通消息的序号选择经 `select_music` 解算持久化成员；应用时由 MediaJob 固定 Music 字节，再由 `insert_audio` 形成新版本。BGM 与 SFX 都是原生 AudioObject Clip，但分别位于 music/effect 轨；候选与选曲本身不产生制作意图。
 
 ### 6.4 旁白、字幕与固定切点
 
@@ -500,7 +469,7 @@ CJK 可以逐字成 token，连续 Latin/digit run 可以整词成 token；标�
 
 `SpeechObject` 增加可空 `alignment={alignment_id, content_digest}`；源对齐 SpeechClip 同时绑定真实音频 SourceSnapshot/source_range。`Animation` 增加可空 `NarrationAnchor`，保存 alignment 引用及 sentence/word/text_range 来源。设计时由服务端把锚点解算成 Clip-local 整数 keyframes，video-spec 只携带最终帧值；renderer 不读取 NarrationAlignment。锚点解算必须支持指定 sentence、word_id 或 text_range + occurrence，缺失、歧义、跨句或超窗明确报错，禁止“找不到就返回 0”。
 
-讲稿、音频或 source_range 改变会使旧对齐/锚点失效：模型通过 `revise_video` 提交目标 Speech Clip 的直接 Op；源对齐 Speech 的文本或媒体变化先准备新 NarrationAlignment，再生成新 CompositionVersion 并重解算受影响动画，未点名的对象保持 id 与内容。确定性时间平移按现有时间映射移动锚点 provenance；不支持保持语义的 Speech time_map/rate 继续失败闭。
+讲稿、音频或 source_range 改变会使旧对齐/锚点失效：编辑操作定位目标 Speech Clip；源对齐 Speech 的文本或媒体变化先准备新 NarrationAlignment，再生成新 CompositionVersion 并重解算受影响动画，未点名的对象保持 id 与内容。确定性时间平移按现有时间映射移动锚点 provenance；不支持保持语义的 Speech time_map/rate 继续失败闭。
 
 `timestamps`、`timing`、`beats` 和语义表都可以从 READY NarrationAlignment + CompositionVersion 生成只读 DTO、调试 JSON 或交付导出，**这些内容必须完整保留，但不获得第二份独立编辑权**。唯一可编辑讲稿仍是 SpeechObject.text，唯一创作结构仍是 CompositionVersion。
 
@@ -540,7 +509,7 @@ Composition 的持续修订使用一套与 Skill、模板和具体影片无关�
 - Scene 被编辑或其成员被整体变换时，Scene.range 与成员使用同一时间映射；Scene 不拥有第二套局部时间线。
 - 所有 ops 先在同一候选版本完成映射，再由唯一量化座统一取整，避免逐 Clip 累计舍入误差。
 
-每次修订仍只经 `revise_video → apply_composition_edits` 原子产生一个 CompositionVersion；保留未改实体 id、SourceSnapshot 与 `skill_provenance`，不调用 Director redraft。任一目标或媒体不支持时零新版、零部分写入。通用操作不等于承诺所有媒体能力；操作语义共享，Object/adapter 的能力矩阵独立裁决。
+每次修订仍只经 原生编辑工具与 `apply_composition_edits` 原子产生一个 CompositionVersion；保留未改实体 id、SourceSnapshot 与 `skill_provenance`，不调用 Director redraft。任一目标或媒体不支持时零新版、零部分写入。通用操作不等于承诺所有媒体能力；操作语义共享，Object/adapter 的能力矩阵独立裁决。
 
 ## 7. Skill、VideoTemplate、Preset、PromptTemplate
 
@@ -561,18 +530,18 @@ VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Ski
 
 发布目录为 `<MANAGED_SKILL_ROOT>/promo-video/<version>/`，当前目录版本由 `MANAGED_SKILL_VERSIONS` 选择，已绑定作品沿用自己的版本引用。部署方内部完成安装和注册，用户不安装包，不恢复仓库自研 Promo，也不增加新的 Skill 商店或自助安装路径。
 
-通用 PackageReader 按需读取方法、镜头卡、Gallery 变体和实际存在的预览；它们是创作证据，不是运行期镜头注册表。宿主负责采集、grounding、素材权限、估价、授权、TTS、存储、渲染与失败恢复，作品仍经 `design_video` / `revise_video` 和唯一内容写口保存。固定 VideoTemplate 若被其他现役 Skill 使用，只能确定性展开到同一 CompositionVersion，不能形成第二生产链。
+通用 PackageReader 按需读取方法、镜头卡、Gallery 变体和实际存在的预览；它们是创作证据，不是运行期镜头注册表。宿主负责采集、grounding、素材权限、估价、授权、TTS、存储、渲染与失败恢复，作品仍经 `create_video` 和原生编辑工具 和唯一内容写口保存。固定 VideoTemplate 若被其他现役 Skill 使用，只能确定性展开到同一 CompositionVersion，不能形成第二生产链。
 
 ### 7.3 外部 Skill 持久化与加载
 
 - 当前产品边界：内置包随应用部署，由内部注册和使用，不开放用户自助安装。外部 SkillVersion 链只用于内部登记、测试与历史 provenance，不承诺 Claude Code / Codex 插件运行时兼容，也不把用户导入列为当前验收欠账。
 - 用户 Skill 按 owner 隔离，SkillVersion 不可变；保存原始 instructions、references、声明输入、能力报告、Strict/Adaptive policy 与 `source_uri/source_revision/source_hash`。原始外部包无需改名或内容改写即可导入；旧作品不随后续 SkillVersion 改变。
 - **Strict** 只固定导入审阅时明确声明的必要输入、场景数、时长与 Generator producer；这些确定性字段无法满足时给出具体冲突。参考 demo 的词数、示例文案和坐标不自动成为 Strict 产品规则。**Adaptive** 只允许在声明边界内由 Agent 适配，实际故事板、程序与参数随结果呈现。这里不发明通用约束求解器、第二套模板 DSL 或通用插件平台。
-- 唯一创作链为：SkillVersion → 有界选择 instructions/references 并作为不可信创作输入注入现有设计/Generator Agent → 普通原生编辑或受控 Generator 来源 → 预览与 `revise_video` 修订 → `apply_composition_edits` → 固定生产与 Output。不得新增第二意图入口、第二作品内容写口或第二生产链。
+- 唯一创作链为：SkillVersion → 有界选择 instructions/references 并作为不可信创作输入注入现有设计/Generator Agent → 普通原生编辑或受控 Generator 来源 → 预览与原生编辑修订 → `apply_composition_edits` → 固定生产与 Output。不得新增第二意图入口、第二作品内容写口或第二生产链。
 - 外部 `scripts/` 不自动执行，`allowed-tools` 只是未授权依赖声明。外部内容不能覆盖系统、grounding、素材权限、报价和授权；Generator 仍无业务数据库、调度、计费、任意网络或任意文件能力。
 - 渐进读取预算是整个 SkillPackageSession 的共享上限：24 次包读取、16 次 Director 生成（初稿、schema repair、grounding repair 合计）、240 秒 Director 创作墙钟（前置素材采集与 CapturePlan 不计入，嵌套修复不重置）、240k 文本字符、24 个 demo、4 个预览媒体与 16MiB 媒体字节；嵌套修复不刷新计数，缓存媒体不重复计费，媒体在 I/O 前做容量预检。当前绑定 SkillVersion 的 PNG/JPEG/WebP 预览可返回服务端推导的 `{path,snapshot_id,snapshot_digest,content_type}`；Director 只能逐字段回引该身份。设计写口再次读取并校验真实字节，以 owner + SkillVersion/路径/digest 锚注册 asset-less 图片 SourceSnapshot，再发出普通 `bind_source`；跨 owner、跨版本、路径/digest/MIME 替换或任意 owner 快照都不能成为组件资源。
 - 首版不做市场、团队共享、多 Skill 自由叠加，也不从自己的 CompositionVersion 形成或保存 Skill。固定源码适配器只作合同测试夹具，不是产品加载实现；产品加载链不得按包名、镜头名、仓库 URL、commit 或 digest 分支。
-- C 的真实外部消费者为 [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft)：固定源 commit，原始包完成通用导入与 SkillVersion 持久化，再选一个未参与固定适配的 held-out 镜头，用新产品文案经真实 Agent 创作、预览、修订与 run-less 精确版本 Output 验证。可只支持明确声明的镜头与能力范围，不声称兼容整个镜头库；正式 Chat/Run 用户旅程归 C2/C5 验收。
+- C 的真实外部消费者为 [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft)：固定源 commit，原始包完成通用导入与 SkillVersion 持久化，再选一个未参与固定适配的 held-out 镜头，用新产品文案经真实 Agent 创作、预览、修订与 run-less 精确版本 Output 验证。可只支持明确声明的镜头与能力范围，不声称兼容整个镜头库；正式 Chat 用户旅程归 C2/C5 验收。
 
 ### 7.4 Skill 调用与 Home 入口
 
@@ -586,7 +555,7 @@ VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Ski
 - Chat 内组件选择复用 Candidate Surface：`show_video_presets` 展示 2–4 个真实动态 `video_preset_set`，`VideoPresetCandidateSurface` 只负责播放与呈现；用户下一轮用普通语言选择，`select_video_preset` 只记录 selection，不写版本或创建 Job。应用选择时由模型在当前目标上提交直接 `apply_preset` Op，写出实际创作结果，不把 candidate set/member 当作编辑载荷；不跳外部 Gallery、不复制内部镜头名、不新增候选查询端点。浏览 Preset 是可选比较，不是制作前置。
 - 非 Skill Recipe 继续使用 PromptTemplate；Recipe 不进入 @ picker，也不借 Skill 之名获得隐藏执行参数。视频 Skill chip 是独立实体，不把既有 Recipe 改名成 Skill。
 - 自然语言明确点名时只解算唯一可访问 Skill，歧义必须询问。一次创作至多绑定一个显式 Skill，普通 Chat 未显式选择时仍可按现有设计路由进行通用创作。
-- Strict/Adaptive 只约束首版设计。CompositionVersion 出生后，后续时间、内容与 Generator 修订统一走 `revise_video`，不重新执行 Skill；`skill_provenance` 仅保留来源血缘。制作完成由既有 delivery 正文 + Output 卡收口，不自动打开 Workbench/Inspector 或固定追加下一步建议；后续创作与修订动作仍回到普通 Chat。
+- Strict/Adaptive 只约束首版设计。CompositionVersion 出生后，后续时间、内容与 Generator 修订使用对应原生编辑工具，不重新执行 Skill；`skill_provenance` 仅保留来源血缘。制作完成由既有 delivery 正文 + Output 卡收口，不自动打开 Workbench/Inspector 或固定追加下一步建议；后续创作与修订动作仍回到普通 Chat。
 
 ## 8. Chat、原生工具与正式导出
 
@@ -655,7 +624,7 @@ Skill 的方法、项目来源及用户约束与当前作品共同进入普通 C
 3. **MaterialDigest**：Chat 上下文确定性列出已有素材、读取/采集状态、当前版本绑定和可更新事实；不全文重复注入。
 4. **读取复用**：同回合、同 canonical read key、同快照复用 Observation；设计装配器直接读取已绑定 manifest，不要求模型为导演再次调用 `get_web_page`。
 5. **显式刷新**：只有用户明确请求或选择新快照才更新绑定；新旧 digest 不同必须呈现，不静默替换。
-6. **派生品牌理解**：`analyze_brand` 读取同一不可变 SourceSnapshot 的 citable lines 和实际 PNG media inputs，经共享 Agent harness 形成 BrandProfile，再由独立短事务写入 PendingPlan.creative_state。原始 Snapshot 永不被 BrandProfile 覆盖；CSS 未确认的字体只能写视觉相似推断，失败不保存档案，模型不直接写数据库。
+6. **派生品牌理解**：`analyze_brand` 读取同一不可变 SourceSnapshot 的 citable lines 和实际 PNG media inputs，经共享 Agent harness 形成 BrandProfile，再由独立短事务写入 ProjectBrief.creative_state。原始 Snapshot 永不被 BrandProfile 覆盖；CSS 未确认的字体只能写视觉相似推断，失败不保存档案，模型不直接写数据库。
 
 ### 9.1 全局素材库与跨 Chat @ 引用
 
@@ -687,7 +656,7 @@ Skill 的方法、项目来源及用户约束与当前作品共同进入普通 C
 
 既有 WebObject、Composition 校验与 `web_shots` 继续读取冻结 views；具体镜头只消费真实存在的资源，不能把其他 output 的成功说成失败 output 已补齐。功能状态必须来自真实动作结果，合成光标、选框和文字不得冒充功能响应。`page_script` 与任意 JavaScript 不属于当前协议，归后续独立批次。
 
-局部取景修订继续使用 `revise_video.focus_web`：模型只给 Clip 与冻结元素 id，服务端经 grounding 重算相机关键帧，不转写相机数值，也不重新采集或重设计其他内容。参考 video-shotcraft 的采集模板与 PageCam 方法，但不复制其任意 `page.evaluate`、过期 post-state 坐标或合成状态冒充真实状态的实现。
+网页取景的领域操作使用 `focus_web`：模型只给 Clip 与冻结元素 id，服务端经 grounding 重算相机关键帧，不转写相机数值，也不重新采集或重设计其他内容。参考 video-shotcraft 的采集模板与 PageCam 方法，但不复制其任意 `page.evaluate`、过期 post-state 坐标或合成状态冒充真实状态的实现。
 
 
 ## 10. Chat 组件、Canvas 与 Scrub
@@ -763,7 +732,7 @@ SFX/Music 候选与音频 Inspector 共用真实 `WaveformPlayer` 的 play/pause
 - 不迁移旧 FilmStoryboard、film-spec、ClipSpec 或旧文案内容到新作品模型，不保留旧 Film/Clip 的兼容执行层。保留新 CompositionVersion、源素材、用户消息、Job 回执与账本与真实来源关系。
 - 初始选段以真实 ASR 词轴和冻结来源确定 source_range，画面使用固定 layout/fit/transform。旧式二次裁短不在本批实现；未来的视口或视频裁剪能力须从当前对象模型独立建设，不恢复旧 operations。
 - 原片 ASR 与 READY NarrationAlignment 分别提供普通 TextObject 的时间来源。冻结 TTS 音频带来源和 digest，由普通 AudioObject 使用；dialogue/music 只是轨道用途，放置、增益与混音走通用时间内核。手改 independent 字幕不被重派生覆盖。SRT、旧翻译/双语协议与旧 dub_clip 行为不属于本批必交。
-- `operations`、`journeys`、`exploration_rows`、`graph_islands` 及对应外键列只经新 Alembic migration 废弃。当前迁移为 `g7d4a1c9e2f6`，历史迁移保留。
+- `operations`、`journeys`、`exploration_rows`、`graph_islands` 及对应外键列只经新 Alembic migration 废弃。该历史迁移为 `g7d4a1c9e2f6`，历史迁移保留。
 
 - 对公开发布中的外部操作，保留 Publication 和关联 Output 至平台结果核清。
 - ASR words、可引用原句、来源关系和仍有消费者的图片构图锚点保留。视频视觉 speaker_map 生成、自动跟拍、说话人切镜与 crop_track 退出；OpenCV/YuNet 按现役图片消费者保留。

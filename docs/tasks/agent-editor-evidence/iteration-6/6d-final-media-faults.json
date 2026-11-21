@@ -1,0 +1,214 @@
+{
+  "fixture": "Exact public test recording from the real 6D journey; authorized synthetic content-addressed recording in the existing TOS bucket; simulated TTS POST and cues. Each crash is an OS SIGKILL. PostgreSQL leases expire naturally.",
+  "cases": [
+    {
+      "case": "before_submit",
+      "database": "rep_6d_fault_9d6c377a26",
+      "crash_signal": "SIGKILL",
+      "after_kill": {
+        "job": "54a27569-bcbf-5e15-af34-0b64271fa4c5",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": false,
+        "voice": "reserved",
+        "original_digest": null,
+        "simulated_posts": 0,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ],
+        "receipt": {}
+      },
+      "after_recovery": {
+        "job": "54a27569-bcbf-5e15-af34-0b64271fa4c5",
+        "status": "succeeded",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "done",
+        "original_digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ],
+        "receipt": {
+          "status": "available",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "snapshot_id": "b3bfbee8-f61c-51ea-b94f-da1b9309d992",
+          "project_id": "e2e678d2-cdcc-442d-85be-f0bc899b4da3"
+        }
+      }
+    },
+    {
+      "case": "after_submit",
+      "database": "rep_6d_fault_dd8b02e3b1",
+      "crash_signal": "SIGKILL",
+      "after_kill": {
+        "job": "50ee02f3-8f49-5a73-9092-5dab46c31e92",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "synthesizing",
+        "original_digest": null,
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ],
+        "receipt": {}
+      },
+      "after_recovery": {
+        "job": "50ee02f3-8f49-5a73-9092-5dab46c31e92",
+        "status": "unknown",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "synthesizing",
+        "original_digest": null,
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ],
+        "receipt": {
+          "status": "provider_unknown",
+          "charged_credits": null,
+          "reserved_credits": 3,
+          "error": "The provider result needs reconciliation."
+        }
+      }
+    },
+    {
+      "case": "after_fixed",
+      "database": "rep_6d_fault_bd1f03daee",
+      "crash_signal": "SIGKILL",
+      "after_kill": {
+        "job": "cc822bb9-8f6c-5348-a4ed-007403004bcf",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "aligning",
+        "original_digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ],
+        "receipt": {}
+      },
+      "after_recovery": {
+        "job": "cc822bb9-8f6c-5348-a4ed-007403004bcf",
+        "status": "succeeded",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "done",
+        "original_digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ],
+        "receipt": {
+          "status": "available",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "snapshot_id": "d17a6124-169c-5f2b-873a-2b3d4c09d732",
+          "project_id": "ce6030db-54fd-45e8-aaa4-e47b91bd35e9"
+        }
+      }
+    },
+    {
+      "case": "after_settlement",
+      "database": "rep_6d_fault_369381494c",
+      "crash_signal": "SIGKILL",
+      "after_kill": {
+        "job": "afec4322-dd41-5c90-a4b8-c838fdbb805b",
+        "status": "succeeded",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "done",
+        "original_digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ],
+        "receipt": {
+          "status": "available",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "snapshot_id": "0ce17c85-99a7-549c-af8c-ef93a9dfd0d4",
+          "project_id": "ad660593-d4d5-4b80-bd09-1e6dc9b561c9"
+        }
+      },
+      "after_recovery": {
+        "job": "afec4322-dd41-5c90-a4b8-c838fdbb805b",
+        "status": "succeeded",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "done",
+        "original_digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ],
+        "receipt": {
+          "status": "available",
+          "charged_credits": 3,
+          "reserved_credits": 0,
+          "snapshot_id": "0ce17c85-99a7-549c-af8c-ef93a9dfd0d4",
+          "project_id": "ad660593-d4d5-4b80-bd09-1e6dc9b561c9"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,2115 @@
+{
+  "source": {
+    "name": "amber-arc.mp4",
+    "sha256": "11f4e9f66df362a61166e7aa2f1f87dd703db6211b262c0a6b7c608fffde83e4",
+    "pixels": [
+      480,
+      270
+    ],
+    "frames": 144,
+    "fps": 24,
+    "authorization": "public synthetic acceptance sample"
+  },
+  "cases": [
+    {
+      "sample": "post-journey",
+      "user": "8c139ebb-0994-406c-b2a3-483d49cd1623",
+      "project": "34be643e-6a08-411a-8fd5-73dc5b812db5",
+      "asset": "3d144f0d-e855-4f61-80ff-0b96d47375cc",
+      "openings": [
+        {
+          "id": "1e922ac2-b1d5-455c-baff-496b7cb72c83",
+          "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+          "state": "settled",
+          "wire_requests": 12,
+          "provider_emitted_calls": [
+            {
+              "request": "57b3df92-c6e1-42ff-aae9-2ed44f0aa1e0",
+              "id": "call_c6361b0f34dd4af285181f7d",
+              "name": "get_understanding"
+            },
+            {
+              "request": "3afc5d5c-9a77-404e-9e8a-8dcaa9328c9d",
+              "id": "call_567314cbd2d049ecb97840aa",
+              "name": "get_asset"
+            },
+            {
+              "request": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "id": "call_68c0052f6a99480e8acfbc2f",
+              "name": "prepare_video_materials"
+            },
+            {
+              "request": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "id": "call_efb24cd4a96a4af78fe14f1e",
+              "name": "generate_voice"
+            },
+            {
+              "request": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "id": "call_73520cda53f84ea4b189d6e1",
+              "name": "generate_music"
+            },
+            {
+              "request": "c6d1ffcd-e50d-4bf2-97f7-ee4323cdda7e",
+              "id": "call_ae8101946dec4ceca278872e",
+              "name": "generate_music"
+            },
+            {
+              "request": "262192ab-7dc5-4d2e-81e0-59b776b3e7e6",
+              "id": "call_01a1feaafaaf7613941a7cf8",
+              "name": "create_video"
+            },
+            {
+              "request": "d4c7627b-2ba4-47ed-a010-f4ae4b4efc5f",
+              "id": "call_01a1feab0145763d94768fd7",
+              "name": "create_video"
+            },
+            {
+              "request": "51e9d0dd-1605-42e7-8937-a751c0aa10bf",
+              "id": "call_01a1feab8ae372f5b1e1e69f",
+              "name": "insert_audio"
+            },
+            {
+              "request": "51e9d0dd-1605-42e7-8937-a751c0aa10bf",
+              "id": "call_01a1feab8ae372f5b1e1e6a0",
+              "name": "insert_audio"
+            },
+            {
+              "request": "f05e7afb-034d-4c62-ac21-87c389287989",
+              "id": "call_01a1feab949f74de874e4373",
+              "name": "insert_audio"
+            },
+            {
+              "request": "f05e7afb-034d-4c62-ac21-87c389287989",
+              "id": "call_01a1feab949f74de874e4374",
+              "name": "insert_audio"
+            },
+            {
+              "request": "85713947-4a8f-4466-9658-fd1defb6bf4b",
+              "id": "call_7d1973496944400391cdc8ca",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "64c4e184-f12b-43c5-b660-ce362de06918",
+              "id": "call_11a30379f9ee4943b7ee06cd",
+              "name": "preview_range"
+            },
+            {
+              "request": "4f34c4ef-00d5-4692-9010-ab98d83780b0",
+              "id": "call_function_r0n6ax41tdg5_1",
+              "name": "insert_audio"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_c6361b0f34dd4af285181f7d",
+              "tool_name": "get_understanding"
+            },
+            {
+              "call_id": "call_567314cbd2d049ecb97840aa",
+              "tool_name": "get_asset"
+            },
+            {
+              "call_id": "call_68c0052f6a99480e8acfbc2f",
+              "tool_name": "prepare_video_materials",
+              "call_state": "completed",
+              "group_id": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_efb24cd4a96a4af78fe14f1e",
+              "tool_name": "generate_voice",
+              "call_state": "completed",
+              "group_id": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_73520cda53f84ea4b189d6e1",
+              "tool_name": "generate_music",
+              "call_state": "not_executed",
+              "group_id": "6aba8b34-a846-4e0f-89a1-c34b84a474db",
+              "call_index": 2
+            },
+            {
+              "call_id": "call_ae8101946dec4ceca278872e",
+              "tool_name": "generate_music"
+            },
+            {
+              "call_id": "call_01a1feab0145763d94768fd7",
+              "tool_name": "create_video"
+            },
+            {
+              "call_id": "call_01a1feab8ae372f5b1e1e69f",
+              "tool_name": "insert_audio",
+              "call_state": "failed",
+              "group_id": "51e9d0dd-1605-42e7-8937-a751c0aa10bf",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1feab8ae372f5b1e1e6a0",
+              "tool_name": "insert_audio",
+              "call_state": "failed",
+              "group_id": "51e9d0dd-1605-42e7-8937-a751c0aa10bf",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_01a1feab949f74de874e4373",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "f05e7afb-034d-4c62-ac21-87c389287989",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1feab949f74de874e4374",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "f05e7afb-034d-4c62-ac21-87c389287989",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_7d1973496944400391cdc8ca",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_11a30379f9ee4943b7ee06cd",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_r0n6ax41tdg5_1",
+              "tool_name": "insert_audio"
+            }
+          ],
+          "questions": [
+            {
+              "id": "76476d98-b76d-4c0f-8706-66e32759c03e",
+              "tool": null,
+              "answer": "approve",
+              "quote": {
+                "total": [
+                  5,
+                  5
+                ],
+                "per_task": [
+                  [
+                    5,
+                    5
+                  ]
+                ]
+              }
+            }
+          ],
+          "deliveries": []
+        },
+        {
+          "id": "97bbb768-a8ee-4129-9743-25c28c4f9730",
+          "request": "确认导出刚才预览的第 3 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+          "state": "settled",
+          "wire_requests": 9,
+          "provider_emitted_calls": [
+            {
+              "request": "b9426483-5d33-4a0c-adc7-e2fbe2c87c85",
+              "id": "call_589e41fca3cf465aa2ced889",
+              "name": "export_video"
+            },
+            {
+              "request": "1a46c6e9-3301-4a8c-b98c-c2acce9c0df4",
+              "id": "call_d1556ab715fe44ac9f4c92ed",
+              "name": "preview_range"
+            },
+            {
+              "request": "40e0ad09-c20a-4bb1-827a-bd77963e545c",
+              "id": "call_function_wlnimd3axcu1_1",
+              "name": "export_video"
+            },
+            {
+              "request": "d341eccb-44d0-4ce3-ae2d-96bd9435e955",
+              "id": "call_function_59auuyxt0aen_1",
+              "name": "review_video"
+            },
+            {
+              "request": "eda33362-d399-4a75-afc1-38f4aee66639",
+              "id": "call_function_h0i6u92n0vrx_1",
+              "name": "review_video"
+            },
+            {
+              "request": "dc545beb-b130-4427-bf18-18bb5d5ae98f",
+              "id": "call_function_e79sdcpq1bg4_1",
+              "name": "deliver_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_589e41fca3cf465aa2ced889",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_d1556ab715fe44ac9f4c92ed",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_wlnimd3axcu1_1",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_function_e79sdcpq1bg4_1",
+              "tool_name": "deliver_video"
+            }
+          ],
+          "questions": [],
+          "deliveries": [
+            {
+              "output_refs": [
+                "20ec1566-8c2a-5219-8d42-2b94a9e18e87"
+              ],
+              "reviewed_version": {
+                "composition_id": "58ee91a9-9233-4a0e-b80e-727a5928c01b",
+                "content_digest": "710593dceda9af4c046c688ce8017a3cea2f5ebc4af594b9c427a7c7fa1a6417",
+                "composition_version_id": "b93449d7-3e76-483d-aba0-9710eaa5cbcd"
+              }
+            }
+          ]
+        },
+        {
+          "id": "5c838f27-d816-47de-a544-8b35af9a6fe7",
+          "request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+          "state": "settled",
+          "wire_requests": 5,
+          "provider_emitted_calls": [
+            {
+              "request": "0a09da5b-aacf-4905-8c61-d18a386cfd67",
+              "id": "call_2f256b5ecd0d4b7daa855a1a",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "15004286-60fc-4910-92e6-491016647827",
+              "id": "call_9d2dd36c8c8d43288895e8a6",
+              "name": "inspect_clip"
+            },
+            {
+              "request": "eb35c6fd-4d0f-4be6-9429-47796c7049a0",
+              "id": "call_90a838e7fd384f1c81f6dbc5",
+              "name": "scale"
+            },
+            {
+              "request": "3c1ffd5f-918b-49d2-bb1c-bdc66869804e",
+              "id": "call_84b2d22a3a964348810b23f4",
+              "name": "list_project_media"
+            },
+            {
+              "request": "cb5aabae-1591-4295-b8cc-aa63c46ed187",
+              "id": "call_ec1c8b0c13894a8cb7a5c239",
+              "name": "scale"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_2f256b5ecd0d4b7daa855a1a",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_9d2dd36c8c8d43288895e8a6",
+              "tool_name": "inspect_clip"
+            },
+            {
+              "call_id": "call_90a838e7fd384f1c81f6dbc5",
+              "tool_name": "scale"
+            },
+            {
+              "call_id": "call_84b2d22a3a964348810b23f4",
+              "tool_name": "list_project_media"
+            },
+            {
+              "call_id": "call_ec1c8b0c13894a8cb7a5c239",
+              "tool_name": "scale"
+            }
+          ],
+          "questions": [],
+          "deliveries": []
+        },
+        {
+          "id": "a7c9c99c-f059-4689-ade6-eb5b1134aac5",
+          "request": "请生成一张原创摄影风格的图片：深蓝色桌面上放着半透明琥珀玻璃球，暖光侧照。这次只生成图片供我查看，允许本次图片生成费用。",
+          "state": "settled",
+          "wire_requests": 4,
+          "provider_emitted_calls": [
+            {
+              "request": "33ff2171-2a28-474b-b512-cf6e3a10e0c4",
+              "id": "call_01a1feb5473876a3bca386bc",
+              "name": "generate_image"
+            },
+            {
+              "request": "e3240b81-714d-4532-abf8-63340749c777",
+              "id": "call_53827c3d2b96463099bb8e48",
+              "name": "answer"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1feb5473876a3bca386bc",
+              "tool_name": "generate_image"
+            }
+          ],
+          "questions": [
+            {
+              "id": "11f1ab58-803e-438f-8ed4-6010e2d41628",
+              "tool": null,
+              "answer": "approve",
+              "quote": {
+                "total": [
+                  4,
+                  6
+                ],
+                "per_task": [
+                  [
+                    4,
+                    6
+                  ]
+                ]
+              }
+            }
+          ],
+          "deliveries": []
+        }
+      ],
+      "jobs": [
+        {
+          "id": "7c766304-ea5e-5b9e-9d0d-af8c26496d1a",
+          "kind": "generate_voice",
+          "opening": "1e922ac2-b1d5-455c-baff-496b7cb72c83",
+          "native_call_id": "call_efb24cd4a96a4af78fe14f1e",
+          "receipt": "3a329729-45e4-45e8-b85b-9214391bbe02",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 5,
+          "result": {
+            "project_id": "34be643e-6a08-411a-8fd5-73dc5b812db5",
+            "snapshot_id": "f11e4e9b-d739-5115-8576-70e7eae5b066",
+            "charged_credits": 5,
+            "reserved_credits": 0,
+            "duration_seconds": 5.3754375,
+            "role": "narration",
+            "digest": "12648e3c59741065d427e5364905915b26f01c5f5c57310cfcc8bd1af51a439f",
+            "analysis_digest": "6e20aa64d824b9be5becd17e7e138ceba9671e530b62803402bf863d20dc3d64",
+            "status": "available",
+            "added_to_composition": false,
+            "text": "光球正沿着弧线缓缓移动，向着明亮的前方继续前行。"
+          }
+        },
+        {
+          "id": "2177ebd1-17c8-56c1-be84-602354c7be6f",
+          "kind": "generate_music",
+          "opening": "1e922ac2-b1d5-455c-baff-496b7cb72c83",
+          "native_call_id": "call_ae8101946dec4ceca278872e",
+          "receipt": "8869de8c-deca-4d8e-8368-ab4e981e7a79",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "result": {
+            "project_id": "34be643e-6a08-411a-8fd5-73dc5b812db5",
+            "snapshot_id": "207eadf8-a4e9-5573-a082-8301574922fb",
+            "charged_credits": 0,
+            "reserved_credits": 0,
+            "duration_seconds": 5.4,
+            "role": "music",
+            "digest": "b7de8efc095b871cab99602c7eacdcff901e7b581c20c65e0da5e9580e55239f",
+            "analysis_digest": "d0632e76b850fc270b85a22003d603ef14d998e01033a4c201b82f94017a64b1",
+            "status": "available",
+            "added_to_composition": false
+          }
+        },
+        {
+          "id": "44cac903-8b62-5a18-a262-9092f4d5203e",
+          "kind": "generate_image",
+          "opening": "a7c9c99c-f059-4689-ade6-eb5b1134aac5",
+          "native_call_id": "call_01a1feb5473876a3bca386bc",
+          "receipt": "2afe38ca-c986-4eb9-b0b6-a58014eafe8a",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 6,
+          "result": {
+            "project_id": "34be643e-6a08-411a-8fd5-73dc5b812db5",
+            "snapshot_id": "e4b368d7-db00-510f-b603-31c61c8e6f15",
+            "charged_credits": 4,
+            "reserved_credits": 0,
+            "role": "image",
+            "digest": "d84d4cc70f5d5ae74347d12f740416dcb1dfbea6cf1b3e9c41c68e4d433be633",
+            "status": "available",
+            "added_to_composition": false
+          }
+        },
+        {
+          "id": "20ec1566-8c2a-5219-8d42-2b94a9e18e87",
+          "kind": "export_video",
+          "opening": "97bbb768-a8ee-4129-9743-25c28c4f9730",
+          "native_call_id": "call_function_wlnimd3axcu1_1",
+          "receipt": "11bc6046-09e3-4ad8-8fba-b7c5e2200c24",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 10,
+          "result": {
+            "composition_id": "58ee91a9-9233-4a0e-b80e-727a5928c01b",
+            "composition_version_id": "b93449d7-3e76-483d-aba0-9710eaa5cbcd",
+            "content_digest": "710593dceda9af4c046c688ce8017a3cea2f5ebc4af594b9c427a7c7fa1a6417",
+            "output_id": "20ec1566-8c2a-5219-8d42-2b94a9e18e87",
+            "charged_credits": 10,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "export",
+            "status": "available"
+          }
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "371366c5-fcb7-41de-afdc-03b5382e0235",
+          "content_digest": "01a5e7f85cd317a537f3d17768c0315cf4d8c8ab8b88f9accf3035a3dbc87521"
+        },
+        {
+          "version": 2,
+          "id": "0d0c93d9-9156-49fd-97ba-387af06276c4",
+          "content_digest": "881738b0b887533d1a6c31af620a00e392649964710e09f2a1f9e53834fa4412"
+        },
+        {
+          "version": 3,
+          "id": "b93449d7-3e76-483d-aba0-9710eaa5cbcd",
+          "content_digest": "710593dceda9af4c046c688ce8017a3cea2f5ebc4af594b9c427a7c7fa1a6417"
+        }
+      ],
+      "ledger": [
+        [
+          "grant",
+          1000,
+          1000
+        ],
+        [
+          "hold",
+          -5,
+          995
+        ],
+        [
+          "release",
+          5,
+          1000
+        ],
+        [
+          "capture",
+          -5,
+          995
+        ],
+        [
+          "hold",
+          -10,
+          985
+        ],
+        [
+          "release",
+          10,
+          995
+        ],
+        [
+          "capture",
+          -10,
+          985
+        ],
+        [
+          "hold",
+          -6,
+          979
+        ],
+        [
+          "release",
+          6,
+          985
+        ],
+        [
+          "capture",
+          -4,
+          981
+        ]
+      ],
+      "alignments": [
+        {
+          "id": "5c76e65f-a755-4ea0-be91-229bf6344e31",
+          "status": "ALIGNED",
+          "audio_snapshot_id": "f11e4e9b-d739-5115-8576-70e7eae5b066",
+          "lease_expires_at": null
+        }
+      ],
+      "conversation_metering": {
+        "records": 6,
+        "prompt_tokens": 280700,
+        "completion_tokens": 6374,
+        "cached_tokens": 167848,
+        "metered_usd": 0.045929
+      },
+      "wallet_captured_credits": 19
+    },
+    {
+      "sample": "replica",
+      "user": "d782bb2b-6929-416d-8efd-1f68c2a63ff8",
+      "project": "1ec8e887-58dd-4cff-bb79-d415945fc75f",
+      "asset": "a95705f3-8190-426f-9233-d26ed2805b43",
+      "openings": [
+        {
+          "id": "9f67c9f2-1340-4065-aa18-22b3bf98b86b",
+          "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+          "state": "settled",
+          "wire_requests": 9,
+          "provider_emitted_calls": [
+            {
+              "request": "e1183fb3-2700-49b9-ad65-02b2146d9617",
+              "id": "call_1cfea8c077f348f9a049f1ae",
+              "name": "get_understanding"
+            },
+            {
+              "request": "40cee71f-99ad-49f9-9c8d-47f229de6999",
+              "id": "call_7ca7c857bc0049eca7a5adcd",
+              "name": "get_asset"
+            },
+            {
+              "request": "40cee71f-99ad-49f9-9c8d-47f229de6999",
+              "id": "call_853654366414416ba3539621",
+              "name": "prepare_video_materials"
+            },
+            {
+              "request": "bd97a1db-e382-409a-8cd9-19f659ab0760",
+              "id": "call_01a1feb2ef86766784a527f6",
+              "name": "generate_music"
+            },
+            {
+              "request": "bd97a1db-e382-409a-8cd9-19f659ab0760",
+              "id": "call_01a1feb2ef86766784a527f7",
+              "name": "generate_voice"
+            },
+            {
+              "request": "ab24c55b-2f82-4391-ad05-cd81d453cad9",
+              "id": "call_f864acee7f084e99a3f94215",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "ab24c55b-2f82-4391-ad05-cd81d453cad9",
+              "id": "call_aebd19a5c5c440d69574c4ca",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "9f679dca-96f1-49ea-8fbe-605fe6f214fe",
+              "id": "call_01a1feb49a76724588d3b8f3",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "786e77c8-e524-4179-9e2c-d419ae9e64aa",
+              "id": "call_01a1feb4a46677afb2ce6432",
+              "name": "create_video"
+            },
+            {
+              "request": "d9d4294a-09ea-45b4-882d-faf4803a683f",
+              "id": "call_01a1feb4a90577caa1da8175",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "bd50fbdb-ce16-43c7-a445-b5c3461dc8e2",
+              "id": "call_01a1feb4b1c0751ca5ccc65a",
+              "name": "create_video"
+            },
+            {
+              "request": "612459ac-e872-4375-9e69-54c9c4a15e6b",
+              "id": "call_01a1feb4b7e47050bf435eb3",
+              "name": "create_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_1cfea8c077f348f9a049f1ae",
+              "tool_name": "get_understanding"
+            },
+            {
+              "call_id": "call_7ca7c857bc0049eca7a5adcd",
+              "tool_name": "get_asset",
+              "call_state": "completed",
+              "group_id": "40cee71f-99ad-49f9-9c8d-47f229de6999",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_853654366414416ba3539621",
+              "tool_name": "prepare_video_materials",
+              "call_state": "completed",
+              "group_id": "40cee71f-99ad-49f9-9c8d-47f229de6999",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_01a1feb2ef86766784a527f6",
+              "tool_name": "generate_music",
+              "call_state": "completed",
+              "group_id": "bd97a1db-e382-409a-8cd9-19f659ab0760",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1feb2ef86766784a527f7",
+              "tool_name": "generate_voice",
+              "call_state": "completed",
+              "group_id": "bd97a1db-e382-409a-8cd9-19f659ab0760",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_f864acee7f084e99a3f94215",
+              "tool_name": "get_narration_alignment",
+              "call_state": "not_executed",
+              "group_id": "ab24c55b-2f82-4391-ad05-cd81d453cad9",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_aebd19a5c5c440d69574c4ca",
+              "tool_name": "inspect_timeline",
+              "call_state": "failed",
+              "group_id": "ab24c55b-2f82-4391-ad05-cd81d453cad9",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_01a1feb49a76724588d3b8f3",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_01a1feb4a90577caa1da8175",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_01a1feb4b7e47050bf435eb3",
+              "tool_name": "create_video"
+            }
+          ],
+          "questions": [
+            {
+              "id": "eb95a9ff-dca9-4578-94d1-fbf6405f17ee",
+              "tool": null,
+              "answer": "approve",
+              "quote": {
+                "total": [
+                  3,
+                  3
+                ],
+                "per_task": [
+                  [
+                    3,
+                    3
+                  ]
+                ]
+              }
+            }
+          ],
+          "deliveries": []
+        },
+        {
+          "id": "1d5fb5c9-12a6-47cd-a6e2-f3f97a948551",
+          "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+          "state": "settled",
+          "wire_requests": 8,
+          "provider_emitted_calls": [
+            {
+              "request": "19ccd878-1b3d-4966-9f78-3081c985c86c",
+              "id": "call_01a1feb7218d76b1bbf07de7",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "24c79ff3-a66e-4ed1-b964-1ce255ac584f",
+              "id": "call_01a1feb727357007b68f69db",
+              "name": "annotate_narration"
+            },
+            {
+              "request": "a4bfd56c-02c2-49e7-a37e-7fc8e32e4076",
+              "id": "call_01a1feb72f3d7195939bc921",
+              "name": "create_video"
+            },
+            {
+              "request": "4168df80-16a1-47ec-a667-abac775ad1b3",
+              "id": "call_fe2945ba5dfb4d99b90ef459",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "a8604ee7-705e-4855-832f-4dbabbd096c5",
+              "id": "call_382404b6421c4c5fb16c9fc6",
+              "name": "insert_audio"
+            },
+            {
+              "request": "17d98f79-cdf5-495f-a029-817bef09037c",
+              "id": "call_01a1feb742bb755e86a7f583",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "9f982cc2-dee3-40dd-b50d-4ffee24ff87d",
+              "id": "call_01a1feb74b367730b6a89fb9",
+              "name": "preview_range"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1feb7218d76b1bbf07de7",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_01a1feb727357007b68f69db",
+              "tool_name": "annotate_narration"
+            },
+            {
+              "call_id": "call_01a1feb72f3d7195939bc921",
+              "tool_name": "create_video"
+            },
+            {
+              "call_id": "call_fe2945ba5dfb4d99b90ef459",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_382404b6421c4c5fb16c9fc6",
+              "tool_name": "insert_audio"
+            },
+            {
+              "call_id": "call_01a1feb742bb755e86a7f583",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_01a1feb74b367730b6a89fb9",
+              "tool_name": "preview_range"
+            }
+          ],
+          "questions": [],
+          "deliveries": []
+        },
+        {
+          "id": "148c56ce-f88b-4d79-815d-2ed7bdd4221d",
+          "request": "确认导出刚才预览的第 2 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+          "state": "settled",
+          "wire_requests": 10,
+          "provider_emitted_calls": [
+            {
+              "request": "2ca01853-c1f8-4e86-9bce-3e1d96b67c8d",
+              "id": "call_a9a948985a71484c80d495b0",
+              "name": "export_video"
+            },
+            {
+              "request": "9eab548a-e15e-4f18-9be9-9f3c4180dafd",
+              "id": "call_d765f72a6a594fe595a886b0",
+              "name": "preview_range"
+            },
+            {
+              "request": "137d91f0-3e4a-4e05-830b-0fc715b8b176",
+              "id": "call_function_5atdzzl33f9w_1",
+              "name": "export_video"
+            },
+            {
+              "request": "d82a14de-384e-4694-8468-328c1cebe092",
+              "id": "call_function_o8t4u66zl8mv_1",
+              "name": "review_video"
+            },
+            {
+              "request": "8e43ce44-8f01-471c-8d5e-ebc695d5c979",
+              "id": "call_function_pu9jglnmrsns_1",
+              "name": "inspect_clip"
+            },
+            {
+              "request": "204cff2c-c7c1-4e97-86d0-80d8b3e04d29",
+              "id": "call_function_g4b9cg4mgxie_1",
+              "name": "review_video"
+            },
+            {
+              "request": "0e03f03c-7b6b-43ab-8f74-b58cb3531e1a",
+              "id": "call_function_kzbwxm9ct6ps_1",
+              "name": "deliver_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_a9a948985a71484c80d495b0",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_d765f72a6a594fe595a886b0",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_5atdzzl33f9w_1",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_function_pu9jglnmrsns_1",
+              "tool_name": "inspect_clip"
+            },
+            {
+              "call_id": "call_function_kzbwxm9ct6ps_1",
+              "tool_name": "deliver_video"
+            }
+          ],
+          "questions": [],
+          "deliveries": [
+            {
+              "output_refs": [
+                "8ba6fbc5-b1ea-5cef-938a-a98d431093f3"
+              ],
+              "reviewed_version": {
+                "composition_id": "77b1965b-d400-49dc-a97a-6330b839c94b",
+                "content_digest": "4ab9a19e69cde4ff96765daa418f6961173e96f86aaca942d96761a166cd7ccb",
+                "composition_version_id": "92875bf6-8e5c-4ea2-bb6d-83b5ee62904a"
+              }
+            }
+          ]
+        },
+        {
+          "id": "92d84e2e-dfbc-44bc-9525-1926b0365f9b",
+          "request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+          "state": "failed",
+          "wire_requests": 6,
+          "provider_emitted_calls": [
+            {
+              "request": "a63997f0-de11-4bde-b52f-a957aaca997b",
+              "id": "call_01a1febca2e872deb4cc60b7",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "4cbb55a5-9394-4f67-9c3b-6e050cebfc20",
+              "id": "call_01a1febca7c87704a90572b6",
+              "name": "scale"
+            },
+            {
+              "request": "d9347d5f-8026-439d-9f75-6440b3571b10",
+              "id": "call_01a1febcada47024bf84e54d",
+              "name": "preview_range"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1febca2e872deb4cc60b7",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_01a1febca7c87704a90572b6",
+              "tool_name": "scale"
+            },
+            {
+              "call_id": "call_01a1febcada47024bf84e54d",
+              "tool_name": "preview_range"
+            }
+          ],
+          "questions": [],
+          "deliveries": []
+        },
+        {
+          "id": "11769199-55f5-4f82-9192-4af29f80c564",
+          "request": "请查看已保存的 110% 放大版预览，确认旁白和配乐仍在，然后导出这一版 MP4，允许本次导出费用，审阅成片后交付。",
+          "state": "settled",
+          "wire_requests": 7,
+          "provider_emitted_calls": [
+            {
+              "request": "3243fc60-ec5f-4522-a920-f553b6e61180",
+              "id": "chatcmpl-tool-b288d1411a1bae71",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "a5b4f1e7-db4a-4d8b-a3fe-536597581142",
+              "id": "chatcmpl-tool-8f80e61f51be2b62",
+              "name": "preview_range"
+            },
+            {
+              "request": "8aadc8e8-b5b3-4a98-b791-46c9f97daf76",
+              "id": "call_function_2mnnxtoshya9_1",
+              "name": "export_video"
+            },
+            {
+              "request": "10565698-d42e-40fe-8295-d60c6864ec7a",
+              "id": "call_function_h55fbzvwnnpn_1",
+              "name": "review_video"
+            },
+            {
+              "request": "6cf4226d-bab5-458a-b540-848744023641",
+              "id": "call_function_nbdomwmxoa1u_1",
+              "name": "deliver_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "chatcmpl-tool-b288d1411a1bae71",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "chatcmpl-tool-8f80e61f51be2b62",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_2mnnxtoshya9_1",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_function_nbdomwmxoa1u_1",
+              "tool_name": "deliver_video"
+            }
+          ],
+          "questions": [],
+          "deliveries": [
+            {
+              "output_refs": [
+                "85731f37-0992-5df0-970a-ba11e879f2c2"
+              ],
+              "reviewed_version": {
+                "composition_id": "77b1965b-d400-49dc-a97a-6330b839c94b",
+                "content_digest": "7a23eac0b4d376444eb17e5c5248d58255f58a84d42ee5929b713e22e1338a58",
+                "composition_version_id": "fa30c32a-40d6-4c87-8ee7-b5bc241a25b3"
+              }
+            }
+          ]
+        }
+      ],
+      "jobs": [
+        {
+          "id": "34f5fa59-3da1-5867-9fec-fc1c51dfa475",
+          "kind": "generate_music",
+          "opening": "9f67c9f2-1340-4065-aa18-22b3bf98b86b",
+          "native_call_id": "call_01a1feb2ef86766784a527f6",
+          "receipt": "6950fe24-4118-4e2d-b546-aeed0aedccf3",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "result": {
+            "project_id": "1ec8e887-58dd-4cff-bb79-d415945fc75f",
+            "snapshot_id": "7f9e3549-cfb0-5d4a-999d-2522734bd330",
+            "charged_credits": 0,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "music",
+            "digest": "97302e0d5e80e521eb74e7dbbe366627e0fc99179cdae2f5ef999b855efdb3a6",
+            "analysis_digest": "74f4b4fc9f0e2874318d4c0b1611983c44f71bc21095bf0d7a8e3813e1981c24",
+            "status": "available",
+            "added_to_composition": false
+          }
+        },
+        {
+          "id": "cb543ba7-8b3d-5935-9dee-8cd7031f7a1a",
+          "kind": "generate_voice",
+          "opening": "9f67c9f2-1340-4065-aa18-22b3bf98b86b",
+          "native_call_id": "call_01a1feb2ef86766784a527f7",
+          "receipt": "58439893-a299-46a2-9d00-76fd46a0fca2",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 3,
+          "result": {
+            "project_id": "1ec8e887-58dd-4cff-bb79-d415945fc75f",
+            "snapshot_id": "f3738013-b589-5467-9037-a30ebc001f9b",
+            "charged_credits": 3,
+            "reserved_credits": 0,
+            "duration_seconds": 3.32046875,
+            "role": "narration",
+            "digest": "c26f9889b175a67ad7ea5f90f278d4d83a7db1aa2dd6fbad3fd80b20f05b1cfa",
+            "analysis_digest": "c50fc6d03bc76aaa62d4919bb8b08232518be22b8085a5b5398e6f006ae65505",
+            "status": "available",
+            "added_to_composition": false,
+            "text": "琥珀色的光球，沿着弧线缓缓前行。"
+          }
+        },
+        {
+          "id": "8ba6fbc5-b1ea-5cef-938a-a98d431093f3",
+          "kind": "export_video",
+          "opening": "148c56ce-f88b-4d79-815d-2ed7bdd4221d",
+          "native_call_id": "call_function_5atdzzl33f9w_1",
+          "receipt": "d5135546-4c9d-44c8-a3f9-fe66614e1a0d",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 10,
+          "result": {
+            "composition_id": "77b1965b-d400-49dc-a97a-6330b839c94b",
+            "composition_version_id": "92875bf6-8e5c-4ea2-bb6d-83b5ee62904a",
+            "content_digest": "4ab9a19e69cde4ff96765daa418f6961173e96f86aaca942d96761a166cd7ccb",
+            "output_id": "8ba6fbc5-b1ea-5cef-938a-a98d431093f3",
+            "charged_credits": 10,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "export",
+            "status": "available"
+          }
+        },
+        {
+          "id": "85731f37-0992-5df0-970a-ba11e879f2c2",
+          "kind": "export_video",
+          "opening": "11769199-55f5-4f82-9192-4af29f80c564",
+          "native_call_id": "call_function_2mnnxtoshya9_1",
+          "receipt": "0b44bf4c-ba90-4add-9328-2306cd05309d",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 10,
+          "result": {
+            "composition_id": "77b1965b-d400-49dc-a97a-6330b839c94b",
+            "composition_version_id": "fa30c32a-40d6-4c87-8ee7-b5bc241a25b3",
+            "content_digest": "7a23eac0b4d376444eb17e5c5248d58255f58a84d42ee5929b713e22e1338a58",
+            "output_id": "85731f37-0992-5df0-970a-ba11e879f2c2",
+            "charged_credits": 10,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "export",
+            "status": "available"
+          }
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "d89416b6-43be-49c9-b9ed-e3f90bb21b12",
+          "content_digest": "430958f56fe11a4a66659d9e0b295d23517c110d5465bc4b65ed734c92a50353"
+        },
+        {
+          "version": 2,
+          "id": "92875bf6-8e5c-4ea2-bb6d-83b5ee62904a",
+          "content_digest": "4ab9a19e69cde4ff96765daa418f6961173e96f86aaca942d96761a166cd7ccb"
+        },
+        {
+          "version": 3,
+          "id": "fa30c32a-40d6-4c87-8ee7-b5bc241a25b3",
+          "content_digest": "7a23eac0b4d376444eb17e5c5248d58255f58a84d42ee5929b713e22e1338a58"
+        }
+      ],
+      "ledger": [
+        [
+          "grant",
+          1000,
+          1000
+        ],
+        [
+          "hold",
+          -3,
+          997
+        ],
+        [
+          "release",
+          3,
+          1000
+        ],
+        [
+          "capture",
+          -3,
+          997
+        ],
+        [
+          "hold",
+          -10,
+          987
+        ],
+        [
+          "release",
+          10,
+          997
+        ],
+        [
+          "capture",
+          -10,
+          987
+        ],
+        [
+          "hold",
+          -10,
+          977
+        ],
+        [
+          "release",
+          10,
+          987
+        ],
+        [
+          "capture",
+          -10,
+          977
+        ]
+      ],
+      "alignments": [
+        {
+          "id": "8d9373e1-8fe4-4771-bfee-8b30f755dfa8",
+          "status": "READY",
+          "audio_snapshot_id": "f3738013-b589-5467-9037-a30ebc001f9b",
+          "lease_expires_at": null
+        }
+      ],
+      "browser": [
+        {
+          "id": "8ba6fbc5-b1ea-5cef-938a-a98d431093f3",
+          "version": "92875bf6-8e5c-4ea2-bb6d-83b5ee62904a",
+          "play": [
+            {
+              "seconds": 0.163216,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            },
+            {
+              "seconds": 0.169433,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            }
+          ],
+          "sha256": "8c641f620fbe28fd82aacc117fef5bb1d6fcbb7a00b21ff8602f005e369065f3",
+          "bytes": 336501,
+          "frames": 150,
+          "download_button_verified": true
+        },
+        {
+          "id": "85731f37-0992-5df0-970a-ba11e879f2c2",
+          "version": "fa30c32a-40d6-4c87-8ee7-b5bc241a25b3",
+          "play": [
+            {
+              "seconds": 0.156887,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            },
+            {
+              "seconds": 0.171202,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            }
+          ],
+          "sha256": "ef726d33f33004e637ad779874c9d1b9729ffcdf262096d9ab00e763e372cda6",
+          "bytes": 388696,
+          "frames": 150,
+          "download_button_verified": true
+        }
+      ],
+      "conversation_metering": {
+        "records": 5,
+        "prompt_tokens": 395581,
+        "completion_tokens": 9288,
+        "cached_tokens": 243376,
+        "metered_usd": 0.06491
+      },
+      "wallet_captured_credits": 23
+    },
+    {
+      "sample": "finalcase",
+      "user": "e523c087-e32c-469e-a05f-25ce8936c945",
+      "project": "42cc7318-281e-4b40-9de4-f1996228b337",
+      "asset": "a915547c-e514-49be-b55f-34a238b33dc4",
+      "openings": [
+        {
+          "id": "44440949-1360-40dd-812b-f79b7ee89d8d",
+          "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+          "state": "settled",
+          "wire_requests": 16,
+          "provider_emitted_calls": [
+            {
+              "request": "11a210c2-4fc3-4ece-8d90-64833cefa90c",
+              "id": "call_01a1feb78dbb77a78981032a",
+              "name": "get_understanding"
+            },
+            {
+              "request": "599f8ec7-80b3-430d-a881-0918ba3ffa8d",
+              "id": "call_01a1feb7fe7374778d043882",
+              "name": "get_asset"
+            },
+            {
+              "request": "48e59f00-9704-4978-ae44-9b89a0bbce0a",
+              "id": "call_01a1feb803a1722bb3658eaf",
+              "name": "prepare_video_materials"
+            },
+            {
+              "request": "bfeca3a6-898f-48bc-8cf3-184fba190e48",
+              "id": "call_function_svxp1mvybp9q_1",
+              "name": "generate_voice"
+            },
+            {
+              "request": "bfeca3a6-898f-48bc-8cf3-184fba190e48",
+              "id": "call_function_svxp1mvybp9q_2",
+              "name": "generate_music"
+            },
+            {
+              "request": "a4124c0a-ab98-481e-b7c1-e22c6f30dca6",
+              "id": "call_826ed5d49d4e4dd5bb5720c5",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "a4124c0a-ab98-481e-b7c1-e22c6f30dca6",
+              "id": "call_0fb190a06c0c4b22be65d0ee",
+              "name": "generate_music"
+            },
+            {
+              "request": "43593379-5fa5-424f-bc91-f03cc26d7d91",
+              "id": "call_47842d5b909d4d98adcc0bcc",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "86da2bc3-d2bc-4fb0-a61c-aae65ac4473c",
+              "id": "call_a7b002a7011e472295040315",
+              "name": "create_video"
+            },
+            {
+              "request": "fc70e3e6-2f33-4a4e-b196-2876c62e9756",
+              "id": "call_b38dbb43f98b4c0a8f72225a",
+              "name": "create_video"
+            },
+            {
+              "request": "73a1154d-ad93-4784-a4f3-fbcf9e1a219f",
+              "id": "call_ab7b176a3fb2473eb129bf53",
+              "name": "insert_audio"
+            },
+            {
+              "request": "73a1154d-ad93-4784-a4f3-fbcf9e1a219f",
+              "id": "call_59f1f1a0d35542a081a2b0c7",
+              "name": "insert_audio"
+            },
+            {
+              "request": "675ff6e9-d8f5-4533-aeed-d03b5279b63e",
+              "id": "call_01a1feb977bf7559856415b6",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "1143ab9a-7976-4850-8656-af61ae9ef22d",
+              "id": "call_01a1feb97cf177919f8f171f",
+              "name": "inspect_clip"
+            },
+            {
+              "request": "329e5305-52e5-4c6f-be3a-e074db53a673",
+              "id": "call_01a1feb9841f70408191cb9e",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "4e597c81-fbce-4638-8e8c-2b64a1f80cb6",
+              "id": "call_01a1feb9899977f281de527e",
+              "name": "preview_range"
+            },
+            {
+              "request": "71f4a14a-1eb1-4956-bf08-d12b2a05d33c",
+              "id": "call_01a1feb9968f72f0a23b7855",
+              "name": "bind_clip_source"
+            },
+            {
+              "request": "a5a2d729-aa9a-4cc9-8a46-edaf851f3e4c",
+              "id": "call_01a1feb99da776a98f8ce796",
+              "name": "get_narration_alignment"
+            },
+            {
+              "request": "57200ba1-7ea5-4ec4-9af8-7296d1c02b69",
+              "id": "call_01a1feb9a2697591844afc55",
+              "name": "preview_range"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1feb78dbb77a78981032a",
+              "tool_name": "get_understanding"
+            },
+            {
+              "call_id": "call_01a1feb7fe7374778d043882",
+              "tool_name": "get_asset"
+            },
+            {
+              "call_id": "call_01a1feb803a1722bb3658eaf",
+              "tool_name": "prepare_video_materials"
+            },
+            {
+              "call_id": "call_function_svxp1mvybp9q_1",
+              "tool_name": "generate_voice",
+              "call_state": "completed",
+              "group_id": "bfeca3a6-898f-48bc-8cf3-184fba190e48",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_function_svxp1mvybp9q_2",
+              "tool_name": "generate_music",
+              "call_state": "failed",
+              "group_id": "bfeca3a6-898f-48bc-8cf3-184fba190e48",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_826ed5d49d4e4dd5bb5720c5",
+              "tool_name": "get_narration_alignment",
+              "call_state": "not_executed",
+              "group_id": "a4124c0a-ab98-481e-b7c1-e22c6f30dca6",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_0fb190a06c0c4b22be65d0ee",
+              "tool_name": "generate_music",
+              "call_state": "completed",
+              "group_id": "a4124c0a-ab98-481e-b7c1-e22c6f30dca6",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_47842d5b909d4d98adcc0bcc",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_a7b002a7011e472295040315",
+              "tool_name": "create_video"
+            },
+            {
+              "call_id": "call_b38dbb43f98b4c0a8f72225a",
+              "tool_name": "create_video"
+            },
+            {
+              "call_id": "call_ab7b176a3fb2473eb129bf53",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "73a1154d-ad93-4784-a4f3-fbcf9e1a219f",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_59f1f1a0d35542a081a2b0c7",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "73a1154d-ad93-4784-a4f3-fbcf9e1a219f",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_01a1feb977bf7559856415b6",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_01a1feb97cf177919f8f171f",
+              "tool_name": "inspect_clip"
+            },
+            {
+              "call_id": "call_01a1feb9841f70408191cb9e",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_01a1feb9899977f281de527e",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_01a1feb9968f72f0a23b7855",
+              "tool_name": "bind_clip_source"
+            },
+            {
+              "call_id": "call_01a1feb99da776a98f8ce796",
+              "tool_name": "get_narration_alignment"
+            },
+            {
+              "call_id": "call_01a1feb9a2697591844afc55",
+              "tool_name": "preview_range"
+            }
+          ],
+          "questions": [
+            {
+              "id": "7894a73c-7934-4fb8-9145-cbf90092f812",
+              "tool": null,
+              "answer": "approve",
+              "quote": {
+                "total": [
+                  4,
+                  4
+                ],
+                "per_task": [
+                  [
+                    4,
+                    4
+                  ]
+                ]
+              }
+            }
+          ],
+          "deliveries": []
+        }
+      ],
+      "jobs": [
+        {
+          "id": "dfb1c1f6-6018-54db-9ab6-5b1766658fcb",
+          "kind": "generate_voice",
+          "opening": "44440949-1360-40dd-812b-f79b7ee89d8d",
+          "native_call_id": "call_function_svxp1mvybp9q_1",
+          "receipt": "a92abd4d-e709-496d-9447-05b0187fa712",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 4,
+          "result": {
+            "project_id": "42cc7318-281e-4b40-9de4-f1996228b337",
+            "snapshot_id": "5c3d0c2e-f0f9-5216-abf2-bae832e5f038",
+            "charged_credits": 4,
+            "reserved_credits": 0,
+            "duration_seconds": 3.92546875,
+            "role": "narration",
+            "digest": "a5291be1e343017e744e3286aa462f00167f6e933761356ab6be8d497556f457",
+            "analysis_digest": "0a50696238b64e31c063f65d1eb3ce54775726650d8f7268bf0f22ba5587b740",
+            "status": "available",
+            "added_to_composition": false,
+            "text": "琥珀色的圆球，正沿着固定的轨道缓缓前行。"
+          }
+        },
+        {
+          "id": "bf56e2c6-6dcd-5353-a560-1f00286e74e3",
+          "kind": "generate_music",
+          "opening": "44440949-1360-40dd-812b-f79b7ee89d8d",
+          "native_call_id": "call_0fb190a06c0c4b22be65d0ee",
+          "receipt": "c7137804-a01c-4bc8-9114-e5944fb9414f",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "result": {
+            "project_id": "42cc7318-281e-4b40-9de4-f1996228b337",
+            "snapshot_id": "4b47d401-36d5-5a6c-805d-69891b9660a3",
+            "charged_credits": 0,
+            "reserved_credits": 0,
+            "duration_seconds": 10.0,
+            "role": "music",
+            "digest": "7a256e167c58cfb81afe597fd6428643179bb06416776eeede7a5a3b0bf29429",
+            "analysis_digest": "1e3df8ffb21879070f01158e6124b8cf7e44458a7d266d6d2954e8e8ed5bf9f0",
+            "status": "available",
+            "added_to_composition": false
+          }
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "95689fb7-15fb-4149-ace4-874efcd31a91",
+          "content_digest": "326af3f79e62b0d6e88a4630db27da9188b9c9f5e3d757de03ab7f1a69347f32"
+        },
+        {
+          "version": 2,
+          "id": "fc7197e8-3fbb-427b-82da-51d93ede0718",
+          "content_digest": "4ceb1bba452c689f04ffea45d610bd89bc1f7afe3998aca66869e4b3bc6a1591"
+        },
+        {
+          "version": 3,
+          "id": "e61ce26a-3099-404c-8955-ed2fb1f7d4a3",
+          "content_digest": "87fe785a0a7ed2b1947ac9dc895ee2712f6f8f7970a1522e52acbd2e3eb4fe54"
+        }
+      ],
+      "ledger": [
+        [
+          "grant",
+          1000,
+          1000
+        ],
+        [
+          "hold",
+          -4,
+          996
+        ],
+        [
+          "release",
+          4,
+          1000
+        ],
+        [
+          "capture",
+          -4,
+          996
+        ]
+      ],
+      "alignments": [
+        {
+          "id": "3686f79c-51aa-442c-a7cb-ae45a0e660e8",
+          "status": "ALIGNED",
+          "audio_snapshot_id": "5c3d0c2e-f0f9-5216-abf2-bae832e5f038",
+          "lease_expires_at": null
+        }
+      ],
+      "conversation_metering": {
+        "records": 2,
+        "prompt_tokens": 161570,
+        "completion_tokens": 3896,
+        "cached_tokens": 107158,
+        "metered_usd": 0.026573
+      },
+      "wallet_captured_credits": 4
+    },
+    {
+      "sample": "recheck",
+      "user": "62c2901d-96e1-4feb-a202-b041e43e2dd0",
+      "project": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+      "asset": "9a8011c7-1571-43ac-8f1b-cc94073d11ed",
+      "openings": [
+        {
+          "id": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+          "request": "把刚上传的光球视频剪成一条约五秒的短片，保留光球移动的画面。加一句简短的中文旁白和轻柔的背景音乐，允许这次旁白及配乐的费用。请实际预览画面和声音，有问题就调整。先给我看预览，暂不导出。",
+          "state": "settled",
+          "wire_requests": 12,
+          "provider_emitted_calls": [
+            {
+              "request": "3c7aaef5-e3c0-4014-b1ea-24e06651e1e1",
+              "id": "call_01a1febe8a8574d3bf3ce9b0",
+              "name": "get_understanding"
+            },
+            {
+              "request": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "id": "call_01a1febed21b723399ee8cc8",
+              "name": "generate_voice"
+            },
+            {
+              "request": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "id": "call_01a1febed21b723399ee8cc9",
+              "name": "generate_music"
+            },
+            {
+              "request": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "id": "call_01a1febed21b723399ee8cca",
+              "name": "prepare_video_materials"
+            },
+            {
+              "request": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+              "id": "call_95bd37367668471fab0a9b73",
+              "name": "prepare_video_materials"
+            },
+            {
+              "request": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+              "id": "call_2e0139d6dc8444e9a87551e1",
+              "name": "generate_music"
+            },
+            {
+              "request": "dfd4a142-ac7b-4565-bbfb-3aee65eca062",
+              "id": "call_function_14r308nkxd2h_1",
+              "name": "create_video"
+            },
+            {
+              "request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+              "id": "call_01a1febf85ac74d7ba92a1e5",
+              "name": "insert_audio"
+            },
+            {
+              "request": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+              "id": "call_01a1febf85ac74d7ba92a1e6",
+              "name": "insert_audio"
+            },
+            {
+              "request": "461bb1ee-23ae-435c-a652-21d60d648a2c",
+              "id": "call_db2ec6282cb34dfaac571e12",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "d46eb130-aa22-4c2e-ad01-e90a73e235dc",
+              "id": "call_bf28d4e079294e23b081cc54",
+              "name": "preview_range"
+            },
+            {
+              "request": "7b9b0739-a68e-4b45-aaed-adc32669a9dd",
+              "id": "call_function_1qte94s1ak6i_1",
+              "name": "generate_voice"
+            },
+            {
+              "request": "ed54525e-c80c-46d1-86fc-e9eca7d3a3d1",
+              "id": "call_01a1fec3522973729d1fa824",
+              "name": "answer"
+            },
+            {
+              "request": "68967c0c-7570-48b3-9690-d1dd4622c46d",
+              "id": "call_01a1fec358e375969e477eef",
+              "name": "answer"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1febe8a8574d3bf3ce9b0",
+              "tool_name": "get_understanding"
+            },
+            {
+              "call_id": "call_01a1febed21b723399ee8cc8",
+              "tool_name": "generate_voice",
+              "call_state": "completed",
+              "group_id": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1febed21b723399ee8cc9",
+              "tool_name": "generate_music",
+              "call_state": "not_executed",
+              "group_id": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_01a1febed21b723399ee8cca",
+              "tool_name": "prepare_video_materials",
+              "call_state": "not_executed",
+              "group_id": "14212cd3-02dd-4241-b6d4-6258c801512f",
+              "call_index": 2
+            },
+            {
+              "call_id": "call_95bd37367668471fab0a9b73",
+              "tool_name": "prepare_video_materials",
+              "call_state": "completed",
+              "group_id": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_2e0139d6dc8444e9a87551e1",
+              "tool_name": "generate_music",
+              "call_state": "completed",
+              "group_id": "191b0c5d-1fe3-442d-843f-c8402680a07e",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_function_14r308nkxd2h_1",
+              "tool_name": "create_video"
+            },
+            {
+              "call_id": "call_01a1febf85ac74d7ba92a1e5",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1febf85ac74d7ba92a1e6",
+              "tool_name": "insert_audio",
+              "call_state": "completed",
+              "group_id": "80197e44-76c0-4d1d-af20-11ae348d5b29",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_db2ec6282cb34dfaac571e12",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "call_bf28d4e079294e23b081cc54",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_1qte94s1ak6i_1",
+              "tool_name": "generate_voice"
+            }
+          ],
+          "questions": [
+            {
+              "id": "8d904c5a-c73f-40ba-a70c-c105c2cc39fc",
+              "tool": null,
+              "answer": "approve",
+              "quote": {
+                "total": [
+                  3,
+                  3
+                ],
+                "per_task": [
+                  [
+                    3,
+                    3
+                  ]
+                ]
+              }
+            },
+            {
+              "id": "58b0d0db-e2e6-4c2b-bd6b-437df4310367",
+              "tool": "generate_voice",
+              "answer": "decline",
+              "quote": {
+                "total": [
+                  3,
+                  3
+                ],
+                "per_task": [
+                  [
+                    3,
+                    3
+                  ]
+                ]
+              }
+            }
+          ],
+          "deliveries": []
+        },
+        {
+          "id": "94068fbf-66a8-4970-b811-970be553819a",
+          "request": "确认导出刚才预览的第 3 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+          "state": "settled",
+          "wire_requests": 7,
+          "provider_emitted_calls": [
+            {
+              "request": "6db614cb-830f-41b1-9e39-8fd7bf7a4751",
+              "id": "call_01a1fec4302875d5b2309344",
+              "name": "export_video"
+            },
+            {
+              "request": "2a6bfa12-79ab-4f93-9396-ed450114f46a",
+              "id": "call_01a1fec4344e77b08222588c",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "2a6bfa12-79ab-4f93-9396-ed450114f46a",
+              "id": "call_01a1fec4344e77b08222588d",
+              "name": "preview_range"
+            },
+            {
+              "request": "ef6f47cc-02f3-4361-9dfe-3f2153d3ab4b",
+              "id": "call_function_b5fzhawtbys7_1",
+              "name": "export_video"
+            },
+            {
+              "request": "78daa745-1293-4756-9b4e-526eaa51c853",
+              "id": "call_function_ng7a2nikzyyl_1",
+              "name": "review_video"
+            },
+            {
+              "request": "d48e73dc-8e06-45ef-9999-54769b0bed41",
+              "id": "call_function_y9tgjsxmb4bp_1",
+              "name": "deliver_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_01a1fec4302875d5b2309344",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_01a1fec4344e77b08222588c",
+              "tool_name": "inspect_timeline",
+              "call_state": "completed",
+              "group_id": "2a6bfa12-79ab-4f93-9396-ed450114f46a",
+              "call_index": 0
+            },
+            {
+              "call_id": "call_01a1fec4344e77b08222588d",
+              "tool_name": "preview_range",
+              "call_state": "completed",
+              "group_id": "2a6bfa12-79ab-4f93-9396-ed450114f46a",
+              "call_index": 1
+            },
+            {
+              "call_id": "call_function_b5fzhawtbys7_1",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_function_y9tgjsxmb4bp_1",
+              "tool_name": "deliver_video"
+            }
+          ],
+          "questions": [],
+          "deliveries": [
+            {
+              "output_refs": [
+                "4d413c65-6386-55cc-b24c-6293da5f3b99"
+              ],
+              "reviewed_version": {
+                "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+                "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901",
+                "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404"
+              }
+            }
+          ]
+        },
+        {
+          "id": "9b0d26d1-1518-4776-a6bc-0a09da9aba18",
+          "request": "把画面稍微放大到 110%，保留旁白和配乐。请保存新版，重新看一下画面，先给我预览。",
+          "state": "settled",
+          "wire_requests": 4,
+          "provider_emitted_calls": [
+            {
+              "request": "95142653-f28f-4ec2-82af-2ff90b6e5d27",
+              "id": "chatcmpl-tool-ad9a1ad806ff50cc",
+              "name": "inspect_timeline"
+            },
+            {
+              "request": "852a4969-49e3-45a1-922a-cb81a69da41d",
+              "id": "chatcmpl-tool-b0c029a8b01d69f1",
+              "name": "scale"
+            },
+            {
+              "request": "d20e842f-923c-45b5-b39f-5a3a8361f24f",
+              "id": "call_fc41b1fed93f495c84adbf13",
+              "name": "preview_range"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "chatcmpl-tool-ad9a1ad806ff50cc",
+              "tool_name": "inspect_timeline"
+            },
+            {
+              "call_id": "chatcmpl-tool-b0c029a8b01d69f1",
+              "tool_name": "scale"
+            },
+            {
+              "call_id": "call_fc41b1fed93f495c84adbf13",
+              "tool_name": "preview_range"
+            }
+          ],
+          "questions": [],
+          "deliveries": []
+        },
+        {
+          "id": "c223f6ee-ca5d-460e-927d-79df854ee02e",
+          "request": "确认导出刚才预览的第 4 版，请导出 MP4，审阅真实成片后交付给我。允许本次导出扣费。",
+          "state": "settled",
+          "wire_requests": 7,
+          "provider_emitted_calls": [
+            {
+              "request": "cc3f6400-a926-4b26-82d1-6ed0c88301e6",
+              "id": "call_9e629e0affa945cd9960ed92",
+              "name": "export_video"
+            },
+            {
+              "request": "e5bac68f-708b-4cc0-9bad-d3ccab721a74",
+              "id": "call_3d456e5fd4f048d6ab3b26dd",
+              "name": "preview_range"
+            },
+            {
+              "request": "4ebed1d7-cdb8-4ec4-b072-a9d6b7d79bcf",
+              "id": "call_function_89xtxnrgxnac_1",
+              "name": "export_video"
+            },
+            {
+              "request": "23c10c51-c1f8-407b-8cab-bd0ca1a4575a",
+              "id": "call_function_n17usrdwq094_1",
+              "name": "review_video"
+            },
+            {
+              "request": "8c918d1f-e863-462a-a5bc-f70ac9a076e0",
+              "id": "call_function_vtmbcgi7cwfg_1",
+              "name": "deliver_video"
+            }
+          ],
+          "calls": [
+            {
+              "call_id": "call_9e629e0affa945cd9960ed92",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_3d456e5fd4f048d6ab3b26dd",
+              "tool_name": "preview_range"
+            },
+            {
+              "call_id": "call_function_89xtxnrgxnac_1",
+              "tool_name": "export_video"
+            },
+            {
+              "call_id": "call_function_vtmbcgi7cwfg_1",
+              "tool_name": "deliver_video"
+            }
+          ],
+          "questions": [],
+          "deliveries": [
+            {
+              "output_refs": [
+                "30ed87dd-1ae6-567a-93e8-a1bc3c7064a2"
+              ],
+              "reviewed_version": {
+                "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+                "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18",
+                "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a"
+              }
+            }
+          ]
+        }
+      ],
+      "jobs": [
+        {
+          "id": "fbfc0940-b288-5429-b14a-e143fb59c116",
+          "kind": "generate_voice",
+          "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+          "native_call_id": "call_01a1febed21b723399ee8cc8",
+          "receipt": "1194e6d5-c5fd-4c88-9134-7a74abdb5ce9",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 3,
+          "result": {
+            "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+            "snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+            "charged_credits": 3,
+            "reserved_credits": 0,
+            "duration_seconds": 3.575875,
+            "role": "narration",
+            "digest": "aea2f196d29c9ad86d90f014db3cf6b6ab8d924a658542f453d634e4c2d0d1f9",
+            "analysis_digest": "441eb883bb761e4270bf8860285f4df38afcb72a2f8e8bfddfb97de06636bc4c",
+            "status": "available",
+            "added_to_composition": false,
+            "text": "琥珀色的光球，正沿着弧线向前移动。"
+          }
+        },
+        {
+          "id": "8433fa6c-54a2-5c28-b1a5-bbf9c201b881",
+          "kind": "generate_music",
+          "opening": "177d00e4-7152-43fa-bb7c-c11db84a4c1e",
+          "native_call_id": "call_2e0139d6dc8444e9a87551e1",
+          "receipt": "d64d9311-0164-4f1a-a17e-ebd853159469",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "result": {
+            "project_id": "b96dfb5d-80a4-476d-83ca-3ded95f77fa4",
+            "snapshot_id": "3efbe10a-aa7a-53cc-9663-9deb217ed20b",
+            "charged_credits": 0,
+            "reserved_credits": 0,
+            "duration_seconds": 10.0,
+            "role": "music",
+            "digest": "5da4d6fa06aba00833d7c82d260cfa61c2eb0bf66f40e2f486dbc20bddf2d7fa",
+            "analysis_digest": "1b40ff5deebafe09e2d4c06f772cc873e363e0dac5a96f2e22e5e4b4b1d358f8",
+            "status": "available",
+            "added_to_composition": false
+          }
+        },
+        {
+          "id": "4d413c65-6386-55cc-b24c-6293da5f3b99",
+          "kind": "export_video",
+          "opening": "94068fbf-66a8-4970-b811-970be553819a",
+          "native_call_id": "call_function_b5fzhawtbys7_1",
+          "receipt": "6086b502-70e2-48ba-b4bd-4b619d5e39b7",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 10,
+          "result": {
+            "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+            "composition_version_id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+            "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901",
+            "output_id": "4d413c65-6386-55cc-b24c-6293da5f3b99",
+            "charged_credits": 10,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "export",
+            "status": "available"
+          }
+        },
+        {
+          "id": "30ed87dd-1ae6-567a-93e8-a1bc3c7064a2",
+          "kind": "export_video",
+          "opening": "c223f6ee-ca5d-460e-927d-79df854ee02e",
+          "native_call_id": "call_function_89xtxnrgxnac_1",
+          "receipt": "b2ee9d81-62c6-4053-bc95-2dfb7361b35a",
+          "state": "succeeded",
+          "claims": 1,
+          "authorized": 10,
+          "result": {
+            "composition_id": "732f3944-4bf4-49c2-95fd-feafc07fbe61",
+            "composition_version_id": "85e713f0-1443-4c79-87eb-de398255541a",
+            "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18",
+            "output_id": "30ed87dd-1ae6-567a-93e8-a1bc3c7064a2",
+            "charged_credits": 10,
+            "reserved_credits": 0,
+            "duration_seconds": 5.0,
+            "role": "export",
+            "status": "available"
+          }
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "d79f38cd-6b8e-4670-847d-24dcaa8adb74",
+          "content_digest": "40e2b6fa6e528b95b94d4b6e7e6e140402183c1f245e5b3cd663359181a524f0"
+        },
+        {
+          "version": 2,
+          "id": "3e77da05-3465-461b-b548-a2e01019d81b",
+          "content_digest": "8a6e044f83e4aa0e9157514cf67f125e6be6a0a050e47d6b201556e4e45b48de"
+        },
+        {
+          "version": 3,
+          "id": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+          "content_digest": "5e0f7a115b00369840e86dcf3b32d32859f2191857295a336c4b008ddecf1901"
+        },
+        {
+          "version": 4,
+          "id": "85e713f0-1443-4c79-87eb-de398255541a",
+          "content_digest": "821c657b1ca533a74af3f07ba18b180a4a0dd92a65b2525a9991490838c47e18"
+        }
+      ],
+      "ledger": [
+        [
+          "grant",
+          1000,
+          1000
+        ],
+        [
+          "hold",
+          -3,
+          997
+        ],
+        [
+          "release",
+          3,
+          1000
+        ],
+        [
+          "capture",
+          -3,
+          997
+        ],
+        [
+          "hold",
+          -10,
+          987
+        ],
+        [
+          "release",
+          10,
+          997
+        ],
+        [
+          "capture",
+          -10,
+          987
+        ],
+        [
+          "hold",
+          -10,
+          977
+        ],
+        [
+          "release",
+          10,
+          987
+        ],
+        [
+          "capture",
+          -10,
+          977
+        ]
+      ],
+      "alignments": [
+        {
+          "id": "4dccacf6-c959-45ef-b04d-c24c870bd00d",
+          "status": "ALIGNED",
+          "audio_snapshot_id": "12dca1d3-3a61-52ed-bb05-4a23fdf1fff6",
+          "lease_expires_at": null
+        }
+      ],
+      "browser": [
+        {
+          "id": "4d413c65-6386-55cc-b24c-6293da5f3b99",
+          "version": "1ebcb252-3ac6-4be9-8e57-c14fce07a404",
+          "play": [
+            {
+              "seconds": 0.165984,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            },
+            {
+              "seconds": 0.200356,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            }
+          ],
+          "sha256": "196416201d50d8bd7072845b4e5071ab674967acfa890ded93f27cb35044f558",
+          "bytes": 321488,
+          "frames": 150,
+          "download_button_verified": true
+        },
+        {
+          "id": "30ed87dd-1ae6-567a-93e8-a1bc3c7064a2",
+          "version": "85e713f0-1443-4c79-87eb-de398255541a",
+          "play": [
+            {
+              "seconds": 0.167214,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            },
+            {
+              "seconds": 0.172119,
+              "width": 1920,
+              "height": 1080,
+              "ready": 4
+            }
+          ],
+          "sha256": "3594e7cad1f9e1eb46f52af7ca3360c2a44ce1522c40f9ff4b92714bf0484e5a",
+          "bytes": 369857,
+          "frames": 150,
+          "download_button_verified": true
+        }
+      ],
+      "conversation_metering": {
+        "records": 6,
+        "prompt_tokens": 263172,
+        "completion_tokens": 7258,
+        "cached_tokens": 139858,
+        "metered_usd": 0.043829999999999994
+      },
+      "wallet_captured_credits": 23
+    }
+  ],
+  "schema": {
+    "version_num": "j6d05_project_brief",
+    "workflow_runs": null,
+    "workflow_steps": null
+  }
+}

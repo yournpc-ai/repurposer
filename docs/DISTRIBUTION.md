@@ -96,7 +96,7 @@ created_at / updated_at
 
 索引：`(state, due_at)` 部分索引（`WHERE state IN ('SCHEDULED','PUBLISHING')`，认领扫描）；`(user_id, state)`（队列页）；`idempotency_key` 唯一；`(channel_account_id)`。
 
-删除语义：`output_id` FK 为 `ON DELETE RESTRICT`——删除带非终态 publication 的产物会撞 FK 报错；服务层"先取消其非终态 publication 再删产物"的优雅路径未实施。
+删除成片时先锁定 Project 和 Output。存在 scheduled、publishing 或 unknown 发布记录时，接口在删除文件或数据库记录前返回 409。项目删除也检查未核实的外部效果与资金。
 
 ### 3.3 状态机
 

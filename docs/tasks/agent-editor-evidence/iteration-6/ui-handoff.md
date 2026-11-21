@@ -2,9 +2,11 @@
 
 ## 提交与状态
 
-交接代码 HEAD 为 `492acc4169f587dde971ee5ef7dda7af50e1d930`，完整消息读写切片为 `ea56282d4ec8f6fd61cf664c798fdb6380950093`。本交接文档的提交可用 `git log -1 --format=%H -- docs/tasks/agent-editor-evidence/iteration-6/ui-handoff.md` 核对。Chat 执行契约与下列文件的 Editor 施工已结束。交接前已检查该组路径，工作树干净。
+交接代码 HEAD 为 `492acc4169f587dde971ee5ef7dda7af50e1d930`，完整消息读写切片为 `ea56282d4ec8f6fd61cf664c798fdb6380950093`。首次提交本交接文档的 SHA 为 `e932584ac723a038393c35edf6f8be99f8e32786`。Chat 执行契约与下列文件的 Editor 施工已结束。交接前已检查该组路径，工作树干净。
 
 API core 489 项通过（3 项警告），Web 42 个文件、337 项通过，TypeScript 通过。真实 Chrome 在同一项目分别播放 v2、v3，逐张硬刷新后重新播放并点击下载，下载的 SHA-256 等于各自 Output。真实 HTTP 已完成批准、媒体、导出和 Stop；Unknown 与取消竞态通过隔离库故障注入。真实 Chrome 尚未逐一复演全部故障注入，也未验证 affectUI 视觉改造。十用户独立窗口为 41 个请求，4 项 Job 各认领一次。详细范围见 [6D 记录](6d.md) 与 [浏览器实测](6d-ui-release.json)。
+
+后续服务端切片 `fd437031` 删除了从未由现役工具发出的 video_draft_review 回执，按用户原话审阅指定 Output。deliver_video 工具结果中的 export_charged_this_opening 和 original_export_charge 分别来自本 opening 与原导出；用户钱包仍以账本为准。已释放的前端文件无需接入新订阅。最新实测见 [6D 验收](6d-acceptance.md)。
 
 ## 文件所有权
 
