@@ -78,7 +78,8 @@ export function StoryboardCard({
             block.content_digest != null &&
             data.content_digest !== block.content_digest
           ) ||
-          !sameScrubTarget(data.scrub, scrub)
+          !sameScrubTarget(data.scrub, scrub) ||
+          (scrub && !data.video_preview)
         ) {
           throw new Error("Storyboard identity mismatch")
         }
@@ -150,7 +151,7 @@ export function StoryboardCard({
 
   if (failed) {
     return (
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p role="status" className="mt-1 text-xs text-muted-foreground">
         {t("chat.videoStoryboard.unavailable")}
       </p>
     )
@@ -167,7 +168,7 @@ export function StoryboardCard({
             content_digest: read.content_digest,
           }}
           textSizeDraft={textSizeDraft}
-          onReady={() => setPreviewReady(true)}
+          onReady={() => setPreviewReady(read.video_preview?.status === "ready")}
           onError={() => setPreviewReady(false)}
         />
       )}

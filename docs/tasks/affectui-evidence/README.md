@@ -11,13 +11,25 @@
 | `8a199198` | Caret 弹层、附件操作与水合前草稿 |
 | `cd97c9c7` | 媒体查看、波形、预览、字幕字号、滚动控件与旧组件删除 |
 
-### StoryboardCard 文件交接（UI → Editor）
+### StoryboardCard 文件交接与回归
 
 | 文件 | UI 释放状态 | 接手方 | 已提交的视觉基线 |
 |---|---|---|---|
 | `apps/web/src/components/chat/video/StoryboardCard.tsx` | `RELEASED` | `OWNED_BY_EDITOR` | `cd97c9c7` |
 
 在本地 main 的 `3e5513b1` 核对，该文件与视觉基线一致，工作树和暂存区均无该文件的修改。Editor 可接手移除展示回执响应中的 `run_id` 读取和 `onRunStarted` 回调。保留原展示就绪条件，以及对 `presented_message_id || messageId`、`composition_version_id` 和 `presentation_digest` 的确认。UI 后续接手 Chat 文件以 Editor 的 `iteration-6/ui-handoff.md` 逐文件释放为准。
+
+Editor 在 `8def896d` 移除了这条 Run 路径，在 `8321116b` 将分镜卡标记为 `RELEASED` 并交回 UI。交接时该文件没有工作树或暂存修改。AgentThread、ChatConversation、ComponentSlot 与 Activity 投影仍为 `OWNED_BY_EDITOR`。详见 [Editor 文件交接及执行契约](../agent-editor-evidence/iteration-6/ui-handoff.md)。
+
+Chrome 复现了一个展示回执错误。服务端 DTO 为 `video_preview.status=pending_media` 时，预览提示已显示就会触发父级的就绪回调，正文结束后浏览器因此向原消息发送了一次展示完成 POST。分镜卡现在检查预览状态。返回 DTO 缺少所请求的局部预览时，卡片显示读取失败并保留未确认状态。普通分镜没有请求局部预览时，原有正文就绪路径仍然有效。
+
+| Chrome 组件验收 | 观测结果 |
+|---|---|
+| 英文浅色桌面 1280 和平板 768、中文深色手机 375，三种宽度均启用 reduced-motion | 真实 StoryboardCard、恢复判定和 Remotion Player 使用本机版本 DTO 夹具。媒体待就绪、预览不可用、请求的预览缺失、内容摘要不匹配四种情况下，正文结束后均为 0 次展示 POST。 |
+| 固定版本、键盘切换和刷新 | 读取 v1 且首帧就绪后，正文尚未完成时 0 次 POST。正文结束后向 original-message 发送 1 次 POST，正文只含 v1 与本次 DTO 的展示摘要。Enter 打开当前版本才读取 v2，回执计数不变。禁用浏览器缓存并刷新后重新读取 v1。恢复目标匹配时正文就绪后再次回执，切换为其他历史消息时 0 次新增回执。三种宽度的页面异常数均为 0。 |
+| 自动化 | 新增 4 项组件回归，覆盖三类不可播放输入与无局部预览的独立正文路径。本轮完整 Web 测试为 47 个文件、418 项通过，TypeScript、客户端及 SSR 生产构建通过。 |
+
+以上请求由浏览器网络夹具接收。真实项目刷新、服务端持久化、用户续改及历史 Output 联调仍未验证。Editor 单独报告的隔离 PostgreSQL HTTP 验证见交接文档。此切片只涉及分镜展示与恢复判定的消费端，Tool、Context 与 Job 执行没有新增联调证据。
 
 ### 官方源码与接入裁决
 
@@ -69,7 +81,7 @@ Router 精确回归保留：从 /projects 打开项目详情，reload 到 docume
 
 在 apps/web 执行 `pnpm exec tsc --noEmit`、`pnpm test`、`pnpm build`。本轮最后一次完整运行通过 46 个测试文件、415 项测试及客户端、SSR 构建。计数包含当时共享工作树的 Editor 测试。QuestionDock 的选中态断言改查唯一选中的 Clean Card，SkillPicker 定位断言保留原像素与方向检查。
 
-**联合签收仍开放。** 等待 Editor 在 iteration-6/ui-handoff.md 中逐文件标注 RELEASED，并提供隔离 API 目标。旧 Run 投影、费用回执、真实 Tool / Job、历史 Output 与交付后续改均需通过同一真实旅程。6B / 6C 的已有记录及本轮静态检查不计入这些项目的验收。
+**联合签收仍开放。** 目前仅分镜卡已从 Editor 交回。生产 Tool Group、Activity 与费用确认的接线仍等待其消费者文件释放，真实项目联调等待隔离 API 目标。旧 Run 投影、费用回执、真实 Tool / Job、历史 Output 与交付后续改均需通过同一真实旅程。6B / 6C 的已有记录及本轮静态检查不计入这些项目的验收。
 
 ## U0–U2 范围和现场
 
