@@ -19,7 +19,6 @@ from app.agents.tool_loop import (
     # chain-adjudication exception, imported below) shadows the loop event's
     # name in this module — the retract seat must match the LOOP's class
 )
-from app.agents.working_drafts import WorkingDraftRejected, WorkingDraftUpdated
 from app.chat.deferred_frames import DeferredFrames
 from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
@@ -93,9 +92,7 @@ PlanTurnOutcome = tuple[Message | None, Message | None]
 
 
 class PlanTurn:
-    """One plan-path turn: the pre-call assembly, the four tool executions,
-    and the outcome mapping. Created by ``run_plan_turn``; one instance per
-    turn (the idempotency guards are its fields)."""
+    """Native tool dispatch and conversation facts for one project opening."""
 
     def __init__(
         self,
@@ -585,7 +582,7 @@ class PlanTurn:
 
     # ---- the loop's execute dispatch ----------------------------------------
 
-    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
+    async def execute(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected:
         """The LoopExecute seat: validate → (reject: feedback, zero writes) →
         accept: writes + the outcome stashed → None (terminal stop). A
         PERCEPTION call short-circuits the seats above: reads are dispatched
@@ -638,7 +635,7 @@ class PlanTurn:
             await self._resolve_deferred()
         return result
 
-    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
+    async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected:
         if name in {"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"}:
             from app.chat.video_turn_seats import skill_read_seat
             return await skill_read_seat(

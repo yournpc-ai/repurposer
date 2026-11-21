@@ -22,12 +22,12 @@ from uuid import UUID
 import av
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.service import format_storyboard_text, video_version_read
 from app.models.schemas import MediaInput, MediaInputType, ReviewVideoArgs
-from app.models.tables import Output, Project
+from app.models.tables import CompositionVersion, Conversation, Message, Output, Project
 from app.providers import storage
 from app.providers.llm.base import LLMError
 from app.tools.video.output_checks import (
@@ -469,6 +469,7 @@ def _build_review_report(
     *,
     output_facts: dict[str, Any],
     args: ReviewVideoArgs,
+    requirements: str,
     answer: ContentReviewAnswer,
     frames: list[ReviewFrame],
     spec: dict[str, Any],
@@ -507,7 +508,7 @@ def _build_review_report(
         "execution_digest": output_facts["execution_digest"],
         "video_sha256": output_facts["video_sha256"],
         "reviewed_at": datetime.now(UTC).isoformat(),
-        "requirements": args.requirements,
+        "requirements": requirements,
         "at_seconds": args.at_seconds,
         "motion_scene_id": motion_scene_id,
         "motion_sampling": motion_sampling,
@@ -539,7 +540,7 @@ def _build_review_report(
             }
             for frame in frames
         ],
-        "findings": _report_findings(answer, frames, spec, args.requirements),
+        "findings": _report_findings(answer, frames, spec, requirements),
     }
 
 
@@ -548,6 +549,7 @@ def _reusable_report(
     output_id: UUID,
     video_sha256: str,
     args: ReviewVideoArgs,
+    requirements: str,
 ) -> dict[str, Any] | None:
     saved = (quality or {}).get("content_review")
     if (
@@ -555,7 +557,7 @@ def _reusable_report(
         or not isinstance(saved, dict)
         or saved.get("output_id") != str(output_id)
         or saved.get("video_sha256") != video_sha256
-        or saved.get("requirements") != args.requirements
+        or saved.get("requirements") != requirements
         or saved.get("schema_version") != _REVIEW_SCHEMA_VERSION
         or (saved.get("media_inspection") or {}).get("checker_version")
         != OUTPUT_CHECKER_VERSION
@@ -622,11 +624,41 @@ async def read_output_video(key: str) -> bytes:
         raise ReviewError("The delivered MP4 cannot be read from storage.") from exc
 
 
+async def _user_review_requirements(db, *, opening_id: UUID, output: Output, owner_id: UUID) -> str:
+    opening = await db.scalar(select(Message).join(Conversation).where(
+        Message.id == opening_id, Message.role == "user", Conversation.user_id == owner_id,
+        Conversation.project_id == output.project_id,
+    ))
+    if opening is None:
+        raise ReviewError("The review requires the user's opening in this project.")
+    # The creation and edit requests refer to the exact exported lineage, including
+    # when a later opening has already changed the composition's current version.
+    pinned = await db.get(CompositionVersion, output.composition_version_id)
+    if pinned is None or pinned.composition_id != output.composition_id:
+        raise ReviewError("The exported version is unavailable.")
+    edit_marker = func.jsonb_build_array(func.jsonb_build_object("request", CompositionVersion.request_id))
+    made_version = select(CompositionVersion.id).where(
+        CompositionVersion.composition_id == pinned.composition_id,
+        CompositionVersion.version <= pinned.version,
+        CompositionVersion.request_id.is_not(None),
+        Message.intent["editor_commits"].contains(edit_marker),
+    ).exists()
+    prior = list(await db.scalars(select(Message.content).where(
+        Message.conversation_id == opening.conversation_id, Message.role == "user",
+        Message.seq < opening.seq, made_version,
+    ).order_by(Message.seq.desc()).limit(4)))
+    return json.dumps({
+        "current_user_request": opening.content,
+        "prior_user_requests_for_this_work": list(reversed(prior)),
+    }, ensure_ascii=False)
+
+
 async def review_video(
     db: AsyncSession,
     *,
     owner_id: UUID,
     project_id: UUID,
+    opening_id: UUID,
     args: ReviewVideoArgs,
 ) -> dict[str, Any]:
     output = await db.scalar(
@@ -656,7 +688,8 @@ async def review_video(
     # Cache identity includes the actual delivered bytes, not just the Output id.
     video = await read_output_video(video_key)
     video_sha256 = hashlib.sha256(video).hexdigest()
-    saved = _reusable_report(output.quality, output.id, video_sha256, args)
+    requirements = await _user_review_requirements(db, opening_id=opening_id, output=output, owner_id=owner_id)
+    saved = _reusable_report(output.quality, output.id, video_sha256, args, requirements)
     if (saved is not None and saved.get("file") and
             all(saved.get(k) == v for k, v in pinned.items())):
         return saved
@@ -704,12 +737,13 @@ async def review_video(
         saved_report
         if isinstance(saved_report, dict)
         and saved_report.get("output_id") == str(output.id)
+        and saved_report.get("requirements") == requirements
         and saved_report.get("video_sha256") == output_facts["video_sha256"]
         else None
     )
     try:
         answer = await video_reviewer.call(
-            requirements=args.requirements,
+            requirements=requirements,
             output_facts=json.dumps(output_facts, ensure_ascii=False),
             storyboard=format_storyboard_text(read),
             frame_facts=_frame_facts(frames, spec),
@@ -727,6 +761,7 @@ async def review_video(
     report = _build_review_report(
         output_facts=output_facts,
         args=args,
+        requirements=requirements,
         answer=answer,
         frames=frames,
         spec=spec,

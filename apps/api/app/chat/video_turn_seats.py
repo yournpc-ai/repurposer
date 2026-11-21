@@ -258,7 +258,8 @@ async def review_video_seat(
         return ToolObservation("Review the exact selected Output.", ok=False)
     try:
         async with AsyncSessionLocal() as video_db:
-            report = await review_video(video_db, owner_id=turn.project.user_id, project_id=turn.project.id, args=args)
+            report = await review_video(video_db, owner_id=turn.project.user_id, project_id=turn.project.id,
+                                        opening_id=turn.turn_id, args=args)
     except ReviewAttemptFailed as exc:
         return TerminalRefusal(
             str(exc),

@@ -266,16 +266,10 @@ async def test_skill_binding_survives_an_unsaved_clarification_turn(database, mo
         conversation = Conversation(
             user_id=owner,
             project_id=project,
-            context={"schema_version": 1, "items": [{
-                "id": "draft-item",
-                "tool": "design_video",
-                "target_tool": "design_video",
-                "text": '{"draft_id":"draft-1"}',
-                "candidate": {"active": True},
-            }]},
         )
         db.add(conversation)
         await db.flush()
+        clarification = uuid4()
         db.add_all([
             Message(
                 conversation_id=conversation.id,
@@ -288,6 +282,7 @@ async def test_skill_binding_survives_an_unsaved_clarification_turn(database, mo
             Message(
                 conversation_id=conversation.id,
                 role="user",
+                id=clarification,
                 content="clarify",
                 turn_state="settled",
                 seq=2,
@@ -296,6 +291,8 @@ async def test_skill_binding_survives_an_unsaved_clarification_turn(database, mo
                     "skill_binding": "inherited",
                 },
             ),
+            Message(conversation_id=conversation.id, role="assistant", content="Which title?",
+                    turn_id=clarification, seq=3, question={"kind": "question", "question": "Which title?"}),
         ])
         await db.commit()
         prepared = await prepare_chat_turn(

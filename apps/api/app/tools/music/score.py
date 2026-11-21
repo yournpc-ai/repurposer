@@ -11,8 +11,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.editing.schemas import CompositionContent
-from app.editing.timing import SOURCE_TIMEBASE, output_ticks_to_source_ticks, quantize_ticks
+from app.editing.timing import SOURCE_TIMEBASE, quantize_ticks
 from app.models.schemas import canonical_json_hash
 
 SCORE_SCHEMA_VERSION = 1
@@ -179,35 +178,6 @@ class ScoreSpec(ScoreSpecDraft):
 
 def _fraction(value: str) -> Fraction:
     return Fraction(value)
-
-
-def build_score_spec(creative: ScoreSpecDraft, draft: dict[str, Any]) -> ScoreSpec:
-    """Resolve creative sections against current Scene truth, never model timestamps."""
-    content = CompositionContent.model_validate(draft.get("content") or {})
-    scenes = sorted(content.scenes, key=lambda scene: scene.range.start)
-    if not scenes:
-        raise ScoreError("a score needs the current draft's Scenes")
-    if [item.scene_id for item in creative.sections] != [scene.scene_id for scene in scenes]:
-        raise ScoreError("score sections must cover every current Scene once, in playback order")
-    if any(current.range.start < previous.range.end for previous, current in zip(scenes, scenes[1:])):
-        raise ScoreError("the current draft has overlapping Scene ranges")
-    sections = []
-    for scene, section in zip(scenes, creative.sections, strict=True):
-        start_sample = quantize_ticks(
-            Fraction(scene.range.start, content.settings.timebase) * creative.sample_rate
-        )
-        end_sample = quantize_ticks(
-            Fraction(scene.range.end, content.settings.timebase) * creative.sample_rate
-        )
-        sections.append(ScoreSection(
-            **section.model_dump(mode="json"),
-            section_id=scene.scene_id,
-            start_tick=output_ticks_to_source_ticks(scene.range.start, content.settings.timebase),
-            end_tick=output_ticks_to_source_ticks(scene.range.end, content.settings.timebase),
-            start_sample=start_sample,
-            end_sample=end_sample,
-        ))
-    return _resolve_sections(creative, sections)
 
 
 class GenerateMusicArgs(BaseModel):
@@ -486,6 +456,5 @@ __all__ = [
     "ScoreSpecDraft",
     "ScoreTransition",
     "authored_beat_grid",
-    "build_score_spec",
     "synthesize_score",
 ]

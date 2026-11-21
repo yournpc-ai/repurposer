@@ -1,39 +1,5 @@
-"""Pipeline execution error taxonomy (agent-loop-upgrade W3).
+"""User-facing failure descriptions for Chat, media providers and workers."""
 
-Kept import-free so every layer (tools / node classes / orchestrator) can
-share it without cycles.
-
-**User-facing failure lines** (provider 错误人话化): exceptions carry a
-``user_key`` — a machine key into ``USER_ERROR_LINES`` — and the orchestrator
-bakes the localized line into ``node.error`` at fail time (the same
-bake-at-write, UI-locale discipline as step summaries). Raw innards
-(SQL/SQLAlchemy/httpx/pydantic dumps) stay in structlog only. Deterministic
-input errors (plain ``ValueError`` sites, ``HTTPException.detail``) keep
-their authored messages — a separate i18n debt, deliberately out of this
-taxonomy.
-"""
-
-class TransientNodeError(Exception):
-    """A retryable step failure: provider / network / storage hiccups.
-
-    ``execute_step`` resets the node to ``pending`` (the worker's next tick is
-    the backoff) when the kind carries retry budget (``NodeBase.retries``);
-    anything else fails fast. Deterministic failures — missing inputs, empty
-    batches, validation errors — must raise ordinary exceptions so they never
-    burn retry budget.
-
-    ``user_key`` names the user-facing line for the exhausted/terminal case.
-    """
-
-    def __init__(self, message: str, *, user_key: str | None = None) -> None:
-        super().__init__(message)
-        self.user_key = user_key
-
-
-# Failure lines shown on the failed step row / clip card. Keys follow the
-# UI locale (en/zh today); unknown locales fall back to English — the same
-# fallback rule as summary_templates. Copy doctrine: plain and factual, an
-# honest next step, no jargon ("provider" never appears).
 USER_ERROR_LINES: dict[str, dict[str, str]] = {
     "provider_rate_limited": {
         "en": "The AI service is busy right now — please try again in a moment",
@@ -138,33 +104,7 @@ USER_ERROR_LINES: dict[str, dict[str, str]] = {
         "en": "The audio was generated. Loudness and true peak could not be verified for playback.",
         "zh": "音频已生成。响度与真峰值校验失败，试听交付已暂停。",
     },
-    # The film storyboard's bounded rewrite exhausted (3 candidates, each
-    # rejected by the grounding validator) — the honest line names what the
-    # film is made of, never the machinery.
-    # The design beat's capture wait outlasted its ceiling — the draft
-    # refused a half-captured world; nothing was designed, nothing started.
-    # The TEXT source's ladder terminal (素材源抽象): every candidate failed
-    # the checks. The copy itself already passed the feasibility preflight,
-    # so this line never blames the user's words or their named numbers —
-    # it owns the miss and names what the system can do next.
-    # The text source's material preflight: at the DEFAULT (natural reading)
-    # pace the full copy runs past the single-film frame cap — named BEFORE
-    # any design attempt, with the actions the system can actually take
-    # (including the user's explicit faster-pace choice — the reading
-    # estimate recommends, it never bounds). Never dressed up as the user's
-    # parameter mistake.
-    # The text source's named-target preflight: the named duration is over
-    # the render frame cap, or the named scene count sits outside the copy's
-    # real satisfiable span (screen overflow / scenes with nothing to cite)
-    # — the honest conflict plus the workable options (never a silent
-    # squeeze; a named FASTER pace is legal and never lands here).
-    # The text source's zero-copy preflight (the text film's birth gate):
-    # no words arrived at all — the remedy is the copy itself or a brief.
-    # The direction preflight found a view-poor world: the page's VISUALS
-    # never captured (a blocked / timed-out browser half), rejected before
-    # any LLM call. The honest remedy is a re-capture (re-sending the link
-    # re-arms the hollow asset — the dedup seat's law) or user-supplied
-    # shots — never clearer copy.
+
 }
 
 
@@ -200,16 +140,8 @@ def user_error_line(exc: BaseException, ui_language: str = "en") -> str:
     return user_line("step_failed", ui_language)
 
 
-def propagate_key(cause: BaseException, default: str) -> str:
-    """The wrapper-site rule: a wrapped provider error keeps its own key;
-    anything else gets the wrapper's family default."""
-    return getattr(cause, "user_key", None) or default
-
-
 __all__ = [
-    "TransientNodeError",
     "USER_ERROR_LINES",
     "user_line",
     "user_error_line",
-    "propagate_key",
 ]

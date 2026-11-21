@@ -1,0 +1,197 @@
+{
+  "db": "rep_6d_overlap_9c32496b33",
+  "turns": [
+    {
+      "opening": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "reply": "允许为「琥珀色的光球，正沿着弧线缓缓向前。」生成旁白吗？最多使用 3 积分。",
+      "state": "settled"
+    },
+    {
+      "opening": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "reply": "允许为「极简风格画面：深藏蓝纯色背景，画面中有一条清晰可见的浅蓝色弧线（曲线），从左下方缓缓升起，向右下方弯曲延伸；一个琥珀色（暖橙金色）实心圆球正落在该弧线之上并与弧线贴合，沿弧线方向移动。扁平矢量插画风格，无文字，无阴影渐变。」生成图片吗？最多使用 6 积分。",
+      "state": "settled"
+    }
+  ],
+  "approvals": [
+    {
+      "id": "3ca7329f-3bbc-4a88-a613-233878f3be9b",
+      "opening": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_voice",
+      "max": 3,
+      "approved": true
+    },
+    {
+      "id": "5fb7a2d1-e1bc-4375-aa72-5f82a9a94698",
+      "opening": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "generate_image",
+      "max": 6,
+      "approved": false
+    }
+  ],
+  "user": "3c4fc86a-1e55-4b72-9415-ba105691b414",
+  "project": "5b3f25b6-8189-4971-8d78-37882b7e370e",
+  "asset": "9db3913c-5a13-4cf7-bee5-0ab0b0ae2816",
+  "head": "a5915aec-a7e2-4313-be78-0f116336d199",
+  "ordinal": 3,
+  "media": [
+    {
+      "kind": "generate_music",
+      "id": "f87f4e41-39d6-5739-80ba-e587cbbd91c3",
+      "status": "succeeded",
+      "attempt": 1,
+      "snapshot": "76249736-fbf7-55fc-92f6-3e469aeaefa6",
+      "credits": "0"
+    },
+    {
+      "kind": "generate_voice",
+      "id": "e5a0a040-3250-518e-9bea-15553a10a446",
+      "status": "succeeded",
+      "attempt": 1,
+      "snapshot": "ea33f57c-7374-5424-b139-05fe3e911c5a",
+      "credits": "3"
+    }
+  ],
+  "exports": [
+    {
+      "id": "d8f4eac5-74e2-56e4-b8b9-00f3120d4990",
+      "status": "succeeded",
+      "attempt": 1,
+      "composition_version_id": "a5915aec-a7e2-4313-be78-0f116336d199"
+    }
+  ],
+  "delivered": [],
+  "calls": [
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "get_understanding",
+      "call_id": "call_9865fb2f170d45bca15514b2"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "get_asset",
+      "call_id": "call_9cb497598da64749b6e520fa"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "prepare_video_materials",
+      "call_id": "call_7e7261a29cb345f99c930cd2"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_voice",
+      "call_id": "call_63a76679cafc400fb7de764b"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_music",
+      "call_id": "call_f65bb848c1d7416781ea3d37"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_music",
+      "call_id": "call_625781328b811d2dfad2eecf"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "prepare_video_materials",
+      "call_id": "call_29a0b6ae0b9675f9e82a4e88"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "create_video",
+      "call_id": "call-a0adf9fe-1751-4936-9456-0919b2be2743"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef77dd775c5af5ca163"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef78221754f84ee0bf9"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef78a03775b98b2cd41"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef78a03775b98b2cd42"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef78eff70d589a89c2b"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "preview_range",
+      "call_id": "call_01a1fef78eff70d589a89c2c"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "export_video",
+      "call_id": "call_01a1fef881a1709b9b770713"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef886437129a2025316"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "preview_range",
+      "call_id": "call_01a1fef88a1972fb8786a0f5"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "export_video",
+      "call_id": "call_function_tm9ob4f09qtf_1"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "generate_image",
+      "call_id": "call_function_n8eyqf8738nf_1"
+    }
+  ],
+  "wallet": [
+    {
+      "kind": "grant",
+      "amount": 1000,
+      "balance_after": 1000
+    },
+    {
+      "kind": "hold",
+      "amount": -3,
+      "balance_after": 997
+    },
+    {
+      "kind": "release",
+      "amount": 3,
+      "balance_after": 1000
+    },
+    {
+      "kind": "capture",
+      "amount": -3,
+      "balance_after": 997
+    },
+    {
+      "kind": "hold",
+      "amount": -10,
+      "balance_after": 987
+    },
+    {
+      "kind": "release",
+      "amount": 10,
+      "balance_after": 997
+    },
+    {
+      "kind": "capture",
+      "amount": -10,
+      "balance_after": 987
+    }
+  ]
+}

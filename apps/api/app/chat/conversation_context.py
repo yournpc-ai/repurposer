@@ -66,21 +66,18 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
     """Newest complete records win; every omitted item gets an exact reason."""
     chosen, omitted, seen = [], [], set()
     seen_candidates = set()
-    successful_writes = set()
     spent = 0
     for item in reversed(items):
         identity = item["id"]
         reason = None
         name, args = item["tool"], item["arguments"]
         target_tool = item.get("target_tool") or name
-        effective_args = item.get("executed_arguments") or args
         candidate = item.get("candidate") or {}
         candidate_id = candidate.get("candidate_id")
         if candidate_id and candidate_id in seen_candidates:
             reason = "superseded by a newer correction or terminal result for this candidate"
         elif candidate_id:
             seen_candidates.add(candidate_id)
-        write_key = (target_tool, effective_args.get("composition_id"), json.dumps(effective_args.get("base_ref"), sort_keys=True))
         if item["turn_id"] == str(current_turn):
             # The current ToolLoop owns these protocol pairs already.
             continue
@@ -90,12 +87,8 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
             reason = "transient result"
         elif name in {"read_skill_reference", "list_skill_shots", "get_skill_shot", "get_skill_preview"} and item.get("skill_reference") != skill_reference:
             reason = "different bound Skill/version"
-        elif target_tool in {"design_video", "revise_video"} and not item["ok"] and write_key in successful_writes:
-            reason = "candidate superseded by successful save"
-        elif target_tool in {"design_video", "revise_video"} and not item["ok"] and item.get("base_versions") and not set(item["base_versions"]).issubset(keys):
-            reason = "candidate belongs to an older work version"
         resource_keys = item.get("resource_keys") or []
-        if not reason and item["ok"] and target_tool in {"design_video", "revise_video", "get_video_version"}:
+        if not reason and item["ok"] and target_tool == "get_video_version":
             version_keys = {key for key in resource_keys if key.startswith("composition:")}
             if version_keys and not version_keys.issubset(keys):
                 reason = "saved version is no longer included in current project facts; read explicitly if needed"
@@ -121,8 +114,6 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
             chosen.append(projected)
             spent += cost
             seen.add(fingerprint)
-        if item["ok"] and target_tool in {"design_video", "revise_video"} and item["turn_id"] in valid_turns:
-            successful_writes.add(write_key)
     chosen.reverse()
     return chosen, omitted
 
@@ -297,39 +288,36 @@ class ConversationContext:
         for item in selected:
             wire_id = "history_" + hashlib.sha256(item["id"].encode()).hexdigest()[:24]
             candidate = item.get("candidate") or {}
-            if candidate.get("active", True):
+            if candidate and candidate.get("active", True) and not item["ok"]:
                 try:
                     diagnostic = json.loads(item["text"])
-                    is_draft = "draft_id" in diagnostic
-                    if not item["ok"] or is_draft:
-                        candidate_id = candidate["candidate_id"]
-                        target_tool = candidate["target_tool"]
-                        identity_key = "draft_id" if is_draft else "candidate_id"
-                        if diagnostic[identity_key] != candidate_id or diagnostic["draft_digest" if is_draft else "candidate_digest"] != candidate["candidate_digest"]:
-                            raise ValueError("draft/candidate metadata and diagnostic differ")
-                        arguments = item.get("executed_arguments") or item["arguments"]
-                        raw_errors = [{
-                            "loc": error.get("original_loc") or error.get("loc") or error.get("field_path") or error.get("operation_path") or [],
-                            "type": error.get("type", "value_error"),
-                            "msg": error.get("msg", error.get("message", "invalid candidate")),
-                            **({"relation": error["relation"]} if error.get("relation") else {}),
-                            **({"entity": error["entity"]} if error.get("entity") else {}),
-                        } for error in diagnostic.get("errors", [])]
-                        restored_candidates.append(RestoredCandidate(
-                            candidate_id=candidate_id, candidate_digest=candidate["candidate_digest"],
-                            tool_name=target_tool, arguments=arguments, errors=raw_errors,
-                            base_keys=frozenset(candidate.get("base_keys") or item.get("base_versions") or []), call_id=wire_id,
-                        ))
-                        if not is_draft and item["tool"] == CORRECTION_TOOL_NAME and item["arguments"].get("mode") != "replace":
-                            # A patch call does not contain the merged candidate. Project
-                            # exactly one current full body into its latest tool result;
-                            # older digests were omitted by select_items.
-                            diagnostic["candidate"] = arguments
-                            diagnostic["candidate_location"] = "this restored tool result's candidate field"
-                            item["text"] = json.dumps(diagnostic, ensure_ascii=False)
+                    candidate_id = candidate["candidate_id"]
+                    target_tool = candidate["target_tool"]
+                    if (diagnostic["candidate_id"] != candidate_id or
+                            diagnostic["candidate_digest"] != candidate["candidate_digest"]):
+                        raise ValueError("candidate metadata and diagnostic differ")
+                    arguments = item.get("executed_arguments") or item["arguments"]
+                    raw_errors = [{
+                        "loc": error.get("original_loc") or error.get("loc") or error.get("field_path") or error.get("operation_path") or [],
+                        "type": error.get("type", "value_error"),
+                        "msg": error.get("msg", error.get("message", "invalid candidate")),
+                        **({"relation": error["relation"]} if error.get("relation") else {}),
+                        **({"entity": error["entity"]} if error.get("entity") else {}),
+                    } for error in diagnostic.get("errors", [])]
+                    restored_candidates.append(RestoredCandidate(
+                        candidate_id=candidate_id, candidate_digest=candidate["candidate_digest"],
+                        tool_name=target_tool, arguments=arguments, errors=raw_errors,
+                        base_keys=frozenset(candidate.get("base_keys") or item.get("base_versions") or []), call_id=wire_id,
+                    ))
+                    if item["tool"] == CORRECTION_TOOL_NAME and item["arguments"].get("mode") != "replace":
+                        # A patch call does not contain the merged candidate. Project
+                        # exactly one current full body into its latest tool result;
+                        # older digests were omitted by select_items.
+                        diagnostic["candidate"] = arguments
+                        diagnostic["candidate_location"] = "this restored tool result's candidate field"
+                        item["text"] = json.dumps(diagnostic, ensure_ascii=False)
                 except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
-                    if not item["ok"]:
-                        candidate_rejections.append({"item_id": item["id"], "reason": str(exc)})
+                    candidate_rejections.append({"item_id": item["id"], "reason": str(exc)})
             messages.append({"role": "assistant", "content": "", "tool_calls": [{
                 "id": wire_id, "type": "function", "function": {"name": item["tool"],
                     "arguments": json.dumps(item["arguments"], ensure_ascii=False)}}]})

@@ -690,10 +690,6 @@ _ACTIVITY_TERMINAL = {"completed", "failed", "cancelled"}
 
 _ACTIVITY_RECEIPT_FIELDS = {
     "video_review": {"kind", "frames", "findings", "output_issue_codes", "scope"},
-    "video_draft_review": {
-        "kind", "evidence_id", "draft_digest", "content_digest", "media_digest",
-        "source_range_seconds", "scene_ids", "continuous",
-    },
     "video_revision": {
         "kind", "version", "settings", "scenes", "clips", "transitions_changed", "components",
     },
@@ -929,70 +925,32 @@ async def wait_delivery(ctx: Ctx, conversation_id: str, output: Output, timeout:
     raise JourneyFailure(f"no reviewed delivery for Output {output.id}")
 
 
-async def check_incremental_design_turn(ctx: Ctx, turn: dict, label: str) -> None:
-    """Verify one real high-level save, with a draft digest chain only when used."""
-    turn_id = str((turn.get("user_message") or {}).get("id") or "")
-    check(bool(turn_id), f"{label}: the settled turn has its real user-message id", turn)
+async def check_native_version_commit(ctx: Ctx, turn: dict, label: str) -> None:
+    """Connect this model's native call to its owned, committed version."""
+    opening_id = uuid.UUID(turn["user_message"]["id"])
+    calls = _p1_provider_calls(turn)
+    called = {name for call in calls for name, _ in _p1_tool_calls(call)}
     async with AsyncSessionLocal() as db:
-        conversation = await db.scalar(select(Conversation).where(
-            Conversation.id == uuid.UUID(turn["conversation_id"]),
-            Conversation.user_id == ctx.user_id,
-        ))
-        context = dict(conversation.context or {}) if conversation is not None else {}
-    check(conversation is not None, f"{label}: owned conversation is readable", None)
-    items = [
-        item for item in (context.get("items") or [])
-        if item.get("turn_id") == turn_id
-        and (item.get("tool") == "design_video" or item.get("target_tool") == "design_video")
-    ]
-    successful_saves = 0
-    draft_id = None
-    latest_ref = None
-    for item in items:
-        args = item.get("executed_arguments") or item.get("arguments") or {}
-        save = args.get("save", False)
-        check(isinstance(save, bool), f"{label}: design save flag is boolean", item.get("id"))
-        try:
-            result = json.loads(item.get("text") or "")
-        except (TypeError, json.JSONDecodeError):
-            result = None
-        if isinstance(result, dict) and result.get("draft_retired"):
-            continue
-        returned_ref = result.get("draft_ref") if isinstance(result, dict) else None
-        if isinstance(returned_ref, dict):
-            if latest_ref is None:
-                check(args.get("draft_ref") is None,
-                      f"{label}: a new working draft does not borrow an older identity",
-                      item.get("id"))
-            else:
-                check(args.get("draft_ref") == latest_ref,
-                      f"{label}: each write authenticates the latest draft digest",
-                      {"call": item.get("id"), "sent": args.get("draft_ref"),
-                       "expected": latest_ref})
-            if draft_id is None:
-                draft_id = returned_ref.get("draft_id")
-            check(returned_ref.get("draft_id") == draft_id
-                  and isinstance(returned_ref.get("draft_digest"), str),
-                  f"{label}: all writes keep one working-draft identity",
-                  {"call": item.get("id"), "returned": returned_ref})
-            latest_ref = returned_ref
-        if item.get("ok") and save:
-            successful_saves += 1
-            if args.get("draft_ref") is not None:
-                check(latest_ref is not None and args.get("draft_ref") == latest_ref,
-                      f"{label}: final save validates the assembled working draft",
-                      {"call": item.get("id"), "sent": args.get("draft_ref"),
-                       "expected": latest_ref})
-            else:
-                check(bool(args.get("shots")),
-                      f"{label}: a direct high-level save carries bounded shots",
-                      item.get("id"))
-            check(any(str(key).startswith("composition:")
-                      for key in item.get("resource_keys") or []),
-                  f"{label}: the successful save records its Composition resource",
-                  item.get("id"))
-    check(successful_saves == 1,
-          f"{label}: the high-level design is saved exactly once", successful_saves)
+        opening = await db.scalar(
+            select(Message).join(Conversation).where(
+                Message.id == opening_id, Conversation.user_id == ctx.user_id,
+                Conversation.id == uuid.UUID(turn["conversation_id"]),
+            )
+        )
+        check(opening is not None, f"{label}: the opening belongs to this user", opening_id)
+        markers = (opening.intent or {}).get("editor_commits", [])
+        check(bool(markers), f"{label}: the opening recorded its native edits", opening_id)
+        versions = list((await db.scalars(
+            select(CompositionVersion.request_id).join(Composition, Composition.id == CompositionVersion.composition_id).join(
+                Conversation, Conversation.project_id == Composition.origin_project_id,
+            ).where(Conversation.id == opening.conversation_id,
+                    Composition.owner_id == ctx.user_id,
+                    CompositionVersion.request_id.in_([m["request"] for m in markers]))
+        )).all())
+    check(set(versions) == {m["request"] for m in markers},
+          f"{label}: every edit has a durable version in this project", versions)
+    check(all(m["tool"] in called for m in markers),
+          f"{label}: the model called each committed tool", sorted(called))
 
 
 REMIX_SOURCE_KEY = "demo/uploads/demo_talk.mp4"
@@ -1218,8 +1176,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
     """builtin_promo_skill 两种 arc 的真实宣传视频旅程；仅 product-evidence 变体制作一次。
 
     message-first-spotlight 用纯文案首稿覆盖零素材/零 Run 负形。
-    两个首稿与开放重稿都读取真实 ToolExchange，断言同一工作草稿至少两次
-    成功增量写入、digest 连续续写和最后一次保存；声明需要动态预览的固定素材
+    两个首稿与开放重稿核对模型调用、opening 回执和项目内实际提交的版本。声明需要动态预览的固定素材
     版本必须有同 version/digest 的 ready 预览，而不是只凭版本行推断创作过程。
     product-evidence 用真实网页捕获 fixture + 图片 + 视频 + 精确文案首稿，
     经开放全结构重稿、定点文案修订和本地 Music 候选/选曲后，由一条后续明示
@@ -1256,7 +1213,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
           "message-first first design starts no production", copy_turn)
     copy_read, _ = await ctx.acknowledge_video_presentation(
         copy_turn    )
-    await check_incremental_design_turn(ctx, copy_turn, "message-first first draft")
+    await check_native_version_commit(ctx, copy_turn, "message-first first draft")
     _check_complete_video_storyboard(copy_read, "message-first first draft")
     copy_versions = await composition_versions_of(pid_copy)
     check(len(copy_versions) == 1 and copy_versions[0].version == 1,
@@ -1307,7 +1264,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
           "the complete first product storyboard holds with zero Run", first_turn)
     first_read, _ = await ctx.acknowledge_video_presentation(
         first_turn    )
-    await check_incremental_design_turn(ctx, first_turn, "product-evidence first draft")
+    await check_native_version_commit(ctx, first_turn, "product-evidence first draft")
     _check_complete_video_storyboard(first_read, "product-evidence first draft")
     versions = await composition_versions_of(pid)
     check(len(versions) == 1 and versions[0].version == 1,
@@ -1339,7 +1296,7 @@ async def promo_skill_storyboard_revision_and_delivery(ctx: Ctx) -> None:
           "the open structural redraft starts no production", redraft_turn)
     redraft_read, _ = await ctx.acknowledge_video_presentation(
         redraft_turn    )
-    await check_incremental_design_turn(ctx, redraft_turn, "open structural redraft")
+    await check_native_version_commit(ctx, redraft_turn, "open structural redraft")
     _check_complete_video_storyboard(redraft_read, "open structural redraft")
     versions = await composition_versions_of(pid)
     check(len(versions) == 2
@@ -1766,7 +1723,7 @@ export const FixedImage = () => <AbsoluteFill><Img src={'fixed.png'} /></Absolut
     _check_complete_video_storyboard(read, "external fixed-image design")
     versions = await composition_versions_of(pid)
     check(len(versions) == 1,
-          "the real external-Skill Chat creates its first version through design_video",
+          "the real external-Skill Chat creates its first CompositionVersion",
           None)
     provenance = versions[0].skill_provenance or {}
     external_provenance = provenance.get("external_skill") or {}
@@ -1959,39 +1916,6 @@ def _p1_report_tokens(label: str, turn: dict) -> list[dict]:
     return calls
 
 
-async def _p1_report_first_draft(
-    ctx: Ctx, turn: dict, label: str, *, require_saved: bool = True,
-) -> None:
-    from app.chat.conversation_context import context_items
-
-    async with AsyncSessionLocal() as db:
-        conversation = await db.get(Conversation, uuid.UUID(turn["conversation_id"]))
-    items = [
-        item for item in context_items(conversation.context)
-        if item.get("turn_id") == _p1_turn_id(turn)
-        and item.get("target_tool") in {None, "design_video"}
-        and item.get("tool") in {"design_video", "correct_tool_candidate"}
-    ]
-    first = next((item for item in items if item.get("tool") == "design_video"), None)
-    check(first is not None, f"{label}: the first high-level submission is recorded", items)
-    saved = any(
-        item.get("tool") == "design_video" and item.get("ok")
-        and "Video version" in item.get("text", "")
-        for item in items
-    )
-    presented = bool((turn.get("assistant_message") or {}).get("blocks"))
-    print("P1_FIRST_DRAFT", json.dumps({
-        "label": label,
-        "turn_id": _p1_turn_id(turn),
-        "first_submission_valid": bool(first.get("ok")),
-        "corrected_then_saved": bool(not first.get("ok") and saved),
-        "saved": saved,
-        "storyboard_presented": presented,
-    }, ensure_ascii=False))
-    if require_saved:
-        check(saved and presented, f"{label}: a valid final save is presented as a Storyboard", items)
-
-
 async def _seed_p1_promo_baseline(ctx: Ctx, pid: str, skill_ref: dict):
     from app.editing.schemas import CompositionContent
     from app.editing.store import apply_composition_edits
@@ -2069,20 +1993,15 @@ async def _seed_p1_promo_baseline(ctx: Ctx, pid: str, skill_ref: dict):
 async def _p1_revise(ctx: Ctx, pid: str, message: str, label: str, expected_version: int, **extra):
     turn = await ctx.chat(pid, message, **extra)
     calls = _p1_report_tokens(f"{label}_v{expected_version}", turn)
-    revisions = [args for call in calls for name, args in _p1_tool_calls(call) if name == "revise_video"]
-    check(revisions and all(not {"tracks", "clips", "ops", "scenes"} & set(args) for args in revisions),
-          f"{label}: actual execution stays on the bounded revision tool", revisions)
-    declarations = [
-        (item.get("function") or {}).get("parameters") or {}
-        for call in calls
+    from app.chat.editor import WRITE_TOOLS
+    writes = {name for call in calls for name, _ in _p1_tool_calls(call) if name in WRITE_TOOLS}
+    declarations = {
+        item["function"]["name"] for call in calls
         for item in (call["request"].get("payload") or {}).get("tools") or []
-        if (item.get("function") or {}).get("name") == "revise_video"
-    ]
-    check(declarations and all(
-        "action" in (schema.get("properties") or {})
-        and not {"tracks", "clips", "ops", "scenes"} & set(schema.get("properties") or {})
-        for schema in declarations
-    ), f"{label}: final provider declarations expose only high-level revision intent", declarations)
+        if item.get("function")
+    }
+    check(writes and writes.issubset(declarations), f"{label}: revisions use registered native tools", writes)
+    await check_native_version_commit(ctx, turn, label)
     assistant = turn.get("assistant_message") or {}
     if any(block.get("kind") == "video_storyboard" for block in assistant.get("blocks") or []):
         await ctx.acknowledge_video_presentation(turn)
@@ -2103,71 +2022,20 @@ async def _p1_skill_ref(ctx: Ctx) -> dict:
     return promo["reference"]
 
 
-def _p1_assert_generic_design_wire(calls: list[dict]) -> None:
+def _p1_assert_native_create_wire(calls: list[dict]) -> None:
     declarations = [
-        (item.get("function") or {})
-        for call in calls
+        item["function"] for call in calls
         for item in (call["request"].get("payload") or {}).get("tools") or []
-        if (item.get("function") or {}).get("name") == "design_video"
+        if (item.get("function") or {}).get("name") == "create_video"
     ]
-    check(declarations, "the provider really receives design_video declarations", None)
-    raw = {"tracks", "clips", "sources", "settings", "ops", "shots"}
-    check(all(not raw & set((item.get("parameters") or {}).get("properties") or {})
-              for item in declarations),
-          "every declared design_video uses the common high-level draft/scene protocol",
-          declarations)
-    check(any("scene" in ((item.get("parameters") or {}).get("properties") or {})
-              for item in declarations),
-          "a real provider request declares the high-level single-Scene input", declarations)
-    designs = [
-        args for call in calls for name, args in _p1_tool_calls(call) if name == "design_video"
-    ]
-    check(designs and all(not raw & set(args) for args in designs),
-          "executed model arguments contain neither legacy shots nor raw entities/ops", designs)
-
-
-def _p1_media_parts(calls: list[dict]) -> list[dict]:
-    return [
-        part
-        for call in calls
-        for message in (call["request"].get("payload") or {}).get("messages") or []
-        if isinstance(message.get("content"), list)
-        for part in message["content"]
-        if isinstance(part, dict) and part.get("type") != "text"
-    ]
-
-
-async def _p1_active_draft(ctx: Ctx, turn: dict) -> dict:
-    from app.chat.conversation_context import context_items
-
-    async with AsyncSessionLocal() as db:
-        conversation = await db.get(Conversation, uuid.UUID(turn["conversation_id"]))
-    candidates = [
-        item for item in context_items(conversation.context)
-        if (item.get("candidate") or {}).get("active", True)
-        and (item.get("candidate") or {}).get("target_tool") == "design_video"
-        and isinstance(item.get("executed_arguments"), dict)
-    ]
-    check(candidates, "ConversationContext retains the real working draft", turn)
-    item = candidates[-1]
-    return {
-        "draft_id": item["candidate"]["candidate_id"],
-        "draft_digest": item["candidate"]["candidate_digest"],
-        "item_id": item["id"],
-        "arguments": item["executed_arguments"],
-    }
-
-
-async def _p1_skill_receipt(ctx: Ctx, pid: str, skill_ref: dict) -> dict:
-    from app.tools.project_context import settled_skill_read_receipts
-
-    async with AsyncSessionLocal() as db:
-        receipts = await settled_skill_read_receipts(
-            db, project_id=uuid.UUID(pid), owner_id=ctx.user_id,
-        )
-    matches = [item for item in receipts.values() if item.get("skill_reference") == skill_ref]
-    check(len(matches) == 1, "the built-in Promo has one durable merged read receipt", receipts)
-    return matches[0]
+    check(bool(declarations), "the provider received create_video", None)
+    for declaration in declarations:
+        props = declaration["parameters"]["properties"]
+        check({"name", "shots"} <= set(props) and not {"tracks", "ops", "draft_ref"} & set(props),
+              "creation exposes native shot inputs", sorted(props))
+    actual = [args for call in calls for name, args in _p1_tool_calls(call) if name == "create_video"]
+    check(any(args.get("shots") and args.get("name") for args in actual),
+          "the model supplied shots to create_video", actual)
 
 
 async def promo_p1_first_draft(ctx: Ctx) -> None:
@@ -2191,7 +2059,7 @@ async def promo_p1_first_draft(ctx: Ctx) -> None:
         mentions=[{"type": "asset", "id": video_id, "label": "Real video"}],
     )
     calls = _p1_report_tokens("real_video_four_second_first_draft", turn)
-    _p1_assert_generic_design_wire(calls)
+    _p1_assert_native_create_wire(calls)
     read, _ = await ctx.acknowledge_video_presentation(turn)
     _check_complete_video_storyboard(read, "real-video four-second first draft")
     versions = await composition_versions_of(pid)
@@ -2241,7 +2109,7 @@ async def promo_p1_first_draft(ctx: Ctx) -> None:
           ),
           "output and source timebases both prove the user's exact four-second window",
           {"output": clip.range, "source": source_range, "timebase": content.settings.timebase})
-    await _p1_report_first_draft(ctx, turn, "real_video_four_seconds")
+    await check_native_version_commit(ctx, turn, "real_video_four_seconds")
     print("P1_REAL_VIDEO", json.dumps({
         "project_id": pid,
         "asset_id": video_id,
@@ -2253,131 +2121,6 @@ async def promo_p1_first_draft(ctx: Ctx) -> None:
         "clip_id": clip.clip_id,
         "output_range": clip.range.model_dump(mode="json"),
         "source_range": source_range.model_dump(mode="json"),
-    }, ensure_ascii=False))
-
-
-async def promo_p1_continuation(ctx: Ctx) -> None:
-    """SSE draft, non-streaming clarification, SSE save with restored receipts."""
-    from app.editing.store import content_of
-
-    skill_ref = await _p1_skill_ref(ctx)
-    pid = await ctx.new_project("P1 exact-copy three-turn continuation")
-    first_stream = await ctx.chat_stream(
-        pid,
-        "Start a message-led draft with exactly 2 scenes and 10 seconds, "
-        "no narration and no music, but do not save it yet. Read references/pipeline.md, "
-        "two installed shot cards, and one available reference preview once. Use this "
-        "exact copy in order, with no other on-screen text and no repetition: "
-        "A practical course for clearer product launches. Join the next workshop. "
-        "Do not produce a video.",
-        skill=skill_ref,
-    )
-    check(first_stream.completed is not None and first_stream.failed is None,
-          "exact-copy SSE draft completes", first_stream.failed)
-    first = first_stream.completed
-    check(not await composition_versions_of(pid) and await count_exports(pid) == 0,
-          "the first exact-copy turn retains a draft without saving or producing", pid)
-    first_calls = _p1_report_tokens("exact_copy_initial_draft", first)
-    _p1_assert_generic_design_wire(first_calls)
-    if len(first_calls) > 1:
-        second_usage = (first_calls[1]["outcome"].get("response") or {}).get("usage") or {}
-        check((second_usage.get("prompt_tokens") or 0) <= 45_000,
-              "fresh second provider call stays at or below 45k prompt tokens", second_usage)
-    first_tools = [(name, args) for call in first_calls for name, args in _p1_tool_calls(call)]
-    read_paths = [args.get("path") for name, args in first_tools if name == "read_skill_reference"]
-    shot_reads = [path for path in read_paths if str(path).startswith("references/shots/")]
-    previews = [args for name, args in first_tools if name == "get_skill_preview"]
-    check("references/pipeline.md" in read_paths
-          and len(set(shot_reads)) >= 2
-          and len(previews) == 1,
-          "the first turn reads its two selected cards and the required reference preview once",
-          first_tools)
-    await _p1_report_first_draft(ctx, first, "exact_copy_initial_draft", require_saved=False)
-    initial_draft = await _p1_active_draft(ctx, first)
-    initial_receipt = await _p1_skill_receipt(ctx, pid, skill_ref)
-    check(initial_receipt.get("owner_id") == str(ctx.user_id)
-          and initial_receipt.get("reads") and initial_receipt.get("preview_checks"),
-          "the first receipt binds owner, package resources and the actual preview read", initial_receipt)
-
-    clarify = await ctx.chat(
-        pid,
-        "Should the two supplied sentences stay verbatim and in that order? "
-        "Only clarify the draft; do not save a version and do not produce.",
-    )
-    clarify_calls = _p1_report_tokens("exact_copy_non_streaming_clarification", clarify)
-    check(not await composition_versions_of(pid) and await count_exports(pid) == 0,
-          "the non-streaming clarification neither saves nor produces", pid)
-    clarified_draft = await _p1_active_draft(ctx, clarify)
-    clarified_receipt = await _p1_skill_receipt(ctx, pid, skill_ref)
-    check(clarified_draft["draft_id"] == initial_draft["draft_id"]
-          and clarified_draft["draft_digest"] == initial_draft["draft_digest"],
-          "clarification preserves the same draft identity and digest", clarified_draft)
-    check(clarified_receipt == initial_receipt,
-          "ConversationContext restores identical reads without a non-streaming Activity receipt",
-          clarified_receipt)
-    clarify_wire = json.dumps(
-        [call["request"].get("payload") for call in clarify_calls], ensure_ascii=False,
-    )
-    check(initial_receipt["package_identity"] in clarify_wire
-          and all(read["digest"] in clarify_wire for read in initial_receipt["reads"]),
-          "the clarification provider request contains the restored package/version/digests",
-          initial_receipt)
-
-    third_stream = await ctx.chat_stream(
-        pid,
-        "Save that existing draft unchanged as the first storyboard. "
-        "Do not reread the Skill and do not produce.",
-    )
-    check(third_stream.completed is not None and third_stream.failed is None,
-          "the third-turn SSE save completes", third_stream.failed)
-    third = third_stream.completed
-    third_calls = _p1_report_tokens("exact_copy_third_turn_save", third)
-    third_tools = [(name, args) for call in third_calls for name, args in _p1_tool_calls(call)]
-    third_designs = [args for name, args in third_tools if name == "design_video"]
-    check(third_designs and all(
-        args.get("draft_ref") == {
-            "draft_id": initial_draft["draft_id"], "draft_digest": initial_draft["draft_digest"],
-        } and args.get("save") is True and not {
-            "shots", "tracks", "clips", "ops", "scene", "scene_plan",
-        } & set(args)
-        for args in third_designs
-    ), "third turn saves the exact restored draft without rebinding or redesigning", third_designs)
-    check(not any(name in {"read_skill_reference", "list_skill_shots", "get_skill_preview"}
-                  for name, _ in third_tools),
-          "third-turn save reuses receipts without another package read", third_tools)
-    third_wire = json.dumps([call["request"].get("payload") for call in third_calls], ensure_ascii=False)
-    check("arc_not_read" not in third_wire and "shot_not_read" not in third_wire,
-          "third-turn save never regresses to arc/shot read repair", third_wire[-4000:])
-    check("receipt_contains_media" in third_wire and initial_receipt["package_identity"] in third_wire
-          and all(read["digest"] in third_wire for read in initial_receipt["reads"]),
-          "third turn receives the same owner/package/version/digest receipt", initial_receipt)
-    check(not _p1_media_parts(third_calls),
-          "no current or historical preview media is reinjected for the save-only turn",
-          _p1_media_parts(third_calls))
-    check(await _p1_skill_receipt(ctx, pid, skill_ref) == initial_receipt,
-          "saving does not alter the durable read receipt", None)
-    read, _ = await ctx.acknowledge_video_presentation(third)
-    _check_complete_video_storyboard(read, "third-turn exact-copy save")
-    versions = await composition_versions_of(pid)
-    check(len(versions) == 1 and not content_of(versions[0]).sources
-          and await count_exports(pid) == 0 and not await outputs_of(pid, "video"),
-          "third turn saves exactly one copy-only version with zero Runs/Outputs", pid)
-    expected = "A practical course for clearer product launches. Join the next workshop."
-    check(_native_copy_without_whitespace(content_of(versions[0])) == expected.replace(" ", ""),
-          "exact copy survives continuation once, in order", _native_copy_without_whitespace(content_of(versions[0])))
-    await _p1_report_first_draft(ctx, third, "exact_copy_third_turn")
-    print("P1_CONTINUATION", json.dumps({
-        "project_id": pid,
-        "turn_ids": [_p1_turn_id(first), _p1_turn_id(clarify), _p1_turn_id(third)],
-        "user_message_ids": [
-            (first.get("user_message") or {}).get("id"),
-            (clarify.get("user_message") or {}).get("id"),
-            (third.get("user_message") or {}).get("id"),
-        ],
-        "draft": initial_draft,
-        "receipt": initial_receipt,
-        "message_id": (third.get("assistant_message") or {}).get("id"),
-        "version_id": str(versions[0].id),
     }, ensure_ascii=False))
 
 
@@ -2536,332 +2279,6 @@ async def promo_p1_overlay(ctx: Ctx) -> None:
         "overlay_version_id": str(overlay_version.id),
         "removed_version_id": str(removed_version.id),
     }))
-
-
-async def _seed_sequential_oxvalue_draft(ctx: Ctx, pid: str):
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ToolExchange, ToolObservation
-    from app.agents.working_drafts import working_draft_observation
-    from app.chat.conversation_context import ConversationContext
-    from app.editing.store import content_of
-    from app.tools.video.design import CompositionDesignVideoArgs
-
-    fixture_version_id = uuid.UUID("946f96f9-ef35-4c0c-87b2-d6115738ad77")
-    async with AsyncSessionLocal() as db:
-        version = await db.get(CompositionVersion, fixture_version_id)
-        check(version is not None, "P2 frozen OxValue fixture version exists", fixture_version_id)
-        composition = await db.get(Composition, version.composition_id)
-        check(composition.owner_id == ctx.user_id,
-              "P2 uses the frozen fixture's owner without copying or recapturing media", composition.owner_id)
-        content = content_of(version)
-        conversation = Conversation(user_id=ctx.user_id, project_id=uuid.UUID(pid))
-        db.add(conversation)
-        await db.flush()
-        opening = Message(
-            conversation_id=conversation.id,
-            role="user",
-            content="测试夹具：恢复同一未保存的 OxValue 两幕工作草稿。",
-            turn_state="settled",
-            seq=1,
-        )
-        db.add(opening)
-        await db.flush()
-        opening.turn_id = opening.id
-        await db.commit()
-        conversation_id, opening_id = conversation.id, opening.id
-    arguments = {
-        "content": content.model_dump(mode="json"),
-        "design": {"name": "OxValue sequential draft review"},
-    }
-    record = CandidateRecord.create(
-        tool_name="design_video",
-        arguments=arguments,
-        errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id=str(ctx.user_id), conversation_id=str(conversation_id)),
-        base_keys=frozenset(),
-        call_id="fixture-oxvalue-two-scenes",
-        candidate_id="cnd_oxvalue_sequential",
-    )
-    observation = ToolObservation(json.dumps(working_draft_observation(record), ensure_ascii=False))
-    exchange = ToolExchange(
-        call_id="fixture-oxvalue-two-scenes",
-        tool_name="design_video",
-        arguments={"fixture": "frozen_oxvalue_two_scene_draft"},
-        executed_arguments=arguments,
-        observation=observation,
-        target_tool="design_video",
-        candidate={
-            "candidate_id": record.candidate_id,
-            "candidate_digest": record.candidate_digest,
-            "target_tool": "design_video",
-            "base_keys": [],
-            "active": True,
-        },
-    )
-    await ConversationContext(
-        conversation_id=conversation_id,
-        owner_id=ctx.user_id,
-        turn_id=opening_id,
-    ).record(exchange)
-    return content
-
-
-async def sequential_oxvalue_draft_review(ctx: Ctx) -> None:
-    """P2 ordinary-Chat sequential draft review, local fix, recheck and save; no production."""
-    from app.editing.store import content_of
-    fixture_owner = uuid.UUID("1291c14d-fdae-406a-8be4-7585f2e213a0")
-    local = Ctx(fixture_owner, keep=ctx.keep)
-    try:
-        pid = await local.new_project("P2 OxValue sequential draft review")
-        before = await _seed_sequential_oxvalue_draft(local, pid)
-        stream = await local.chat_stream(
-            pid,
-            "请按播放顺序审查当前工作草稿：先检查第 1 幕，再检查第 2 幕与上一幕的衔接。"
-            "第 1 幕应让观众看清 Frame / Enrich，第 2 幕应转向 Value / Defend。"
-            "请根据真实预览证据判断；若发现不符，只修改有问题的幕，复查受影响范围，"
-            "核对第一幕、原生文字轨、来源和时间线没有意外改动后，保存并呈现可编辑分镜。"
-            "不要制作或渲染正式视频。",
-        )
-        check(stream.failed is None and stream.completed is not None,
-              "P2 ordinary Chat completes with an envelope", stream.failed)
-        turn = stream.completed
-        calls = _p1_report_tokens("P2 sequential OxValue", turn)
-        tool_calls = [item for call in calls for item in _p1_tool_calls(call)]
-        names = [name for name, _ in tool_calls]
-        check(names.count("review_working_draft") >= 3,
-              "P2 actually previews Scene 1, the 1→2 join and the affected recheck", names)
-        first_review = names.index("review_working_draft")
-        second_review = names.index("review_working_draft", first_review + 1)
-        first_edit = next((index for index, (name, args) in enumerate(tool_calls)
-                           if name == "design_video" and not args.get("save")), None)
-        check(first_edit is not None and first_edit > second_review,
-              "P2 model edits only after evidence from the second Scene", tool_calls)
-        recheck_index = next((index for index in range(first_edit + 1, len(tool_calls))
-                              if tool_calls[index][0] == "review_working_draft"), None)
-        check(recheck_index is not None, "P2 rechecks after the local edit", names)
-        save_index = next((index for index in range(recheck_index + 1, len(tool_calls))
-                           if tool_calls[index][0] == "design_video"
-                           and tool_calls[index][1].get("save") is True), None)
-        check(save_index is not None and save_index > recheck_index,
-              "P2 saves only after the affected continuous recheck", tool_calls)
-        review_args = [args for name, args in tool_calls if name == "review_working_draft"]
-        check(all("target" not in args and "requirements" not in args for args in review_args),
-              "P2 server owns preview windows instead of model-supplied targets", review_args)
-        check(sum(args.get("judgment") is not None for args in review_args) >= 3,
-              "P2 records explicit judgments against returned evidence ids", review_args)
-        edited_clip_ids = {
-            entity.get("clip_id") or (entity.get("clip") or {}).get("clip_id")
-            for name, args in tool_calls[:save_index]
-            if name == "design_video" and not args.get("save")
-            for entity in [
-                *(args.get("clips") or []),
-                *[
-                    clip for track in args.get("tracks") or []
-                    for clip in track.get("clips") or []
-                ],
-            ]
-        }
-        edited_clip_ids.update(
-            args["focus_clip_id"]
-            for name, args in tool_calls[:save_index]
-            if name == "design_video" and not args.get("save") and args.get("focus_clip_id")
-        )
-        edited_clip_ids.discard(None)
-        check(edited_clip_ids == {"clp_review_web"},
-              "P2 edits only the second Scene web Clip", edited_clip_ids)
-        print("P2_MODEL_DISCOVERY", json.dumps({
-            "second_review_tool_index": second_review,
-            "first_edit_tool_index": first_edit,
-            "edited_clip_ids": sorted(edited_clip_ids),
-            "recheck_tool_index": recheck_index,
-            "save_tool_index": save_index,
-        }))
-
-        active = [item for item in stream.activities if item.get("status") == "active"]
-        expected_activity = [
-            "chat.activity.videoDraftScene",
-            "chat.activity.videoDraftJoin",
-            "chat.activity.videoDraftRecheck",
-            "chat.activity.videoSave",
-        ]
-        positions = [next((i for i, item in enumerate(active) if item.get("key") == key), None)
-                     for key in expected_activity]
-        check(all(index is not None for index in positions) and positions == sorted(positions),
-              "P2 Activity starts in actual review/recheck/save order", active)
-        check(active[positions[0]].get("count") == 1
-              and active[positions[1]].get("count") == 2
-              and active[positions[2]].get("count") == 2,
-              "P2 Activity names the actual Scene and cumulative range", active)
-        evidence_receipts = list({
-            (item.get("receipt") or {})["evidence_id"]: (item.get("receipt") or {})
-            for item in stream.activities
-            if item.get("status") == "completed"
-            and (item.get("receipt") or {}).get("kind") == "video_draft_review"
-        }.values())
-        check(len(evidence_receipts) >= 3
-              and len({item["media_digest"] for item in evidence_receipts}) >= 3,
-              "P2 completed Activity follows distinct actual preview media", evidence_receipts)
-        check(evidence_receipts[0]["scene_ids"] == ["input"]
-              and evidence_receipts[0]["source_range_seconds"] == {"start": 0.0, "end": 4.0},
-              "P2 first receipt proves Scene 1 alone", evidence_receipts[0])
-        check({"input", "review"} <= set(evidence_receipts[1]["scene_ids"])
-              and evidence_receipts[1]["source_range_seconds"]["end"] == 8.0,
-              "P2 second receipt proves the 1→2 join and Scene 2", evidence_receipts[1])
-        check("review" in evidence_receipts[2]["scene_ids"]
-              and evidence_receipts[2]["source_range_seconds"]["end"] == 8.0,
-              "P2 recheck receipt covers the affected second Scene", evidence_receipts[2])
-        check(all(item.get("evidence_id") for item in evidence_receipts)
-              and len({item["evidence_id"] for item in evidence_receipts}) == len(evidence_receipts),
-              "P2 reports stable distinct evidence ids", evidence_receipts)
-        print("P2_PREVIEW_WINDOWS", json.dumps([{
-            "evidence_id": item["evidence_id"],
-            "media_digest": item["media_digest"],
-            "range": item["source_range_seconds"],
-            "scene_ids": item["scene_ids"],
-        } for item in evidence_receipts], ensure_ascii=False))
-
-        interim_positions = [
-            index for index, event in enumerate(stream.raw_events)
-            if event["event"] == "assistant.interim_prose"
-        ]
-        first_preview_done = next(
-            index for index, event in enumerate(stream.raw_events)
-            if event["event"] == "assistant.activity"
-            and event["data"].get("key") == "chat.activity.videoDraftSceneDone"
-        )
-        second_preview_done = next(
-            index for index, event in enumerate(stream.raw_events)
-            if event["event"] == "assistant.activity"
-            and event["data"].get("key") == "chat.activity.videoDraftJoinDone"
-        )
-        edit_started = next(
-            index for index, event in enumerate(stream.raw_events)
-            if index > second_preview_done and event["event"] == "assistant.activity"
-            and event["data"].get("key") == "chat.activity.videoDesign"
-            and event["data"].get("status") == "active"
-        )
-        check(any(position < first_preview_done for position in interim_positions),
-              "P2 service message precedes the first review receipt", stream.interim_prose_rows)
-        check(any(second_preview_done < position < edit_started for position in interim_positions),
-              "P2 second-Scene finding follows its actual preview and precedes repair", stream.raw_events)
-
-
-        versions = await composition_versions_of(pid)
-        check(len(versions) == 1, "P2 final working draft lands exactly one editable version", versions)
-        final = content_of(versions[0])
-        await local.acknowledge_video_presentation(turn)
-        old_clips = {clip.clip_id: clip for track in before.timeline.tracks for clip in track.clips}
-        new_clips = {clip.clip_id: clip for track in final.timeline.tracks for clip in track.clips}
-        changed = [clip_id for clip_id in old_clips if old_clips[clip_id] != new_clips[clip_id]]
-        check(changed == ["clp_review_web"],
-              "P2 saved delta is exactly the second web Clip", changed)
-        check(final.settings == before.settings and final.sources == before.sources
-              and final.timeline.transitions == before.timeline.transitions,
-              "P2 preserves settings, sources and transitions", None)
-        check(final.scenes[0] == before.scenes[0]
-              and new_clips["clp_input_web"] == old_clips["clp_input_web"]
-              and new_clips["clp_input_headline"] == old_clips["clp_input_headline"]
-              and new_clips["clp_review_headline"] == old_clips["clp_review_headline"],
-              "P2 preserves Scene 1 and both native text Clips", None)
-        check(new_clips["clp_review_web"].animations != old_clips["clp_review_web"].animations
-              and new_clips["clp_review_web"].object == old_clips["clp_review_web"].object
-              and new_clips["clp_review_web"].source == old_clips["clp_review_web"].source,
-              "P2 changes only the target camera animation and preserves its frozen source", None)
-        check(await count_exports(pid) == 0, "P2 creates no export job", None)
-        async with AsyncSessionLocal() as db:
-            outputs = await db.scalar(select(func.count(Output.id)).where(Output.project_id == uuid.UUID(pid)))
-        check(outputs == 0, "P2 creates no formal Output", outputs)
-        print("P2_FINAL", json.dumps({
-            "project_id": pid,
-            "composition_id": str(versions[0].composition_id),
-            "composition_version_id": str(versions[0].id),
-            "content_digest": versions[0].content_digest,
-            "provider_calls": len(calls),
-            "prompt_tokens": sum(((call["outcome"].get("response") or {}).get("usage") or {}).get("prompt_tokens") or 0
-                                 for call in calls),
-            "evidence_ids": [item["evidence_id"] for item in evidence_receipts],
-            "preview_windows": [item["source_range_seconds"] for item in evidence_receipts],
-            "changed_clip_ids": changed,
-        }, ensure_ascii=False))
-
-        title_text = "Value / Defend — 已更新"
-        title_stream = await local.chat_stream(
-            pid,
-            f"把刚才保存作品的第二幕标题改为“{title_text}”。只改这个标题，"
-            "不要重新审片，不要制作或渲染正式视频。",
-        )
-        check(title_stream.failed is None and title_stream.completed is not None,
-              "P2 saved-version title edit completes in the same Chat", title_stream.failed)
-        title_turn = title_stream.completed
-        title_calls = _p1_report_tokens("P2 saved-version title edit", title_turn)
-        title_tool_calls = [item for call in title_calls for item in _p1_tool_calls(call)]
-        check(any(name == "revise_video" for name, _ in title_tool_calls),
-              "P2 title feedback writes through saved-version revision", title_tool_calls)
-        check(bool(title_stream.interim_prose_rows),
-              "P2 targeted saved-version edit explains its revision",
-              title_stream.interim_prose_rows)
-        for call in title_calls:
-            payload = call["request"].get("payload") or {}
-            messages = payload.get("messages") or []
-            text = "\n".join(
-                content if isinstance((content := message.get("content")), str)
-                else json.dumps(content, ensure_ascii=False)
-                for message in messages
-            )
-            check('"video_stage": "version_edit"' in text,
-                  "P2 every saved-version provider request uses version_edit", text[-2000:])
-            check('"video_stage": "draft_review"' not in text,
-                  "P2 saved-version edit never reenters first-draft review", None)
-            declared = {
-                (item.get("function") or {}).get("name")
-                for item in payload.get("tools") or []
-            }
-            check("review_working_draft" not in declared and "design_video" not in declared,
-                  "P2 saved-version request omits draft authoring and review tools", declared)
-            media_parts = [
-                part for message in messages for part in (message.get("content") or [])
-                if isinstance(message.get("content"), list)
-                and isinstance(part, dict) and part.get("type") != "text"
-            ]
-            check(not media_parts, "P2 saved-version request carries no current or historical video", media_parts)
-
-        title_versions = await composition_versions_of(pid)
-        check(len(title_versions) == 2 and title_versions[1].version == 2,
-              "P2 title edit creates exactly one next immutable version", title_versions)
-        title_final = content_of(title_versions[1])
-        title_clips = {
-            clip.clip_id: clip for track in title_final.timeline.tracks for clip in track.clips
-        }
-        title_changed = [
-            clip_id for clip_id in new_clips
-            if new_clips[clip_id] != title_clips[clip_id]
-        ]
-        check(title_changed == ["clp_review_headline"],
-              "P2 title revision changes only the requested text Clip", title_changed)
-        check(title_clips["clp_review_headline"].object.text == title_text
-              and title_clips["clp_review_web"] == new_clips["clp_review_web"]
-              and title_clips["clp_input_headline"] == new_clips["clp_input_headline"],
-              "P2 title text is exact and prior repair/other text stay intact", None)
-        check(await count_exports(pid) == 0, "P2 two turns create no export job", None)
-        async with AsyncSessionLocal() as db:
-            outputs = await db.scalar(select(func.count(Output.id)).where(Output.project_id == uuid.UUID(pid)))
-        check(outputs == 0, "P2 two turns create no formal Output", outputs)
-        print("P2_TITLE_EDIT", json.dumps({
-            "project_id": pid,
-            "composition_id": str(title_versions[1].composition_id),
-            "composition_version_id": str(title_versions[1].id),
-            "content_digest": title_versions[1].content_digest,
-            "provider_calls": len(title_calls),
-            "prompt_tokens": sum(((call["outcome"].get("response") or {}).get("usage") or {}).get("prompt_tokens") or 0
-                                 for call in title_calls),
-            "changed_clip_ids": title_changed,
-            "run_count": 0,
-            "output_count": 0,
-        }, ensure_ascii=False))
-    finally:
-        await local.cleanup()
-        await local.close()
 
 
 async def _external_generator_journey(
@@ -3084,10 +2501,10 @@ async def promo_short_confirmation_delivery(ctx: Ctx) -> None:
     for call in first_calls:
         for declaration in (call["request"].get("payload") or {}).get("tools") or []:
             function = declaration.get("function") or {}
-            if function.get("name") != "design_video":
+            if function.get("name") != "create_video":
                 continue
             properties = (function.get("parameters") or {}).get("properties") or {}
-            check(not {"scene_count", "target_seconds", "aspect", "background"} & set(properties),
+            check(not {"scene_count", "target_seconds"} & set(properties) and not {"aspect", "background"} & set(function["parameters"].get("required", [])),
                   "the unfixed URL brief never exposes invented hard constraints", sorted(properties))
             check("verbatim_copy" not in properties,
                   "the plain URL brief does not invent an exact-copy restriction", sorted(properties))
@@ -3439,13 +2856,11 @@ JOURNEYS = {
     "dynamic_skill_talkcraft": dynamic_skill_talkcraft,
     "external_skill_fixed_image_and_adversarial_packages": external_skill_fixed_image_and_adversarial_packages,
     "promo_generic_cutover_probe": promo_generic_cutover_probe,
-    "promo_p1_continuation": promo_p1_continuation,
     "promo_p1_first_draft": promo_p1_first_draft,
     "promo_p1_overlay": promo_p1_overlay,
     "promo_p1_revision": promo_p1_revision,
     "promo_short_confirmation_delivery": promo_short_confirmation_delivery,
     "promo_skill_storyboard_revision_and_delivery": promo_skill_storyboard_revision_and_delivery,
-    "sequential_oxvalue_draft_review": sequential_oxvalue_draft_review,
     "uploaded_video_editing": uploaded_video_editing,
 }
 

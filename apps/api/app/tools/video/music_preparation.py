@@ -216,7 +216,7 @@ async def prepare_programmatic_music(
                 },
                 "origin": {
                     "kind": "programmatic_score",
-                    "run_id": execution_id,
+                    "media_job_id": execution_id,
                     "synth_version": score.synth_version,
                 },
                 "music": {"music_id": str(music_id), "title": name},
@@ -230,7 +230,7 @@ async def prepare_programmatic_music(
     manifest = {
         "schema_version": 1,
         "state": "fixed",
-        "execution": {"run_id": execution_id, "provider": "local_numpy"},
+        "execution": {"media_job_id": execution_id, "provider": "local_numpy"},
         "score_digest": score.score_digest,
         "score_spec": score.model_dump(mode="json"),
         "score_spec_ref": score_ref,
@@ -262,60 +262,8 @@ async def prepare_programmatic_music(
     }
 
 
-def has_music_preparation_scope(run) -> bool:
-    return isinstance((run.context or {}).get("music_preparation"), dict)
-
-
-async def music_preparation_fact(db, run, steps) -> dict[str, Any]:
-    preparation = (run.context or {}).get("music_preparation") or {}
-    result = preparation.get("result") or {}
-    if not preparation.get("score_spec") or not result:
-        raise ValueError("music preparation has no fixed result")
-    step = next((item for item in steps if item.kind == "prepare_music"), None)
-    if step is None or step.status != "done" or step.output_refs:
-        raise ValueError("music preparation did not settle as an Output-free step")
-    score = ScoreSpec.model_validate(preparation["score_spec"])
-    result_score = ScoreSpec.model_validate(result.get("score_spec") or {})
-    if result_score != score or result.get("score_digest") != score.score_digest:
-        raise ValueError("music result differs from its authorized ScoreSpec")
-    snapshot = await db.get(SourceSnapshot, UUID(str(result["snapshot"]["snapshot_id"])))
-    music = await db.get(Music, UUID(str(result["music"]["music_id"])))
-    if (
-        snapshot is None or music is None
-        or snapshot.digest != result["snapshot"]["digest"]
-        or snapshot.origin_project_id != run.project_id
-        or music.generated_by_user_id != snapshot.owner_id
-        or music.is_public
-        or snapshot.duration_ticks != result.get("duration_ticks")
-        or snapshot.duration_ticks != score.duration_ticks
-    ):
-        raise ValueError("music preparation media identity is inconsistent")
-    from app.tools.video.media_analysis import read_report
-
-    analysis = await read_report(result["analysis_ref"])
-    if (
-        analysis.get("media_kind") != "audio"
-        or analysis.get("analysis_scope") != "full"
-        or (analysis.get("source_ref") or {}).get("digest") != snapshot.digest
-        or not ((analysis.get("media_facts") or {}).get("decode") or {}).get("fully_decoded")
-    ):
-        raise ValueError("music audio analysis is not trustworthy")
-    return {
-        "music_id": str(music.id),
-        "snapshot_id": str(snapshot.id),
-        "snapshot_digest": snapshot.digest,
-        "score_digest": score.score_digest,
-        "duration_seconds": result["duration_seconds"],
-        "analysis_ref": result["analysis_ref"],
-        "cache_hit": bool(result.get("cache_hit")),
-        "usage": result.get("usage") or {},
-    }
-
-
 __all__ = [
     "MusicPreparationError",
     "cached_music_preparation",
-    "has_music_preparation_scope",
-    "music_preparation_fact",
     "prepare_programmatic_music",
 ]

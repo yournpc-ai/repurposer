@@ -13,9 +13,7 @@ Guardrails (三条军规):
   perception family's tools are declared ``terminal=False``: an accepted
   read feeds its observation back on the wire (assistant tool_call +
   role:tool result — the standard continuation) and the loop iterates.
-- 零副作用往返 — the loop itself writes nothing and never commits; the
-  executions write through the three only doors (edit ops / wiring ops /
-  ``create_run``), flush-only; the read tools hold no writes in the TURN'S
+- 零副作用往返 — the loop itself writes nothing and never commits; native tools own their execution and persistence; read tools hold no writes in the TURN'S
   transaction (只读纪律). Carve-out (ADR-124): a read tool's world-fact
   snapshot write-through (the page readings seat) rides an INDEPENDENT
   short session — the turn's transaction stays read-only.
@@ -56,6 +54,8 @@ from pydantic import BaseModel, ValidationError
 from app.agents.arguments import normalize_numeric_arguments, numeric_string_changes
 from app.agents.base import AGENTS, jinja_env
 from app.agents.candidate_correction import (
+    candidate_progress_digest,
+    tool_progress_digest,
     CORRECTION_TOOL_NAME,
     CandidateCorrectionArgs,
     CandidateRecord,
@@ -67,17 +67,6 @@ from app.agents.candidate_correction import (
     correction_tool,
 )
 from app.agents.tool_progress import ToolProgress, bind_progress
-from app.agents.working_drafts import (
-    WorkingDraftRejected,
-    WorkingDraftReviewed,
-    WorkingDraftUpdated,
-    candidate_progress_digest,
-    merge_working_draft,
-    tool_progress_digest,
-    verify_working_draft,
-    working_draft_diagnostic,
-    working_draft_observation,
-)
 from app.metering import bind_model_prompt
 from app.providers.llm import get_llm_client
 from app.providers.llm.base import LLMClient, LLMError, LLMSchemaError
@@ -148,11 +137,6 @@ class ChatTool:
     # terminal actions remain standalone even when non-terminal on the wire.
     batchable: bool = False
     repairable: bool = False
-    # ConversationContext-backed working drafts use the same identity and
-    # recovery records for successful incremental writes and failed saves.
-    draftable: bool = False
-    # Evidence reads authenticate and retain the same draft without merging writes.
-    draft_reader: bool = False
     presentation: ToolPresentation | None = None
     independent_media: bool = False
     snapshot_read: bool = False
@@ -599,7 +583,7 @@ RejectionStop = Callable[[ToolRejected, tuple[ToolRejected, ...]], bool]
 # All side effects belong to the executor; the loop writes nothing.
 LoopExecute = Callable[
     [str, BaseModel | None, str],
-    Awaitable[str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftReviewed | WorkingDraftUpdated],
+    Awaitable[str | None | ToolObservation | TerminalRefusal | CandidateRejected],
 ]
 
 
@@ -844,12 +828,9 @@ class ToolLoopAgent:
         rejections: list[ToolRejected] = []
         rejected_candidates: list[dict] = []
         candidates: dict[str, CandidateRecord] = {}
-        drafts: dict[str, CandidateRecord] = {}
         restored_live_ids: set[str] = set()
-        restored_draft_ids: set[str] = set()
         retired_candidate_ids: set[str] = set()
         repair_candidate_id: str | None = None
-        latest_draft_id: str | None = None
         execution_by_name: dict[str, ChatTool] = {}
         execution_parameter_schemas: dict[str, dict] = {}
 
@@ -874,25 +855,6 @@ class ToolLoopAgent:
             candidates.pop(record.candidate_id, None)
             if repair_candidate_id == record.candidate_id:
                 repair_candidate_id = None
-
-        async def retire_working_draft(record: CandidateRecord, *, iteration: int, kind: str) -> None:
-            nonlocal latest_draft_id
-            payload = working_draft_diagnostic(record, kind=kind)
-            payload["draft_retired"] = True
-            await _emit(on_context_event, ToolExchange(
-                call_id=record.call_id, tool_name=record.tool_name, arguments={},
-                observation=ToolObservation(json.dumps(payload, ensure_ascii=False), ok=False),
-                base_keys=record.base_keys, iteration=iteration, call_index=0,
-                target_tool=record.tool_name,
-                candidate={"candidate_id": record.candidate_id,
-                    "candidate_digest": record.candidate_digest,
-                    "target_tool": record.tool_name, "base_keys": sorted(record.base_keys),
-                    "active": False},
-            ))
-            retired_candidate_ids.add(record.candidate_id)
-            drafts.pop(record.candidate_id, None)
-            if latest_draft_id == record.candidate_id:
-                latest_draft_id = None
 
         async def _reject(
             event: ToolRejected, *, feedback: str, iteration: int
@@ -1007,13 +969,11 @@ class ToolLoopAgent:
             shared = [{"role": "user", "content": observation_wire_content(ToolObservation(snapshot.text, images=snapshot.images))}] if snapshot and (snapshot.text or snapshot.images) else []
             history = await restore_context(snapshot, [*base_messages, *(dialogue or []), *tail, *feedback, *shared]) if restore_context is not None else ConversationHistory()
             current_restored_ids: set[str] = set()
-            current_draft_ids: set[str] = set()
             for restored in history.candidates:
                 target = declared_by_name.get(restored.tool_name)
-                is_draft = target is not None and target.draftable
                 if (
                     restored.candidate_id in retired_candidate_ids
-                    or target is None or not (target.repairable or target.draftable)
+                    or target is None or not target.repairable
                     or (restored.base_keys and (snapshot is None or not restored.base_keys.issubset(snapshot.keys)))
                 ):
                     continue
@@ -1026,21 +986,12 @@ class ToolLoopAgent:
                         "candidate_id": restored.candidate_id, "reason": str(exc),
                     })
                     continue
-                if is_draft:
-                    if restored_record.candidate_id not in drafts:
-                        drafts[restored_record.candidate_id] = restored_record
-                    current_draft_ids.add(restored_record.candidate_id)
-                else:
-                    candidates[restored_record.candidate_id] = restored_record
-                    current_restored_ids.add(restored_record.candidate_id)
+                candidates[restored_record.candidate_id] = restored_record
+                current_restored_ids.add(restored_record.candidate_id)
             for stale_id in restored_live_ids - current_restored_ids:
                 if stale_id != repair_candidate_id:
                     candidates.pop(stale_id, None)
-            for stale_id in restored_draft_ids - current_draft_ids:
-                if stale_id != latest_draft_id:
-                    drafts.pop(stale_id, None)
             restored_live_ids = current_restored_ids
-            restored_draft_ids = current_draft_ids
             active_repair = candidates.get(repair_candidate_id or "")
             restricted_tools = (
                 [correction_declaration]
@@ -1054,7 +1005,6 @@ class ToolLoopAgent:
                 new_result_ok = has_new_result and observation_results[-1][1]
                 assembled = round_assembler(
                     tools=restricted_tools,
-                    drafts=tuple(drafts.values()),
                     snapshot=snapshot,
                     active_repair=active_repair,
                     iteration=iteration,
@@ -1185,7 +1135,6 @@ class ToolLoopAgent:
                     "candidate_digest": active_repair.candidate_digest,
                     "target_tool": active_repair.tool_name} if active_repair is not None else None),
                 "available_candidate_ids": sorted(candidates),
-                "available_draft_ids": sorted(drafts),
                 "retained_observation_ids": [m["tool_call_id"] for m in tail if m.get("tool_call_id")],
                 "rejected_candidates": list(rejected_candidates),
                 "candidate_retained": (
@@ -1428,39 +1377,6 @@ class ToolLoopAgent:
                     iteration=iteration,
                 )
 
-            async def reject_working_draft(call, call_id, record: CandidateRecord, *,
-                                           detail: str,
-                                           kind: str = "content_validation",
-                                           event_kind: str = "execute_guardrail",
-                                           correction_error: CorrectionError | None = None):
-                nonlocal latest_draft_id
-                drafts[record.candidate_id] = record
-                latest_draft_id = record.candidate_id
-                rejected_candidates.append({
-                    "iteration": iteration, "call_id": call_id,
-                    "tool_name": record.tool_name, "candidate_id": record.candidate_id,
-                    "candidate_digest": record.candidate_digest,
-                    "arguments": deepcopy(record.arguments), "errors": record.errors,
-                })
-                payload = working_draft_diagnostic(record, kind=kind)
-                if correction_error is not None:
-                    payload["draft_error"] = {"code": correction_error.code, "message": str(correction_error)}
-                await remember(
-                    call, call_id, ToolObservation(
-                        json.dumps(payload, ensure_ascii=False), ok=False, fold_after_delivery=True,
-                    ),
-                    executed_arguments=record.arguments, candidate_record=record,
-                    candidate_active=True, target_tool=record.tool_name,
-                )
-                return await _reject(
-                    ToolRejected(
-                        event_kind, record.tool_name, iteration, detail[:200], 0,
-                        candidate_digest=candidate_progress_digest(record),
-                    ),
-                    feedback="工作草稿未保存。最新标识和错误见工具结果。",
-                    iteration=iteration,
-                )
-
             unsafe = [call for call in result.tool_calls if call.name in by_name
                       and (by_name[call.name].terminal or not by_name[call.name].batchable)]
             group = by_name.get(result.tool_calls[0].name)
@@ -1573,8 +1489,6 @@ class ToolLoopAgent:
                 if not prose_handled and not prose.strip() and isinstance(habit_prose, str):
                     prose = habit_prose
                 is_correction = call.name == CORRECTION_TOOL_NAME
-                is_draft_merge = False
-                is_draft_update = False
                 if not is_correction:
                     raw = _unwrap_item_dialect(raw)
                 dispatch_name = call.name
@@ -1657,31 +1571,7 @@ class ToolLoopAgent:
                         trace_argument_normalization(model_call_id=assembly.get("model_call_id"), tool_call_id=call_id, agent=self.name, iteration=iteration, changes=numeric_string_changes(raw, params.model_dump(mode="json")))
                     except ValidationError as e:
                         errors = json.loads(e.json(include_input=False, include_url=False))
-                        draft_validation_record = None
-                        if tool.draftable and isinstance(raw.get("draft_ref"), dict):
-                            try:
-                                reference = raw["draft_ref"]
-                                draft_id = reference.get("draft_id")
-                                if not isinstance(draft_id, str):
-                                    raise CorrectionError("invalid_draft", "draft_id must be a string")
-                                draft_record = drafts.get(draft_id)
-                                if draft_record is None:
-                                    raise CorrectionError("unknown_draft", "draft_id does not name a current retained Composition draft")
-                                verify_working_draft(draft_record, reference)
-                                draft_validation_record = draft_record.updated(
-                                    draft_record.arguments, errors, call_id=call_id,
-                                )
-                            except (ValidationError, CorrectionError):
-                                # An unauthenticated reference cannot borrow a
-                                # retained draft's identity for its diagnostic.
-                                pass
-                        if draft_validation_record is not None:
-                            stopped = await reject_working_draft(
-                                call, call_id, draft_validation_record,
-                                detail=str(e), kind="params_validation",
-                                event_kind="params_validation",
-                            )
-                        elif tool.repairable:
+                        if tool.repairable:
                             candidate_record = CandidateRecord.create(
                                 tool_name=call.name, arguments=raw, errors=errors,
                                 schema=parameter_schemas[call.name], scope=scope,
@@ -1702,53 +1592,12 @@ class ToolLoopAgent:
                                 "ok": False, "execution": "not executed", "saved": False,
                                 "kind": "params_validation", "errors": errors, "candidate": raw,
                                 "repair": "Return valid arguments for this tool.",
-                            }, ensure_ascii=False), ok=False, fold_after_delivery=tool.draftable))
+                            }, ensure_ascii=False), ok=False))
                             stopped = await _reject(ToolRejected("params_validation", call.name, iteration,
                                 str(e)[:200], int((time.monotonic() - iteration_started) * 1000)),
                                 feedback=str(e), iteration=iteration) if not batched else None
                         if stopped is not None:
                             return stopped
-                        continue
-                if not is_correction and params is not None and getattr(params, "draft_ref", None) is not None:
-                    reference = params.draft_ref
-                    candidate_record = drafts.get(reference.draft_id)
-                    try:
-                        if candidate_record is None:
-                            raise CorrectionError("unknown_draft", "draft_id does not name a current retained Composition draft in this owner/conversation")
-                        verify_working_draft(candidate_record, reference)
-                        if candidate_record.base_keys and (
-                            snapshot is None or not candidate_record.base_keys.issubset(snapshot.keys)
-                        ):
-                            raise CorrectionError("stale_base", "The draft's source/version facts are no longer current; re-read current facts and start a new design")
-                        bind_working_draft = getattr(params, "bind_working_draft", None)
-                        if bind_working_draft is None:
-                            raise CorrectionError("invalid_draft", "the target tool cannot accept working draft state")
-                        if tool.draft_reader:
-                            bind_working_draft(candidate_record.arguments)
-                        else:
-                            merged = merge_working_draft(candidate_record, params)
-                            dispatch_name = candidate_record.tool_name
-                            dispatch_tool = by_name[dispatch_name]
-                            bind_working_draft(merged)
-                            is_draft_merge = True
-                    except (CorrectionError, ValidationError) as exc:
-                        correction_error = exc if isinstance(exc, CorrectionError) else CorrectionError("invalid_revision", str(exc))
-                        if candidate_record is not None:
-                            stopped = await reject_working_draft(
-                                call, call_id, candidate_record,
-                                detail=str(exc), kind="params_validation",
-                                event_kind="params_validation", correction_error=correction_error,
-                            )
-                        else:
-                            feedback = json.dumps({"ok": False, "execution": "not executed", "saved": False,
-                                "draft_error": {"code": correction_error.code, "message": str(correction_error)}}, ensure_ascii=False)
-                            await remember(call, call_id, ToolObservation(feedback, ok=False))
-                            stopped = await _reject(ToolRejected("params_validation", call.name, iteration,
-                                str(exc)[:200], 0), feedback=str(exc), iteration=iteration)
-                        if stopped is not None:
-                            return stopped
-                        if isinstance(correction_error, CorrectionError) and correction_error.code == "stale_base" and candidate_record is not None:
-                            await retire_working_draft(candidate_record, iteration=iteration, kind="stale_base")
                         continue
                 tool = dispatch_tool
                 if is_correction:
@@ -1759,12 +1608,6 @@ class ToolLoopAgent:
                 if (assembled.acknowledgment and not tool.terminal and not response_has_prose
                         and not interim_proses_sent and not speech_parts):
                     prose = assembled.acknowledgment
-                # Draft judgments speak only from their accepted observation.
-                if (
-                    not tool.terminal and not self.service_per_call
-                    and tool.draft_reader and getattr(params, "judgment", None) is not None
-                ):
-                    prose = ""
                 interim_prose_route = (
                     not tool.terminal
                     and bool(prose.strip())
@@ -1842,58 +1685,6 @@ class ToolLoopAgent:
                 else:
                     with bind_progress(call_id, on_loop_event, group_id):
                         outcome = await execute(dispatch_name, params, speech)
-                if isinstance(outcome, WorkingDraftReviewed):
-                    if not tool.draft_reader or candidate_record is None:
-                        raise RuntimeError(f"{dispatch_name} returned draft evidence without draft_reader=True")
-                    candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
-                    drafts[candidate_record.candidate_id] = candidate_record
-                    latest_draft_id = candidate_record.candidate_id
-                    observation = outcome.observation
-                    payload = json.loads(observation.text)
-                    payload["draft_ref"] = working_draft_observation(candidate_record)["draft_ref"]
-                    payload["review"] = working_draft_observation(candidate_record)["review"]
-                    outcome = replace(observation, text=json.dumps(payload, ensure_ascii=False))
-                    is_draft_update = True
-                if isinstance(outcome, WorkingDraftUpdated):
-                    if not tool.draftable:
-                        raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
-                    if candidate_record is None:
-                        candidate_record = CandidateRecord.create(
-                            tool_name=dispatch_name, arguments=outcome.arguments, errors=[],
-                            schema=parameter_schemas[dispatch_name], scope=scope,
-                            base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
-                        )
-                    else:
-                        candidate_record = candidate_record.updated(outcome.arguments, [], call_id=call_id)
-                    drafts[candidate_record.candidate_id] = candidate_record
-                    latest_draft_id = candidate_record.candidate_id
-                    receipt = working_draft_observation(candidate_record)
-                    outcome = ToolObservation(
-                        json.dumps(receipt, ensure_ascii=False),
-                        ok=True,
-                        fold_after_delivery=True,
-                    )
-                    is_draft_update = True
-                    is_draft_merge = False
-                if isinstance(outcome, WorkingDraftRejected):
-                    if not tool.draftable:
-                        raise RuntimeError(f"{dispatch_name} returned a working draft without draftable=True")
-                    arguments = outcome.arguments
-                    if candidate_record is None:
-                        candidate_record = CandidateRecord.create(
-                            tool_name=dispatch_name, arguments=arguments, errors=outcome.errors,
-                            schema=parameter_schemas[dispatch_name], scope=scope,
-                            base_keys=snapshot.keys if snapshot else frozenset(), call_id=call_id,
-                        )
-                    else:
-                        candidate_record = candidate_record.updated(arguments, outcome.errors, call_id=call_id)
-                    stopped = await reject_working_draft(
-                        call, call_id, candidate_record,
-                        detail=outcome.reason,
-                    )
-                    if stopped is not None:
-                        return stopped
-                    continue
                 if isinstance(outcome, CandidateRejected):
                     if not tool.repairable:
                         raise RuntimeError(f"{dispatch_name} returned candidate validation without repairable=True")
@@ -1920,30 +1711,10 @@ class ToolLoopAgent:
                             "— the declaration and the execute table skewed "
                             "(a terminal call ends the turn, never observes)"
                         )
-                    if is_draft_merge and outcome.ok:
-                        assert candidate_record is not None
-                        retired_candidate_ids.add(candidate_record.candidate_id)
-                        drafts.pop(candidate_record.candidate_id, None)
-                        if latest_draft_id == candidate_record.candidate_id:
-                            latest_draft_id = None
-                        for stale_draft in list(drafts.values()):
-                            await retire_working_draft(
-                                stale_draft, iteration=iteration, kind="superseded"
-                            )
-                    elif outcome.ok and tool.draftable and not is_draft_update:
-                        # A successful save supersedes retained working drafts;
-                        # a save=false update remains the active draft itself.
-                        for stale_draft in list(drafts.values()):
-                            await retire_working_draft(
-                                stale_draft, iteration=iteration, kind="superseded"
-                            )
                     if is_correction:
                         retired_candidate_ids.add(candidate_record.candidate_id)
                         candidates.pop(candidate_record.candidate_id, None)
                         repair_candidate_id = None
-                    # A working-draft observation is an accepted write step,
-                    # not a saved version. Only the direct save observation
-                    # carries this fact; tool.ok alone includes save=false.
                     if outcome.ok and outcome.version_saved:
                         version_saved = True
                     last_read_name = dispatch_name
@@ -1951,16 +1722,10 @@ class ToolLoopAgent:
                     observation_results.append((dispatch_name, outcome.ok))
                     await remember(
                         call, call_id, outcome,
-                        executed_arguments=(
-                            candidate_record.arguments if (
-                                candidate_record is not None
-                                and (is_draft_update or (is_draft_merge and not outcome.ok))
-                            )
-                            else params.model_dump(mode="json") if params is not None else {}
-                        ),
-                        candidate_record=candidate_record if (is_correction or is_draft_merge or is_draft_update) else None,
-                        candidate_active=is_draft_update or (is_draft_merge and not outcome.ok),
-                        target_tool=dispatch_name if (is_correction or is_draft_merge or is_draft_update) else None,
+                        executed_arguments=params.model_dump(mode="json") if params is not None else {},
+                        candidate_record=candidate_record if is_correction else None,
+                        candidate_active=False,
+                        target_tool=dispatch_name if is_correction else None,
                     )
                     if group_id and not parallel_params and not outcome.ok and outcome.user_error:
                         await _emit(on_loop_event, replace(members[call_id],
@@ -2033,9 +1798,9 @@ class ToolLoopAgent:
                         candidates.pop(candidate_record.candidate_id, None)
                         repair_candidate_id = None
                     await remember(call, call_id, ToolObservation(outcome.reason, ok=False),
-                                   (candidate_record.arguments if is_draft_merge and candidate_record is not None else params.model_dump(mode="json") if params is not None else {}),
-                                   candidate_record=candidate_record if (is_correction or is_draft_merge) else None,
-                                   candidate_active=is_draft_merge, target_tool=dispatch_name if (is_correction or is_draft_merge) else None)
+                                   params.model_dump(mode="json") if params is not None else {},
+                                   candidate_record=candidate_record if is_correction else None,
+                                   candidate_active=False, target_tool=dispatch_name if is_correction else None)
                     # The deterministic turn-ending refusal: the REJECTION facts
                     # all ride the existing seat (ToolRejected — the speech
                     # retracts, the half-started activity cancels), then the
@@ -2078,11 +1843,6 @@ class ToolLoopAgent:
                             "— the declaration and the execute table skewed "
                             "(a read never ends the turn)"
                         )
-                    if is_draft_merge:
-                        assert candidate_record is not None
-                        retired_candidate_ids.add(candidate_record.candidate_id)
-                        drafts.pop(candidate_record.candidate_id, None)
-                        latest_draft_id = None
                     if is_correction:
                         retired_candidate_ids.add(candidate_record.candidate_id)
                         candidates.pop(candidate_record.candidate_id, None)
@@ -2114,14 +1874,14 @@ class ToolLoopAgent:
                     await _emit(on_loop_event, ReadAccepted(tool_name=dispatch_name, ok=False))
                     continue
                 await remember(call, call_id, ToolObservation(outcome, ok=False),
-                    (candidate_record.arguments if is_draft_merge and candidate_record is not None else params.model_dump(mode="json") if params is not None else {}),
-                    candidate_record=candidate_record if (is_correction or is_draft_merge) else None,
-                    candidate_active=is_draft_merge, target_tool=dispatch_name if (is_correction or is_draft_merge) else None)
+                    params.model_dump(mode="json") if params is not None else {},
+                    candidate_record=candidate_record if is_correction else None,
+                    candidate_active=False, target_tool=dispatch_name if is_correction else None)
                 from app.chat.editor import EDITOR_NAMES
 
                 rejection_digest = (
                     candidate_progress_digest(candidate_record)
-                    if candidate_record is not None and (is_correction or is_draft_merge)
+                    if candidate_record is not None and is_correction
                     else rejection_arguments_digest(dispatch_name, call.arguments, params)
                     if dispatch_name in EDITOR_NAMES or dispatch_name == "create_video"
                     else None

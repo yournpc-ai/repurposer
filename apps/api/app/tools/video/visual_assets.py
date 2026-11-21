@@ -8,8 +8,6 @@ import hashlib
 import io
 import json
 import re
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -28,7 +26,7 @@ from app.editing.schemas import (
 )
 from app.models.database import AsyncSessionLocal
 from app.models.ids import source_snapshot_id
-from app.models.schemas import VideoDraftRef, canonical_json_hash
+from app.models.schemas import canonical_json_hash
 from app.models.tables import SourceSnapshot
 from app.providers import storage
 from app.tools.video.media_analysis import (
@@ -47,8 +45,6 @@ VISUAL_ASSET_SCHEMA_VERSION = 1
 VISUAL_ASSET_RUNNER_VERSION = "controlled-svg-browser-v2"
 _SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 _XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
-VISUAL_ASSET_BATCH_SIZE = 4
-VISUAL_ASSET_MAX_PER_CALL = 64
 _MANIFEST_PREFIX = "visual-assets"
 _MAX_SVG_BYTES = 200_000
 _MAX_SVG_ELEMENTS = 2048
@@ -70,12 +66,6 @@ class InvalidSVGProgramError(VisualAssetError):
 
 class VisualAssetOutcomeUnknownError(VisualAssetError):
     pass
-
-
-@dataclass
-class VisualAssetBatch:
-    assets: list[dict[str, Any]] = field(default_factory=list)
-    failures: list[dict[str, str]] = field(default_factory=list)
 
 
 class NormalizedRegion(BaseModel):
@@ -193,25 +183,6 @@ class SceneAssetSpec(BaseModel):
         return canonical_json_hash(request)
 
 
-SceneId = Annotated[str, Field(min_length=1, max_length=64)]
-
-
-class VisualAssetSelection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    draft_ref: VideoDraftRef
-    scene_ids: list[SceneId] = Field(
-        min_length=1, max_length=VISUAL_ASSET_MAX_PER_CALL
-    )
-    review_existing: bool = False
-
-    @model_validator(mode="after")
-    def _unique_scenes(self):
-        if self.scene_ids is not None and len(self.scene_ids) != len(set(self.scene_ids)):
-            raise ValueError("scene_ids must be unique")
-        return self
-
-
 def _validated_spec(spec: SceneAssetSpec) -> SceneAssetSpec:
     for color in spec.palette:
         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
@@ -222,77 +193,8 @@ def _validated_spec(spec: SceneAssetSpec) -> SceneAssetSpec:
     return spec
 
 
-def scene_asset_specs(content: dict[str, Any], values: Any) -> list[SceneAssetSpec]:
-    if not isinstance(values, list) or not values:
-        raise VisualAssetError("scene_assets must be a non-empty bounded batch")
-    if len(values) > VISUAL_ASSET_MAX_PER_CALL:
-        raise VisualAssetError("scene asset batch exceeds the deployment policy")
-    specs = [
-        _validated_spec(
-            item if isinstance(item, SceneAssetSpec) else SceneAssetSpec.model_validate(item)
-        )
-        for item in values
-    ]
-    scene_ids = {str(scene.get("scene_id")) for scene in content.get("scenes") or []}
-    ids = [item.scene_id for item in specs]
-    if len(ids) != len(set(ids)):
-        raise VisualAssetError("scene_assets contains a duplicate scene_id")
-    missing = [item for item in ids if item not in scene_ids]
-    if missing:
-        raise VisualAssetError(
-            f"scene_assets reference scenes outside the current draft: {missing}"
-        )
-    return specs
-
-
-def merge_scene_assets(
-    design: dict[str, Any], content: dict[str, Any], values: Any
-) -> list[dict[str, Any]]:
-    updates = scene_asset_specs(content, values)
-    merged = {
-        item["scene_id"]: item
-        for item in design.get("scene_assets") or []
-        if isinstance(item, dict) and item.get("scene_id")
-    }
-    for spec in updates:
-        merged[spec.scene_id] = spec.model_dump(mode="json")
-    scene_order = [str(scene.get("scene_id")) for scene in content.get("scenes") or []]
-    return [merged[scene_id] for scene_id in scene_order if scene_id in merged]
-
-
-def current_scene_assets(arguments: dict[str, Any]) -> list[SceneAssetSpec]:
-    content = arguments.get("content") or {}
-    values = (arguments.get("design") or {}).get("scene_assets") or []
-    if not values:
-        return []
-    specs = scene_asset_specs(content, values)
-    words = (arguments.get("design") or {}).get("review_user_words")
-    if words is not None:
-        roles = {s["scene_id"]: s.get("intent") for s in content.get("scenes", [])}
-        for spec in specs:
-            spec._review_basis = {"user_words": words, "scene_roles": roles}
-    return specs
-
-
-def select_scene_assets(arguments: dict[str, Any], scene_ids: list[str]) -> list[SceneAssetSpec]:
-    available = {spec.scene_id: spec for spec in current_scene_assets(arguments)}
-    if len(scene_ids) != len(set(scene_ids)):
-        raise VisualAssetError("scene_ids must be unique")
-    missing = [scene_id for scene_id in scene_ids if scene_id not in available]
-    if missing:
-        raise VisualAssetError(f"No current SceneAssetSpec for scene_ids: {', '.join(missing)}")
-    return [available[scene_id] for scene_id in scene_ids]
-
-
 def request_key(owner_id: UUID, project_id: UUID, request_digest: str) -> str:
     return f"{_MANIFEST_PREFIX}/{owner_id}/{project_id}/{request_digest}.json"
-
-
-def batched_scene_assets(specs: list[SceneAssetSpec], size: int = VISUAL_ASSET_BATCH_SIZE):
-    if size <= 0 or size > VISUAL_ASSET_BATCH_SIZE:
-        raise ValueError("invalid visual asset batch size")
-    for index in range(0, len(specs), size):
-        yield specs[index : index + size]
 
 
 def sanitize_svg_program(program: str, output: VisualOutputConstraints) -> tuple[bytes, str, str]:
@@ -791,18 +693,17 @@ async def prepare_visual_asset(
     owner_id: UUID,
     project_id: UUID,
     spec: SceneAssetSpec,
-    draft_ref: VideoDraftRef | None,
     execution_id: str,
     media_usage: dict | None = None,
     content_attempt: int = 1,
-    step_attempt: int = 1,
+    job_attempt: int = 1,
     rasterizer: Any = None,
     reviewer: Any = None,
 ) -> dict[str, Any]:
     spec = _validated_spec(spec)
     cached = await cached_visual_asset(owner_id=owner_id, project_id=project_id, spec=spec)
     if cached is not None:
-        if (cached.get("execution") or {}).get("media_job_id" if media_usage is not None else "run_id") == execution_id:
+        if (cached.get("execution") or {}).get("media_job_id") == execution_id:
             usage = cached.get("usage") or {}
             if usage:
                 from app.metering import record_media_usage
@@ -951,12 +852,11 @@ async def prepare_visual_asset(
         "scene_id": spec.scene_id,
         "request_digest": spec.request_digest(),
         "scene_asset": spec.model_dump(mode="json"),
-        "draft_ref_at_birth": draft_ref.model_dump(mode="json") if draft_ref else None,
         "execution": {
-            ("media_job_id" if media_usage is not None else "run_id"): execution_id,
+            "media_job_id": execution_id,
             **({"metered_cost": dict(media_usage)} if media_usage is not None else {}),
             "content_attempt": content_attempt,
-            "step_attempt": step_attempt,
+            "job_attempt": job_attempt,
         },
         "media": {
             "storage_key": media_key,
@@ -987,82 +887,6 @@ async def prepare_visual_asset(
     }
 
 
-async def prepare_visual_assets(
-    *,
-    owner_id: UUID,
-    project_id: UUID,
-    specs: list[SceneAssetSpec],
-    draft_ref: VideoDraftRef | None,
-    execution_id: str,
-    content_attempts: dict[str, int] | None = None,
-    step_attempt: int = 1,
-    review_existing: bool = False,
-    rasterizer: Any = None,
-    reviewer: Any = None,
-    on_prepared: Callable[[int], Awaitable[None]] | None = None,
-    on_active_scene: Callable[[int, str | None], Awaitable[None]] | None = None,
-) -> VisualAssetBatch:
-    results = VisualAssetBatch()
-    prepared_count = 0
-
-    async def prepare_scene(spec: SceneAssetSpec) -> dict[str, Any]:
-        nonlocal prepared_count
-        if review_existing:
-            asset = await review_fixed_visual_asset(
-                owner_id=owner_id, project_id=project_id, spec=spec, reviewer=reviewer
-            )
-        else:
-            asset = await prepare_visual_asset(
-                owner_id=owner_id, project_id=project_id, spec=spec, draft_ref=draft_ref,
-                execution_id=execution_id, content_attempt=(content_attempts or {}).get(spec.scene_id, 1),
-                step_attempt=step_attempt, rasterizer=rasterizer, reviewer=reviewer,
-            )
-        prepared_count += 1
-        if on_prepared is not None:
-            await on_prepared(prepared_count)
-        return asset
-
-    completed = 0
-    progress_lock = asyncio.Lock()
-
-    async def track_scene(spec: SceneAssetSpec, active: list[str]) -> dict[str, Any]:
-        nonlocal completed
-        try:
-            return await prepare_scene(spec)
-        finally:
-            async with progress_lock:
-                active.remove(spec.scene_id)
-                completed += 1
-                if on_active_scene is not None:
-                    await on_active_scene(completed, next(iter(active), None))
-
-    for batch in batched_scene_assets(specs):
-        active = [spec.scene_id for spec in batch]
-        if on_active_scene is not None:
-            await on_active_scene(completed, active[0])
-        settled = await asyncio.gather(*(track_scene(spec, active) for spec in batch), return_exceptions=True)
-        for spec, item in zip(batch, settled, strict=True):
-            if isinstance(item, dict):
-                results.assets.append(item)
-                continue
-            if not isinstance(item, Exception):
-                raise item  # cancellation must not settle the run
-            code = "execution_error"
-            if isinstance(item, VisualAssetOutcomeUnknownError):
-                code = "outcome_unknown"
-            elif isinstance(item, InvalidSVGProgramError):
-                code = "invalid_svg"
-            detail = str(item)[:400] if isinstance(item, VisualAssetError) else type(item).__name__
-            results.failures.append({
-                "scene_id": spec.scene_id,
-                "request_digest": spec.request_digest(),
-                "execution_id": execution_id,
-                "code": code,
-                "detail": detail,
-            })
-    return results
-
-
 async def visual_asset_result_images(results: list[dict[str, Any]]) -> list[Any]:
     images = []
     for result in results:
@@ -1088,19 +912,12 @@ __all__ = [
     "MiniMaxImageSource",
     "NormalizedRegion",
     "SceneAssetSpec",
-    "VISUAL_ASSET_BATCH_SIZE",
-    "VISUAL_ASSET_MAX_PER_CALL",
     "VisualAssetError",
     "VisualAssetOutcomeUnknownError",
     "VisualOutputConstraints",
-    "batched_scene_assets",
     "cached_visual_asset",
-    "current_scene_assets",
-    "merge_scene_assets",
     "prepare_visual_asset",
-    "prepare_visual_assets",
     "rasterize_svg",
     "sanitize_svg_program",
-    "scene_asset_specs",
     "visual_asset_result_images",
 ]

@@ -914,15 +914,6 @@ VideoScrubTarget = Annotated[
 ]
 
 
-class VideoDraftRef(BaseModel):
-    """保留在 ConversationContext 中、尚未提交的 Composition 工作草稿。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    draft_id: str = Field(min_length=1, max_length=80)
-    draft_digest: str = Field(min_length=64, max_length=64)
-
-
 class VideoPresetChoice(BaseModel):
     """A previously shown Preset member; media and Preset identity are server-resolved."""
 
@@ -1035,11 +1026,6 @@ class ReviewVideoArgs(BaseModel):
 
     output_id: UUID = Field(
         description="从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。"
-    )
-    requirements: str = Field(
-        min_length=1,
-        max_length=4000,
-        description="忠实提取当前请求和对话中相关的用户要求，不预写审阅结论。",
     )
     at_seconds: list[float] | None = Field(
         default=None,

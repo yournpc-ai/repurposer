@@ -15,7 +15,7 @@ from app.chat.service import (
 )
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import canonical_json_hash
-from app.models.tables import Composition, Conversation, Message, Output, Project
+from app.models.tables import Composition, Conversation, ExportJob, Message, Output, Project
 from app.pipeline.media_jobs import KINDS, enqueue_media, media_quote
 from app.tools.video.audio_playback import playback_item
 
@@ -119,7 +119,15 @@ async def deliver_video(db, turn, output_id, base):
         await db.commit()
         if turn.on_row_append:
             await turn.on_row_append(message)
+    charge = (await db.execute(
+        select(Message.turn_id, Message.intent["media_result"]["charged_credits"].as_integer())
+        .join(ExportJob, ExportJob.receipt_id == Message.id)
+        .where(ExportJob.id == output.id, ExportJob.project_id == turn.project.id)
+    )).one_or_none()
     turn._editor_delivery = {"output_id": str(output_id), **base, "delivered_to_chat": True}
+    if charge:
+        turn._editor_delivery["export_charged_this_opening"] = charge[1] if charge[0] == turn.turn_id else 0
+        turn._editor_delivery["original_export_charge"] = charge[1]
     return ToolObservation(json.dumps(turn._editor_delivery))
 
 

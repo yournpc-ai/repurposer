@@ -310,9 +310,8 @@ async def _image(job, project, token):
                 owner_id=project.user_id,
                 project_id=project.id,
                 spec=spec,
-                draft_ref=None,
                 execution_id=str(job.id),
-                step_attempt=job.attempt,
+                job_attempt=job.attempt,
                 media_usage=usage.accrued,
             )
         return image, await credits_for_cost(lock, cost_usd(usage.accrued))

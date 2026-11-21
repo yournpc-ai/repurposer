@@ -764,7 +764,7 @@ def _loop_incomplete_text(text: str, result) -> str:
     rejections = getattr(result, "rejections", [])
     from app.chat.editor import WRITE_TOOLS
 
-    video_tools = {"design_video", "create_video", *WRITE_TOOLS}
+    video_tools = {"create_video", *WRITE_TOOLS}
     saved = bool(getattr(result, "version_saved", False))
     prepared = any(name in {"prepare_video_materials", "capture_web"} and ok for name, ok in observations)
     rejected = any(r.tool_name in video_tools for r in rejections) or any(name in video_tools and not ok for name, ok in observations)
@@ -794,10 +794,10 @@ def _cannot_do_text(text: str) -> str:
     (2026-08-20 review: the null-params incident had ~50% of recipe launches
     reading this line in English with tool slugs in it)."""
     if _prefers_zh(text):
-        return "这个我现在还做不了。请描述要制作或修改的视频、要整理的画布，或想咨询的问题。"
+        return "这个我现在还做不了。请描述要制作或修改的视频、或想咨询的问题。"
     return (
         "I can't do that yet. Try describing a video to create or edit, "
-        "a canvas to organize, or a question to answer."
+        "or a question to answer."
     )
 
 
@@ -1689,6 +1689,7 @@ async def prepare_chat_turn(
     from app.skills.resolution import SkillResolutionError, resolve_chat_skill
     from app.skills.store import SkillNotFoundError
 
+    pending = await latest_pending_question(db, conversation_id)
     prior_skill_references: list[SkillReference] | None = None
     inherited_skill: SkillReference | None = None
     inherited_binding = False
@@ -1731,27 +1732,19 @@ async def prepare_chat_turn(
             )
             .limit(1)
         )
-        if saved_version is None:
-            from app.chat.conversation_context import context_items
-
-            active_draft = any(
-                (item.get("candidate") or {}).get("active", True)
-                and item.get("target_tool") == "design_video"
-                and '"draft_id"' in str(item.get("text") or "")
-                for item in context_items(conversation.context)
-            )
-            for index, previous_user in enumerate(previous_users):
-                if index and not active_draft:
-                    break
-                intent = previous_user.intent or {}
+        if saved_version is None and previous_users:
+            previous = previous_users[0]
+            intent = previous.intent or {}
+            # A clarification stays bound to the opening that asked it.
+            if intent.get("skill_binding") != "inherited" or (
+                pending is not None and pending.turn_id == previous.id
+            ):
                 raw_skill = intent.get("skill")
-                if raw_skill is None or intent.get("skill_binding") == "inherited":
-                    continue
-                try:
-                    inherited_skill = TypeAdapter(SkillReference).validate_python(raw_skill)
-                except ValueError:
-                    inherited_skill = None
-                break
+                if raw_skill is not None:
+                    try:
+                        inherited_skill = TypeAdapter(SkillReference).validate_python(raw_skill)
+                    except ValueError:
+                        inherited_skill = None
 
     try:
         skill_resolution = await resolve_chat_skill(
@@ -1833,7 +1826,6 @@ async def prepare_chat_turn(
     # judged answer settles the row — an interjection leaves it pending
     # and the reply gets the reminder tail).
     answered_question: Message | None = None
-    pending = await latest_pending_question(db, conversation_id)
     if pending is not None:
         pending_payload = QuestionPayload.model_validate(pending.question)
         if pending_payload.kind == "question":

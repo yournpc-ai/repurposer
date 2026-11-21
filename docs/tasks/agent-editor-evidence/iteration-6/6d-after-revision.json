@@ -1,0 +1,375 @@
+{
+  "db": "rep_6d_overlap_9c32496b33",
+  "turns": [
+    {
+      "opening": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "reply": "允许为「琥珀色的光球，正沿着弧线缓缓向前。」生成旁白吗？最多使用 3 积分。",
+      "state": "settled"
+    },
+    {
+      "opening": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "reply": "允许为「极简风格画面：深藏蓝纯色背景，画面中有一条清晰可见的浅蓝色弧线（曲线），从左下方缓缓升起，向右下方弯曲延伸；一个琥珀色（暖橙金色）实心圆球正落在该弧线之上并与弧线贴合，沿弧线方向移动。扁平矢量插画风格，无文字，无阴影渐变。」生成图片吗？最多使用 6 积分。",
+      "state": "settled"
+    }
+  ],
+  "approvals": [
+    {
+      "id": "3ca7329f-3bbc-4a88-a613-233878f3be9b",
+      "opening": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_voice",
+      "max": 3,
+      "approved": true
+    },
+    {
+      "id": "5fb7a2d1-e1bc-4375-aa72-5f82a9a94698",
+      "opening": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "generate_image",
+      "max": 6,
+      "approved": false
+    }
+  ],
+  "user": "3c4fc86a-1e55-4b72-9415-ba105691b414",
+  "project": "5b3f25b6-8189-4971-8d78-37882b7e370e",
+  "asset": "9db3913c-5a13-4cf7-bee5-0ab0b0ae2816",
+  "head": "a5915aec-a7e2-4313-be78-0f116336d199",
+  "ordinal": 3,
+  "media": [
+    {
+      "kind": "generate_voice",
+      "id": "e5a0a040-3250-518e-9bea-15553a10a446",
+      "status": "succeeded",
+      "attempt": 1,
+      "snapshot": "ea33f57c-7374-5424-b139-05fe3e911c5a",
+      "credits": "3"
+    },
+    {
+      "kind": "generate_music",
+      "id": "f87f4e41-39d6-5739-80ba-e587cbbd91c3",
+      "status": "succeeded",
+      "attempt": 1,
+      "snapshot": "76249736-fbf7-55fc-92f6-3e469aeaefa6",
+      "credits": "0"
+    }
+  ],
+  "exports": [
+    {
+      "id": "d8f4eac5-74e2-56e4-b8b9-00f3120d4990",
+      "status": "succeeded",
+      "attempt": 1,
+      "composition_version_id": "a5915aec-a7e2-4313-be78-0f116336d199",
+      "review": {
+        "sha256": "10c27929b1ba4025c0aba630c770c9122e3fcda813fc6f56923e24eb18679baf",
+        "summary": "已确认当前成片为 H.264 MP4，1920×1080、30fps、5.0秒，音轨可正常解码且未检测到削波。本次仅提供并解码检查了2.500秒处的单帧，无法据此确认光球在整段5秒内的连续移动、镜头变化或动作衔接；音频测量只能确认音轨存在及响度概况，不能确认是否包含可辨识的中文旁白。",
+        "file": {
+          "bytes": 325187,
+          "width": 1920,
+          "height": 1080,
+          "video_codec": "h264",
+          "audio_codecs": [
+            "aac"
+          ],
+          "video_frames": 150,
+          "video_seconds": 5.0
+        }
+      }
+    },
+    {
+      "id": "6bba57d6-37bf-537a-b80a-f392d6eac083",
+      "status": "succeeded",
+      "attempt": 1,
+      "composition_version_id": "4600ddd8-e594-45c5-bc1c-6c819b3bb8d9",
+      "review": {
+        "sha256": "abed714ccd35b8ed69b6b14993ee16eb146b876fe788a8700382d34b30831a18",
+        "summary": "已对本次实际解码帧 F01（2.500s）及完整输出媒体进行检查。画面可见深蓝背景、琥珀色光球和横向蓝色弧线，构图清晰，无文字裁切、遮挡或控件干扰；光球位于画面偏左上方，弧线横贯下方。音轨可正常解码，存在旁白音轨与背景音乐音轨，整体 RMS 为 -18.403 dBFS、峰值为 -4.915 dBFS，且无削波样本。确定性检查未发现媒体问题。由于本次仅提供 1 个解码帧，无法据此确认光球在整段 5 秒内的连续移动、完整运动轨迹或音画同步。",
+        "file": {
+          "bytes": 373556,
+          "width": 1920,
+          "height": 1080,
+          "video_codec": "h264",
+          "audio_codecs": [
+            "aac"
+          ],
+          "video_frames": 150,
+          "video_seconds": 5.0
+        }
+      }
+    }
+  ],
+  "delivered": [
+    {
+      "turn_id": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "outputs": [
+        "6bba57d6-37bf-537a-b80a-f392d6eac083"
+      ],
+      "reviewed": {
+        "composition_id": "7253be85-cd92-431c-9d2c-06cc9e30ab1a",
+        "content_digest": "839b2dc9a4d8070410e43c6914dae8790c99096d8c15568cbca830e9ce97af71",
+        "composition_version_id": "4600ddd8-e594-45c5-bc1c-6c819b3bb8d9"
+      }
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "outputs": [
+        "d8f4eac5-74e2-56e4-b8b9-00f3120d4990"
+      ],
+      "reviewed": {
+        "composition_id": "7253be85-cd92-431c-9d2c-06cc9e30ab1a",
+        "content_digest": "54199c6d759cdb3a0f1129cb6d9aa6419e690954c4743f2aedd13d8278620352",
+        "composition_version_id": "a5915aec-a7e2-4313-be78-0f116336d199"
+      }
+    }
+  ],
+  "calls": [
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "get_understanding",
+      "call_id": "call_9865fb2f170d45bca15514b2"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "get_asset",
+      "call_id": "call_9cb497598da64749b6e520fa"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "prepare_video_materials",
+      "call_id": "call_7e7261a29cb345f99c930cd2"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_voice",
+      "call_id": "call_63a76679cafc400fb7de764b"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_music",
+      "call_id": "call_f65bb848c1d7416781ea3d37"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "generate_music",
+      "call_id": "call_625781328b811d2dfad2eecf"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "prepare_video_materials",
+      "call_id": "call_29a0b6ae0b9675f9e82a4e88"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "create_video",
+      "call_id": "call-a0adf9fe-1751-4936-9456-0919b2be2743"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef77dd775c5af5ca163"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef78221754f84ee0bf9"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef78a03775b98b2cd41"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "insert_audio",
+      "call_id": "call_01a1fef78a03775b98b2cd42"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef78eff70d589a89c2b"
+    },
+    {
+      "turn_id": "2cfdf1ee-e4de-41bc-a0c0-52689d129bf8",
+      "tool": "preview_range",
+      "call_id": "call_01a1fef78eff70d589a89c2c"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "export_video",
+      "call_id": "call_01a1fef881a1709b9b770713"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "inspect_timeline",
+      "call_id": "call_01a1fef886437129a2025316"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "preview_range",
+      "call_id": "call_01a1fef88a1972fb8786a0f5"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "export_video",
+      "call_id": "call_function_tm9ob4f09qtf_1"
+    },
+    {
+      "turn_id": "f5b996a0-2d11-4ba9-8370-9a4845d41988",
+      "tool": "generate_image",
+      "call_id": "call_function_n8eyqf8738nf_1"
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "tool": "export_video",
+      "call_id": "call_9d840eb2ab6046ee90b01172"
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "tool": "preview_range",
+      "call_id": "call_351309de284247fcb1a7579a"
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "tool": "export_video",
+      "call_id": "call_function_zvglgm3wf9hp_1"
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "tool": "inspect_timeline",
+      "call_id": "call_function_nkqwyawsmui3_1"
+    },
+    {
+      "turn_id": "a3519cbb-4094-4317-8367-f03fb9befd0e",
+      "tool": "deliver_video",
+      "call_id": "call_function_a1o8pqe42t87_1"
+    },
+    {
+      "turn_id": "a397349b-2456-4d65-9037-afd7d69f36df",
+      "tool": "inspect_timeline",
+      "call_id": "call_1b3e758c161f49b29c752162"
+    },
+    {
+      "turn_id": "a397349b-2456-4d65-9037-afd7d69f36df",
+      "tool": "scale",
+      "call_id": "call_9f69123c0e3f482f91f70540"
+    },
+    {
+      "turn_id": "a397349b-2456-4d65-9037-afd7d69f36df",
+      "tool": "preview_range",
+      "call_id": "call_01a1ff0188a670b390fd0fbd"
+    },
+    {
+      "turn_id": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "tool": "export_video",
+      "call_id": "call_8fb14e78f24a49c8a90c7d73"
+    },
+    {
+      "turn_id": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "tool": "preview_range",
+      "call_id": "call_89e412a17fd54c80aed74b3f"
+    },
+    {
+      "turn_id": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "tool": "export_video",
+      "call_id": "call_function_hn8scvf429n3_1"
+    },
+    {
+      "turn_id": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "tool": "deliver_video",
+      "call_id": "call_function_lluuvt1j6jwh_1"
+    }
+  ],
+  "wallet": [
+    {
+      "kind": "grant",
+      "amount": 1000,
+      "balance_after": 1000
+    },
+    {
+      "kind": "hold",
+      "amount": -3,
+      "balance_after": 997
+    },
+    {
+      "kind": "release",
+      "amount": 3,
+      "balance_after": 1000
+    },
+    {
+      "kind": "capture",
+      "amount": -3,
+      "balance_after": 997
+    },
+    {
+      "kind": "hold",
+      "amount": -10,
+      "balance_after": 987
+    },
+    {
+      "kind": "release",
+      "amount": 10,
+      "balance_after": 997
+    },
+    {
+      "kind": "capture",
+      "amount": -10,
+      "balance_after": 987
+    },
+    {
+      "kind": "hold",
+      "amount": -10,
+      "balance_after": 977
+    },
+    {
+      "kind": "release",
+      "amount": 10,
+      "balance_after": 987
+    },
+    {
+      "kind": "capture",
+      "amount": -10,
+      "balance_after": 977
+    }
+  ],
+  "revision_openings": {
+    "edit": {
+      "opening": "a397349b-2456-4d65-9037-afd7d69f36df",
+      "reply": "新版已保存（版本 4，版本号 第 4 版），画面层 0–5 秒的片段 已放大到 110%，旁白与背景音乐轨保持不变。\n\n预览观察（0–5 秒，抽样 0s / 2.47s / 4.97s）：深蓝底色上的琥珀色光球沿直线弧线由左向右持续移动，位置连续变化、无跳切；三帧画面均有像素差异，缩放未裁掉光球或地平线。\n\n取景实测：源为 480×270，`fit=contain` 放大后源画面上下左右各被画布裁掉 96px / 54px（source_clipped_px），画布留边为 0。因此这是放大后的必然裁切，原始 480×270 完整画面已不完全可见；光球和地平线在实际帧中均未被裁断。\n\n音频轨仍在（混音非静音，RMS≈0.12，峰值≈0.58，综合响度约 -15.6 LUFS）。\n\n需要我现在导出正式 MP4 到对话吗？",
+      "state": "settled"
+    },
+    "export": {
+      "opening": "da6fbaa2-dd8c-4cfa-945f-e104d9d0ab81",
+      "reply": "已交付第 4 版成片 MP4。\n\n- 作品：《琥珀弧线上的光球》版本 4（version_id `4600ddd8…`）\n- 成片：1920×1080，H.264，150 帧 / 5.0 秒，AAC 音轨，文件 373,556 字节\n- 审阅：实际解码了成片文件。2.5 秒帧显示深蓝背景、琥珀色光球与横贯下方的蓝色弧线，构图清晰无裁切或控件干扰；音轨可正常解码，RMS −18.4 dBFS、峰值 −4.9 dBFS，无削波样本。\n- 未检查范围：本次只解码到 1 个静帧，未逐场景核对连续运动与音画同步；听感未实际试听。\n- 费用：本轮导出扣费 10 积分（回执中本次导出与原始导出均为 10）。",
+      "state": "settled"
+    }
+  },
+  "versions": [
+    {
+      "id": "557a7002-f4e5-4c9b-9d21-7a24c31a375a",
+      "version": 1,
+      "content_digest": "33829dcd7f4f8a38d839fd82f530b4639948d1dc83f76bd8d359b7225976040c"
+    },
+    {
+      "id": "babe7209-f547-46be-97eb-6a8f2b0577e7",
+      "version": 2,
+      "content_digest": "2594703b5408507ed34bdb897b974a8916169d9dc995852ae5f5e38d08b1d2c2"
+    },
+    {
+      "id": "a5915aec-a7e2-4313-be78-0f116336d199",
+      "version": 3,
+      "content_digest": "54199c6d759cdb3a0f1129cb6d9aa6419e690954c4743f2aedd13d8278620352"
+    },
+    {
+      "id": "4600ddd8-e594-45c5-bc1c-6c819b3bb8d9",
+      "version": 4,
+      "content_digest": "839b2dc9a4d8070410e43c6914dae8790c99096d8c15568cbca830e9ce97af71"
+    }
+  ],
+  "music_provenance": [
+    {
+      "snapshot": "76249736-fbf7-55fc-92f6-3e469aeaefa6",
+      "origin": {
+        "kind": "programmatic_score",
+        "media_job_id": "f87f4e41-39d6-5739-80ba-e587cbbd91c3",
+        "synth_version": "numpy-electronic-v1"
+      }
+    }
+  ]
+}

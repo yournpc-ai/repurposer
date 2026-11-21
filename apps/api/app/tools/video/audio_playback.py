@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Any
 from uuid import UUID
 
 
@@ -77,24 +76,3 @@ def _playback_item(measured: dict, report: dict, role: str, result: dict, reques
         if role == "music" else request.get("text") or result.get("text") or "",
         "peaks": peaks, "analysis_digest": report["report_digest"],
     }
-
-
-def audio_preparation(run):
-    for role in ("narration", "music"):
-        preparation = (run.context or {}).get(f"{role}_preparation")
-        if isinstance(preparation, dict):
-            return role, preparation
-    return None
-
-
-async def audio_playback_blocks(db, run, project) -> list[dict[str, Any]]:
-    audio = audio_preparation(run)
-    if audio is None:
-        return []
-    role, preparation = audio
-    try:
-        items = [await playback_item(db, project, role, part.get("result") or {}, part.get("request") or {})
-                 for part in preparation.get("scenes") or [preparation]]
-    except PlaybackUnavailable:
-        return []
-    return [{"kind": "audio_playback", "project_id": str(project.id), "items": items}]

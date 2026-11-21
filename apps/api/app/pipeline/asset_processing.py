@@ -41,7 +41,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.pipeline import job_lease
 from app.pipeline.errors import user_line
-from app.ui_locale import display_language
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import AssetStatus, AssetType
 from app.models.tables import Asset, Project
@@ -336,7 +335,7 @@ async def claim_pending_asset(db: AsyncSession) -> tuple[UUID, UUID] | None:
             return None
         if asset.attempt > settings.asset_max_attempts:
             project = await db.get(Project, asset.project_id) if asset.project_id else None
-            lang = display_language(None, project.language if project else None)
+            lang = ((project.language if project else None) or "en").lower()
             asset.processing_status = AssetStatus.FAILED
             asset.processing_error = user_line("processing_gave_up", lang)
             asset.claim_token = asset.lease_until = None

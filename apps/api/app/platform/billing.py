@@ -411,7 +411,7 @@ async def _mutate(
             )
             # Belt and braces under the gate: a pathological same-key race can
             # never turn into an IntegrityError poisoning the caller's commit
-            # (execute_step's success write rides this session).
+            # alongside the business result in this transaction.
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
             .returning(CreditTransaction.id)
         )

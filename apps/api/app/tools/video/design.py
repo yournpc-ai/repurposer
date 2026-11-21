@@ -20,9 +20,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.errors import AgentOutputError, AgentStopError
-from app.agents.working_drafts import (
-    apply_working_draft_writes,
-)
 from app.editing.edits import (
     AddClip,
     AddTrack,
@@ -30,6 +27,7 @@ from app.editing.edits import (
     ClipEntityWrite,
     EntityWrites,
     Op,
+    apply_entity_writes_raw,
     apply_ops,
 )
 from app.editing.presets import PresetError, expand_preset
@@ -911,7 +909,7 @@ async def _place_skill_generator(
             layout=placement.layout or LayoutBox(x=0, y=0, width=settings.width, height=settings.height),
         ),
     )
-    candidate = apply_working_draft_writes(
+    candidate = apply_entity_writes_raw(
         content, EntityWrites(clips=[ClipEntityWrite(track_id=placement.track_id, clip=clip)])
     )
     for resource in project.resources:

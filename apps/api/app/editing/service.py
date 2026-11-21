@@ -464,19 +464,14 @@ def format_storyboard_text(read: dict[str, Any]) -> str:
     for source in payload["sources"]:
         if (source.get("beat_grid") or {}).get("available") or (source.get("beat_grid") or {}).get("bpm"):
             lines.append(f"frozen music snapshot {source['snapshot_id']} BeatGrid={source['beat_grid']}")
-    speech_clips = [
-        clip
-        for scene in payload["scenes"]
-        for clip in scene["clips"]
-        if clip["object_kind"] == "speech"
-    ]
-    if speech_clips:
-        lines.append(
-            "\nNarration: reviewed SpeechObjects above; actual audio and sentence-aligned "
-            "captions are prepared only by authorized production inside each fixed clip window."
-        )
-    else:
-        lines.append("\nNarration: off.")
+    speech_clips = [clip for clip in all_clips if clip["object_kind"] == "speech"]
+    dialogue_audio = [clip for clip in all_clips if clip["object_kind"] == "audio"
+                      and clip["track_role"] == "dialogue" and clip.get("snapshot_id")]
+    lines.append(f"\nNarration: {len(speech_clips)} SpeechObject(s); "
+                 f"{len(dialogue_audio)} fixed audio Clip(s) on dialogue tracks.")
+    for clip in dialogue_audio:
+        lines.append(f"  {clip['clip_id']}: snapshot {clip['snapshot_id']}, "
+                     f"{clip['range_seconds']['start']:.3f}s–{clip['range_seconds']['end']:.3f}s")
     music_clips = [clip for clip in all_clips if clip.get("track_role") == "music"]
     lines.append(
         f"\nMusic: {len(music_clips)} saved Clip(s) in this version."

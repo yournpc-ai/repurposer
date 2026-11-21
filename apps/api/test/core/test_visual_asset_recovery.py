@@ -9,7 +9,6 @@ import pytest
 from PIL import Image
 
 from app.agents.base import jinja_env
-from app.models.schemas import VideoDraftRef
 from app.models.tables import Project, SourceSnapshot
 from app.providers.llm.base import LLMSchemaError
 from app.tools.video import visual_assets
@@ -81,7 +80,6 @@ async def test_existing_source_refits_legacy_png_before_review_and_cache(databas
     reviewer = AsyncMock(return_value={"status": "pass", "summary": "The diagram is visible."})
     kwargs = dict(
         owner_id=owner, project_id=project_id, spec=spec, reviewer=reviewer,
-        draft_ref=VideoDraftRef(draft_id="draft", draft_digest="a" * 64),
     )
     result = await visual_assets.prepare_visual_asset(**kwargs, execution_id="first")
     assert not result["cache_hit"] and result["usage"] == {}
@@ -209,23 +207,11 @@ async def test_review_recovery_reuses_snapshot_and_is_bounded(monkeypatch, retry
         pytest.fail("Review recovery must never execute image generation")
 
     monkeypatch.setattr(visual_assets, "prepare_visual_asset", never_generate)
-    reference = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
-    project = SimpleNamespace(id=project_id, user_id=owner_id)
-    draft, _ = image_draft()
-    kwargs = {
-        "owner_id": owner_id,
-        "project_id": project_id,
-        "draft_ref": reference,
-        "execution_id": "review-run",
-        "review_existing": True,
-        "reviewer": reviewer,
-    }
-    mixed = await visual_assets.prepare_visual_assets(specs=[missing, spec], **kwargs)
-    assert [(item["scene_id"], item["code"]) for item in mixed.failures] == [
-        (missing.scene_id, "execution_error"),
-    ]
-    reviewed, = mixed.assets
-    cached, = (await visual_assets.prepare_visual_assets(specs=[spec], **kwargs)).assets
+    kwargs = {"owner_id": owner_id, "project_id": project_id, "reviewer": reviewer}
+    with pytest.raises(visual_assets.VisualAssetError):
+        await visual_assets.review_fixed_visual_asset(spec=missing, **kwargs)
+    reviewed = await visual_assets.review_fixed_visual_asset(spec=spec, **kwargs)
+    cached = await visual_assets.review_fixed_visual_asset(spec=spec, **kwargs)
     assert cached == reviewed
     assert len(calls) == 1
     assert stored[original_key] == original_manifest
@@ -326,7 +312,7 @@ def test_visual_review_legacy_findings_require_actual_evidence():
 
 
 @pytest.mark.asyncio
-async def test_bad_svg_is_reported_before_quote_and_later_batches_still_settle(monkeypatch):
+async def test_bad_svg_is_reported_before_quote():
     specs = [
         visual_assets.SceneAssetSpec(
             scene_id=f"scene-{i}", intent="Evidence",
@@ -338,30 +324,6 @@ async def test_bad_svg_is_reported_before_quote_and_later_batches_still_settle(m
     ]
     with pytest.raises(ValueError, match=r"Scene scene-2: SVG is not well formed"):
         visual_assets.preflight_scene_svgs(specs)
-    draft_ref = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
-    project = SimpleNamespace(id=uuid4(), user_id=uuid4())
-    async def worker_item(*, spec, **kwargs):
-        visual_assets.preflight_scene_svgs([spec])
-        return {"scene_id": spec.scene_id}
-
-    monkeypatch.setattr(visual_assets, "prepare_visual_asset", worker_item)
-    progress = AsyncMock()
-    active_scene = AsyncMock()
-    settled = await visual_assets.prepare_visual_assets(
-        owner_id=project.user_id, project_id=project.id, specs=specs,
-        draft_ref=draft_ref, execution_id=str(uuid4()), on_prepared=progress, on_active_scene=active_scene,
-    )
-    ticks = [call.args for call in active_scene.await_args_list]
-    assert [scene for count, scene in ticks if scene is not None] == [s.scene_id for s in specs]
-    assert ticks[-1] == (len(specs), None)
-    assert [call.args for call in progress.await_args_list] == [(1,), (2,), (3,), (4,), (5,)]
-    assert [a["scene_id"] for a in settled.assets] == [
-        "scene-0", "scene-1", "scene-3", "scene-4", "scene-5",
-    ]
-    failed, = settled.failures
-    assert failed["scene_id"] == "scene-2" and failed["code"] == "invalid_svg"
-
-
 @pytest.mark.asyncio
 async def test_submitted_provider_image_reuses_only_verified_fixed_media(monkeypatch):
     from app.tools.video import generated_images
@@ -416,12 +378,11 @@ async def test_submitted_provider_image_reuses_only_verified_fixed_media(monkeyp
 @pytest.mark.asyncio
 async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
 
-    draft, _ = image_draft()
-    draft["content"]["scenes"][0]["intent"] = "Show the link to a source paper."
-    draft["content"]["scenes"][1]["intent"] = "Show a researcher communicating science."
-    draft["design"]["scene_assets"][1]["intent"] = "Use a vertically mounted phone."
-    draft["design"]["review_user_words"] = ["Show the researcher in the second scene."]
-    spec = visual_assets.current_scene_assets(draft)[1]
+    _, specs = image_draft()
+    spec = specs[1].model_copy(update={"intent": "Use a vertically mounted phone."})
+    roles = {"s1": "Show the link to a source paper.", "s2": "Show a researcher communicating science."}
+    words = ["Show the researcher in the second scene."]
+    spec._review_basis = {"user_words": words, "scene_roles": roles}
     pixel_identity = spec.request_digest()
     first_version = spec.review_version()
     output = io.BytesIO()
@@ -436,12 +397,11 @@ async def test_review_uses_scene_role_and_user_words_and_keeps_pixel_identity():
     first = await review()
     projection = json.loads(reviewer.await_args.kwargs["scene_asset_json"])
     assert "vertically" not in str(projection)
-    assert projection["requirements"]["narrative"] == draft["content"]["scenes"][1]["intent"]
+    assert projection["requirements"]["narrative"] == roles["s2"]
     assert projection["other_scene_roles"] == {"s1": "Show the link to a source paper."}
     assert first.status == "pass"
 
-    draft["design"]["review_user_words"].append("Use a vertically mounted phone.")
-    spec = visual_assets.current_scene_assets(draft)[1]
+    spec._review_basis = {"scene_roles": roles, "user_words": [*words, "Use a vertically mounted phone."]}
     assert spec.request_digest() == pixel_identity and spec.review_version() != first_version
     reviewer.return_value = {"status": "fail", "summary": "Orientation mismatch", "findings": [{
         "kind": "observed_issue", "requirement": "user_1", "observed": "Horizontal phone",

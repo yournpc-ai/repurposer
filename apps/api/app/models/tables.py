@@ -901,10 +901,8 @@ class CreditTransaction(Base):
     capture | release | refund | adjust. ``amount`` is signed (hold/capture
     negative); ``balance_after`` chains each row to the balance it produced,
     so ledger drift is a one-query audit. ``idempotency_key`` is a
-    first-class UNIQUE column: worker restarts, step retries and payment
-    webhook replays dedupe structurally, never via check-then-write
-    code. ``ref`` carries the cause ({\"run_id\": …} / {\"step_id\": …} /
-    {\"source\": \"signup\"} / PAYMENTS {\"payment_event\": …}).
+    first-class UNIQUE column. Job retries and payment webhook replays share
+    the same ledger. The ref records the operation that caused the entry.
     """
 
     __tablename__ = "credit_transactions"

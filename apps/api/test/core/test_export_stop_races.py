@@ -332,6 +332,7 @@ async def test_visible_export_pins_old_version_and_only_reports_reviewed_deliver
         for _ in range(2):
             observation = await execute_editor(turn, "deliver_video", DeliverVideoArgs(output_id=export.job))
             assert observation.ok, observation.content
+            assert turn._editor_delivery["export_charged_this_opening"] == 8
         deliveries = (await db.scalars(select(Message).where(Message.turn_id == export.turn,
                                      Message.intent.has_key("reviewed_version")))).all()
         assert len(deliveries) == 1 and deliveries[0].intent["reviewed_version"] == base
@@ -342,6 +343,15 @@ async def test_visible_export_pins_old_version_and_only_reports_reviewed_deliver
         db.add(Message(conversation_id=cid, seq=6, role="assistant", turn_id=unrelated.id, content="Which one?"))
         await db.flush()
         assert await confirm() is None
+        unrelated.turn_state = "in_flight"
+        await db.commit()
+        turn.turn_id = unrelated.id
+        turn._editor_export = {}
+        turn._video_base_ref = base
+        observed = await execute_editor(turn, "deliver_video", DeliverVideoArgs(output_id=export.job))
+        assert observed.ok, observed.content
+        assert turn._editor_delivery["original_export_charge"] == 8
+        assert turn._editor_delivery["export_charged_this_opening"] == 0
 
 
 @pytest.mark.asyncio
@@ -369,3 +379,31 @@ async def test_recovery_reviews_prior_opening_export_once_after_newer_opening(da
         assert resume.await_args.kwargs["turn_id"] == export.turn
         assert resume.await_args.kwargs["review_pinned_export"]
         assert resume.await_args.kwargs["authorized_media"].intent["media_result"]["output_id"] == str(export.job)
+
+
+@pytest.mark.asyncio
+async def test_output_review_uses_user_words_on_the_exported_lineage(database, export):
+    from app.models.schemas import ReviewVideoArgs
+    from app.models.tables import CompositionVersion
+    from app.tools.video.review import ReviewError, _user_review_requirements
+    import json
+
+    assert "requirements" not in ReviewVideoArgs.model_json_schema()["properties"]
+    async with database() as db:
+        opening = await db.get(Message, export.turn)
+        job = await db.get(ExportJob, export.job)
+        version = await db.get(CompositionVersion, job.version_id)
+        version.request_id = "native-edit-for-this-version"
+        earlier = Message(conversation_id=opening.conversation_id, role="user", content="Keep the uploaded motion",
+                          seq=0, intent={"editor_commits": [{"request": version.request_id}]})
+        later = Message(conversation_id=opening.conversation_id, role="user", content="Change the path",
+                        seq=4, intent={"editor_commits": [{"request": version.request_id}]})
+        db.add_all([earlier, later])
+        await db.flush()
+        output = Output(project_id=export.pid, composition_version_id=version.id, composition_id=version.composition_id)
+        requirements = await _user_review_requirements(db, opening_id=opening.id, output=output, owner_id=export.owner)
+        assert json.loads(requirements) == {
+            "current_user_request": opening.content, "prior_user_requests_for_this_work": [earlier.content],
+        }
+        with pytest.raises(ReviewError):
+            await _user_review_requirements(db, opening_id=opening.id, output=output, owner_id=uuid4())

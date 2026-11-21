@@ -92,7 +92,6 @@ from app.chat.activity_receipts import (
     SfxImportReceipt,
     SfxSearchReceipt,
     SkillReadReceipt,
-    VideoDraftReviewReceipt,
     VideoReviewReceipt,
     VideoRevisionReceipt,
 )
@@ -133,18 +132,9 @@ _ACTIVITY_KEYS = {
 _VIDEO_DESIGN_KEYS = ("chat.activity.videoDesign", "chat.activity.videoDesignDone")
 _VIDEO_REVISE_KEYS = ("chat.activity.videoRevise", "chat.activity.videoReviseDone")
 _VIDEO_REVIEW_KEYS = ("chat.activity.videoReview", "chat.activity.videoReviewDone")
-_VIDEO_DRAFT_SCENE_KEYS = ("chat.activity.videoDraftScene", "chat.activity.videoDraftSceneDone")
-_VIDEO_DRAFT_JOIN_KEYS = ("chat.activity.videoDraftJoin", "chat.activity.videoDraftJoinDone")
-_VIDEO_DRAFT_RECHECK_KEYS = ("chat.activity.videoDraftRecheck", "chat.activity.videoDraftRecheckDone")
 _VIDEO_SAVE_KEYS = ("chat.activity.videoSave", "chat.activity.videoSaveDone")
-_VIDEO_DRAFT_REVIEW_KEY_PAIRS = (
-    _VIDEO_DRAFT_SCENE_KEYS,
-    _VIDEO_DRAFT_JOIN_KEYS,
-    _VIDEO_DRAFT_RECHECK_KEYS,
-)
 _RECEIPT_TYPES = {
     "video_review": VideoReviewReceipt,
-    "video_draft_review": VideoDraftReviewReceipt,
     "component": ComponentReceipt,
     "video_revision": VideoRevisionReceipt,
     "sfx_search": SfxSearchReceipt,
@@ -168,9 +158,6 @@ def _is_storyboard_key(key: str | None) -> bool:
         + _VIDEO_REVISE_KEYS
         + _VIDEO_REVIEW_KEYS
         + _VIDEO_SAVE_KEYS
-        + _VIDEO_DRAFT_SCENE_KEYS
-        + _VIDEO_DRAFT_JOIN_KEYS
-        + _VIDEO_DRAFT_RECHECK_KEYS
     )
 
 
@@ -350,7 +337,6 @@ class ActivityProjector:
         receipt = receipt if status == STATUS_COMPLETED else None
         frame = self._frame(
             activity_id, kind, status, key,
-            count=len(receipt.scene_ids) if isinstance(receipt, VideoDraftReviewReceipt) else None,
             duration_ms=duration_ms, receipt=receipt,
         )
         # 落定即退役 (2026-09-28 用户拍板; 2026-09-29 扩到 run 跨度): a
@@ -393,9 +379,6 @@ class ActivityProjector:
             return _VIDEO_REVIEW_KEYS[1]
         if active_key == _VIDEO_SAVE_KEYS[0]:
             return _VIDEO_SAVE_KEYS[1]
-        for active, done in _VIDEO_DRAFT_REVIEW_KEY_PAIRS:
-            if active_key == active:
-                return done
         pair = _ACTIVITY_KEYS.get(kind)
         return pair[1] if pair else None
 
@@ -546,14 +529,12 @@ class ActivityProjector:
                 elif (
                     isinstance(event, ReadAccepted)
                     and presentation is not None
-                    and presentation.policy in {"review", "working_draft_review"}
+                    and presentation.policy == "review"
                     and (
                         not event.ok
                         or not isinstance(
                             event.receipt,
-                            VideoReviewReceipt
-                            if presentation.policy == "review"
-                            else VideoDraftReviewReceipt,
+                            VideoReviewReceipt,
                         )
                     )
                 ):
@@ -598,22 +579,6 @@ class ActivityProjector:
             self._open_call = None
         return frames
 
-    @staticmethod
-    def _working_draft_review_activity(params) -> tuple[tuple[str, str], int]:
-        from app.agents.working_drafts import working_draft_review_facts
-
-        facts = working_draft_review_facts(params._working_draft or {})
-        target = params._review_target
-        ordinal = next((
-            scene["ordinal"] for scene in facts["scenes"]
-            if scene["scene_id"] == target.scene_id
-        ), 1)
-        if facts["invalidated_ranges_seconds"]:
-            return _VIDEO_DRAFT_RECHECK_KEYS, ordinal
-        if target.include_previous_scene:
-            return _VIDEO_DRAFT_JOIN_KEYS, ordinal
-        return _VIDEO_DRAFT_SCENE_KEYS, ordinal
-
     def _on_executing(self, event: ReadExecuting) -> list[ActivityFrame]:
         """开工戳 (execute entry — ADR-108 数组位置律): the ONE seat where a
         non-terminal call's work visibly starts. Emitted after the
@@ -633,15 +598,9 @@ class ActivityProjector:
                 presentation.defer_start or presentation.kind == KIND_READ
             ):
                 return []
-            if presentation.policy == "working_draft_review" and (
-                event.params.judgment is not None or event.params._review_target is None
-            ):
-                return []
             count = None
             if presentation.policy == "design":
                 keys = _VIDEO_SAVE_KEYS if getattr(event.params, "save", False) else _VIDEO_DESIGN_KEYS
-            elif presentation.policy == "working_draft_review":
-                keys, count = self._working_draft_review_activity(event.params)
             else:
                 display = next(
                     (variant for variant in presentation.variants if variant.matches(event.params)),

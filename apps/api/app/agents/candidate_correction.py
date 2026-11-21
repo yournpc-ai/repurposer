@@ -114,6 +114,34 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def tool_progress_digest(
+    tool_name: str,
+    arguments: dict[str, Any],
+    *,
+    base_keys=(),
+) -> str:
+    """Content-only retry identity for retained tool calls."""
+    encoded = json.dumps(
+        {
+            "target_tool": tool_name,
+            "arguments": arguments,
+            "base_keys": sorted(base_keys),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def candidate_progress_digest(record: CandidateRecord) -> str:
+    """Random candidate ids never fake progress."""
+    return tool_progress_digest(
+        record.tool_name, record.arguments, base_keys=record.base_keys
+    )
+
+
 def _digest(*, candidate_id: str, scope: CandidateScope, tool_name: str, arguments: dict, base_keys: frozenset[str]) -> str:
     return hashlib.sha256(_canonical({
         "candidate_id": candidate_id,

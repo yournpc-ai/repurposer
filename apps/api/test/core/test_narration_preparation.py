@@ -17,27 +17,6 @@ from app.pipeline.errors import user_error_line
 from app.tools.video.media_analysis import LoudnessAnalysisError, analyze_audio_bytes, read_report
 
 
-def spoken_draft(ids):
-    scenes, clips = [], []
-    for index, scene_id in enumerate(ids):
-        timing = {"start": index * 5 * SOURCE_TIMEBASE, "end": (index + 1) * 5 * SOURCE_TIMEBASE}
-        scenes.append({"scene_id": scene_id, "range": timing, "speech_clip_ids": [f"speech_{scene_id}"]})
-        clips.append({
-            "clip_id": f"speech_{scene_id}", "scene_id": scene_id, "range": timing,
-            "object": {"kind": "speech", "object_id": f"voice_{scene_id}", "text": scene_id,
-                       "voice_id": "English", "language": "en"},
-        })
-    return {
-        "content": {
-            "settings": {"width": 1920, "height": 1080, "fps": {"num": 24, "den": 1}, "timebase": SOURCE_TIMEBASE},
-            "scenes": scenes, "timeline": {"tracks": [
-                {"track_id": "dialogue", "kind": "audio", "role": "dialogue", "order": 0, "clips": clips},
-            ]},
-        },
-        "design": {"authoring": "high_level_scene"},
-    }
-
-
 async def _project(database, *, generated):
     async with database() as db:
         user = User(email=f"{uuid4()}@example.test", name="narration-owner")
@@ -168,15 +147,12 @@ async def test_measured_score_has_playable_receipt_across_cache_and_history(data
     from importlib import import_module
 
     from app.chat.service import _create_message
-    from app.editing.schemas import speech_text_digest
-    from app.editing.timing import SOURCE_TIMEBASE as ticks
-    from app.models.schemas import ChatMessageResponse, canonical_json_hash
+    from app.models.schemas import ChatMessageResponse
     from app.models.tables import Conversation, Message
     from app.providers import storage
-    from app.tools.music.score import ScoreSpecDraft
     from app.tools.video import music_preparation as music
     from app.chat.editor_media import _record_audio
-    from app.tools.video.narration_draft import reproject_narration_timing
+    from app.tools.music.score import GenerateMusicArgs, instrumental_score
 
     project, _ = await _project(database, generated=True)
     files = {}
@@ -186,34 +162,13 @@ async def test_measured_score_has_playable_receipt_across_cache_and_history(data
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     monkeypatch.setattr(music, "AsyncSessionLocal", database)
 
-    ids = ["intro", "end"]
-    draft = spoken_draft(ids)
-    draft["content"]["scenes"][-1]["range"]["end"] = 15 * ticks
-    draft["design"].update(user_constraints={"target_seconds": 15}, narrations=[{
-        "scene_id": sid, "text_digest": speech_text_digest(sid), "alignment": {"status": "READY"},
-        "source_duration_ticks": ticks, "source_timebase": ticks,
-        "cues": [{"source_range": {"start": 0, "end": ticks}}],
-    } for sid in ids])
-    reproject_narration_timing(draft)
-    from app.tools.music.score import build_score_spec
-    score = build_score_spec(ScoreSpecDraft.model_validate({
-        "bpm": {"num": 96}, "sections": [{"scene_id": sid, "intent": "build"} for sid in ids],
-        "instruments": [{"instrument_id": "lead", "kind": "pad"}], "seed": 42,
-        "events": [{"scene_id": sid, "instrument_id": "lead", "start_beat": "0",
-                    "duration_beats": "4", "midi": 60} for sid in ids],
-    }), draft)
+    score = instrumental_score(GenerateMusicArgs(style="ambient", duration_seconds=15))
     result = await music.prepare_programmatic_music(project=project, name="Evidence", score=score, execution_id="test")
     cached = await music.cached_music_preparation(owner_id=project.user_id, project_id=project.id, score=score)
     assert cached["snapshot"] == result["snapshot"] and cached["cache_hit"]
-    reference = {"draft_id": "storyboard", "draft_digest": canonical_json_hash(draft)}
-    request = {"draft_ref": reference, "name": "Evidence"}
+    request = {"name": "Evidence"}
     async with database() as db:
-        conversation = Conversation(user_id=project.user_id, project_id=project.id, ui_language="en", context={
-            "schema_version": 1, "items": [{"executed_arguments": draft, "candidate": {
-                "target_tool": "design_video", "candidate_id": reference["draft_id"],
-                "candidate_digest": reference["draft_digest"],
-            }}],
-        })
+        conversation = Conversation(user_id=project.user_id, project_id=project.id, ui_language="en")
         db.add(conversation)
         await db.commit()
         opening = await _create_message(db, conversation.id, "user", "帮我做一支宣传片")

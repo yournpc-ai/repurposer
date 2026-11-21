@@ -2,10 +2,7 @@
 
 只读纪律: this module holds ZERO write functions — every execute below only
 reads (a SELECT, or the web pair's read-only fetch) and renders compact
-model-facing text (the observation). The world's
-READINGS live here; the world's WRITINGS stay behind the three doors
-(edit ops / wiring ops / ``create_run``) — a read tool is never a doorbell
-for a write (简报 §3).
+model-facing text (the observation). The editor's writes use its native tools.
 
 Every execute is tenant-scoped to the turn's project (the same ownership
 check as the edit verbs' doors — a client-pinned id resolves only inside its

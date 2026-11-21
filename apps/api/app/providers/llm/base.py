@@ -35,9 +35,7 @@ class LLMError(Exception):
     """LLM provider API error.
 
     ``user_key`` names the localized user-facing line (pipeline/errors.py's
-    USER_ERROR_LINES) for when this surfaces on a failed step row — set at the
-    raise site by failure mode, propagated through wrapper layers via
-    ``propagate_key``."""
+    USER_ERROR_LINES) when Chat or a background task reports a failure."""
 
     def __init__(self, message: str, *, user_key: str | None = None) -> None:
         super().__init__(message)

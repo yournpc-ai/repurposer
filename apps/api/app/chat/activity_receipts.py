@@ -69,17 +69,6 @@ class VideoReviewReceipt(BaseModel):
     scope: VideoReviewScopeReceipt
 
 
-class VideoDraftReviewReceipt(BaseModel):
-    kind: Literal["video_draft_review"] = "video_draft_review"
-    evidence_id: str | None = None
-    draft_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    media_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    source_range_seconds: dict[str, float]
-    scene_ids: list[str] = Field(min_length=1)
-    continuous: Literal[True]
-
-
 class ComponentClipReceipt(BaseModel):
     clip_id: str = Field(min_length=1)
     program_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -179,7 +168,6 @@ class MusicSelectionReceipt(BaseModel):
 
 ActivityReceipt = (
     VideoReviewReceipt
-    | VideoDraftReviewReceipt
     | ComponentReceipt
     | VideoRevisionReceipt
     | SfxSearchReceipt

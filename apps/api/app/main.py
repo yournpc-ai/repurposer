@@ -80,8 +80,7 @@ app.add_middleware(
 
 class UiLocaleMiddleware:
     """Capture the browser's Accept-Language into the request-scoped
-    ContextVar (app.ui_locale) — create_run pins it into the plan so
-    display strings follow the UI language, not the material's. Pure ASGI
+    ContextVar (app.ui_locale) for localized Chat and Job feedback. Pure ASGI
     (BaseHTTPMiddleware's task hop makes ContextVar propagation fragile)."""
 
     def __init__(self, app):
