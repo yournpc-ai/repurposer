@@ -5,7 +5,7 @@ import asyncio
 import structlog
 
 from app.config import settings
-from app.models.database import AsyncSessionLocal
+from app.models.database import AsyncSessionLocal, require_current_schema
 from app.pipeline.asset_processing import claim_pending_asset, process_asset
 from app.distribution import (
     claim_due_publication,
@@ -143,6 +143,7 @@ async def run_worker() -> None:
     """Worker entrypoint: recover orphaned jobs, then poll forever."""
     from app.providers.llm import get_llm_client
 
+    await require_current_schema()
     llm = get_llm_client()
     logger.info(
         "worker_starting",

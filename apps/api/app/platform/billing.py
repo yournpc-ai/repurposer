@@ -1,26 +1,8 @@
-"""Wallet service — the credits wallet and ledger writers (ADR-055).
+"""Wallet and ledger writers for native media generation, export and payments.
 
-User-side currency layer of the credits system (docs/BILLING.md): ``metering``
-accounts the provider side in USD (``workflow_steps.cost``); this module
-accounts the user side in credits. One fold, two consumers — USD never
-reaches the UI.
-
-Charge cycle (BILLING §3): ``hold_run`` pre-charges the high-end fold at run
-birth → ``capture_step`` settles each successful step's actual at the
-metering merge point (same session, same commit — ADR-050) → ``release_run``
-returns the un-captured remainder at the run's terminal state. Failed/skipped
-steps never write a capture row (失败不扣费); NULL-estimate steps hold 0 but
-capture their actual — the balance may go negative (BILLING §5, by design).
-``purchase`` is written by the Stripe payment adapter (PAYMENTS); the ledger
-needs no money columns for it.
-
-Write discipline (create_notification precedent): writers flush, callers
-commit — a ledger row must commit atomically with the event that caused it
-(the signup here; the step's metering merge point for capture). Every ledger
-row carries an ``idempotency_key`` and every mutation is gated on that key's
-absence INSIDE the same UPDATE statement: dedupe is the UNIQUE constraint,
-never check-then-write code, and a duplicate call never poisons the caller's
-transaction with an IntegrityError.
+Job submission reserves the authorized amount. Its terminal transaction releases
+that reservation and captures the actual charge under job-specific idempotency
+keys. Unresolved external work retains its reservation for reconciliation.
 """
 
 from decimal import ROUND_HALF_UP, Decimal
@@ -34,7 +16,7 @@ from sqlalchemy import String, case, exists, func, literal, select, tuple_, unio
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tables import CreditTransaction, Wallet, WorkflowStep
+from app.models.tables import CreditTransaction, Wallet
 from app.platform.configs import get_config
 from app.providers.llm import price_text_tokens
 from app.providers.llm.minimax import price_tokens, price_units
@@ -195,44 +177,44 @@ async def _list_outgoing_events(
 ) -> tuple[list[CreditTransaction], tuple[datetime, UUID] | None, int]:
     """Paginate SEMANTIC spend events, not their raw hold/capture/release rows.
 
-    A run with at least one capture is one event, ordered by its latest ledger
+    A Job with at least one capture is one event, ordered by its latest ledger
     row; a negative non-run entry is one event. The page selects ten event keys
     first, then fetches every raw row for those runs so each fold is complete.
     """
-    run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
-    run_scoped = (
+    job_id = func.coalesce(CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
+    job_scoped = (
         CreditTransaction.kind.in_(["hold", "capture", "release"])
-        & run_id.is_not(None)
-        & (run_id != "")
+        & job_id.is_not(None)
+        & (job_id != "")
     )
     capture_total = func.sum(
         case((CreditTransaction.kind == "capture", CreditTransaction.amount), else_=0)
     )
-    run_events = (
+    job_events = (
         select(
-            run_id.label("event_key"),
+            job_id.label("event_key"),
             func.max(CreditTransaction.created_at).label("created_at"),
             # UUID is only a deterministic tie-breaker, not a chronological
             # value; text gives the union one portable cursor column type.
             func.max(CreditTransaction.id.cast(String)).label("cursor_id"),
-            literal(True).label("run_scoped"),
+            literal(True).label("job_scoped"),
         )
-        .where(CreditTransaction.user_id == user_id, run_scoped)
-        .group_by(run_id)
+        .where(CreditTransaction.user_id == user_id, job_scoped)
+        .group_by(job_id)
         .having(capture_total != 0)
     )
     single_events = select(
         CreditTransaction.id.cast(String).label("event_key"),
         CreditTransaction.created_at.label("created_at"),
         CreditTransaction.id.cast(String).label("cursor_id"),
-        literal(False).label("run_scoped"),
+        literal(False).label("job_scoped"),
     ).where(
         CreditTransaction.user_id == user_id,
-        ~run_scoped,
+        ~job_scoped,
         CreditTransaction.amount < 0,
         CreditTransaction.kind.notin_(["purchase", "grant", "refund"]),
     )
-    events = union_all(run_events, single_events).subquery()
+    events = union_all(job_events, single_events).subquery()
     total = int(
         await db.scalar(select(func.count()).select_from(events)) or 0
     )
@@ -252,13 +234,13 @@ async def _list_outgoing_events(
     if not page:
         return [], None, total
 
-    run_ids = [row.event_key for row in page if row.run_scoped]
-    single_ids = [UUID(row.event_key) for row in page if not row.run_scoped]
+    job_ids = [row.event_key for row in page if row.job_scoped]
+    single_ids = [UUID(row.event_key) for row in page if not row.job_scoped]
     raw_stmt = (
         select(CreditTransaction)
         .where(
             CreditTransaction.user_id == user_id,
-            (run_scoped & run_id.in_(run_ids)) | CreditTransaction.id.in_(single_ids),
+            (job_scoped & job_id.in_(job_ids)) | CreditTransaction.id.in_(single_ids),
         )
         .order_by(CreditTransaction.created_at.desc(), CreditTransaction.id.desc())
     )
@@ -291,14 +273,14 @@ async def list_transactions(
 
     stmt = select(CreditTransaction).where(CreditTransaction.user_id == user_id)
     if direction == "in":
-        run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
-        run_scoped = (
+        job_id = func.coalesce(CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
+        job_scoped = (
             CreditTransaction.kind.in_(["hold", "capture", "release"])
-            & run_id.is_not(None)
-            & (run_id != "")
+            & job_id.is_not(None)
+            & (job_id != "")
         )
         stmt = stmt.where(
-            ~run_scoped
+            ~job_scoped
             & (
                 CreditTransaction.kind.in_(["purchase", "grant", "refund"])
                 | (CreditTransaction.amount >= 0)
@@ -325,43 +307,12 @@ async def list_transactions(
 
 
 async def held(db: AsyncSession, user_id: UUID) -> int:
-    """Currently frozen credits = Σ max(0, holds − releases).
-
-    Capture releases the portion of the reservation it consumes atomically;
-    terminal settlement releases the rest. Captures themselves are actual
-    charges, so subtracting them again would double-count consumption.
-
-    Aggregates in Python, not SQL: the group key is a JSONB extraction, and
-    grouping by a parameterised JSONB expression trips Postgres's
-    SELECT/GROUP-BY identity rule (same text, different bind positions =
-    mismatch → "column ref must appear in GROUP BY"). The per-user ledger is
-    small; a plain filtered scan is cheap and honest.
-    """
-    rows = (
-        await db.execute(
-            select(CreditTransaction.kind, CreditTransaction.amount,
-                   CreditTransaction.ref).where(
-                CreditTransaction.user_id == user_id,
-                CreditTransaction.kind.in_(["hold", "capture", "release"]),
-            )
-        )
-    ).all()
-    per_run: dict[str, dict[str, int]] = {}
-    settled: set[str] = set()
-    for kind, amount, ref in rows:
-        run_id = (ref or {}).get("run_id") or (ref or {}).get("export_id") or (ref or {}).get("media_job_id")
-        if not run_id:
-            continue
-        if kind == "release" and not (ref or {}).get("step_id"):
-            settled.add(str(run_id))
-        sums = per_run.setdefault(str(run_id), {})
-        sums[kind] = sums.get(kind, 0) + int(amount)
-    return sum(
-        # max also recognizes legacy captures made before atomic hold releases.
-        max(0, abs(sums.get("hold", 0)) - max(
-            sums.get("release", 0), abs(sums.get("capture", 0))))
-        for run_id, sums in per_run.items() if run_id not in settled
-    )
+    """Outstanding reservations from the same wallet ledger used for settlement."""
+    amount = await db.scalar(select(func.sum(CreditTransaction.amount)).where(
+        CreditTransaction.user_id == user_id,
+        CreditTransaction.kind.in_(("hold", "release")),
+    ))
+    return -int(amount or 0)
 
 
 async def check_hold(db: AsyncSession, *, user_id: UUID, required: int) -> Wallet:
@@ -369,7 +320,7 @@ async def check_hold(db: AsyncSession, *, user_id: UUID, required: int) -> Walle
 
     Raises CreditsInsufficientError when the balance can't cover it — a
     negative balance therefore fails every hold, including a free (0) one
-    (BILLING §5: gate at the start, never mid-flight). ``hold_run`` re-checks
+    (BILLING §5: gate at the start, never mid-flight). The reservation writer re-checks
     atomically inside its UPDATE; this probe exists so the birthplace rejects
     before mutating anything, and for future UI previews.
     """
@@ -377,28 +328,6 @@ async def check_hold(db: AsyncSession, *, user_id: UUID, required: int) -> Walle
     if wallet.balance < required:
         raise CreditsInsufficientError(balance=int(wallet.balance), required=required)
     return wallet
-
-
-async def hold_run(
-    db: AsyncSession, *, user_id: UUID, run_id: UUID, amount: int
-) -> CreditTransaction | None:
-    """Pre-charge the high-end estimate fold at run birth (idem
-    ``run:{id}:hold``). Amount 0 → no row (nothing moved). The sufficiency
-    check re-fires inside the UPDATE (``balance >= amount``), so a concurrent
-    hold that drained the wallet between ``check_hold`` and here turns into
-    the same CreditsInsufficientError, never a silent overdraw."""
-    if amount <= 0:
-        return None
-    return await _mutate(
-        db,
-        user_id=user_id,
-        kind="hold",
-        amount=-amount,
-        ref={"run_id": str(run_id)},
-        idem=f"run:{run_id}:hold",
-        note="Run estimate hold",
-        require_balance=amount,
-    )
 
 
 async def purchase_credits(
@@ -427,96 +356,6 @@ async def purchase_credits(
         idem=f"stripe:{provider_event_id}:purchase",
         note="Credit package purchase",
     )
-
-
-async def capture_step(
-    db: AsyncSession, *, user_id: UUID, node: WorkflowStep
-) -> CreditTransaction | None:
-    """Settle one successful step's actual (called at the metering merge
-    point, same write). Amount = credits(node.cost total) − credits already
-    captured for this step:
-
-    - the common case writes one row at idem ``step:{id}:capture`` holding
-      the step's full accumulated cost — transient retries included (成功收
-      全量, BILLING §3);
-    - a QualityBounce re-run reaches the success branch a second time with
-      the SAME step-level key already taken; its row lands at
-      ``step:{id}:capture:{attempt}`` carrying only the delta beyond what
-      was captured, so the ledger still reconciles with workflow_steps.cost
-      (× the ratio) instead of silently eating the re-run.
-
-    Failed/skipped steps never reach here (失败不扣费); a step with nothing
-    metered (cost NULL) or a credit amount that rounds to 0 writes no row —
-    the ledger records money movement, and zero is not movement.
-    """
-    # Serialize reservation consumption with other captures and finalization.
-    await db.execute(select(Wallet).where(Wallet.user_id == user_id).with_for_update())
-    usd_total = cost_usd(node.cost)
-    if usd_total <= 0:
-        return None
-    total_credits = await credits_for_cost(db, usd_total)
-    prior = await _capture_sum_for_step(db, user_id=user_id, step_id=node.id)
-    amount = total_credits - prior
-    if amount <= 0:
-        return None
-    idem = (
-        f"step:{node.id}:capture"
-        if prior == 0
-        else f"step:{node.id}:capture:{node.attempt or 0}"
-    )
-    held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=node.run_id)
-    if node.kind in {"prepare_music", "prepare_visual_assets", "prepare_narration", "produce_video", "render"}:
-        from app.models.tables import WorkflowRun
-
-        context = await db.scalar(select(WorkflowRun.context).where(WorkflowRun.id == node.run_id))
-        if (context or {}).get("editor_media"):
-            # A direct generation authorizes one step. Provider overages remain in node.cost.
-            amount = min(amount, max(0, held_amount - released))
-            if amount == 0:
-                return None
-    covered = min(amount, max(0, held_amount - released))
-    if covered:
-        await _mutate(
-            db, user_id=user_id, kind="release", amount=covered,
-            ref={"run_id": str(node.run_id), "step_id": str(node.id)},
-            idem=f"{idem}:hold-release", note="Reservation applied to step charge",
-        )
-    return await _mutate(
-        db,
-        user_id=user_id,
-        kind="capture",
-        amount=-amount,
-        ref={"run_id": str(node.run_id), "step_id": str(node.id)},
-        idem=idem,
-        note=f"Step {node.kind} capture",
-    )
-
-
-async def release_run(
-    db: AsyncSession, *, user_id: UUID, run_id: UUID
-) -> CreditTransaction | None:
-    """Release the remaining reservation, not the captured charge twice.
-
-    Every ledger amount changes the wallet. Capture already debits actual
-    cost and returns its covered reservation in the same transaction.
-    """
-    await db.execute(select(Wallet).where(Wallet.user_id == user_id).with_for_update())
-    held_amount, released = await _run_hold_release_sums(db, user_id=user_id, run_id=run_id)
-    remainder = max(0, held_amount - released)
-    if remainder == 0:
-        return None
-    return await _mutate(
-        db,
-        user_id=user_id,
-        kind="release",
-        amount=remainder,
-        ref={"run_id": str(run_id)},
-        idem=f"run:{run_id}:release",
-        note="Run hold release",
-    )
-
-
-# ---- internals ----------------------------------------------------------------
 
 
 async def _mutate(
@@ -604,38 +443,20 @@ async def _txn_by_idem(db: AsyncSession, idem: str) -> CreditTransaction | None:
     ).scalar_one_or_none()
 
 
-async def _capture_sum_for_step(db: AsyncSession, *, user_id: UUID, step_id: UUID) -> int:
-    """Credits already captured for a step (bounce-delta bookkeeping)."""
-    total = (
-        await db.execute(
-            select(func.coalesce(func.sum(CreditTransaction.amount), 0)).where(
-                CreditTransaction.user_id == user_id,
-                CreditTransaction.kind == "capture",
-                CreditTransaction.ref["step_id"].as_string() == str(step_id),
-            )
-        )
-    ).scalar_one()
-    return abs(int(total))
-
-
-async def _run_hold_release_sums(
-    db: AsyncSession, *, user_id: UUID, run_id: UUID
-) -> tuple[int, int]:
-    """(held, released) reservation totals; captures are actual charges."""
-    rows = await db.execute(
-        select(
-            CreditTransaction.kind,
-            func.coalesce(func.sum(CreditTransaction.amount), 0),
-        )
-        .where(
-            CreditTransaction.user_id == user_id,
-            CreditTransaction.kind.in_(["hold", "release"]),
-            CreditTransaction.ref["run_id"].as_string() == str(run_id),
-        )
-        .group_by(CreditTransaction.kind)
-    )
-    sums = {kind: int(total) for kind, total in rows}
-    return abs(sums.get("hold", 0)), sums.get("release", 0)
+def settled_job_amounts(job, result, *, export):
+    """Expected signed ledger totals for a receipt that proves settlement."""
+    if job.status not in {"succeeded", "failed", "cancelled"}:
+        return None
+    succeeded = job.status == "succeeded"
+    if result.get("status") != ("available" if succeeded else job.status):
+        return None
+    charged = result.get("charged_credits")
+    reserved = job.authorized_credits
+    if (result.get("reserved_credits") != 0 or type(charged) is not int
+            or not 0 <= charged <= reserved or (not succeeded and charged != 0)
+            or (export and succeeded and charged != reserved)):
+        return None
+    return {"hold": -reserved, "release": reserved, "capture": -charged}
 
 
 async def hold_export(db, *, user_id, export_id, credits):

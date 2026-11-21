@@ -12,9 +12,9 @@ from app.config import settings
 from app.models.database import Base
 from app.models.tables import (
     Composition, CompositionVersion, CreditTransaction, Output, Project, User, Wallet,
-    WorkflowRun, WorkflowStep, Conversation, Message,
+    Conversation, Message,
 )
-from app.models.schemas import ProjectStatus, RenderStatus, WorkflowStatus
+from app.models.schemas import ProjectStatus, RenderStatus
 from app.platform import billing
 
 pytestmark = pytest.mark.asyncio
@@ -84,83 +84,6 @@ def pin_video_output(output, composition, version, provenance):
         "family": "video", "tracks": [], "provenance": provenance,
     }
     return output
-
-
-@pytest.mark.parametrize("reservation,charges", [(191, [177]), (191, []), (191, [120, 130]), (0, [177])])
-async def test_capture_consumes_reservation_once(database, monkeypatch, reservation, charges):
-    async def price(_db, cost):
-        return round(cost * 1000)
-    monkeypatch.setattr(billing, "credits_for_cost", price)
-    uid, rid = await owner(database), uuid4()
-    async with database() as db:
-        await billing.hold_run(db, user_id=uid, run_id=rid, amount=reservation)
-        await db.commit()
-    nodes = [SimpleNamespace(id=uuid4(), run_id=rid, kind="produce_video", attempt=0,
-                             cost={"fixed_cost": amount / 1000}) for amount in charges]
-
-    async def capture(node):
-        async with database() as db:
-            await billing.capture_step(db, user_id=uid, node=node)
-            await db.commit()
-
-    # Parallel steps and duplicate delivery of the same success callback.
-    await asyncio.gather(*(capture(n) for n in nodes for _ in range(2)))
-    async with database() as db:
-        actual = sum(charges)
-        wallet = await db.get(Wallet, uid)
-        assert wallet.balance == 1000 - max(reservation, actual)
-        assert await billing.held(db, uid) == max(0, reservation - actual)
-        await billing.release_run(db, user_id=uid, run_id=rid)
-        await billing.release_run(db, user_id=uid, run_id=rid)
-        await db.commit()
-        await db.refresh(wallet)
-        assert wallet.balance == 1000 - actual
-        assert await billing.held(db, uid) == 0
-        delta = await db.scalar(select(func.coalesce(func.sum(CreditTransaction.amount), 0)))
-        assert wallet.balance == 1000 + delta
-
-
-async def test_legacy_repair_is_dry_by_default_and_idempotent(database, monkeypatch):
-    from scripts import repair_credit_reservations as repair
-    uid, rid = await owner(database), uuid4()
-    monkeypatch.setattr(repair, "AsyncSessionLocal", database)
-    async with database() as db:
-        for kind, amount in [("hold", -191), ("capture", -177), ("release", 14)]:
-            await billing._mutate(db, user_id=uid, kind=kind, amount=amount,
-                                  ref={"run_id": str(rid)}, idem=f"legacy:{rid}:{kind}", note="test")
-        await db.commit()
-    await repair.main(str(rid), False)
-    async with database() as db:
-        assert (await db.get(Wallet, uid)).balance == 646
-    await repair.main(str(rid), True)
-    await repair.main(str(rid), True)
-    async with database() as db:
-        assert (await db.get(Wallet, uid)).balance == 823
-        assert await billing.held(db, uid) == 0
-
-
-async def test_capture_delta_and_rollback(database, monkeypatch):
-    async def price(_db, cost):
-        return round(cost * 1000)
-    monkeypatch.setattr(billing, "credits_for_cost", price)
-    uid, rid = await owner(database), uuid4()
-    node = SimpleNamespace(id=uuid4(), run_id=rid, kind="produce_video", attempt=0,
-                           cost={"fixed_cost": .100})
-    async with database() as db:
-        await billing.hold_run(db, user_id=uid, run_id=rid, amount=191)
-        await db.commit()
-        await billing.capture_step(db, user_id=uid, node=node)
-        await db.rollback()  # no reservation refund can escape a failed transaction
-        assert await billing.held(db, uid) == 191
-        await billing.capture_step(db, user_id=uid, node=node)
-        await db.commit()
-        node.cost, node.attempt = {"fixed_cost": .230}, 1
-        await billing.capture_step(db, user_id=uid, node=node)
-        await billing.capture_step(db, user_id=uid, node=node)
-        await billing.release_run(db, user_id=uid, run_id=rid)
-        await db.commit()
-        assert (await db.get(Wallet, uid)).balance == 770
-        assert await billing.held(db, uid) == 0
 
 
 async def _open_turn(database, uid):
@@ -463,7 +386,7 @@ async def test_stop_rereads_preloaded_row_after_settlement(database):
 
 
 @pytest.mark.asyncio
-async def test_stop_winning_final_commit_leaves_no_run_or_hold(database):
+async def test_stop_winning_final_commit_rolls_back_the_reservation(database):
     from app.chat.service import (
         TurnStopped,
         _lock_turn_for_final_commit,
@@ -490,17 +413,11 @@ async def test_stop_winning_final_commit_leaves_no_run_or_hold(database):
         ))
 
     async with database() as db:
-        run = WorkflowRun(project_id=project_id, status=WorkflowStatus.PENDING)
-        db.add(run)
-        await db.flush()
-        await billing.hold_run(db, user_id=uid, run_id=run.id, amount=50)
+        await billing.hold_media(db, user_id=uid, job_id=uuid4(), credits=50)
         with pytest.raises(TurnStopped):
             await _lock_turn_for_final_commit(db, turn_id)
         await db.rollback()
     async with database() as db:
-        assert list((await db.scalars(select(WorkflowRun).where(
-            WorkflowRun.project_id == project_id
-        ))).all()) == []
         assert await billing.held(db, uid) == 0
 
 

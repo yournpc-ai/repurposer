@@ -1,0 +1,532 @@
+{
+  "database": "127.0.0.1:5966/rep_6d_qmopb4",
+  "api": "127.0.0.1:19861",
+  "worker_processes": 2,
+  "worker_attribution": "attempt is the persisted claim count. Individual worker PIDs were not recorded per claim.",
+  "requests": 41,
+  "responses": {
+    "200": 39,
+    "201": 1,
+    "404": 1
+  },
+  "duration_s": 62.836,
+  "people": [
+    {
+      "role": "edit1",
+      "user": "2c008301-4cd5-4062-9134-b98f4e374e81",
+      "project": "817d527c-ee20-4d32-9ebf-b07e3babd367",
+      "turn": "640ef7ca-0ff4-4b6b-b6ff-53b57fc4b2b8",
+      "start": 0.017,
+      "end": 8.147,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 5,
+        "assistant.row.append": 2,
+        "assistant.activity": 4,
+        "assistant.row.update": 2,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fe9beb0675a5baeba443",
+          "tool_name": "inspect_timeline"
+        },
+        {
+          "call_id": "call_01a1fe9beef270b2aa17572b",
+          "tool_name": "scale"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "a9847b10-5fa6-4ee0-8899-ac3a52b53eb3",
+          "content_digest": "c9c53688ceb8d15ebee44a8ad23235a461bf46349ff6c2ca0d4099935c4a066b"
+        },
+        {
+          "version": 2,
+          "id": "612555d5-3fa3-45a6-ba27-10ebe84fbf61",
+          "content_digest": "1d4eb152a5b7331b4917715fdfbf9c47bda7bab92b15b61112d4fb7ff11dd044"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "edit2",
+      "user": "34673b94-a29a-46c1-919e-ed8e48d784e5",
+      "project": "c7305882-ee70-44b1-a903-3fd4513bd5e1",
+      "turn": "931a72a0-66ba-4936-9463-6f681be462f3",
+      "start": 0.047,
+      "end": 6.408,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 2,
+        "assistant.row.append": 2,
+        "assistant.activity": 4,
+        "assistant.row.update": 2,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fe9bea73709a885a7c8a",
+          "tool_name": "inspect_timeline"
+        },
+        {
+          "call_id": "call_01a1fe9bee1275b69423792f",
+          "tool_name": "split_clip"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "8d9cb7af-b98f-4517-8b53-f75de01c37e1",
+          "content_digest": "5f2037b3d992005880456a536627dc7559287ffa347209004b2fbc3af74ff699"
+        },
+        {
+          "version": 2,
+          "id": "e346535b-ec21-42b7-9a39-ce02b8d90fc2",
+          "content_digest": "f1c4c9fe4279073a5f694810a86fbbf933790fab56a1fe0b7a760f20b99ac074"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "media1",
+      "user": "94ec302d-ef03-476e-b2ee-c4809f58d87c",
+      "project": "9ac7ec98-b354-4188-9317-bcf1ab6b61ce",
+      "turn": "22bf0c00-a72f-462a-b3f5-5d61029cdf03",
+      "start": 0.05,
+      "end": 62.836,
+      "wallet": {
+        "balance": 997,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 5,
+        "assistant.row.append": 4,
+        "assistant.activity": 2,
+        "assistant.row.update": 1,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_f0ad4a9e44484e7c809e85de",
+          "tool_name": "generate_voice"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": [
+        {
+          "id": "36614f9c-5fbc-59e4-bbc0-b5e840ce7804",
+          "tool": "generate_voice",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 3,
+          "receipt": "e5bace3f-e9ea-4eac-8d70-ea0315f6585c",
+          "call_id": "call_f0ad4a9e44484e7c809e85de",
+          "facts": {
+            "role": "narration",
+            "digest": "b4bb0653d545bd3cf4b48c0de481166b2669584b6c0eafa9d4db39743c8e2283",
+            "status": "available",
+            "snapshot_id": "9a7f4a96-944d-5496-bc1d-2adc7d921063",
+            "charged_credits": 3,
+            "duration_seconds": 1.66025,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -3
+            ],
+            [
+              "release",
+              3
+            ],
+            [
+              "capture",
+              -3
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "media2",
+      "user": "0ea4636f-b1a9-40b2-a74c-4d2b3b98c3c9",
+      "project": "c187a154-792a-48bc-b8d2-f852c2283966",
+      "turn": "a47474b2-faee-4611-8329-3c9a517ed123",
+      "start": 0.054,
+      "end": 12.469,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.delta": 3,
+        "assistant.interim_prose": 1,
+        "assistant.thinking": 1,
+        "assistant.row.append": 4,
+        "assistant.activity": 2,
+        "assistant.row.update": 1,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fe9beaee702aa123d74a",
+          "tool_name": "generate_music"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": [
+        {
+          "id": "f51684a7-d29e-540d-9333-8967d9238bed",
+          "tool": "generate_music",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 0,
+          "receipt": "8837ebcd-f76c-4ada-9d5c-8ab8eff07dd7",
+          "call_id": "call_01a1fe9beaee702aa123d74a",
+          "facts": {
+            "role": "music",
+            "digest": "21bf2332d74c325ec2916b602d589c35bd4d8c8d46539abc330ff6a067941aaf",
+            "status": "available",
+            "snapshot_id": "dda2743c-e342-5cff-8b47-98959f60bb46",
+            "charged_credits": 0,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": []
+        }
+      ]
+    },
+    {
+      "role": "export1",
+      "user": "c9f8bbed-936b-4a1b-96e3-069a4c2e7dd6",
+      "project": "180e419d-d499-43cd-ae7d-4ca5fe53a173",
+      "turn": "580eae0f-3bcc-4cf4-bc8b-d25673b63097",
+      "start": 0.058,
+      "end": 27.229,
+      "wallet": {
+        "balance": 994,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 6,
+        "assistant.row.append": 11,
+        "assistant.row.update": 6,
+        "assistant.activity": 10,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_454234a0d84c4682aed3a2a0",
+          "tool_name": "inspect_timeline",
+          "call_state": "completed",
+          "call_index": 0,
+          "group_id": "ed784087-703b-40a9-bad8-73a669f83572"
+        },
+        {
+          "call_id": "call_5c30544286154f38b6e83c4f",
+          "tool_name": "preview_range",
+          "call_state": "completed",
+          "call_index": 1,
+          "group_id": "ed784087-703b-40a9-bad8-73a669f83572"
+        },
+        {
+          "call_id": "call_function_wqec96tshbo8_1",
+          "tool_name": "export_video"
+        },
+        {
+          "call_id": "call_function_fc28mr1vdo34_1",
+          "tool_name": "deliver_video"
+        }
+      ],
+      "delivery_refs": [
+        [
+          "74c22a5b-e7df-5e69-97f5-ae2ceddc1d92"
+        ]
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "f7aad44e-1cd5-4067-8a9f-dd7539335b60",
+          "content_digest": "9237ce1c695d01ed41cbe227791c5c38e36c670e98fd08f016b6b91101a69bd6"
+        }
+      ],
+      "jobs": [
+        {
+          "id": "74c22a5b-e7df-5e69-97f5-ae2ceddc1d92",
+          "tool": "export_video",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 6,
+          "receipt": "667c9ec7-7fbf-4c62-9951-c5d735f2a2ff",
+          "call_id": "call_function_wqec96tshbo8_1",
+          "facts": {
+            "role": "export",
+            "status": "available",
+            "output_id": "74c22a5b-e7df-5e69-97f5-ae2ceddc1d92",
+            "charged_credits": 6,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -6
+            ],
+            [
+              "release",
+              6
+            ],
+            [
+              "capture",
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "export2",
+      "user": "c2a791b4-740a-4c17-a107-51aff28e675f",
+      "project": "9c0cf6fd-d58f-4530-ab4f-3645a826c5d1",
+      "turn": "8277d50b-3d2d-4eea-be19-f5af8145fdf6",
+      "start": 0.061,
+      "end": 31.496,
+      "wallet": {
+        "balance": 994,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 5,
+        "assistant.row.append": 10,
+        "assistant.activity": 10,
+        "assistant.row.update": 4,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_d7bb456e24244933915adf2f",
+          "tool_name": "inspect_timeline"
+        },
+        {
+          "call_id": "call_e54541d939464c8d8f303932",
+          "tool_name": "preview_range"
+        },
+        {
+          "call_id": "call_function_pp8r2nc5yaay_1",
+          "tool_name": "export_video"
+        },
+        {
+          "call_id": "call_function_fcjgvh4sv6s0_1",
+          "tool_name": "deliver_video"
+        }
+      ],
+      "delivery_refs": [
+        [
+          "458f984f-31f1-53bc-82c5-92b96bf8351f"
+        ]
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "id": "3c991da8-7475-46d6-a25e-df99f42586e9",
+          "content_digest": "0386e904996d6c7ad4e88e7961e5cafd643d5b1e2b05d52a028f845d901bb027"
+        }
+      ],
+      "jobs": [
+        {
+          "id": "458f984f-31f1-53bc-82c5-92b96bf8351f",
+          "tool": "export_video",
+          "status": "succeeded",
+          "claims": 1,
+          "authorized": 6,
+          "receipt": "fd23d223-b7bc-4849-b1e6-3142e24da213",
+          "call_id": "call_function_pp8r2nc5yaay_1",
+          "facts": {
+            "role": "export",
+            "status": "available",
+            "output_id": "458f984f-31f1-53bc-82c5-92b96bf8351f",
+            "charged_credits": 6,
+            "duration_seconds": 3.0,
+            "reserved_credits": 0
+          },
+          "ledger": [
+            [
+              "hold",
+              -6
+            ],
+            [
+              "release",
+              6
+            ],
+            [
+              "capture",
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "role": "preview",
+      "user": "59a89b76-026f-40df-b063-85943722e990",
+      "project": "1ed5a043-d648-433c-a21e-224a322719ed",
+      "turn": "48552e9f-b971-465b-a13d-a653b0f3b33c",
+      "start": 0.065,
+      "end": 20.487,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 11,
+        "assistant.row.append": 2,
+        "assistant.row.update": 4,
+        "assistant.activity": 4,
+        "turn.completed": 1
+      },
+      "requests": 3,
+      "opening_state": "settled",
+      "tools": [
+        {
+          "call_id": "call_01a1fe9beafe76d3b06a1841",
+          "tool_name": "inspect_timeline",
+          "call_state": "completed",
+          "call_index": 0,
+          "group_id": "51bdd567-6eb0-4394-a301-797c1c6f38ae"
+        },
+        {
+          "call_id": "call_01a1fe9beb1971c78c4f6d70",
+          "tool_name": "preview_range",
+          "call_state": "completed",
+          "call_index": 1,
+          "group_id": "51bdd567-6eb0-4394-a301-797c1c6f38ae"
+        }
+      ],
+      "delivery_refs": [],
+      "versions": [
+        {
+          "version": 1,
+          "id": "6def7bb8-aaf3-49b9-bd5d-0d97154b3586",
+          "content_digest": "0a926f765f4d739c5f00d527475ade0c1966888e2a18e21f120465d46f8f17ec"
+        }
+      ],
+      "jobs": []
+    },
+    {
+      "role": "asset",
+      "user": "640b94db-56ef-4d90-a0f2-e04ca57bf517",
+      "project": "11d684b8-c962-4947-af3b-5fbdd759721a",
+      "start": 0.069,
+      "end": 4.035,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "asset_status": "completed",
+      "requests": 7,
+      "versions": [],
+      "jobs": []
+    },
+    {
+      "role": "stop",
+      "user": "db9e4b34-8bde-4a88-b24d-81b54f2426fa",
+      "project": "ac6c1834-4e43-41e9-8082-196f244f06f4",
+      "turn": "c304eb6f-578c-493c-9af2-30300e8456a9",
+      "start": 0.073,
+      "end": 2.745,
+      "wallet": {
+        "balance": 1000,
+        "held": 0
+      },
+      "stopped": {
+        "accepted": true,
+        "turn_state": "retracted"
+      },
+      "events": {
+        "turn.started": 1,
+        "assistant.thinking": 6
+      },
+      "requests": 4,
+      "opening_state": null,
+      "tools": [],
+      "delivery_refs": [],
+      "versions": [],
+      "jobs": []
+    },
+    {
+      "role": "history",
+      "user": "c99df217-02c0-473f-b946-834d08dbdffc",
+      "project": "02529de3-1e32-4d4d-b0f5-0f484e9814e0",
+      "start": 0.077,
+      "end": 5.163,
+      "wallet": {
+        "balance": 977,
+        "held": 0
+      },
+      "foreign_http": 404,
+      "outputs": [
+        "7cbf6789-079b-5052-9ae9-2d571ec558e3",
+        "4ae4fa5d-e0db-5de4-87c4-000db535720f"
+      ],
+      "requests": 9,
+      "versions": [
+        {
+          "version": 1,
+          "id": "425f8240-ab06-40e6-a4e8-9ad20645c2f3",
+          "content_digest": "a9ba57e08517fad5884a94727ac5b59972e6f5cda4740963cae09ebf0e8dee28"
+        },
+        {
+          "version": 2,
+          "id": "dfa9db0c-427d-4bf0-9154-6176daae8781",
+          "content_digest": "79649287c04f9ba04612c7cca3c456fd0eae54c53cf0482fbac2035f81862a81"
+        },
+        {
+          "version": 3,
+          "id": "495cb0a5-1e39-44f3-8bc4-b776fd9e1c9c",
+          "content_digest": "9edb75ce0a1426e123a762cd3f0eae7e14dd2e80e5db21327386f1dcb359c16d"
+        }
+      ],
+      "jobs": []
+    }
+  ],
+  "schema": "j6d04_retire_workflow",
+  "absent_tables": [
+    "workflow_runs",
+    "workflow_steps"
+  ],
+  "jobs": 4,
+  "claims": 4,
+  "capture": 15,
+  "setup": "Five preparations used native Chat. edit2 needed the same create request twice before saving its starting version. Setup requests are excluded from the simultaneous window."
+}

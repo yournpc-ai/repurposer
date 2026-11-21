@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 
 from app.chat import editor_media, service
 from app.models.schemas import OptionAnswerRequest, ChatTurnStopRequest
-from app.models.tables import Conversation, CreditTransaction, MediaJob, Message, Project, User, WorkflowRun, WorkflowStep
+from app.models.tables import Conversation, CreditTransaction, MediaJob, Message, Project, User
 from app.tools.music.score import GenerateMusicArgs
 from test.core.test_compositions import _create, _project, _snapshots, _user
 
@@ -57,8 +57,6 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
         }
         with pytest.raises(ValueError, match="different parameters"):
             await submit(turn, args.model_copy(update={"bpm": 92}))
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
-        assert await db.scalar(select(func.count()).select_from(WorkflowStep)) == 0
         assert await db.scalar(select(func.count()).select_from(MediaJob)) == 1
         assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
         assert (await db.get(MediaJob, twin[0].intent["media_job"])).status == "cancelled"
@@ -80,14 +78,13 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
         receipt, settled = ask.outcome
         assert observation.awaiting_authorization and settled is None
         await db.commit()
-        assert receipt.question["kind"] == "question" and receipt.workflow_run_id is None
+        assert receipt.question["kind"] == "question"
         decline, _ = await service.answer_question(db, owner, receipt.id, OptionAnswerRequest(kind="option", option_id="decline"))
         assert decline.intent["media_result"] == {"status": "declined"}
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
         permit = await submit(await opening())
         accepted = await editor_media.answer_media_permission(db, project, permit, True)
         await db.commit()
-        assert accepted.workflow_run_id is None and accepted.intent["media_job"]
+        assert accepted.intent["media_job"]
         assert all(v == 0 for v in await db.scalars(select(CreditTransaction.amount).where(
             CreditTransaction.kind.in_(["hold", "capture", "release"]))))
 
@@ -194,7 +191,6 @@ async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(datab
             with pytest.raises(CreditsInsufficientError):
                 await editor_media.answer_media_permission(db, project, permission, True)
             await db.rollback()
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
         assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(
             CreditTransaction.kind.in_(["hold", "capture"]))) == 0
     speech = SpeechObject(kind="speech", object_id="obj_voice", **voice.model_dump())
@@ -278,17 +274,15 @@ async def test_export_quote_replay_competing_openings_and_stop(database, monkeyp
         turn = await opening()
         first, duplicate = await asyncio.gather(submit(turn), submit(turn))
         assert first.id == duplicate.id and "MP4" in first.content
-        assert not await db.scalar(select(WorkflowRun.id))
         assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))
         execution = await editor_media.answer_media_permission(db, project, await db.get(Message, first.id), True)
         await db.commit()
         replay = await submit(turn)
-        assert replay.id == execution.id and replay.workflow_run_id is None
+        assert replay.id == execution.id
         user.settings = {"confirm_execution": "auto"}
         competing = await opening()
         with pytest.raises(ValueError):
             await submit(competing)
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
         assert await db.scalar(select(func.count()).select_from(ExportJob)) == 1
         assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(CreditTransaction.kind == "hold")) == 1
         _, newer, _ = await apply_composition_edits(db, owner_id=owner, composition_id=comp.id,
@@ -331,8 +325,7 @@ async def test_auto_account_needs_permission_for_unrequested_export(database, mo
         receipt = await editor_media.submit_editor_media(
             turn, "export_video", ExportVideoArgs(), comp, version, "unrequested-export",
         )
-        assert receipt.question and receipt.workflow_run_id is None
-        assert not await db.scalar(select(WorkflowRun.id))
+        assert receipt.question
         assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))
 
 

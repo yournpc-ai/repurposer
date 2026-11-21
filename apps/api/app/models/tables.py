@@ -31,7 +31,6 @@ from app.models.schemas import (
     ProjectStatus,
     PublicationState,
     RenderStatus,
-    WorkflowStatus,
     canonical_json_hash,
 )
 
@@ -237,85 +236,6 @@ class PageReading(Base):
     fetched_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
 
 
-class WorkflowRun(Base):
-    """Workflow run table — run-level state machine only.
-
-    Per-step state lives in workflow_steps (RunPlan); ``context`` is the
-    plan (normalized intent), ``progress`` aggregates node states. The retired
-    current_step string is gone (query running nodes instead).
-    """
-
-    __tablename__ = "workflow_runs"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
-    status = Column(Enum(WorkflowStatus), default=WorkflowStatus.PENDING)
-    context = Column(JSON, default=dict)
-    progress = Column(Integer, default=0)
-    error = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
-class WorkflowStep(Base):
-    """RunPlan node: one step of a run's execution plan (ADR-028).
-
-    The plan graph is materialized at run creation by the orchestrator —
-    topology is code-determined, never LLM-chosen. ``inputs`` is the edge list
-    (upstream node ids); ``spec`` carries DB-opaque params (instruction,
-    language, counts, target ids); ``output_refs`` lists produced outputs rows;
-    ``cost`` is the per-node metering ledger (ADR-025, written by
-    app/metering.py). Step status transitions are row-level writes — the
-    retired run-context JSON blob + process lock is gone.
-    """
-
-    __tablename__ = "workflow_steps"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    run_id = Column(
-        UUID(as_uuid=True),
-        # DEFERRED (D9, ADR-050): fan-out runners INSERT steps mid-run inside
-        # a long-lived Session 2; an immediate FK check would KEY-SHARE-lock
-        # the run row for the whole session and stall run-row updaters
-        # (maybe_finalize / status flips) into cross-session wedges. The check
-        # fires at COMMIT — same integrity, no mid-run lock window.
-        ForeignKey("workflow_runs.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"),
-        nullable=False,
-    )
-    kind = Column(String(50), nullable=False)
-    status = Column(String(20), nullable=False, default="pending")
-    seq = Column(Integer, nullable=False, default=0)
-    # DAG edges: list of upstream node ids (str UUID).
-    inputs = Column(JSONB, nullable=False, default=list)
-    spec = Column(JSONB, nullable=False, default=dict)
-    # Produced outputs row ids (str UUID).
-    output_refs = Column(JSONB, nullable=False, default=list)
-    # {prompt_tokens, completion_tokens, fixed_cost} — metering ledger.
-    cost = Column(JSONB, nullable=True)
-    # {prompt_tokens: [low, high], completion_tokens: [low, high], units: {…}}
-    # — the node's compile-time self-quotation (N-34); NULL = never estimated
-    # (legacy rows, runtime fan-out steps, quantities unknowable at compile).
-    estimate = Column(JSONB, nullable=True)
-    error = Column(Text, nullable=True)
-    attempt = Column(Integer, nullable=False, default=0)
-    # Fencing token (ADR-079): minted at claim (jobs.claim_ready_node),
-    # NULLed on every authority-losing path (reap / retry re-pend /
-    # QualityBounce reset / runtime-fanout re-pend / Suspend park / resume /
-    # cascade-skip). execute_step's terminal tails predicate on it
-    # (``WHERE id=:id AND claim_token=:mine`` + rowcount) — a stale
-    # executor's terminal write matches 0 rows and is discarded wholesale.
-    claim_token = Column(UUID(as_uuid=True), nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-    __table_args__ = (
-        Index("ix_workflow_steps_run_status", "run_id", "status"),
-        Index("ix_workflow_steps_kind_status", "kind", "status"),
-    )
-
-
 class SourceSnapshot(Base):
     """One immutable capture of an asset's content (ADR-145, VIDEO_PROJECT §9).
 
@@ -495,28 +415,16 @@ class Output(Base):
     types. Type-specific content lives in ``payload`` guarded by
     OUTPUT_PAYLOAD_SCHEMAS; ``files`` holds produced artifacts
     (video/srt/image object keys); ``publishing`` is the distribution metadata
-    home (title/description/hashtags/cover_image_url/topic); ``workflow_step_id``
-    is read-only lineage back to the producing node.
+    home (title/description/hashtags/cover_image_url/topic).
     """
 
     __tablename__ = "outputs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    # DEFERRED on both parent FKs (D9, ADR-050): writers INSERT outputs inside
-    # a Session 2 that spans LLM awaits; immediate FK checks would
-    # KEY-SHARE-lock the project/step rows mid-run and deadlock the runner's
-    # own display writers (step_display / mirrors UPDATE the step row from
-    # their own sessions — the observed D9 wedge). Checks fire at COMMIT.
     project_id = Column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", deferrable=True, initially="DEFERRED"),
         nullable=False,
-    )
-    workflow_step_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("workflow_steps.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-        index=True,
     )
     type = Column(String(50), nullable=False)
     language = Column(String(10), default="zh")
@@ -526,31 +434,8 @@ class Output(Base):
     files = Column(JSONB, nullable=False, default=dict)
     source_ref = Column(JSONB, nullable=True)
     render_spec = Column(JSONB, nullable=True)
-    # render_status NULL = render not requested (worker claim predicate).
+    # ExportJob commits a completed video Output in its success transaction.
     render_status = Column(Enum(RenderStatus), nullable=True)
-    # render_status claim write-set companion (ADR-030 rule 2 — read together
-    # with render_status everywhere; falls back into payload if review objects).
-    render_error = Column(Text, nullable=True)
-    # Render fencing token (ADR-079): minted at claim
-    # (jobs.claim_pending_render), NULLed at every re-pend (morphs / verify
-    # title-card / undo-redo / manual render / startup reap). The render
-    # chain's terminal writes predicate on it — render_status is a state, not
-    # an identity (the morph-window race proof), so a zombie render's
-    # guarded write matches 0 rows.
-    render_claim_token = Column(UUID(as_uuid=True), nullable=True)
-    # Poison-pill counter (R1 B4a): claims of this render row. Intent-driven
-    # re-pends (morph / verify / undo-redo / manual render / tool re-render —
-    # every seat that NULLs the token for NEW work) reset it to 0; the crash
-    # reap never does. Named into the render_* family — a bare ``attempt``
-    # would collide with the verify verdict's ``quality.attempt`` key.
-    render_attempt = Column(Integer, nullable=False, default=0)
-    # Render writer barrier (ADR-096 §1): the compile-static writer-step ids
-    # (seq-ordered, last = the render owner) the current render request waits
-    # on — the claim gate (jobs.claim_pending_render) fires only when every
-    # listed step is done. Stamped at every run-scoped pend (birth fan-out /
-    # morph touch / failure-rescue restamp); NULL = unbarriered (run-less
-    # re-pends: undo/redo, manual render, legacy rows).
-    render_barrier = Column(JSONB, nullable=True)
     score = Column(JSONB, nullable=True)
     # 质检裁决 (产物质量线期 3): the verify node's verdict —
     # {status: passed|needs_human, checks: [{id, ok, detail, cls}], attempt,
@@ -638,7 +523,7 @@ class Message(Base):
 
     Keeps chat history minimal: role, content, optional attachments, and a
     link to the workflow run that was triggered by this message (if any).
-    Generation progress/status lives on WorkflowRun, not duplicated here.
+    MediaJob and ExportJob own their native execution status.
     """
 
     __tablename__ = "messages"
@@ -660,11 +545,6 @@ class Message(Base):
     # like mentions): persisted so the rebuilt history honestly shows the
     # focus prefix row on the user message after a refresh.
     focus_output = Column(JSONB, nullable=True)
-    workflow_run_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("workflow_runs.id", ondelete="SET NULL"),
-        nullable=True,
-    )
     # The opening user row's id for facts born inside that user turn. NULL on
     # legacy rows and independent trigger/material facts; no relationship is
     # inferred from transcript adjacency.

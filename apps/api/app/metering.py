@@ -1,37 +1,7 @@
-"""Per-node LLM usage metering (ADR-025, RunPlan Phase 1).
+"""Accumulate provider usage in the context of the calling MediaJob or Chat turn.
 
-The single LLM choke point (``providers/llm`` clients) reports API ``usage`` here;
-``record_usage`` accumulates it onto the workflow step currently bound via
-``collect_execution_cost``. Binding is a contextvar, so concurrent node executions
-(asyncio tasks) each meter their own node, and retries/fallbacks inside one
-node accumulate naturally — every attempt is billed.
-
-Media calls (TTS / clone / image / music) report through ``record_media_usage``:
-actual units merge into ``cost.units`` and their priced money (the client's
-``price_units`` — quantities from nodes, prices from the Model layer, N-34)
-accumulates into ``cost.fixed_cost``.
-
-Accumulation is IN MEMORY (D9, 2026-08-27): recording touches no SQL. The
-bound step's ``execute_step`` folds the accrued ledger onto
-``workflow_steps.cost`` in ONE write at the end of the execution — on the
-success path and every terminal exception branch alike. The old per-call
-UPDATEs opened a second session that locked the very row the runner's own
-uncommitted session was holding — an application-level self-deadlock under
-node concurrency.
-
-Usage lands on ``workflow_steps.cost`` as
-``{prompt_tokens, completion_tokens, fixed_cost, units?}`` — no step-name
-intermediate. Run-level cost is an aggregate view (sum over the run's nodes).
-
-Conversation-layer metering (ADR-117 D3): a SECOND, independent ledger binds
-to a conversation turn via ``bind_conversation_turn`` at the turn-entry seams
-(``execute_chat_turn`` / ``answer_question`` / ``run_trigger_turn``). The same
-``record_usage`` choke point accumulates into whichever ledgers are bound —
-the two never coexist structurally (workflow steps run in the worker, chat
-turns in the request path). The turn's tail folds the accrued tokens into ONE
-``conversation_usage`` row via ``fold_conversation_usage`` — metered, never
-billed, never on any UI; ``cost_usd`` is priced at write time (frozen, never
-drifts with the vendor price list).
+Media usage includes priced units. Chat folds provider tokens into conversation_usage.
+The caller owns persistence and settlement.
 """
 
 import contextvars

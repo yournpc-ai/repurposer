@@ -53,7 +53,7 @@ def suggestion_stale_reasons(
     assets_missing: bool,
     assets_failed: bool,
     new_understanding: bool,
-    plan_or_run_since: bool,
+    edited_since: bool,
 ) -> list[str]:
     """The directed stale verdict's NAMED reasons (ADR-099 §4 — the three
     predicates are the whole stale definition; there is no fourth). Order
@@ -66,8 +66,8 @@ def suggestion_stale_reasons(
         reasons.append("the material it drew on failed processing")
     if new_understanding:
         reasons.append("new material understanding landed since")
-    if plan_or_run_since:
-        reasons.append("a plan was docked or a run started since")
+    if edited_since:
+        reasons.append("a new composition version was saved since")
     return reasons
 
 

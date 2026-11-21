@@ -46,7 +46,8 @@ from app.models.tables import (
     MessageSeqCounter,
     Project,
     User,
-    WorkflowRun,
+    Composition,
+    CompositionVersion,
 )
 from app.platform.billing import CreditsInsufficientError
 from app.platform.configs import get_config
@@ -266,7 +267,6 @@ async def _create_message(
     attachments: list[dict[str, Any]] | None = None,
     mentions: list[dict[str, Any]] | None = None,
     focus_output: dict[str, Any] | None = None,
-    workflow_run_id: UUID | None = None,
     intent: dict[str, Any] | None = None,
     question: dict[str, Any] | None = None,
     suggestions: list[dict[str, Any]] | None = None,
@@ -291,7 +291,6 @@ async def _create_message(
         attachments=attachments or [],
         mentions=mentions or [],
         focus_output=focus_output,
-        workflow_run_id=workflow_run_id,
         intent=intent,
         question=question,
         suggestions=suggestions or [],
@@ -1876,7 +1875,6 @@ async def prepare_chat_turn(
                 answered_question is not None
                 and pending_payload.slot is not None
                 and project is not None
-                and answered_question.workflow_run_id is None
             ):
                 # ask 一等动作的 autoResume 回填 (ADR-052 B2 D2-C1): same
                 # user-stated backfill as the answer endpoint — the plan
@@ -2571,34 +2569,16 @@ async def resolve_suggestion_note(
             .limit(1)
         )
     ).scalar_one_or_none() is not None
-    plan_since = (
-        await db.execute(
-            select(Message.id)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.question["kind"].astext == "task_book",
-                Message.created_at > source.created_at,
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none() is not None
-    run_since = False
-    if project_id is not None:
-        run_since = (
-            await db.execute(
-                select(WorkflowRun.id)
-                .where(
-                    WorkflowRun.project_id == project_id,
-                    WorkflowRun.created_at > source.created_at,
-                )
-                .limit(1)
-            )
-        ).scalar_one_or_none() is not None
+    edited_since = project_id is not None and await db.scalar(
+        select(CompositionVersion.id).join(Composition, Composition.id == CompositionVersion.composition_id)
+        .where(Composition.origin_project_id == project_id, CompositionVersion.created_at > source.created_at)
+        .limit(1)
+    ) is not None
     reasons = suggestion_stale_reasons(
         assets_missing=assets_missing,
         assets_failed=assets_failed,
         new_understanding=new_understanding,
-        plan_or_run_since=plan_since or run_since,
+        edited_since=edited_since,
     )
     return compose_suggestion_note(record.get("label") or "", reasons)
 

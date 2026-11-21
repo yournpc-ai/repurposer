@@ -25,7 +25,7 @@ from app.models.schemas import (
     question_group_digest,
     seal_creative_state,
 )
-from app.models.tables import Conversation, Message, Project, SourceSnapshot, User, WorkflowRun
+from app.models.tables import Conversation, Message, Project, SourceSnapshot, User
 from test.core.test_website_promo_readiness import website_question_arguments
 
 def group_payload(*, allow_freeform=True):
@@ -236,7 +236,6 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
                 select(func.count(Message.id)).where(Message.conversation_id == conversation_id)
             )
         ) == 2
-        assert (await db.scalar(select(func.count(WorkflowRun.id)))) == 0
         with pytest.raises(HTTPException) as replay:
             await answer_question(
                 db, user_id, question_id, request

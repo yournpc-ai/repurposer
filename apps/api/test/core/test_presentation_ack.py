@@ -10,7 +10,7 @@ from app.chat.routes import chat_router
 from app.chat.video_turn_seats import stamp_video_presentation
 from app.dependencies import get_current_user_required, get_db
 from app.editing.service import video_version_read
-from app.models.tables import Conversation, CreditTransaction, ExportJob, MediaJob, Message, Project, WorkflowRun
+from app.models.tables import Conversation, CreditTransaction, ExportJob, MediaJob, Message, Project
 from test.core.test_compositions import _create, _project, _snapshots, _user
 
 
@@ -60,5 +60,5 @@ async def test_presentation_ack_pins_display_and_never_submits_production(databa
             assert all(block[k] == value for k, value in exact.items())
             assert block["presentation_complete"] is True
         assert (await db.get(Project, pid)).pending_brief["video_presentation"]["presented_message_id"] == str(current)
-        for table in (ExportJob, MediaJob, WorkflowRun, CreditTransaction):
+        for table in (ExportJob, MediaJob, CreditTransaction):
             assert await db.scalar(select(func.count()).select_from(table)) == 0

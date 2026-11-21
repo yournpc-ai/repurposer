@@ -16,7 +16,6 @@ from app.models.schemas import (
     ProjectResponse,
     ProjectResultsResponse,
     ProjectUpdate,
-    WorkflowStatus,
 )
 from app.models.tables import (
     Asset,
@@ -34,13 +33,13 @@ from app.models.tables import (
     Project,
     Publication,
     User,
-    WorkflowRun,
 )
 from app.pipeline.outputs import (
     chat_delivery_output_ids,
     is_chat_video_output,
     output_to_response,
 )
+from app.platform.billing import settled_job_amounts
 from app.platform.conversation_context import get_project_prompt
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, is_export_location, presign_download, matches_export_location, resolve_stored_url
@@ -226,18 +225,10 @@ async def _jobs_settled(db, project_ids, user_id):
         amounts = {(key, kind): amount for key, kind, amount in totals}
         for job, intent in jobs:
             result = (intent or {}).get("media_result") or {}
-            expected = "available" if job.status == "succeeded" else job.status
-            if result.get("status") != expected:
-                return False
-            charged = job.authorized_credits if job.status == "succeeded" else 0
-            if model is MediaJob:
-                if result.get("reserved_credits") != 0 or result.get("charged_credits") is None:
-                    return False
-                charged = result["charged_credits"]
-            key = str(job.id)
-            if (amounts.get((key, "hold"), 0) != -job.authorized_credits
-                    or amounts.get((key, "release"), 0) != job.authorized_credits
-                    or amounts.get((key, "capture"), 0) != -charged):
+            expected = settled_job_amounts(job, result, export=model is ExportJob)
+            if expected is None or any(
+                amounts.get((str(job.id), kind), 0) != value for kind, value in expected.items()
+            ):
                 return False
     return True
 
@@ -250,7 +241,6 @@ async def _delete_projects(db: AsyncSession, ids: list[UUID], user_id: UUID) -> 
     )).all()
     if len(owned) != len(ids):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-    run_ref = CreditTransaction.ref["run_id"].astext
     busy = (
         select(Asset.id).where(Asset.project_id.in_(ids), or_(
             Asset.processing_status == AssetStatus.PROCESSING,
@@ -260,12 +250,6 @@ async def _delete_projects(db: AsyncSession, ids: list[UUID], user_id: UUID) -> 
         .where(SourceSnapshot.origin_project_id.in_(ids), NarrationAlignment.status.in_(("PENDING", "PROCESSING"))),
         select(Publication.id).where(Publication.project_id.in_(ids),
             Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING, PublicationState.UNKNOWN))),
-        select(WorkflowRun.id).join(CreditTransaction, run_ref == cast(WorkflowRun.id, String))
-        .where(WorkflowRun.project_id.in_(ids), CreditTransaction.user_id == user_id,
-               CreditTransaction.kind.in_(("hold", "release")))
-        .group_by(WorkflowRun.id).having(func.sum(CreditTransaction.amount) != 0),
-        select(WorkflowRun.id).where(WorkflowRun.project_id.in_(ids), WorkflowRun.status.in_(
-            (WorkflowStatus.PENDING, WorkflowStatus.RUNNING, WorkflowStatus.WAITING_HUMAN))),
     )
     conflict = ("该项目仍有正在执行或待核对费用的任务，暂时无法删除。"
                 if (current_ui_language() or "").startswith("zh")
@@ -281,7 +265,6 @@ async def _delete_projects(db: AsyncSession, ids: list[UUID], user_id: UUID) -> 
     await db.execute(delete(ExportJob).where(ExportJob.project_id.in_(ids)))
     await db.execute(delete(Publication).where(Publication.project_id.in_(ids)))
     await db.execute(delete(Output).where(Output.project_id.in_(ids)))
-    await db.execute(delete(WorkflowRun).where(WorkflowRun.project_id.in_(ids)))
     await db.execute(delete(Asset).where(Asset.project_id.in_(ids)))
     await db.execute(update(ConversationUsage).where(ConversationUsage.project_id.in_(ids)).values(project_id=None))
     await db.execute(delete(Project).where(Project.id.in_(ids)))

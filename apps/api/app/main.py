@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.models.database import AsyncSessionLocal, init_db
+from app.models.database import AsyncSessionLocal, require_current_schema
 from app.chat.routes import chat_router, outputs_regenerate_router
 from app.distribution.routes import router as distribution_router
 from app.memory.routes import personas_router
@@ -44,7 +44,7 @@ _warmup_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     settings.ensure_dirs()
-    await init_db()
+    await require_current_schema()
     from app.providers.llm import get_llm_client
 
     llm = get_llm_client()

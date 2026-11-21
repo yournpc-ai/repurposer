@@ -248,17 +248,6 @@ class ProjectStatus(StrEnum):
     COMPLETED = "completed"
 
 
-class WorkflowStatus(StrEnum):
-    """Workflow run statuses."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    WAITING_HUMAN = "waiting_human"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
 class ChatAttachment(BaseModel):
     """File attached to a chat message."""
 
@@ -365,7 +354,7 @@ class ChatMention(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["asset", "output", "transcript_segment", "workflow_step", "recipe"]
+    type: Literal["asset", "output", "transcript_segment", "recipe"]
     id: str
     label: str
     # 段落级指认 (2026-09-11 — 选区引用): an output mention may pin the exact
@@ -662,7 +651,6 @@ class ChatMessageResponse(BaseModel):
     mentions: list[ChatMention] = Field(default_factory=list)
     skill: SkillReference | None = None
     focus_output: FocusRef | None = None
-    workflow_run_id: UUID | None = None
     # Opening user-message identity for rows born in that turn; NULL on old
     # rows and independent world facts.
     turn_id: UUID | None = None
@@ -691,7 +679,6 @@ class ChatMessageResponse(BaseModel):
     def _editor_media_projection(self):
         intent = self.intent or {}
         if "editor_media" in intent or "media_permission" in intent:
-            self.workflow_run_id = None
             self.intent = {key: intent[key] for key in (
                 "native_call_id", "media_job", "export_job", "media_result",
             ) if key in intent}
@@ -2915,68 +2902,6 @@ OUTPUT_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 
-class ProductionStage(BaseModel):
-    """User-safe, replayable production work inside one fenced step attempt."""
-
-    event_id: str
-    kind: str
-    run_id: UUID
-    step_id: UUID
-    attempt: int = Field(ge=0)
-    seq: int = Field(ge=0)
-    status: Literal["running", "completed", "failed"]
-    started_at: datetime
-    finished_at: datetime | None = None
-    reused: bool | None = None
-    item_count: int | None = Field(default=None, ge=0)
-    reused_count: int | None = Field(default=None, ge=0)
-    scene_id: str | None = None
-
-
-class StepResponse(BaseModel):
-    """One node of a run's execution plan — the user-facing step (ADR-028).
-
-    ``stage`` is an optional display hint lifted from ``node.spec["stage"]`` by
-    the serializer (e.g. selecting_segments / building_specs), letting the
-    stepper reuse existing i18n keys.
-    """
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    kind: str
-    status: str
-    seq: int
-    attempt: int = 0
-    error: str | None = None
-    cost: dict | None = None
-    stage: str | None = None
-    # Quantified one-liner from the registry summary_template (e.g. "Selected
-    # 3 clips · 87s total"), lifted from spec["summary"] like stage.
-    summary: str | None = None
-    # The runner's structured "nothing to do here" declaration (2026-09-10 —
-    # the receipt's whisper tier): stamped at the same seat as the "…skipped"
-    # summary line, so the client never string-matches. None ≠ False only on
-    # legacy rows.
-    noop: bool | None = None
-    # Output row ids this node produced — the RunCard collects these on run
-    # completion to inline the product cards (chat-loop-v2).
-    output_refs: list[UUID] = Field(default_factory=list)
-    # DAG edges: upstream step ids (the run's execution DAG, ADR-028).
-    inputs: list[UUID] = Field(default_factory=list)
-    # Credits derivation (ADR-055, BILLING §7 — serialization-derived, NEVER
-    # persisted columns): the step's quotation / metered actual, priced USD
-    # (PRICING) × the consumption ratio at read time. ``estimate_credits``
-    # [low, high] is None when the node never quoted (NULL estimate);
-    # ``cost_credits`` is None while nothing was metered (cost NULL).
-    estimate_credits: list[int] | None = None
-    cost_credits: int | None = None
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    scene_index: int | None = Field(default=None, ge=1)
-    production_stages: list[ProductionStage] = Field(default_factory=list)
-
-
 class OutputResponse(BaseModel):
     """An owned video media, execution and Composition-lineage record."""
 
@@ -2984,7 +2909,6 @@ class OutputResponse(BaseModel):
 
     id: UUID
     project_id: UUID
-    workflow_step_id: UUID | None = None
     type: str
     # None = unpinned (legacy rows, or the null-as-string plan token that
     # leaked into early rows' language column — normalized at the boundary
@@ -3002,7 +2926,6 @@ class OutputResponse(BaseModel):
     source_ref: dict | None = None
     render_spec: VideoSpecEnvelope | None = None
     render_status: RenderStatus | None = None
-    render_error: str | None = None
     # Composition lineage (ADR-145): set on video-family outputs only.
     composition_id: UUID | None = None
     composition_version_id: UUID | None = None
@@ -3183,25 +3106,6 @@ class FeedbackReason(StrEnum):
     OTHER = "other"
 
 
-
-
-class RunResponse(BaseModel):
-    """Workflow run response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    project_id: UUID
-    status: WorkflowStatus
-    progress: int = Field(default=0, ge=0, le=100)
-    error: str | None = None
-    context: dict | None = None
-    # Aggregated step metering (sum of workflow_steps.cost); None until metered.
-    cost: dict | None = None
-    # RunPlan steps, ordered by seq; empty for runs predating RunPlan.
-    steps: list[StepResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime | None = None
 
 
 class ProjectAssetStatus(BaseModel):

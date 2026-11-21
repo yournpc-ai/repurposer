@@ -436,13 +436,11 @@ async def get_wallet_transactions(
 
     from app.models.tables import (
         CreditTransaction as _CreditTransaction,
-        Output as _Output,
+        ExportJob,
+        MediaJob,
         PaymentOrder as _PaymentOrder,
         Project as _Project,
-        WorkflowRun as _Run,
-        WorkflowStep as _Step,
     )
-    from app.models.schemas import INTERNAL_OUTPUT_TYPES
     from app.ui_locale import current_ui_language
 
     keyset = _decode_cursor(cursor) if cursor else None
@@ -456,12 +454,12 @@ async def get_wallet_transactions(
     ordered: list[tuple[str, _CreditTransaction]] = []  # (group key | "", row) newest-first
     for row in rows:
         ref = row.ref or {}
-        run_id = (ref.get("run_id") or ref.get("export_id") or ref.get("media_job_id")) if row.kind in ("hold", "capture", "release") else None
-        if run_id:
-            group = groups.setdefault(str(run_id), {"captures": 0, "at": row.created_at})
+        job_id = (ref.get("export_id") or ref.get("media_job_id")) if row.kind in ("hold", "capture", "release") else None
+        if job_id:
+            group = groups.setdefault(str(job_id), {"captures": 0, "at": row.created_at})
             if row.kind == "capture":
                 group["captures"] += int(row.amount)
-            ordered.append((str(run_id), row))
+            ordered.append((str(job_id), row))
         else:
             ordered.append(("", row))
 
@@ -488,63 +486,14 @@ async def get_wallet_transactions(
         str(order.credit_transaction_id): order for order in payment_orders
     }
 
-    # Spend-row facts in three batches (ADR-058 二源律): the run's context
-    # carries the LLM-chosen plan name (source ①); the produced PUBLIC output
-    # types are the client's honest-fallback facts (source ② 世界自证);
-    # the project title feeds the row's meta line.
-    run_ids = {UUID(row.ref["run_id"]) for key, row in ordered if key and row.ref.get("run_id")}
-    run_rows = (
-        list(
-            (
-                await db.execute(_select(_Run).where(_Run.id.in_(run_ids)))
-            )
-            .scalars()
-            .all()
-        )
-        if run_ids
-        else []
-    )
-    ctx_by_run = {str(r.id): (r.context or {}) for r in run_rows}
-    project_ids = {r.project_id for r in run_rows}
-    title_by_project = {
-        p.id: p.title
-        for p in (
-            list(
-                (
-                    await db.execute(
-                        _select(_Project).where(_Project.id.in_(project_ids))
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            if project_ids
-            else []
-        )
-    }
-    project_name_by_run = {
-        str(r.id): title_by_project.get(r.project_id) for r in run_rows
-    }
-    type_rows = (
-        (
-            await db.execute(
-                _select(_Step.run_id, _Output.type)
-                .join(_Output, _Output.workflow_step_id == _Step.id)
-                .where(
-                    _Step.run_id.in_(run_ids),
-                    _Output.type.notin_(INTERNAL_OUTPUT_TYPES),
-                )
-                .order_by(_Step.seq)
-            )
-        ).all()
-        if run_ids
-        else []
-    )
-    types_by_run: dict[str, list[str]] = {}
-    for rid, otype in type_rows:
-        types = types_by_run.setdefault(str(rid), [])
-        if otype not in types:
-            types.append(otype)
+    project_titles = {}
+    for model, field in ((ExportJob, "export_id"), (MediaJob, "media_job_id")):
+        ids = {UUID(row.ref[field]) for key, row in ordered if key and row.ref.get(field)}
+        if ids:
+            titles = await db.execute(_select(model.id, _Project.title)
+                .join(_Project, _Project.id == model.project_id)
+                .where(model.id.in_(ids), _Project.user_id == user.id))
+            project_titles.update({str(job_id): title for job_id, title in titles})
     zh = (current_ui_language() or "").startswith("zh")
 
     items: list[WalletTransactionItem] = []
@@ -559,21 +508,15 @@ async def get_wallet_transactions(
                 # A run with no metered captures yet — the held strip owns
                 # its frozen part; no row (鸡毛蒜皮不上明面).
                 continue
-            ctx = ctx_by_run.get(key) or {}
-            name = str(ctx.get("name") or "").strip() or None
-            hint_raw = str(ctx.get("instruction") or "").strip()
+            is_export = bool((row.ref or {}).get("export_id"))
             items.append(
                 WalletTransactionItem(
-                    id=f"export:{key}" if (row.ref or {}).get("export_id") else (f"media:{key}" if (row.ref or {}).get("media_job_id") else f"run:{key}"),
+                    id=f"export:{key}" if is_export else f"media:{key}",
                     family="spend",
                     amount=spent,
-                    label=(("视频导出" if zh else "MP4 export") if (row.ref or {}).get("export_id") else (("素材生成" if zh else "Media generation") if (row.ref or {}).get("media_job_id") else name)),
-                    output_types=["video"] if (row.ref or {}).get("export_id") else types_by_run.get(key, []),
-                    hint=(
-                        hint_raw if len(hint_raw) <= 36 else hint_raw[:36] + "…"
-                    )
-                    or None,
-                    project_name=project_name_by_run.get(key),
+                    label=(("视频导出" if zh else "MP4 export") if is_export else ("素材生成" if zh else "Media generation")),
+                    output_types=["video"] if is_export else [],
+                    project_name=project_titles.get(key),
                     created_at=groups[key]["at"],
                 )
             )

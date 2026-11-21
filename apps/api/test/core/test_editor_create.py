@@ -119,7 +119,7 @@ async def test_create_video_preserves_creative_state_and_external_skill(database
 async def test_website_source_becomes_editable_version_with_user_constraints(database, monkeypatch):
     from app.chat.readiness import brief_with_user_constraints
     from app.models.schemas import PendingPlan
-    from app.models.tables import Output, SourceSnapshot, WorkflowRun
+    from app.models.tables import Output, SourceSnapshot
 
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     owner = await _user(database)
@@ -174,7 +174,6 @@ async def test_website_source_becomes_editable_version_with_user_constraints(dat
         assert web["object"]["view_id"] == "paper"
         assert web["source"] == {"snapshot_id": str(source.id), "snapshot_digest": source.digest, "source_range": None}
         assert sum((clip["range"]["end"] - clip["range"]["start"]) / saved.settings["timebase"] for clip in clips if clip["object"]["kind"] == "web") == 3
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
         assert await db.scalar(select(func.count()).select_from(Output)) == 0
 
 

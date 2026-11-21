@@ -1,6 +1,7 @@
 """Database setup."""
 
-from alembic import command
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
@@ -38,7 +39,13 @@ def get_alembic_config() -> AlembicConfig:
     return alembic_cfg
 
 
-async def init_db() -> None:
-    """Initialize database by running Alembic migrations to head."""
-    alembic_cfg = get_alembic_config()
-    command.upgrade(alembic_cfg, "head")
+async def require_current_schema() -> None:
+    """API and Worker startup only read the installed revision."""
+    expected = ScriptDirectory.from_config(get_alembic_config()).get_current_head()
+    async with engine.connect() as connection:
+        actual = await connection.run_sync(lambda conn: MigrationContext.configure(conn).get_current_revision())
+    if actual != expected:
+        raise RuntimeError(
+            f"Database revision {actual!r} differs from {expected!r}. "
+            "Verify the target database, then run alembic upgrade head explicitly."
+        )

@@ -232,13 +232,9 @@ class PlanTurn:
         # while either kind is pending.
         self.plan_pending = (
             pending_q is not None
-            and pending_q.workflow_run_id is None
             and (pending_q.question or {}).get("kind") == "task_book"
         )
-        if pending_q is not None and (
-            pending_q.workflow_run_id is not None
-            or (pending_q.question or {}).get("kind") != "question"
-        ):
+        if pending_q is not None and (pending_q.question or {}).get("kind") != "question":
             pending_q = None
         self.pending_q = pending_q
 
