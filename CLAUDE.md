@@ -38,7 +38,7 @@
 
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
-- UI components: affectUI Clean (React 19), with existing Chat and media primitives tracked for U3/U4
+- UI components: affectUI Clean (React 19), with remaining Chat primitives tracked for the Editor handoff
 - Styling: Tailwind CSS v4
 - Icons: lucide-react (sole icon source)
 - Internationalization: i18next + react-i18next
@@ -50,38 +50,15 @@
 
 ## 仍有消费者的旧 shadcn / Base UI
 
-### Use `render` prop, not `asChild`
-The shadcn components used in this project are based on **base-ui**. Their trigger components (`Button`, `DialogTrigger`, `DropdownMenuTrigger`, `PopoverTrigger`, `SidebarMenuButton`, `TooltipTrigger`, etc.) **do not support the Radix-style `asChild`**; instead, they use the `render` prop to specify the rendered element.
-
-Incorrect:
-```tsx
-<Button asChild><Link to="/" /></Button>
-```
-
-Correct:
-```tsx
-<Button render={<Link to="/" />}>Label</Button>
-```
+AgentThread 和 ChatConversation 仍消费旧 Button。该组件支持 Base UI 的 `render` 属性。媒体全屏查看与 Composer 面板采用 Clean Dialog 和 Popover，各自的属性见组件源码。
 
 ### Icons
 - All icons must be imported from `lucide-react`. Hand-written SVG icons are prohibited, with two exceptions: third-party logos with no lucide alternative, and **the brand mark** — `src/components/LogoMark.tsx`; its geometry's source of truth is `LogoMark.tsx`, `public/favicon.svg` is the static baked-color copy and must be kept in sync.
-- **Inside `Button`, use `size-*` not `h-* w-*`**: every button variant pins `[&_svg:not([class*='size-'])]:size-N` — `h-5 w-5` does NOT match the `:not()` guard and gets silently overridden; `size-5` is exempt. Full size table = `docs/UI_GUIDELINES.md` §2.
+- **Inside the remaining legacy `Button`, use `size-*` not `h-* w-*`**: every button variant pins `[&_svg:not([class*='size-'])]:size-N` — `h-5 w-5` does NOT match the `:not()` guard and gets silently overridden; `size-5` is exempt. Full size table = `docs/UI_GUIDELINES.md` §2.
 
-## U3/U4 尚待迁移界面的旧视觉约定
+## Studio 界面约定
 
-以下约定供维护现有旧控件时查阅。Home、Studio Shell、Projects、Settings、Login 及新控件按上面的 affectUI Clean 约定施工。
-
-- **小圆角**：`rounded-md` = control 8px、`rounded-lg` = panel 10px、`rounded-xl` = 14px、`rounded-2xl` = 18px，大型 composer surface = 16px。`rounded-full` 仅四例外：真圆形图标钮 / 状态徽章红点 / home composer 钉底单行 stadium 条 / gallery 筛选 pill 行。`Badge` 用于元数据恒 `className="rounded-md"` 覆盖。
-- **控件三档**：sm / md / lg = `h-9`（36px）/ `h-11`（44px）/ `h-12.5`（50px）；同排控件同档中心线对齐，composer 底排用 sm。尺寸只用标准 spacing utilities，保证 `tailwind-merge` 能覆盖 CVA 默认档；pill / trigger 文字不加粗。
-- **浮层选型**：列表单选 = `DropdownMenu`；内联动作面板 / 多控件设置面板 = `Popover`；表单纯下拉 = `Select`。
-- **纵深**：**全站禁用 `ring-*`**。卡 = `bg-card` + `shadow-resting`，确有结构边界只用 `border-subtle`，禁可见 `border-border`；阴影只用 `shadow-resting` / `shadow-raised` / `shadow-floating` / `shadow-control-thumb` 分级 token，禁逐实例色值；composer 与媒体 tile 保持无影，填充优先——fill 已区分就不加边界。键盘焦点、媒体选中与表单校验用 `outline-*`，焦点可见性不得删除。
-- **灰梯 token 阶**，禁临时 alpha 填充（`bg-muted/50` / `bg-background/60` 等）；hover 一律 `bg-accent`（双主题同为 `surface-muted` 实色阶），禁逐实例硬编码 hover 色值；带 `dark:bg-*` 的元素必须显式配 `dark:hover:bg-accent`。
-- **文字三档**：`foreground` / `muted-foreground` / `meta-foreground`（`text-meta` utility）。
-- **浮层一律 `overlay-surface`**（styles.css 共享冰霜配方）；overlay chrome 只用 Dialog primitive，**禁手写 backdrop**；视口锚浮层 portal 到 `document.body`。
-- **颜色只用 shadcn token**，禁硬编码色值。
-- **布局**：`_app` 页面 `flex-1`，禁 `min-h-svh`/`min-h-screen`（home = `h-svh` + 单内部 scrollport 例外；landing 页合法）；页面主体放 `SidebarInset`。
-- **侧栏**：导航用 `SidebarMenuButton` + `render={<Link />}`；图标 `h-4.5 w-4.5`；新增入口同步 `nav.*` i18n；**通知铃 = 内容区右上角唯一浮动 chip**，该角全站保留；无全局 AppHeader。（浮动 chip 法适用 md+；<md chrome 全收编进玻璃 `MobileHeader`——品牌/Projects/裸铃/头像 AccountConsole，浮动触发器与浮动铃双撤，侧栏抽屉不再可达。）
-- **Dot grid = FlowView 签名，只此一面**；home 与其余任何面禁用。
+共享 Composer、预览与媒体查看控件使用 Clean 的尺寸、边界、交互和焦点样式。媒体选区坐标、帧时间、字幕字号草稿与缩放值由各自的领域组件提供。Studio 页面沿用现有 Shell 的内容区和滚动容器。新增导航入口同步 `nav.*` 翻译。通知入口继续使用当前 Studio chrome 的位置。Dot grid 仅用于既有 FlowView。
 
 ## Composer / Chat 行为硬律（全文 → `docs/CHAT_ARCHITECTURE.md`）
 

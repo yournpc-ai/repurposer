@@ -1,0 +1,101 @@
+{
+  "scope": "Isolated frontend components with local media samples, no authenticated API or agent execution",
+  "viewports": [
+    {
+      "width": 1280,
+      "height": 820,
+      "touch": 0,
+      "chrome": "157.0.8103.79",
+      "locale": "en",
+      "reducedMotion": true,
+      "theme": "",
+      "orderedReceiptStates": [
+        "unknown",
+        "error",
+        "notExecuted",
+        "queued",
+        "success"
+      ],
+      "submitCallbacks": "1",
+      "skill": "promo-video",
+      "draft": {
+        "text": "@source.mp4 \nTrim clip ",
+        "mentions": [
+          {
+            "type": "asset",
+            "id": "source.mp4",
+            "label": "source.mp4"
+          }
+        ]
+      },
+      "dropped": "drop.mp4",
+      "downloadSHA256": "c9cfbd6748758715d73b8deb06aa2f6f3ebb0e78a0816d5c2d06729fb8347e5b",
+      "restoredFocus": "video",
+      "pageErrors": []
+    },
+    {
+      "width": 768,
+      "height": 820,
+      "touch": 1,
+      "chrome": "157.0.8103.79",
+      "locale": "zh",
+      "reducedMotion": true,
+      "theme": "dark",
+      "orderedReceiptStates": [
+        "unknown",
+        "error",
+        "notExecuted",
+        "queued",
+        "success"
+      ],
+      "submitCallbacks": "1",
+      "skill": "promo-video",
+      "draft": {
+        "text": "@source.mp4 \nTrim clip ",
+        "mentions": [
+          {
+            "type": "asset",
+            "id": "source.mp4",
+            "label": "source.mp4"
+          }
+        ]
+      },
+      "dropped": "drop.mp4",
+      "downloadSHA256": "c9cfbd6748758715d73b8deb06aa2f6f3ebb0e78a0816d5c2d06729fb8347e5b",
+      "restoredFocus": "video",
+      "pageErrors": []
+    },
+    {
+      "width": 375,
+      "height": 820,
+      "touch": 1,
+      "chrome": "157.0.8103.79",
+      "locale": "en",
+      "reducedMotion": true,
+      "theme": "dark",
+      "orderedReceiptStates": [
+        "unknown",
+        "error",
+        "notExecuted",
+        "queued",
+        "success"
+      ],
+      "submitCallbacks": "1",
+      "skill": "promo-video",
+      "draft": {
+        "text": "@source.mp4 \nTrim clip ",
+        "mentions": [
+          {
+            "type": "asset",
+            "id": "source.mp4",
+            "label": "source.mp4"
+          }
+        ]
+      },
+      "dropped": "drop.mp4",
+      "downloadSHA256": "c9cfbd6748758715d73b8deb06aa2f6f3ebb0e78a0816d5c2d06729fb8347e5b",
+      "restoredFocus": "video",
+      "pageErrors": []
+    }
+  ]
+}

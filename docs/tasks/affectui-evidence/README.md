@@ -1,6 +1,69 @@
 # affectUI Clean 迁移验收
 
-## 范围和现场
+## U3-A 与独立 U4 切片
+
+**有条件通过。** 开工时本地 main、origin/main 与远端引用同为 `935aab92`。本轮在共享 main 原地提交，使用逐文件 pathspec。Editor 的 API、AgentThread、ChatConversation、timeline 与流协议归 Editor。其并行提交和未提交修改保持原归属。共享 8000 与 dev_worker 保持暂停。UI 联调尚未收到带数据库、迁移与端口的隔离 API 交接。
+
+| 本地 UI 提交 | 范围 |
+|---|---|
+| `778034ee` | Thinking、费用决定和有序 Tool 回执的纯展示与回归测试 |
+| `8fea9ad5` | Composer、Persona、QuestionDock、附件面板与旧控件删除 |
+| `8a199198` | Caret 弹层、附件操作与水合前草稿 |
+| `cd97c9c7` | 媒体查看、波形、预览、字幕字号、滚动控件与旧组件删除 |
+
+### 官方源码与接入裁决
+
+使用本地 affectui、affectui-migrate Skills 及条目参考，通过 affectUI MCP 的 search_components、get_component、get_source 读取完整 TSX。apps/web 的 shadcn Registry 配置有效。直接请求免费 tool-call-card-clean 返回 200。当前 shell 无 Registry Token，直接请求 Pro approval-card-clean 返回 401，授权 MCP 成功返回其完整源码。Pro Screen 与 Composer 同样经 MCP 读取。
+
+| 场景 | 官方候选和源码事实 | 当前实现与数据归属 |
+|---|---|---|
+| 消息和工作过程 | `agent-thread` Screen 将用户消息、正文、工具组、决定、附件与任务穿插在消息流中。simulate 可以播放示例故事。另查 `ai-answer-clean`、`message-actions-clean` 的来源卡、再生成和版本动作。 | 采用流内折叠结构。Chat 的 Markdown、打字机、历史与 Stop 仍由现有宿主负责。正式渲染及动作接线等待文件交接。 |
+| 单项和多项 Tool | `tool-call-card-clean` 同一源码导出 ToolCallCard 和 ToolCallGroup，原版三态，按传入子项归组，原生 button 提供 Enter / Space 折叠。 | 保留卡片与组结构。分别翻译 accepted、queued、running、success、error、cancelled、unknown、notExecuted、待确认、已拒绝、已同意、已存版本、待审片与已交付。仅显示调用者提供的耗时与详情。组接收顺序由调用方决定。测试涵盖同名调用的不同结果；生产 call ID 关联仍待 6D。 |
+| Thinking | `thinking-loader-clean` 自带阶段轮转和完成计时。 | 保留官方射线和标签过渡，展示调用方传入的单一阶段。 |
+| 授权 | `approval-card-clean` 支持 uncontrolled、Always 与自动超时拒绝。`permission-request-clean` 涵盖按时长授权、撤销。 | 使用 Approval Card 的标题、价格详情和操作区。状态、报价、上限与 submitting 由调用方提供，同意与拒绝只发出决定。刷新和资金结果需依赖服务端。 |
+| Composer 与附件 | `chat-composer-clean` 有自己的输入、模型、授权模式及示例听写。`dropzone-clean` 有文件状态与进度视图。 | 使用现有 Clean IconButton、Spinner、Tooltip、Popover、Avatar、Card、TextField。保留 MentionEditor 的 DOM chip 和 Skill 引用、文件选择、项目启动、上传与重试。进度来自原上传 hook。 |
+| 播放器与结果 | 检索媒体卡、toolbars、Dialog、Popover、加载与错误展示。单独核对 dialog-clean、popover-clean、button-clean、icon-button-clean、select-clean 源码。范围输入检索返回 number-input 等候选。 | Clean 原生 Dialog 加入全屏媒体布局和指定返回焦点。保留底图动画、签名读取、下载、Remotion、真实音频元素和像素选区。字号连续拖动采用原生 range；原 CAS 写口、版本身份与草稿取消路径继续工作。 |
+
+### 删除与代码扫描
+
+口径与 U2 一致，按 apps/web/src 中不同消费者文件计数，识别别名和相对路径。只计旧模块的精确路径。Base UI 按直接 import 语句计数。
+
+| 指标 | 开工复核 | 独立切片后 |
+|---|---:|---:|
+| 旧 Button / Input / Dialog / Select 消费文件 | 15 / 1 / 1 / 1 | 2 / 0 / 0 / 0 |
+| Base UI 直接 import / 文件 | 15 / 12 | 6 / 4 |
+| U2 清单中仍存在的旧 UI 文件 | 16 | 8 |
+| Arc token | 0 | 0 |
+
+删除 avatar、input、tooltip、dialog、label、popover、select、slider 共 8 个文件及其内嵌样式。移除根 TooltipProvider 和无消费者的 AttachmentTrigger。独立 CSS 文件删除 0，直接依赖删除 0。未跟踪的 thinking-loader.tsx 在开工时即存在，本轮未纳入提交。无新状态库、Chat Store 或 Job Store。
+
+| 剩余文件 | 归属 |
+|---|---|
+| button | AgentThread、ChatConversation 两个旧按钮消费者均待释放 |
+| attachment、bubble、marker、message | Chat 附件、用户消息、MetaRow 与消息正文仍消费。附件操作已用 Clean |
+| message-scroller | 有实际视口锚点、滚动恢复和 Chat 消费者。滚动按钮已用 Clean |
+| tour、sonner | 首页引导定位和全局反馈。Tour 直接消费 Base UI Popover 的底层定位 |
+
+### 本轮五面与浏览器证据
+
+| 面 | 本轮实际证据 | 尚待联合验收 |
+|---|---|---|
+| Tool | UI 提交只涉及 Web 与证据。回执测试校验同名 Tool 的顺序和 Unknown / Not Executed | 原生模型调用、call ID 到 Job 的投影 |
+| Context | Chrome 输入、Shift+Enter、纯文本粘贴、选中素材 mention 与内置 Skill。实测草稿包含 source.mp4 的身份和 promo-video。Enter 只触发一次组件回调 | 已登录 Home 首发、上传与 Project Chat POST 的持久请求体 |
+| Chat | Tool Group 与 Card 的 Enter / Space 折叠。授权组件同意和拒绝回调触发后仍以父级提供的状态为准 | 生产 Activity、审批结果、流式正文、Stop 与历史重放 |
+| Execution | 使用既有 MP4、MP3、PNG。Chrome 实际解码、播放、暂停、seek、全屏、框选视频像素并下载，下载内容 SHA-256 与文件一致 | 真实媒体生成、费用预占、失败 / Unknown、正式导出、审片与交付 |
+| Recovery | /home 水合前输入两行，修复前可复现水合错误和清空，修复后在桌面与手机视口保留原文。独立 SSR 水合测试同时检查 DOM 身份和 onChange 内容。焦点从详情返回 Lightbox，关闭后回原媒体按钮 | opening 重放、刷新和续聊、历史版本 / Output 身份、签名过期续期 |
+| UI | Chrome 1280×820、768×820、375×820。浅 / 深 / System 变化、中文 / 英文、reduce、键盘、鼠标和触摸视口。附件选取与 drop 到达组件回调。项目 / 手机实体键盘与系统 IME 未实测 | 真实项目内完整细节及多设备联调 |
+
+[隔离浏览器测量](u3-u4-browser.json) 使用真实组件和本地媒体样本，回执、费用与输入回调是组件夹具。页面错误、末焦点、草稿、Skill、SHA-256 与调用次数均由浏览器采集。/home 路由另以未登录浏览器断开 API，验证草稿跨水合保留。附件访问出现登录弹层。
+
+Router 精确回归保留：从 /projects 打开项目详情，reload 到 document commit 后立即 goBack。桌面和手机无 API 版本均返回项目列表，无 hydration 错误。含真实项目数据的原序列仍为未验证。
+
+在 apps/web 执行 `pnpm exec tsc --noEmit`、`pnpm test`、`pnpm build`。本轮最后一次完整运行通过 46 个测试文件、415 项测试及客户端、SSR 构建。计数包含当时共享工作树的 Editor 测试。QuestionDock 的选中态断言改查唯一选中的 Clean Card，SkillPicker 定位断言保留原像素与方向检查。
+
+**联合签收仍开放。** 等待 Editor 在 iteration-6/ui-handoff.md 中逐文件标注 RELEASED，并提供隔离 API 目标。旧 Run 投影、费用回执、真实 Tool / Job、历史 Output 与交付后续改均需通过同一真实旅程。6B / 6C 的已有记录及本轮静态检查不计入这些项目的验收。
+
+## U0–U2 范围和现场
 
 开工基线为 `fab4017b`，当时远端为 `a83ee492`。U0 为 `eaed729d`，U1 为 `b0fd324d`。共享工作树在 U2 施工期间纳入独立 6C 提交 `ca29ce54`。本目录只记录 Web 迁移。
 
@@ -36,7 +99,7 @@ U1 删除 `alert`、`checkbox`、`progress`、`scroll-area`、`switch`，以及 
 
 删除 26 条已退出的 sidebar/chart 主题声明（含 Tailwind 映射），3 个旧 CSS utility（media-scrim、scroll-fade-x、ambient-glow），2 个无调用的封面动画（rc-lineGrow、rc-qPulse），以及下线的 post、quote、carousel 封面选择器。保留现有 5 种素材封面实际使用的样式和媒体覆盖层语义色。移除 3 个直接依赖及锁文件记录（@base-ui-components/react、tailwindcss-animate、@fontsource-variable/geist）。
 
-### 仍在使用的基线文件
+### U2 时仍在使用的基线文件
 
 下表路径相对于 `apps/web/src/`。U3 覆盖消息与 Activity，U4 覆盖共享 Composer、预览与媒体控件。依赖链中的旧原语在最后一个消费者切换后删除。Tour 的定位与交互服务首次引导，Sonner 服务全局反馈，二者已接入本轮 Clean 按钮或主题。
 
