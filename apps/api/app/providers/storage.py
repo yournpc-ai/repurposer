@@ -330,13 +330,16 @@ async def presign_upload(
     *,
     ttl: int | None = None,
     create_only: bool = False,
+    upload_id: str | None = None,
 ) -> str:
     """Generate a presigned PUT URL for direct upload to object storage."""
     client = _get_s3_client()
-    params: dict[str, str] = {
+    params = {
         "Bucket": _bucket(key),
         "Key": _normalize_key(key),
     }
+    if upload_id:
+        params["Metadata"] = {"export-upload": upload_id}
     if create_only:
         params["IfNoneMatch"] = "*"
     if content_type:
@@ -676,44 +679,26 @@ def _is_not_found(e: ClientError) -> bool:
     return e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound")
 
 
-async def exists(key: str | None) -> bool:
-    """Return True if the object exists in storage.
-
-    Only a missing object yields False; credential/network errors propagate so
-    callers (e.g. seed reconcilers) do not silently misread them as "absent".
-    """
-    if not key:
-        return False
-    client = _get_s3_client()
-    try:
-        await asyncio.to_thread(
-            client.head_object,
-            Bucket=_bucket(key),
-            Key=_normalize_key(key),
-        )
-        return True
-    except ClientError as e:
-        if _is_not_found(e):
-            return False
-        raise
-
-
-async def size(key: str | None) -> int | None:
-    """Return the object size in bytes, or None if missing (404 only)."""
+async def object_head(key: str | None) -> dict | None:
+    """HEAD one exact key. Only a missing object is represented by None."""
     if not key:
         return None
     client = _get_s3_client()
     try:
-        response = await asyncio.to_thread(
-            client.head_object,
-            Bucket=_bucket(key),
-            Key=_normalize_key(key),
-        )
-        return int(response["ContentLength"])
-    except ClientError as e:
-        if _is_not_found(e):
+        return await asyncio.to_thread(client.head_object, Bucket=_bucket(key), Key=_normalize_key(key))
+    except ClientError as exc:
+        if _is_not_found(exc):
             return None
         raise
+
+
+async def exists(key: str | None) -> bool:
+    return await object_head(key) is not None
+
+
+async def size(key: str | None) -> int | None:
+    head = await object_head(key)
+    return int(head["ContentLength"]) if head is not None else None
 
 
 def resolve_file_path(key: str | None) -> Path | None:

@@ -23,6 +23,7 @@ from app.providers.storage import (
     delete_file,
     exists,
     matches_export_location,
+    object_head,
     presign_upload,
     private_export_key,
     private_export_root,
@@ -381,6 +382,7 @@ async def execute_export(job_id, token):
                     key,
                     content_type="video/mp4",
                     create_only=True,
+                    upload_id=str(token),
                     ttl=max(3600, settings.render_timeout_seconds + 600),
                 )
                 payload = {
@@ -392,6 +394,7 @@ async def execute_export(job_id, token):
                             "put_url": put_url,
                             "content_type": "video/mp4",
                             "create_only": True,
+                            "upload_id": str(token),
                         }
                     },
                 }
@@ -405,7 +408,7 @@ async def execute_export(job_id, token):
                         root + "/prepare-export", json={"spec": spec, "render_id": str(job_id)}
                     )
                     response.raise_for_status()
-                    if response.json().get("ready") is not True or response.json().get("single_put") is not True:
+                    if response.json().get("ready") is not True or response.json().get("upload_identity") is not True:
                         raise ValueError("Renderer did not confirm the artifact")
                     if not await _announce(
                         job_id, token, "Uploading the rendered MP4.", "正在上传成片。", dispatch_upload=True
@@ -415,15 +418,16 @@ async def execute_export(job_id, token):
                     response = await client.post(root + "/upload", json=payload)
                     if not response.is_success:
                         code = response.json().get("code")
-                        if code in {"ARTIFACT_CACHE_MISS", "HTTP_400", "HTTP_401", "HTTP_403"}:
+                        if code in {"ARTIFACT_CACHE_MISS", "HTTP_400", "HTTP_401", "HTTP_403", "HTTP_412"}:
                             await _record_upload_observation(job_id, upload_id, "rejected")
                         response.raise_for_status()
                     if response.json().get("video") != key:
                         raise ValueError("Unexpected renderer acknowledgement")
                     await _record_upload_observation(job_id, upload_id, "stored")
             elif upload_id and not upload_outcome:
-                if not await exists(key):
-                    raise ValueError("Upload outcome pending")
+                head = await object_head(key)
+                if (head or {}).get("Metadata", {}).get("export-upload") != upload_id:
+                    raise ValueError("Upload identity unconfirmed")
                 await _record_upload_observation(job_id, upload_id, "stored")
             if upload_outcome == "rejected":
                 raise ValueError("Renderer rejected the upload")
@@ -464,13 +468,16 @@ async def execute_export(job_id, token):
                     )
                     for query in references:
                         if await db.scalar(query.limit(1)):
+                            # The dispatch is settled. A surviving consumer owns the bytes.
+                            break
+                    else:
+                        try:
+                            head = await object_head(location)
+                            if head and head.get("Metadata", {}).get("export-upload") == receipt.intent["upload_started_by"]:
+                                await delete_file(location)
+                        except (BotoCoreError, ClientError, OSError):
                             await _defer_upload_check(db, job, receipt, project)
                             return
-                    try:
-                        await delete_file(location)
-                    except (BotoCoreError, ClientError, OSError):
-                        await _defer_upload_check(db, job, receipt, project)
-                        return
                 await _finish(db, job, project, "cancelled", _stopped_text(project))
             else:
                 await _finish(db, job, project, "succeeded" if files else "failed",
@@ -495,8 +502,10 @@ async def recheck_unknown_upload(job_id: UUID) -> bool:
         ):
             return False
         outcome = receipt.intent.get("upload_outcome")
-        if outcome is None and not await exists(key):
-            return False
+        if outcome is None:
+            head = await object_head(key)
+            if (head or {}).get("Metadata", {}).get("export-upload") != receipt.intent["upload_started_by"]:
+                return False
         receipt.intent = {**receipt.intent, "upload_outcome": outcome or "stored",
                           "upload_checks": MAX_ATTEMPTS - 1}
         job.status, job.lease_until = "queued", None

@@ -51,8 +51,9 @@ def renderer(monkeypatch):
     prepared, upload, stored = asyncio.Event(), asyncio.Event(), asyncio.Event()
     allow_prepare, allow_put, allow_reply = asyncio.Event(), asyncio.Event(), asyncio.Event()
     objects, puts = set(), []
+    upload_ids = {}
     wire = SimpleNamespace(prepared=prepared, upload=upload, stored=stored, allow_prepare=allow_prepare,
-                           allow_put=allow_put, allow_reply=allow_reply, objects=objects, puts=puts, lost=False)
+                           allow_put=allow_put, allow_reply=allow_reply, objects=objects, puts=puts, upload_ids=upload_ids)
 
     async def probe(key):
         return key in objects
@@ -64,15 +65,14 @@ def renderer(monkeypatch):
         if url.endswith("/prepare-export"):
             prepared.set()
             await allow_prepare.wait()
-            return httpx.Response(200, json={"ready": True, "single_put": True}, request=httpx.Request("POST", url))
+            return httpx.Response(200, json={"ready": True, "single_put": True, "upload_identity": True}, request=httpx.Request("POST", url))
         assert url.endswith("/upload")
         upload.set()
-        if wire.lost:
-            raise httpx.ReadTimeout("Renderer reply lost")
         await allow_put.wait()
         key = json["outputs"]["video"]["key"]
         puts.append(key)
         objects.add(key)
+        upload_ids[key] = json["outputs"]["video"]["upload_id"]
         stored.set()
         await allow_reply.wait()
         return httpx.Response(200, json={"video": key}, request=httpx.Request("POST", url))
@@ -87,6 +87,10 @@ def renderer(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
+    async def head(key):
+        return {"Metadata": {"export-upload": upload_ids.get(key)}} if key in objects else None
+
+    monkeypatch.setattr(export_jobs, "object_head", head)
     wire.remove = AsyncMock(side_effect=remove)
     monkeypatch.setattr(export_jobs, "httpx", SimpleNamespace(AsyncClient=Client))
     monkeypatch.setattr(export_jobs, "exists", probe)
@@ -217,6 +221,9 @@ asyncio.run(main())
     await export_jobs._record_upload_observation(export.job, str(uuid4()), "stored")
     assert await claim(database) is None
     renderer.objects.add(export.key)
+    renderer.upload_ids[export.key] = str(uuid4())
+    assert not await export_jobs.recheck_unknown_upload(export.job)
+    renderer.upload_ids[export.key] = str(token)
     assert await export_jobs.recheck_unknown_upload(export.job)
     identity = await claim(database)
     assert identity[1] != token
