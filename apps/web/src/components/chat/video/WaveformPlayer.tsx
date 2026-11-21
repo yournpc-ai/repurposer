@@ -10,7 +10,7 @@ import {
 } from "motion/react"
 import { Pause, Play } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/ui/icon-button-clean"
 import { cn } from "@/lib/utils"
 
 const PEAK_COUNT = 48
@@ -197,31 +197,30 @@ export function WaveformPlayer({
   return (
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <div className="flex min-w-0 items-center gap-2">
-        <Button
+        <IconButton
           type="button"
           variant="ghost"
-          size="icon-sm"
-          className="shrink-0 rounded-full"
           onClick={toggle}
           disabled={loading || (failed && !resolvePlaybackUrl)}
           aria-busy={loading}
-          aria-label={resolvePlaybackUrl
+          label={resolvePlaybackUrl
             ? t(failed ? "chat.audio.retry" : playing ? "chat.audio.pause" : "chat.audio.play")
             : t(playing ? "chat.sfx.pause" : "chat.sfx.play")}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={playing ? "pause" : "play"}
-              initial={reduceMotion ? false : { opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.85 }}
-              transition={{ duration: reduceMotion ? 0 : 0.1 }}
-              className="flex items-center justify-center"
-            >
-              {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
-            </motion.span>
-          </AnimatePresence>
-        </Button>
+          icon={
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={playing ? "pause" : "play"}
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.85 }}
+                transition={{ duration: reduceMotion ? 0 : 0.1 }}
+                className="flex items-center justify-center"
+              >
+                {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+              </motion.span>
+            </AnimatePresence>
+          }
+        />
         <div className="relative h-8 min-w-0 flex-1 rounded-md focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
           <div className="absolute inset-0 flex items-center gap-0.5" aria-hidden="true">
             {peaks.map((peak, index) => (

@@ -9,7 +9,8 @@ import {
 } from "@shadcn/react/message-scroller"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { useTranslation } from "react-i18next"
 import { ArrowDownIcon } from "lucide-react"
 
 type ViewportAnchor = {
@@ -285,16 +286,8 @@ function MessageScrollerItem({
   )
 }
 
-function MessageScrollerButton({
-  direction = "end",
-  className,
-  children,
-  render,
-  variant = "ghost",
-  size = "icon-sm",
-  ...props
-}: Omit<React.ComponentProps<typeof MessageScrollerPrimitive.Button>, "render"> &
-  Pick<React.ComponentProps<typeof Button>, "variant" | "size" | "render">) {
+function MessageScrollerButton({ direction = "end" }: { direction?: "start" | "end" }) {
+  const { t } = useTranslation()
   // Visibility is computed from LIVE viewport geometry (scroll listener +
   // ResizeObserver on both viewport and content), not the primitive's
   // commit-based snapshot: the snapshot only updates on the library's own
@@ -335,37 +328,25 @@ function MessageScrollerButton({
   }, [direction])
 
   return (
-    <Button
+    <IconButton
       data-slot="message-scroller-button"
-      data-direction={direction}
-      data-variant={variant}
-      data-size={size}
-      data-active={active ? "true" : "false"}
+      label={t(direction === "end" ? "chat.scrollToEnd" : "chat.scrollToStart")}
+      icon={<ArrowDownIcon className={direction === "start" ? "rotate-180" : undefined} />}
+      variant="secondary"
+      data-active={active}
       inert={!active}
-      variant={variant}
-      size={size}
       ref={ref}
+      style={{ position: "absolute" }}
       onClick={() =>
         direction === "end"
           ? scrollToEnd({ behavior: "smooth" })
           : scrollToStart({ behavior: "smooth" })
       }
       className={cn(
-        "dock-surface absolute inset-s-1/2 -translate-x-1/2 rounded-full text-foreground transition-[translate,scale,opacity] duration-200 hover:bg-accent hover:text-foreground data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:translate-y-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=end]:data-[active=false]:translate-y-full data-[direction=start]:top-4 data-[direction=start]:data-[active=false]:-translate-y-full rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180",
-        className
+        "inset-s-1/2 -translate-x-1/2 transition-opacity motion-reduce:transition-none data-[active=false]:pointer-events-none data-[active=false]:opacity-0",
+        direction === "end" ? "bottom-4" : "top-4",
       )}
-      render={render ?? <button type="button" />}
-      {...props}
-    >
-      {children ?? (
-        <>
-          <ArrowDownIcon className="size-4" />
-          <span className="sr-only">
-            {direction === "end" ? "Scroll to end" : "Scroll to start"}
-          </span>
-        </>
-      )}
-    </Button>
+    />
   )
 }
 

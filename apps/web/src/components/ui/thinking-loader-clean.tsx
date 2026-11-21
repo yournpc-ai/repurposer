@@ -3,14 +3,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-/*
- * Thinking Loader (clean style) – a small "the model is working" chip, in a single self-contained file.
- * One white chip with hairline shadows, a thin eight-ray spinner in the accent blue and a quiet gray
- * label with a darker band sweeping over it. The label walks through phases (Thinking → Searching
- * the web → …): the old one rolls up and blurs out, the new one rolls in, and the chip glides to its
- * new width. When done, the spinner turns into a check and the label settles on "Thought for 6s".
- * The styles are injected below, so no extra files are needed.
- */
+/** Clean working indicator. The caller supplies the current phase label. */
 
 const RAYS = Array.from({ length: 8 }, (_, i) => i);
 

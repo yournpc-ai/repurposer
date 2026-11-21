@@ -1,23 +1,11 @@
-import { useEffect, useState } from "react"
+import { useId, useEffect, useState } from "react"
 import { SlidersHorizontal } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
+import { Button } from "@/components/ui/button-clean"
+import { Popover } from "@/components/ui/popover-clean"
+import { Select } from "@/components/ui/select-clean"
 import { apiFetch } from "@/lib/api"
 import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
 
@@ -65,6 +53,7 @@ export function TextSizeScrubInput({
   onApplied: (versionId: string) => void
 }) {
   const { t } = useTranslation()
+  const sliderId = useId()
   const targets = read.storyboard.scenes.flatMap((scene) => scene.clips)
     .concat(read.storyboard.unassigned_clips)
     .filter((clip) =>
@@ -181,90 +170,90 @@ export function TextSizeScrubInput({
   }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) cancel()
-        setOpen(next)
-      }}
-    >
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="sm" className="mt-2">
-            <SlidersHorizontal className="size-3.5" />
-            {t("chat.videoStoryboard.scrub.trigger")}
-          </Button>
-        }
-      />
-      <PopoverContent align="start" className="w-80 gap-3 p-3">
-        <div className="grid gap-1.5">
-          <Label>{t("chat.videoStoryboard.scrub.target")}</Label>
+    <div className="mt-2 w-fit">
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<SlidersHorizontal />}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          if (open) cancel()
+          setOpen(!open)
+        }}
+      >
+        {t("chat.videoStoryboard.scrub.trigger")}
+      </Button>
+      <Popover
+        open={open}
+        onClose={() => {
+          cancel()
+          setOpen(false)
+        }}
+        align="start"
+        width="20rem"
+        aria-label={t("chat.videoStoryboard.scrub.trigger")}
+      >
+        <div className="grid gap-3">
           <Select
-            value={selected?.clip_id ?? ""}
-            onValueChange={(next) => {
+            label={t("chat.videoStoryboard.scrub.target")}
+            options={targets.map((clip) => ({ value: clip.clip_id, label: (clip.text ?? "").slice(0, 40) }))}
+            value={selected?.clip_id}
+            onChange={(next) => {
               cancel()
-              setClipId(next ?? "")
+              setClipId(next)
             }}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {targets.map((clip) => (
-                <SelectItem key={clip.clip_id} value={clip.clip_id}>
-                  {(clip.text ?? "").slice(0, 40)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {preview && selected && (
-          <div>
-            <CompositionPreview
-              preview={preview}
-              identity={read.base_ref}
-              textSizeDraft={dirty ? { clipId: selected.clip_id, fontSize: value } : null}
-              onReady={() => {}}
-              onError={() => {}}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("chat.videoStoryboard.scrub.isolatedObject")}
-            </p>
-          </div>
-        )}
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label>{t("chat.videoStoryboard.scrub.fontSize")}</Label>
-            <span className="text-xs text-muted-foreground">{value}px</span>
-          </div>
-          <Slider
-            aria-label={t("chat.videoStoryboard.scrub.fontSize")}
-            min={1}
-            max={400}
-            step={1}
-            value={[value]}
-            onValueChange={(next) => change(Array.isArray(next) ? next[0] : next)}
-            onValueCommitted={(next) => change(Array.isArray(next) ? next[0] : next)}
-            disabled={saving}
           />
+          {preview && selected && (
+            <div>
+              <CompositionPreview
+                preview={preview}
+                identity={read.base_ref}
+                textSizeDraft={dirty ? { clipId: selected.clip_id, fontSize: value } : null}
+                onReady={() => {}}
+                onError={() => {}}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("chat.videoStoryboard.scrub.isolatedObject")}
+              </p>
+            </div>
+          )}
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor={sliderId}>{t("chat.videoStoryboard.scrub.fontSize")}</label>
+              <span className="text-xs text-muted-foreground">{value}px</span>
+            </div>
+            <input
+              type="range"
+              id={sliderId}
+              className="w-full accent-primary"
+              aria-label={t("chat.videoStoryboard.scrub.fontSize")}
+              min={1}
+              max={400}
+              step={1}
+              value={value}
+              onChange={(event) => change(event.currentTarget.valueAsNumber)}
+              disabled={saving}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                cancel()
+                setOpen(false)
+              }}
+              disabled={saving}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" onClick={() => void apply()} disabled={!dirty || saving}>
+              {t("chat.videoStoryboard.scrub.apply")}
+            </Button>
+          </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              cancel()
-              setOpen(false)
-            }}
-            disabled={saving}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button size="sm" onClick={() => void apply()} disabled={!dirty || saving}>
-            {t("chat.videoStoryboard.scrub.apply")}
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+      </Popover>
+    </div>
   )
 }

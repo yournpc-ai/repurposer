@@ -3,7 +3,7 @@ import { Maximize2 } from "lucide-react"
 
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/ui/icon-button-clean"
 
 import { RemotionPreviewAdapter } from "./RemotionPreviewAdapter"
 import { parseScopedPreviewSpec, previewWithTextFontSize, type VideoScrubScope } from "./previewSpec"
@@ -88,15 +88,13 @@ export function CompositionPreview({
       <div className="relative" data-preview-slot={slotId}>
         {!expanded && <RemotionPreviewAdapter spec={spec} onReady={onReady} onError={handleError} />}
         {expanded && <div style={{ aspectRatio: spec.width / spec.height }} />}
-        {onOpenPreview && <Button
+        {onOpenPreview && <IconButton
           variant="secondary"
-          size="icon-sm"
-          className="absolute top-2 right-2"
-          aria-label={t("common.preview")}
+          icon={<Maximize2 />}
+          style={{ position: "absolute", top: 8, right: 8 }}
+          label={t("common.preview")}
           onClick={() => onOpenPreview({ id: identity.composition_version_id, slotId, spec })}
-        >
-          <Maximize2 className="size-4" />
-        </Button>}
+        />}
       </div>
     </div>
   )

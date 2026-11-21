@@ -7,12 +7,7 @@ import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { motion, useMotionValue } from "motion/react"
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog-clean"
 import { MediaLightboxStage } from "./MediaLightboxStage"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
 import type { MediaRegionSelectionControl } from "./mediaRegionSelection"
@@ -44,42 +39,37 @@ export function MediaLightbox({
   }, [data, veil])
 
   const closeAndRestoreFocus = () => {
-    finalFocusRef.current = data?.slotId ? getSlot?.(data.slotId) ?? null : null
+    finalFocusRef.current = data?.slotId ? (getSlot?.(data.slotId) ?? null) : null
     onOpenChange(false)
   }
 
+  if (!data) return null
   return (
     <Dialog
-      open={!!data}
+      fullscreen
+      open
+      title={data.title}
+      closeButton={false}
+      returnFocus={finalFocusRef}
       onOpenChange={(open) => {
-        if (!open) requestCloseRef.current?.()
+        if (open) return
+        if (regionSelection?.enabled) regionSelection.onCancel()
+        else requestCloseRef.current?.()
       }}
     >
-      <DialogContent
-        variant="lightbox"
-        showCloseButton={false}
-        finalFocus={getSlot ? () => finalFocusRef.current : undefined}
-        overlayClassName="z-[70] bg-background duration-0 backdrop-blur-none data-open:animate-none data-closed:animate-none dark:bg-background supports-backdrop-filter:backdrop-blur-none"
-        overlayRender={<motion.div style={{ opacity: veil }} />}
-      >
-        <DialogHeader className="sr-only">
-          <DialogTitle>{data?.title}</DialogTitle>
-        </DialogHeader>
-        {data ? (
-          <MediaLightboxStage
-            items={[data]}
-            activeId={data.id}
-            start={0}
-            actions={actions}
-            getSlot={getSlot}
-            regionSelection={regionSelection}
-            onNavigate={() => {}}
-            onClosed={closeAndRestoreFocus}
-            requestCloseRef={requestCloseRef}
-            veil={veil}
-          />
-        ) : null}
-      </DialogContent>
+      <motion.div aria-hidden className="absolute inset-0 bg-background" style={{ opacity: veil }} />
+      <MediaLightboxStage
+        items={[data]}
+        activeId={data.id}
+        start={0}
+        actions={actions}
+        getSlot={getSlot}
+        regionSelection={regionSelection}
+        onNavigate={() => {}}
+        onClosed={closeAndRestoreFocus}
+        requestCloseRef={requestCloseRef}
+        veil={veil}
+      />
     </Dialog>
   )
 }

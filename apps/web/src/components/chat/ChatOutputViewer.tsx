@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
-import { AtSign, FileWarning, Loader2, Scan } from "lucide-react"
+import { AtSign, FileWarning, Scan } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner-clean"
+import { Button } from "@/components/ui/button-clean"
 import { MediaLightbox, type MediaLightboxData } from "@/components/results/MediaLightbox"
 import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { apiFetch, toAbsoluteUrl } from "@/lib/api"
@@ -87,7 +88,7 @@ export function ChatOutputViewer({
         </div>
       ) : (
         <div className="flex min-h-48 items-center justify-center p-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label={t("common.loading")} />
+          <Spinner size={24} label={t("common.loading")} />
         </div>
       ),
     }
@@ -104,7 +105,7 @@ export function ChatOutputViewer({
       actions={selectedOutput ? (
         <>
           <Button
-            variant={regionSelecting ? "secondary" : "outline"}
+            variant={regionSelecting ? "primary" : "secondary"}
             size="sm"
             className="h-9 max-sm:w-9 max-sm:px-0"
             aria-label={t("chat.outputViewer.selectRegion")}
@@ -116,7 +117,7 @@ export function ChatOutputViewer({
             <Scan className="size-4" /><span className="max-sm:hidden">{t("chat.outputViewer.selectRegion")}</span>
           </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="h-9 max-sm:w-9 max-sm:px-0"
             aria-label={t("chat.outputViewer.referenceAsset")}

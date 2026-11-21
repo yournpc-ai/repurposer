@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { PointerEvent as ReactPointerEvent, RefObject } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import {
   formatMediaTimeMs,
   makeMediaRegionSelection,
@@ -216,15 +216,15 @@ export function MediaRegionSelectionOverlay({
           <div className="flex shrink-0 items-center gap-1">
             {value ? (
               <>
-                <Button variant="ghost" size="sm" className="h-9 px-2" onClick={control.onReselect}>
+                <Button variant="ghost" size="sm" onClick={control.onReselect}>
                   {t("chat.outputViewer.reselectRegion")}
                 </Button>
-                <Button variant="ghost" size="sm" className="h-9 px-2" onClick={control.onDone}>
+                <Button variant="ghost" size="sm" onClick={control.onDone}>
                   {t("chat.outputViewer.referenceRegion")}
                 </Button>
               </>
             ) : null}
-            <Button variant="ghost" size="sm" className="h-9 px-2" onClick={control.onCancel}>
+            <Button variant="ghost" size="sm" onClick={control.onCancel}>
               {t("common.cancel")}
             </Button>
           </div>

@@ -1,10 +1,8 @@
 import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/ui/icon-button-clean"
 
 const attachmentVariants = cva(
   "group/attachment relative flex w-fit max-w-full min-w-0 shrink-0 flex-wrap rounded-lg border border-transparent bg-muted text-card-foreground transition-colors focus-within:outline-1 focus-within:outline-ring/30 has-[>a,>button]:hover:bg-accent data-[state=error]:border-destructive/30 data-[state=idle]:border-dashed",
@@ -154,42 +152,11 @@ function AttachmentActions({
 }
 
 function AttachmentAction({
-  className,
-  variant,
-  size = "icon-xs",
+  children,
+  "aria-label": label,
   ...props
-}: React.ComponentProps<typeof Button>) {
-  return (
-    <Button
-      data-slot="attachment-action"
-      variant={variant ?? "ghost"}
-      size={size}
-      className={cn(className)}
-      {...props}
-    />
-  )
-}
-
-function AttachmentTrigger({
-  className,
-  render,
-  type,
-  ...props
-}: useRender.ComponentProps<"button">) {
-  return useRender({
-    defaultTagName: "button",
-    props: mergeProps<"button">(
-      {
-        type: render ? type : (type ?? "button"),
-        className: cn("absolute inset-0 z-10 outline-none", className),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: "attachment-trigger",
-    },
-  })
+}: React.ComponentProps<"button"> & { "aria-label": string }) {
+  return <IconButton {...props} data-slot="attachment-action" size="sm" label={label} icon={children} />
 }
 
 function AttachmentGroup({ className, ...props }: React.ComponentProps<"div">) {
@@ -214,5 +181,4 @@ export {
   AttachmentDescription,
   AttachmentActions,
   AttachmentAction,
-  AttachmentTrigger,
 }

@@ -25,7 +25,7 @@ export type ToolCallCardProps = {
   status: ToolCallStatus;
   /** User-facing details from the persisted receipt, including fixed media/version links. */
   children?: ReactNode;
-  /** Final duration in ms – otherwise measured while the card shows "running" */
+  /** Duration reported by the receipt, in milliseconds */
   duration?: number;
   /** Start expanded (uncontrolled) */
   defaultOpen?: boolean;
@@ -38,13 +38,13 @@ export type ToolCallCardProps = {
 };
 
 export type ToolCallGroupProps = {
-  /** ToolCallCard elements – the group reads their name, icon, status and duration */
+  /** ToolCallCard elements in native call order, keyed by call ID */
   children: ReactNode;
-  /** Label once all calls are done – defaults to "Used 3 tools" */
+  /** Group heading when no call is running */
   label?: string;
   /** Label while any call is running */
   runningLabel?: string;
-  /** Total duration in ms – otherwise the sum of the cards' durations, or the time measured while running */
+  /** Optional elapsed time reported for this group, in milliseconds */
   duration?: number;
   defaultOpen?: boolean;
   open?: boolean;
@@ -140,7 +140,7 @@ export function ToolCallCard({
           )}
           {status === "error" && <ErrorIcon />}
           <span className="ui-tclc__time">
-            {statusLabel}{duration != null && ` · ${formatMs(duration, false)}`}
+            {statusLabel}{duration != null && ` · ${formatMs(duration)}`}
           </span>
         </span>
         <Chevron />
@@ -216,7 +216,7 @@ export function ToolCallGroup({
           <span className={running ? "ui-tclc-group__label ui-tclc__shine" : "ui-tclc-group__label"} data-text={title}>
             {title}
           </span>
-          {duration != null && <span className="ui-tclc-group__time">· {formatMs(duration, false)}</span>}
+          {duration != null && <span className="ui-tclc-group__time">· {formatMs(duration)}</span>}
         </span>
         <Chevron />
       </button>
@@ -268,9 +268,8 @@ function WrenchIcon() {
 
 /* ---------- Helpers ---------- */
 
-/** 0.4s, 12.3s, 2m 05s, 3h 12m, 2d 4h – the live timer always shows tenths below a minute */
-function formatMs(ms: number, live: boolean) {
-  if (!live && ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
+function formatMs(ms: number) {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(Math.floor(ms / 100) / 10).toFixed(1)}s`;
   const s = Math.floor(ms / 1000);
   if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;

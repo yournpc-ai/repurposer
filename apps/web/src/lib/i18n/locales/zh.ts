@@ -1168,6 +1168,8 @@ const zh: Resources = {
     },
   },
   chat: {
+    scrollToStart: "滚动到开头",
+    scrollToEnd: "滚动到末尾",
     assistantLabel: "Rookie Cut",
     userLabel: "你",
     thinking: "思考中...",
@@ -1674,6 +1676,7 @@ const zh: Resources = {
       version: "v{{number}}",
     },
     outputViewer: {
+      downloadError: "下载失败，请重试。",
       title: "已交付产物",
       selectRegion: "局部选择",
       referenceAsset: "引用此素材",

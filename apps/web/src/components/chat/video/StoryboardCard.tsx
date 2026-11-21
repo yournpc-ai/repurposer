@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import { apiFetch } from "@/lib/api"
 import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"

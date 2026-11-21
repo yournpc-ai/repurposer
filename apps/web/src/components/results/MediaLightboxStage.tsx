@@ -27,10 +27,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Popover } from "@/components/ui/popover-clean"
 import { authorizePlayback, downloadFile, playbackPath } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
@@ -190,6 +191,7 @@ export function MediaLightboxStage({
   const closingRef = useRef(false)
   const canZoomRef = useRef(false)
   const overlayRef = useRef<HTMLDivElement>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const closeRef = useRef<HTMLButtonElement>(null)
   const mediaRef = useRef<HTMLDivElement>(null)
   const stripRef = useRef<HTMLDivElement>(null)
@@ -782,21 +784,12 @@ export function MediaLightboxStage({
         ) : null}
         <div className="pointer-events-auto flex items-center gap-1">
           {hasDetails ? (
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 rounded-full"
-                    aria-label={t("chat.outputViewer.details")}
-                    title={t("chat.outputViewer.details")}
-                  />
-                }
-              >
-                <Info className="size-4.5" />
-              </PopoverTrigger>
-              <PopoverContent align="end" positionerClassName="z-[80]" className="thin-scroll max-h-[70vh] w-[min(22rem,calc(100vw-2rem))] gap-4 overflow-y-auto p-4">
+            <div>
+              <IconButton label={t("chat.outputViewer.details")} icon={<Info />}
+                aria-haspopup="dialog" aria-expanded={detailsOpen}
+                onClick={() => setDetailsOpen(!detailsOpen)} />
+              <Popover open={detailsOpen} onClose={() => setDetailsOpen(false)} align="end"
+                aria-label={t("chat.outputViewer.details")} width="22rem">
                 {current.prompt ? (
                   <div className="flex flex-col gap-2">
                     <span className="text-meta text-[11px]">{t("results.lightbox.prompt")}</span>
@@ -828,45 +821,31 @@ export function MediaLightboxStage({
                     </div>
                   </div>
                 ) : null}
-              </PopoverContent>
-            </Popover>
+              </Popover>
+            </div>
           ) : null}
           {current.url ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 rounded-full"
-              aria-label={t("results.canvas.download")}
-              title={t("results.canvas.download")}
-              onClick={() => downloadFile(current.url as string, current.downloadName ?? current.title).catch(() => {})}
-            >
-              <Download className="size-4.5" />
-            </Button>
+            <IconButton
+              label={t("results.canvas.download")}
+              onClick={() => downloadFile(current.url as string, current.downloadName ?? current.title).catch(() => toast.error(t("chat.outputViewer.downloadError")))}
+              icon={<Download className="size-4.5" />}
+            />
           ) : null}
           {current.kind === "image" && current.url ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 rounded-full"
-              aria-label={zoomed ? t("chat.outputViewer.zoomOut") : t("chat.outputViewer.zoomIn")}
-              title={zoomed ? t("chat.outputViewer.zoomOut") : t("chat.outputViewer.zoomIn")}
-              aria-pressed={zoomed}
+            <IconButton
+              label={zoomed ? t("chat.outputViewer.zoomOut") : t("chat.outputViewer.zoomIn")}
+              pressed={zoomed}
               onClick={() => toggleZoom()}
-            >
-              {zoomed ? <ZoomOut className="size-4.5" /> : <ZoomIn className="size-4.5" />}
-            </Button>
+              icon={zoomed ? <ZoomOut className="size-4.5" /> : <ZoomIn className="size-4.5" />}
+            />
           ) : null}
-          <Button
+          <IconButton
             ref={closeRef}
-            variant="ghost"
-            size="icon"
-            className="size-9 rounded-full"
-            aria-label={t("common.close")}
-            title={t("common.close")}
+            data-autofocus
+            label={t("common.close")}
             onClick={() => close()}
-          >
-            <X className="size-4.5" />
-          </Button>
+            icon={<X className="size-4.5" />}
+          />
         </div>
       </motion.div>
 

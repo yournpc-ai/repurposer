@@ -1215,6 +1215,8 @@ const en = {
     },
   },
   chat: {
+    scrollToStart: "Scroll to start",
+    scrollToEnd: "Scroll to end",
     assistantLabel: "Rookie Cut",
     userLabel: "You",
     thinking: "Thinking...",
@@ -1761,6 +1763,7 @@ const en = {
       version: "v{{number}}",
     },
     outputViewer: {
+      downloadError: "Download failed. Please try again.",
       title: "Delivered output",
       selectRegion: "Select region",
       referenceAsset: "Reference this asset",

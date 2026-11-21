@@ -119,6 +119,9 @@ export function Popover({
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       // A menu or another popover opened from inside this one closes first
+      // A select keeps focus on its trigger while its nested listbox is open.
+      const triggerWithList = (e.target as Element | null)?.closest?.('[aria-haspopup="listbox"][aria-expanded="true"]');
+      if (triggerWithList && panel.current?.contains(triggerWithList)) return;
       const layer = (e.target as Element | null)?.closest?.("[popover]");
       if (layer && layer !== panel.current && panel.current?.contains(layer)) return;
       e.preventDefault();

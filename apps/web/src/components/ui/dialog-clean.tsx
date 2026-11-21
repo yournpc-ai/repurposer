@@ -67,6 +67,8 @@ export type DialogProps = Shared & {
   closeOnBackdrop?: boolean;
   /** Shows the close × in the corner */
   closeButton?: boolean;
+  fullscreen?: boolean;
+  returnFocus?: RefObject<HTMLElement | null>;
   /** The ×'s accessible name and tooltip */
   closeLabel?: string;
 };
@@ -221,6 +223,8 @@ type LayerProps = Omit<Shared, "defaultOpen" | "onOpenChange" | "trigger"> & {
   closeOnBackdrop: boolean;
   opener: RefObject<HTMLElement | null>;
   alert?: boolean;
+  fullscreen?: boolean;
+  returnFocus?: RefObject<HTMLElement | null>;
   busy?: boolean;
   close?: { label: string; onClick: () => void };
   footer?: ReactNode;
@@ -239,6 +243,8 @@ function Layer({
   width,
   initialFocus,
   contained,
+  fullscreen,
+  returnFocus,
   closeOnBackdrop,
   opener,
   alert,
@@ -342,7 +348,8 @@ function Layer({
         document.dispatchEvent(new Event("repurposer:modal-change"));
       }
       const at = document.activeElement;
-      if (back?.isConnected && (inside || !at || at === document.body)) back.focus({ preventScroll: true });
+      const target = returnFocus?.current ?? back;
+      if (target?.isConnected && (inside || !at || at === document.body || at === back)) target.focus({ preventScroll: true });
     };
   }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -370,6 +377,7 @@ function Layer({
       aria-labelledby={titleId}
       aria-describedby={shows(description) ? descId : rest["aria-describedby"]}
       aria-busy={busy || undefined}
+      data-fullscreen={fullscreen || undefined}
       data-contained={contained || undefined}
       data-leaving={leaving || undefined}
       onPointerDown={(e) => (downOnBackdrop.current = e.target === e.currentTarget)}
@@ -379,7 +387,10 @@ function Layer({
       <style href="ui-dialog-clean" precedence="default">
         {css}
       </style>
-      <div ref={panel} className="ui-dlgc__panel" data-size={size} data-alert={alert || undefined} tabIndex={-1} style={panelStyle}>
+      {fullscreen ? <>
+        <h2 id={titleId} className="sr-only">{title}</h2>
+        {children}
+      </> : <div ref={panel} className="ui-dlgc__panel" data-size={size} data-alert={alert || undefined} tabIndex={-1} style={panelStyle}>
         <div className="ui-dlgc__head">
           <div className="ui-dlgc__heading">
             <h2 className="ui-dlgc__title" id={titleId}>
@@ -402,7 +413,7 @@ function Layer({
         </div>
         {shows(children) && <div className="ui-dlgc__body">{children}</div>}
         {shows(footer) && <div className="ui-dlgc__foot">{footer}</div>}
-      </div>
+      </div>}
     </dialog>
   );
 }
@@ -546,6 +557,7 @@ const css = /* css */ `
   -webkit-font-smoothing: antialiased;
   animation: ui-dlgc-scrim 180ms ease both;
 }
+.ui-dlgc[data-fullscreen] { padding: 0; background: transparent; animation: none; }
 .ui-dlgc:not([open]) { display: none; }
 .ui-dlgc::backdrop { background: transparent; }
 .ui-dlgc[data-contained] { position: absolute; z-index: 70; }
