@@ -1078,11 +1078,6 @@ async def stop_chat_turn(
         or conversation.user_id != current_user.id
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Turn not found")
-    if data.scope == "media_preparation":
-        from app.chat.media_journey import stop_media_journey
-
-        mark = await stop_media_journey(db, message, conversation)
-        return {"accepted": mark is not None, "journey_message": mark}
     state = await stop_turn_at_visible_frontier(db, turn_id, data)
     return {"accepted": True, "turn_state": state}
 

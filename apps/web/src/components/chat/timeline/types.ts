@@ -658,18 +658,6 @@ export type ComponentSlot =
       history?: boolean
     }
 
-/** Run identity stays independent of the containing Turn. Only contiguous,
- * explicitly associated speech is composed with its single work surface. */
-export interface RunResponseSlot {
-  kind: "run"
-  key: string
-  runId: string
-  opening: ConversationUnit[]
-  deliveries: ConversationUnit[]
-}
-
-export type AssistantResponseSlot = ConversationUnit | RunResponseSlot
-
 /** The conversation arranges complete presentation containers. A Turn owns
  * its user boundary and one assistant response; independent facts retain their
  * identity. Source message/Activity identities remain on the internal slots. */
@@ -679,12 +667,11 @@ export type ConversationBlock =
       key: string
       turnId: string
       user: OverlayMessage | null
-      slots: AssistantResponseSlot[]
+      slots: ConversationUnit[]
     }
   | {
       kind: "standalone"
       key: string
       factKind: NonNullable<OverlayMessage["independentKind"]> | "legacy"
-      slots: AssistantResponseSlot[]
+      slots: ConversationUnit[]
     }
-  | RunResponseSlot

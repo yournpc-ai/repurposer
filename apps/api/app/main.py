@@ -25,7 +25,6 @@ from app.pipeline.routes import (
     outputs,
     persona_assets,
     projects,
-    runs,
     staging,
 )
 from app.platform.configs import reconcile_configs
@@ -251,7 +250,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(personas_router, prefix="/api/v1/personas", tags=["personas"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(runs, prefix="/api/v1/runs", tags=["runs"])
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
 app.include_router(persona_assets, prefix="/api/v1/personas", tags=["persona-assets"])

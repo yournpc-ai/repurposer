@@ -9,7 +9,6 @@ import { Download } from "lucide-react"
 import { ActivityRow, activityText, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
-import { RunCard } from "@/components/chat/RunCard"
 import { ComponentSlot } from "./blocks/ComponentSlot"
 import type { RegisterStructureVisibility } from "./structureVisibility"
 import { AssistantResponse } from "./blocks/AssistantResponse"
@@ -27,7 +26,7 @@ import {
 } from "@/components/ui/message-scroller"
 import { deliveredOutputsForRefs } from "@/lib/anchorCards"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
-import type { Output, WorkflowStep } from "@/lib/types"
+import type { Output } from "@/lib/types"
 import { skillOptionForReference, type SkillOption } from "@/lib/skills"
 import type { InferredIntent } from "./chatProtocol"
 import { AssistantText } from "./rows/AssistantText"
@@ -35,10 +34,7 @@ import { FocusRow, TurnErrorRow } from "./rows/MetaRow"
 import { UserBubble } from "./rows/UserMessage"
 import type {
   ConversationUnit,
-  AssistantResponseSlot,
-  RunResponseSlot,
   OverlayMessage,
-  ProjectAsset,
   SuggestionPill,
 } from "./timeline/types"
 import { buildConversationBlocks } from "./timeline/project"
@@ -68,7 +64,6 @@ function ScrollerSendBridge({
 }
 
 interface ChatConversationProps {
-  messages: OverlayMessage[]
   planVersions: { messageId: string; plan: InferredIntent }[]
   renderPlanVersion: (
     version: { messageId: string; plan: InferredIntent },
@@ -78,7 +73,6 @@ interface ChatConversationProps {
   chatOutputs: Output[]
   skillOptions: SkillOption[]
   openOutputViewer: (outputId: string) => void
-  runId: string | null
   chatBusy: boolean
   onSuggestionClick: (suggestion: SuggestionPill) => void
   onStructureVisible: RegisterStructureVisibility
@@ -88,16 +82,6 @@ interface ChatConversationProps {
   nowRow: NowRowPayload | null
   bottomNowRow: NowRowPayload | null
   activeTurnId: string | null
-  steps: WorkflowStep[]
-  runTitle: string
-  runCreatedAt: string | null
-  terminal: boolean
-  status: string | null
-  reviewPending: boolean
-  runWorkEndedAtMs: number | null
-  runFallbackOutputs: Output[]
-  hasUploads: boolean
-  assets: ProjectAsset[]
   scrollerSendRef: RefObject<(() => void) | null>
 }
 
@@ -141,14 +125,12 @@ function useChatStatusLabel(label: string | null, standalone: boolean) {
 }
 
 export function ChatConversation({
-  messages,
   planVersions,
   renderPlanVersion,
   conversationUnits,
   chatOutputs,
   skillOptions,
   openOutputViewer,
-  runId,
   chatBusy,
   onSuggestionClick,
   onStructureVisible,
@@ -158,16 +140,6 @@ export function ChatConversation({
   nowRow,
   bottomNowRow,
   activeTurnId,
-  steps,
-  runTitle,
-  runCreatedAt,
-  terminal,
-  status,
-  reviewPending,
-  runWorkEndedAtMs,
-  runFallbackOutputs,
-  hasUploads,
-  assets,
   scrollerSendRef,
 }: ChatConversationProps) {
   const { t } = useTranslation()
@@ -182,14 +154,6 @@ export function ChatConversation({
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
-  const deliveryAttemptCounts = new Map<string, number>()
-  for (const message of messages) {
-    if (!message.runDelivery || !message.runId) continue
-    deliveryAttemptCounts.set(
-      message.runId,
-      (deliveryAttemptCounts.get(message.runId) ?? 0) + 1,
-    )
-  }
   const renderConversationMessage = (m: OverlayMessage) => {
     const deliveryOutputSlot = hasMessageOutputs(m) ? (
       <div data-message-scroller-reading-edge>
@@ -295,7 +259,7 @@ export function ChatConversation({
                         variant="outline"
                         size="sm"
                         className="gap-1.5 rounded-md"
-                        disabled={s.action === "send" && (chatBusy || (runId != null && !terminal))}
+                        disabled={s.action === "send" && chatBusy}
                         onClick={() => onSuggestionClick(s)}
                       >
                         {s.action === "download" ? (
@@ -406,27 +370,14 @@ export function ChatConversation({
         <WorkSegmentRow
           rows={unit.rows}
           elapsedMs={unit.elapsedMs}
-          settledLabel={unit.workRunIds?.length ? t("chat.activityFold.workedWithoutTime") : undefined}
           liveLabel={live ? chatStatusLabel : null}
           failure={unit.failure}
-        >
-          {unit.workRunIds?.flatMap((id) => {
-            const start = messages.find((m) => m.runId === id && m.activity?.kind === "run")
-            return (start?.blocks ?? []).map((block, i) => block.kind === "system_notice"
-              ? <ComponentSlot key={`${id}-notice-${i}`} slot={{
-                  kind: "systemNotice", key: `${id}-notice-${i}`, block, priorDrained: true, history: true,
-                }} />
-              : null)
-          })}
-        </WorkSegmentRow>
+        />
       </MessageScrollerItem>
     )
   }
 
-  const conversationBlocks = buildConversationBlocks(conversationUnits, {
-    attachedRunId: runId,
-    pinAttachedRun: runId != null && !terminal,
-  })
+  const conversationBlocks = buildConversationBlocks(conversationUnits)
   let bottomSeatBlockKey: string | null = null
   for (const block of conversationBlocks) {
     // An answer resumes the same server turn, but starts a new visible
@@ -440,45 +391,6 @@ export function ChatConversation({
 
   const renderUnit = (unit: ConversationUnit) => unit.kind === "message"
     ? renderConversationMessage(unit.message) : renderActivityUnit(unit)
-
-  const renderRun = (slot: RunResponseSlot) => {
-    const opening = slot.opening.map(renderUnit)
-    const deliveries = slot.deliveries.map(renderUnit)
-    const sharedProps = {
-      opening,
-      renderAttemptCount: deliveryAttemptCounts.get(slot.runId) ?? 1,
-    }
-    return (
-      <RunCard
-        key={slot.key}
-        {...sharedProps}
-        runId={slot.runId}
-        availableOutputs={chatOutputs}
-        hasDelivery={(deliveryAttemptCounts.get(slot.runId) ?? 0) > 0}
-        onOpen={openOutputViewer}
-        attached={slot.runId === runId ? {
-          steps,
-          title: runTitle,
-          runStartedAt: runCreatedAt,
-          terminal,
-          cancelled: status === "cancelled",
-          failed: status === "failed",
-          reviewPending,
-          workEndedAtMs: runWorkEndedAtMs,
-          hasUploads,
-          outputs: runFallbackOutputs,
-          onOpen: openOutputViewer,
-          renderAttemptCount: sharedProps.renderAttemptCount,
-          narrativeFallback: assets.some((asset) =>
-            asset.processing_status === "pending" || asset.processing_status === "processing",
-          ) ? t("results.stepper.transcribing") : t("results.stepper.queued"),
-        } : undefined}
-      >
-        {deliveries}
-      </RunCard>
-    )
-  }
-  const renderSlot = (slot: AssistantResponseSlot) => slot.kind === "run" ? renderRun(slot) : renderUnit(slot)
 
   return (
     <MessageScrollerProvider
@@ -499,8 +411,7 @@ export function ChatConversation({
                 the run adapter pins bottom while live and anchors at the
                 run end once terminal. */}
             {conversationBlocks.map((block) => {
-              if (block.kind === "run") return renderRun(block)
-              const slots = block.slots.map(renderSlot)
+              const slots = block.slots.map(renderUnit)
               if (block.kind === "standalone") {
                 return <AssistantResponse key={block.key}>{slots}</AssistantResponse>
               }

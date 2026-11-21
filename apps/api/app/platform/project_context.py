@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import PersonaContext
-from app.models.tables import Asset, Output, Persona, Project, WorkflowRun
+from app.models.tables import Asset, Output, Persona, Project
 
 
 def persona_context_from_row(persona: Persona | None) -> PersonaContext | None:
@@ -143,35 +143,3 @@ async def resolve_default_persona(
         .limit(1)
     )
     return result.scalar_one_or_none()
-
-
-async def resolve_run_persona(
-    db: AsyncSession,
-    run: WorkflowRun,
-    project: Project,
-) -> Persona | None:
-    """The persona a run generates with: the run-pinned choice
-    (``run.context.persona_id``, written at plan confirmation) → the
-    project mount → the user's default persona. A historical run context's
-    ``brand_template_id`` key is ignored on read — re-runs fall back to the
-    persona skin.
-    """
-    pinned = (run.context or {}).get("persona_id")
-    if pinned:
-        try:
-            result = await db.execute(
-                select(Persona).where(
-                    Persona.id == UUID(str(pinned)),
-                    Persona.user_id == project.user_id,
-                )
-            )
-            persona = result.scalar_one_or_none()
-        except (ValueError, TypeError):
-            persona = None
-        if persona is not None:
-            return persona
-    if project.persona_id:
-        persona = await resolve_persona(db, project)
-        if persona is not None:
-            return persona
-    return await resolve_default_persona(db, UUID(str(project.user_id)))

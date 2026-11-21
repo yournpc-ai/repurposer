@@ -1842,7 +1842,6 @@ class ChatTurnStopRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    scope: Literal["turn", "media_preparation"] = "turn"
     prose: list[VisibleProseFrontier] = Field(default_factory=list, max_length=128)
     activity_ids: list[UUID] = Field(default_factory=list, max_length=128)
     structure_ids: list[UUID] = Field(default_factory=list, max_length=128)

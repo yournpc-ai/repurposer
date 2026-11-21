@@ -11,7 +11,6 @@ import {
 } from "./activity"
 import type {
   ConversationBlock,
-  RunResponseSlot,
   ConversationUnit,
   OverlayMessage,
 } from "./types"
@@ -94,85 +93,14 @@ export function buildConversationUnits(
   return units
 }
 
-export interface ConversationRunProjection {
-  attachedRunId?: string | null
-  /** Only an active attached Run pins to the live edge. */
-  pinAttachedRun?: boolean
-}
-
-// Intermediate ownership groups, local to this projection. They are never a
-// second render path: the public result below contains response containers.
 type SourceBlock =
   | { kind: "turn"; key: string; turnId: string; units: ConversationUnit[] }
   | { kind: "standalone"; key: string; factKind: NonNullable<OverlayMessage["independentKind"]> | "legacy"; units: ConversationUnit[] }
-  | { kind: "runAnchor"; key: string; runId: string }
 
-/** rows → units → blocks. Only explicit turnId joins units into a TurnBlock;
- * independent and legacy facts retain their own block type. A Run anchors
- * immediately before its first explicitly associated delivery, preserving
- * mid-run QA above it. Without a delivery, the centralized legacy fallback
- * uses the first explicit Run association; timestamps and last-delivery
- * adjacency never participate. */
-export function buildConversationBlocks(
-  units: ConversationUnit[],
-  runProjection: ConversationRunProjection = {},
-): ConversationBlock[] {
-  const runOrder: string[] = []
-  const firstAssociationAfter = new Map<string, number>()
-  const firstDeliveryAt = new Map<string, number>()
-  for (let index = 0; index < units.length; index += 1) {
-    const unit = units[index]
-    if (unit.kind !== "message" || !unit.message.runId) continue
-    const runId = unit.message.runId
-    if (!runOrder.includes(runId)) runOrder.push(runId)
-    if (unit.message.runDelivery) {
-      if (!firstDeliveryAt.has(runId)) firstDeliveryAt.set(runId, index)
-    } else if (!firstAssociationAfter.has(runId)) {
-      firstAssociationAfter.set(runId, index + 1)
-    }
-  }
 
-  const attachedRunId = runProjection.attachedRunId ?? null
-  // A persisted delivery is already at its exact transcript position, even
-  // when the Run terminal SSE trails it. Never pin the work AFTER its result.
-  const pinAttachedRun = runProjection.pinAttachedRun === true &&
-    attachedRunId != null && !firstDeliveryAt.has(attachedRunId)
-  const foldedRuns = new Set(units.flatMap((unit) => unit.kind === "activityFold" ? unit.workRunIds ?? [] : []))
-  const insertions = new Map<number, string[]>()
-  const insert = (index: number, runId: string) => {
-    if (foldedRuns.has(runId)) return
-    const existing = insertions.get(index) ?? []
-    existing.push(runId)
-    insertions.set(index, existing)
-  }
-  for (const runId of runOrder) {
-    if (pinAttachedRun && runId === attachedRunId) continue
-    const index = firstDeliveryAt.get(runId) ?? firstAssociationAfter.get(runId)
-    if (index != null) insert(index, runId)
-  }
-  if (attachedRunId) {
-    const alreadyAnchored = runOrder.includes(attachedRunId) &&
-      !pinAttachedRun
-    if (pinAttachedRun || !alreadyAnchored) {
-      insert(units.length, attachedRunId)
-    }
-  }
-
-  type AnchoredUnit = ConversationUnit | { kind: "runAnchor"; runId: string }
-  const anchoredUnits: AnchoredUnit[] = []
-  for (let index = 0; index <= units.length; index += 1) {
-    for (const runId of insertions.get(index) ?? []) {
-      anchoredUnits.push({ kind: "runAnchor", runId })
-    }
-    if (index < units.length) anchoredUnits.push(units[index])
-  }
-
+export function buildConversationBlocks(units: ConversationUnit[]): ConversationBlock[] {
   const blocks: SourceBlock[] = []
-  for (const unit of anchoredUnits) {
-    if (unit.kind === "runAnchor") {
-      blocks.push({ kind: "runAnchor", key: `run:${unit.runId}`, runId: unit.runId })
-      continue
-    }
+  for (const unit of units) {
     const firstKey = unit.kind === "message" ? unit.message.birthKey ?? unit.message.id : unit.rowKey
     const turnId = unit.kind === "message" ? unit.message.turnId : unit.turnId
     const independentKind =
@@ -205,10 +133,6 @@ export function buildConversationBlocks(
   }
   const visibleBlocks: SourceBlock[] = []
   for (const block of blocks) {
-    if (block.kind === "runAnchor") {
-      visibleBlocks.push(block)
-      continue
-    }
     const visibleUnits = block.units.filter(
       (unit) =>
         unit.kind !== "message" ||
@@ -228,36 +152,7 @@ export function buildConversationBlocks(
  * later deliveries keep their own response instead of moving across it. */
 function composeResponses(groups: SourceBlock[]): ConversationBlock[] {
   const result: ConversationBlock[] = []
-  let activeRun: RunResponseSlot | null = null
   for (const group of groups) {
-    if (group.kind === "runAnchor") {
-      const run: RunResponseSlot = { kind: "run", key: group.key, runId: group.runId, opening: [], deliveries: [] }
-      const previous = result[result.length - 1]
-      const slots = previous && previous.kind !== "run" ? previous.slots : undefined
-      const last = slots?.[slots.length - 1]
-      if (slots && last?.kind === "message" && last.message.role === "assistant" &&
-          last.message.runId === run.runId && !last.message.runDelivery &&
-          !last.message.independentKind) {
-        run.opening.push(last)
-        slots.splice(slots.length - 1, 1, run)
-      } else {
-        result.push(run)
-      }
-      activeRun = run
-      continue
-    }
-    const firstDelivery = activeRun?.deliveries[0]
-    const firstTurnId = firstDelivery?.kind === "message" ? firstDelivery.message.turnId : undefined
-    const run = activeRun
-    if (run && group.units.every((unit) =>
-      unit.kind === "message" && unit.message.role === "assistant" &&
-      unit.message.runDelivery === true && unit.message.runId === run.runId &&
-      (run.deliveries.length === 0 || unit.message.turnId === firstTurnId),
-    )) {
-      run.deliveries.push(...group.units)
-      continue
-    }
-    activeRun = null
     if (group.kind === "turn") {
       const first = group.units[0]
       const user = first?.kind === "message" && first.message.role === "user" ? first.message : null
@@ -273,11 +168,9 @@ function composeResponses(groups: SourceBlock[]): ConversationBlock[] {
 /** Read the original transcript order from a presentation container. Run work
  * is a view of existing Run state, never an invented transcript unit. */
 export function conversationBlockUnits(block: ConversationBlock): ConversationUnit[] {
-  const runUnits = (run: RunResponseSlot) => [...run.opening, ...run.deliveries]
-  if (block.kind === "run") return runUnits(block)
   return [
     ...(block.kind === "turn" && block.user ? [{ kind: "message" as const, message: block.user }] : []),
-    ...block.slots.flatMap((slot) => slot.kind === "run" ? runUnits(slot) : [slot]),
+    ...block.slots,
   ]
 }
 

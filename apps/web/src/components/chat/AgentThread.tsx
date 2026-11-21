@@ -44,21 +44,11 @@ import {
 import { buildConversationUnits, closeWorkSegment } from "./timeline/project"
 import { foldActivityUnits } from "./timeline/activity"
 import {
-  nextRunWorkSeal,
-  runStepEndMs,
-  visibleProductionStages,
-  sameRunAttempt,
-  isHistoricalRunTerminal,
-  type RunAttemptKey,
-  type RunWorkSeal,
-} from "@/lib/runWorkSegment"
-import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
 } from "@/lib/credits"
 import { createTypewriter } from "@/lib/typewriter"
 import { downloadOutput } from "@/components/results/downloadOutput"
-import { nextRunAttachment, useRunEvents } from "@/lib/use-run-events"
 import { cn } from "@/lib/utils"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
@@ -69,7 +59,7 @@ import {
   type MentionContext,
 } from "@/lib/mentions"
 import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
-import { isChatVideoOutput, zeroDeliveryVideoOutputs } from "@/lib/anchorCards"
+import { isChatVideoOutput } from "@/lib/anchorCards"
 import {
   MentionEditor,
   type MentionEditorHandle,
@@ -129,23 +119,15 @@ import {
   spliceAnswerEnvelope,
 } from "./answerSettlement"
 import {
-  buildRecoveredActivityRow,
   buildRecoveredProseMessage,
-  hasAnyRunDelivery,
   insertRecoveredMessage,
-  isCurrentRunAttemptDelivery,
-  isFreshPolledRow,
   isTurnOwner,
-  observedMessageSeq,
   prependMissingHistory,
   reconcilePersistedFailure,
   releaseTurnOwner,
-  runReviewerLanded,
-  shouldAdmitPolledTrigger,
   stampServerMessageId,
   stampMessagePresentation,
 } from "./liveMessageReconcile"
-import { belongsToServerRow, chineseSceneNumber, continuationTurnId, mediaProgress, sceneOrder, preparationActivity, preparationTool, journeyMark, journeyTranscriptRow, latestJourneyMark, type JourneyMark } from "./mediaJourneyMessages"
 import { matchOptionByText } from "./optionMatch"
 import { loadQuestionGroupDrafts, saveQuestionGroupDrafts } from "./questionGroupDrafts"
 import {
@@ -393,9 +375,6 @@ interface AgentThreadProps {
    * restored sessions — the conversation is already on the server. */
   firstMessage?: FirstMessageHandoff | null
   initialIntent?: InferredIntent | null
-  /** Attach to an already-running generation (returning visitor): skips the
-   * confirm beat, lands straight on the step flow. */
-  initialRunId?: string | null
   /** A zero-visible Stop retracted the handed-over first Turn. Clear the
    * router handoff so a refresh cannot auto-send the restored draft again. */
   onFirstMessageRetracted?: () => void
@@ -489,7 +468,6 @@ export function AgentThread({
   prompt,
   firstMessage,
   initialIntent,
-  initialRunId,
   onFirstMessageRetracted,
   onProjectChanged,
 }: AgentThreadProps) {
@@ -518,21 +496,7 @@ export function AgentThread({
   // over; a fresh navigation gets it from the first /chat turn's refetch) —
   // it gates the confirm beat (confirmActive) and the revision anchor
   // chips. Attach mode starts ready.
-  const [intentReady, setIntentReady] = useState(!!initialIntent || !!initialRunId)
-  const [runId, setRunId] = useState<string | null>(initialRunId ?? null)
-  // Mirrored in a ref: async chat continuations capture stale closures, and
-  // they must be able to tell a run went live while their turn was in flight.
-  const runIdRef = useRef<string | null>(initialRunId ?? null)
-  useEffect(() => {
-    runIdRef.current = runId
-  }, [runId])
-  // Explicit same-run recovery gets a new attachment epoch without creating a
-  // new domain Run or changing the RunBlock's runId-only key.
-  const [runAttempt, setRunAttempt] = useState(0)
-  const runAttemptRef = useRef(0)
-  const [runAttemptUploadRetry, setRunAttemptUploadRetry] = useState(0)
-  const [runStartedExplicitly, setRunStartedExplicitly] = useState(false)
-
+  const [intentReady, setIntentReady] = useState(!!initialIntent)
   // ask_user 机器: the pending question docks above the input (task_book in
   // the confirm beat; plain questions from the chat loop afterwards); the
   // answered one collapses into the flow as an answered question.
@@ -644,13 +608,6 @@ export function AgentThread({
 
   // Conversation below the pinned regions (plan card / progress).
   const [messages, setMessages] = useState<OverlayMessage[]>([])
-  const [journey, setJourney] = useState<JourneyMark | null>(null)
-  const [journeyReadSeq, setJourneyReadSeq] = useState(-1)
-  const journeyOpeningId = journey && (journey.state === "active" || journey.seq > journeyReadSeq)
-    ? journey.openingId : null
-  const observeJourney = useCallback((rows: Pick<QuestionMessage, "intent" | "seq">[]) => {
-    setJourney((current) => latestJourneyMark(rows, current))
-  }, [])
   const interimActivityGatesRef = useRef<Set<string>>(new Set())
   const [interimActivityGateCount, setInterimActivityGateCount] = useState(0)
   const releaseHeldActivityRows = useCallback(() => {
@@ -712,8 +669,7 @@ export function AgentThread({
   // markdown, so it lands atomically (never through the typewriter — the
   // law's atomic-landing twin), after its design activity's settle row.
   const handleRowAppend = useCallback((wire: RowAppendPayload) => {
-    const row = journeyTranscriptRow(wire)
-    observeJourney([row])
+    const row = wire
     noteObservedSeq(row.seq)
     const turnId = row.turn_id ? adoptCurrentTurnId(row.turn_id) : undefined
     const frame = activityRowFrame(row.intent)
@@ -760,7 +716,7 @@ export function AgentThread({
         },
       ]
     })
-  }, [adoptCurrentTurnId, noteObservedSeq, observeJourney, reconcileCurrentTurnRows])
+  }, [adoptCurrentTurnId, noteObservedSeq, reconcileCurrentTurnRows])
   const handleRowUpdate = useCallback(
     (id: string, frame: ActivityRowFramePayload) => {
       currentActivityRowKeysRef.current.add(id)
@@ -870,7 +826,6 @@ export function AgentThread({
   }, [rememberSkillOption])
   const [chatBusy, setChatBusy] = useState(false)
   const [stopPending, setStopPending] = useState(false)
-  const [runCancelPending, setRunCancelPending] = useState(false)
   // Typewriter busy/idle edge. The bottom now seat also requires an actually
   // released non-whitespace fragment: buffered envelope text is not visible
   // prose. An existing current fold owns the live label in place and seals
@@ -948,63 +903,6 @@ export function AgentThread({
   const projectChangedRef = useRef(onProjectChanged)
   projectChangedRef.current = onProjectChanged
 
-  const {
-    steps,
-    status,
-    terminal,
-    terminalSource,
-    createdAt: runCreatedAt,
-    uploadRetryCount,
-  } = useRunEvents(runId, undefined, runAttempt)
-  const currentUploadRetryCount = Math.max(uploadRetryCount, runAttemptUploadRetry)
-  const currentUploadRetryCountRef = useRef(currentUploadRetryCount)
-  currentUploadRetryCountRef.current = currentUploadRetryCount
-  const currentRunAttempt: RunAttemptKey | null = runId
-    ? { runId, attempt: runAttempt }
-    : null
-  const currentRunAttemptRef = useRef<RunAttemptKey | null>(currentRunAttempt)
-  currentRunAttemptRef.current = currentRunAttempt
-  // The run-delivery segment has its own write-once clock per attachment
-  // attempt. Old deliveries and old async continuations cannot seal recovery.
-  const [runWorkSeal, setRunWorkSeal] = useState<RunWorkSeal | null>(null)
-  const runWorkSealRef = useRef<RunWorkSeal | null>(null)
-  const [reviewExpiredAttempt, setReviewExpiredAttempt] = useState<RunAttemptKey | null>(null)
-  useEffect(() => {
-    runWorkSealRef.current = null
-    setRunWorkSeal(null)
-    setReviewExpiredAttempt(null)
-    setRunCancelPending(false)
-  }, [runId, runAttempt])
-  const sealRunWorkSegment = useCallback((targetRunId: string, endedAtMs: number) => {
-    const attempt = runAttemptRef.current
-    const next = nextRunWorkSeal(runWorkSealRef.current, currentRunAttemptRef.current, {
-      runId: targetRunId,
-      attempt,
-      endedAtMs,
-    })
-    if (next === runWorkSealRef.current) return
-    runWorkSealRef.current = next
-    setRunWorkSeal(next)
-  }, [])
-  // Ref mirror: sendChat's async continuation must read the live terminal
-  // state, not a stale closure.
-  const terminalRef = useRef(terminal)
-  useEffect(() => {
-    terminalRef.current = terminal
-    if (terminal) setRunCancelPending(false)
-  }, [terminal])
-
-  // Phase 3 Batch B (裁决 1, 2026-09-20): the confirm beat is a DERIVED
-  // predicate, never a phase — readiness comes from the server-named stamp
-  // alone (PLAN_READY), plus the dock's own facts: a plan actually landed
-  // (intentReady) and no run is live (runAttached = runId ∧ ¬terminal — the
-  // post-terminal refinement's new plan must be able to raise the beat
-  // again, so the conjunct is run LIVENESS, not run existence). The
-  // envelope→stamp window (a live dock's pill waits one refetch) is accepted
-  // by the ruling: the conservative direction, and the birthplace 422 guards
-  // for real. No lifecycle decision is ever re-derived locally.
-  const runAttached = runId != null && !terminal
-
   // The pending question is a plain DB row — fetching the project
   // conversation rebuilds the dock after refresh / on any device, whatever
   // the phase (task_book while confirming, question once the chat loop asks).
@@ -1039,17 +937,13 @@ export function AgentThread({
       },
       {
         suggestions,
-        sealRunId = null,
-        workerOpeningId,
         fresh = true,
       }: {
         suggestions?: SuggestionPill[]
-        sealRunId?: string | null
-        workerOpeningId?: string | null
         fresh?: boolean
       } = {},
     ) => {
-      const row = journeyTranscriptRow(wire)
+      const row = wire
       noteObservedSeq(row.seq)
       const runDelivery = triggerSuggestions(row.intent) !== undefined
       const runDeliveryRef = triggerDeliveryRef(row.intent)
@@ -1064,11 +958,6 @@ export function AgentThread({
         runDeliveryRef,
         outputRefs: triggerOutputRefs(row.intent),
       })
-      message.mediaProgress = mediaProgress(wire)
-      message.mediaOpeningId = journeyMark(wire)?.openingId
-      message.sceneOrder = sceneOrder(wire)
-      message.activity = preparationActivity(wire)
-      message.continuationTurnId = continuationTurnId(wire, workerOpeningId)
       setMessages((prev) => insertRecoveredMessage(prev, message, { fresh }))
       const text = (row.content ?? "").trim()
       let visibleLength = 0
@@ -1078,17 +967,6 @@ export function AgentThread({
           sawVisible = true
           const atMs = Date.now()
           noteSpeechVisible(row.id, atMs)
-          if (
-            runDelivery && sealRunId &&
-            terminalRef.current &&
-            isCurrentRunAttemptDelivery(
-              { runId: sealRunId, runDelivery: true, runDeliveryRef },
-              runIdRef.current,
-              currentUploadRetryCountRef.current,
-            )
-          ) {
-            sealRunWorkSegment(sealRunId, atMs)
-          }
         }
         // Two reads can observe this server row before React commits the first.
         visibleLength += fragment.length
@@ -1115,7 +993,7 @@ export function AgentThread({
         ),
       )
     },
-    [noteObservedSeq, noteSpeechVisible, sealRunWorkSegment],
+    [noteObservedSeq, noteSpeechVisible],
   )
 
   /** The panel's task plan + reasons live on the project (pending_brief) —
@@ -1184,12 +1062,10 @@ export function AgentThread({
   // never in the flow; a TEXT question (options-empty) IS a plain flow
   // message, pending or answered. Best-effort: the live flow works without
   // it.
-  const [historySettled, setHistorySettled] = useState(false)
   useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let watchingMedia = false
-    setHistorySettled(false)
     const load = async () => {
       try {
         const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
@@ -1232,9 +1108,6 @@ export function AgentThread({
         // rows keep their identity and typing state; a recovered live tail
         // cannot pull the final archive reply ahead of its own activities.
         if (!cancelled) {
-          const loaded = latestJourneyMark(data.items ?? [], null)
-          if (loaded) setJourneyReadSeq((seq) => Math.max(seq, loaded.seq))
-          observeJourney(data.items ?? [])
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
             const frames = new Map(history.filter((m) => m.activity)
@@ -1247,7 +1120,6 @@ export function AgentThread({
       } catch {
         if (!cancelled) setOpeningHistory("failed")
       } finally {
-        if (!cancelled) setHistorySettled(true)
         if (!cancelled && watchingMedia) timer = setTimeout(load, 2500)
       }
     }
@@ -1259,207 +1131,10 @@ export function AgentThread({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, historyAttempt])
 
-  // Mid-run dock revival (期 4): the direction interrupt docks its question
-  // while the run is already streaming — when a waiting interrupt step
-  // appears in the SSE flow, re-fetch the pending question so it docks
-  // above the input. A null fetch result keeps the dock empty (already
-  // answered elsewhere), and the step leaving waiting ends the watch.
-  useEffect(() => {
-    if (pendingQuestion) return
-    if (!steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
-    let cancelled = false
-    fetchPendingQuestion().then((q) => {
-      if (!cancelled) setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [steps, pendingQuestion, fetchPendingQuestion])
-
-  // Stale-dock clear: the server can settle the docked interrupt question
-  // without a client action — the expiry sweep's auto-answer, or an answer
-  // from another device. When this run's interrupt step leaves waiting,
-  // re-fetch and drop the dock if nothing is pending anymore.
-  useEffect(() => {
-    if (!pendingQuestion || pendingQuestion.workflow_run_id !== runId) return
-    if (steps.some((s) => s.kind === "interrupt" && s.status === "waiting")) return
-    let cancelled = false
-    fetchPendingQuestion().then((q) => {
-      if (!cancelled && !dockWorthyQuestion(q)) setPendingQuestion(null)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [steps, pendingQuestion, runId, fetchPendingQuestion])
-
-  // ── 触发回合的到达通道 (T3, ADR-077 判词③) ─────────────────────────
-  // Trigger turns land as assistant rows (intent.type === "trigger_review")
-  // OUTSIDE any request the dock made: the understanding-warmed beat fires
-  // while assets process (pre-first-run, journey 一②), the closing reviewer
-  // lands seconds after the run's terminal frame (journey 一⑦). The dock
-  // polls the conversation while either window is open; each unseen trigger
-  // row types out through its own typewriter (打字机律 — server-born prose
-  // never blobs in), and the question docks only after the prose drains
-  // (散文在先、提问随后): NEW rows carry a real options question (ADR-081 —
-  // the numbered OptionDock), LEGACY rows replay their intent-dump pills.
-  // The settle rides the existing agent-speech recall funnel (a tucked-away
-  // dock resurfaces on its own — 唤回复用, zero new machinery).
   const messagesRef = useRef<OverlayMessage[]>(messages)
   // Stop reads the latest committed render synchronously; an effect-deferred
   // mirror could miss the final visible typewriter frame.
   messagesRef.current = messages
-  const triggerInFlight = useRef<Set<string>>(new Set())
-
-  const pollTriggerMessages = useCallback(async ({
-    includeActivityRows = true,
-    reviewRunId = null,
-    openingId = null,
-    onJourneyRun,
-    signal,
-  }: {
-    openingId?: string | null
-    onJourneyRun?: (runId: string, rowSeq: number) => void
-    signal?: AbortSignal
-    includeActivityRows?: boolean
-    reviewRunId?: string | null
-  } = {}): Promise<void> => {
-    try {
-      const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
-        toast: false, signal,
-      })
-      if (!convRes.ok) return
-      const conv = (await convRes.json()) as { id?: string }
-      if (!conv.id) return
-      const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
-        toast: false, signal,
-      })
-      if (!res.ok) return
-      const data = (await res.json()) as {
-        items?: (QuestionMessage & { role: "user" | "assistant" | "system" })[]
-      }
-      if (signal?.aborted) return
-      const rows = data.items ?? []
-      let latestStart: { runId: string; seq: number } | undefined
-      const observedBefore = observedMessageSeq(
-        observedSeqRef.current,
-        messagesRef.current,
-      )
-      // The response advances the observation watermark immediately; each
-      // admission decision below still compares with the PRE-response tail.
-      for (const row of rows) noteObservedSeq(row.seq)
-      for (const row of rows) {
-        if (signal?.aborted) return
-        if (row.role !== "assistant") continue
-        const mark = journeyMark(row)
-        const sameTurnActivity = row.turn_id === openingId &&
-          (activityRowFrame(row.intent) !== undefined || (row.intent as { type?: string } | null)?.type === "interim_prose")
-        if (openingId && !(mark ? mark.openingId === openingId : sameTurnActivity)) continue
-        // 永不渲染行 (ADR-108): the rejection forensics ledger / legacy
-        // aggregate logs never enter the flow.
-        if (isNonRenderIntent(row.intent)) continue
-        const fresh = isFreshPolledRow(row.seq, observedBefore)
-        const beat = includeActivityRows ? activityRowFrame(row.intent) : undefined
-        if (beat !== undefined) {
-          const existing = messagesRef.current.find((m) => m.id === row.id)
-          if (existing?.activity?.status === "active" && (
-            beat.status !== "active" || existing.activity.key !== beat.key ||
-            existing.activity.count !== beat.count || existing.activity.total !== beat.total
-          )) {
-            setMessages((previous) => previous.map((m) => m.id === row.id
-              ? { ...m, activity: { ...m.activity, ...beat } } : m))
-          }
-          if (existing || !fresh) continue
-          const recovered = buildRecoveredActivityRow({
-            id: row.id,
-            seq: row.seq,
-            createdAt: row.created_at,
-            turnId: row.turn_id,
-            beat,
-          })
-          if (recovered.registerHost) currentActivityRowKeysRef.current.add(row.id)
-          setMessages((prev) =>
-            insertRecoveredMessage(prev, recovered.message, { fresh: true }),
-          )
-          continue
-        }
-        // Current server rows always carry seq. A null-seq row is legacy
-        // archive, never a new live-tail arrival; mount replay still renders
-        // it with read tolerance.
-        if (row.seq == null) continue
-        const suggestions = triggerSuggestions(row.intent)
-        if (openingId && row.workflow_run_id && mark?.state === "active" && suggestions === undefined) {
-          latestStart = { runId: row.workflow_run_id, seq: row.seq }
-        }
-        if (!openingId && suggestions === undefined) continue
-        // A generic watch never backfills old speech. Run review admits only
-        // its own delivery/failure row; an unrelated trigger is not this
-        // window's to recover, even when it is new to this client.
-        if (!openingId && !shouldAdmitPolledTrigger({
-          fresh,
-          reviewRunId,
-          rowRunId: row.workflow_run_id,
-        })) {
-          continue
-        }
-        // Dedup by the SERVER row id — the archive replay and a previous
-        // poll arrival land under the same id, so the row is known if it is
-        // in the flow already or mid-typing. A PENDING options question
-        // replays as its echo row (`${id}-echo`, 形态律 replay), so that
-        // alias counts as known too — without it a refresh inside a watch
-        // window re-types the review under the bare id.
-        if (triggerInFlight.current.has(row.id)) continue
-        const existing = messagesRef.current.find((message) => belongsToServerRow(message, row.id))
-        if (existing) {
-          // A restarted worker can settle the same receipt in place.
-          const settled = journeyTranscriptRow(row)
-          if (mark && mark.state !== "active" && !existing.streaming &&
-              (existing.content !== (settled.content ?? "") || !!existing.mediaProgress !== mediaProgress(row) ||
-               JSON.stringify(existing.blocks ?? []) !== JSON.stringify(settled.blocks ?? []))) {
-            setMessages((previous) => previous.map((message) => message.id === existing.id
-              ? { ...message, content: settled.content ?? "", blocks: settled.blocks,
-                  mediaProgress: mediaProgress(row), continuationTurnId: continuationTurnId(row, openingId) }
-              : message))
-          }
-          continue
-        }
-        triggerInFlight.current.add(row.id)
-        try {
-          await pacePersistedMessage(row, {
-            suggestions,
-            sealRunId: row.workflow_run_id,
-            workerOpeningId: openingId,
-            fresh,
-          })
-          // 选项语法统一律 (ADR-081): a NEW-shape trigger row carries its
-          // suggestions as a real options question (question payload) —
-          // dock it once the prose has drained (提问随后, same law the
-          // legacy pills follow). Legacy rows skip this (their chips are
-          // already attached above).
-          if (!row.answer && (row.question?.options?.length ?? 0) > 0) {
-            const q = await fetchPendingQuestion()
-            setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
-          }
-        } finally {
-          triggerInFlight.current.delete(row.id)
-        }
-      }
-      if (signal?.aborted) return
-      const markedRows = openingId ? rows.filter((row) => journeyMark(row)?.openingId === openingId) : rows
-      if (latestStart && latestJourneyMark(markedRows, null)?.state === "active") {
-        onJourneyRun?.(latestStart.runId, latestStart.seq)
-      }
-      // A run-scoped poll may discover the first mark. Only a journey-scoped
-      // read can finish the watch, after admitting all its rows through the terminal one.
-      if (openingId) {
-        const latest = latestJourneyMark(markedRows, null)
-        if (latest) setJourneyReadSeq((seq) => Math.max(seq, latest.seq))
-      }
-      if (openingId || !journeyOpeningId) observeJourney(markedRows)
-    } catch {
-      /* server-born speech is best-effort — the replay rebuilds on refresh */
-    }
-  }, [projectId, fetchPendingQuestion, pacePersistedMessage, noteObservedSeq, journeyOpeningId, observeJourney])
-
   // Load the project's assets for the prompt attachments — once on mount,
   // and again after a chat turn when the project started empty: the plan
   // path promotes user-declared pasted text ("this is my transcript: …")
@@ -1541,12 +1216,7 @@ export function AgentThread({
           for (const row of fresh) {
             if (gen !== reconcileGenRef.current) return
             reconciledIdsRef.current.add(row.id)
-            await pacePersistedMessage(row, {
-              sealRunId:
-                triggerSuggestions(row.intent) !== undefined
-                  ? row.workflow_run_id
-                  : null,
-            })
+            await pacePersistedMessage(row)
           }
           // The turn's terminal artifacts are in — dock a pending ask if the
           // turn left one, refresh attachments, settle the line, release the
@@ -1657,7 +1327,6 @@ export function AgentThread({
   /** Honest preprocess copy (chat-flow-sequencing 验收 5): with zero file
    * uploads the preprocess node validates material / admits the writer
    * lift — "Analyzing your uploads…" would be a lie. */
-  const hasUploads = assets.some((a) => a.file_url)
 
   // Processing watch: sent assets mid-processing — the tick refreshes the
   // asset rows (the chips' processing state and the now-line's reading rows
@@ -1671,116 +1340,20 @@ export function AgentThread({
         a.processing_status === "processing"),
   )
   useEffect(() => {
-    if (!assetsProcessing || journeyOpeningId) return
-    // Open the observation baseline before the first tick; beats already in
-    // this snapshot are archive, beats extending it afterwards are live.
-    void pollTriggerMessages()
-    const id = setInterval(() => {
-      void fetchAssets()
-      void pollTriggerMessages()
-    }, 3000)
+    if (!assetsProcessing) return
+    const id = setInterval(() => { void fetchAssets() }, 3000)
     return () => clearInterval(id)
-  }, [assetsProcessing, journeyOpeningId, fetchAssets, pollTriggerMessages])
+  }, [assetsProcessing, fetchAssets])
 
-  // Watch window (run terminal → current-attempt delivery reply). Historical
-  // hydration settles from real rows; only an explicit live attachment uses
-  // the bounded 60s no-reply wait. Expiry stops the shimmer, not late polling.
-  const reviewerLanded = runReviewerLanded(messages, runId, currentUploadRetryCount)
-  const reviewExpired = sameRunAttempt(reviewExpiredAttempt, currentRunAttempt)
-  const historicalTerminal = isHistoricalRunTerminal({
-    terminal,
-    terminalSource,
-    runStartedExplicitly,
-  })
-  const historicalReviewSettled = historicalTerminal && historySettled
-  const reviewPending =
-    terminal &&
-    status !== "cancelled" &&
-    runId != null &&
-    !reviewerLanded &&
-    !reviewExpired &&
-    !historicalTerminal
-  const runWorkEndedAtMs = runWorkSeal && sameRunAttempt(runWorkSeal, currentRunAttempt)
-    ? runWorkSeal.endedAtMs
-    : null
-  useEffect(() => {
-    if (journeyOpeningId || !terminal || !runId || reviewerLanded || status === "cancelled" || !historySettled) return
-    const attemptKey = { runId, attempt: runAttempt }
-    if (historicalReviewSettled) {
-      if (!reviewExpired) {
-        setReviewExpiredAttempt(attemptKey)
-        sealRunWorkSegment(runId, runStepEndMs(runCreatedAt, steps) ?? Date.now())
-      }
-      return
-    }
-    const startedAt = Date.now()
-    const poll = () => {
-      if (!sameRunAttempt(currentRunAttemptRef.current, attemptKey)) return
-      void pollTriggerMessages({ includeActivityRows: false, reviewRunId: runId })
-    }
-    poll()
-    const id = setInterval(() => {
-      if (!sameRunAttempt(currentRunAttemptRef.current, attemptKey)) return
-      if (!reviewExpired && Date.now() - startedAt > 60_000) {
-        setReviewExpiredAttempt(attemptKey)
-        sealRunWorkSegment(runId, runStepEndMs(runCreatedAt, steps) ?? startedAt)
-      }
-      // Keep admitting a genuinely late delivery after the visual seal. Its
-      // arrival disables the zero-delivery fallback in the same render.
-      poll()
-    }, 3000)
-    return () => clearInterval(id)
-  }, [
-    terminal,
-    terminalSource,
-    status,
-    runId,
-    runAttempt,
-    reviewerLanded,
-    reviewExpired,
-    historicalReviewSettled,
-    historySettled,
-    journeyOpeningId,
-    pollTriggerMessages,
-    runCreatedAt,
-    steps,
-    sealRunWorkSegment,
-  ])
-
-  // The output mention's candidate feed (reference family, MENTIONS §2): a
-  // pinned output id resolves the revision target deterministically
-  // server-side. Refresh on mount and when a run lands terminal (new
-  // outputs exist only then).
-  const [outputs, setOutputs] = useState<Output[]>([])
   const [globalReferences, setGlobalReferences] = useState<{
     assets: { id: string; title: string; type: string }[]
     outputs: { id: string; name: string; type: string }[]
   }>({ assets: [], outputs: [] })
-  const fetchOutputs = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/v1/projects/${projectId}/results`, {
-        toast: false,
-      })
-      if (res.ok) {
-        const data = (await res.json()) as { outputs?: Output[] }
-        setOutputs(data.outputs ?? [])
-      }
-    } catch {
-      /* mention feed refresh is best-effort */
-    }
-  }, [projectId])
-
-  useEffect(() => {
-    void fetchOutputs()
-  }, [fetchOutputs, terminal])
-
-  // Persistent delivery facts, including archived exact Outputs. The active
-  // /results rows only fill the brief window before this projection refreshes.
   const [chatOutputEntries, setChatOutputEntries] = useState<ChatOutputEntry[] | null>(null)
   const [viewerOutputId, setViewerOutputId] = useState<string | null>(null)
   const deliveryMessageKey = messages
-    .filter((message) => message.runId || message.outputRefs?.length)
-    .map((message) => `${message.id}:${message.runId ?? ""}:${(message.outputRefs ?? []).join(",")}`)
+    .filter((message) => message.outputRefs?.length)
+    .map((message) => `${message.id}:${(message.outputRefs ?? []).join(",")}`)
     .join("|")
   useEffect(() => {
     let cancelled = false
@@ -1799,26 +1372,10 @@ export function AgentThread({
       cancelled = true
       if (interval) clearInterval(interval)
     }
-  }, [projectId, terminal, deliveryMessageKey, viewerOutputId])
+  }, [projectId, deliveryMessageKey, viewerOutputId])
 
-  const chatOutputs = useMemo(() => {
-    const byId = new Map(outputs.map((output) => [output.id, output]))
-    for (const entry of chatOutputEntries ?? []) {
-      if (entry.output) byId.set(entry.output_id, entry.output)
-    }
-    return [...byId.values()].filter(isChatVideoOutput)
-  }, [outputs, chatOutputEntries])
-  const runHasDelivery = hasAnyRunDelivery(messages, runId)
-  const runFallbackOutputs = zeroDeliveryVideoOutputs({
-    steps,
-    outputs: chatOutputs,
-    terminal,
-    reviewSettled:
-      reviewExpired ||
-      historicalReviewSettled ||
-      (status === "cancelled" && (runStartedExplicitly || historySettled)),
-    hasDelivery: runHasDelivery,
-  })
+  const chatOutputs = useMemo(() => (chatOutputEntries ?? []).flatMap(({ output }) =>
+    output && isChatVideoOutput(output) ? [output] : []), [chatOutputEntries])
 
   // One Chat-hosted viewer: message rows supply only the exact Output id.
   const viewerTriggerRef = useRef<HTMLElement | null>(null)
@@ -1857,7 +1414,7 @@ export function AgentThread({
       }
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [projectId, terminal])
+  }, [projectId, deliveryMessageKey])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1886,7 +1443,7 @@ export function AgentThread({
       // The owner-wide feed stays available for a future cross-project picker;
       // this project's @ surface admits only entities in its current results.
       const currentAssetIds = new Set(assets.map((asset) => asset.id))
-      const currentOutputIds = new Set(outputs.map((output) => output.id))
+      const currentOutputIds = new Set(chatOutputs.map((output) => output.id))
       return {
         assets: [...new Map([...globalReferences.assets, ...assets].map((a) => [a.id, a])).values()]
           .filter((a) => currentAssetIds.has(a.id) && a.title)
@@ -1902,7 +1459,7 @@ export function AgentThread({
             chipLabel: o.name || t("chat.videoStoryboard.title"),
             kind: o.type,
           })),
-          ...outputs.map((o) => ({
+          ...chatOutputs.map((o) => ({
             id: o.id,
             label: outputMentionName(o, t(`chat.anchorCards.types.${o.type}`)),
             chipLabel: outputMentionLabel(o, t(`chat.anchorCards.types.${o.type}`)),
@@ -1912,7 +1469,7 @@ export function AgentThread({
           .filter((o) => currentOutputIds.has(o.id) && ["clip", "film", "video"].includes(o.kind)),
       }
     },
-    [assets, outputs, globalReferences, t],
+    [assets, chatOutputs, globalReferences, t],
   )
 
   // Terminal (ADR-051 — the dock is the sole shell): failure stays put —
@@ -1920,87 +1477,6 @@ export function AgentThread({
   // 人话化梯), no toast on top; success hands off to the page (refetch →
   // the landed products show on the canvas) and the run's completion recalls
   // a tucked-away panel (the lastAgentKey mechanism below).
-  useEffect(() => {
-    if (!terminal) return
-    // 收紧判定 (2026-09-13, ADR-074②): a PARTIAL failure is FAILED now but
-    // still hands off — its landed products must reach the canvas. Only a
-    // run that landed NOTHING (no done step with output_refs — prep steps
-    // don't count) skips the refetch: nothing new to show, the failed rows
-    // carry the error in-flow.
-    if (
-      status === "failed" &&
-      !steps.some((s) => s.status === "done" && (s.output_refs?.length ?? 0) > 0)
-    ) {
-      return
-    }
-    void projectChangedRef.current()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terminal])
-
-  /** Shared landing for every path that starts a run (the dock's Start
-   * button, a prose confirmation via /chat): the dock clears and the step
-   * flow takes over. The page is told at the same beat — its refetch flips
-   * runActive, attaches the page SSE, and the run 期活画布 renders from the
-   * first beat. NO QA archive on any start path (2026-09-05 用户拍板): the
-   * AnsweredQuestion block is the option-choice UI — a task_book start is a
-   * gesture, not a Q&A; its record = echo 散文 + (chat 文本时) 用户原话 +
-   * run 收据行. */
-  const landOnStartedRun = useCallback((startedRunId: string) => {
-    // A started run retires the old presentation receipt locally. Invalidate
-    // any in-flight read so it cannot re-authorize a historical card later.
-    presentationRecoveryGenRef.current += 1
-    setPresentationRecovery(null)
-    setPendingQuestion(null)
-    const sameRun = runIdRef.current === startedRunId
-    const newAttachment = !sameRun || terminalRef.current
-    if (newAttachment) {
-      const { attempt, uploadRetryCount: retryCount } = nextRunAttachment(
-        runAttemptRef.current,
-        sameRun,
-      )
-      // The server may already have pushed upload_retry_count=N before this
-      // Chat envelope lands. The attachment epoch is the client's recovery
-      // ordinal; incrementing that already-advanced server count again would
-      // wait for upload-retry-(N+1) and never seal the real retry-N delivery.
-      runAttemptRef.current = attempt
-      runIdRef.current = startedRunId
-      currentRunAttemptRef.current = { runId: startedRunId, attempt }
-      currentUploadRetryCountRef.current = retryCount
-      terminalRef.current = false
-      setRunAttempt(attempt)
-      setRunAttemptUploadRetry(retryCount)
-    }
-    setRunStartedExplicitly(true)
-    setRunId(startedRunId)
-    void projectChangedRef.current(startedRunId)
-  }, [])
-
-  // Worker continuations have no browser request or uploaded asset to keep
-  // their message watch alive. Follow the original request through its final row.
-  const lastJourneyStart = useRef(-1)
-  useEffect(() => {
-    if (!historySettled || !journeyOpeningId || chatBusy) return
-    const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout>
-    const poll = async () => {
-      await pollTriggerMessages({
-        openingId: journeyOpeningId,
-        signal: controller.signal,
-        onJourneyRun: (nextRunId, seq) => {
-          if (seq <= lastJourneyStart.current) return
-          lastJourneyStart.current = seq
-          if (runIdRef.current !== nextRunId) landOnStartedRun(nextRunId)
-        },
-      })
-      if (!controller.signal.aborted) timer = setTimeout(() => { void poll() }, 3000)
-    }
-    void poll()
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
-  }, [journeyOpeningId, historySettled, chatBusy, pollTriggerMessages, landOnStartedRun])
-
   const taskLabel = useCallback(
     (task: TaskItem) => {
       const meta = TOOL_META[task.tool]
@@ -2027,14 +1503,12 @@ export function AgentThread({
     [summarizePlan],
   )
 
-  const planSummary = useMemo(() => titleOf(intent), [intent, titleOf])
 
   /** The receipt/recap title (ADR-058): stamped from the BIRTHING proposal
    * at run birth — the run's own truth, immune to later intent drift (a
    * chat-dispatch turn never touches the dock's plan state; the next
    * refinement plan must not retitle an archived receipt). Null = fall back
    * to the live plan's title (plan-confirm starts are fresh by construction). */
-  const runTitle = planSummary
 
   /** Land the user-level shortfall as the in-flow grey row (BILLING §7 — the
    * 422's typed form, never a toast): the meta:"error" seat turn.failed
@@ -2308,25 +1782,8 @@ export function AgentThread({
     wire: QuestionMessage,
     opts?: { echoCarried?: boolean }
   ) => {
-    const message = journeyTranscriptRow(wire)
-    observeJourney([message])
-    if (preparationTool(message)) {
-      await pacePersistedMessage(message)
-      return
-    }
+    const message = wire
     if (message.question && !message.answer) {
-      if (
-        message.question.kind === "task_book" &&
-        runIdRef.current &&
-        !terminalRef.current
-      ) {
-        // A run is already LIVE (started from another surface while this
-        // turn was in flight) — a late task plan must not pull the UI back
-        // to confirm; the run flow owns the surface now. (A TERMINAL run
-        // does not trigger this guard: the dock's refinement plans dock
-        // normally — runId set ≠ run live.)
-        return
-      }
       if (
         message.question.kind === "question" &&
         (message.question.options?.length ?? 0) === 0 &&
@@ -2787,7 +2244,6 @@ export function AgentThread({
         ),
       )
       if (data.assistant_message != null) {
-        observeJourney([data.assistant_message])
         reconciledIdsRef.current.add(data.assistant_message.id)
       }
       if (data.answered_question != null) {
@@ -3082,7 +2538,7 @@ export function AgentThread({
   }
 
   useEffect(() => {
-    if (!firstMessage || initialRunId || openingHistory !== "empty" || firstMessageSentRef.current) return
+    if (!firstMessage || openingHistory !== "empty" || firstMessageSentRef.current) return
     firstMessageSentRef.current = true
     void (async () => {
       const rollbackId = crypto.randomUUID()
@@ -3112,7 +2568,7 @@ export function AgentThread({
       })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openingHistory, firstMessage, initialRunId])
+  }, [openingHistory, firstMessage])
 
   const handleGroupSubmit = async (
     answers: BriefAnswerItem[],
@@ -3324,7 +2780,7 @@ export function AgentThread({
       adoptTurnId(data.follow_up?.turn_id ?? data.answered_question.turn_id)
       setMessages((prev) => (ownsTurn() ? reconcileTurnRows(prev) : prev))
       const answeredRow = buildAnsweredQuestionRow(data.answered_question)
-      const followUp = data.follow_up ? journeyTranscriptRow(data.follow_up) : null
+      const followUp = data.follow_up
       // 打字机律最后闸门 (sendChat 同款): a zero-delta follow-up (the
       // funnel's repair round never streams) paces its prose through the
       // preview bubble BEFORE the archive splice — the echo visibly leads,
@@ -3360,7 +2816,6 @@ export function AgentThread({
           : prev,
       )
       if (followUp) {
-        if (preparationTool(followUp)) setMessages((prev) => prev.filter((m) => m.id !== previewId))
         // echoCarried ≡ the settled bubble carries streamed prose
         // (2026-09-09 单派生): a paced zero-delta follow-up rides the same
         // typewriter, whose callback flips the flag — `streamedAny ||
@@ -3534,11 +2989,6 @@ export function AgentThread({
 
   /** Stop either the attached active Run or the current assistant Turn. A
    * failed control request leaves the real work running and never fakes a stop. */
-  const latestUser = messages.slice().reverse().find((m) => m.role === "user")
-  const journeyActive = journey?.state === "active" && !pendingQuestion && (!latestUser ||
-    latestUser.id === journey.openingId || latestUser.serverMessageId === journey.openingId ||
-    latestUser.turnId === journey.openingId)
-
   const stopFrontier = (turnId: string) => {
     const structureIds = new Set<string>()
     for (const [id, owner] of visibleStructureTurnsRef.current) {
@@ -3548,46 +2998,8 @@ export function AgentThread({
   }
 
   const handleStop = async () => {
-    if (stopPending || runCancelPending) return
+    if (stopPending) return
     const controller = abortRef.current
-    if (!chatBusy && journeyActive && journey) {
-      setStopPending(true)
-      try {
-        const res = await apiFetch(`/api/v1/chat/turns/${journey.openingId}/stop`, {
-          method: "POST", body: { scope: "media_preparation" },
-        })
-        if (res.ok) {
-          const { journey_message } = await res.json() as { journey_message?: Pick<QuestionMessage, "seq" | "intent"> }
-          if (journey_message) observeJourney([journey_message])
-        }
-      } catch {
-        // apiFetch reports the error. Keep following the worker until it settles.
-      } finally {
-        setStopPending(false)
-      }
-      return
-    }
-    if (runAttached && runId) {
-      setRunCancelPending(true)
-      let requested = false
-      try {
-        const res = await apiFetch(`/api/v1/runs/${runId}/cancel`, {
-          method: "POST",
-          body: {},
-        })
-        if (!res.ok) return
-        requested = true
-        // The Run cancel is authoritative; an associated assistant stream may
-        // only be finishing its already-committed typewriter drain.
-        controller?.abort()
-        requestAnimationFrame(() => editorRef.current?.focus())
-      } catch {
-        // apiFetch already reported the failure; the Run remains active.
-      } finally {
-        if (!requested) setRunCancelPending(false)
-      }
-      return
-    }
     if (!controller) {
       if (!recoveredJobTurn) return
       setStopPending(true)
@@ -3665,7 +3077,7 @@ export function AgentThread({
     // (× removes one). answering: an option answer is mid-flight — its
     // optimistic archive + the follow-up LLM turn own the flow until they
     // land.
-    if ((!text && ready.length === 0) || chatBusy || answering || runAttached) return
+    if ((!text && ready.length === 0) || chatBusy || answering ) return
     if (staged.some((s) => s.status === "uploading")) return
     const sentAssets = ready.map((s) => s.asset)
     // The assets state learns the upload at SEND, never at stage (the send
@@ -3759,20 +3171,6 @@ export function AgentThread({
     unit.kind === "activityFold" && unit.openTail,
   )
   const workFold = openFold?.kind === "activityFold" ? openFold : undefined
-  const preparationRunId = workFold?.workRunIds?.at(-1)
-  const preparationStart = preparationRunId
-    ? messages.find((m) => m.runId === preparationRunId && m.activity?.kind === "run")
-    : undefined
-  const followingJourney = journeyActive && workFold?.turnId === journey?.openingId
-  const attachedPreparation = !!preparationRunId && runId === preparationRunId
-  const livePreparation = !!preparationStart && preparationStart.activity?.status !== "cancelled" &&
-    !(journey?.openingId === workFold?.turnId && journey?.state === "stopped") && (attachedPreparation
-    ? status !== "cancelled" && (!terminal || reviewPending || followingJourney)
-    : followingJourney)
-  // Worker continuations have no browser Chat request. Their persisted tool
-  // callbacks still update the same open activity fold during the journey poll.
-  const workerContinuing = !chatBusy && followingJourney && !preparationRunId && !pendingQuestion
-
   // The now label is shared by the bottom seat (no current activity host
   // yet) and the current open fold (from its FIRST active host onward).
   // Thus previous-prose typing can hide the bottom Thinking seat, but it can
@@ -3811,28 +3209,7 @@ export function AgentThread({
       name,
       count,
     })
-    if (livePreparation && preparationStart) {
-      if (messages.some((m) => m.mediaProgress && m.runId === preparationRunId)) {
-        return workFold?.liveActivity ?? think(null)
-      }
-      if (attachedPreparation && terminal) return think("chat.closingReview")
-      const step = attachedPreparation ? steps.find((item) => item.status === "running") : undefined
-      const stage = step && visibleProductionStages(step).reverse().find((item) => item.status === "running")
-      const index = stage?.scene_id && preparationStart.sceneOrder
-        ? preparationStart.sceneOrder.indexOf(stage.scene_id) + 1 : step?.scene_index
-      if (index && (stage?.kind === "visual_assets" || stage?.kind === "speech_media")) {
-        const key = stage.kind === "visual_assets" ? "pictureScene" : "voiceScene"
-        return think(`chat.preparationProgress.${key}`, chineseSceneNumber(index), index)
-      }
-      if (stage && stage.kind !== "validate") {
-        if (stage.kind === "visual_assets" && stage.item_count) {
-          return think("chat.preparationProgress.imagesProcessed", undefined, stage.item_count)
-        }
-        return think(`chat.preparationProgress.${stage.kind}`)
-      }
-      return think(preparationStart.activity?.key ?? null)
-    }
-    if (workerContinuing) return workFold?.liveActivity ?? think(null)
+    if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn && workFold.liveActivity) return workFold.liveActivity
     if (chatBusy) {
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
     }
@@ -3884,7 +3261,7 @@ export function AgentThread({
       }
     }
   }
-  if (workFold && (livePreparation || workerContinuing)) liveWorkFoldKey = workFold.rowKey
+  if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn) liveWorkFoldKey = workFold.rowKey
   const bottomNowRow =
     liveWorkFoldKey == null && !visibleProseTyping && interimActivityGateCount === 0
       ? nowRow
@@ -3902,7 +3279,7 @@ export function AgentThread({
    * pills never carry a turn of their own. */
   const handleSuggestionClick = (s: SuggestionPill) => {
     if (s.action === "download") {
-      const output = outputs.find((o) => o.id === s.output_id)
+      const output = chatOutputs.find((o) => o.id === s.output_id)
       if (output) downloadOutput(output)
       return
     }
@@ -3919,10 +3296,9 @@ export function AgentThread({
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
-  const canStop = (chatBusy && abortRef.current !== null) || runAttached || journeyActive || recoveredJobTurn !== null
+  const canStop = (chatBusy && abortRef.current !== null) || recoveredJobTurn !== null
   const chatScroller = (
     <ChatConversation
-      messages={messages}
       planVersions={planVersions}
       renderPlanVersion={(version, index) => (
         <PlanVersionChip
@@ -3943,7 +3319,6 @@ export function AgentThread({
       chatOutputs={chatOutputs}
       skillOptions={skillOptions}
       openOutputViewer={openOutputViewer}
-      runId={historySettled || runStartedExplicitly ? runId : null}
       chatBusy={chatBusy}
       onSuggestionClick={handleSuggestionClick}
       onStructureVisible={registerStructureVisibility}
@@ -3953,16 +3328,6 @@ export function AgentThread({
       nowRow={nowRow}
       bottomNowRow={bottomNowRow}
       activeTurnId={adoptCurrentTurnId() ?? null}
-      steps={steps}
-      runTitle={runTitle}
-      runCreatedAt={runCreatedAt}
-      terminal={terminal}
-      status={status}
-      reviewPending={reviewPending}
-      runWorkEndedAtMs={runWorkEndedAtMs}
-      runFallbackOutputs={runFallbackOutputs}
-      hasUploads={hasUploads}
-      assets={assets}
       scrollerSendRef={scrollerSendRef}
     />
   )
@@ -4134,7 +3499,7 @@ export function AgentThread({
             stop={canStop}
             disabled={
               canStop
-                ? stopPending || runCancelPending
+                ? stopPending
                 : (!input.trim() &&
                     !staged.some((s) => s.status === "done")) ||
                   staged.some((s) => s.status === "uploading")
