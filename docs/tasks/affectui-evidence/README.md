@@ -31,6 +31,14 @@ Chrome 复现了一个展示回执错误。服务端 DTO 为 `video_preview.stat
 
 以上请求由浏览器网络夹具接收。真实项目刷新、服务端持久化、用户续改及历史 Output 联调仍未验证。Editor 单独报告的隔离 PostgreSQL HTTP 验证见交接文档。此切片只涉及分镜展示与恢复判定的消费端，Tool、Context 与 Job 执行没有新增联调证据。
 
+### 项目详情路由交接（UI → Editor 6D）
+
+| 文件 | UI 释放状态 | 接手方与范围 |
+|---|---|---|
+| `apps/web/src/routes/_app.projects.$id.tsx` | `RELEASED` | `OWNED_BY_EDITOR`，接手项目详情页的旧 Run / lifecycle 数据消费与 Chat 接线 |
+
+核对时共享 main 为 `cf8608e0`。该路由的 HEAD、暂存区及工作树内容均为 Git blob `b7bab342f0e86186be5f5ba782228ac52553b3a3`，没有待合入的 UI 改动。6D 可直接接手。除 AgentThread 的 `initialRunId`、`lifecycle` 和 prompt 回退外，该文件还用 `latest_run` 与 `material_pending` 决定素材轮询，用 `runActive` 驱动项目菜单。Home 首发通过 `location.state.firstMessage` 单独传入。此次释放仅涉及该路由，分镜卡继续归 UI。
+
 ### 官方源码与接入裁决
 
 使用本地 affectui、affectui-migrate Skills 及条目参考，通过 affectUI MCP 的 search_components、get_component、get_source 读取完整 TSX。apps/web 的 shadcn Registry 配置有效。直接请求免费 tool-call-card-clean 返回 200。当前 shell 无 Registry Token，直接请求 Pro approval-card-clean 返回 401，授权 MCP 成功返回其完整源码。Pro Screen 与 Composer 同样经 MCP 读取。
