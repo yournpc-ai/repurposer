@@ -1,6 +1,28 @@
 import type { Resources } from "./en"
 
 const zh: Resources = {
+  agentReceipt: {
+    accepted: "待执行",
+    queued: "排队",
+    running: "运行中",
+    success: "成功",
+    error: "失败",
+    cancelled: "已取消",
+    unknown: "结果未知",
+    notExecuted: "未执行",
+    pending: "待确认",
+    denied: "已拒绝",
+    approved: "已同意",
+    versionSaved: "版本已保存",
+    outputGenerated: "待审片",
+    delivered: "已交付",
+    group: "工具调用（{{count}}）",
+    thinking: "思考中",
+    quote: "报价",
+    limit: "费用上限",
+    approve: "同意",
+    decline: "拒绝",
+  },
   common: {
     retryHistory: "重新加载对话",
     upload: "上传",
