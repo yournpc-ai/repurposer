@@ -1,16 +1,4 @@
-"""UI locale (display language) plumbing.
-
-Display-layer strings — step summaries, ask chrome, deterministic chat
-replies — follow the USER'S UI language, never the material's language: a
-Chinese UI generating from an English video reads Chinese step lines.
-
-The browser's locale rides the CORS-safelisted ``Accept-Language`` header
-(the frontend sends ``i18n.language`` verbatim); a middleware captures it
-into a request-scoped ContextVar, and ``create_run`` pins it into
-``TaskSpec.ui_language`` — stored verbatim on run.context like every other
-task field, so the worker (a separate process, no request context)
-reads the pinned value off the run.
-"""
+"""Capture the browser language from Accept-Language for request-scoped display text."""
 
 import contextvars
 

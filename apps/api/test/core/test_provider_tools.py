@@ -835,18 +835,17 @@ def test_chat_tool_loops_allow_twenty_bounded_iterations():
     assert intent_router.max_iterations == 20
 
 
-def test_video_modes_use_the_shared_pending_question_rule():
+def test_native_chat_prompt_contains_pending_question_and_language():
     from app.agents.base import jinja_env
-    from app.chat.intent import intent_router
     from app.chat.prompts import chat_system
 
-    plan = chat_system("plan", available_tools=intent_router.tools)
+    plan = chat_system()
     assert plan.count("待回答的问题：") == 1
     assert plan.count("交流语言：") == 1
     assert "pending_disposition" in plan
 
     opening = jinja_env.get_template("chat/user.j2").render(
-        mode="plan", recent=["- user: earlier"], message="latest answer",
+        recent=["- user: earlier"], message="latest answer",
         asset_lines=["- page (web_page)"], understanding_lines=["- Summary: evidence"],
         persona_lines=["- tone: rational"], brief_lines=["- target_seconds: 30 (user-stated)"],
         confirmation_line="确认设置： execution=auto, spending=auto.",
@@ -1149,6 +1148,24 @@ def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_pre
     assert facts["selected"] == saved["base_ref"]
     assert "recently_edited_clips" not in facts and "observed_preview" not in facts
 
+
+
+def test_export_opening_reviews_its_own_output_after_another_edit():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    work = _composition_resource()
+    exported = {**work["base_ref"], "composition_version_id": "earlier-version", "status": "available",
+                "output_id": "the-export", "content_digest": "e" * 64}
+    result = assemble_video_round({
+        "tools": intent_router.tools, "user_text": "Review and deliver the exported version",
+        "snapshot": ContextSnapshot("head", resources=(("work", work),)), "exported": exported,
+    })
+    facts = json.loads(result.context)
+    assert facts["selected"] == work["base_ref"]
+    assert facts["exported_this_opening"] == exported
+    assert {tool.name for tool in result.tools} == {"review_video", "deliver_video", "answer"}
 
 
 def test_create_rejection_stops_repeated_or_unproductive_attempts():

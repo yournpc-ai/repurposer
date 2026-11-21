@@ -279,7 +279,13 @@ async def test_cancel_refreshes_receipt_read_before_dispatch(database, export):
 
 
 @pytest.mark.asyncio
-async def test_visible_export_pins_old_version_and_only_reports_reviewed_delivery(database, export, renderer):
+async def test_visible_export_pins_old_version_and_only_reports_reviewed_delivery(database, export, renderer, monkeypatch):
+    import hashlib
+    from app.chat.editor import DeliverVideoArgs, execute_editor
+
+    monkeypatch.setattr("app.chat.editor.AsyncSessionLocal", database)
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    monkeypatch.setattr("app.tools.video.review.read_output_video", AsyncMock(return_value=b"reviewed MP4"))
     from app.chat.video_turn_seats import short_video_confirmation, stamp_video_presentation
     from app.editing.service import video_version_read
     from app.editing.store import apply_composition_edits
@@ -300,7 +306,7 @@ async def test_visible_export_pins_old_version_and_only_reports_reviewed_deliver
         await db.commit()
     identity = await claim(database)
     async with database() as db:
-        await apply_composition_edits(db, owner_id=export.owner, composition_id=UUID(base["composition_id"]),
+        _, newer, _ = await apply_composition_edits(db, owner_id=export.owner, composition_id=UUID(base["composition_id"]),
                                       base_version_id=UUID(base["composition_version_id"]), ops=[set_intent("new head")])
     renderer.allow_prepare.set()
     renderer.allow_put.set()
@@ -316,14 +322,50 @@ async def test_visible_export_pins_old_version_and_only_reports_reviewed_deliver
         facts = await confirm()
         assert facts["export_job_id"] == str(export.job) and facts["status"] == "succeeded"
         assert facts["media_result"]["charged_credits"] == 8 and facts["output_refs"] == []
-        delivered = Message(conversation_id=cid, turn_id=export.turn, seq=4, role="assistant",
-                            content="Reviewed", intent={"output_refs": [str(export.job)], "reviewed_version": base})
-        db.add(delivered)
-        await db.flush()
-        assert (await confirm())["delivery_message_id"] == str(delivered.id)
+        turn = SimpleNamespace(project=project, conversation_id=cid, turn_id=export.turn, on_row_append=None,
+                               _editor_export=facts["media_result"],
+                               _video_base_ref={**base, "composition_version_id": str(newer.id),
+                                                "content_digest": newer.content_digest},
+                               _video_review_report={**base, "output_id": str(export.job), "frames": [1],
+                                                     "video_sha256": hashlib.sha256(b"reviewed MP4").hexdigest(),
+                                                     "reviewed_at": "test"})
+        for _ in range(2):
+            observation = await execute_editor(turn, "deliver_video", DeliverVideoArgs(output_id=export.job))
+            assert observation.ok, observation.content
+        deliveries = (await db.scalars(select(Message).where(Message.turn_id == export.turn,
+                                     Message.intent.has_key("reviewed_version")))).all()
+        assert len(deliveries) == 1 and deliveries[0].intent["reviewed_version"] == base
+        assert (await confirm())["delivery_message_id"] == str(deliveries[0].id)
         unrelated = Message(conversation_id=cid, seq=5, role="user", content="Another topic")
         db.add(unrelated)
         await db.flush()
         db.add(Message(conversation_id=cid, seq=6, role="assistant", turn_id=unrelated.id, content="Which one?"))
         await db.flush()
         assert await confirm() is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_reviews_prior_opening_export_once_after_newer_opening(database, export, renderer, monkeypatch):
+    async with database() as db:
+        tool = await db.get(Message, export.rid)
+        job = await db.get(ExportJob, export.job)
+        base = job.render_spec["provenance"]
+        tool.intent = {**tool.intent, "composition_id": base["composition_id"], "version_id": str(job.version_id)}
+        db.add(Message(conversation_id=tool.conversation_id, role="user", seq=4, content="Edit the title"))
+        await db.commit()
+
+    for event in (renderer.allow_prepare, renderer.allow_put, renderer.allow_reply):
+        event.set()
+    await export_jobs.execute_export(*await claim(database))
+    resume = AsyncMock(return_value=(None, None))
+    monkeypatch.setattr("app.chat.plan_turn.run_plan_turn", resume)
+    async with database() as db:
+        receipt = await db.get(Message, export.rid)
+        project = await db.get(Project, export.pid)
+        for _ in range(2):
+            await editor_media.continue_media_turn(db, project, receipt, on_loop_event=AsyncMock())
+        assert (await db.get(Message, export.turn)).turn_state == "settled"
+        resume.assert_awaited_once()
+        assert resume.await_args.kwargs["turn_id"] == export.turn
+        assert resume.await_args.kwargs["review_pinned_export"]
+        assert resume.await_args.kwargs["authorized_media"].intent["media_result"]["output_id"] == str(export.job)

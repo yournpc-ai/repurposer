@@ -1,4 +1,4 @@
-{% if mode == "plan" %}{%- if recent -%}
+{%- if recent -%}
 最近的对话：
 {{ recent|join('\n') }}
 
@@ -45,7 +45,4 @@
 {{ pending_lines|join('\n') }}
 {%- endif %}
 {% if message %}用户消息：{{ message }}{% endif %}
-{% elif mode == "conversation" %}上下文：
-{{ context_text }}
-
-{% if message %}用户消息：{{ message }}{% endif %}{% endif %}
+{# End of the user message. #}

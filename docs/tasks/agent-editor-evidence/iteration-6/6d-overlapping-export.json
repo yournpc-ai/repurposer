@@ -1,0 +1,61 @@
+{
+  "database": "rep_6d_overlap_9c32496b33",
+  "pinned_version": "49053053-4cb3-45a3-9f09-34f2c8e30f60",
+  "while_upload_waited": {
+    "job": "c39de404-a429-565d-ab03-942646715695",
+    "status": "running",
+    "same_claim": true,
+    "claim_count": 1,
+    "current_head": "4153d292-63a6-45a7-bdc6-24e37a7f47a0",
+    "version_advanced": true
+  },
+  "edited": {
+    "opening": "12fdfca0-525c-465b-ac95-add9f8e22b89",
+    "reply": "Done. The title object the object at 0–3 s (\"PUBLIC TEST\") was translated +32 px on x (y unchanged at 0), saved as version 2 of \"Public Test Title Card\" (version_id version 2). No media generated and no export performed.",
+    "state": "settled"
+  },
+  "exported": {
+    "opening": "97a5e495-47ba-496c-9219-e6c80dbec8ff",
+    "reply": "Done — the title card MP4 has been delivered to this chat.\n\n**What was exported and reviewed**\n- Output ID: this media (the only export available in this opening; charged 6 credits, 3.0 s)\n- Composition: \"Public Test Title Card\" (`4e7241a8-cf18-437f-923c-3dbc801aeb3e`), 1 clip / 1 scene, 1920×1080, H.264, 90 frames @ 30 fps, 3.0 s\n\n**Review of the exact delivered file**\n- Sampled frames at 0.2 s, 1.5 s, 2.8 s and the ordered scene sequence (7 frames, 0.0–2.97 s): every frame shows a crisp, centered white bold \"PUBLIC TEST\" on black, horizontally and vertically centered, no clipping, no occlusion, no extra content, no repeated/flat-frame anomalies.\n- Audio track exists and decodes but is fully silent (RMS/peak −240 dBFS). Your request specified no music or narration, so this isn't a defect — but the MP4 has no audible sound.\n- Not motion-reviewed continuously: I only saw the discrete sampled frames above, not a continuous playback.\n\n**One discrepancy to flag**\nThe exported file is pinned to composition version version 1 (version 1), while the currently selected saved version is `4153d292-63a6-45a7-bdc6-24e37a7f47a0` (version 2), with a different content digest. The rendered title card content is identical across every sampled frame of the delivered export, but I could not decode version 2's own preview to prove byte-identical output — if version 2 contains an edit that isn't visible in these frames, it wouldn't be captured here. Tell me if you'd like a fresh export explicitly pinned to version 2.",
+    "state": "settled"
+  },
+  "outputs": [
+    {
+      "id": "c39de404-a429-565d-ab03-942646715695",
+      "composition_version_id": "49053053-4cb3-45a3-9f09-34f2c8e30f60"
+    }
+  ],
+  "deliveries": [
+    [
+      "a797f022-92bc-4e49-bc1b-54628d195e2a",
+      "97a5e495-47ba-496c-9219-e6c80dbec8ff",
+      [
+        "c39de404-a429-565d-ab03-942646715695"
+      ],
+      {
+        "composition_id": "4e7241a8-cf18-437f-923c-3dbc801aeb3e",
+        "content_digest": "7b83d0c71f1436914109b5291c439e7056f29609a7f05647d67022f0e2578517",
+        "composition_version_id": "49053053-4cb3-45a3-9f09-34f2c8e30f60"
+      }
+    ]
+  ],
+  "ledger": [
+    [
+      "hold",
+      -6
+    ],
+    [
+      "release",
+      6
+    ],
+    [
+      "capture",
+      -6
+    ]
+  ],
+  "formal_upload_attempts": 1,
+  "worker_pids": [
+    5616,
+    5618
+  ]
+}

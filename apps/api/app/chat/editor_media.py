@@ -198,12 +198,19 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             raise ValueError("Media request is outside the current project.")
         if any(edit["request"] == identity for edit in (opening.intent or {}).get("editor_commits", [])):
             raise ValueError("This call already belongs to a different operation.")
+        replay_ids = (opening.intent or {}).get("media_replay_ids", {})
+        original = replay_ids.get(identity, identity)
         receipt = await db.scalar(select(Message).where(
-            Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
+            Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == original,
         ))
         if receipt and name == "export_video" and receipt.intent.get("composition_id") == composition_id:
             # The native call keeps its original export pin when a retry sees a newer head.
             fingerprint = canonical_json_hash({"tool": name, "version": receipt.intent["version_id"], "params": params})
+        if not receipt and name == "export_video":
+            receipt = await db.scalar(select(Message).where(
+                Message.turn_id == opening.id, Message.intent["fingerprint"].astext == fingerprint,
+                (Message.intent.has_key("export_job") | Message.intent.has_key("media_permission")),
+            ).order_by(Message.seq.desc()).limit(1))
         if not receipt and (opening.intent or {}).get("resumed_media"):
             # A resumed model can repeat the exact request with a fresh native
             # id. Return the existing receipt without acquiring another hold.
@@ -215,6 +222,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             if receipt.intent["fingerprint"] != fingerprint:
                 raise ValueError("This call already belongs to different parameters.")
             if receipt.intent.get("media_result") or receipt.question or receipt.intent.get("export_job") or receipt.intent.get("media_job"):
+                existing = receipt.intent.get("editor_media")
+                if existing and original != existing:
+                    opening.intent = {**(opening.intent or {}), "media_replay_ids": {**replay_ids, identity: existing}}
+                    await db.commit()
                 return receipt
         else:
             from app.chat.editor_create import media_generation_forbidden
@@ -306,17 +317,18 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             recovering = bool((opening.intent or {}).get("resumed_media"))
             paid = estimate.total[1] > 0
             another_paid_call = False
-            if paid and name in KINDS:
+            if paid:
                 another_paid_call = await db.scalar(select(Message.id).where(
                     Message.turn_id == opening.id, Message.id != receipt.id,
                     Message.intent["tool"].astext == name,
-                    (Message.intent.has_key("media_job") | Message.intent.has_key("media_permission")),
+                    (Message.intent.has_key("export_job") | Message.intent.has_key("media_job")
+                     | Message.intent.has_key("media_permission")),
                 ).limit(1)) is not None
             needs_media_consent = paid and name in KINDS and (
-                recovering or another_paid_call or not _requests_paid_media(opening.content or "", name)
+                recovering or not _requests_paid_media(opening.content or "", name)
             )
             fixed_reuse = recovering and not paid and name in {"generate_voice", "generate_image"}
-            if (recovering and paid) or needs_media_consent or export_needs_consent or (need.requires_confirmation and not fixed_reuse):
+            if another_paid_call or (recovering and paid) or needs_media_consent or export_needs_consent or (need.requires_confirmation and not fixed_reuse):
                 zh = (project.language or "").startswith("zh")
                 text = (f"允许这次素材生成吗？最多使用 {need.quote_high} 积分。" if zh else
                         f"Authorize this media generation for up to {need.quote_high} credits?")
@@ -475,7 +487,9 @@ async def continue_media_turn(db, project, receipt, **hooks):
                 opening.turn_state = "settled"
                 await state.commit()
                 return None
-        if ((comp_id and not exported and str(head) != receipt.intent["version_id"]) or latest != turn_id or
+        review_pinned_export = exported and receipt.intent["media_result"]["status"] == "available" and latest != turn_id
+        if ((comp_id and not exported and str(head) != receipt.intent["version_id"])
+                or (latest != turn_id and not review_pinned_export) or
                 (receipt.intent["media_result"]["status"] != "available" and
                  not any(member.intent["media_result"]["status"] == "available" for member in siblings))):
             await report_committed_edits(state, opening)
@@ -514,7 +528,7 @@ async def continue_media_turn(db, project, receipt, **hooks):
             db, project.user_id, conversation, project,
             ChatRequest(project_id=project.id, message=opening.content, mentions=opening.mentions or []),
             recent=await list_conversation_messages(db, conversation.id), turn_id=turn_id,
-            authorized_media=receipt, **hooks,
+            authorized_media=receipt, review_pinned_export=review_pinned_export, **hooks,
         )
     await fold_conversation_usage(db, user_id=project.user_id, project_id=project.id, accrued=usage.accrued)
     finished = await _lock_turn_for_transcript_write(db, turn_id, require_in_flight=True)

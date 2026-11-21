@@ -116,8 +116,9 @@ async def create_video(db, turn, args: CreateVideoArgs):
                          .with_for_update(key_share=True))
         if await db.scalar(select(Composition.id).where(Composition.origin_project_id == project).limit(1)):
             raise ValueError("This project already has a saved work. Inspect it before editing.")
-        if await db.scalar(select(Message.id).where(Message.turn_id == opening.id,
-                                                    Message.intent["editor_media"].astext == identity)):
+        if identity in (opening.intent or {}).get("media_replay_ids", {}) or await db.scalar(
+            select(Message.id).where(Message.turn_id == opening.id, Message.intent["editor_media"].astext == identity)
+        ):
             raise RequestMismatch("This call already belongs to a media request.")
 
         ids = {sid for shot in args.shots for sid in (shot.snapshot_id, shot.narration_snapshot_id) if sid}

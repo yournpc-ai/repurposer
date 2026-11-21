@@ -1,0 +1,48 @@
+{
+  "database": "rep_6d_overlap_9c32496b33",
+  "pinned_version": "3e847656-ddf7-44db-a2b6-ed66fd826ffa",
+  "while_upload_waited": {
+    "job": "2da5745f-2900-512a-a672-f3407443c273",
+    "status": "running",
+    "same_claim": true,
+    "claim_count": 1,
+    "current_head": "91b0705c-7cf8-4bd2-b64e-77ab0d87df65",
+    "version_advanced": true
+  },
+  "edited": {
+    "opening": "7c9bf778-8d1c-4bc0-a56c-2d4bac9233de",
+    "reply": "Done — the title text \"PUBLIC TEST\" (the 0–3 s clip, object the object at 0–3 s) is now shifted 32 px to the right, with y unchanged at 0 and scale/rotation preserved. Saved as version 2 of \"Public Test Title Card\". No new media created and no export performed, as requested.",
+    "state": "settled"
+  },
+  "exported": {
+    "opening": "e225d3d2-a84a-4af8-acc2-7d95f7da9f29",
+    "reply": "The storyboard below is saved. The last follow-up adjustment did not complete and is not included; no production started.\n\n| Shot | Time | On-screen text | Picture and purpose |\n| --- | --- | --- | --- |\n| 1 | 0.00–3.00s | PUBLIC TEST | PUBLIC TEST |\n\nDuration 3.0s; canvas 1920×1080; 30fps.\n\nReview this saved version first; the unfinished adjustment still needs separate handling.",
+    "state": "settled"
+  },
+  "outputs": [
+    {
+      "id": "2da5745f-2900-512a-a672-f3407443c273",
+      "composition_version_id": "3e847656-ddf7-44db-a2b6-ed66fd826ffa"
+    }
+  ],
+  "deliveries": [],
+  "ledger": [
+    [
+      "hold",
+      -6
+    ],
+    [
+      "release",
+      6
+    ],
+    [
+      "capture",
+      -6
+    ]
+  ],
+  "formal_upload_attempts": 1,
+  "worker_pids": [
+    4383,
+    4384
+  ]
+}

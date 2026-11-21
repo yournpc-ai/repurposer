@@ -341,16 +341,7 @@ class ChatMentionRegion(ChatMentionGeometry):
 
 
 class ChatMention(BaseModel):
-    """An @ entity reference pinned to a definite id (CHAT_ARCH §7).
-
-    The contract and the column (messages.mentions) are the seat; the picker
-    UI is the registry-driven composer surface (MENTIONS §4). ``recipe`` is
-    retired (MENTIONS §3 — a recipe is just a prompt: the card's prefilled
-    template IS the entire launch payload); the type member stays so
-    historical messages still render their chips.
-    ``workflow_step`` follows the N-15 rename (one concept, one name across
-    the stack).
-    """
+    """A reference to a specific entity selected in the conversation."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -698,22 +689,7 @@ class MessageListResponse(BaseModel):
 
 
 class QuestionProposal(BaseModel):
-    """Intent agent output, state C: a structured question (→ QuestionDock).
-
-    N-18 (overturning N-14): the structured-question payload is orthogonal to
-    task_list / edit_ops, so the union gains a third state. The pre-N-18
-    "tasks=[] ask back" migrates here as an ``options=[]`` + ``allow_freeform``
-    question. The LLM only ever raises a plain question — a task_book question
-    is raised by the chat plan path, never by the agent.
-
-    ADR-071 ⑤ 方向裁定 (2026-09-11): the provider call sends
-    ``response_format: json_object`` — this schema NEVER reaches the model;
-    it is the parse-side contract only. The model-facing field spec lives in
-    the prompt templates (``app/prompts/chat/plan_mode.j2``'s ask
-    rule / ``conversation_mode.j2``'s shape C) — those are the single
-    source; the comments here MIRROR them for humans. Edit the templates
-    first, then sync this mirror.
-    """
+    """Question and answer options proposed through the native ask_user tool."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -789,11 +765,7 @@ def tolerate_null_keys(data: Any, *keys: str) -> Any:
 
 
 def is_null_token(value: Any) -> bool:
-    """The plan emission's null-as-string dialect (``"language": "null"``):
-    True only for the bare token, exact-match — real content (a focus text
-    mentioning null) never equals it. One predicate shared by the proposal
-    boundary (TaskItem's param scrub) and the display boundary
-    (OutputResponse.language normalization)."""
+    """Recognize the literal null token when normalizing an optional value."""
     return isinstance(value, str) and value.strip().lower() == "null"
 
 

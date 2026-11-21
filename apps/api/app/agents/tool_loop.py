@@ -1,19 +1,7 @@
-"""The bounded tool-loop harness form (ADR-077 判词② — 会话层工具 loop 化).
+"""Bounded native tool calling with streamed prose, typed arguments and tool observations.
 
-The chat intent surface's call shape: the model speaks prose on the content
-channel (it streams — the typewriter law holds natively) and closes the turn
-by calling ONE terminal tool — the action union's mechanical translation
-(ask → ``ask_user``, draft → ``present_plan``, start → ``start_run``,
-task_list → ``propose_tasks``, precise edit → ``edit_output``, wiring →
-``edit_graph``; the answer states close with the ``answer`` tool or bare
-prose). The loop exists for TWO reasons: a rejected tool call — schema-class
-truncation (``LLMSchemaError`` at the client seam), params validation, or the
-execution's own guardrails (出书门槛搬进执行内) — feeds structured feedback
-back and the model iterates, bounded; and the NON-terminal read tools (T2b's
-perception family, ``app/chat/perception/``) let the model look at the world
-before it closes — read-before-write is the relative-revision/recommendation
-journeys' functional premise (JOURNEYS 旅程三). 修复/错误反馈语义同构 across
-the wire tiers (ADR-077 判词④ 法则).
+The Agent reads or edits the project, receives each call's result and chooses its
+next action. A rejected call returns feedback within the same bounded loop.
 
 Guardrails (三条军规):
 
@@ -140,7 +128,7 @@ class ChatTool:
     ``description`` is model-facing and stays terse (注册表条目扰动 =
     prompt 扰动). ``params_model`` compiles to the tool's JSON schema — its
     Field descriptions ARE the parameter documentation. None = a zero-arg
-    call (``start_run``). ``terminal``: a terminal tool's accepted call ends
+    call. ``terminal``: a terminal tool's accepted call ends
     the turn (终态工具一调即停); a non-terminal tool (the perception family's
     reads) returns a ``ToolObservation`` and the loop iterates.
 
@@ -767,13 +755,6 @@ class ToolLoopAgent:
             )
 
             template_kwargs["packs"] = pack_instructions(self.packs)
-        if self.prompt == "chat/user.j2":
-            template_kwargs["mode"] = {
-                "intent_router": "plan",
-                "chat_intent": "conversation",
-                "trigger_turn": "event",
-                "trigger_delivery": "delivery",
-            }[self.name]
         user_prompt = jinja_env.get_template(self.prompt).render(**template_kwargs)
         system_supplements = []
         if self.service_per_call:
@@ -1166,15 +1147,7 @@ class ToolLoopAgent:
             if assembled.project_reply and dialogue is not None:
                 round_dialogue = next(([m] for m in reversed(dialogue) if m["role"] == "user"), [])
             opening_index = 1 + len(history_messages)
-            if dialogue is not None and self.name in {"trigger_turn", "trigger_delivery"}:
-                dialogue_start = opening_index
-                opening_index += len(round_dialogue)
-                observation_start = opening_index + len(opening)
-                feedback_start = observation_start + len(tail)
-                project_start = feedback_start + len(feedback)
-                messages = [base_messages[0], *history_messages, *round_dialogue, *opening,
-                            *tail, *feedback, *shared]
-            elif dialogue is None:
+            if dialogue is None:
                 messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
                 dialogue_start = opening_index + len(opening)
                 observation_start = dialogue_start

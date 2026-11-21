@@ -2,7 +2,7 @@
 
 
 from app.agents.tool_loop import ToolLoopAgent
-from app.chat.prompts import intent_router_system
+from app.chat.prompts import chat_system
 from app.chat.turn_tools import (
     PLAN_READ_TOOLS,
     PLAN_TOOLS,
@@ -191,7 +191,7 @@ def _assemble_plan_turn(
 intent_router = ToolLoopAgent(
     name="intent_router",
     prompt="chat/user.j2",
-    system=intent_router_system(),
+    system=chat_system(),
     temperature=0.2,
     assemble=_assemble_plan_turn,
     # The current Composition authoring and production tools share one loop.

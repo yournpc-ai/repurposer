@@ -1,0 +1,36 @@
+{
+  "project": "88505511-ccee-4717-827c-75c6b29e9e7f",
+  "request": "Record a voiceover saying \u201cThe title moves.\u201d Return only the recording. I authorize generating this voiceover.",
+  "media_opening": {
+    "opening": "8a89db3f-f33b-432a-807a-59109abb1e1e",
+    "reply": "The voiceover is recorded and playable in this chat.\n\n- Text: \"The title moves.\" \u2014 recorded at original speed, en, presenter_male\n- Duration: 1.358 s\n- Snapshot: this media (audio), alignment ALIGNED\n- Not yet added to the timeline; no composition changes were made.",
+    "state": "settled"
+  },
+  "edit_opening": {
+    "opening": "86a8b5eb-a34a-456c-be5b-61a14c3f0a37",
+    "reply": "The title \"PUBLIC TEST\" in the 0\u20133 s clip (scene 1, 0.0\u20133.0s) is now offset 16 px down (transform x 32, y 16, scale 1.0), saved as version 3. No new media or export was performed.",
+    "state": "settled"
+  },
+  "head_before": "4153d292-63a6-45a7-bdc6-24e37a7f47a0",
+  "head_during": "cc5996ca-7a8e-461c-9cb7-17a5caad7e8a",
+  "head_after": "cc5996ca-7a8e-461c-9cb7-17a5caad7e8a",
+  "status_during": "running",
+  "claim_unchanged": true,
+  "job_id": "32060e62-f259-53dc-b686-995973c241de",
+  "attempts": 1,
+  "provider_calls": 1,
+  "result": {
+    "role": "narration",
+    "status": "available",
+    "snapshot_id": "c9ce1435-c63b-5923-86ad-fd8d3d4cee87",
+    "project_id": "88505511-ccee-4717-827c-75c6b29e9e7f",
+    "duration_seconds": 1.358375,
+    "digest": "710af818482cf651cc57bed73cbc65402455068c991aa7003876d13a76b910a0",
+    "charged_credits": 2,
+    "reserved_credits": 0
+  },
+  "worker_pids": [
+    6419,
+    6420
+  ]
+}

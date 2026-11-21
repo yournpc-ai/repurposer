@@ -8,21 +8,8 @@ from app.agents.base import jinja_env
 from app.agents.tool_loop import RoundAssembly, prune_wire_parameters
 from app.chat.editor import EDITOR_NAMES, project_editor_reply
 
-ChatMode = str
-
-
-def chat_system(mode: ChatMode, *, available_tools: list | None = None) -> str:
-    from app.config import settings
-
-    return jinja_env.get_template("chat/system.j2").render(
-        mode=mode,
-        tool_names={tool.name for tool in available_tools or []},
-        menu_lines="",
-        include_menu=False,
-        wiring_lines="",
-        chat_loop=mode == "conversation",
-        component_bake_enabled=settings.component_bake_enabled,
-    )
+def chat_system() -> str:
+    return jinja_env.get_template("chat/system.j2").render()
 
 
 def _creative_state_projection(creative_state) -> dict:
@@ -328,6 +315,20 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["revision_target_status"] = "The referenced Output is historical. Ask which baseline to use before editing."
             names = {"ask_user", "answer", "review_video"}
 
+        exported = facts.get("exported") or {}
+        if exported.get("status") == "available" and exported.get("output_id"):
+            context["exported_this_opening"] = exported
+            current = next((work for work in works if work["composition_id"] == exported["composition_id"]), None)
+            if facts.get("review_pinned_export") or (
+                current and current["version_id"] != exported["composition_version_id"]
+                and recent.get("version_id") != current["version_id"]
+            ):
+                context["delivery_scope"] = (
+                    "Another opening is working on this project. Review and deliver the exact MP4 in "
+                    "exported_this_opening if it meets this opening's request. Identify the exported version."
+                )
+                names = {"answer", "review_video", "deliver_video"}
+
         def dialogue_wire(description, parameters):
             return description, prune_wire_parameters(parameters, {
                 "brief", "material_text", "material_urls", "items", "slot",
@@ -404,7 +405,3 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         context=json.dumps({"video_target": "unresolved"}, ensure_ascii=False),
         include_project_context=False, opening_text=user_text, enforce_offered_tools=True,
     )
-
-
-def intent_router_system() -> str:
-    return chat_system("plan")

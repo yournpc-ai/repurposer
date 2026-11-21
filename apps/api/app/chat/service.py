@@ -635,9 +635,7 @@ async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project
 # (slot="asset_role") or an @-mention; the pins are settled by CODE ONLY — the
 # LLM frames the question but its options are built here (id = asset id), and
 # the answer decodes by id, never by a guessed filename. reference 常驻可回读:
-# the pins ride ProjectBrief → TaskSpec → run.context verbatim, and the
-# skeleton row itself is content-addressed (the read tool re-reads it any
-# time). Roles are reversible between runs (a fresh mention re-pins).
+# The brief identifies the selected source and exemplar. A later mention may change them.
 
 
 def _build_role_question(text: str, assets: list[Asset]) -> QuestionProposal | None:
@@ -1067,14 +1065,14 @@ def _video_no_progress_text(text: str, read: dict) -> str:
     zh = _prefers_zh(text)
     rows = storyboard_presentation_rows(read)
     if zh:
-        intro = "下面的分镜已经保存。最后一次后续调整未完成，未写入这版；本次没有开始制作。"
+        intro = "下面的分镜已经保存。本轮后续操作未全部完成。"
         header = "| 镜头 | 时间 | 屏幕文字 | 画面与目的 |"
         divider = "| --- | --- | --- | --- |"
         footer = "请先查看这个已保存版本；未完成的调整仍需另行处理。"
     else:
         intro = (
-            "The storyboard below is saved. The last follow-up adjustment did not "
-            "complete and is not included; no production started."
+            "The storyboard below is saved. The requested follow-up did not "
+            "fully complete."
         )
         header = "| Shot | Time | On-screen text | Picture and purpose |"
         divider = "| --- | --- | --- | --- |"
@@ -1576,26 +1574,9 @@ async def _plan_turn(
     turn_id: UUID | None = None,
     group_answer_submitted: bool = False,
     authorized_media: Message | None = None,
+    review_pinned_export: bool = False,
 ) -> tuple[Message | None, Message | None]:
-    """Plan path (intent-surface-unification W1): build / refine / confirm
-    the plan inside the chat loop — the ONLY intent surface.
-
-    Entered for project-scope turns while a plan is pending (refine or
-    prose confirmation) or before the project's first run (first turn / after
-    a bail). Returns the assistant message (the docked/answered question row
-    for draft/ask/start; None when the turn closes without a row — the
-    degrade paths land their own shape), the started run
-    id, the answered task-book question
-    (for ChatResponse.answered_question), and cascade-bailed run ids. The
-    caller owns the single Stop-fenced commit, including the Start branch.
-
-    ADR-077 判词② (2026-09-14): the dispatch retired into the tool
-    loop — this body is a shim; the turn lives in ``app/chat/plan_turn.py``
-    (the intent router's terminal tools present_plan / ask_user / start_run /
-    answer, guardrails inside the executions). Deferred import: the runner
-    imports THIS module's machinery (the ask_user machinery, the docks, the
-    gate texts).
-    """
+    """Execute the native tool loop for an owned project opening."""
     from app.chat.plan_turn import run_plan_turn
 
     return await run_plan_turn(
@@ -1609,6 +1590,7 @@ async def _plan_turn(
         recent=recent,
         group_answer_submitted=group_answer_submitted,
         authorized_media=authorized_media,
+        review_pinned_export=review_pinned_export,
         on_delta=on_delta,
         on_reasoning=on_reasoning,
         on_phase=on_phase,
@@ -1849,9 +1831,7 @@ async def prepare_chat_turn(
     # freeform answer" masking is retired; every other message is judged
     # by the intent router / chat intent agent in context, and only a
     # judged answer settles the row — an interjection leaves it pending
-    # and the reply gets the reminder tail). A pending task_book
-    # (unconfirmed plan) never resumes here: its answers are the dock's
-    # Start and plan-path refinements below.
+    # and the reply gets the reminder tail).
     answered_question: Message | None = None
     pending = await latest_pending_question(db, conversation_id)
     if pending is not None:

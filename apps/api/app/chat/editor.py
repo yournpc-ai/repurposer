@@ -306,7 +306,7 @@ async def edit_clip(
     if name not in WRITE_TOOLS or not isinstance(args, WRITE_TOOLS[name].params_model):
         raise ValueError("Arguments do not match this editor operation.")
     identity = uuid5(opening_id, call_id)
-    if await db.scalar(select(Message.id).where(
+    if str(identity) in (opening.intent or {}).get("media_replay_ids", {}) or await db.scalar(select(Message.id).where(
         Message.turn_id == opening_id, Message.intent["editor_media"].astext == str(identity),
     )):
         raise RequestMismatch("This call already belongs to a media request.")
@@ -548,6 +548,10 @@ def _remember_labels(turn, facts, version_id, digest, number):
 
 async def execute_editor(turn, name, args):
     base = getattr(turn, "_video_base_ref", None)
+    exported = getattr(turn, "_editor_export", None) or {}
+    if name == "deliver_video" and exported.get("output_id") == str(args.output_id):
+        # This receipt belongs to the original opening even if another edit advanced the head.
+        base = {k: exported[k] for k in ("composition_id", "composition_version_id", "content_digest")}
     if name == "create_video":
         from app.chat.editor_create import create_video
         from app.chat.editor_recovery import editor_lock_key

@@ -538,8 +538,7 @@ class Message(Base):
     role = Column(String(20), nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=True)
     attachments = Column(JSON, default=list)
-    # @ entity refs (asset/output/transcript_segment/workflow_step); the
-    # picker UI lands in a later iteration — the column is the seat.
+    # Entity references selected in the composer.
     mentions = Column(JSONB, nullable=False, default=list, server_default="[]")
     # The canvas product this turn was pointed at ({id, label}, denormalized
     # like mentions): persisted so the rebuilt history honestly shows the
@@ -553,7 +552,7 @@ class Message(Base):
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
     )
-    intent = Column(JSONB(none_as_null=True), nullable=True)  # IntentProposal dump for this turn (chat/intent.py chat_intent agent); JSONB — the trigger dedup reads intent["trigger"].astext (generic JSON's subscript has no .astext, R1 B1 实证)
+    intent = Column(JSONB(none_as_null=True), nullable=True)  # Durable activity, tool receipt or delivery facts.
     # Turn identity (交互完整性批 A, 2026-09-17 — the minimal in-flight
     # contract): set ONLY on the user row that opens a chat turn — durable
     # from the turn's first beat (prepare's own commit), so "the message is
@@ -567,9 +566,7 @@ class Message(Base):
     # A crashed turn's row AGES OUT of in_flight via the stale bound, never
     # holds the gate forever.
     turn_state = Column(String(20), nullable=True)
-    # One row, two states (the ask_user machinery): ``question`` is the typed payload
-    # ({kind: task_book|choice|confirm, ...}); ``answer`` NULL = pending —
-    # pending questions live in the dock, answered ones archive as QA pairs.
+    # A question and its answer retain the same message identity.
     # none_as_null: Python None must persist as SQL NULL — the pending
     # predicate (question IS NOT NULL / answer IS NULL) depends on it.
     question = Column(JSONB(none_as_null=True), nullable=True)

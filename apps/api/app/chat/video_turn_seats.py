@@ -1,13 +1,4 @@
-"""The video family's turn seats (ADR-145 phase B) — ONE implementation;
-the plan path's and the chat path's runners both delegate here (the
-codebase's two-path mirror stays thin instead of copying 100+ lines).
-
-Layering: chat may import editing (the pure content services) and
-tools/video (the LLM/capture orchestration). The write door commits on a
-DEDICATED session — the turn's own long transaction never rides it; the
-turn only carries the presentation receipt (pending_brief's
-video_presentation slice) and the storyboard block on the presenting row.
-"""
+"""Project video observations, scoped confirmations and reviewed delivery facts."""
 
 import json
 import re

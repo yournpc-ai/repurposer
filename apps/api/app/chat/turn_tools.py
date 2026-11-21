@@ -416,7 +416,7 @@ PLAN_READ_TOOLS = [
 ]
 # ── 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉) ──────────────────
 # The model sometimes echoes the tool it is calling as a BARE bracketed line
-# of prose ('[start_run]'): the name saturates its prompt (it must — it is
+# of prose ('[inspect_clip]'): the name saturates its prompt (it must — it is
 # the tool's name), and the bracket shape is the function-call markup of its
 # pretraining. The real call rides the native tool channel; the echo is pure
 # noise the spoken sentence already covers — and the user should never see
@@ -424,7 +424,7 @@ PLAN_READ_TOOLS = [
 # name in brackets; a name mentioned mid-sentence is prose and stays.
 _TOOL_ECHO_NAMES = frozenset(
     tool.name for tool in [*PLAN_TOOLS, *PLAN_READ_TOOLS]
-) | {"wrap_up"}  # the trigger turn's terminal (its module imports ours)
+)
 _TOOL_ECHO_LINE = re.compile(r"^\[[a-z_]+\]\s*$")
 # A tail fragment that could still complete INTO a bare echo line — the
 # stream filter holds exactly these undecided (fails fast on any non

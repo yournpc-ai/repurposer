@@ -220,8 +220,7 @@ class PlanTurn:
         # context explicitly (the pending block) — a user-stated proposal for
         # ITS slot is the answer (code settles the row in the absorb below),
         # anything else is an interjection (the question stays open and the
-        # answer tool's reply gets the reminder tail). A pending task_book is
-        # this path's own confirmation target (G-1), never a judgment subject.
+        # answer tool's reply gets the reminder tail).
         pending_q = await latest_pending_question(db, self.conversation_id)
         if pending_q is not None and (pending_q.question or {}).get("kind") != "question":
             pending_q = None
@@ -856,10 +855,7 @@ class PlanTurn:
                 "pass the bare question or group title, or call answer "
                 "instead."
             )
-        # 判词⑦ 扩座 (2026-09-12, S5) as a REJECTION (its structural form):
-        # ANY ask while a question is still pending is an interjection, never
-        # a new dock — docking supersedes the pending row, and for a
-        # task_book that orphans the confirmation.
+        # Keep the original question until the user answers or dismisses it.
         if self.pending_q is not None:
             return (
                 "a question of yours is still awaiting the user's answer — "
@@ -1167,19 +1163,9 @@ async def run_plan_turn(
     turn_id: UUID | None = None,
     group_answer_submitted: bool = False,
     authorized_media: Message | None = None,
+    review_pinned_export: bool = False,
 ) -> PlanTurnOutcome:
-    """The plan path's turn: assemble → the bounded tool loop → the outcome
-    mapping. ``intent_router`` provider failures propagate as LLMError — no
-    fabricated default plan (2026-08-14 裁定); the route boundary turns it
-    into a 502 with the localized provider line. on_delta streams the prose
-    channel (it IS the reply now); on_tool_call/on_tool_ready carry the
-    structure frames (the phase beat / the question preview); on_phase labels
-    the real phase switches; on_interim_prose (ADR-085) is the interim_prose
-    channel's SSE seat — the runner wraps it with persistence (the interim_prose
-    row is this turn's own message, intent type 'interim_prose'). None = the
-    one-shot path. ``on_row_append`` is the generic persisted-row channel
-    (currently unused by this path — the design beat's program-markdown
-    publication retired with the 2026-10-18 裁决)."""
+    """Assemble the opening and its receipts, execute native tools, and persist the reply."""
     turn = PlanTurn(
         db, user_id, conversation, project, request,
         skill=skill, skill_ambiguity=skill_ambiguity,
@@ -1293,6 +1279,7 @@ async def run_plan_turn(
             "video_confirmation": confirmation,
             "preceding_delivery": turn.preceding_delivery,
             "exported": getattr(turn, "_editor_export", None),
+            "review_pinned_export": review_pinned_export,
             "delivered": getattr(turn, "_editor_delivery", None),
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,

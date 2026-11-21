@@ -49,7 +49,7 @@ terminal follows the judgment tree:
   nothing needs accounting;
 - close by an accepted TERMINAL whose name is NOT among the rejected
   names, all of which are known (实质工作变化 — the guardrail redirected
-  the turn's form, e.g. present_plan → ask_user) → ONE born-terminal
+  the turn's form, e.g. ask_user → answer) → ONE born-terminal
   COMPLETED frame saying the work change (``chat.activity.repairDone``),
   never a model self-reflection; unprovable (any rejected name unknown —
   a truncation severed it) → SILENT (无依据则不言);

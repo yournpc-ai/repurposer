@@ -275,10 +275,19 @@ async def test_export_quote_replay_competing_openings_and_stop(database, monkeyp
         first, duplicate = await asyncio.gather(submit(turn), submit(turn))
         assert first.id == duplicate.id and "MP4" in first.content
         assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))
-        execution = await editor_media.answer_media_permission(db, project, await db.get(Message, first.id), True)
+        permission = await db.get(Message, first.id)
+        permission.answer = {"kind": "option", "option_id": "approve"}
+        execution = await editor_media.answer_media_permission(db, project, permission, True)
         await db.commit()
         replay = await submit(turn)
         assert replay.id == execution.id
+        repeated = await editor_media.submit_editor_media(
+            turn, "export_video", ExportVideoArgs(), comp, version, "repeated-same-version")
+        assert repeated.id == execution.id
+        with pytest.raises(ValueError, match="different parameters"):
+            await editor_media.submit_editor_media(
+                turn, "generate_music", GenerateMusicArgs(style="ambient", duration_seconds=1),
+                comp, version, "repeated-same-version")
         user.settings = {"confirm_execution": "auto"}
         competing = await opening()
         with pytest.raises(ValueError):
@@ -293,6 +302,12 @@ async def test_export_quote_replay_competing_openings_and_stop(database, monkeyp
         replay_on_new_head = await editor_media.submit_editor_media(
             turn, "export_video", ExportVideoArgs(), comp, newer, "export1")
         assert replay_on_new_head.id == execution.id
+        turn._video_base_ref = {**ref, "composition_version_id": str(newer.id), "content_digest": newer.content_digest}
+        turn._editor_last_preview = {**turn._video_base_ref, "mp4_sha256": "b" * 64}
+        second_version = await editor_media.submit_editor_media(
+            turn, "export_video", ExportVideoArgs(), comp, newer, "distinct-export")
+        assert second_version.question and "media_permission" in second_version.intent
+        assert await db.scalar(select(func.count()).select_from(ExportJob)) == 1
         assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
         assert (await db.get(ExportJob, job.id, populate_existing=True)).status == "cancelled"
 
