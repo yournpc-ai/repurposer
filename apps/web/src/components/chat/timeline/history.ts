@@ -88,6 +88,7 @@ export function nativeJobReceipt(intent: unknown): NativeJobReceipt | undefined 
     operation: typeof data.operation === "string" ? data.operation : undefined,
     status,
     role: typeof result?.role === "string" ? result.role : undefined,
+    error: typeof result?.error === "string" ? result.error : undefined,
     outputId: typeof result?.output_id === "string" ? result.output_id : undefined,
     chargedCredits: typeof result?.charged_credits === "number" ? result.charged_credits : undefined,
     reservedCredits: typeof result?.reserved_credits === "number" ? result.reserved_credits : undefined,

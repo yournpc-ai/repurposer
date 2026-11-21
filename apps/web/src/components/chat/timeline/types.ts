@@ -221,6 +221,7 @@ export interface QuestionAnswer {
 export interface NativeJobReceipt {
   callId: string
   operation?: string
+  error?: string
   status: string
   role?: string
   outputId?: string

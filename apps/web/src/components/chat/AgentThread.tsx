@@ -1209,16 +1209,14 @@ export function AgentThread({
     () => {
       // The owner-wide feed stays available for a future cross-project picker;
       // this project's @ surface admits only entities in its current results.
-      const currentAssetIds = new Set(assets.map((asset) => asset.id))
+      const assetNames = new Map(globalReferences.assets.map((asset) => [asset.id, asset.title]))
       const currentOutputIds = new Set(chatOutputs.map((output) => output.id))
       return {
-        assets: [...new Map([...globalReferences.assets, ...assets].map((a) => [a.id, a])).values()]
-          .filter((a) => currentAssetIds.has(a.id) && a.title)
-          .map((a) => ({
-            id: a.id,
-            name: a.title as string,
-            kind: assetTypeKind(a.type),
-          })),
+        assets: assets.map((asset) => {
+          const kind = assetTypeKind(asset.type)
+          const name = asset.title || assetNames.get(asset.id)
+          return { id: asset.id, kind, name: name && name !== asset.id ? name : t(`mentions.fileType.${kind}`) }
+        }),
         outputs: [...new Map([
           ...globalReferences.outputs.map((o) => ({
             id: o.id,

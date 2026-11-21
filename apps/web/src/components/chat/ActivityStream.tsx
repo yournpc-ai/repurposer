@@ -494,6 +494,7 @@ function JobDetails({ job, onOpen }: { job: NativeJobReceipt; onOpen?: (id: stri
   const output = job.outputId
   return (
     <>
+      {job.error && <p>{job.error}</p>}
       {job.chargedCredits !== undefined && <p>{t("agentReceipt.chargedCredits", { count: job.chargedCredits })}</p>}
       {job.reservedCredits !== undefined && job.reservedCredits > 0 && (
         <p>{t("agentReceipt.reservedCredits", { count: job.reservedCredits })}</p>
@@ -529,16 +530,18 @@ export function NativeToolReceipts({ rows, grouped, onOpen }: { rows: ActivityRo
     const name = row.tool_name
       ? t(`chat.toolName.${row.tool_name}`, { defaultValue: row.tool_name.replaceAll("_", " ") })
       : activityText(row, t)
+    let status = callStatuses[row.call_state ?? row.status] ?? "unknown"
+    if (row.jobReceipt) status = jobStatus(row.jobReceipt)
+    else if (status === "success" && row.receipt?.kind === "video_revision") status = "versionSaved"
     return (
       <ToolCallCard
         key={row.call_id ?? row.activity_id}
         callId={row.call_id}
         name={name}
-        status={row.jobReceipt ? jobStatus(row.jobReceipt) : row.receipt?.kind === "video_revision" && row.status === "completed"
-          ? "versionSaved" : callStatuses[row.call_state ?? row.status] ?? "unknown"}
+        status={status}
         duration={row.duration_ms}
       >
-        {row.error && <p>{row.error}</p>}
+        {row.error && row.error !== row.jobReceipt?.error && <p>{row.error}</p>}
         {row.key && !row.error && !row.call_state && !row.jobReceipt && <p>{activityText(row, t)}</p>}
         {row.jobReceipt && <JobDetails job={row.jobReceipt} onOpen={onOpen} />}
         {row.receipt && <ActivityEvidence receipt={row.receipt} />}
