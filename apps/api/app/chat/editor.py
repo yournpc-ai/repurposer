@@ -148,6 +148,7 @@ def _editor_tool(name, description, args, key):
         args,
         terminal=False,
         batchable=True,
+        independent_media=name in {"generate_voice", "generate_music", "generate_image"},
         snapshot_read=name in {"inspect_timeline", "inspect_clip"},
         presentation=ToolPresentation(
             kind="read",

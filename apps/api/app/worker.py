@@ -31,6 +31,7 @@ from app.distribution import (
     reap_stale_publications,
 )
 from app.pipeline.export_jobs import claim_export, execute_export
+from app.pipeline.media_jobs import KINDS, claim_media, execute_media
 from app.pipeline.jobs import (
     STALE_NODE_REAP_SECONDS,
     claim_pending_asset,
@@ -76,7 +77,8 @@ _STAGING_REAP_INTERVAL_SECONDS = 3600
 _last_staging_reap = 0.0
 _staging_reap_task: asyncio.Task[None] | None = None
 
-_export_resume_task: asyncio.Task | None = None
+_job_resume_task: asyncio.Task | None = None
+_media_tasks: set[asyncio.Task] = set()
 _running_node_tasks: set[asyncio.Task] = set()
 _running_render_tasks: set[asyncio.Task] = set()
 
@@ -151,6 +153,15 @@ async def _tick() -> bool:
         did_work = True
         await process_narration_alignment(*alignment_claim)
 
+    for kind in KINDS:
+        async with AsyncSessionLocal() as db:
+            claim = await claim_media(db, kind)
+        if claim:
+            did_work = True
+            task = asyncio.create_task(execute_media(*claim))
+            _media_tasks.add(task)
+            task.add_done_callback(_media_tasks.discard)
+
     # Fill up to the concurrency cap with ready nodes; each runs as its own
     # asyncio task (contextvars metering stays per-node).
     while len(_running_node_tasks) < _NODE_CONCURRENCY:
@@ -195,12 +206,12 @@ async def _tick() -> bool:
         _running_render_tasks.add(task)
         task.add_done_callback(_running_render_tasks.discard)
 
-    global _export_resume_task
-    if _export_resume_task is None or _export_resume_task.done():
-        if _export_resume_task is not None and _export_resume_task.exception():
-            logger.warning("export_receipt_continuation_interrupted")
-        from app.chat.editor_recovery import resume_export_receipts
-        _export_resume_task = asyncio.create_task(resume_export_receipts())
+    global _job_resume_task
+    if _job_resume_task is None or _job_resume_task.done():
+        if _job_resume_task is not None and _job_resume_task.exception():
+            logger.warning("job_receipt_continuation_interrupted")
+        from app.chat.editor_recovery import resume_job_receipts
+        _job_resume_task = asyncio.create_task(resume_job_receipts())
 
     # Staging GC is scheduled only after every claim source has had its turn.
     # A slow storage sweep remains isolated from all subsequent ticks.

@@ -199,7 +199,7 @@ async def _list_outgoing_events(
     row; a negative non-run entry is one event. The page selects ten event keys
     first, then fetches every raw row for those runs so each fold is complete.
     """
-    run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext)
+    run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
     run_scoped = (
         CreditTransaction.kind.in_(["hold", "capture", "release"])
         & run_id.is_not(None)
@@ -291,7 +291,7 @@ async def list_transactions(
 
     stmt = select(CreditTransaction).where(CreditTransaction.user_id == user_id)
     if direction == "in":
-        run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext)
+        run_id = func.coalesce(CreditTransaction.ref["run_id"].astext, CreditTransaction.ref["export_id"].astext, CreditTransaction.ref["media_job_id"].astext)
         run_scoped = (
             CreditTransaction.kind.in_(["hold", "capture", "release"])
             & run_id.is_not(None)
@@ -349,7 +349,7 @@ async def held(db: AsyncSession, user_id: UUID) -> int:
     per_run: dict[str, dict[str, int]] = {}
     settled: set[str] = set()
     for kind, amount, ref in rows:
-        run_id = (ref or {}).get("run_id") or (ref or {}).get("export_id")
+        run_id = (ref or {}).get("run_id") or (ref or {}).get("export_id") or (ref or {}).get("media_job_id")
         if not run_id:
             continue
         if kind == "release" and not (ref or {}).get("step_id"):
@@ -658,3 +658,22 @@ async def settle_export(db, *, user_id, export_id, reserved, charged):
         await _mutate(db, user_id=user_id, kind="capture", amount=-charged,
                       ref={"export_id": str(export_id)}, idem=f"export:{export_id}:capture",
                       note="Verified MP4 export")
+
+async def hold_media(db, *, user_id, job_id, credits):
+    await check_hold(db, user_id=user_id, required=credits)
+    if credits:
+        await _mutate(db, user_id=user_id, kind="hold", amount=-credits,
+                      ref={"media_job_id": str(job_id)}, idem=f"media:{job_id}:hold",
+                      note="Media generation reservation", require_balance=credits)
+
+
+async def settle_media(db, *, user_id, job_id, reserved, charged):
+    if not 0 <= charged <= reserved:
+        raise ValueError("Media charge exceeds its reservation")
+    ref = {"media_job_id": str(job_id)}
+    if reserved:
+        await _mutate(db, user_id=user_id, kind="release", amount=reserved, ref=ref,
+                      idem=f"media:{job_id}:release", note="Media generation reservation released")
+    if charged:
+        await _mutate(db, user_id=user_id, kind="capture", amount=-charged, ref=ref,
+                      idem=f"media:{job_id}:capture", note="Generated media")

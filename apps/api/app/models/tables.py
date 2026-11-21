@@ -914,6 +914,7 @@ class VideoNarration(Base):
     usage_characters = Column(Integer, nullable=True)
     trace_id = Column(String(255), nullable=True)
     status = Column(String(24), nullable=False, default="synthesizing")
+    synthesis_execution_id = Column(String(128), nullable=True)
     owner_token = Column(String(128), nullable=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(Text, nullable=True)
@@ -1305,3 +1306,21 @@ class ExportJob(Base):
     lease_until = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     __table_args__ = (Index("ix_export_jobs_queue", "status", "created_at"),)
+
+
+class MediaJob(Base):
+    """One authorized generation. The native receipt holds its opening and final media facts."""
+
+    __tablename__ = "media_jobs"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    receipt_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), unique=True, nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    kind = Column(String(24), nullable=False)
+    request = Column(JSONB, nullable=False)
+    authorized_credits = Column(Integer, nullable=False)
+    status = Column(String(16), nullable=False)
+    attempt = Column(Integer, nullable=False)
+    claim_token = Column(UUID(as_uuid=True))
+    lease_until = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    __table_args__ = (Index("ix_media_jobs_queue", "kind", "status", "created_at"),)

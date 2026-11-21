@@ -23,7 +23,7 @@ import pytest
 from app.config import settings
 from app.metering import (
     bind_conversation_turn,
-    bind_workflow_step,
+    collect_execution_cost,
     fold_conversation_usage,
     record_usage,
 )
@@ -72,7 +72,7 @@ async def test_the_two_ledgers_are_independent() -> None:
     # contextvars — each fold seat (execute_step vs the turn tail) reads
     # only its own, so a call lands on whichever ledgers happen to be bound
     # (structurally they never coexist: worker vs request path).
-    with bind_workflow_step(uuid.uuid4()) as step:
+    with collect_execution_cost() as step:
         with bind_conversation_turn() as convo:
             await record_usage(_usage(10, 5))
     assert step.accrued["prompt_tokens"] == 10

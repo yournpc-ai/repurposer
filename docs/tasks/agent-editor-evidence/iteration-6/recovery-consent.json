@@ -1,0 +1,187 @@
+{
+  "entry": "Original paid recording fixture from before_submit. Deterministic recovery proposal at model boundary, real native handler, real PostgreSQL and real model after user decline.",
+  "opening": "c4ff5105-813f-4e0e-bb15-9541b86806b7",
+  "opening_status": "in_flight",
+  "original_native_call": "fault-voice",
+  "old_job": "53d02a0e-a106-5200-b497-a625dc26a2d5",
+  "old_snapshot": "5b56e582-f24b-5cc5-9ed7-d46d3d43f875",
+  "old_job_status": "succeeded",
+  "old_ledger": [
+    [
+      "hold",
+      -3
+    ],
+    [
+      "release",
+      3
+    ],
+    [
+      "capture",
+      -3
+    ]
+  ],
+  "question": "允许为「A public blue triangle test illustration.」生成图片吗？最多使用 6 积分。",
+  "quote": {
+    "total": [
+      4,
+      6
+    ],
+    "per_task": [
+      [
+        4,
+        6
+      ]
+    ]
+  },
+  "new_native_call": "recovery-image-new",
+  "declined_receipt": "cabbe55f-ea79-4df4-b48d-2f428343080c",
+  "declined_state": {
+    "status": "declined"
+  },
+  "jobs": 1,
+  "new_generation_requests": [],
+  "reply": "允许导出这个版本的 MP4 吗？最多使用 6 积分。",
+  "stop_at_next_quote": {
+    "opening_status": "cancelled",
+    "quote_tool": "export_video",
+    "quote_state": "cancelled",
+    "export_jobs": 0,
+    "saved_version_before": "903b7efe-f6c4-4d71-b48f-008522e4c94a",
+    "saved_version_after": "903b7efe-f6c4-4d71-b48f-008522e4c94a",
+    "old_voice_status": "succeeded"
+  },
+  "real_model_after_decline": [
+    {
+      "model_call_id": "1b951529-61eb-40de-9f14-88b57f66fe12",
+      "calls": [
+        {
+          "id": "call_01a1fe1d63ab7465abf0ae20",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Color Test\",\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"Color Test\",\"duration_seconds\":2.5,\"text_color\":\"#FFFFFF\"},{\"snapshot_id\":\"5b56e582-f24b-5cc5-9ed7-d46d3d43f875\",\"narration_snapshot_id\":\"5b56e582-f24b-5cc5-9ed7-d46d3d43f875\",\"narration_alignment_id\":\"38e7754a-dd5c-4d1f-99a2-1d8c8d1e6525\",\"captions_asr\":true,\"source_muted\":true,\"source_fit\":\"contain\"}]}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 11409,
+        "total_characters": 0,
+        "prompt_tokens": 10948,
+        "completion_tokens": 461,
+        "completion_tokens_details": {
+          "reasoning_tokens": 204
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      }
+    },
+    {
+      "model_call_id": "1513770f-d951-418a-a156-8b443fa045e9",
+      "calls": [
+        {
+          "id": "call_01a1fe1d715977ceaec93096",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Color Test\",\"shots\":[{\"duration_seconds\":3,\"text_preset\":\"title-lockup\",\"headline\":\"Color Test\",\"text_color\":\"#FFFFFF\"}]}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 11644,
+        "total_characters": 0,
+        "prompt_tokens": 11461,
+        "completion_tokens": 183,
+        "completion_tokens_details": {
+          "reasoning_tokens": 89
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 10948
+        }
+      }
+    },
+    {
+      "model_call_id": "fba90838-3c52-4525-8684-a817693f723e",
+      "calls": [
+        {
+          "id": "call_01a1fe1d76357776a12eb0a2",
+          "name": "insert_audio",
+          "arguments": "{\"source_id\":\"5b56e582-f24b-5cc5-9ed7-d46d3d43f875\",\"start_seconds\":0.6}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 7558,
+        "total_characters": 0,
+        "prompt_tokens": 7492,
+        "completion_tokens": 66,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      }
+    },
+    {
+      "model_call_id": "dbcbe5ac-23c3-4f06-8c7a-fcdff79226ee",
+      "calls": [
+        {
+          "id": "call_01a1fe1d7aed77de8e5753c4",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 7743,
+        "total_characters": 0,
+        "prompt_tokens": 7706,
+        "completion_tokens": 37,
+        "completion_tokens_details": {
+          "reasoning_tokens": 16
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      }
+    },
+    {
+      "model_call_id": "e1fbaa5a-2ed8-4500-bc12-dbd36a844b0f",
+      "calls": [
+        {
+          "id": "call_01a1fe1d7fc1719bb9ca85fc",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":3}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 8441,
+        "total_characters": 0,
+        "prompt_tokens": 8361,
+        "completion_tokens": 80,
+        "completion_tokens_details": {
+          "reasoning_tokens": 38
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 7706
+        }
+      }
+    },
+    {
+      "model_call_id": "7053bf7f-b1e5-4621-ba85-9f324158868d",
+      "calls": [
+        {
+          "id": "call_function_k27zzmr3b08n_1",
+          "name": "export_video",
+          "arguments": "{}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 11324,
+        "total_characters": 0,
+        "prompt_tokens": 11107,
+        "completion_tokens": 217,
+        "completion_tokens_details": {
+          "reasoning_tokens": 200
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      }
+    }
+  ]
+}

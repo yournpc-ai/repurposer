@@ -2,7 +2,7 @@
 
 The single LLM choke point (``providers/llm`` clients) reports API ``usage`` here;
 ``record_usage`` accumulates it onto the workflow step currently bound via
-``bind_workflow_step``. Binding is a contextvar, so concurrent node executions
+``collect_execution_cost``. Binding is a contextvar, so concurrent node executions
 (asyncio tasks) each meter their own node, and retries/fallbacks inside one
 node accumulate naturally — every attempt is billed.
 
@@ -61,18 +61,14 @@ def _new_ledger() -> dict:
     }
 
 
-class bind_workflow_step:
-    """Bind an in-memory cost ledger to a workflow step for the current async
-    context. ``accrued`` is the ledger itself — the caller (execute_step)
-    keeps the reference and folds it onto the step row after the run, on
-    success and failure paths alike."""
+class collect_execution_cost:
+    """Collect provider usage within a single async execution."""
 
-    def __init__(self, node_id: UUID) -> None:
-        self._node_id = node_id
+    def __init__(self) -> None:
         self._token: contextvars.Token[dict | None] | None = None
         self.accrued: dict = _new_ledger()
 
-    def __enter__(self) -> "bind_workflow_step":
+    def __enter__(self) -> "collect_execution_cost":
         self._token = _current_cost_ledger.set(self.accrued)
         return self
 
@@ -246,7 +242,7 @@ def _cached_tokens_of(usage: dict) -> int | None:
 
 class bind_conversation_turn:
     """Bind an in-memory usage ledger to a conversation turn for the current
-    async context (``bind_workflow_step``'s mirror). ``accrued`` is the
+    async context (``collect_execution_cost``'s mirror). ``accrued`` is the
     ledger itself — the turn-entry seam keeps the reference and folds it
     into ONE ``conversation_usage`` row with the turn's own commit.
 

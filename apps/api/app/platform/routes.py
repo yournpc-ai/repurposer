@@ -456,7 +456,7 @@ async def get_wallet_transactions(
     ordered: list[tuple[str, _CreditTransaction]] = []  # (group key | "", row) newest-first
     for row in rows:
         ref = row.ref or {}
-        run_id = (ref.get("run_id") or ref.get("export_id")) if row.kind in ("hold", "capture", "release") else None
+        run_id = (ref.get("run_id") or ref.get("export_id") or ref.get("media_job_id")) if row.kind in ("hold", "capture", "release") else None
         if run_id:
             group = groups.setdefault(str(run_id), {"captures": 0, "at": row.created_at})
             if row.kind == "capture":
@@ -564,10 +564,10 @@ async def get_wallet_transactions(
             hint_raw = str(ctx.get("instruction") or "").strip()
             items.append(
                 WalletTransactionItem(
-                    id=f"export:{key}" if (row.ref or {}).get("export_id") else f"run:{key}",
+                    id=f"export:{key}" if (row.ref or {}).get("export_id") else (f"media:{key}" if (row.ref or {}).get("media_job_id") else f"run:{key}"),
                     family="spend",
                     amount=spent,
-                    label=(("视频导出" if zh else "MP4 export") if (row.ref or {}).get("export_id") else name),
+                    label=(("视频导出" if zh else "MP4 export") if (row.ref or {}).get("export_id") else (("素材生成" if zh else "Media generation") if (row.ref or {}).get("media_job_id") else name)),
                     output_types=["video"] if (row.ref or {}).get("export_id") else types_by_run.get(key, []),
                     hint=(
                         hint_raw if len(hint_raw) <= 36 else hint_raw[:36] + "…"

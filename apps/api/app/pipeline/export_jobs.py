@@ -9,9 +9,10 @@ from uuid import UUID, uuid4
 
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, text
 
 from app.config import settings
+from app.pipeline import job_lease
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import RenderStatus
 from app.models.tables import Composition, CompositionVersion, ExportJob, Message, Output, Project
@@ -269,26 +270,11 @@ async def claim_export(db):
 
 
 def _authority(job_id, token):
-    return (
-        ExportJob.id == job_id,
-        ExportJob.status == "running",
-        ExportJob.claim_token == token,
-        ExportJob.lease_until > func.clock_timestamp(),
-    )
+    return job_lease.authority(ExportJob, job_id, token)
 
 
 async def _heartbeat(job_id, token):
-    while True:
-        await asyncio.sleep(LEASE.total_seconds() / 3)
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(ExportJob)
-                .where(*_authority(job_id, token))
-                .values(lease_until=func.now() + LEASE)
-            )
-            await db.commit()
-            if not result.rowcount:
-                return
+    await job_lease.heartbeat(AsyncSessionLocal, ExportJob, job_id, token, LEASE)
 
 
 async def _announce(job_id, token, en, zh):

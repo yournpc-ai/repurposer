@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 
 from app.chat import editor_media, service
 from app.models.schemas import OptionAnswerRequest, ChatTurnStopRequest
-from app.models.tables import Conversation, CreditTransaction, Message, Project, User, WorkflowRun, WorkflowStep
+from app.models.tables import Conversation, CreditTransaction, MediaJob, Message, Project, User, WorkflowRun, WorkflowStep
 from app.tools.music.score import GenerateMusicArgs
 from test.core.test_compositions import _create, _project, _snapshots, _user
 
@@ -28,7 +28,6 @@ async def test_explicit_voice_prohibition_stops_before_authorization_or_executio
 async def test_native_music_request_replay_stop_and_permission(database, monkeypatch):
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
-    monkeypatch.setattr(editor_media, "cached_music_preparation", AsyncMock(return_value=None))
     owner = await _user(database)
     pid = await _project(database, owner)
     await _snapshots(database, owner)
@@ -49,13 +48,14 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
         def submit(turn, args=args):
             return editor_media.submit_editor_media(turn, "generate_music", args, comp, version, "call-1")
         twin = await asyncio.gather(submit(turn), submit(turn))
-        assert twin[0].workflow_run_id == twin[1].workflow_run_id and twin[0].id == twin[1].id
+        assert twin[0].intent["media_job"] == twin[1].intent["media_job"] and twin[0].id == twin[1].id
         with pytest.raises(ValueError, match="different parameters"):
             await submit(turn, args.model_copy(update={"bpm": 92}))
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 1
-        assert await db.scalar(select(func.count()).select_from(WorkflowStep)) == 1
+        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
+        assert await db.scalar(select(func.count()).select_from(WorkflowStep)) == 0
+        assert await db.scalar(select(func.count()).select_from(MediaJob)) == 1
         assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
-        assert (await db.get(WorkflowRun, twin[0].workflow_run_id)).status.value == "cancelled"
+        assert (await db.get(MediaJob, twin[0].intent["media_job"])).status == "cancelled"
         assert await db.get(Message, twin[0].id)
         with pytest.raises(service.TurnStopped):
             await submit(turn)
@@ -71,11 +71,11 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
         assert receipt.question["kind"] == "question" and receipt.workflow_run_id is None
         decline, _ = await service.answer_question(db, owner, receipt.id, OptionAnswerRequest(kind="option", option_id="decline"))
         assert decline.intent["media_result"] == {"status": "declined"}
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 1
+        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
         permit = await submit(await opening())
         accepted = await editor_media.answer_media_permission(db, project, permit, True)
         await db.commit()
-        assert accepted.workflow_run_id is not None
+        assert accepted.workflow_run_id is None and accepted.intent["media_job"]
         assert all(v == 0 for v in await db.scalars(select(CreditTransaction.amount).where(
             CreditTransaction.kind.in_(["hold", "capture", "release"]))))
 
@@ -88,7 +88,6 @@ async def test_generation_does_not_bind_an_older_version_and_insert_replays(data
 
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
-    monkeypatch.setattr(editor_media, "cached_music_preparation", AsyncMock(return_value=None))
     owner = await _user(database)
     pid = await _project(database, owner)
     await _snapshots(database, owner)
@@ -119,7 +118,7 @@ async def test_generation_does_not_bind_an_older_version_and_insert_replays(data
     async with database() as db:
         newer = await db.get(CompositionVersion, UUID(saved["version_id"]))
         assert audio.id not in [UUID(s["snapshot_id"]) for s in newer.sources]
-        assert (await db.get(WorkflowRun, request.workflow_run_id)).status.value == "pending"
+        assert (await db.get(MediaJob, request.intent["media_job"])).status == "queued"
     insert = InsertAudioArgs(source_id=audio.id, start_seconds=1, gain_db=-10)
     with pytest.raises(ValueError, match="changed since inspection"):
         await edit("insert_audio", insert, "place", ref(newer), str(initial.id))
@@ -210,16 +209,18 @@ async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(datab
         if accepted.question:
             accepted = await editor_media.answer_media_permission(db, project, accepted, True)
         await db.commit()
-        from app.platform.billing import capture_step
+        from app.platform.billing import settle_media
 
+        job = await db.get(MediaJob, accepted.intent["media_job"])
         hold = await db.scalar(select(CreditTransaction.amount).where(
-            CreditTransaction.idempotency_key == f"run:{accepted.workflow_run_id}:hold"))
-        step = await db.scalar(select(WorkflowStep).where(WorkflowStep.run_id == accepted.workflow_run_id))
-        step.cost = {"fixed_cost": 500}
-        assert hold < 0
-        charged = await capture_step(db, user_id=owner, node=step)
-        assert charged.amount == hold
-        assert await capture_step(db, user_id=owner, node=step) is None
+            CreditTransaction.idempotency_key == f"media:{job.id}:hold"))
+        assert hold == -job.authorized_credits < 0
+        with pytest.raises(ValueError, match="exceeds"):
+            await settle_media(db, user_id=owner, job_id=job.id, reserved=-hold, charged=1-hold)
+        for _ in range(2):
+            await settle_media(db, user_id=owner, job_id=job.id, reserved=-hold, charged=-hold)
+        assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(
+            CreditTransaction.idempotency_key == f"media:{job.id}:capture")) == 1
 
 
 @pytest.mark.asyncio
@@ -321,3 +322,187 @@ async def test_auto_account_needs_permission_for_unrequested_export(database, mo
         assert receipt.question and receipt.workflow_run_id is None
         assert not await db.scalar(select(WorkflowRun.id))
         assert not await db.scalar(select(CreditTransaction.id).where(CreditTransaction.kind == "hold"))
+
+
+@pytest.mark.asyncio
+async def test_expired_voice_occupancy_recovers_only_fixed_audio(database, monkeypatch):
+    from datetime import timedelta
+    from sqlalchemy import update
+    from app.chat.editor import GenerateVoiceArgs
+    from app.editing.schemas import SpeechObject
+    from app.models.tables import VideoNarration
+    from app.tools.video import narration_store as originals
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    owner = await _user(database)
+    args = GenerateVoiceArgs(text="Lease recovery.", language="en")
+    speech = SpeechObject(kind="speech", object_id="obj_voice", **args.model_dump())
+    first = await originals.resolve_original(owner, speech, execution_id="generator")
+    assert first["state"] == "needs_audio"
+
+    async with database() as db:
+        row, now = (await db.execute(select(VideoNarration, func.now()))).one()
+        assert timedelta(minutes=9) < row.lease_expires_at - now <= timedelta(minutes=10)
+        await db.execute(update(VideoNarration).values(lease_expires_at=func.now()))
+        await db.commit()
+
+    with pytest.raises(originals.NarrationOutcomeUnknown):
+        await originals.resolve_original(owner, speech, execution_id="recovery")
+
+    async with database() as db:
+        await db.execute(update(VideoNarration).values(
+            status="aligning", audio_digest="a" * 64, storage_key="fixed.mp3",
+            duration_s=1, usage_characters=15,
+        ))
+        await db.commit()
+
+    recovery = await originals.resolve_original(owner, speech, execution_id="recovery")
+    assert recovery["audio"]["synthesis_execution_id"] == "generator"
+    assert recovery["state"] == "needs_alignment"
+    assert recovery["audio"]["media"]["digest"] == "a" * 64
+    with pytest.raises(originals.NarrationStoreError, match="lost its occupancy"):
+        await originals.complete_alignment(owner, speech, execution_id="generator", cues=[])
+
+
+@pytest.mark.asyncio
+async def test_historical_image_requires_original_project_and_digest(database, monkeypatch):
+    import json
+    from uuid import uuid4
+    from app.providers import storage
+
+    owner = await _user(database)
+    first = await _project(database, owner)
+    second = await _project(database, owner)
+    program, raw, png = "a" * 64, "b" * 64, "c" * 64
+    asset = {"provenance": {"kind": "minimax_image", "program_digest": program,
+                            "provider_media_digest": raw}, "media": {"digest": png}}
+    async with database() as db:
+        run = WorkflowRun(project_id=first, context={"visual_asset_preparation": {
+            "result": {"assets": [asset]}}})
+        db.add(run)
+        await db.commit()
+        manifest = {"program_digest": program, "execution_id": str(run.id), "media": {"digest": raw}}
+        monkeypatch.setattr(storage, "exists", AsyncMock(return_value=True))
+        async def read_manifest(key):
+            assert key == f"video-generated-images/{program}.json"
+            return json.dumps(manifest).encode()
+        monkeypatch.setattr(storage, "read", read_manifest)
+        project = await db.get(Project, first)
+        assert await editor_media._historical_image_owned(db, project, asset)
+        assert not await editor_media._historical_image_owned(db, await db.get(Project, second), asset)
+        manifest["media"]["digest"] = "d" * 64
+        assert not await editor_media._historical_image_owned(db, project, asset)
+        manifest["media"]["digest"] = raw
+        manifest["execution_id"] = str(uuid4())
+        assert not await editor_media._historical_image_owned(db, project, asset)
+
+
+@pytest.mark.asyncio
+async def test_media_queue_limits_owner_fairness_and_fences_expired_workers(database, monkeypatch):
+    from datetime import timedelta
+    from uuid import uuid4
+    from app.pipeline import media_jobs
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+
+    async def seat():
+        owner = await _user(database)
+        pid = await _project(database, owner)
+        async with database() as db:
+            conversation = Conversation(project_id=pid, user_id=owner)
+            db.add(conversation)
+            await db.commit()
+            return pid, conversation.id
+
+    async def enqueue(seat, kind):
+        pid, cid = seat
+        async with database() as db:
+            job_id = uuid4()
+            receipt = await service._create_message(db, cid, "assistant", "", intent={
+                "editor_media": str(job_id), "tool": kind,
+            })
+            await media_jobs.enqueue_media(db, await db.get(Project, pid), receipt, {}, 0)
+            await db.commit()
+            return job_id
+
+    async def claim(kind):
+        async with database() as db:
+            return await media_jobs.claim_media(db, kind)
+
+    seats = [await seat() for _ in range(9)]
+    jobs = []
+    for owner in seats[:8]:
+        jobs.append([await enqueue(owner, "generate_image") for _ in range(4)])
+        if len(jobs) == 1:
+            with pytest.raises(ValueError, match="queue is full"):
+                await enqueue(owner, "generate_image")
+    with pytest.raises(ValueError, match="queue is full"):
+        await enqueue(seats[-1], "generate_image")
+    music = await enqueue(seats[0], "generate_music")
+    workers = await asyncio.gather(claim("generate_image"), claim("generate_image"))
+    claims = [claim for claim in workers if claim]
+    if len(claims) == 1:
+        claims.append(await claim("generate_image"))
+    assert {claim[0] for claim in claims} == {jobs[0][0], jobs[1][0]}
+    assert await claim("generate_image") is None
+    assert (await claim("generate_music"))[0] == music
+    oldest = next(item for item in claims if item[0] == jobs[0][0])
+    for attempt in range(1, media_jobs.MAX_ATTEMPTS + 1):
+        async with database() as db:
+            row = await db.get(MediaJob, oldest[0], with_for_update=True)
+            assert row.attempt == attempt
+            row.lease_until = func.now() - timedelta(seconds=1)
+            await db.commit()
+            assert await db.scalar(select(MediaJob.id).where(*media_jobs._authority(*oldest))) is None
+        reclaimed = await claim("generate_image")
+        if attempt < media_jobs.MAX_ATTEMPTS:
+            assert reclaimed[0] == oldest[0] and reclaimed[1] != oldest[1]
+            oldest = reclaimed
+        else:
+            assert reclaimed is None
+    async with database() as db:
+        failed = await db.get(MediaJob, oldest[0])
+        assert failed.status == "failed" and failed.attempt == 3
+        assert (await db.get(MediaJob, jobs[1][0])).status == "running"
+
+
+@pytest.mark.asyncio
+async def test_recovered_paid_request_requires_bound_confirmation_with_auto_account(database, monkeypatch):
+    from app.chat.editor import GenerateVoiceArgs
+    from app.models.schemas import PlanEstimate
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
+    quote = AsyncMock(return_value=PlanEstimate(total=[2, 3], per_task=[[2, 3]]))
+    monkeypatch.setattr(editor_media, "media_quote", quote)
+    owner = await _user(database, settings={"confirm_execution": "auto", "confirm_credits": "auto"})
+    pid = await _project(database, owner)
+    async with database() as db:
+        project = await db.get(Project, pid)
+        conv = Conversation(project_id=pid, user_id=owner)
+        db.add(conv)
+        await db.commit()
+        row = await service._create_message(db, conv.id, "user", "Generate narration.")
+        row.turn_state = "in_flight"
+        row.intent = {"resumed_media": "previously-delivered"}
+        await db.commit()
+        turn = SimpleNamespace(project=project, user_id=owner, turn_id=row.id, conversation_id=conv.id,
+                               text=row.content)
+        args = GenerateVoiceArgs(text="A new line.", language="en")
+        async def submit(args):
+            return await editor_media.submit_editor_media(turn, "generate_voice", args, None, None, "new-voice")
+        question = await submit(args)
+        assert question.intent["media_permission"]["params"]["text"] == args.text
+        assert question.intent["media_permission"]["quote"]["total"][1] == 3
+        assert (await submit(args)).id == question.id
+        with pytest.raises(ValueError, match="different parameters"):
+            await submit(args.model_copy(update={"text": "Different."}))
+        assert await db.scalar(select(func.count()).select_from(MediaJob)) == 0
+        question = await db.get(Message, question.id, with_for_update=True)
+        execution = await editor_media.answer_media_permission(db, project, question, True)
+        await db.commit()
+        assert execution.intent["authorization_ref"] == str(question.id)
+        assert (await submit(args)).id == execution.id
+        assert await db.scalar(select(func.count()).select_from(MediaJob)) == 1
+        assert list(await db.scalars(select(CreditTransaction.amount).where(
+            CreditTransaction.ref["media_job_id"].astext == execution.intent["media_job"]))) == [-3]

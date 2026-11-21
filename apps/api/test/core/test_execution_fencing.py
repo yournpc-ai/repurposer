@@ -95,7 +95,7 @@ class _SessionFactory:
 
 
 class _FakeBound:
-    """metering.bind_workflow_step stand-in: context manager + ledger."""
+    """metering.collect_execution_cost stand-in: context manager + ledger."""
 
     def __init__(self):
         self.accrued: dict = {}
@@ -158,7 +158,7 @@ class _World:
 
         monkeypatch.setattr(orchestrator, "AsyncSessionLocal", self.factory)
         monkeypatch.setitem(orchestrator.NODE_KINDS, "fake_kind", fake_node)
-        monkeypatch.setattr(orchestrator, "bind_workflow_step", lambda _id: _FakeBound())
+        monkeypatch.setattr(orchestrator, "collect_execution_cost", lambda: _FakeBound())
 
         async def _capture(db, *, user_id, node):
             self.captured.append(node)

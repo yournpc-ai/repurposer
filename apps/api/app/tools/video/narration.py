@@ -292,6 +292,81 @@ async def narration_quote_characters(content: CompositionContent, *, user_id: UU
     return total
 
 
+async def prepare_original_narration(
+    speech: SpeechObject,
+    *,
+    user_id: UUID,
+    execution_id: str,
+    policy: NarrationPolicy,
+    spent: int = 0,
+    before_submit=None,
+) -> tuple[dict[str, Any], bool]:
+    """Resolve the speed-1.0 recording and its sentence timings under one authorization."""
+    from app.metering import record_media_usage
+    from app.providers.voice import synthesize_detailed
+    from app.tools.video.narration_store import (
+        NarrationOutcomeUnknown,
+        cancel_unsubmitted,
+        complete_alignment,
+        complete_audio,
+        mark_outcome_unknown,
+        resolve_original,
+    )
+
+    generated = False
+    resolution = await resolve_original(user_id, speech, execution_id=execution_id, reserve_only=before_submit is not None)
+    if resolution["state"] == "done":
+        original = {**resolution["original"], "cache_hit": True, "run_usage": 0}
+    else:
+        normalized = resolution["normalized_text"]
+        run_usage = 0
+        if resolution["state"] == "needs_audio":
+            try:
+                _check_budget(policy, spent, normalized)
+            except Exception:
+                await cancel_unsubmitted(user_id, speech, execution_id=execution_id)
+                raise
+            if before_submit is not None:
+                await before_submit()
+            try:
+                result = await asyncio.to_thread(
+                    synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
+                )
+                generated = True
+            except Exception as exc:
+                await mark_outcome_unknown(
+                    user_id, speech, execution_id=execution_id, error=str(exc)
+                )
+                raise NarrationOutcomeUnknown(
+                    f"Original narration outcome is unconfirmed: {exc}"
+                ) from exc
+            duration = decode_duration_s(result.audio)
+            audio = await complete_audio(
+                user_id,
+                speech,
+                execution_id=execution_id,
+                audio=result.audio,
+                duration_s=duration,
+                subtitle_file=result.subtitle_file,
+                usage_characters=result.usage_characters,
+                trace_id=result.trace_id,
+            )
+            run_usage = result.usage_characters
+            await record_media_usage({"tts_chars": float(run_usage)})
+            resolution = {"state": "needs_alignment", "audio": audio, "normalized_text": normalized}
+        else:
+            # Confirmed audio from an earlier attempt resumes without re-metering.
+            if resolution["audio"].get("synthesis_execution_id") == execution_id:
+                run_usage = int(resolution["audio"].get("usage_characters") or 0)
+        audio = resolution["audio"]
+        cues = await _cues(audio.get("subtitle_file"), normalized, float(audio["duration_s"]))
+        original = await complete_alignment(
+            user_id, speech, execution_id=execution_id, cues=cues
+        )
+        original = {**original, "cache_hit": not generated and not run_usage, "run_usage": run_usage}
+    return original, generated
+
+
 async def prepare_speech_media(
     content: CompositionContent,
     *,
@@ -303,14 +378,7 @@ async def prepare_speech_media(
     """Prepare every SpeechClip inside its fixed window, with no blind paid replay."""
     from app.metering import record_media_usage
     from app.providers.voice import synthesize_detailed
-    from app.tools.video.narration_store import (
-        NarrationOutcomeUnknown,
-        cancel_unsubmitted,
-        complete_alignment,
-        complete_audio,
-        mark_outcome_unknown,
-        resolve_original,
-    )
+    from app.tools.video.narration_store import NarrationOutcomeUnknown
     from app.tools.video.preparation import store_source_bytes
 
     clips = _speech_clips(content)
@@ -354,53 +422,9 @@ async def prepare_speech_media(
             continue
 
         if manifest is None:
-            resolution = await resolve_original(user_id, speech, execution_id=execution_id)
-            if resolution["state"] == "done":
-                original = {**resolution["original"], "cache_hit": True, "run_usage": 0}
-            else:
-                normalized = resolution["normalized_text"]
-                run_usage = 0
-                if resolution["state"] == "needs_audio":
-                    try:
-                        _check_budget(policy, spent, normalized)
-                    except Exception:
-                        await cancel_unsubmitted(user_id, speech, execution_id=execution_id)
-                        raise
-                    try:
-                        result = await asyncio.to_thread(
-                            synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
-                        )
-                        generated = True
-                    except Exception as exc:
-                        await mark_outcome_unknown(
-                            user_id, speech, execution_id=execution_id, error=str(exc)
-                        )
-                        raise NarrationOutcomeUnknown(
-                            f"clip {clip.clip_id}: original narration outcome is unconfirmed: {exc}"
-                        ) from exc
-                    duration = decode_duration_s(result.audio)
-                    audio = await complete_audio(
-                        user_id,
-                        speech,
-                        execution_id=execution_id,
-                        audio=result.audio,
-                        duration_s=duration,
-                        subtitle_file=result.subtitle_file,
-                        usage_characters=result.usage_characters,
-                        trace_id=result.trace_id,
-                    )
-                    run_usage = result.usage_characters
-                    await record_media_usage({"tts_chars": float(run_usage)})
-                    resolution = {"state": "needs_alignment", "audio": audio, "normalized_text": normalized}
-                else:
-                    # Confirmed audio from an earlier attempt resumes without re-metering.
-                    run_usage = int(resolution["audio"].get("usage_characters") or 0)
-                audio = resolution["audio"]
-                cues = await _cues(audio.get("subtitle_file"), normalized, float(audio["duration_s"]))
-                original = await complete_alignment(
-                    user_id, speech, execution_id=execution_id, cues=cues
-                )
-                original = {**original, "cache_hit": False, "run_usage": run_usage}
+            original, generated = await prepare_original_narration(
+                speech, user_id=user_id, execution_id=execution_id, policy=policy, spent=spent
+            )
             manifest = {
                 "schema_version": 1,
                 "state": "original_ready",

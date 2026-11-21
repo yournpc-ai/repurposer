@@ -3449,7 +3449,14 @@ async def stop_turn_at_visible_frontier(
     await discard_turn_context(db, row.conversation_id, user_message_id)
 
     media_rows = {m.id for m in assistant_rows if (m.intent or {}).get("editor_media")
-                 and (m.workflow_run_id or (m.intent or {}).get("export_job") or (m.intent or {}).get("media_result"))}
+                 and (m.workflow_run_id or (m.intent or {}).get("media_job") or (m.intent or {}).get("export_job") or (m.intent or {}).get("media_result"))}
+    for m in assistant_rows:
+        permission = (m.intent or {}).get("media_permission")
+        if permission and (m.intent.get("media_receipt_id") or permission.get("recovery_quote")):
+            media_rows.add(m.id)
+            if not m.answer and m.question:
+                m.answer = AnswerPayload(kind="bail", text="Stopped", answered_at=datetime.now(UTC)).model_dump(mode="json")
+                m.intent = {**m.intent, "media_result": {"status": "cancelled"}}
     deliveries = {m.id for m in assistant_rows if (m.intent or {}).get("reviewed_version") and (m.intent or {}).get("output_refs")}
     if media_rows:
         from app.pipeline.orchestrator import cancel_run
@@ -3459,6 +3466,9 @@ async def stop_turn_at_visible_frontier(
             if job_id := (by_id[message_id].intent or {}).get("export_job"):
                 from app.pipeline.export_jobs import cancel_export
                 await cancel_export(db, project, UUID(job_id))
+            if job_id := (by_id[message_id].intent or {}).get("media_job"):
+                from app.pipeline.media_jobs import cancel_media
+                await cancel_media(db, project, UUID(job_id))
             run_id = by_id[message_id].workflow_run_id
             if run_id is not None:
                 run = await db.get(WorkflowRun, run_id, with_for_update=True, populate_existing=True)

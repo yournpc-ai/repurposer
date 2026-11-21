@@ -1,0 +1,54 @@
+{
+  "opening": "6f55b64b-d68c-4c9b-a216-d4efcbe404a4",
+  "entry": "Two native handlers dispatched concurrently. TTS timeout injected at provider client. Actual music generation, analysis, storage and ledger.",
+  "rows": [
+    {
+      "tool": "generate_voice",
+      "job": "95842559-1d64-5923-a08e-5685fb9b855f",
+      "receipt": "ccc4fc18-32c4-4e3a-9e60-059e2b969a96",
+      "attempt": 1,
+      "status": "unknown",
+      "facts": {
+        "error": "The provider result needs reconciliation.",
+        "status": "provider_unknown",
+        "charged_credits": null,
+        "reserved_credits": 2
+      },
+      "ledger": [
+        [
+          "hold",
+          -2
+        ]
+      ]
+    },
+    {
+      "tool": "generate_music",
+      "job": "c66aba20-90b4-5999-862c-07edc69de3d2",
+      "receipt": "738ad2b7-8101-4990-94c6-cc9d484aed55",
+      "attempt": 1,
+      "status": "succeeded",
+      "facts": {
+        "peak": 0.096893310546875,
+        "role": "music",
+        "score": {
+          "bpm": {
+            "den": 1,
+            "num": 100
+          },
+          "style": "ambient"
+        },
+        "digest": "4f430c2287097df18b92a7b8c717b6c6ab6f7fc5368068c85c38cdc8c8dd2d43",
+        "status": "available",
+        "music_id": "a94e39c5-0b10-5f1c-9181-f6a506274f4b",
+        "cache_hit": false,
+        "snapshot_id": "dec90c0e-499f-5b6c-bf6c-3507ced1b8e7",
+        "analysis_digest": "e70a5dcc3f0fa4430074ff287b16fda28aa53033825acb4ea9e8463b308bb88d",
+        "charged_credits": 0,
+        "duration_seconds": 1.0,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "ledger": []
+    }
+  ]
+}

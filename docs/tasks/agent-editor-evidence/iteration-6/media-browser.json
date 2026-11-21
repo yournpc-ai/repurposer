@@ -1,0 +1,50 @@
+[
+  {
+    "kind": "voice_music",
+    "reloaded": false,
+    "measured": [
+      {
+        "duration": 1.439656,
+        "played": 0.104003
+      },
+      {
+        "duration": 4,
+        "played": 0.107578
+      }
+    ]
+  },
+  {
+    "kind": "voice_music",
+    "reloaded": true,
+    "measured": [
+      {
+        "duration": 1.439656,
+        "played": 0.115085
+      },
+      {
+        "duration": 4,
+        "played": 0.105117
+      }
+    ]
+  },
+  {
+    "kind": "image",
+    "reloaded": false,
+    "pixels": [
+      [
+        1920,
+        1080
+      ]
+    ]
+  },
+  {
+    "kind": "image",
+    "reloaded": true,
+    "pixels": [
+      [
+        1920,
+        1080
+      ]
+    ]
+  }
+]

@@ -10,6 +10,8 @@
 
 - 6C 隔离验收使用 PostgreSQL 5966。合成文字卡经原生导出处理函数、ExportJob 和 Renderer 写入现有 TOS；按不可变版本配置公开测试许可。对象匿名 GET 为 200，其他用户访问应用的 Output、签发与下载入口均为 403。事故旁白历史回放和原库删除盘点等待只读实例或一致性备份。[真实 TOS 导出记录](tasks/agent-editor-evidence/iteration-6/public-test-export.json)
 
+- 6C 在隔离库完成三类 MediaJob 的实际生成、跨项目图片隔离、原生多调用、进程强杀与恢复费用确认。事故原库回放仍开放，6D 待开始。[媒体验收及首错](tasks/agent-editor-evidence/iteration-6/media.md)
+
 - **当前产品主线为 Agent Editor v1。** 六个独立素材原始首次验收仍为 3 完整、2 部分、1 失败，跨素材普遍稳定尚未证明。三条未完整通过任务已完成首错归因和最小闭环：开放演讲复测在 17 次请求内交付、字幕本轮目标完整，但开放与单人仍有视觉误述；两个新增独立素材主任务达成。接缝、片尾卡和媒体生成回归被 Worker fencing/固定音频恢复故障阻断，不能算作保持成功。主观音频、自然语言事实和开放任务稳定性仍开放。[主合同](tasks/new-agent.md) · [首错归因与最小闭环](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md)
 
 - **R1 — Core Product Beta：已封板**。实现与验收已闭环；baseline LLM 方差族 S1 / S6f / S10 仍是登记的开放观察项，不作为新的 release regression 自动放大范围。验收以当前合同与验证登记为准。

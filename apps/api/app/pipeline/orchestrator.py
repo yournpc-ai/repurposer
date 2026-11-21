@@ -38,7 +38,7 @@ from app.models.schemas import (
     WorkflowStatus,
 )
 from app.models.tables import Asset, AssetStatus, CreditTransaction, Message, Output, WorkflowStep, Project, WorkflowRun
-from app.metering import bind_workflow_step, merge_accrued_cost
+from app.metering import collect_execution_cost, merge_accrued_cost
 # Graph fill/back-write (ADR-057 K2) — top-level is cycle-free: graph_fill's
 # module-level chain (graph / graph_store / outputs / billing) never points
 # back here; its own import of THIS module stays function-level inside
@@ -571,7 +571,7 @@ async def execute_step(node_id: UUID) -> None:
                     return
                 project = await db.get(Project, run.project_id)
                 executor = NODE_KINDS[node.kind]
-                bound = bind_workflow_step(node.id)
+                bound = collect_execution_cost()
                 # Same ledger object the runner's LLM/media calls accumulate
                 # into — readable after the with-block AND on raise (D9).
                 accrued = bound.accrued

@@ -127,6 +127,8 @@ async def recover_interrupted_edits(db, conversation_id):
             Message.intent.has_key("editor_media"), Message.intent.has_key("media_result"),
             Message.workflow_run_id.is_not(None)).order_by(Message.seq.desc()).limit(1))
         if result is not None:
+            if result.intent["media_result"].get("status") == "historical_ownership_pending":
+                continue
             opening = await db.get(Message, turn_id)
             if opening and not (opening.intent or {}).get("resumed_media"):
                 from app.chat.trigger_turn import fire_trigger, TRIGGER_RUN_COMPLETED
@@ -141,11 +143,13 @@ async def recover_interrupted_edits(db, conversation_id):
             media = list(await db.scalars(select(Message).where(
                 Message.turn_id == row.id, Message.intent.has_key("editor_media"),
             ).order_by(Message.seq)))
-            if any(m.intent.get("export_job") and m.intent.get("media_result") and
+            if any(m.intent.get("media_permission") and not m.answer for m in media):
+                continue
+            if any((m.intent.get("export_job") or m.intent.get("media_job")) and m.intent.get("media_result") and
                    not (row.intent or {}).get("resumed_media") for m in media):
                 # The worker polls durable results and competes for the existing opening lock.
                 continue
-            pending = any((m.workflow_run_id or m.intent.get("export_job")) and not m.intent.get("media_result") for m in media)
+            pending = any((m.workflow_run_id or (m.intent.get("export_job") or m.intent.get("media_job"))) and not m.intent.get("media_result") for m in media)
             if pending:
                 continue
             for receipt in media:
@@ -164,9 +168,12 @@ async def recover_media_receipts(db, conversation_id=None):
     from app.chat.editor_media import settle_media_receipt
     from app.models.schemas import WorkflowStatus
 
+    unresolved = ~Message.intent.has_key("media_result")
+    if conversation_id:
+        unresolved |= Message.intent["media_result"]["status"].astext == "historical_ownership_pending"
     query = select(WorkflowRun, Project).join(Project, Project.id == WorkflowRun.project_id).join(
         Message, Message.workflow_run_id == WorkflowRun.id
-    ).where(Message.intent.has_key("editor_media"), ~Message.intent.has_key("media_result"),
+    ).where(Message.intent.has_key("editor_media"), unresolved,
             WorkflowRun.status.in_([WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]))
     if conversation_id:
         query = query.where(Message.conversation_id == conversation_id)
@@ -190,7 +197,8 @@ async def resume_finished_media(db):
         .join(Message, Message.workflow_run_id == WorkflowRun.id)
         .join(opening, opening.id == Message.turn_id)
         .where(opening.turn_state == "in_flight", Message.intent.has_key("editor_media"),
-               Message.intent.has_key("media_result")).order_by(Message.seq.desc()))
+               Message.intent.has_key("media_result"),
+               Message.intent["media_result"]["status"].astext != "historical_ownership_pending").order_by(Message.seq.desc()))
     for project_id, run_id in rows:
         fire_trigger(project_id, TRIGGER_RUN_COMPLETED, str(run_id))
 
@@ -221,20 +229,24 @@ async def settle_media_activity(db, receipt):
         activity.intent = {**activity.intent, "frame": frame}
 
 
-async def resume_export_receipts():
+async def resume_job_receipts():
     """One bounded scan; the live API and every worker share the opening lock."""
     from sqlalchemy.orm import aliased
     from app.models.database import AsyncSessionLocal
-    from app.models.tables import ExportJob
     from app.chat.editor_media import continue_media_turn
 
     opening = aliased(Message)
+    later = aliased(Message)
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(ExportJob.project_id, Message.id)
-            .join(Message, Message.id == ExportJob.receipt_id)
+        rows = (await db.execute(select(Conversation.project_id, Message.id)
+            .select_from(Message).join(Conversation, Conversation.id == Message.conversation_id)
             .join(opening, opening.id == Message.turn_id)
-            .where(opening.turn_state == "in_flight", Message.intent.has_key("media_result"))
-            .order_by(ExportJob.created_at).limit(32))).all()
+            .where(opening.turn_state == "in_flight", Message.intent.has_key("media_result"),
+                   or_(Message.intent.has_key("media_job"), Message.intent.has_key("export_job"),
+                       Message.intent["media_permission"]["recovery_quote"].as_boolean().is_(True)))
+            .where(~select(later.id).where(later.turn_id == opening.id, later.seq > Message.seq,
+                                         later.intent.has_key("editor_media")).exists())
+            .order_by(Message.created_at).limit(32))).all()
     for project_id, receipt_id in rows:
         async with AsyncSessionLocal() as db:
             await continue_media_turn(db, await db.get(Project, project_id), await db.get(Message, receipt_id))

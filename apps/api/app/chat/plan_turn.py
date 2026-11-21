@@ -1713,9 +1713,15 @@ async def run_plan_turn(
     )
     await turn.assemble(recent)
     mention_target = await video_target_hint(db, project, request.mentions)
+    completed_media = []
     if authorized_media is not None:
-        mention_target = {"composition_id": authorized_media.intent["composition_id"]}
-        turn._inspected_version = authorized_media.intent["version_id"]
+        completed_media = list(await db.scalars(select(Message.intent["media_result"]).where(
+            Message.turn_id == turn_id, Message.conversation_id == conversation.id,
+            Message.intent.has_key("media_job"), Message.intent.has_key("media_result"),
+        ).order_by(Message.seq)))
+        if authorized_media.intent.get("composition_id"):
+            mention_target = {"composition_id": authorized_media.intent["composition_id"]}
+            turn._inspected_version = authorized_media.intent["version_id"]
         if authorized_media.intent["media_result"].get("role") == "export":
             turn._editor_export = authorized_media.intent["media_result"]
             mention_target["version_id"] = authorized_media.intent["version_id"]
@@ -1803,6 +1809,7 @@ async def run_plan_turn(
             "delivered": getattr(turn, "_editor_delivery", None),
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,
+            "media_receipts": completed_media,
             "authorized_media": authorized_media.intent["media_result"] if authorized_media is not None else None,
             "last_preview": getattr(turn, "_editor_last_preview", None),
             "recent_edit": getattr(turn, "_editor_recent", None),
@@ -1818,10 +1825,17 @@ async def run_plan_turn(
         return assembly
 
     speech_language = conversation_speech_language(recent or [])
+    dialogue = conversation_messages(recent or [])
+    if authorized_media is not None:
+        dialogue = [{"role": "user", "content": request.message}]
+        if authorized_media.intent["media_result"].get("status") == "declined":
+            dialogue.extend([
+                {"role": "assistant", "content": authorized_media.content},
+                {"role": "user", "content": (authorized_media.answer or {}).get("text") or "Decline"},
+            ])
     result = await intent_router.call_loop(
         turn.execute,
-        dialogue=([{"role": "user", "content": request.message}] if authorized_media is not None
-                  else conversation_messages(recent or [])),
+        dialogue=dialogue,
         speech_language_hint=speech_language,
         tools=[*tools_for_bound_skill(intent_router.tools, turn.skill), *context_tools],
         round_assembler=assemble_round,

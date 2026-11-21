@@ -166,6 +166,7 @@ class ChatTool:
     # Evidence reads authenticate and retain the same draft without merging writes.
     draft_reader: bool = False
     presentation: ToolPresentation | None = None
+    independent_media: bool = False
     snapshot_read: bool = False
     finish_batch: Callable[[list[tuple[BaseModel, "ToolObservation"]]], Awaitable["ToolObservation | None"]] | None = None
 
@@ -1530,7 +1531,11 @@ class ToolLoopAgent:
             # A malformed member goes through the ordinary per-item diagnostics below.
             parallel_params = []
             read_results = {}
-            if group_id and all(c.name in by_name and by_name[c.name].snapshot_read for c in result.tool_calls):
+            media_group = group_id and all(
+                c.name in by_name and by_name[c.name].independent_media for c in result.tool_calls
+            )
+            paused_member = None
+            if group_id and (media_group or all(c.name in by_name and by_name[c.name].snapshot_read for c in result.tool_calls)):
                 try:
                     parallel_params = [by_name[c.name].params_model.model_validate(c.arguments)
                                        for c in result.tool_calls]
@@ -1838,10 +1843,12 @@ class ToolLoopAgent:
                         for completed in asyncio.as_completed(pending):
                             member, observed, duration = await completed
                             read_results[member.call_id] = observed
-                            state = "completed" if observed.ok else "failed"
+                            state = ("awaiting_authorization" if observed.awaiting_authorization else
+                                     "provider_unknown" if observed.provider_outcome_unknown else
+                                     "completed" if observed.ok else "failed")
                             presentation = by_name[member.tool_name].presentation
                             await _emit(on_loop_event, replace(member, state=state, duration_ms=duration,
-                                        key=presentation.done_key if observed.ok else member.key,
+                                        key=presentation.done_key if state == "completed" else member.key,
                                         user_error=observed.user_error))
                     finally:
                         for task in pending:
@@ -2011,6 +2018,10 @@ class ToolLoopAgent:
                     if finish_batch and outcome.ok:
                         batch_observations.append((params, outcome))
                     if outcome.stop_after_observation:
+                        if media_group and parallel_params:
+                            paused_member = LoopResult(prose=speech, tool_name=dispatch_name, params=params,
+                                                       iterations=iteration + 1, calls=calls)
+                            continue
                         if group_id:
                             for call_index in range(call_index + 1, len(wire_calls)):
                                 remaining = result.tool_calls[call_index]
@@ -2156,6 +2167,8 @@ class ToolLoopAgent:
                 )
                 if stopped is not None:
                     return stopped
+            if paused_member is not None:
+                return _finish(paused_member)
             if finish_batch and len(batch_observations) == len(result.tool_calls):
                 settlement = await finish_batch(batch_observations)
                 if settlement is not None:

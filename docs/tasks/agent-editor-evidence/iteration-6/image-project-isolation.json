@@ -1,0 +1,96 @@
+{
+  "prompt": "A single teal paper cube on pale yellow, simple public studio test swatch. No writing.",
+  "entry": "native handler with production MiniMax image-01 and actual HTTP POST counter; replay before and after execution",
+  "rows": [
+    {
+      "project": "ff39e3ad-8b2e-4474-95e3-1cc3567ceb20",
+      "owner": "66c56205-1a73-495a-8f84-1a4eb16dc6cc",
+      "opening": "b00d35d7-58f2-4213-b474-ae54dcf4bb55",
+      "job": "c54ea0ff-c251-5911-9ff8-8744966e7254",
+      "receipt": "c0797fce-aa0e-4613-866b-065db25940ed",
+      "native_call": "image-1",
+      "attempt": 1,
+      "status": "succeeded",
+      "result": {
+        "role": "image",
+        "digest": "0a8418c1445fec4531c7e54f8a23261250a5d5fd92cbaee0b5da964a29a8c9c9",
+        "review": "pass",
+        "status": "available",
+        "cache_hit": false,
+        "dimensions": {
+          "mode": "RGB",
+          "width": 1920,
+          "height": 1080
+        },
+        "snapshot_id": "fe85d276-126f-50e5-a6e9-0639725963f4",
+        "review_summary": "\u56fa\u5b9a PNG \u5df2\u5b8c\u6574\u89e3\u7801\u4e3a 1920\u00d71080 RGB \u56fe\u50cf\u3002\u753b\u9762\u6e05\u6670\u5448\u73b0\u4e00\u4e2a\u4f4d\u4e8e\u6d45\u9ec4\u8272\u80cc\u666f\u4e0a\u7684\u9752\u7eff\u8272\u7eb8\u8d28\u7acb\u65b9\u4f53\uff0c\u4e3b\u4f53\u5b8c\u6574\u53ef\u89c1\u3001\u65e0\u906e\u6321\uff0c\u672a\u89c1\u6587\u5b57\u3002\u7b26\u5408\u672c\u5e55\u7684\u53d9\u4e8b\u3001\u7528\u6237\u8981\u6c42\u4e0e\u6280\u672f\u8981\u6c42\u3002",
+        "charged_credits": 4,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "provider_POST_count": 1,
+      "ledger": [
+        [
+          "hold",
+          -6
+        ],
+        [
+          "release",
+          6
+        ],
+        [
+          "capture",
+          -4
+        ]
+      ],
+      "owner_preview": 200,
+      "other_preview": 404,
+      "own_project_foreign_snapshot": 404
+    },
+    {
+      "project": "30d921da-9803-4e05-bfc4-c897d24033d5",
+      "owner": "a3953ee9-8fcf-45a0-ab09-e77d5ef1c31a",
+      "opening": "a8a71b32-ea9f-4127-82e6-97332e6907ac",
+      "job": "788b11ec-46c6-54e5-900e-ce8ed89c6a02",
+      "receipt": "f7e88a68-afac-4161-84af-13e665cf3470",
+      "native_call": "image-1",
+      "attempt": 1,
+      "status": "succeeded",
+      "result": {
+        "role": "image",
+        "digest": "66b363de0297fa1c6eea539bda65ea771b10db4872223e5c5660aaf87d32c4e3",
+        "review": "pass",
+        "status": "available",
+        "cache_hit": false,
+        "dimensions": {
+          "mode": "RGB",
+          "width": 1920,
+          "height": 1080
+        },
+        "snapshot_id": "c82c22e1-97fe-5a7c-b102-9743aeaa6d52",
+        "review_summary": "PNG \u53ef\u5b8c\u6574\u89e3\u7801\uff0c\u5c3a\u5bf8\u4e3a 1920\u00d71080\u3002\u753b\u9762\u6e05\u6670\u5448\u73b0\u4e00\u4e2a\u5c45\u4e2d\u7684\u9752\u7eff\u8272\u7acb\u65b9\u4f53\uff0c\u80cc\u666f\u4e3a\u6de1\u9ec4\u8272\uff0c\u4e3b\u4f53\u5b8c\u6574\u53ef\u89c1\u4e14\u65e0\u660e\u663e\u88c1\u5207\u3001\u4e66\u5199\u3001\u54c1\u724c\u6807\u8bc6\u6216\u5176\u4ed6\u5e72\u6270\u5143\u7d20\uff0c\u7b26\u5408\u672c\u5e55\u53d9\u4e8b\u53ca\u7528\u6237\u8981\u6c42\u3002",
+        "charged_credits": 4,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "provider_POST_count": 1,
+      "ledger": [
+        [
+          "hold",
+          -6
+        ],
+        [
+          "release",
+          6
+        ],
+        [
+          "capture",
+          -4
+        ]
+      ],
+      "owner_preview": 200,
+      "other_preview": 404,
+      "own_project_foreign_snapshot": 404
+    }
+  ]
+}

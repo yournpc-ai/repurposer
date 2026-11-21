@@ -177,6 +177,7 @@ class SceneAssetSpec(BaseModel):
         return value
 
     # Server-owned review inputs, excluded from the pixel-generation identity and model schema.
+    _generation_scope: tuple[UUID, UUID] | None = PrivateAttr(default=None)
     _review_basis: dict[str, Any] | None = PrivateAttr(default=None)
 
     def review_version(self) -> str:
@@ -186,7 +187,10 @@ class SceneAssetSpec(BaseModel):
         return f"{version}-{canonical_json_hash(self._review_basis)}"
 
     def request_digest(self) -> str:
-        return canonical_json_hash(self.model_dump(mode="json"))
+        request = self.model_dump(mode="json")
+        if self._generation_scope:
+            request["generation_scope"] = [str(value) for value in self._generation_scope]
+        return canonical_json_hash(request)
 
 
 SceneId = Annotated[str, Field(min_length=1, max_length=64)]
@@ -716,7 +720,7 @@ async def has_fixed_visual_source(
     fixed = await fixed_visual_asset_manifest(owner_id=owner_id, project_id=project_id, spec=spec)
     return fixed is not None or (
         isinstance(spec.source, MiniMaxImageSource)
-        and await find_fixed_generated_image(_minimax_clip(spec)) is not None
+        and await find_fixed_generated_image(_minimax_clip(spec), scope=spec._generation_scope) is not None
     )
 
 
@@ -725,7 +729,7 @@ async def _recover_submitted_image(spec: SceneAssetSpec) -> dict[str, Any]:
 
     if isinstance(spec.source, MiniMaxImageSource):
         try:
-            fixed = await find_fixed_generated_image(_minimax_clip(spec))
+            fixed = await find_fixed_generated_image(_minimax_clip(spec), scope=spec._generation_scope)
         except GeneratedImageError as exc:
             raise VisualAssetOutcomeUnknownError(
                 "The earlier image request lacks a verified fixed result; no resubmission."
@@ -752,6 +756,7 @@ async def _minimax_image(
     try:
         generated = fixed or await ensure_generated_image_clip(
             _minimax_clip(spec), execution_id=execution_id, on_reuse=on_reuse,
+            **({"scope": spec._generation_scope} if spec._generation_scope else {}),
         )
     except Exception as exc:
         raise VisualAssetOutcomeUnknownError(
@@ -788,6 +793,7 @@ async def prepare_visual_asset(
     spec: SceneAssetSpec,
     draft_ref: VideoDraftRef | None,
     execution_id: str,
+    media_usage: dict | None = None,
     content_attempt: int = 1,
     step_attempt: int = 1,
     rasterizer: Any = None,
@@ -796,7 +802,7 @@ async def prepare_visual_asset(
     spec = _validated_spec(spec)
     cached = await cached_visual_asset(owner_id=owner_id, project_id=project_id, spec=spec)
     if cached is not None:
-        if (cached.get("execution") or {}).get("run_id") == execution_id:
+        if (cached.get("execution") or {}).get("media_job_id" if media_usage is not None else "run_id") == execution_id:
             usage = cached.get("usage") or {}
             if usage:
                 from app.metering import record_media_usage
@@ -888,7 +894,8 @@ async def prepare_visual_asset(
     revision = spec.review_version()
     if isinstance(spec.source, ControlledSVGSource):
         revision = f"{VISUAL_ASSET_RUNNER_VERSION}:{revision}"
-    identity = uuid5(NAMESPACE_URL, f"visual-asset:{spec.request_digest()}:{revision}")
+    identity_key = f"visual-asset:{spec.request_digest()}:{revision}"
+    identity = uuid5(NAMESPACE_URL, f"{project_id}:{identity_key}" if media_usage is not None else identity_key)
     snapshot_id = source_snapshot_id(owner_id, identity, "image", media_digest)
     analysis = analyze_image_bytes(
         png, snapshot_id=str(snapshot_id), source_digest=media_digest,
@@ -946,7 +953,8 @@ async def prepare_visual_asset(
         "scene_asset": spec.model_dump(mode="json"),
         "draft_ref_at_birth": draft_ref.model_dump(mode="json") if draft_ref else None,
         "execution": {
-            "run_id": execution_id,
+            ("media_job_id" if media_usage is not None else "run_id"): execution_id,
+            **({"metered_cost": dict(media_usage)} if media_usage is not None else {}),
             "content_attempt": content_attempt,
             "step_attempt": step_attempt,
         },

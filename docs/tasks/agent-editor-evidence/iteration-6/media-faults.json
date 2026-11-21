@@ -1,0 +1,295 @@
+{
+  "boundary": "real SIGKILL; recorded provider audio substituted for POST and subtitle fetch; only each killed test lease was advanced in the isolated database",
+  "rows": [
+    {
+      "case": "before_submit",
+      "after_kill": {
+        "job": "53d02a0e-a106-5200-b497-a625dc26a2d5",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": false,
+        "voice": "reserved",
+        "media": null,
+        "original_digest": null,
+        "simulated_posts": 0,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ]
+      },
+      "after_recovery": {
+        "job": "53d02a0e-a106-5200-b497-a625dc26a2d5",
+        "status": "succeeded",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "done",
+        "media": {
+          "peak": 0.39233046770095825,
+          "role": "narration",
+          "text": "Welcome to the color test.",
+          "digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+          "status": "available",
+          "language": "en",
+          "voice_id": "presenter_male",
+          "cache_hit": false,
+          "snapshot_id": "5b56e582-f24b-5cc5-9ed7-d46d3d43f875",
+          "alignment_id": "38e7754a-dd5c-4d1f-99a2-1d8c8d1e6525",
+          "analysis_digest": "e032d04c3c71fd3f7ab5d0d8be8405e4faedbe247f512303bf217d4368f3c323",
+          "charged_credits": 3,
+          "duration_seconds": 1.7415,
+          "reserved_credits": 0,
+          "added_to_composition": false
+        },
+        "original_digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ]
+      }
+    },
+    {
+      "case": "after_submit",
+      "after_kill": {
+        "job": "1ef97a9a-e121-549b-b613-97dc0bf994fc",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "synthesizing",
+        "media": null,
+        "original_digest": null,
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ]
+      },
+      "after_recovery": {
+        "job": "1ef97a9a-e121-549b-b613-97dc0bf994fc",
+        "status": "unknown",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "synthesizing",
+        "media": {
+          "error": "The provider result needs reconciliation.",
+          "status": "provider_unknown",
+          "charged_credits": null,
+          "reserved_credits": 3
+        },
+        "original_digest": null,
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ]
+      }
+    },
+    {
+      "case": "after_fixed",
+      "after_kill": {
+        "job": "d7d31184-695d-5531-ae9a-1248eeb7aca4",
+        "status": "running",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "aligning",
+        "media": null,
+        "original_digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ]
+        ]
+      },
+      "after_recovery": {
+        "job": "d7d31184-695d-5531-ae9a-1248eeb7aca4",
+        "status": "succeeded",
+        "attempt": 2,
+        "provider_started": true,
+        "voice": "done",
+        "media": {
+          "peak": 0.39233046770095825,
+          "role": "narration",
+          "text": "Welcome to the color test.",
+          "digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+          "status": "available",
+          "language": "en",
+          "voice_id": "presenter_male",
+          "cache_hit": false,
+          "snapshot_id": "6232a2ec-abcc-5408-a1ba-e70da44c0174",
+          "alignment_id": "ba2aed83-f4a8-404a-9842-b50cd1151686",
+          "analysis_digest": "e8cd0c7e4bf48325aab6a92139d14c59f9bc62259dd8021ecee28cf00ed21b7a",
+          "charged_credits": 3,
+          "duration_seconds": 1.7415,
+          "reserved_credits": 0,
+          "added_to_composition": false
+        },
+        "original_digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ]
+      }
+    },
+    {
+      "case": "after_settlement",
+      "after_kill": {
+        "job": "e6ab7827-73a7-5041-aa18-98d85e9a583f",
+        "status": "succeeded",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "done",
+        "media": {
+          "peak": 0.39233046770095825,
+          "role": "narration",
+          "text": "Welcome to the color test.",
+          "digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+          "status": "available",
+          "language": "en",
+          "voice_id": "presenter_male",
+          "cache_hit": false,
+          "snapshot_id": "32b0fad2-59b4-533a-bf96-192e801bfee3",
+          "alignment_id": "746090a8-5152-48d9-b934-82b93d975ba0",
+          "analysis_digest": "844a2420d09a9e843b029e40285c9ef288e40a938f34e65826a7bacb8f59e116",
+          "charged_credits": 3,
+          "duration_seconds": 1.7415,
+          "reserved_credits": 0,
+          "added_to_composition": false
+        },
+        "original_digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ]
+      },
+      "after_recovery": {
+        "job": "e6ab7827-73a7-5041-aa18-98d85e9a583f",
+        "status": "succeeded",
+        "attempt": 1,
+        "provider_started": true,
+        "voice": "done",
+        "media": {
+          "peak": 0.39233046770095825,
+          "role": "narration",
+          "text": "Welcome to the color test.",
+          "digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+          "status": "available",
+          "language": "en",
+          "voice_id": "presenter_male",
+          "cache_hit": false,
+          "snapshot_id": "32b0fad2-59b4-533a-bf96-192e801bfee3",
+          "alignment_id": "746090a8-5152-48d9-b934-82b93d975ba0",
+          "analysis_digest": "844a2420d09a9e843b029e40285c9ef288e40a938f34e65826a7bacb8f59e116",
+          "charged_credits": 3,
+          "duration_seconds": 1.7415,
+          "reserved_credits": 0,
+          "added_to_composition": false
+        },
+        "original_digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "simulated_posts": 1,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ]
+      }
+    }
+  ],
+  "before_agent_continuation": {
+    "boundary": "SIGKILL at entry to model continuation, after committed resume marker. Two recovery callers competed. The model queued an additional image for a recording-only request. Test stopped it before worker claim.",
+    "opening": "057c4e9a-bd40-4217-867e-3a7a486c681b",
+    "goal": "Generate a public recording for the color test.",
+    "opening_status": "cancelled",
+    "resume_attempts": 2,
+    "rows": [
+      {
+        "kind": "generate_voice",
+        "id": "e6ab7827-73a7-5041-aa18-98d85e9a583f",
+        "native_call": "fault-voice",
+        "attempt": 1,
+        "state": "succeeded",
+        "charged": 3,
+        "ledger": [
+          [
+            "hold",
+            -3
+          ],
+          [
+            "release",
+            3
+          ],
+          [
+            "capture",
+            -3
+          ]
+        ]
+      },
+      {
+        "kind": "generate_image",
+        "id": "ccf6daf2-96d3-5679-ba02-1e7c869e7666",
+        "native_call": "call_01a1fe1530a171fb95f7ce23",
+        "attempt": 0,
+        "state": "cancelled",
+        "charged": 0,
+        "ledger": [
+          [
+            "hold",
+            -6
+          ],
+          [
+            "release",
+            6
+          ]
+        ]
+      }
+    ]
+  }
+}

@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.editing.schemas import SpeechObject
@@ -95,6 +95,7 @@ async def _fixed_original(row) -> dict:
         "alignment_digest": row.alignment_digest,
         "usage_characters": row.usage_characters,
         "trace_id": row.trace_id,
+        "synthesis_execution_id": row.synthesis_execution_id,
         "speed": 1.0,
         "cache_hit": True,
     }
@@ -116,7 +117,7 @@ async def peek_original(user_id: UUID, speech: SpeechObject) -> dict | None:
 
 
 async def resolve_original(
-    user_id: UUID, speech: SpeechObject, *, execution_id: str
+    user_id: UUID, speech: SpeechObject, *, execution_id: str, reserve_only: bool = False
 ) -> dict:
     """Resolve a fixed original, a resumable alignment, or a new occupancy."""
     from app.models.tables import VideoNarration
@@ -125,8 +126,14 @@ async def resolve_original(
     owner_token = f"{execution_id}:original"
     deadline = time.monotonic() + _WAIT_BUDGET_S
     while True:
-        row = await _row(user_id, content_hash)
-        if row is None:
+        async with _session() as db:
+            occupancy = (await db.execute(
+                select(VideoNarration, func.now()).where(
+                    VideoNarration.user_id == user_id,
+                    VideoNarration.content_hash == content_hash,
+                )
+            )).one_or_none()
+        if occupancy is None:
             async with _session() as db:
                 inserted = (
                     await db.execute(
@@ -138,9 +145,10 @@ async def resolve_original(
                             language=speech.language,
                             config_hash=config_hash,
                             text=normalized,
-                            status="synthesizing",
+                            status="reserved" if reserve_only else "synthesizing",
+                            synthesis_execution_id=execution_id,
                             owner_token=owner_token,
-                            lease_expires_at=datetime.now(UTC) + timedelta(seconds=_LEASE_S),
+                            lease_expires_at=func.now() + timedelta(seconds=_LEASE_S),
                         )
                         .on_conflict_do_nothing(index_elements=["user_id", "content_hash"])
                         .returning(VideoNarration.id)
@@ -155,6 +163,7 @@ async def resolve_original(
                     "owner_token": owner_token,
                 }
             continue
+        row, database_now = occupancy
         if row.status == "done":
             return {"state": "done", "original": await _fixed_original(row)}
         if row.status == "unknown":
@@ -163,6 +172,8 @@ async def resolve_original(
                 "automatic recovery will not submit it again"
             )
         if row.owner_token == owner_token:
+            if reserve_only and row.status == "reserved":
+                return {"state": "needs_audio", "normalized_text": normalized, "owner_token": owner_token}
             if row.status == "aligning" and row.storage_key and row.audio_digest:
                 return {
                     "state": "needs_alignment",
@@ -175,6 +186,7 @@ async def resolve_original(
                             "digest": row.audio_digest,
                             "mime_type": "audio/mpeg",
                         },
+                        "synthesis_execution_id": row.synthesis_execution_id,
                         "duration_s": float(row.duration_s),
                         "subtitle_file": row.subtitle_file,
                         "usage_characters": row.usage_characters,
@@ -188,26 +200,35 @@ async def resolve_original(
         if time.monotonic() > deadline:
             raise NarrationStoreError("narration occupancy wait budget exhausted")
         lease = row.lease_expires_at
-        expired = not isinstance(lease, datetime) or lease <= datetime.now(UTC)
+        expired = lease is None or lease <= database_now
         if expired:
-            if row.status == "aligning" and row.storage_key:
+            if row.status == "reserved":
+                async with _session() as db:
+                    await db.execute(delete(VideoNarration).where(
+                        VideoNarration.id == row.id, VideoNarration.status == "reserved",
+                        VideoNarration.lease_expires_at <= func.now(),
+                    ))
+                    await db.commit()
+                continue
+            if row.status == "aligning" and row.storage_key and row.audio_digest:
                 # Only a fixed-audio alignment may be taken over without replaying TTS.
                 async with _session() as db:
-                    result = await db.execute(
+                    await db.execute(
                         update(VideoNarration)
                         .where(
                             VideoNarration.id == row.id,
                             VideoNarration.status == "aligning",
-                            VideoNarration.lease_expires_at < datetime.now(UTC),
+                            or_(VideoNarration.lease_expires_at.is_(None),
+                                VideoNarration.lease_expires_at <= func.now()),
                         )
                         .values(
                             owner_token=owner_token,
-                            lease_expires_at=datetime.now(UTC) + timedelta(seconds=_LEASE_S),
+                            lease_expires_at=func.now() + timedelta(seconds=_LEASE_S),
                         )
                     )
                     await db.commit()
-                if (result.rowcount or 0) == 1:
-                    continue
+                # Another worker may already own or have finished the alignment.
+                continue
             raise NarrationOutcomeUnknown(
                 "An expired narration occupancy has no recoverable fixed result; "
                 "recovery will not replay its provider request"
@@ -249,7 +270,7 @@ async def complete_audio(
                 subtitle_file=subtitle_file,
                 usage_characters=usage_characters,
                 trace_id=trace_id,
-                lease_expires_at=datetime.now(UTC) + timedelta(seconds=_LEASE_S),
+                lease_expires_at=func.now() + timedelta(seconds=_LEASE_S),
                 error=None,
             )
         )
@@ -335,7 +356,7 @@ async def cancel_unsubmitted(
                 VideoNarration.user_id == user_id,
                 VideoNarration.content_hash == content_hash,
                 VideoNarration.owner_token == f"{execution_id}:original",
-                VideoNarration.status == "synthesizing",
+                VideoNarration.status.in_(("reserved", "synthesizing")),
             )
         )
         await db.commit()

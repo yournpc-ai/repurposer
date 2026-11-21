@@ -58,8 +58,9 @@ def _request(obj: GeneratorObject) -> dict[str, Any]:
     }
 
 
-def _manifest_key(obj: GeneratorObject, execution_id: str | None, regenerate: bool) -> str:
-    base = f"{_MANIFEST_PREFIX}/{obj.program_digest()}"
+def _manifest_key(obj: GeneratorObject, execution_id: str | None, regenerate: bool, *, scope: tuple[UUID, UUID] | None = None) -> str:
+    prefix = f"{_MANIFEST_PREFIX}/{scope[0]}/{scope[1]}" if scope else _MANIFEST_PREFIX
+    base = f"{prefix}/{obj.program_digest()}"
     if not regenerate:
         return f"{base}.json"
     if execution_id is None:
@@ -116,7 +117,7 @@ async def _cached_manifest(
     return manifest
 
 
-async def find_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> dict[str, Any] | None:
+async def find_fixed_generated_image(clip: Clip, *, composition_id: str | None = None, scope: tuple[UUID, UUID] | None = None) -> dict[str, Any] | None:
     """Read the exact fixed image, preferring the composition's selected generation."""
     obj = _image_object(clip)
     pointer = _composition_key(obj, composition_id)
@@ -124,7 +125,7 @@ async def find_fixed_generated_image(clip: Clip, *, composition_id: str | None =
         current = await _cached_manifest(obj, pointer, stale_source_is_missing=True)
         if current is not None:
             return current
-    return await _cached_manifest(obj, _manifest_key(obj, None, False))
+    return await _cached_manifest(obj, _manifest_key(obj, None, False, scope=scope))
 
 
 async def has_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> bool:
@@ -164,11 +165,12 @@ async def ensure_generated_image_clip(
     execution_id: str | None,
     composition_id: str | None = None,
     regenerate: bool = False,
+    scope: tuple[UUID, UUID] | None = None,
     on_reuse: Callable[[bool], None] | None = None,
 ) -> dict[str, Any]:
     """Return exact fixed image facts, generating only on an authorized miss."""
     obj = _image_object(clip)
-    key = _manifest_key(obj, execution_id, regenerate)
+    key = _manifest_key(obj, execution_id, regenerate, scope=scope)
     pointer = _composition_key(obj, composition_id)
     cached = None
     if pointer is not None and not regenerate:

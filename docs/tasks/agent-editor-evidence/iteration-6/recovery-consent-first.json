@@ -1,0 +1,112 @@
+{
+  "entry": "Original paid recording fixture from after_fixed. Deterministic recovery proposal at model boundary, real native handler, real PostgreSQL and real model after user decline.",
+  "opening": "a4cdb5ac-8b26-4cf9-9bc7-eac1e545816d",
+  "opening_status": "settled",
+  "original_native_call": "fault-voice",
+  "old_job": "d7d31184-695d-5531-ae9a-1248eeb7aca4",
+  "old_snapshot": "6232a2ec-abcc-5408-a1ba-e70da44c0174",
+  "old_job_status": "succeeded",
+  "old_ledger": [
+    [
+      "hold",
+      -3
+    ],
+    [
+      "release",
+      3
+    ],
+    [
+      "capture",
+      -3
+    ]
+  ],
+  "question": "允许为「A public blue triangle test illustration.」生成图片吗？最多使用 6 积分。",
+  "quote": {
+    "total": [
+      4,
+      6
+    ],
+    "per_task": [
+      [
+        4,
+        6
+      ]
+    ]
+  },
+  "new_native_call": "recovery-image-new",
+  "declined_receipt": "b57b20af-0acf-428e-ad31-58bd3e7d44f7",
+  "declined_state": {
+    "status": "declined"
+  },
+  "jobs": 1,
+  "new_generation_requests": [],
+  "reply": "This change did not complete. I did not save a new storyboard or start production, and I stopped the repeated attempts. Send the request again and I'll retry.",
+  "real_model_after_decline": [
+    {
+      "model_call_id": "307e0ba8-f4f1-4cda-9664-425ec9d49a52",
+      "calls": [
+        {
+          "id": "call_01a1fe1c4d61764e9fc3a023",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Color Test — Public Recording\",\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"Color Test\",\"supporting_text\":\"Public Recording\",\"text_color\":\"#FFFFFF\",\"duration_seconds\":1.7415,\"narration_snapshot_id\":\"6232a2ec-abcc-5408-a1ba-e70da44c0174\",\"narration_alignment_id\":\"ba2aed83-f4a8-404a-9842-b50cd1151686\",\"captions_asr\":true}]}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 11773,
+        "total_characters": 0,
+        "prompt_tokens": 10882,
+        "completion_tokens": 891,
+        "completion_tokens_details": {
+          "reasoning_tokens": 675
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 187
+        }
+      }
+    },
+    {
+      "model_call_id": "4adffeb4-a9dc-432d-bcc3-9248fc4d9d8e",
+      "calls": [
+        {
+          "id": "call_01a1fe1c52f7710b96d6a725",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Color Test — Public Recording\",\"shots\":[{\"text_preset\":\"title-lockup\"}],\"headline\":\"Color Test\",\"supporting_text\":\"Public Recording\",\"text_color\":\"#FFFFFF\",\"duration_seconds\":1.7415,\"narration_snapshot_id\":\"6232a2ec-abcc-5408-a1ba-e70da44c0174\",\"narration_alignment_id\":\"ba2aed83-f4a8-404a-9842-b50cd1151686\"}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 12286,
+        "total_characters": 0,
+        "prompt_tokens": 12098,
+        "completion_tokens": 188,
+        "completion_tokens_details": {
+          "reasoning_tokens": 5
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 10882
+        }
+      }
+    },
+    {
+      "model_call_id": "427c9e2d-8a71-4000-869f-a7aed374f28b",
+      "calls": [
+        {
+          "id": "call_01a1fe1c58e7715bb8c931ca",
+          "name": "create_video",
+          "arguments": "{\"name\":\"Color Test — Public Recording\",\"shots\":[{\"text_preset\":\"title-lockup\",\"headline\":\"Color Test\",\"supporting_text\":\"Public Recording\",\"text_color\":\"#FFFFFF\",\"duration_seconds\":1.7415,\"narration_snapshot_id\":\"6232a2ec-abcc-5408-a1ba-e70da44c0174\",\"narration_alignment_id\":\"ba2aed83-f4a8-404a-9842-b50cd1151686\"}]}"
+        }
+      ],
+      "usage": {
+        "total_tokens": 13204,
+        "total_characters": 0,
+        "prompt_tokens": 13012,
+        "completion_tokens": 192,
+        "completion_tokens_details": {
+          "reasoning_tokens": 7
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 12003
+        }
+      }
+    }
+  ]
+}

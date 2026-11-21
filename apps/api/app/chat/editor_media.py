@@ -10,15 +10,13 @@ from app.agents.tool_loop import ToolObservation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.service import (
     _create_message, _lock_turn_for_transcript_write, latest_pending_question,
-    resolve_confirmation_need, submit_confirmed_tasks,
+    resolve_confirmation_need,
 )
 from app.models.database import AsyncSessionLocal
-from app.models.schemas import TaskItem, WorkflowStatus, canonical_json_hash
+from app.models.schemas import WorkflowStatus, canonical_json_hash
 from app.models.tables import Composition, Conversation, Message, Output, Project, WorkflowRun, WorkflowStep
-from app.pipeline.orchestrator import derive_task_estimates
-from app.tools.music.score import instrumental_score
+from app.pipeline.media_jobs import KINDS, enqueue_media, media_quote
 from app.tools.video.audio_playback import playback_item
-from app.tools.video.music_preparation import cached_music_preparation
 
 
 async def _record_audio(db, project, receipt, result, request):
@@ -125,6 +123,45 @@ async def deliver_video(db, turn, output_id, base):
     return ToolObservation(json.dumps(turn._editor_delivery))
 
 
+async def _historical_image_owned(db, project, asset):
+    """Match the provider's original execution and pixels before replaying a legacy image."""
+    from app.providers import storage
+
+    provenance = asset.get("provenance") or {}
+    if provenance.get("kind") != "minimax_image":
+        return provenance.get("kind") in {"controlled_svg", "existing_image"}
+    program = provenance.get("program_digest") or ""
+    if len(program) != 64 or any(c not in "0123456789abcdef" for c in program):
+        return False
+    key = f"video-generated-images/{program}.json"
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    try:
+        if not await storage.exists(key):
+            return False
+        manifest = json.loads(await storage.read(key))
+        execution_id = UUID(str(manifest["execution_id"]))
+    except (KeyError, TypeError, ValueError, OSError, BotoCoreError, ClientError):
+        return False
+    digest = provenance.get("provider_media_digest")
+    final_digest = (asset.get("media") or {}).get("digest")
+    media = manifest.get("media")
+    if (not digest or not final_digest or not isinstance(media, dict)
+            or manifest.get("program_digest") != program or media.get("digest") != digest):
+        return False
+    execution = await db.scalar(select(WorkflowRun).join(Project).where(
+        WorkflowRun.id == execution_id, Project.id == project.id, Project.user_id == project.user_id,
+    ))
+    if execution is None:
+        return False
+    prepared = (execution.context or {}).get("visual_asset_preparation") or {}
+    return any(
+        (item.get("provenance") or {}).get("provider_media_digest") == digest
+        and (item.get("media") or {}).get("digest") == final_digest
+        for item in (prepared.get("result") or {}).get("assets", [])
+    )
+
+
 async def settle_media_receipt(db, project, run):
     """Worker delivery, live tool return and history recovery share one locked receipt."""
     receipt = await db.scalar(select(Message).where(
@@ -133,7 +170,8 @@ async def settle_media_receipt(db, project, run):
     if receipt is None:
         raise ValueError("The media request receipt is unavailable.")
     facts = receipt.intent.get("media_result")
-    if facts:
+    historical_image = receipt.intent.get("tool") == "generate_image" and run.status == WorkflowStatus.COMPLETED
+    if facts and not historical_image:
         return receipt
     outcome_unknown = bool((run.context or {}).get("provider_outcome_unknown"))
     if run.status == WorkflowStatus.COMPLETED:
@@ -145,7 +183,16 @@ async def settle_media_receipt(db, project, run):
                 if result["failures"]:
                     outcome_unknown = any(f.get("code") == "outcome_unknown" for f in result["failures"])
                     raise ValueError(result["failures"][0]["detail"])
-                return await _record_image(db, project, receipt, result["assets"][0])
+                asset = result["assets"][0]
+                if not await _historical_image_owned(db, project, asset):
+                    receipt.content = ("历史图片归属待核验。" if (project.language or "").startswith("zh")
+                                       else "Historical image ownership is pending verification.")
+                    receipt.blocks = []
+                    receipt.intent = {**receipt.intent, "media_result": {
+                        "status": "historical_ownership_pending", "error": receipt.content,
+                    }}
+                    return receipt
+                return await _record_image(db, project, receipt, asset)
             prep = run.context.get("music_preparation") or run.context["narration_preparation"]
             return await _record_audio(db, project, receipt, prep["result"], prep["request"])
         except ValueError as exc:
@@ -162,22 +209,6 @@ async def settle_media_receipt(db, project, run):
     return receipt
 
 
-async def _submit(db, project, receipt, task, quote, via):
-    run = await submit_confirmed_tasks(
-        db, project, None, [task], name=task.params.get("name", task.tool), instruction=None,
-        confirmation_id=receipt.intent["editor_media"], confirmed_via=via, quote=quote,
-    )
-    from app.models.tables import CreditTransaction
-
-    hold = await db.scalar(select(CreditTransaction.amount).where(
-        CreditTransaction.idempotency_key == f"run:{run.id}:hold"))
-    if -(hold or 0) > quote["total"][1]:
-        raise ValueError("The media price changed before submission.")
-    run.context = {**run.context, "editor_media": receipt.intent["editor_media"]}
-    receipt.workflow_run_id = run.id
-    return run.id
-
-
 async def answer_media_permission(db, project, receipt, approved):
     """The answer row lock makes the exact quote and its answer single-use."""
     auth = receipt.intent["media_permission"]
@@ -190,7 +221,9 @@ async def answer_media_permission(db, project, receipt, approved):
                                               "call_state": state}}
     if not approved:
         receipt.intent = {**receipt.intent, "media_result": {"status": "declined"}}
-        return
+        if auth.get("recovery_quote"):
+            return receipt
+        return None
     if receipt.intent.get("composition_id"):
         head = await db.scalar(select(Composition.current_version_id).where(
             Composition.id == UUID(receipt.intent["composition_id"]), Composition.owner_id == project.user_id,
@@ -209,8 +242,10 @@ async def answer_media_permission(db, project, receipt, approved):
             raise ValueError("The authorized version needs fixed media.")
         estimate = await export_quote(db, spec)
     else:
-        task = TaskItem.model_validate(auth["task"])
-        estimate = await derive_task_estimates(db, project, [task])
+        params = auth.get("params")
+        if params is None:
+            raise ValueError("Request a fresh media quote for this saved authorization.")
+        estimate = await media_quote(db, receipt.intent["tool"], params, project=project)
     if estimate is None or estimate.total[1] > auth["quote"]["total"][1]:
         raise ValueError("The media quote has changed.")
     execution = await _create_message(db, receipt.conversation_id, "assistant", "", turn_id=receipt.turn_id,
@@ -219,27 +254,11 @@ async def answer_media_permission(db, project, receipt, approved):
         from app.pipeline.export_jobs import enqueue_export
         await enqueue_export(db, project, execution, spec, estimate.total[1])
     else:
-        await _submit(db, project, execution, task, estimate.model_dump(mode="json"), "user_option")
-    receipt.intent = {"media_permission": {"quote": auth["quote"]}, "media_receipt_id": str(execution.id)}
+        await enqueue_media(db, project, execution, params, estimate.total[1])
+    execution.intent = {**execution.intent, "authorization_ref": str(receipt.id)}
+    receipt.intent = {"media_permission": auth, "native_call_id": execution.intent["native_call_id"],
+                      "fingerprint": execution.intent["fingerprint"], "media_receipt_id": str(execution.id)}
     return execution
-
-
-async def _cached_voice(project, args):
-    from app.editing.schemas import SpeechObject
-    from app.tools.video.alignment_store import request_alignment
-    from app.tools.video.narration_store import peek_original
-    from app.tools.video.preparation import snapshot_narration_original
-
-    speech = SpeechObject(kind="speech", object_id="obj_prepare_narration", **args.model_dump())
-    original = await peek_original(project.user_id, speech)
-    if original is None:
-        return None
-    async with AsyncSessionLocal() as db:
-        _, snapshot = await snapshot_narration_original(db, project, text=args.text, original=original)
-        await db.commit()
-    aligned = await request_alignment(owner_id=project.user_id, audio_snapshot_id=snapshot.id, text=args.text)
-    return {"audio_snapshot_id": str(snapshot.id), "audio_digest": snapshot.digest,
-            "alignment_id": aligned["alignment_id"], "cache_hit": True}
 
 
 async def submit_editor_media(turn, name, args, composition, version, call_id):
@@ -280,12 +299,17 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             # id. Return the existing receipt without acquiring another hold.
             receipt = await db.scalar(select(Message).where(
                 Message.turn_id == opening.id, Message.intent["fingerprint"].astext == fingerprint,
-                Message.intent["media_result"]["status"].astext == "available",
+                Message.intent["media_result"]["status"].astext.in_(("available", "declined", "provider_unknown", "historical_ownership_pending")),
             ).order_by(Message.seq).limit(1))
         if receipt:
             if receipt.intent["fingerprint"] != fingerprint:
                 raise ValueError("This call already belongs to different parameters.")
-            if receipt.intent.get("media_result") or receipt.question or receipt.intent.get("export_job") or receipt.workflow_run_id:
+            if name == "generate_image" and receipt.workflow_run_id:
+                run = await db.get(WorkflowRun, receipt.workflow_run_id)
+                if run and run.project_id == project.id and run.status == WorkflowStatus.COMPLETED:
+                    await settle_media_receipt(db, project, run)
+                    await db.commit()
+            if receipt.intent.get("media_result") or receipt.question or receipt.intent.get("export_job") or receipt.intent.get("media_job") or receipt.workflow_run_id:
                 return receipt
         else:
             if opening.turn_state != "in_flight":
@@ -316,11 +340,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                         or not preview.get("mp4_sha256")
                         or current_group_id() and preview.get("decision") == current_group_id()):
                     raise ValueError("Inspect actual preview evidence for this version before deciding to export it.")
-                cached = None
             elif name == "generate_image":
                 from app.tools.video.params import PrepareVisualAssetsParams
                 from app.tools.video.production import resolve_visual_asset_selection
-                from app.tools.video.visual_assets import SceneAssetSpec, cached_visual_asset, preflight_scene_svgs
+                from app.tools.video.visual_assets import SceneAssetSpec, preflight_scene_svgs
 
                 source = ({"kind": "controlled_svg", "program": args.svg} if args.svg else
                           {"kind": "minimax_image", "prompt": args.prompt})
@@ -331,15 +354,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 )
                 specs = await resolve_visual_asset_selection(db, project, request)
                 preflight_scene_svgs(specs)
-                cached = await cached_visual_asset(owner_id=turn.user_id, project_id=project.id, spec=specs[0])
-                task = TaskItem(tool="prepare_visual_assets", params=request.model_dump(mode="json", exclude_none=True))
-            elif name == "generate_music":
-                task = TaskItem(tool="prepare_music", params=params)
-                cached = await cached_music_preparation(owner_id=turn.user_id, project_id=project.id,
-                                                        score=instrumental_score(args))
-            else:
-                task = TaskItem(tool="prepare_narration", params=params)
-                cached = await _cached_voice(project, args)
+                params = {"scene": specs[0].model_dump(mode="json"), "review_basis": specs[0]._review_basis}
             activity_id = await db.scalar(select(Message.id).where(
                 Message.turn_id == opening.id, Message.intent["frame"]["status"].astext == "active",
                 Message.intent["frame"]["call_id"].astext == call_id,
@@ -351,13 +366,6 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                         **({"export_preview": preview} if preview else {}),
                         "activity_id": str(activity_id) if activity_id else None},
             )
-            if cached is not None:
-                if name == "generate_image":
-                    await _record_image(db, project, receipt, {**cached, "cache_hit": True})
-                else:
-                    await _record_audio(db, project, receipt, cached, params)
-                await db.commit()
-                return receipt
             if name == "export_video":
                 if missing:
                     receipt.intent = {**receipt.intent, "media_result": {
@@ -368,7 +376,7 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                     return receipt
                 estimate = await export_quote(db, spec)
             else:
-                estimate = await derive_task_estimates(db, project, [task])
+                estimate = await media_quote(db, name, params, project=project)
             need = await resolve_confirmation_need(db, turn.user_id, estimate, require_quote=True)
             quote = estimate.model_dump(mode="json") if estimate else None
             if not quote:
@@ -385,25 +393,35 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                      and (opening.intent or {}).get("editor_commits"))
                     or confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
                 )
-            if need.requires_confirmation or export_needs_consent:
+            recovering = bool((opening.intent or {}).get("resumed_media"))
+            recovery_quote = recovering and estimate.total[1] > 0
+            fixed_reuse = recovering and estimate.total[1] == 0 and name in {"generate_voice", "generate_image"}
+            if recovery_quote or export_needs_consent or (need.requires_confirmation and not fixed_reuse):
                 zh = (project.language or "").startswith("zh")
                 text = (f"允许这次素材生成吗？最多使用 {need.quote_high} 积分。" if zh else
                         f"Authorize this media generation for up to {need.quote_high} credits?")
                 if name == "export_video":
                     text = (f"允许导出这个版本的 MP4 吗？最多使用 {need.quote_high} 积分。" if zh else
                             f"Authorize MP4 export of this version for up to {need.quote_high} credits?")
+                if recovery_quote and name in KINDS:
+                    zh_name, en_name = {"generate_voice": ("旁白", "narration"), "generate_music": ("音乐", "music"),
+                                        "generate_image": ("图片", "image")}[name]
+                    detail = args.model_dump(mode="json", exclude_none=True)
+                    label = detail.get("prompt") or detail.get("text") or detail.get("style") or ""
+                    text = (f"允许为「{label}」生成{zh_name}吗？最多使用 {estimate.total[1]} 积分。" if zh else
+                            f"Generate {en_name} for “{label}” for up to {estimate.total[1]} credits?")
                 receipt.content = text
                 receipt.question = {"kind": "question", "question": text,
                                     "options": [{"id": "approve", "label": "允许" if zh else "Allow"},
                                                 {"id": "decline", "label": "取消" if zh else "Decline"}]}
-                receipt.intent = {**receipt.intent, "media_permission": {"quote": quote, **({} if name == "export_video" else {"task": task.model_dump()})}}
+                receipt.intent = {**receipt.intent, "media_permission": {"quote": quote, "recovery_quote": recovering, **({"params": params} if name in KINDS else {})}}
                 await db.commit()
                 return receipt
             if name == "export_video":
                 from app.pipeline.export_jobs import enqueue_export
                 await enqueue_export(db, project, receipt, spec, estimate.total[1])
             else:
-                await _submit(db, project, receipt, task, quote, "editor_tool")
+                await enqueue_media(db, project, receipt, params, estimate.total[1])
             await db.commit()
         return receipt
 
@@ -414,17 +432,21 @@ async def generate_media(turn, name, args, composition, version):
         raise ValueError("A durable message and native call identity are required.")
     from app.chat.editor_recovery import editor_lock_key
 
-    await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
-    receipt = await submit_editor_media(turn, name, args, composition, version, call_id)
-    if receipt.question and not receipt.answer:
-        # The committed question belongs to a separate submission session.
-        receipt = await turn.db.get(Message, receipt.id, populate_existing=True)
-        if hasattr(turn, "settled_pending"):
-            turn.outcome = (receipt, None, turn.settled_pending, [])
-        else:
-            turn.outcome = (receipt, None, [], turn.settled_question)
-        return ToolObservation("Awaiting authorization.", stop_after_observation=True, awaiting_authorization=True)
-    if turn.on_row_append and (receipt.workflow_run_id or receipt.intent.get("export_job")) and not receipt.intent.get("media_result"):
+    # SQLAlchemy sessions are single-task. Serialize admission and the question row
+    # on this opening, then wait for independent results outside the lock.
+    admission = turn.__dict__.setdefault("_media_admission", asyncio.Lock())
+    async with admission:
+        await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
+        receipt = await submit_editor_media(turn, name, args, composition, version, call_id)
+        if receipt.question and not receipt.answer:
+            # The committed question belongs to a separate submission session.
+            receipt = await turn.db.get(Message, receipt.id, populate_existing=True)
+            if hasattr(turn, "settled_pending"):
+                turn.outcome = (receipt, None, turn.settled_pending, [])
+            else:
+                turn.outcome = (receipt, None, [], turn.settled_question)
+            return ToolObservation("Awaiting authorization.", stop_after_observation=True, awaiting_authorization=True)
+    if turn.on_row_append and (receipt.workflow_run_id or receipt.intent.get("export_job") or receipt.intent.get("media_job")) and not receipt.intent.get("media_result"):
         await turn.on_row_append(receipt)
     receipt = await wait_for_media_result(turn.project, receipt, on_progress=turn.on_row_append)
     if turn.on_row_append:
@@ -472,11 +494,11 @@ async def wait_for_media_result(project, receipt, *, on_progress=None):
     while not receipt.intent.get("media_result"):
         await asyncio.sleep(0.5)
         async with AsyncSessionLocal() as db:
-            if receipt.intent.get("export_job"):
+            if receipt.intent.get("export_job") or receipt.intent.get("media_job"):
                 prior_content = receipt.content
                 receipt = await db.get(Message, receipt.id)
                 if receipt is None:
-                    raise ValueError("Export receipt unavailable.")
+                    raise ValueError("Media receipt unavailable.")
                 if on_progress and not receipt.intent.get("media_result") and receipt.content != prior_content:
                     await on_progress(receipt)
                 continue
@@ -498,6 +520,8 @@ async def continue_media_turn(db, project, receipt, **hooks):
     from app.metering import bind_conversation_turn, fold_conversation_usage
     from app.models.schemas import ChatRequest
 
+    if (receipt.intent.get("media_result") or {}).get("status") == "historical_ownership_pending":
+        return None
     turn_id = receipt.turn_id
     if not await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
         return None
@@ -505,12 +529,25 @@ async def continue_media_turn(db, project, receipt, **hooks):
         opening = await state.get(Message, turn_id, with_for_update=True, populate_existing=True)
         if not opening or opening.turn_state != "in_flight":
             return None
+        pending = await state.scalar(select(Message.id).where(
+            Message.turn_id == turn_id, (Message.intent.has_key("media_job") | Message.intent.has_key("export_job")),
+            ~Message.intent.has_key("media_result"),
+        ).limit(1))
+        if pending:
+            return None
         newest = await state.scalar(select(Message.id).where(
             Message.turn_id == turn_id, Message.intent.has_key("editor_media"),
         ).order_by(Message.seq.desc()).limit(1))
         if newest != receipt.id:
             return None
-        await settle_media_activity(state, receipt)
+        siblings = list(await state.scalars(select(Message).where(
+            Message.turn_id == turn_id, (Message.intent.has_key("media_job") | Message.intent.has_key("export_job")),
+            Message.intent.has_key("media_result"),
+        ).order_by(Message.seq)))
+        for member in siblings:
+            await settle_media_activity(state, member)
+        if not any(member.id == receipt.id for member in siblings):
+            await settle_media_activity(state, receipt)
         await settle_interrupted_members(state, turn_id)
         identity = receipt.intent["editor_media"]
         latest = await state.scalar(select(Message.id).where(
@@ -534,9 +571,9 @@ async def continue_media_turn(db, project, receipt, **hooks):
                 opening.turn_state = "settled"
                 await state.commit()
                 return None
-        if (not comp_id or (not exported and str(head) != receipt.intent["version_id"]) or latest != turn_id or
-                (intent.get("editor_commits") and not exported) or (not exported and intent.get("resumed_media") == identity) or
-                receipt.intent["media_result"]["status"] != "available"):
+        if ((comp_id and not exported and str(head) != receipt.intent["version_id"]) or latest != turn_id or
+                (receipt.intent["media_result"]["status"] != "available" and
+                 not any(member.intent["media_result"]["status"] == "available" for member in siblings))):
             await report_committed_edits(state, opening)
             available = receipt.intent["media_result"]["status"] == "available"
             if comp_id and str(head) != receipt.intent["version_id"] and available and not intent.get("editor_commits"):
@@ -550,16 +587,16 @@ async def continue_media_turn(db, project, receipt, **hooks):
             opening.turn_state = "settled" if available and not comp_id else "failed"
             await state.commit()
             return None
-        if exported:
-            attempts = int(intent.get("export_resume_attempts", 0)) if intent.get("resumed_media") == identity else 0
-            if attempts >= 3:
-                opening.turn_state = "failed"
-                await _create_message(state, opening.conversation_id, "assistant",
-                    "成片已保存，审片续行中断。" if _prefers_zh(opening.content)
-                    else "The MP4 was saved. Its review was interrupted.", turn_id=turn_id)
-                await state.commit()
-                return None
-            intent = {**intent, "export_resume_attempts": attempts + 1}
+        attempts_key = "export_resume_attempts" if exported else "media_resume_attempts"
+        attempts = int(intent.get(attempts_key, 0)) if intent.get("resumed_media") == identity else 0
+        if attempts >= 3:
+            opening.turn_state = "failed"
+            await _create_message(state, opening.conversation_id, "assistant",
+                "已保存的结果仍可查看，续行已中断。" if _prefers_zh(opening.content)
+                else "The saved result is available. Continuation was interrupted.", turn_id=turn_id)
+            await state.commit()
+            return None
+        intent = {**intent, attempts_key: attempts + 1}
         opening.intent = {**intent, "resumed_media": identity}
         await state.commit()
     conversation = await db.get(Conversation, opening.conversation_id)
@@ -577,6 +614,8 @@ async def continue_media_turn(db, project, receipt, **hooks):
         )
     await fold_conversation_usage(db, user_id=project.user_id, project_id=project.id, accrued=usage.accrued)
     finished = await _lock_turn_for_transcript_write(db, turn_id, require_in_flight=True)
-    finished.turn_state = "settled"
+    pending = await latest_pending_question(db, opening.conversation_id)
+    awaiting_quote = pending and pending.turn_id == turn_id and (pending.intent or {}).get("media_permission")
+    finished.turn_state = "in_flight" if awaiting_quote else "settled"
     await db.commit()
     return follow_up

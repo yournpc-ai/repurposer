@@ -1,0 +1,88 @@
+{
+  "entry": "Two direct native handler submissions, no model or browser in this probe",
+  "rows": [
+    {
+      "call_id": "generate_voice-test",
+      "job": "12c2ebae-d494-5344-9619-9557b8fb820a",
+      "receipt": "2eecb89a-1df9-4c38-a09b-1ec7e1b8a3ef",
+      "opening": "5fb6d0ae-718d-47c0-b71b-87fe91320bdc",
+      "request": {
+        "text": "Welcome to the color test.",
+        "language": "en",
+        "voice_id": "presenter_male"
+      },
+      "status": "succeeded",
+      "attempt": 1,
+      "authorized": 3,
+      "result": {
+        "peak": 0.39233046770095825,
+        "role": "narration",
+        "text": "Welcome to the color test.",
+        "digest": "1d9e222dcb34840db73e81b1d58e3eee47c256a7596a523f9d5fbe1b0f661057",
+        "status": "available",
+        "language": "en",
+        "voice_id": "presenter_male",
+        "cache_hit": false,
+        "snapshot_id": "eb581ed3-0c1f-55db-96f7-41e1a44f8e5e",
+        "alignment_id": "7fe67153-1d72-4dde-bbe1-8c1761dc7354",
+        "analysis_digest": "e1c6fa556ae89e580d380febdd3d3b1d1d9be5060024649df316752d17944e99",
+        "charged_credits": 3,
+        "duration_seconds": 1.7415,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "ledger": [
+        [
+          "hold",
+          -3
+        ],
+        [
+          "release",
+          3
+        ],
+        [
+          "capture",
+          -3
+        ]
+      ]
+    },
+    {
+      "call_id": "generate_music-test",
+      "job": "37713b9f-e5ff-57dc-92ec-93542a3f79a1",
+      "receipt": "293eda7f-25ad-424b-b865-4cbbd32d4f56",
+      "opening": "5fb6d0ae-718d-47c0-b71b-87fe91320bdc",
+      "request": {
+        "bpm": 100,
+        "name": "Electronic instrumental",
+        "style": "ambient",
+        "duration_seconds": 4.0
+      },
+      "status": "succeeded",
+      "attempt": 1,
+      "authorized": 0,
+      "result": {
+        "peak": 0.097015380859375,
+        "role": "music",
+        "score": {
+          "bpm": {
+            "den": 1,
+            "num": 100
+          },
+          "style": "ambient"
+        },
+        "digest": "788ffd69e7b6b0e43a684437f6da92ab97cc791bc592c74643e485d7ae49d9f4",
+        "status": "available",
+        "music_id": "addafb55-cfcc-52bf-b4ee-8c48ae846b62",
+        "cache_hit": false,
+        "snapshot_id": "62f4ad45-72d0-5f9d-b395-a23bef4e5399",
+        "analysis_digest": "8c3e5047d6885da0e78522e241c831135197b98f2351ed8b5ab62b27e05e68f4",
+        "charged_credits": 0,
+        "duration_seconds": 4.0,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "ledger": []
+    }
+  ],
+  "workflow_runs": 0
+}

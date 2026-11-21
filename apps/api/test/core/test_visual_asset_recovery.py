@@ -184,7 +184,7 @@ async def test_chat_plan_and_start_resolve_the_same_saved_scene_spec(monkeypatch
         return None
 
     monkeypatch.setattr(visual_assets, "fixed_visual_asset_manifest", cache_miss)
-    monkeypatch.setattr(generated_images, "find_fixed_generated_image", lambda *a: cache_miss())
+    monkeypatch.setattr(generated_images, "find_fixed_generated_image", lambda *a, **kw: cache_miss())
     task = TaskItem(tool="prepare_visual_assets", params={"draft_ref": reference.model_dump(mode="json"), "scene_ids": ["s2"], "review_existing": False})
     assert "directly" in video_proposal_guard([task])
     assert (await video_quote_facts(db, project, [task]))["visual_images"] == 1
@@ -476,7 +476,7 @@ async def test_submitted_provider_image_reuses_only_verified_fixed_media(monkeyp
     async def read(storage_key):
         return stored[storage_key]
 
-    async def find(clip):
+    async def find(clip, *, scope=None):
         return fixed if ready else None
 
     async def never_submit(*args, **kwargs):
