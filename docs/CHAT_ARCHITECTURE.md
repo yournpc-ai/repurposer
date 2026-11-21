@@ -14,7 +14,7 @@ chat/plan_turn.py 组装当前消息、项目素材、已知 Brief 及其来源�
 
 chat/editor_media.py 在生成前校验 opening、项目、原生 call ID、参数指纹和报价。需要授权时持久化带 approve/decline 选项的问题。服务端在回答原问题时使用原参数和上限。报价问题、授权接受、供应商实际返回以及钱包结算分别有自己的事实。
 
-MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快照、摘要、时长或尺寸、计费与可用状态。插入时间线产生新的 CompositionVersion。ExportJob 固定确切版本与渲染规格；成功的 Output 可以审阅。review_video 读取真实 MP4，deliver_video 核对审片摘要、版本及字节后写入持久交付消息。后续修改保存新版本，之前的卡继续指向当时的 Output。
+MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快照、摘要、时长或尺寸、计费与可用状态。插入时间线产生新的 CompositionVersion。ExportJob 固定确切版本与渲染规格；成功的 Output 可以审阅。review_video 读取真实 MP4，deliver_video 核对审片摘要、版本及字节后写入持久交付消息。后续修改保存新版本，之前的卡继续指向当时的 Output。 导出授权续行按 opening 的提交标记和不可变版本恢复已执行的编辑。Agent 先审阅该次导出的 Output，再决定是否需要进一步修订。用户点选历史 Output 时可审阅并交付原文件，交付校验该 Output 的版本和 SHA-256。
 
 ## 消息、Stop 与恢复
 

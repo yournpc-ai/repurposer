@@ -1167,6 +1167,20 @@ def test_export_opening_reviews_its_own_output_after_another_edit():
     assert facts["exported_this_opening"] == exported
     assert {tool.name for tool in result.tools} == {"review_video", "deliver_video", "answer"}
 
+    # A completed export can resume with the original edit request even when
+    # no other opening advanced the head. The edit is already in the MP4.
+    exported = {**work["base_ref"], "role": "export", "status": "available", "output_id": "the-export"}
+    resumed = assemble_video_round({
+        "tools": intent_router.tools, "user_text": "Extend the closing still by one second and export",
+        "snapshot": ContextSnapshot("head", resources=(("work", work),)), "exported": exported,
+        "authorized_media": exported,
+        "recent_edit": {"composition_id": work["composition_id"], "version_id": work["version_id"],
+                        "clips": {}, "applied": [{"tool": "extend_still", "version": 14}]},
+    })
+    names = {tool.name for tool in resumed.tools}
+    assert "review_video" in names and not {"extend_still", "export_video"} & names
+    assert json.loads(resumed.context)["already_saved_this_turn"] == [{"tool": "extend_still", "version": 14}]
+
 
 def test_create_rejection_stops_repeated_or_unproductive_attempts():
     from app.agents.tool_loop import ToolRejected

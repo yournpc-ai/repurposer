@@ -575,6 +575,12 @@ async def execute_editor(turn, name, args):
     if name == "deliver_video" and exported.get("output_id") == str(args.output_id):
         # This receipt belongs to the original opening even if another edit advanced the head.
         base = {k: exported[k] for k in ("composition_id", "composition_version_id", "content_digest")}
+    elif name == "deliver_video":
+        pin = getattr(turn, "_editor_output_pin", None) or {}
+        review = getattr(turn, "_video_review_report", None) or {}
+        if (pin.get("output_id") == str(args.output_id) == review.get("output_id")
+                and pin.get("output_version_id") == review.get("composition_version_id")):
+            base = {k: review[k] for k in ("composition_id", "composition_version_id", "content_digest")}
     if name == "create_video":
         from app.chat.editor_create import create_video
         from app.chat.editor_recovery import editor_lock_key

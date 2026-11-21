@@ -71,7 +71,7 @@ from app.models.schemas import (
     question_group_digest,
     resolve_recommended_id,
 )
-from app.models.tables import Asset, Message, Persona, Project, User
+from app.models.tables import Asset, CompositionVersion, Message, Persona, Project, User
 from app.pipeline.asset_processing import has_any_text_material
 from app.pipeline.assets import (
     asset_text_content,
@@ -1167,6 +1167,22 @@ async def run_plan_turn(
             mention_target["version_id"] = authorized_media.intent["version_id"]
     turn._editor_output_pin = mention_target
     opening = await db.get(Message, turn_id) if turn_id is not None else None
+    if opening and (getattr(turn, "_editor_export", None) or {}).get("status") == "available":
+        # The resumed model receives the opening text again. Restore its actual
+        # edits from immutable versions before it decides what remains to do.
+        markers = {m["request"]: m["tool"] for m in (opening.intent or {}).get("editor_commits", [])}
+        if markers:
+            exported_version = await db.get(CompositionVersion, UUID(turn._editor_export["composition_version_id"]))
+            committed = (await db.execute(select(CompositionVersion.request_id, CompositionVersion.version).where(
+                CompositionVersion.composition_id == exported_version.composition_id,
+                CompositionVersion.version <= exported_version.version,
+                CompositionVersion.request_id.in_(markers),
+            ).order_by(CompositionVersion.version))).all()
+            if committed:
+                turn._editor_recent = {
+                    "composition_id": str(exported_version.composition_id), "version_id": str(exported_version.id),
+                    "clips": {}, "applied": [{"tool": markers[key], "version": number} for key, number in committed],
+                }
     confirmation = ((opening.intent or {}) if opening is not None else {}).get("video_confirmation")
     from app.chat.video_turn_seats import preceding_delivery
 
@@ -1245,6 +1261,7 @@ async def run_plan_turn(
             "preceding_delivery": turn.preceding_delivery,
             "exported": getattr(turn, "_editor_export", None),
             "review_pinned_export": review_pinned_export,
+            "reviewed_output_id": (getattr(turn, "_video_review_report", None) or {}).get("output_id"),
             "delivered": getattr(turn, "_editor_delivery", None),
             "production_requested": requested_video_production(request.message),
             "pending_question": lambda: turn.pending_q,

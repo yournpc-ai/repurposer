@@ -291,12 +291,19 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             names.discard("export_video")
             names.discard("deliver_video")
         if hint.get("output_id") and selected is None:
-            context["revision_target_status"] = "The referenced Output is historical. Ask which baseline to use before editing."
+            context["revision_target_status"] = "The referenced Output is historical. It can be reviewed and delivered as saved. Ask which baseline to use before editing."
             names = {"ask_user", "answer", "review_video"}
+            if not draft_only_request(user_text) and facts.get("reviewed_output_id") == hint["output_id"]:
+                names.add("deliver_video")
 
         exported = facts.get("exported") or {}
         if exported.get("status") == "available" and exported.get("output_id"):
             context["exported_this_opening"] = exported
+            if ((facts.get("authorized_media") or {}).get("role") == "export"
+                    and facts.get("reviewed_output_id") != exported["output_id"]):
+                names.intersection_update({"answer", "ask_user", "inspect_timeline", "inspect_clip", "preview_range",
+                                           "review_video", "read_conversation_context", "list_project_media",
+                                           "get_narration_alignment"})
             current = next((work for work in works if work["composition_id"] == exported["composition_id"]), None)
             if facts.get("review_pinned_export") or (
                 current and current["version_id"] != exported["composition_version_id"]
