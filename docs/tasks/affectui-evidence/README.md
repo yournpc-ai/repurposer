@@ -11,6 +11,14 @@
 | `8a199198` | Caret 弹层、附件操作与水合前草稿 |
 | `cd97c9c7` | 媒体查看、波形、预览、字幕字号、滚动控件与旧组件删除 |
 
+### StoryboardCard 文件交接（UI → Editor）
+
+| 文件 | UI 释放状态 | 接手方 | 已提交的视觉基线 |
+|---|---|---|---|
+| `apps/web/src/components/chat/video/StoryboardCard.tsx` | `RELEASED` | `OWNED_BY_EDITOR` | `cd97c9c7` |
+
+在本地 main 的 `3e5513b1` 核对，该文件与视觉基线一致，工作树和暂存区均无该文件的修改。Editor 可接手移除展示回执响应中的 `run_id` 读取和 `onRunStarted` 回调。保留原展示就绪条件，以及对 `presented_message_id || messageId`、`composition_version_id` 和 `presentation_digest` 的确认。UI 后续接手 Chat 文件以 Editor 的 `iteration-6/ui-handoff.md` 逐文件释放为准。
+
 ### 官方源码与接入裁决
 
 使用本地 affectui、affectui-migrate Skills 及条目参考，通过 affectUI MCP 的 search_components、get_component、get_source 读取完整 TSX。apps/web 的 shadcn Registry 配置有效。直接请求免费 tool-call-card-clean 返回 200。当前 shell 无 Registry Token，直接请求 Pro approval-card-clean 返回 401，授权 MCP 成功返回其完整源码。Pro Screen 与 Composer 同样经 MCP 读取。
