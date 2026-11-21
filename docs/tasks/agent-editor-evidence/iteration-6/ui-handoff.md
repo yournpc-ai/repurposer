@@ -1,26 +1,26 @@
-# Editor 6D → affectUI U3/U4 分镜卡交接
+# Editor 6D → affectUI U3/U4 Chat 交接
 
-## 提交与验收范围
+## 提交与状态
 
-分镜卡交接的代码 HEAD 为 `8def896d1a64a0b3a81dedbe1108f68e3aed70a0`。该提交包含前端改动、HTTP 回归与展示恢复测试。Job 回执与刷新时 Stop 的基线为 `0d13f1b8`，Stop 与资金裁决为 `117fe2b4e07d8f3f5cbc4da6aa120197509197a0`。核对代码 HEAD 时下表内文件均无未提交修改。
+交接代码 HEAD 为 `492acc4169f587dde971ee5ef7dda7af50e1d930`，完整消息读写切片为 `ea56282d4ec8f6fd61cf664c798fdb6380950093`。本交接文档的提交可用 `git log -1 --format=%H -- docs/tasks/agent-editor-evidence/iteration-6/ui-handoff.md` 核对。Chat 执行契约与下列文件的 Editor 施工已结束。交接前已检查该组路径，工作树干净。
 
-分镜卡展示契约已完成。最新 Chat 代码交接基线为 `6d657cb9`，项目详情基线为 `f15c7f46`。旧 Run SSE 与取消 API 都已删除，Chat 执行层的消息类型仍在收口。此时 Editor 的 Chat 文件无未提交修改。Web 374 项、API core 498 项和 TypeScript 通过。独立 API、两个 Worker 与 Chrome 实测按 v2 和 v3 两张成片卡分别播放、硬刷新再播放，实际下载的 SHA-256 与各自固定 Output 一致，视频各 150 帧。十用户混合负载尚未验证。
+API core 489 项通过（3 项警告），Web 42 个文件、337 项通过，TypeScript 通过。真实 Chrome 在同一项目分别播放 v2、v3，逐张硬刷新后重新播放并点击下载，下载的 SHA-256 等于各自 Output。真实 HTTP 已完成批准、媒体、导出和 Stop；Unknown 与取消竞态通过隔离库故障注入。真实 Chrome 尚未逐一复演全部故障注入，也未验证 affectUI 视觉改造。十用户独立窗口为 41 个请求，4 项 Job 各认领一次。详细范围见 [6D 记录](6d.md) 与 [浏览器实测](6d-ui-release.json)。
 
-## 文件归属
+## 文件所有权
 
-路径自 `apps/web/src/` 起算。释放范围仅为本表标记 RELEASED 的文件。
+路径以 `apps/web/src/` 为基准。下表的 RELEASED 状态也适用于相应的 Editor 行为回归用例。
 
-| 文件 | 状态 | 可修改范围或保留原因 |
+| 文件 | 状态 | 交接边界 |
 | --- | --- | --- |
-| components/chat/video/StoryboardCard.tsx | RELEASED | 可进行 U3/U4 视觉施工，保留下述版本校验、预览就绪与 ACK |
-| components/chat/AgentThread.tsx | OWNED_BY_EDITOR | Job 回执恢复与旧消息字段仍在收口 |
-| components/chat/ChatConversation.tsx | OWNED_BY_EDITOR | 已移除 Run 展示参数；旧计划版本展示仍在收口 |
-| lib/runWorkSegment.ts | NOT_APPLICABLE | 已删除 |
-| lib/use-run-events.ts | NOT_APPLICABLE | 文件与 SSE 消费者已删除 |
-| components/chat/RunTaskList.tsx | NOT_APPLICABLE | 文件已删除 |
-| components/chat/ActivityStream.tsx、timeline/activity.ts、timeline/project.ts、timeline/history.ts、timeline/types.ts | OWNED_BY_EDITOR | Activity 与 Tool Group 的持久投影与旧 Run 显示共用这些文件 |
-| components/chat/blocks/ComponentSlot.tsx、timeline/reveal.ts、timeline/reveal.test.ts、ChatConversation.mount.test.tsx（位于 components/chat/） | OWNED_BY_EDITOR | 已移除展示触发 Run 的回调，仍在审查其他 Chat 消费者 |
-| components/ui/、QuestionDock.tsx 的视觉组件 | NOT_APPLICABLE | 本交接不变更 affectUI 已有归属 |
+| components/chat/AgentThread.tsx | RELEASED | 开启 original opening、恢复消息、Stop 与 SSE 更新 |
+| components/chat/ChatConversation.tsx | RELEASED | 正文、活动、问答与固定输出引用 |
+| components/chat/ActivityStream.tsx、timeline/activity.ts、timeline/project.ts、timeline/history.ts、timeline/types.ts | RELEASED | 真实 Activity 及同组成员，按持久身份投影 |
+| components/chat/answerSettlement.ts、liveMessageReconcile.ts、blocks/ComponentSlot.tsx、timeline/reveal.ts | RELEASED | 选项回答、行更新与组件释放 |
+| components/chat/ChatOutputViewer.tsx、video/StoryboardCard.tsx | RELEASED | 确切版本展示、选定 Output 的播放与下载 |
+| lib/anchorCards.ts、lib/chat-stream.ts、lib/types.ts | RELEASED | 交接限于 Chat 与成片字段，修改公共类型时检查其他消费者 |
+| lib/runWorkSegment.ts、lib/use-run-events.ts、lib/startRecovery.ts、lib/lifecycleStamp.ts | NOT_APPLICABLE | 已删除 |
+| components/chat/RunCard.tsx、RunTaskList.tsx、blocks/RunBlock.tsx、startSettlement.ts、mediaJourneyMessages.ts、chatProtocol.ts | NOT_APPLICABLE | 已删除 |
+| components/ui/、styles.css、studio.css、QuestionDock.tsx、Home、Projects 列表、Settings、Login | NOT_APPLICABLE | 由原 UI 施工者掌握；6D 未接手视觉施工 |
 
 ## 实际接口与刷新行为
 
@@ -42,6 +42,12 @@
 
 GET /runs/{id}/events、POST /runs/{id}/cancel、media_preparation Stop 与旧 Run 恢复触发器均已删除。项目详情直接读取素材的 processing_status、processing_requested_at。正式导出的成功回执和交付消息引用各自的固定 Output。当前共享 8000 和热重载 Worker 已暂停。共享库仍有旧 schema。
 
+### 消费边界
+
+`history.ts::mapHistoryRows` 实际消费 `intent.media_status === "accepted"` 来折叠尚无结果的执行消息。当前 UI 的完成文案、音频和图片使用更新后的 `Message.content` 和 `blocks`，卡片不自行换算扣款。操作身份、Job ID 和 `media_result` 是 API 提供的诊断与业务事实。历史 Tool Group 过滤、顺序与状态来自 `activityRowFrame`；`group_id` 与 `call_index` 对应同一轮真实模型声明，失败或 Unknown 的成员原位保留。源码见 `apps/api/app/agents/tool_loop.py`、`app/chat/editor_recovery.py::settle_media_activity` 和前述投影文件。
+
+历史消息不再解码 material_beat 或从相邻用户文字猜测授权问题归属。旧 Step 的 Output 候选兜底已删除。正式交付的 output_refs 仍为现役事实。刷新后已交付旧版本仍由这条消息独立持有。
+
 以下文件已释放给 affectUI U3/U4 施工；Editor 6D 不再并行修改这些文件。
 
-- `apps/web/src/components/chat/video/StoryboardCard.tsx`
+范围为“文件所有权”表中所有 RELEASED 项。共享 8000 与热重载 Worker 保持暂停，联调使用明确隔离的后端。
