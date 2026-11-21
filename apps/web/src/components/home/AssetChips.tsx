@@ -1,6 +1,9 @@
 "use client"
 
-import { Loader2, X } from "lucide-react"
+import { Button } from "@/components/ui/button-clean"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
+import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -78,28 +81,15 @@ function AssetChip({
       <span className="truncate">{file.name}</span>
       {item.status === "uploading" ? (
         <span className="flex flex-none items-center gap-1 text-[10px] text-meta-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <Spinner size={12} />
           {Math.round(item.progress * 100)}%
         </span>
       ) : item.status === "error" ? (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="flex-none text-[10px] text-destructive hover:underline"
-        >
-          {t("composer.uploadRetry")}
-        </button>
+        <Button variant="ghost" size="sm" onClick={onRetry}>{t("composer.uploadRetry")}</Button>
       ) : metaLabel ? (
         <span className="flex-none text-[10px] text-meta-foreground">{metaLabel}</span>
       ) : null}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex-none rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-        aria-label={`Remove ${file.name}`}
-      >
-        <X className="h-3 w-3" />
-      </button>
+      <IconButton label={`${t("common.remove")} ${file.name}`} size="sm" icon={<X />} onClick={onRemove} />
     </span>
   )
 }

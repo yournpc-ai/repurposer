@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Card } from "@/components/ui/card-clean"
 import { createPortal } from "react-dom"
 import { BookOpen } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -86,17 +87,16 @@ export function SkillPicker({
   const openAbove = spaceBelow < 264 && position.top > spaceBelow
 
   return createPortal(
-    <div
-      style={
-        openAbove
-          ? {
-              left: position.left,
-              top: position.top,
-              transform: "translateY(calc(-100% - 4px))",
-            }
-          : { left: position.left, top: position.bottom + 4 }
-      }
-      className="overlay-surface fixed z-50 flex max-h-64 w-80 flex-col gap-0.5 overflow-y-auto rounded-lg p-1.5 text-xs text-popover-foreground border border-subtle thin-scroll"
+    <Card
+      style={{
+        position: "fixed",
+        width: 320,
+        maxWidth: "calc(100vw - 16px)",
+        left: Math.max(8, Math.min(position.left, window.innerWidth - 320 - 8)),
+        top: openAbove ? position.top : position.bottom + 4,
+        transform: openAbove ? "translateY(calc(-100% - 4px))" : undefined,
+      }}
+      className="thin-scroll z-50 flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1.5"
     >
       {status === "loading" ? (
         <span className="px-2 py-1.5 text-muted-foreground">
@@ -146,7 +146,7 @@ export function SkillPicker({
           )
         })
       )}
-    </div>,
+    </Card>,
     document.body,
   )
 }

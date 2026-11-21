@@ -139,13 +139,9 @@ function AssetPanelRow({
             {Math.round(item.progress * 100)}%
           </span>
         ) : item.status === "error" ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="block text-[11px] text-destructive hover:underline"
-          >
+          <Button variant="ghost" size="sm" onClick={onRetry}>
             {t("composer.uploadFailed")}
-          </button>
+          </Button>
         ) : (
           <span className="block truncate text-[11px] text-muted-foreground">
             {metaLine}

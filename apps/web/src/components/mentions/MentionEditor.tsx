@@ -90,6 +90,10 @@ export interface MentionEditorProps {
   ref?: Ref<MentionEditorHandle>
 }
 
+// A stable, empty initial value makes the editable an opaque DOM subtree during hydration.
+// After mount the browser and the existing chip editor own every child.
+const INITIAL_EDITOR_HTML = { __html: "" }
+
 const MENTION_ATTR = "data-mention-type"
 const SKILL_ATTR = "data-skill-chip"
 
@@ -204,6 +208,13 @@ export function MentionEditor({
       onSkillChange?.(null)
     }
   }, [onChange, onSkillChange, selectedSkill])
+
+  const [adoptedInitialDraft, setAdoptedInitialDraft] = useState(false)
+  useEffect(() => {
+    if (adoptedInitialDraft) return
+    setAdoptedInitialDraft(true)
+    if (editorRef.current?.textContent) syncNow()
+  }, [adoptedInitialDraft, syncNow])
 
   /** The inline chip node: `@label` in one contenteditable=false span.
    * Text-only (no icon) — the @ prefix makes it self-describing in the
@@ -592,7 +603,9 @@ export function MentionEditor({
       {/* React renders NO children here — the DOM owns text and inline chips. */}
       <div
         ref={editorRef}
-        contentEditable={!disabled}
+        contentEditable={disabled ? false : adoptedInitialDraft ? true : "plaintext-only"}
+        dangerouslySetInnerHTML={INITIAL_EDITOR_HTML}
+        suppressHydrationWarning
         suppressContentEditableWarning
         role="textbox"
         aria-multiline="true"

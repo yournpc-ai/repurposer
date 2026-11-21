@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Card } from "@/components/ui/card-clean"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
@@ -118,17 +119,16 @@ export function MentionPicker({
 
   return createPortal(
     // Anchor to the caret: above it while there's room, below otherwise.
-    <div
-      style={
-        position.top > 220
-          ? {
-              left: position.left,
-              top: position.top,
-              transform: "translateY(calc(-100% - 4px))",
-            }
-          : { left: position.left, top: position.bottom + 4 }
-      }
-      className="overlay-surface fixed z-50 flex w-64 flex-col gap-0.5 rounded-lg p-1.5 text-xs text-popover-foreground border border-subtle"
+    <Card
+      style={{
+        position: "fixed",
+        width: 256,
+        maxWidth: "calc(100vw - 16px)",
+        left: Math.max(8, Math.min(position.left, window.innerWidth - 256 - 8)),
+        top: position.top > 220 ? position.top : position.bottom + 4,
+        transform: position.top > 220 ? "translateY(calc(-100% - 4px))" : undefined,
+      }}
+      className="thin-scroll z-50 flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1.5"
     >
       {filtered.length === 0 ? (
         <span className="px-2 py-1.5 text-muted-foreground">
@@ -161,7 +161,7 @@ export function MentionPicker({
           )
         })
       )}
-    </div>,
+    </Card>,
     document.body,
   )
 }

@@ -45,7 +45,7 @@ async function renderPicker(position: { left: number; top: number; bottom: numbe
   )
   const name = await screen.findByText("Promotional video")
   const button = name.closest("button") as HTMLButtonElement
-  return { button, popup: button.closest(".overlay-surface") as HTMLElement }
+  return { button, popup: button.closest(".ui-crdc") as HTMLElement }
 }
 
 it("opens below the caret when space allows and omits the slash from catalog names", async () => {
