@@ -109,7 +109,6 @@ from app.models.schemas import (
     ChatAskArgs,
     ChatMention,
     CreativeState,
-    EditGraphArgs,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     InferredIntent,
@@ -227,11 +226,6 @@ class ChatTurn:
         self.user_id = user_id
         self.turn_id = turn_id
         self.conversation_id = UUID(str(conversation.id))
-        # 环境能力位 (ADR-118 §6 双键): the conversation-stamped client
-        # capability (prepare_chat_turn 的 last-wins 盖章, ui_language 同律
-        # 座) — the assembly's canvas_available source on request-born
-        # turns; None = never reported → the Environment line stays out.
-        self.canvas_available = conversation.canvas_available
         self.project = project
         self.text = text
         self.skill = skill
@@ -318,7 +312,6 @@ class ChatTurn:
         self.context = (
             await build_context(
                 db, project, mentions, pending,
-                canvas_available=self.canvas_available,
                 confirmation=confirmation,
                 skill=self.skill,
                 skill_ambiguity=self.skill_ambiguity,
@@ -580,23 +573,6 @@ class ChatTurn:
             assert isinstance(params, AnnotateNarrationArgs)
             from app.chat.video_turn_seats import annotate_narration_seat
             return await annotate_narration_seat(project=self.project, args=params)
-        if name == "edit_graph":
-            assert isinstance(params, EditGraphArgs)
-            error = await self._edit_graph(params, prose)
-            if error is not None:
-                return error
-            content = prose.strip() or (
-                "已更新手动画布。" if _prefers_zh(self.text) else "Manual Canvas updated."
-            )
-            assistant_message = await _create_message(
-                self.db,
-                self.conversation_id,
-                "assistant",
-                content,
-                intent=AnswerProposal(text=content).model_dump(mode="json"),
-            )
-            self.outcome = (assistant_message, None, [], self.settled_question)
-            return None
         if name == "retry_upload":
             assert isinstance(params, RetryUploadArgs)
             return await self._retry_upload(params, prose)
@@ -879,10 +855,6 @@ class ChatTurn:
         数据链全程消息载, no endpoint. No-op on the one-shot path."""
         if self.on_candidates is not None:
             await self.on_candidates(payload)
-
-    async def _edit_graph(self, params: EditGraphArgs, prose: str) -> str | None:
-        from app.pipeline.graph_store import edit_manual_graph
-        return await edit_manual_graph(self.db, self.project, params.ops)
 
     async def _retry_upload(self, params: RetryUploadArgs, prose: str) -> ToolObservation:
         from app.pipeline.upload_recovery import upload_finished_output

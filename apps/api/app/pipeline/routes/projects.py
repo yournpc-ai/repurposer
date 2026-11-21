@@ -8,12 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
-    AssetResponse,
     BulkDeleteRequest,
     ChatOutputEntry,
-    GraphNodeResponse,
     ProjectCreate,
-    ProjectGraphResponse,
     ProjectResponse,
     ProjectResultsResponse,
     ProjectUpdate,
@@ -25,8 +22,6 @@ from app.models.tables import (
     CompositionVersion,
     Conversation,
     ConversationUsage,
-    GraphEdge,
-    GraphNode,
     Message,
     Output,
     Persona,
@@ -235,20 +230,6 @@ async def get_project_results(
     }
 
 
-# asset_type → 媒介值 (上传素材 = 媒介×manual, ADR-076 映射律): a slides
-# deck's consumption form is video (stills chain); a pasted transcript /
-# past material reads as text.
-_ASSET_MEDIUM = {
-    "video": "video",
-    "audio": "audio",
-    "voice_sample": "audio",
-    "image": "image",
-    "slides": "video",
-    "transcript": "text",
-    "past_material": "text",
-}
-
-
 # ---- Lifecycle Projection stamp (ADR-087 §2, Phase 1) -----------------------
 
 async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
@@ -272,79 +253,6 @@ async def _lifecycle_stamp(db: AsyncSession, project: Project) -> dict:
         ui_language=current_ui_language() or "en",
     )
     return stamp.to_payload()
-
-
-@router.get("/{project_id}/graph", response_model=ProjectGraphResponse)
-async def get_project_graph(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User | None = Depends(get_current_user),
-) -> dict:
-    """Read only source assets and ordinary manual Graph nodes."""
-    project = await get_project_for_user(
-        db, project_id, current_user.id if current_user else None
-    )
-    rows = list(
-        (
-            await db.execute(
-                select(GraphNode)
-                .where(GraphNode.project_id == project_id)
-                .order_by(GraphNode.created_at.asc())
-            )
-        ).scalars().all()
-    )
-    nodes = [
-        node for node in rows
-        if node.type == "asset" or (node.spec or {}).get("prototype") == "manual"
-    ]
-    node_ids = {node.id for node in nodes}
-    edges = list(
-        (
-            await db.execute(
-                select(GraphEdge)
-                .where(GraphEdge.project_id == project_id)
-                .order_by(GraphEdge.created_at.asc())
-            )
-        ).scalars().all()
-    )
-    asset_ids = [node.spec.get("asset_id") for node in nodes if node.type == "asset"]
-    assets = {
-        str(asset.id): asset
-        for asset in (
-            await db.execute(select(Asset).where(Asset.id.in_([UUID(str(item)) for item in asset_ids])))
-        ).scalars().all()
-    } if asset_ids else {}
-    response_nodes = []
-    for node in nodes:
-        spec = dict(node.spec or {})
-        asset_response = None
-        face_type = node.type
-        if node.type == "asset":
-            asset = assets.get(str(spec.get("asset_id")))
-            if asset is None:
-                continue
-            asset_response = AssetResponse.model_validate(asset)
-            meta = asset.meta or {}
-            if isinstance(meta.get("width"), int) and isinstance(meta.get("height"), int):
-                asset_response.width = meta["width"]
-                asset_response.height = meta["height"]
-            face_type = _ASSET_MEDIUM.get(str(asset.type), "text")
-            spec["prototype"] = "manual"
-        response_nodes.append(GraphNodeResponse(
-            id=node.id,
-            type=face_type,
-            state=node.state,
-            spec=spec,
-            layout=node.layout or {},
-            asset=asset_response,
-            created_at=node.created_at,
-            updated_at=node.updated_at,
-        ))
-    return {
-        "nodes": response_nodes,
-        "edges": [edge for edge in edges if edge.from_node in node_ids and edge.to_node in node_ids],
-        "lifecycle": await _lifecycle_stamp(db, project),
-    }
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)

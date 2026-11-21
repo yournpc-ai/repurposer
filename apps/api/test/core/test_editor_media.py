@@ -365,39 +365,6 @@ async def test_expired_voice_occupancy_recovers_only_fixed_audio(database, monke
 
 
 @pytest.mark.asyncio
-async def test_historical_image_requires_original_project_and_digest(database, monkeypatch):
-    import json
-    from uuid import uuid4
-    from app.providers import storage
-
-    owner = await _user(database)
-    first = await _project(database, owner)
-    second = await _project(database, owner)
-    program, raw, png = "a" * 64, "b" * 64, "c" * 64
-    asset = {"provenance": {"kind": "minimax_image", "program_digest": program,
-                            "provider_media_digest": raw}, "media": {"digest": png}}
-    async with database() as db:
-        run = WorkflowRun(project_id=first, context={"visual_asset_preparation": {
-            "result": {"assets": [asset]}}})
-        db.add(run)
-        await db.commit()
-        manifest = {"program_digest": program, "execution_id": str(run.id), "media": {"digest": raw}}
-        monkeypatch.setattr(storage, "exists", AsyncMock(return_value=True))
-        async def read_manifest(key):
-            assert key == f"video-generated-images/{program}.json"
-            return json.dumps(manifest).encode()
-        monkeypatch.setattr(storage, "read", read_manifest)
-        project = await db.get(Project, first)
-        assert await editor_media._historical_image_owned(db, project, asset)
-        assert not await editor_media._historical_image_owned(db, await db.get(Project, second), asset)
-        manifest["media"]["digest"] = "d" * 64
-        assert not await editor_media._historical_image_owned(db, project, asset)
-        manifest["media"]["digest"] = raw
-        manifest["execution_id"] = str(uuid4())
-        assert not await editor_media._historical_image_owned(db, project, asset)
-
-
-@pytest.mark.asyncio
 async def test_media_queue_limits_owner_fairness_and_fences_expired_workers(database, monkeypatch):
     from datetime import timedelta
     from uuid import uuid4

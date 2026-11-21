@@ -34,7 +34,6 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
-    GraphNode,
     NarrationAlignment,
     Output,
     Project,
@@ -62,10 +61,6 @@ from app.pipeline.assets import asset_text_content
 # (they compile into the tool's JSON schema).
 
 
-
-
-class GetNodeParams(BaseModel):
-    node_id: UUID
 
 
 class GetAssetParams(BaseModel):
@@ -641,48 +636,6 @@ def _pending_plan_lines(plan) -> list[str]:
                 f"{p.get('title') or '(unnamed)'}: {outputs} [{p.get('state')}]"
             )
     return lines
-
-
-async def get_node(db: AsyncSession, project: Project, params: GetNodeParams) -> str:
-    row = await db.scalar(select(GraphNode).where(
-        GraphNode.id == params.node_id, GraphNode.project_id == project.id,
-    ))
-    if row is None:
-        return "No such asset or manual Graph node"
-    return json.dumps({"id": str(row.id), "type": row.type, "state": row.state, "spec": row.spec}, ensure_ascii=False)
-
-
-async def get_graph(db: AsyncSession, project: Project, params) -> str:
-    """The canvas's whole current face (ADR-111 §7 — the plan-ready reveal
-    makes the canvas visible BEFORE any run; the model that just showed it
-    must be able to read what it shows): every node one line (state · type
-    · label), in visual order (top-to-bottom, left-to-right). READ-ONLY —
-    the model's canvas interface is the plan vocabulary (present_plan /
-    edit_graph), never node handles (北极星 + apply_wiring_ops 唯一写口)."""
-    nodes = (
-        (
-            await db.execute(
-                select(GraphNode).where(GraphNode.project_id == project.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not nodes:
-        return "The canvas is empty — nothing has been born yet."
-
-    def _pos(n: GraphNode) -> tuple[float, float]:
-        lay = n.layout or {}
-        return (float(lay.get("y", 0)), float(lay.get("x", 0)))
-
-    lines = [f"The canvas right now ({len(nodes)} nodes, visual order):"]
-    for n in sorted(nodes, key=_pos):
-        spec = n.spec or {}
-        label = (
-            spec.get("summary") or spec.get("name") or spec.get("tool") or "…"
-        )
-        lines.append(f"- [{n.state}] {n.type}: {label} (id: {n.id})")
-    return "\n".join(lines)
 
 
 async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:

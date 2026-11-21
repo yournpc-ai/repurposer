@@ -86,7 +86,6 @@ from app.models.tables import (  # noqa: E402
     CompositionVersion,
     Conversation,
     CreditTransaction,
-    GraphNode,
     Message,
     Output,
     Project,
@@ -390,12 +389,6 @@ class Ctx:
     async def results(self, pid: str) -> dict:
         res = await self.client.get(f"/projects/{pid}/results")
         check(res.status_code == 200, "GET results", res.text)
-        return res.json()
-
-    async def graph(self, pid: str) -> dict:
-        """The persistent graph's one read frame (ADR-057 K3 直读端点)."""
-        res = await self.client.get(f"/projects/{pid}/graph")
-        check(res.status_code == 200, "GET project graph", res.text)
         return res.json()
 
     async def runs(self, pid: str) -> list[dict]:

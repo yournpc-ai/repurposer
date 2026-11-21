@@ -2675,7 +2675,6 @@ export function AgentThread({
           // 环境能力位 (ADR-118 §6): the raw can-host-canvas read rides
           // every send — pre-reveal desktop is surface="chat" yet CAN host
           // the canvas; the server's canvas_visible = this ∧ world-liveness.
-          canvas_available: false,
           prior_intent:
             // The panel's current chain rides while the confirm beat is
             // live (裁决 1 derived predicate — never a phase read).

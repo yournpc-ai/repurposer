@@ -1,34 +1,28 @@
 """Chat intent-context assembly (CHAT_ARCH §6; ADR-087 §6 Phase 5 ownership).
 
 The chat loop's deterministic intent context: project summary (assets /
-visible outputs / latest run), the recent rounds, the pending-question
+visible outputs), the recent rounds, the pending-question
 line, and the mention injection. This is the Agent Interface's OWN assembly
 — moved from ``app.agents.contexts`` (the harness layer), whose home is the
 GenerationContext: each layer assembles its own context, and the harness no
 longer reads the conversation store (``Message``) or the outputs read face
 on chat's behalf. Shared resource content is assembled separately by
 ``tools.project_context`` for every model request; this module owns the
-conversation, workflow and pending-question framing.
+conversation and pending-question framing.
 """
 
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contexts import output_one_liner
-from app.chat.canvas_visibility import environment_line
 from app.models.schemas import ChatMention
 from app.models.tables import (
-    GraphEdge,
-    GraphNode,
     Message,
     Project,
-    WorkflowRun,
 )
 from app.pipeline.outputs import list_visible_outputs
-from app.platform.conversation_context import is_pending_plan
 
 
 def conversation_messages(rows: list[Message]) -> list[dict]:
@@ -91,7 +85,6 @@ def conversation_messages(rows: list[Message]) -> list[dict]:
     return dialogue
 
 
-_GRAPH_CONTEXT_LIMIT = 16
 _PAST_JOURNEYS_CAP = 3
 
 
@@ -117,27 +110,19 @@ async def build_context(
     project: Project,
     mentions: list[ChatMention],
     pending: Message | None,
-    canvas_available: bool | None = None,
     confirmation: tuple[str, str] | None = None,
     skill=None,
     skill_ambiguity: list[str] | None = None,
     include_pending: bool = True,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
-    project summary (assets / visible outputs / latest run) + the last 3
+    project summary (assets / visible outputs) + the last 3
     rounds + the mention list. Not a chat-history dump. ``pending`` (the
     conversation's still-open question, if any) is queried by the caller —
     this module assembles, it never queries the chat store's question
     lifecycle. Pointing at a product is an @mention (ADR-058 — the canvas
     focus mechanism retired into the mentions registry); the mention block
     below carries the definite id.
-
-    ``canvas_available``: the conversation-stamped client capability bit
-    (ADR-118 §6 双键). The Environment line rides when the bit is known —
-    canvas_visible = canvas_available ∧ world_live (world_live = hasRuns ∨
-    pending-plan — 与客户端谓词同义单源, 互指 app/chat/canvas_visibility.py);
-    unknown → the line is omitted. This is environment evidence only; no
-    delivery-speech interface guidance is derived from it.
 
     ``confirmation`` (ADR-117 D1) = the user's two confirmation prefs
     (execution, credits) — rendered as one fact line the system template's
@@ -166,83 +151,6 @@ async def build_context(
         for o in outputs:
             one_liner = output_one_liner(o)
             lines.append(f"- {o.type} id={o.id}" + (f": {one_liner}" if one_liner else ""))
-
-    # The persistent graph (ADR-057 — the wiring revision's target table):
-    # the agent points at a node by its row id; the node's own program line
-    # (prompt / params) and state ride so the agent can compose the NEW
-    # program from the CURRENT one (never invent it). Capped — a grown
-    # graph's older islands stop mattering to a revision ask. Workspace 合同
-    # v4.2 C1: legacy type="exploration" graph rows are read-filtered here
-    # too (the family's home is exploration_rows now — the journey digest
-    # block below is its context seat).
-    graph_nodes = list(
-        (
-            await db.execute(
-                select(GraphNode)
-                .where(
-                    GraphNode.project_id == project.id,
-                )
-                .order_by(GraphNode.created_at)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if graph_nodes:
-        graph_edges = list(
-            (
-                await db.execute(
-                    select(GraphEdge).where(GraphEdge.project_id == project.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        children: dict[str, list[str]] = {}
-        for e in graph_edges:
-            children.setdefault(str(e.from_node), []).append(str(e.to_node))
-        lines.append("当前持久化画布图（连接编辑作用于此图）：")
-        for n in graph_nodes[:_GRAPH_CONTEXT_LIMIT]:
-            spec = n.spec or {}
-            label = spec.get("summary") or n.type
-            row = f"- {n.type} id={n.id} state={n.state} — {label}"
-            prompt = spec.get("prompt")
-            if prompt:
-                row += f" | program: {str(prompt)[:140]}"
-            output_ids = spec.get("output_ids") or []
-            if output_ids:
-                row += f" | products: {len(output_ids)}"
-            downstream = children.get(str(n.id)) or []
-            if downstream:
-                row += f" | downstream: {', '.join(downstream)}"
-            lines.append(row)
-        if len(graph_nodes) > _GRAPH_CONTEXT_LIMIT:
-            lines.append(f"- … ({len(graph_nodes) - _GRAPH_CONTEXT_LIMIT} older nodes omitted)")
-
-    latest_run = (
-        await db.execute(
-            select(WorkflowRun)
-            .where(WorkflowRun.project_id == project.id)
-            .order_by(WorkflowRun.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if latest_run is not None:
-        # One-line marker only (the digest doctrine, module header): the
-        # per-step progress detail retired behind the get_run_status read
-        # tool — the agent knows a run exists and reads the detail on demand.
-        lines.append(f"Latest run: status={latest_run.status} id={latest_run.id}")
-
-    # 环境双键 (ADR-118 §6): the structured Environment fact rides directly
-    # under the Project line — canvas_visible = canvas_available ∧ world_live
-    # (world_live = hasRuns ∨ pending-plan — 与客户端谓词同义单源, 互指
-    # app/chat/canvas_visibility.py); 能力位未知 → 行缺席 (未知恒闭).
-    env = environment_line(
-        canvas_available,
-        world_live=latest_run is not None or is_pending_plan(pending),
-    )
-    if env:
-        lines.insert(1, env)
 
     if pending is not None and include_pending:
         # A still-open question (e.g. pick-only, no freeform): the agent must

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_, select
 
-from app.models.tables import Composition, CompositionVersion, Conversation, Message, Project, WorkflowRun
+from app.models.tables import Composition, CompositionVersion, Conversation, Message, Project
 
 
 def editor_lock_key(turn_id):
@@ -106,7 +106,7 @@ async def settle_interrupted_members(db, turn_id):
 async def recover_interrupted_edits(db, conversation_id):
     """Called on history load and next submission. A live writer owns the
     advisory lock until its outer Chat transaction commits or rolls back."""
-    recovered = await recover_media_receipts(db, conversation_id)
+    recovered = False
     media_turns = select(Message.turn_id).where(
         Message.conversation_id == conversation_id, Message.intent.has_key("editor_media"))
     batch_turns = select(Message.turn_id).where(
@@ -121,21 +121,6 @@ async def recover_interrupted_edits(db, conversation_id):
         )
     )
     for turn_id in ids:
-        # The original native execution can finish after its API process dies.
-        # The existing trigger dispatcher owns continuation; history only delivers recorded results.
-        result = await db.scalar(select(Message).where(Message.turn_id == turn_id,
-            Message.intent.has_key("editor_media"), Message.intent.has_key("media_result"),
-            Message.workflow_run_id.is_not(None)).order_by(Message.seq.desc()).limit(1))
-        if result is not None:
-            if result.intent["media_result"].get("status") == "historical_ownership_pending":
-                continue
-            opening = await db.get(Message, turn_id)
-            if opening and not (opening.intent or {}).get("resumed_media"):
-                from app.chat.trigger_turn import fire_trigger, TRIGGER_RUN_COMPLETED
-
-                run = await db.get(WorkflowRun, result.workflow_run_id)
-                fire_trigger(run.project_id, TRIGGER_RUN_COMPLETED, str(run.id))
-                continue
         if not await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id)))):
             continue
         row = await db.get(Message, turn_id, with_for_update=True, populate_existing=True)
@@ -149,7 +134,7 @@ async def recover_interrupted_edits(db, conversation_id):
                    not (row.intent or {}).get("resumed_media") for m in media):
                 # The worker polls durable results and competes for the existing opening lock.
                 continue
-            pending = any((m.workflow_run_id or (m.intent.get("export_job") or m.intent.get("media_job"))) and not m.intent.get("media_result") for m in media)
+            pending = any((m.intent.get("export_job") or m.intent.get("media_job")) and not m.intent.get("media_result") for m in media)
             if pending:
                 continue
             for receipt in media:
@@ -160,47 +145,6 @@ async def recover_interrupted_edits(db, conversation_id):
             await db.flush()
             recovered = True
     return recovered
-
-
-async def recover_media_receipts(db, conversation_id=None):
-    from botocore.exceptions import BotoCoreError, ClientError
-    import structlog
-    from app.chat.editor_media import settle_media_receipt
-    from app.models.schemas import WorkflowStatus
-
-    unresolved = ~Message.intent.has_key("media_result")
-    if conversation_id:
-        unresolved |= Message.intent["media_result"]["status"].astext == "historical_ownership_pending"
-    query = select(WorkflowRun, Project).join(Project, Project.id == WorkflowRun.project_id).join(
-        Message, Message.workflow_run_id == WorkflowRun.id
-    ).where(Message.intent.has_key("editor_media"), unresolved,
-            WorkflowRun.status.in_([WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]))
-    if conversation_id:
-        query = query.where(Message.conversation_id == conversation_id)
-    settled = False
-    for run, project in (await db.execute(query.order_by(WorkflowRun.id))).all():
-        try:
-            await settle_media_receipt(db, project, run)
-            settled = True
-        except (OSError, BotoCoreError, ClientError) as exc:
-            structlog.get_logger().warning("media_delivery_unavailable", run_id=str(run.id),
-                                           error_type=type(exc).__name__)
-    return settled
-
-
-async def resume_finished_media(db):
-    from sqlalchemy.orm import aliased
-    from app.chat.trigger_turn import fire_trigger, TRIGGER_RUN_COMPLETED
-
-    opening = aliased(Message)
-    rows = await db.execute(select(WorkflowRun.project_id, WorkflowRun.id)
-        .join(Message, Message.workflow_run_id == WorkflowRun.id)
-        .join(opening, opening.id == Message.turn_id)
-        .where(opening.turn_state == "in_flight", Message.intent.has_key("editor_media"),
-               Message.intent.has_key("media_result"),
-               Message.intent["media_result"]["status"].astext != "historical_ownership_pending").order_by(Message.seq.desc()))
-    for project_id, run_id in rows:
-        fire_trigger(project_id, TRIGGER_RUN_COMPLETED, str(run_id))
 
 
 async def settle_media_activity(db, receipt):

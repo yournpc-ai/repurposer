@@ -153,14 +153,6 @@ async def _insert_project_asset(
         ),
     )
     db.add(asset)
-    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row —
-    # flush-only, commits with the asset below. 认领即出生 (ADR-102): a
-    # dormant upload carries no processing claim until someone asks.
-    from app.pipeline.graph_store import (  # deferred: import cycle
-        stamp_asset_node,
-    )
-
-    await stamp_asset_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -262,14 +254,6 @@ async def upload_asset(
         processing_status=AssetStatus.PENDING,
     )
     db.add(asset)
-    # 上传即落图 (ADR-057 K2): the asset node is born with its asset row.
-    # 认领即出生 (ADR-102): a dormant upload carries no processing claim
-    # until someone asks.
-    from app.pipeline.graph_store import (  # deferred: import cycle
-        stamp_asset_node,
-    )
-
-    await stamp_asset_node(db, project_id, asset)
     await db.commit()
     await db.refresh(asset)
     return asset
@@ -440,11 +424,6 @@ async def delete_asset(
             detail="Asset not found",
         )
     await delete_file(asset.file_url)
-    # The graph twin goes through the same wiring door (ADR-057 K2) — edges
-    # cascade structurally; absent node (pre-K2 asset) skips.
-    from app.pipeline.graph_store import remove_asset_node  # deferred: import cycle
-
-    await remove_asset_node(db, project_id, asset_id)
     await db.delete(asset)
     await db.commit()
 

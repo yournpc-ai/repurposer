@@ -98,7 +98,6 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     CreativeState,
-    EditGraphArgs,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     InferredIntent,
@@ -744,20 +743,6 @@ class PlanTurn:
         return result
 
     async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        if name == "edit_graph":
-            from app.pipeline.graph_store import edit_manual_graph
-            assert isinstance(params, EditGraphArgs)
-            error = await edit_manual_graph(self.db, self.project, params.ops)
-            if error is not None:
-                return error
-            content = prose.strip() or (
-                "已更新手动画布。" if _prefers_zh(self.text) else "Manual Canvas updated."
-            )
-            assistant_message = await _create_message(
-                self.db, self.conversation_id, "assistant", content
-            )
-            self.outcome = (assistant_message, None, self.settled_pending, [])
-            return None
         if name == "present_plan":
             assert isinstance(params, PresentPlanArgs)
             return await self._present_plan(params, prose)

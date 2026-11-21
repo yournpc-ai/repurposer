@@ -373,14 +373,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                    "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。如果 preceding_reviewed_delivery 或 referenced_output 表明用户针对已交付的成片提出修改，仍需交付修订后的成片，除非用户只要预览。只有交付回执才表示正式成片已发到对话。审阅发现问题时根据用户目标决定是否继续修改；涉及用户硬要求的发现若仍未解决，交付和最终回复必须明确报告该未满足项，不能把有 Output 或有交付卡等同于目标完成。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。" + website_evidence_rule,
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
-            stream_prose=native_creation,
-            project_reply=(None if native_creation else
+            stream_prose=native_creation and not media_ready,
+            project_reply=(None if native_creation and not media_ready else
                            lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text)),
             caller_state={"video_target": selected}, acknowledgment=acknowledgment,
             invitation_tool="ask_user" if any(t.name == "ask_user" for t in tools) else None,
             missing_tool_feedback=(
                 "请通过原生 tool_calls 调用 ask_user，把全部缺失选项放进同一份问卷。正文只写给用户的邀请。"
-                if any(t.name == "ask_user" for t in tools) and not media_ready else None
+                if readiness.task_kind == "website_promo" and readiness.required_next_action == "ask_user"
+                and any(t.name == "ask_user" for t in tools) and not media_ready else None
             ),
         )
     if facts.get("drafts"):

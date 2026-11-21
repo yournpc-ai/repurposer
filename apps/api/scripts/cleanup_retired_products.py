@@ -25,7 +25,6 @@ from app.models.database import AsyncSessionLocal
 from app.models.tables import (
     Asset,
     CompositionVersion,
-    GraphNode,
     Message,
     Output,
     Publication,
@@ -52,7 +51,6 @@ class CleanupPlan:
     include_clips: bool
     output_ids: list[str] = field(default_factory=list)
     step_ids: list[str] = field(default_factory=list)
-    graph_node_ids: list[str] = field(default_factory=list)
     storage_keys: list[str] = field(default_factory=list)
     preserved_output_ids: list[str] = field(default_factory=list)
     external_publications: list[dict] = field(default_factory=list)
@@ -173,17 +171,6 @@ async def target_steps(db: AsyncSession, include_clips: bool, output_ids: set[st
     ]
 
 
-async def target_graph_nodes(db: AsyncSession, include_clips: bool, output_ids: set[str]) -> list[GraphNode]:
-    nodes = list((await db.execute(select(GraphNode))).scalars().all())
-    kinds = RETIRED_TASKS if include_clips else COPY_TASKS
-    return [
-        node for node in nodes
-        if (node.spec or {}).get("tool") in kinds
-        or {str(item) for item in (node.spec or {}).get("output_ids", [])} & output_ids
-        or (include_clips and (node.spec or {}).get("prototype") in {"generator", "editor"})
-    ]
-
-
 async def external_publications(db: AsyncSession, output_ids: set[str]) -> list[Publication]:
     rows = list((await db.execute(select(Publication).where(Publication.output_id.in_(output_ids)))).scalars().all())
     return [row for row in rows if row.published_at is not None or row.platform_post_id or row.platform_post_url]
@@ -209,14 +196,12 @@ async def make_plan(db: AsyncSession, include_clips: bool) -> CleanupPlan:
     doomed = [output for output in doomed if str(output.id) not in external_ids]
     output_ids = {str(output.id) for output in doomed}
     steps = await target_steps(db, include_clips, output_ids)
-    graph_nodes = await target_graph_nodes(db, include_clips, output_ids)
     shared = await shared_storage_keys(db, output_ids)
     keys = sorted({key for output in doomed for key in output_files(output) if key not in shared})
     return CleanupPlan(
         include_clips=include_clips,
         output_ids=sorted(output_ids),
         step_ids=[str(step.id) for step in steps],
-        graph_node_ids=[str(node.id) for node in graph_nodes],
         storage_keys=keys,
         preserved_output_ids=[str(output.id) for output in preserved],
         external_publications=[{
@@ -233,7 +218,6 @@ async def print_plan(db: AsyncSession, plan: CleanupPlan) -> None:
     print(f"scope: {'copy + Film + legacy Clip' if plan.include_clips else 'copy + Film + quote derivatives'}")
     print(f"outputs: {len(plan.output_ids)}")
     print(f"run/render steps: {len(plan.step_ids)}")
-    print(f"graph nodes: {len(plan.graph_node_ids)}")
     print(f"storage objects: {len(plan.storage_keys)}")
     print(f"preserved shared Outputs: {len(plan.preserved_output_ids)}")
     if plan.output_ids:
@@ -249,7 +233,6 @@ async def print_plan(db: AsyncSession, plan: CleanupPlan) -> None:
 async def apply_plan(db: AsyncSession, plan: CleanupPlan, *, cancel_queued: bool) -> None:
     output_uuids = [uuid.UUID(item) for item in plan.output_ids]
     step_uuids = [uuid.UUID(item) for item in plan.step_ids]
-    graph_uuids = [uuid.UUID(item) for item in plan.graph_node_ids]
     active = list((await db.execute(select(WorkflowStep).where(
         WorkflowStep.status.in_(["pending", "running", "waiting"]),
         WorkflowStep.kind.in_(RETIRED_TASKS if plan.include_clips else COPY_TASKS),
@@ -274,8 +257,6 @@ async def apply_plan(db: AsyncSession, plan: CleanupPlan, *, cancel_queued: bool
     runs = list((await db.execute(select(WorkflowRun))).scalars().all())
     for run in runs:
         run.context = scrub(run.context, output_ids)
-    if graph_uuids:
-        await db.execute(delete(GraphNode).where(GraphNode.id.in_(graph_uuids)))
     if output_uuids:
         if await db.scalar(text("SELECT to_regclass('public.operations')")):
             await db.execute(text("DELETE FROM operations WHERE output_id = ANY(:ids)"), {"ids": output_uuids})

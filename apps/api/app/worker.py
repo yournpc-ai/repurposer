@@ -245,13 +245,6 @@ async def run_worker() -> None:
         await reap_stale_publications(db)
         await reap_stale_alignments(db)
     await finalize_stuck_runs()
-    from app.chat.editor_recovery import recover_media_receipts, resume_finished_media
-
-    async with AsyncSessionLocal() as db:
-        await recover_media_receipts(db)
-        await db.commit()
-        await resume_finished_media(db)
-
     while True:
         try:
             did_work = await _tick()

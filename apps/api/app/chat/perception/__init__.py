@@ -37,7 +37,6 @@ from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.chat.perception import executes
 from app.chat.perception.executes import (
     GetAssetParams,
-    GetNodeParams,
     GetSegmentParams,
     GetWebPageParams,
     ListProjectMediaParams,
@@ -78,15 +77,6 @@ _OUTPUT_SPEC_DESCRIPTION = (
 PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
     entry.name: entry
     for entry in [
-        PerceptionTool(
-            name="get_node",
-            description=(
-                "读取一个图节点当前的完整程序、状态、产物和下游节点。上下文的 Graph 部分会截断长程序，通过 edit_graph 修订节点前一定先读全文。"
-            ),
-            params_model=GetNodeParams,
-            execute=executes.get_node,
-            activity_key="chat.inspecting.node",
-        ),
         PerceptionTool(
             name="get_understanding",
             description=(
@@ -131,15 +121,6 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             params_model=None,
             execute=executes.get_pending_plan,
             activity_key="chat.inspecting.pendingPlan",
-        ),
-        PerceptionTool(
-            name="get_graph",
-            description=(
-                "需要谈论用户当前所见时，按画布视觉顺序读取各节点状态和标签。方案展示后、运行前用户已可见工作区。"
-            ),
-            params_model=None,
-            execute=executes.get_graph,
-            activity_key="chat.inspecting.graph",
         ),
         PerceptionTool(
             name="search_transcript",

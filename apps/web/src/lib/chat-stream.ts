@@ -62,7 +62,6 @@ export interface ChatTurnBody {
   persona_id?: string
   surface?: "chat"
   /** The Studio Thread always sends false. */
-  canvas_available?: boolean
   prior_intent?: unknown
 }
 

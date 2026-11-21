@@ -318,95 +318,6 @@ class WorkflowStep(Base):
     )
 
 
-class GraphNode(Base):
-    """One node of the project's persistent canvas graph (ADR-057).
-
-    The graph IS the product object: a project = one persistent, mutable
-    graph (a forest — islands are legal), built and revised by the wiring
-    layer (``pipeline/graph_store.apply_wiring_ops``, the ONLY writer), with
-    chat as its only consumer surface. ``type`` is the node's family word
-    (词表 v3, ADR-076 — renamed from ``kind`` in C5b to end the
-    step.kind double meaning): the five medium values text | table | image
-    | video | audio, plus the two server-internal birth words asset |
-    document. ``state`` is the orthogonal lifecycle dimension — draft |
-    queued | running | done | failed | skipped | stale. ``spec`` is the
-    node's program: prompt / params / the estimate fold of its internal
-    workflow / the produced ``output_id`` back-reference / the internal
-    step keys (steps stay step-grained inside the node — composition, not
-    projection). ``layout`` is the settled canvas frame (append-only:
-    assigned once at add_node, existing nodes never move). Execution
-    semantics (workflow_steps / NodeBase / queue / hold→capture→release)
-    are untouched by this table.
-    """
-
-    __tablename__ = "graph_nodes"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    type = Column(String(20), nullable=False)
-    state = Column(String(20), nullable=False, default="draft")
-    spec = Column(JSONB, nullable=False, default=dict)
-    # {x, y, w, h} — the settled canvas frame, assigned once at birth.
-    layout = Column(JSONB, nullable=False, default=dict)
-    # R24 journey attribution (ADR-088 §10): exploration artifacts carry the
-    # owning journey's id; execution-family nodes stay NULL. An attribution
-    # property, never a graph edge.
-    # Layout island membership (Workspace 合同 v4.2 C6, 2026-09-26 封板):
-    # the sibling group's island row + the member's sequence within it
-    # (column = seq // island.cols-per-column capacity, row = seq % cap).
-    # NULL = no island — singleton births and pre-C6 rows keep the depth
-    # column's plain stacking law. The island's bounding block is frozen at
-    # the group's birth; membership is stamped once, never re-seated.
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
-
-
-class GraphEdge(Base):
-    """One typed context/data-flow edge of the persistent graph (ADR-057).
-
-    An edge is a typed flow (video | audio | text | ctx — ctx renders
-    dashed), NOT an execution-order decoration: execution order inside a run
-    stays on workflow_steps.inputs. ``from_port`` / ``to_port`` name the
-    endpoint ports (the port law: in = the consuming region's bottom-left,
-    out = the producing region's top-right; same-side ports stack from the
-    corner). Node deletion cascades its edges structurally.
-    """
-
-    __tablename__ = "graph_edges"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    project_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    from_node = Column(
-        UUID(as_uuid=True),
-        ForeignKey("graph_nodes.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    from_port = Column(String(40), nullable=False, default="out")
-    to_node = Column(
-        UUID(as_uuid=True),
-        ForeignKey("graph_nodes.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    to_port = Column(String(40), nullable=False, default="in")
-    edge_type = Column(String(10), nullable=False, default="text")
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-
-    __table_args__ = (
-        Index("ix_graph_edges_from", "from_node"),
-        Index("ix_graph_edges_to", "to_node"),
-    )
-
-
 class SourceSnapshot(Base):
     """One immutable capture of an asset's content (ADR-145, VIDEO_PROJECT §9).
 
@@ -720,13 +631,6 @@ class Conversation(Base):
     # Stamped from Accept-Language for worker-born speech and deterministic
     # chrome; plan/chat infer speech from user messages and history instead.
     ui_language = Column(String(10), nullable=True)
-    # 环境能力位 owner (ADR-118 §6 — ui_language 同律座): the client's raw
-    # can-host-canvas read, stamped from the chat request every user turn
-    # (last-wins) — the ONE environment fact the worker-born delivery turn
-    # inherits for canvas_visible (app/chat/canvas_visibility.py). NULL =
-    # never reported → the Environment line is omitted and the handoff
-    # gate stays closed.
-    canvas_available = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 

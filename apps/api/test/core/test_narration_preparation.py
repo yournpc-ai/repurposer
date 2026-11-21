@@ -142,19 +142,18 @@ async def test_scene_audio_freezes_and_yields_measured_playback_without_system_f
 
 
 @pytest.mark.asyncio
-async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_history(database, monkeypatch):
+async def test_measured_score_has_playable_receipt_across_cache_and_history(database, monkeypatch):
     from importlib import import_module
 
     from app.chat.service import _create_message
     from app.editing.schemas import speech_text_digest
     from app.editing.timing import SOURCE_TIMEBASE as ticks
     from app.models.schemas import ChatMessageResponse, canonical_json_hash
-    from app.models.tables import Conversation, Message, WorkflowRun
+    from app.models.tables import Conversation, Message
     from app.providers import storage
     from app.tools.music.score import ScoreSpecDraft
     from app.tools.video import music_preparation as music
-    from app.chat.editor_media import settle_media_receipt
-    from app.models.schemas import WorkflowStatus
+    from app.chat.editor_media import _record_audio
     from app.tools.video.narration_draft import reproject_narration_timing
     from test.core.test_narration_timing import spoken_draft
 
@@ -194,17 +193,12 @@ async def test_measured_score_has_one_playable_receipt_across_cache_worker_and_h
                 "candidate_digest": reference["draft_digest"],
             }}],
         })
-        run = WorkflowRun(project_id=project.id)
-        db.add_all([conversation, run])
+        db.add(conversation)
         await db.commit()
         opening = await _create_message(db, conversation.id, "user", "帮我做一支宣传片")
         receipt = await _create_message(db, conversation.id, "assistant", "", turn_id=opening.id,
-                                        intent={"editor_media": str(uuid4())}, workflow_run_id=run.id)
-        run.status = WorkflowStatus.COMPLETED
-        run.context = {"music_preparation": {"request": request, "result": result}}
-        await db.commit()
-        first = await settle_media_receipt(db, project, run)
-        assert (await settle_media_receipt(db, project, run)).id == first.id
+                                        intent={"editor_media": str(uuid4())})
+        first = await _record_audio(db, project, receipt, result, request)
         await db.commit()
     async with database() as db:
         row = await db.get(Message, receipt.id)

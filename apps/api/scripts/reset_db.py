@@ -88,9 +88,6 @@ PROTECTED_PREFIXES = ("demo/", "music/")
 # indirectly, so the drift report should not flag them as "not wiped".
 CASCADE_COVERED = {
     "workflow_steps",  # workflow_runs.run_id ondelete=CASCADE
-    # graph_edges cascade with graph_nodes, both with projects (ADR-057).
-    "graph_nodes",
-    "graph_edges",
     # The remaining project-scoped rows cascade when projects are wiped.
     "page_readings",
     "journeys",

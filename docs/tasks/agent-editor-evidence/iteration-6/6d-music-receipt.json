@@ -1,0 +1,130 @@
+{
+  "migration": [
+    "rep_6d_qmopb4",
+    null,
+    null
+  ],
+  "provider": "minimax",
+  "model": "MiniMax-M3.1-Flash",
+  "project_id": "e86d6d55-1c3c-47ca-9a7e-b1431c6dde40",
+  "turn_id": "e18e5f5b-3e2a-4cfc-b203-8a9133965bea",
+  "requests": 2,
+  "tool_schema": {
+    "type": "function",
+    "function": {
+      "name": "generate_music",
+      "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "maximum": 120,
+            "minimum": 0.25,
+            "multipleOf": 0.001,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "style": {
+            "enum": [
+              "light_electronic",
+              "ambient",
+              "driving_electronic"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "bpm": {
+            "default": 100,
+            "maximum": 200,
+            "minimum": 40,
+            "title": "Bpm",
+            "type": "integer"
+          },
+          "name": {
+            "default": "Electronic instrumental",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "style"
+        ],
+        "title": "GenerateMusicArgs",
+        "type": "object"
+      }
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "{\"works\": [], \"referenced_output\": null, \"selected\": null, \"project\": {\"title\": \"6D synthetic music\", \"project_id\": \"e86d6d55-1c3c-47ca-9a7e-b1431c6dde40\", \"user_stated_constraints\": []}, \"assets\": [], \"fixed_media\": [{\"snapshot_id\": \"34051749-ee38-59fc-9659-d0407eb2d0d9\", \"kind\": \"audio\", \"duration_ticks\": 270000, \"title\": \"Ambient 三秒试听\"}], \"available_sources\": [{\"snapshot_id\": \"34051749-ee38-59fc-9659-d0407eb2d0d9\", \"kind\": \"audio\", \"digest\": \"21bf2332d74c325ec2916b602d589c35bd4d8c8d46539abc330ff6a067941aaf\", \"duration_ticks\": 270000, \"title\": \"Ambient 三秒试听\", \"width\": null, \"height\": null, \"origin\": {\"kind\": \"programmatic_score\", \"run_id\": \"86c04117-d81d-5ed9-90b4-a2a2b4bac867\", \"synth_version\": \"numpy-electronic-v1\"}, \"view_id\": null, \"web_snapshot_id\": null}], \"delivery_scope\": \"Save the requested work and report any requested preview. Formal export is outside this request.\"}",
+      "name": "project_evidence"
+    },
+    {
+      "role": "user",
+      "content": "只生成一段三秒的 ambient 配乐供我试听。不要创建或修改视频，不需要导出。"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll generate a 3-second ambient instrumental for you to audition.",
+      "tool_calls": [
+        {
+          "id": "call_ba1f60d5e11345ddb889a871",
+          "type": "function",
+          "function": {
+            "name": "generate_music",
+            "arguments": "{\"duration_seconds\":3,\"style\":\"ambient\",\"bpm\":80,\"name\":\"Ambient 三秒试听\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_ba1f60d5e11345ddb889a871",
+      "name": "generate_music",
+      "content": "{\"peak\": 0.097015380859375, \"role\": \"music\", \"score\": {\"bpm\": {\"den\": 1, \"num\": 80}, \"style\": \"ambient\"}, \"digest\": \"21bf2332d74c325ec2916b602d589c35bd4d8c8d46539abc330ff6a067941aaf\", \"status\": \"available\", \"music_id\": \"921fb7d9-a79f-59f7-8ee1-82cb42d12c1f\", \"cache_hit\": false, \"snapshot_id\": \"34051749-ee38-59fc-9659-d0407eb2d0d9\", \"analysis_digest\": \"32f6675acc59f2f9e2cce0ccd5729d6b612f7c4c3e3f97e6997e7696cf3a2e19\", \"charged_credits\": 0, \"duration_seconds\": 3.0, \"reserved_credits\": 0, \"added_to_composition\": false, \"delivered_to_chat\": true}"
+    }
+  ],
+  "job": {
+    "id": "86c04117-d81d-5ed9-90b4-a2a2b4bac867",
+    "status": "succeeded",
+    "claims": 1,
+    "credits_authorized": 0
+  },
+  "history": {
+    "id": "76c8691d-1f24-4895-a2e8-d561f25da9ba",
+    "seq": 5,
+    "intent": {
+      "media_result": {
+        "peak": 0.097015380859375,
+        "role": "music",
+        "score": {
+          "bpm": {
+            "den": 1,
+            "num": 80
+          },
+          "style": "ambient"
+        },
+        "digest": "21bf2332d74c325ec2916b602d589c35bd4d8c8d46539abc330ff6a067941aaf",
+        "status": "available",
+        "music_id": "921fb7d9-a79f-59f7-8ee1-82cb42d12c1f",
+        "cache_hit": false,
+        "snapshot_id": "34051749-ee38-59fc-9659-d0407eb2d0d9",
+        "analysis_digest": "32f6675acc59f2f9e2cce0ccd5729d6b612f7c4c3e3f97e6997e7696cf3a2e19",
+        "charged_credits": 0,
+        "duration_seconds": 3.0,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      }
+    },
+    "blocks": [
+      "audio_playback"
+    ]
+  },
+  "run_count": 0,
+  "final": "已生成三秒 ambient 配乐《Ambient 三秒试听》，可直接在本对话中试听播放。\n\n- 时长：3.0 秒，80 BPM，ambient 电子器风格\n- 素材标识：snapshot_id 这份素材\n- 峰值电平约 0.097，整体较为安静\n\n按你的要求，未创建或修改任何视频，也未做导出。需要调整长度、速度或风格可以再说。",
+  "final_question": null
+}

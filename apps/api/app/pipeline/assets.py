@@ -70,12 +70,6 @@ async def create_transcript_asset_from_text(
         meta={"content_sha256": hashlib.sha256(payload).hexdigest()},
     )
     db.add(asset)
-    # 上传即落图 (ADR-057 K2): the chat-declared transcript gets its asset
-    # node in the same flush — the graph's asset family stays complete
-    # regardless of which door the asset row came through.
-    from app.pipeline.graph_store import stamp_asset_node  # deferred: import cycle
-
-    await stamp_asset_node(db, project_id, asset)
     await db.flush()
     return asset
 
@@ -128,11 +122,6 @@ async def create_web_page_asset_from_url(
         meta={"capture_url": url, **({"turn_id": str(turn_id)} if turn_id else {})},
     )
     db.add(asset)
-    # 上传即落图 (ADR-057 K2) — same flush, same wiring door as the
-    # transcript promotion.
-    from app.pipeline.graph_store import stamp_asset_node  # deferred: import cycle
-
-    await stamp_asset_node(db, project_id, asset)
     await db.flush()
     return asset
 

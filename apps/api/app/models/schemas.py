@@ -1727,99 +1727,6 @@ class ProposeTasksArgs(BaseModel):
     )
 
 
-class ManualNodeSpec(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    prototype: Literal["manual"]
-    text: str | None = None
-    title: str | None = None
-    prompt: str | None = None
-
-
-class AddManualNodeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["add_node"]
-    id: UUID | None = None
-    type: Literal["text", "table", "image", "video", "audio"]
-    spec: ManualNodeSpec
-    after: list[UUID] = Field(
-        default_factory=list,
-        description="本节点入边的父节点 ID。在本次 edit_graph 调用中一并提交所需的全部连接。",
-    )
-    layout: dict[str, Any] | None = None
-
-
-class ManualEdgeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    from_node: UUID
-    to_node: UUID
-    edge_type: Literal["video", "audio", "text"] | None = None
-    from_port: str | None = None
-    to_port: str | None = None
-
-
-class ConnectManualNodeArgs(ManualEdgeArgs):
-    op: Literal["connect"]
-
-
-class DisconnectManualNodeArgs(ManualEdgeArgs):
-    op: Literal["disconnect"]
-
-
-class EditManualNodeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["edit_prompt"]
-    node: UUID
-    prompt: str
-
-
-class DeleteManualNodeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["delete_node"]
-    node: UUID
-
-
-ManualGraphOp = Annotated[
-    AddManualNodeArgs | ConnectManualNodeArgs | DisconnectManualNodeArgs | EditManualNodeArgs | DeleteManualNodeArgs,
-    Field(discriminator="op"),
-]
-
-
-class EditGraphArgs(BaseModel):
-    """对普通手动画布节点及其有类型的连接进行增删改查。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        if isinstance(data, dict) and any(
-            isinstance(op, dict) and op.get("op") == "run" for op in data.get("ops") or []
-        ):
-            raise ValueError("manual Graph CRUD never starts a Run")
-        return tolerate_null_keys(data, "ops", "name", "pending_disposition", "production_intent")
-
-    ops: list[ManualGraphOp] = Field(
-        default_factory=list,
-        description="add_node 需要 type 和 spec.prototype='manual'；连接需要 from_node/to_node。",
-    )
-
-    @field_validator("ops")
-    @classmethod
-    def _manual_graph_only(cls, ops: list[ManualGraphOp]) -> list[dict]:
-        if any(op.op == "run" for op in ops):
-            raise ValueError("manual Graph CRUD never starts a Run")
-        return [op.model_dump(mode="json", exclude_none=True, exclude_unset=True) for op in ops]
-
-    name: str = ""
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-    production_intent: bool | None = None
-
-
 class ChatAskArgs(BaseModel):
     """对话阶段的 ask_user 参数。与方案阶段使用同一澄清结构，省略 Brief 字段，运行后的提问不回填 Brief。"""
 
@@ -2020,16 +1927,6 @@ class ChatRequest(BaseModel):
     # invitation name that home; "chat"/None stays surface-neutral. A
     # transport fact — never persisted on the message.
     surface: Literal["canvas", "chat"] | None = None
-    # 环境能力位 (ADR-118 §6 双键的客户端一半): the viewport's raw
-    # can-host-canvas read (the width breakpoint — 互指 web 半座
-    # lib/canvasVisibility.ts 的 canvasAvailable), NOT the panel form
-    # (``surface`` keeps that seat). Stamped on the conversation every user
-    # turn (last-wins, ui_language owner 同律) so the worker-born delivery
-    # turn inherits the last known environment; never persisted on the
-    # message. None = not reported → the context's Environment line is
-    # omitted and the handoff-sentence gate stays closed (未知恒闭, 永不编
-    # 造).
-    canvas_available: bool | None = None
     # RETIRED (Phase 4 B7 / ADR-087 R9, D1): the autonomy tier is gone —
     # every run is an autonomous continuation. The field stays so old
     # clients keep passing it without a 422 (extra="forbid"); the value is
@@ -3485,34 +3382,6 @@ class ProjectAssetStatus(BaseModel):
     processing_error: str | None = None
 
 
-class GraphNodeResponse(BaseModel):
-    """One source-asset or ordinary manual Canvas node."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    type: Literal["text", "table", "image", "video", "audio"]
-    state: Literal["draft", "done"]
-    spec: dict = Field(default_factory=dict)
-    layout: dict = Field(default_factory=dict)
-    asset: AssetResponse | None = None
-    created_at: datetime
-    updated_at: datetime | None = None
-
-
-class GraphEdgeResponse(BaseModel):
-    """One typed flow of the persistent graph (ADR-057 port law)."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    from_node: UUID
-    from_port: str | None = None
-    to_node: UUID
-    to_port: str | None = None
-    edge_type: str
-
-
 class LifecycleStamp(BaseModel):
     """The server-named lifecycle projection (ADR-087 §2, Phase 1) — one
     truth, many readers. The four CONFIRMATION_READY conjuncts are
@@ -3531,15 +3400,6 @@ class LifecycleStamp(BaseModel):
     confirmation_ready: bool
     blockers: list[str] = Field(default_factory=list)
     charge: dict = Field(default_factory=dict)
-
-
-class ProjectGraphResponse(BaseModel):
-    """The project graph's one read frame — nodes + edges + joined display
-    rows, everything the canvas renders, in one fetch."""
-
-    nodes: list[GraphNodeResponse] = Field(default_factory=list)
-    edges: list[GraphEdgeResponse] = Field(default_factory=list)
-    lifecycle: LifecycleStamp | None = None
 
 
 class ProjectResultsResponse(BaseModel):

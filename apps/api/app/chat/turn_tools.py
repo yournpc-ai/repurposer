@@ -32,7 +32,6 @@ from app.models.schemas import (
     AnnotateNarrationArgs,
     ChatAnswerArgs,
     ChatAskArgs,
-    EditGraphArgs,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
@@ -434,16 +433,6 @@ PLAN_TOOLS = [
         params_model=PlanAskArgs,
     ),
     ChatTool(
-        name="edit_graph",
-        description=(
-            "仅在用户明确打开的手动 Canvas 中增删改查。所有相关操作必须在一次终结调用中提交：同次创建并连接节点（新节点用 add_node.after，或用 connect 操作）。按要求编辑、断连和删除。不会添加任务或成品投影、启动 Run 或打开 Canvas。"
-        ),
-        params_model=EditGraphArgs,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.edit", done_key="chat.activity.editDone",
-        ),
-    ),
-    ChatTool(
         name="start_run",
         description=(
             "启动已确认方案的 Run。只有用户确认了已展示的方案才调用，例如在确认阶段表示“没问题，开始吧”。若是要求修改，调用 present_plan。"
@@ -472,16 +461,6 @@ CHAT_TOOLS = [
         params_model=ProposeTasksArgs,
         presentation=ToolPresentation(
             kind="draft", active_key="chat.activity.draft", done_key="chat.activity.draftDone",
-        ),
-    ),
-    ChatTool(
-        name="edit_graph",
-        description=(
-            "仅在用户明确打开的手动 Canvas 中增删改查。所有相关操作必须在一次终结调用中提交：同次创建并连接节点（新节点用 add_node.after，或用 connect 操作）。按要求编辑、断连和删除。不会添加任务或成品投影、启动 Run 或打开 Canvas。"
-        ),
-        params_model=EditGraphArgs,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.edit", done_key="chat.activity.editDone",
         ),
     ),
     # Production and recovery use the current Composition and Run contracts.
@@ -518,14 +497,14 @@ CHAT_TOOLS = [
 PLAN_READ_TOOLS = [
     *perception_chat_tools(
         "get_understanding", "get_asset", "search_music", "search_transcript",
-        "get_segment", "get_graph", "get_node", "get_web_page", "search_web", "list_project_media",
+        "get_segment", "get_web_page", "search_web", "list_project_media",
     ),
     *_video_project_tools(),
 ]
 CHAT_READ_TOOLS = [
     *perception_chat_tools(
         "get_understanding", "get_run_status", "list_runs", "get_pending_plan",
-        "get_asset", "search_music", "search_transcript", "get_segment", "get_graph",
+        "get_asset", "search_music", "search_transcript", "get_segment",
         "get_web_page", "search_web", "list_project_media",
     ),
     *_video_project_tools(),

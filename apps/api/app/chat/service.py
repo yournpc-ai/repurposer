@@ -2363,7 +2363,7 @@ async def answer_question(
             # Use the SSE activity writer's transaction throughout the continuation.
             # A worker that already claimed this opening will finish it for history.
             owns_continuation = await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id))))
-            execution = await wait_for_media_result(project, execution)
+            execution = await wait_for_media_result(execution)
             if on_row_append:
                 await on_row_append(execution)
             if owns_continuation:
@@ -2901,14 +2901,6 @@ async def prepare_chat_turn(
     _ui = current_ui_language()
     if _ui:
         conversation.ui_language = _ui
-    # 环境能力位盖章 (ADR-118 §6 — ui_language owner 同律座): the request's
-    # raw can-host-canvas bit is the conversation's ONE environment fact —
-    # the worker-born delivery turn (run_trigger_turn) inherits it for
-    # canvas_visible (app/chat/canvas_visibility.py). None-safe, last-wins:
-    # an unreporting client never erases the known bit.
-    if request.canvas_available is not None:
-        conversation.canvas_available = request.canvas_available
-
     from app.skills.resolution import SkillResolutionError, resolve_chat_skill
     from app.skills.store import SkillNotFoundError
 
@@ -3449,7 +3441,7 @@ async def stop_turn_at_visible_frontier(
     await discard_turn_context(db, row.conversation_id, user_message_id)
 
     media_rows = {m.id for m in assistant_rows if (m.intent or {}).get("editor_media")
-                 and (m.workflow_run_id or (m.intent or {}).get("media_job") or (m.intent or {}).get("export_job") or (m.intent or {}).get("media_result"))}
+                 and ((m.intent or {}).get("media_job") or (m.intent or {}).get("export_job") or (m.intent or {}).get("media_result"))}
     for m in assistant_rows:
         permission = (m.intent or {}).get("media_permission")
         if permission and (m.intent.get("media_receipt_id") or permission.get("recovery_quote")):
@@ -3459,7 +3451,6 @@ async def stop_turn_at_visible_frontier(
                 m.intent = {**m.intent, "media_result": {"status": "cancelled"}}
     deliveries = {m.id for m in assistant_rows if (m.intent or {}).get("reviewed_version") and (m.intent or {}).get("output_refs")}
     if media_rows:
-        from app.pipeline.orchestrator import cancel_run
         project_id = await db.scalar(select(Conversation.project_id).where(Conversation.id == row.conversation_id))
         project = await db.get(Project, project_id, with_for_update=True)
         for message_id in media_rows:
@@ -3469,11 +3460,6 @@ async def stop_turn_at_visible_frontier(
             if job_id := (by_id[message_id].intent or {}).get("media_job"):
                 from app.pipeline.media_jobs import cancel_media
                 await cancel_media(db, project, UUID(job_id))
-            run_id = by_id[message_id].workflow_run_id
-            if run_id is not None:
-                run = await db.get(WorkflowRun, run_id, with_for_update=True, populate_existing=True)
-                if run and run.project_id == project.id:
-                    await cancel_run(db, run, project)
     members = {m.id for m in assistant_rows if ((m.intent or {}).get("frame") or {}).get("group_id")}
     committed = bool(members) or bool((row.intent or {}).get("editor_commits")) or bool(media_rows or deliveries)
     if not committed and not visible_prose and not visible_activity and not visible_structure:

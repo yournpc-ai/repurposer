@@ -674,18 +674,6 @@ async def run_trigger_turn(
         logger.warning("trigger_turn_rejected_off_whitelist", trigger=trigger)
         return None
     try:
-        if trigger in (TRIGGER_RUN_COMPLETED, TRIGGER_RUN_FAILED):
-            async with AsyncSessionLocal() as db:
-                run = await db.get(WorkflowRun, run_id_from_trigger_ref(ref))
-                if run and run.project_id == project_id and (run.context or {}).get("editor_media"):
-                    from app.chat.editor_media import continue_media_turn, settle_media_receipt
-
-                    project = await db.get(Project, project_id)
-                    receipt = await settle_media_receipt(db, project, run)
-                    await db.commit()
-                    if receipt is not None:
-                        return await continue_media_turn(db, project, receipt)
-                    return None
         # The admission gate (交互完整性批 B): never overtake an in-flight
         # user turn — defer in bounded cycles, drop into silence at the
         # bound. Inside the try: the fire-and-forget doctrine covers the
@@ -756,7 +744,6 @@ async def run_trigger_turn(
                 # (last-wins, prepare_chat_turn 的 ui_language 同律座);
                 # None = never reported → Environment line omitted, the
                 # handoff gate stays closed (未知恒闭, 永不编造).
-                canvas_available=conversation.canvas_available,
             )
             speech_language = conversation_speech_language(history)
             language = speech_language or _trigger_language(run, history, conversation)

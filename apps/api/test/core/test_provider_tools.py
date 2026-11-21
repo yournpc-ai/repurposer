@@ -699,7 +699,7 @@ def _composition_resource(*, suffix="one", provenance=None):
 def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=False,
                  package_sessions=None, user_text="review the draft", pending_question=None,
                  active_repair=None, mode="plan", iteration=None, interim_prose_count=0,
-                 new_result=False, version_saved=False):
+                 new_result=False, version_saved=False, new_result_tool=None):
     from app.chat.prompts import assemble_video_round
 
     return assemble_video_round({
@@ -717,6 +717,7 @@ def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=Fal
         "iteration": iteration,
         "interim_prose_count": interim_prose_count,
         "new_result": new_result,
+        "new_result_tool": new_result_tool,
     })
 
 
@@ -1098,6 +1099,12 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
         projected = _video_round(intent_router.tools, snapshot=ContextSnapshot("empty"), iteration=iteration)
         assert projected.stream_prose
         assert "speech_rule" not in projected.context
+
+    media = _video_round(
+        intent_router.tools, snapshot=ContextSnapshot("empty"),
+        user_text="Make a three-second ambient score only", new_result_tool="generate_music",
+    )
+    assert media.project_reply is not None and media.missing_tool_feedback is None
 
     saved = _composition_resource()
     edit = _video_round(
