@@ -207,7 +207,7 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
     async def no_model_follow_up(*args, **kwargs):
         assert kwargs["group_answer_submitted"]
         continuations.append(conversation_messages(kwargs["recent"]))
-        return None, None, None, []
+        return None, None
 
     monkeypatch.setattr("app.chat.service._plan_turn", no_model_follow_up)
     async with database() as db:
@@ -278,7 +278,7 @@ async def _answer_group_bail(database, monkeypatch, answers):
 
     async def no_model_follow_up(*args, **kwargs):
         assert not kwargs.get("group_answer_submitted")
-        return None, None, None, []
+        return None, None
 
     monkeypatch.setattr("app.chat.service._plan_turn", no_model_follow_up)
     from app.models.schemas import BailAnswerRequest
@@ -497,7 +497,7 @@ async def test_website_question_repair_keeps_the_editors_invitation(monkeypatch)
     )
     turn.text = pending.prompt
     monkeypatch.setattr(turn, "_absorb", AsyncMock(return_value=Brief()))
-    dock = AsyncMock(return_value=(Message(id=uuid4()), []))
+    dock = AsyncMock(return_value=Message(id=uuid4()))
     monkeypatch.setattr(plan_turn, "_dock_question", dock)
 
     form = website_question_arguments()

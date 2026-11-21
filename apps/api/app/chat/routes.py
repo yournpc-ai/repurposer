@@ -77,13 +77,6 @@ from app.ui_locale import current_ui_language
 
 logger = structlog.get_logger()
 
-# The trigger-turn agent (T3, ADR-077 判词③) takes no calls HERE either —
-# the pipeline's two whitelist seats (warm understanding / run finalized)
-# fire it. Importing the module registers "trigger_turn" in AGENTS at
-# startup (the service.py precedent for the two chat agents), so a broken
-# import fails the boot, never a mid-run first fire.
-from app.chat import trigger_turn as _trigger_turn  # noqa: F401
-
 chat_router = APIRouter()
 
 
@@ -1445,7 +1438,6 @@ async def regenerate_output(
     )
 
     return {
-        "run_id": str(result.run_id) if result.run_id else None,
         # assistant_message is None only on the material-pending suppression
         # path — unreachable here (a regenerate turn carries no fresh
         # uploads), guarded for the Optional contract.

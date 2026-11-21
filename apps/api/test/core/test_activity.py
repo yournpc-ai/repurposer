@@ -242,9 +242,8 @@ def test_all_chat_tool_registries_declare_a_presentation():
     from app.agents.candidate_correction import correction_tool
     from app.chat.conversation_context import conversation_context_tool
     from app.chat.intent import intent_router
-    from app.chat.trigger_turn import delivery_agent, trigger_agent
 
-    tools = [t for agent in (intent_router, trigger_agent, delivery_agent) for t in agent.tools]
+    tools = intent_router.tools
     for tool in [*tools, conversation_context_tool(), correction_tool()]:
         assert tool.presentation is not None, tool.name
         assert tool.presentation.kind == "native" or tool.presentation.active_key, tool.name

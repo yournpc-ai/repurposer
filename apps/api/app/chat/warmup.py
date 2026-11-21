@@ -30,9 +30,8 @@ def _chat_agents() -> list[ToolLoopAgent]:
     app.main's lifespan — the agents' modules must not load earlier than
     they already do)."""
     from app.chat.intent import intent_router
-    from app.chat.trigger_turn import trigger_agent
 
-    return [intent_router, trigger_agent]
+    return [intent_router]
 
 
 async def warm_chat_prefixes() -> None:

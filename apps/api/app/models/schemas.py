@@ -1961,7 +1961,6 @@ class ChatResponse(BaseModel):
     # speaks next, so the stale promise never lands). SSE clients close the
     # preview bubble and wait for the review.
     assistant_message: ChatMessageResponse | None = None
-    run_id: UUID | None = None
     answered_question: ChatMessageResponse | None = None
 
 

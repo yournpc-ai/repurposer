@@ -382,11 +382,3 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
 
 def intent_router_system() -> str:
     return chat_system("plan")
-
-
-def trigger_system() -> str:
-    return chat_system("event")
-
-
-def delivery_system() -> str:
-    return chat_system("delivery")

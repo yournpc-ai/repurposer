@@ -129,7 +129,6 @@ import {
   planEnvelopePacing,
   spliceAnswerEnvelope,
 } from "./answerSettlement"
-import { shouldPaceStartEnvelopeProse } from "./startSettlement"
 import {
   buildRecoveredActivityRow,
   buildRecoveredProseMessage,
@@ -2045,8 +2044,7 @@ export function AgentThread({
    * chat-dispatch turn never touches the dock's plan state; the next
    * refinement plan must not retitle an archived receipt). Null = fall back
    * to the live plan's title (plan-confirm starts are fresh by construction). */
-  const [runTitleOverride, setRunTitleOverride] = useState<string | null>(null)
-  const runTitle = runTitleOverride ?? planSummary
+  const runTitle = planSummary
 
   /** Land the user-level shortfall as the in-flow grey row (BILLING §7 — the
    * 422's typed form, never a toast): the meta:"error" seat turn.failed
@@ -2667,7 +2665,6 @@ export function AgentThread({
       const data = await streamChat<{
         user_message: QuestionMessage
         assistant_message: QuestionMessage | null
-        run_id: string | null
         answered_question?: QuestionMessage | null
       }>(
         {
@@ -2829,78 +2826,6 @@ export function AgentThread({
       // reachable in ANY project, not just an empty one) — always refresh
       // the prompt attachments after a turn.
       void fetchAssets()
-      if (data.run_id && data.assistant_message != null) {
-        if (preparationTool(data.assistant_message)) {
-          setMessages((prev) => prev.filter((m) => m.id !== streamId))
-          await pacePersistedMessage(data.assistant_message)
-          if (ownsTurn()) landOnStartedRun(data.run_id)
-          return
-        }
-        // G-1: the prose confirmation answered the docked task plan
-        // server-side (kind=start) and the run is live. NO QA archive on
-        // ANY start path (2026-09-05 用户拍板): the AnsweredQuestion block
-        // is the option-choice UI — a task_book start (chat text or pill)
-        // is a gesture, not a Q&A. The record = echo 散文 + this user
-        // message + the run receipt line.
-        //
-        // The runId stamp is the run↔message association (ADR-058): the
-        // birthing echo carries it so the detached-run archive (inline
-        // RunCard) and the replay's association stay truthful — the
-        // receipt's anchor no longer reads it (2026-09-13 时序拍板: the
-        // receipt tombstones at the run's END, which postdates every
-        // birthing row by construction).
-        if (segments.streamedAny) {
-          // A read-tool turn's echo may EXTEND the streamed prefix (the
-          // loop's accumulated speech): pace the unseen tail BEFORE the run
-          // lands — the same law as the zero-delta start's paceSettledProse.
-          await paceUnstreamedTail(data.assistant_message.content ?? "")
-          // 信封永远赢 (ADR-093 §1): the content truth replaces the preview
-          // too — the start path is no exception (same-value on the happy
-          // path, the envelope's prose wins after a rejected iteration).
-          finalizePreview(
-            data.assistant_message.content ?? undefined,
-            data.run_id,
-            data.assistant_message.seq,
-            data.assistant_message.id,
-          )
-        } else {
-          // Zero-delta start: the settled speech still paces BEFORE the run
-          // lands. An answered plan row suppresses that pacing ONLY when its
-          // exact echo is already visible — the ordinary start of an earlier
-          // dock. A plan born and auto-started in THIS turn has no such echo
-          // yet; its first presentation must not be mistaken for a duplicate.
-          if (
-            shouldPaceStartEnvelopeProse({
-              content: data.assistant_message.content ?? "",
-              assistantMessageId: data.assistant_message.id,
-              answeredQuestionId: data.answered_question?.id,
-              messages: messagesRef.current,
-            })
-          ) {
-            await paceSettledProse(
-              data.assistant_message.content ?? "",
-              data.run_id,
-              data.assistant_message.seq,
-              data.assistant_message.id,
-            )
-          } else {
-            setMessages((prev) => prev.filter((m) => m.id !== streamId))
-          }
-        }
-        if (!ownsTurn()) return
-        // The receipt titles the RUN by its birthing proposal (ADR-058):
-        // the answered plan row carries the fresh intent server-side — its
-        // LLM name leads, the chain label falls back. The dock's own intent
-        // state is NOT touched (a chat-dispatch turn is not a plan edit).
-        const birthIntent =
-          data.answered_question?.intent ?? data.assistant_message.intent
-        if (birthIntent) {
-          const birthTitle = titleOf(normalizeIntent(birthIntent))
-          if (birthTitle) setRunTitleOverride(birthTitle)
-        }
-        landOnStartedRun(data.run_id)
-        return
-      }
       // This very text settled a pending question server-side — the
       // deterministic autoResume option hit, or the judged settlement
       // (插话支持 ADR-053 R2: the slot handshake / pending_disposition) —
@@ -3463,15 +3388,7 @@ export function AgentThread({
           echoCarried: segments.streamedAny,
         })
         if (!ownsTurn()) return
-        // Run-landing parity with sendChat's `data.run_id` seat: a
-        // run-bearing follow-up (the answered question's continuation
-        // started a run server-side) must land the dock on the run surface
-        // too — setRunId attaches the live run channel (RunTaskList's
-        // dynamic row), onRunStarted makes the page refetch the graph so
-        // hasRuns flips and the canvas actually reveals + grows. Without
-        // this the run only appears after a manual refresh and the page
-        // stays stuck in the full (centered-chat) form.
-        if (followUp.workflow_run_id) landOnStartedRun(followUp.workflow_run_id)
+
       }
     } catch (e) {
       terminalAtMs ??= Date.now()

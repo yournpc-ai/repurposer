@@ -56,7 +56,6 @@ from app.models.tables import (
 from app.platform.billing import CreditsInsufficientError
 from app.platform.configs import get_config
 from app.platform.conversation_context import (
-    find_conversation,
     latest_pending_question,
 )
 from app.platform.user_settings import read_confirmation_prefs
@@ -1157,17 +1156,8 @@ def _design_no_progress_text(
 
 async def _settle_open_questions(
     db: AsyncSession, conversation_id: UUID, answer: AnswerPayload
-) -> list[UUID]:
-    """Answer every still-open question in one stroke (e.g. supersede).
-
-    A superseded interrupt question (kind=question carrying workflow_run_id)
-    can never be answered through the dock anymore — cascade-bail its parked
-    run in the same stroke (node done, downstream skipped), so the single-
-    pending invariant never strands a run. Returns the bailed run ids; the
-    caller finalizes them after its commit. Flush-only.
-    """
-    from app.pipeline.orchestrator import bail_waiting_interrupt
-
+) -> None:
+    """Supersede outstanding questions in the conversation transaction."""
     open_questions = list(
         (
             await db.execute(
@@ -1181,22 +1171,8 @@ async def _settle_open_questions(
         .scalars()
         .all()
     )
-    bailed_run_ids: list[UUID] = []
     for message in open_questions:
         message.answer = answer.model_dump(mode="json")
-        if message.workflow_run_id is None:
-            continue
-        # Raw-dict read (no pydantic pass): rows stored before the kind
-        # convergence still spell "choice" — tolerate both spellings on read,
-        # never written.
-        if (message.question or {}).get("kind") not in ("question", "choice"):
-            continue
-        run = await db.get(WorkflowRun, message.workflow_run_id)
-        if run is None:
-            continue
-        if await bail_waiting_interrupt(db, run) is not None:
-            bailed_run_ids.append(UUID(str(run.id)))
-    return bailed_run_ids
 
 
 def _match_option(text: str, options: list[Option]) -> Option | None:
@@ -1232,17 +1208,9 @@ async def _dock_question(
     payload: QuestionPayload,
     intent: dict[str, Any] | None = None,
     blocks: list[dict[str, Any]] | None = None,
-) -> tuple[Message, list[UUID]]:
-    """Raise a new pending question (ask 落库): at most one pending per
-    conversation, so any still-open question retires as superseded first.
-    The agent's speech lives in ``content`` — the framing prose when the ask
-    brings one (ask 三分解剖 ①), else the bare question — entering the LLM
-    context history naturally; the bare question rides the payload's
-    ``question`` field (解剖 ② — dock title, QA archive, reminder tail).
-    Returns the new message plus the run ids whose parked interrupt was
-    cascade-bailed by the supersede (finalized by the caller after its
-    commit)."""
-    bailed_run_ids = await _settle_open_questions(
+) -> Message:
+    """Store the new question after closing any preceding unanswered question."""
+    await _settle_open_questions(
         db,
         conversation_id,
         AnswerPayload(
@@ -1258,66 +1226,7 @@ async def _dock_question(
         intent=intent,
         blocks=blocks,
     )
-    return message, bailed_run_ids
-
-
-async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
-    """Settle runs cascade-bailed by a supersede (COMPLETED, never failed).
-
-    Runs after the caller's commit — maybe_finalize_run reads committed
-    state in its own session."""
-    from app.pipeline.orchestrator import maybe_finalize_run
-
-    for run_id in run_ids:
-        await maybe_finalize_run(run_id)
-
-
-async def dock_interrupt_question(
-    db: AsyncSession,
-    user_id: UUID,
-    project_id: UUID,
-    run_id: UUID,
-    content: str,
-    payload: QuestionPayload,
-) -> tuple[Message, list[UUID]]:
-    """Dock the direction interrupt's question (期 4, raised by the node
-    runner). ``workflow_run_id`` is the dispatch marker: the answer endpoint
-    recognizes a interrupt question by it and resumes the parked run
-    (answer = resume). The single-pending invariant still applies — docking
-    supersedes any open question, and a superseded parked interrupt is
-    cascade-bailed (its run ids come back for the caller to finalize after
-    commit). Flush-only; the caller commits."""
-    conversation = await _get_or_create_project_conversation(db, user_id, project_id)
-    message, bailed_run_ids = await _dock_question(
-        db, UUID(str(conversation.id)), content, payload
-    )
-    message.workflow_run_id = run_id
-    return message, bailed_run_ids
-
-
-async def discard_unanswered_plan(
-    db: AsyncSession,
-    user_id: UUID,
-    project_id: UUID,
-) -> None:
-    """Drop an unanswered task_book question on the ``/generate`` path.
-
-    /generate means the run started WITHOUT the user answering the docked
-    question (retries, targeted runs, direct API callers — the overlay's own
-    Start always goes through ``answer_question``). No question was
-    answered, so the flow must not carry a fabricated answered question — the
-    question row is deleted outright. Genuine confirmations (the dock's
-    Start button, a prose "looks good, start it") go through
-    ``answer_question`` and still collapse into the flow as usual.
-    Flush-only — caller commits.
-    """
-    conversation = await find_conversation(db, user_id, project_id)
-    if conversation is None:
-        return
-    pending = await latest_pending_question(db, UUID(str(conversation.id)))
-    if pending is None or (pending.question or {}).get("kind") != "task_book":
-        return
-    await db.delete(pending)
+    return message
 
 
 def _suggestion_ref_for(message: Message, data: AnswerRequest) -> SuggestionRef | None:
@@ -1353,7 +1262,7 @@ async def _continue_chat_answer(
     on_candidates=None,
     on_row_append=None,
     turn_id: UUID | None = None,
-) -> tuple[Message | None, UUID | None, list[UUID], Any]:
+) -> Message | None:
     """Persist the user decision before continuing the project editor on the same opening."""
     project = await db.get(Project, conversation.project_id)
     say = (
@@ -1386,7 +1295,7 @@ async def _continue_chat_answer(
         await db.refresh(project)
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-    follow_up, run_id, answered, bailed = await _plan_turn(
+    follow_up, _ = await _plan_turn(
         db, user_id, conversation, project,
         ChatRequest(project_id=project.id, message=say, suggestion_ref=suggestion_ref),
         group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
@@ -1395,7 +1304,7 @@ async def _continue_chat_answer(
         on_loop_event=on_loop_event, on_activity=on_activity,
         on_candidates=on_candidates, on_row_append=on_row_append,
     )
-    return follow_up, run_id, bailed, answered
+    return follow_up
 
 
 async def answer_question(
@@ -1486,7 +1395,6 @@ async def answer_question(
     ).model_dump(mode="json")
 
     follow_up: Message | None = None
-    bailed_run_ids: list[UUID] = []
     # 会话层计量 (ADR-117 D3): the continuation branches below are the LLM
     # seats — each binds its own ledger (the elif chain is exclusive) and
     # folds it right there; the row rides this function's own commit.
@@ -1535,7 +1443,7 @@ async def answer_question(
             conversation_id=conversation.id, turn_id=turn_id or message.id,
             project_id=conversation.project_id,
         ) as _usage_bind:
-            follow_up, _run_id, bailed_run_ids, _extra = (
+            follow_up = (
                 await _continue_chat_answer(
                     db,
                     user_id,
@@ -1589,7 +1497,7 @@ async def answer_question(
                 conversation_id=conversation.id, turn_id=turn_id or message.id,
                 project_id=conversation.project_id,
             ) as _usage_bind:
-                follow_up, _run_id, _answered, bailed_run_ids = await _plan_turn(
+                follow_up, _ = await _plan_turn(
                     db,
                     user_id,
                     conversation,
@@ -1621,8 +1529,6 @@ async def answer_question(
             )
 
     await db.commit()
-    if bailed_run_ids:
-        await finalize_bailed_runs(bailed_run_ids)
     await db.refresh(message)
     if follow_up is not None:
         await db.refresh(follow_up)
@@ -1675,7 +1581,7 @@ async def _plan_turn(
     turn_id: UUID | None = None,
     group_answer_submitted: bool = False,
     authorized_media: Message | None = None,
-) -> tuple[Message | None, UUID | None, Message | None, list[UUID]]:
+) -> tuple[Message | None, Message | None]:
     """Plan path (intent-surface-unification W1): build / refine / confirm
     the plan inside the chat loop — the ONLY intent surface.
 
@@ -2424,7 +2330,7 @@ async def execute_chat_turn(
         conversation_id=prepared.conversation_id, turn_id=prepared.user_message.id,
         project_id=prepared.project.id,
     ) as usage:
-        assistant_message, run_id, answered, bailed_run_ids = await _plan_turn(
+        assistant_message, answered = await _plan_turn(
             db, prepared.user_id, prepared.conversation, prepared.project, request,
             skill=prepared.skill, skill_ambiguity=prepared.skill_ambiguity,
             recent=prepared.history, turn_id=prepared.user_message.id,
@@ -2457,7 +2363,6 @@ async def execute_chat_turn(
     turn_row.turn_state = "settled"
     prepared.user_message.turn_state = "settled"
     await db.commit()
-    await finalize_bailed_runs(bailed_run_ids)
     return ChatResponse(
         conversation_id=prepared.conversation_id,
         user_message=ChatMessageResponse.model_validate(prepared.user_message),
@@ -2468,7 +2373,6 @@ async def execute_chat_turn(
             if assistant_message is not None
             else None
         ),
-        run_id=run_id,
         answered_question=(
             ChatMessageResponse.model_validate(prepared.answered_question)
             if prepared.answered_question is not None

@@ -90,7 +90,7 @@ logger = structlog.get_logger()
 # (assistant message, started run id, answered task-book question,
 # cascade-bailed run ids). The assistant message is None when the turn
 # closes without a row (the degrade paths land their own shape).
-PlanTurnOutcome = tuple[Message | None, UUID | None, Message | None, list[UUID]]
+PlanTurnOutcome = tuple[Message | None, Message | None]
 
 
 class PlanTurn:
@@ -1014,7 +1014,7 @@ class PlanTurn:
             brief=params.brief,
             material_text=params.material_text,
         )
-        assistant_message, bailed_run_ids = await _dock_question(
+        assistant_message = await _dock_question(
             self.db,
             self.conversation_id,
             _ask_content(ask, has_dock_options=bool(group_items)),
@@ -1031,7 +1031,7 @@ class PlanTurn:
             ),
             intent=intent.model_dump(mode="json"),
         )
-        self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
+        self.outcome = (assistant_message, self.settled_pending)
         return None
 
 
@@ -1068,7 +1068,7 @@ class PlanTurn:
             prose,
             blocks=blocks,
         )
-        self.outcome = (assistant_message, None, self.settled_pending, [])
+        self.outcome = (assistant_message, self.settled_pending)
         return None
 
     # ---- the outcome mapping -------------------------------------------------
@@ -1103,7 +1103,7 @@ class PlanTurn:
             # A direct video save is real even when its later correction stops.
             # Present those saved facts and attach the normal review receipt.
             await self._stamp_video_presentation(assistant_message)
-            return assistant_message, None, self.settled_pending, []
+            return assistant_message, self.settled_pending
         if result.ended_by is not None:
             # A deterministic refusal ends the loop without another model
             # roll. Video capability facts have their own honest close; the
@@ -1124,7 +1124,7 @@ class PlanTurn:
                 "assistant",
                 content,
             )
-            return assistant_message, None, self.settled_pending, []
+            return assistant_message, self.settled_pending
         if not result.exhausted:
             # The bare final reply (no tool called) — the read-tolerant
             # answer floor: the prose IS the reply.
@@ -1151,7 +1151,7 @@ class PlanTurn:
             # The bare reply IS the presentation when the model closed a
             # design beat without a further call — same association seat.
             await self._stamp_presentation(assistant_message)
-            return assistant_message, None, self.settled_pending, []
+            return assistant_message, self.settled_pending
         # Exhaustion can follow successful reads and failed submissions.
         # A latched begin refusal speaks
         # the busy/conflict line (never the capability refusal — the design
@@ -1200,7 +1200,7 @@ class PlanTurn:
                     default_path=topic_ask["default_path"],
                 ),
             )
-            assistant_message, bailed_run_ids = await _dock_question(
+            assistant_message = await _dock_question(
                 self.db,
                 self.conversation_id,
                 topic_ask["question"],
@@ -1214,14 +1214,14 @@ class PlanTurn:
                 ),
                 intent=topic_intent.model_dump(mode="json"),
             )
-            return assistant_message, None, self.settled_pending, bailed_run_ids
+            return assistant_message, self.settled_pending
         assistant_message = await _create_message(
             self.db,
             self.conversation_id,
             "assistant",
             _loop_incomplete_text(self.text, result),
         )
-        return assistant_message, None, self.settled_pending, []
+        return assistant_message, self.settled_pending
 
 
 async def run_plan_turn(
@@ -1422,7 +1422,7 @@ async def run_plan_turn(
     if (
         outcome[0] is not None
         and turn_id is not None
-        and outcome[0] is not outcome[2]
+        and outcome[0] is not outcome[1]
     ):
         # Every newly-created terminal row shape (plain reply, dock, start
         # speech) carries the opening-user association. A prose-less Start

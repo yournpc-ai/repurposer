@@ -77,7 +77,6 @@ from sqlalchemy import delete, func, select, update  # noqa: E402
 from app.models.database import AsyncSessionLocal  # noqa: E402
 
 
-from app.pipeline.orchestrator import maybe_finalize_run  # noqa: E402
 
 
 from app.models.tables import (  # noqa: E402

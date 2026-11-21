@@ -241,16 +241,13 @@ async def test_measured_score_has_playable_receipt_across_cache_and_history(data
 
 
 def test_loudness_failure_reports_the_audio_stage(monkeypatch, tmp_path):
-    from app.chat.trigger_turn import _run_failed_fallback_speech
 
     monkeypatch.setenv("IMAGEIO_FFMPEG_EXE", str(tmp_path / "unavailable"))
     with pytest.raises(LoudnessAnalysisError) as exc:
         analyze_audio_bytes(_tone_wav(), snapshot_id=str(uuid4()))
     reason = user_error_line(exc.value, "zh")
     assert "响度与真峰值校验失败" in reason
-    assert _run_failed_fallback_speech(
-        [f"FAILED STEP: prepare_narration — {reason}"], "zh", managed_media=True,
-    ) == reason
+
 
 def test_mixed_mp4_with_trailing_index_has_measured_loudness(tmp_path):
     import subprocess

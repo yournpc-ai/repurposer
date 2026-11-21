@@ -476,7 +476,7 @@ async def continue_media_turn(db, project, receipt, **hooks):
         durable, _ = persistent_activity_hooks(db, conversation.id, turn_id)
         hooks.update(durable)
     with bind_conversation_turn(conversation_id=conversation.id, turn_id=turn_id, project_id=project.id) as usage:
-        follow_up, _, _, _ = await _plan_turn(
+        follow_up, _ = await _plan_turn(
             db, project.user_id, conversation, project,
             ChatRequest(project_id=project.id, message=opening.content, mentions=opening.mentions or []),
             recent=await list_conversation_messages(db, conversation.id), turn_id=turn_id,

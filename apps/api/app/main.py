@@ -33,13 +33,6 @@ from app.platform.payment_routes import router as payment_router
 from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
 from app.ui_locale import capture_ui_language
 
-# Composition-root seam wiring (ADR-087 §6): the Agent Interface subscribes
-# to the pipeline's two legal seams (trigger events / conversation bridge).
-# Never inside app.pipeline itself.
-from app.chat.seams import wire_pipeline_seams
-
-wire_pipeline_seams()
-
 logger = logging.getLogger(__name__)
 request_logger = structlog.get_logger("http")
 
