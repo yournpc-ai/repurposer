@@ -2,9 +2,9 @@
 
 ## 提交与验收范围
 
-本次交接的代码 HEAD 为 `8def896d1a64a0b3a81dedbe1108f68e3aed70a0`。该提交包含前端改动、HTTP 回归与展示恢复测试。Job 回执与刷新时 Stop 的基线为 `0d13f1b8`，Stop 与资金裁决为 `117fe2b4e07d8f3f5cbc4da6aa120197509197a0`。核对代码 HEAD 时下表内文件均无未提交修改。
+分镜卡交接的代码 HEAD 为 `8def896d1a64a0b3a81dedbe1108f68e3aed70a0`。该提交包含前端改动、HTTP 回归与展示恢复测试。Job 回执与刷新时 Stop 的基线为 `0d13f1b8`，Stop 与资金裁决为 `117fe2b4e07d8f3f5cbc4da6aa120197509197a0`。核对代码 HEAD 时下表内文件均无未提交修改。
 
-分镜卡展示契约已完成。Chat 整体仍在施工。Web Chat 目录 275 项通过，TypeScript 检查通过。展示 ACK 的隔离 PostgreSQL HTTP 回归 1 项通过。Job Stop 与项目删除的数据库测试 15 项通过，Renderer 测试 14 项通过。StoryBoardCard 在本提交的 Chrome 硬刷新、完整导出下载、多用户混合负载仍未验收。
+分镜卡展示契约已完成。最新 Chat 代码交接基线为 `6d657cb9`，项目详情基线为 `f15c7f46`。旧 Run SSE 与取消 API 都已删除，Chat 执行层的消息类型仍在收口。此时 Editor 的 Chat 文件无未提交修改。Web 374 项、API core 498 项和 TypeScript 通过。独立 API、两个 Worker 与 Chrome 实测按 v2 和 v3 两张成片卡分别播放、硬刷新再播放，实际下载的 SHA-256 与各自固定 Output 一致，视频各 150 帧。十用户混合负载尚未验证。
 
 ## 文件归属
 
@@ -13,11 +13,11 @@
 | 文件 | 状态 | 可修改范围或保留原因 |
 | --- | --- | --- |
 | components/chat/video/StoryboardCard.tsx | RELEASED | 可进行 U3/U4 视觉施工，保留下述版本校验、预览就绪与 ACK |
-| components/chat/AgentThread.tsx | OWNED_BY_EDITOR | 旧 Run 订阅、Stop、刷新轮询、回答与消息调度仍在调整 |
-| components/chat/ChatConversation.tsx | OWNED_BY_EDITOR | 仍接收 Run 展示参数 |
-| lib/runWorkSegment.ts | OWNED_BY_EDITOR | 仍计算旧执行区段 |
-| lib/use-run-events.ts | OWNED_BY_EDITOR | 仍有旧 Run SSE 消费者 |
-| components/chat/RunTaskList.tsx | OWNED_BY_EDITOR | 仍有旧 Run Step 展示 |
+| components/chat/AgentThread.tsx | OWNED_BY_EDITOR | Job 回执恢复与旧消息字段仍在收口 |
+| components/chat/ChatConversation.tsx | OWNED_BY_EDITOR | 已移除 Run 展示参数；旧计划版本展示仍在收口 |
+| lib/runWorkSegment.ts | NOT_APPLICABLE | 已删除 |
+| lib/use-run-events.ts | NOT_APPLICABLE | 文件与 SSE 消费者已删除 |
+| components/chat/RunTaskList.tsx | NOT_APPLICABLE | 文件已删除 |
 | components/chat/ActivityStream.tsx、timeline/activity.ts、timeline/project.ts、timeline/history.ts、timeline/types.ts | OWNED_BY_EDITOR | Activity 与 Tool Group 的持久投影与旧 Run 显示共用这些文件 |
 | components/chat/blocks/ComponentSlot.tsx、timeline/reveal.ts、timeline/reveal.test.ts、ChatConversation.mount.test.tsx（位于 components/chat/） | OWNED_BY_EDITOR | 已移除展示触发 Run 的回调，仍在审查其他 Chat 消费者 |
 | components/ui/、QuestionDock.tsx 的视觉组件 | NOT_APPLICABLE | 本交接不变更 affectUI 已有归属 |
@@ -40,7 +40,7 @@
 
 分镜展示 ACK 已删除 `_auto_start_docked_plan`、返回 `run_id` 与前端 `onRunStarted` 回调。媒体与导出恢复已从原生 Job 回执读取。新资金规则的恢复仲裁仍是原 opening。
 
-`use-run-events.ts`、`RunTaskList.tsx` 和 AgentThread 中的旧 Run 状态在本 HEAD 仍有运行消费者。它们由 Editor 继续退役。affectUI 后续视觉工作应直接采用上表中的消息和领域回执。当前共享 8000 和热重载 Worker 已暂停；启动共享 API 会自动升级原数据库。此交接只释放代码文件。
+GET /runs/{id}/events、POST /runs/{id}/cancel、media_preparation Stop 与旧 Run 恢复触发器均已删除。项目详情直接读取素材的 processing_status、processing_requested_at。正式导出的成功回执和交付消息引用各自的固定 Output。当前共享 8000 和热重载 Worker 已暂停。共享库仍有旧 schema。
 
 以下文件已释放给 affectUI U3/U4 施工；Editor 6D 不再并行修改这些文件。
 
