@@ -154,10 +154,6 @@ async def answer_media_permission(db, project, receipt, approved):
 
 
 async def submit_editor_media(turn, name, args, composition, version, call_id):
-    from app.chat.service import _TURN_ROW_LOCKS_HELD
-
-    if turn.turn_id in _TURN_ROW_LOCKS_HELD.get():
-        raise ValueError("This request is already settling another authorization.")
     if name == "generate_voice":
         from app.chat.editor_create import voice_generation_forbidden
 

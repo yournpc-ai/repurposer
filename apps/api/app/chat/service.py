@@ -1,10 +1,8 @@
 """Project Chat openings, question answers, native editor turns and durable transcript writes."""
 
 import re
-from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from functools import wraps
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -207,30 +205,6 @@ async def _get_or_create_project_conversation(
     return conversation
 
 
-def _resume_ack_line(decided: str, outcome: str) -> str:
-    """The direction-interrupt wake acknowledgment (期 4 + R1 B3 再挂+明示):
-    ``resumed`` = the locked-direction line; ``blocked`` (another run holds
-    the project's execution authority) = the honest parked line — the answer
-    is saved, the run continues once the current generation finishes.
-    Display language follows the request's UI locale (the option label is
-    already localized). Shared by the answer endpoint, the chat autoResume,
-    and the tool-loop disposition wake."""
-    from app.ui_locale import current_ui_language  # deferred: request ctx
-
-    zh = (current_ui_language() or "").startswith("zh")
-    if outcome == "blocked":
-        return (
-            "你的回答已收到——等当前生成完成后，这条会继续。"
-            if zh
-            else "Got your answer — it will continue once the current generation finishes."
-        )
-    return (
-        f"方向已锁定：{decided}。继续生成。"
-        if zh
-        else f"Direction locked: {decided}. Resuming the run."
-    )
-
-
 # interaction_policy_version 戳 (ADR-099 §7, 批次 C·C+ commit 2): every
 # assistant row created through _create_message carries the interaction
 # policy's version in its intent dump — observation & regression ONLY (the
@@ -349,27 +323,6 @@ async def _create_message(
         await db.flush()
     await db.refresh(message)
     return message
-
-
-async def _parked_interrupt_run(
-    db: AsyncSession, run_id: UUID
-) -> WorkflowRun | None:
-    """A run id on a question is only an anchor until a waiting step proves
-    it is a direction interrupt. Trigger suggestions share the same column."""
-    run = await db.get(WorkflowRun, run_id)
-    if run is None:
-        return None
-    parked_step_id = (
-        await db.execute(
-            select(WorkflowStep.id)
-            .where(
-                WorkflowStep.run_id == run.id,
-                WorkflowStep.status == "waiting",
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    return run if parked_step_id is not None else None
 
 
 async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
@@ -1401,132 +1354,6 @@ async def finalize_bailed_runs(run_ids: list[UUID]) -> None:
         await maybe_finalize_run(run_id)
 
 
-def _task_chain_digest(tasks: list) -> str:
-    """The chain's compact digest — fed to the intent router as the presented
-    plan (it revises the WHOLE chain, so it must see every task + param) and
-    used as the summary fallback when no derived preview exists."""
-    labels = []
-    for task in tasks:
-        params = task.params if isinstance(task.params, dict) else {}
-        label = task.tool
-        chips = []
-        lang = params.get("language") or params.get("target_language")
-        if lang:
-            chips.append(str(lang))
-        if params.get("count") is not None:
-            chips.append(f"×{params['count']}")
-        if params.get("bilingual"):
-            chips.append("bilingual")
-        if params.get("aspect"):
-            chips.append(str(params["aspect"]))
-        if chips:
-            label += "(" + ", ".join(chips) + ")"
-        labels.append(label)
-    return ", ".join(labels)
-
-
-async def sync_plan_question(
-    db: AsyncSession,
-    user_id: UUID,
-    project: Project,
-    intent: InferredIntent,
-    prompt: str,
-    reasons: list[str] | None = None,
-    derived: list[dict] | None = None,
-    brief: Brief | None = None,
-    echo: str | None = None,
-    estimate: PlanEstimate | None = None,
-    plans: list[dict] | None = None,
-    need: "ConfirmationNeed | None" = None,
-) -> list[UUID]:
-    """Keep exactly one pending task_book question per project conversation.
-
-    Called by the chat plan path on every inference (first call and
-    refinements alike): a fresh conversation first archives the original
-    prompt, any still-open plan question is retired as superseded, and the
-    new plan becomes the pending question. The needs_clarification
-    ``reasons`` ride in the question's human text (data, localized at render)
-    so the archive and the LLM context record WHY confirmation was asked.
-    ``brief`` (ADR-052 B3) stamps the merged brief into the question payload
-    — the plan card renders the agent's own understanding from it, never a
-    blank form. ``estimate`` (BILLING §7) stamps the chain's credits
-    quotation (total + per-task marginal, the dry-run compile's fold × the
-    live ratio) — the dock pill reads the total, the plan card's task rows
-    the per-task prices; None docks quote-less, never blocked. ``echo`` = the
-    turn's plan-introduction prose (intent.answer,
-    or the stored draft's echo on a code-path re-dock) — since 2026-09-04 it
-    IS the row's ``content`` so the echo survives as a real message entity
-    (live journey pushes it into the flow before docking; the restore replay
-    renders it as the flow line above the answered archive). An empty echo
-    stores empty content (the docked card / plan prose are the question's
-    face, never a machine digest line). Returns the run ids whose parked
-    interrupts were cascade-bailed by the supersede. Flush-only.
-    """
-    conversation = await _get_or_create_project_conversation(
-        db, user_id, UUID(str(project.id))
-    )
-    conversation_id = UUID(str(conversation.id))
-
-    has_messages = (
-        await db.execute(
-            select(Message.id).where(Message.conversation_id == conversation_id).limit(1)
-        )
-    ).scalar_one_or_none()
-    if has_messages is None and prompt:
-        await _create_message(db, conversation_id, "user", prompt)
-
-    # The echo prose IS the question row's content (2026-09-04 echo 实体化):
-    # the answered archive renders confirmQuestion and the flow renders this
-    # prose as its own message — a machine digest ("Plan ready for
-    # confirmation: …") has no seat anywhere anymore.
-    content = (echo or "").strip()
-    # Reason keys ride the question PAYLOAD (data, localized at render) —
-    # never baked into content, which is user-facing prose (the answered
-    # question renders it verbatim). The LLM context line re-appends them (keys are
-    # the agent's vocabulary).
-    # 计划行自完备 (2026-09-08, 方案 B): the chain stamps the row's `intent`
-    # column and the derived preview the payload — the docked row IS the
-    # whole plan card (the B3 brief stamp's precedent: frozen with the row,
-    # re-stamped every dock), and the SSE envelope needs no pending-brief
-    # refetch to render it.
-    # 授权前移 (ADR-117 §4): the confirmation conjunct is computed ONCE here,
-    # at presentation time (prefs + guardrail + the quote fold), and stamped
-    # into the payload — the client's pill predicate and the auto-start
-    # drive both read this stamp, never a re-derivation. A caller that
-    # already computed it (the dock seats, for the echo's held variant)
-    # passes it through — one computation per dock.
-    if need is None:
-        need = await resolve_confirmation_need(db, user_id, estimate)
-    version_notice = None
-    if need.reason == "unmet_condition":
-        version_notice = ("当前版本仍有未落实的修改。可以继续修改，或确认使用当前版本。" if _prefers_zh(prompt) else
-                          "The requested changes are incomplete. You can revise further or confirm the current version.")
-    elif need.reason == "copy_drift":
-        version_notice = ("当前版本的文案与原文有出入。可以恢复原文，或确认使用当前版本。" if _prefers_zh(prompt) else
-                          "The copy differs from the original. You can restore it or confirm the current version.")
-    _message, bailed_run_ids = await _dock_question(
-        db,
-        conversation_id,
-        content,
-        QuestionPayload(
-            kind="task_book",
-            reasons=reasons or [],
-            brief=brief,
-            estimate_credits=estimate,
-            requires_confirmation=need.requires_confirmation,
-            confirm_reason=need.reason,
-            quote_high=need.quote_high,
-            unquotable=need.unquotable,
-            derived=derived or [],            # 决策包阅读层 (iter-2 ③): the Content Plans behind the compiled
-            # chain; empty on the router-drafted docks (读容忍).
-            plans=plans or [],
-        ),
-        intent=intent.model_dump(mode="json"),
-        blocks=[_system_notice(version_notice)] if version_notice else None,
-    )
-    return bailed_run_ids
-
-
 async def dock_interrupt_question(
     db: AsyncSession,
     user_id: UUID,
@@ -1653,74 +1480,6 @@ async def _continue_chat_answer(
     return follow_up, run_id, bailed, answered
 
 
-def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> dict:
-    if (
-        pending is None or pending.creative_state is None
-        or (context or {}).get("version_ref")
-    ):
-        return {}
-    return {"creative_state": pending.creative_state.model_dump(mode="json")}
-
-
-async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instruction,
-                                 confirmation_id, confirmed_via, quote):
-    """Materialize an authorized request and its accounting scope in the caller transaction."""
-    from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
-    from app.tools.video.production import latest_video_approval
-
-    pending = pending or PendingPlan()
-    run = await create_run(
-        db,
-        project,
-        TaskSpec(
-            tasks=tasks,
-            video_authorized_by=await latest_video_approval(db, project),
-            target_language=first_task_language(tasks) or project.language or "en",
-            instruction=instruction or pending.prompt or None,
-            persona_id=str(pending.persona_id) if pending.persona_id else None,
-            scope="full",
-            # Caption mode rides the run context verbatim from
-            # the InferredIntent — the chat path's caption-mode
-            # question stores it on the intent (RECIPES §4.7).
-            # 资产角色 pins (ADR-078 判词④): settled on the
-            # PendingPlan by the role question / the mention,
-            # riding TaskSpec → run.context verbatim. The panel
-            # never edits them (it edits the intent only), so
-            # the stored pending's pins are the confirmed ones.
-            source_asset_id=pending.source_asset_id,
-            exemplar_asset_id=pending.exemplar_asset_id,
-            # The router's fresh naming of the plan (ADR-058) —
-            # the receipt title and completion line read it.
-            name=name or None,
-        ),
-        reuse_video_production=True,
-    )
-    _scope_user = await db.get(User, project.user_id)
-    _scope_execution, _scope_credits = read_confirmation_prefs(
-        _scope_user.settings if _scope_user is not None else None
-    )
-    run.context = {
-        **(run.context or {}),
-        **_creative_run_context(pending, run.context),
-        "confirmed_scope": {
-            "confirmation_id": str(confirmation_id),
-            "confirmed_at": datetime.now(UTC).isoformat(),
-            "confirmed_via": confirmed_via,
-            "compiled_scope": [task.model_dump(mode="json") for task in tasks],
-            "quote": quote,
-            "settings": {
-                "confirm_execution": _scope_execution,
-                "confirm_credits": _scope_credits,
-                "billing.always_confirm_above": await get_config(
-                    db, "billing.always_confirm_above"
-                ),
-            },
-        },
-    }
-    project.status = ProjectStatus.PROCESSING
-    return run
-
-
 async def answer_question(
     db: AsyncSession,
     user_id: UUID,
@@ -1735,86 +1494,14 @@ async def answer_question(
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
-    confirmed_via: str = "dock_pill",
     turn_id: UUID | None = None,
-    defer_start_commit: bool = False,
 ) -> tuple[Message, Message | None]:
-    """Answer a pending question (``POST /chat/messages/{id}/answer``).
-
-    The answer endpoint doubles as the resume mechanism (NAMING: answer =
-    resume). Returns the answered question plus the assistant's follow-up
-    when the answer continues the conversation. Dispatch by question kind:
-    - task_book + bail   → drop the pending brief (project stays a draft;
-                           the plan can be re-inferred from the prompt)
-    - task_book + start  → start the run from the persisted pending brief
-                           (kind "start" is the confirmation — no magic
-                           option id; the edited plan rides only on it)
-    - question + answer  → record, then continue the conversation: the pick
-                           rides into the next intent turn framed with the
-                           answered question's bare text (作答语境帧),
-                           the follow-up reply comes back here.
-                           A brief-ask (payload.slot) backfills the brief
-                           user-stated and resumes the BOOK path
-    - question + bail    → record only (a graceful exit, never a failure) —
-                           except a brief-ask bail, which TAKES the default
-                           path: the plan path resumes and docks the
-                           draft-from-persona plan (提问策略③)
-    A question carrying ``workflow_run_id`` is a direction interrupt
-    (期 4): the answer wakes the parked run (spec.answer → node back to
-    pending → run back to RUNNING); bail settles the node done, cascade-
-    skips the downstream, and the run completes — never failed.
-
-    ``on_delta``/``on_phase`` (answer SSE, 2026-09-04 验收批): the answer's
-    continuation is an LLM turn (a slot answer resumes the BOOK path — the
-    echo prose generates here), so the endpoint streams like POST /chat;
-    these callbacks carry the prose previews / phase labels. None keeps the
-    one-shot JSON behavior the pill-Start path uses (no LLM there).
-
-    ``confirmed_via`` (iter-2 ④, ADR-089 §4 R20): the confirmation channel
-    stamped into the Confirmed Scope Snapshot — "dock_pill" (the typed
-    answer endpoint, the default) or "chat_reply" (the plan path's
-    start_run tool answered in prose, N-57).
-
-    ``defer_start_commit`` is only for a Start nested in a caller-owned Chat
-    Turn. The Run/hold/answer writes flush but do not commit until the outer
-    opening-row Stop fence passes; a worker therefore cannot claim a Run whose
-    Turn was retracted/cancelled. Direct answer endpoints keep the commit here.
-    """
-    if defer_start_commit and data.kind != "start":
-        raise ValueError("defer_start_commit is valid only for task_book Start")
-
-    from app.pipeline.orchestrator import (
-        bail_waiting_interrupt,
-        resume_waiting_interrupt,
-    )
-
-    # A nested Start takes the opening-row fence BEFORE the pending-question
-    # lock. Stop uses the same opening → transcript order, so the two cannot
-    # deadlock; a Stop that arrived first rejects the Start before any Run/hold.
-    # If Start arrived first, its outer commit finishes before Stop can proceed.
-    if defer_start_commit:
-        start_turn_id = turn_id
-        if start_turn_id is None:
-            turn_ref = await db.get(Message, message_id)
-            start_turn_id = turn_ref.turn_id if turn_ref is not None else None
-        if start_turn_id is not None:
-            await _lock_turn_for_transcript_write(db, start_turn_id)
-            # The outer transaction now owns this fence until its one final
-            # commit. Independent transcript sessions in the SAME async turn
-            # must share that ownership instead of waiting on their owner;
-            # Stop arrives in a different context and still takes the lock.
-            _TURN_ROW_LOCKS_HELD.set(
-                _TURN_ROW_LOCKS_HELD.get() | {start_turn_id}
-            )
-
+    """Record one authorized answer and continue the original Chat opening."""
     media_receipt = await db.get(Message, message_id)
     if media_receipt is not None and (media_receipt.intent or {}).get("media_permission"):
         await _lock_turn_for_transcript_write(db, media_receipt.turn_id)
 
-    # Row lock to the request boundary: a double-clicked Start (or retry)
-    # otherwise passes the answer-is-None check concurrently and births two
-    # paid runs off one plan. The second waiter re-reads post-commit and
-    # hits the 409 below.
+    # Serialize decisions on this question. The second writer sees the committed answer.
     message = await db.get(
         Message, message_id, with_for_update=True, populate_existing=True
     )
@@ -1831,39 +1518,12 @@ async def answer_question(
         raise HTTPException(status.HTTP_409_CONFLICT, "Message is not a question")
     question = QuestionPayload.model_validate(message.question)
     if message.answer is not None:
-        # D3 (Phase 4 B6): on the confirmation seat the stale-start blocks
-        # are machine-readable — a superseded task_book is no longer the
-        # current confirmation scope; a re-start is a double gesture.
-        if question.kind == "task_book":
-            if (message.answer or {}).get("text") == "superseded":
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT, {"code": "start.scope_mismatch"}
-                )
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, {"code": "start.already_answered"}
-            )
-        # 普通问题同律 (2026-09-28): a plain question's double-answer is
-        # machine-readable too — the raw English string used to leak into
-        # the global toast. Superseded = a newer question took the floor
-        # (the click raced the re-dock); anything else = a double gesture.
         if (message.answer or {}).get("text") == "superseded":
             raise HTTPException(
                 status.HTTP_409_CONFLICT, {"code": "question.superseded"}
             )
         raise HTTPException(
             status.HTTP_409_CONFLICT, {"code": "question.already_answered"}
-        )
-    # Kind × question-kind contract: a task_book is only ever confirmed
-    # (start) or dropped (bail); start is meaningless on any other question.
-    if question.kind == "task_book" and data.kind not in ("start", "bail"):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "A task_book question accepts kind 'start' or 'bail' only.",
-        )
-    if question.kind != "task_book" and data.kind == "start":
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Kind 'start' is only valid on a task_book question.",
         )
     option_label: str | None = None
     if data.kind == "option":
@@ -1927,7 +1587,7 @@ async def answer_question(
             raise HTTPException(422, "Select Allow or Decline.")
         project = await db.get(Project, conversation.project_id)
         try:
-            execution = await answer_media_permission(db, project, message, data.option_id == "approve" and data.kind == "option")
+            execution = await answer_media_permission(db, project, message, data.kind == "option" and data.option_id == "approve")
         except CreditsInsufficientError as exc:
             raise HTTPException(422, {"code": "credits.insufficient", "balance": exc.balance,
                                       "required": exc.required}) from exc
@@ -1950,173 +1610,6 @@ async def answer_question(
                     on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
                     on_row_append=on_row_append,
                 )
-    elif question.kind == "task_book":
-        # Project row lock (并发护栏, Message → Project order — the message
-        # lock above lands first): a storyboard redesign's BEGIN commits its
-        # in-flight marker in its own mini-transaction; without this lock a
-        # marker landing between the gate facts below and the run birth
-        # would race the Start. The design beat's begin takes the row
-        # NOWAIT, so a Start holding it wins the race (旧 run 有效) and the
-        # loser fails closed on re-read.
-        project = await db.get(
-            Project, conversation.project_id, with_for_update=True
-        )
-        if project is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-        if data.kind == "bail":
-            # Graceful exit: the unconfirmed plan is dropped, the project
-            # stays a draft and the prompt stays in the conversation — the
-            # setup can be reopened any time. Never a failure. The plan's
-            project.pending_brief = None
-        else:
-            # kind == "start" (the only other kind a task_book accepts).
-            pending = (
-                PendingPlan.model_validate(project.pending_brief)
-                if isinstance(project.pending_brief, dict)
-                else None
-            )
-            # The review panel's edited plan wins over the stored
-            # pending brief — panel edits must reach the run they confirm.
-            # Panel edits ARE task-list mutations (ADR-043): the same data
-            # structure the LLM proposes, so the confirmed chain ships
-            # verbatim — no merge machinery.
-            intent = (data.intent or pending.intent) if pending is not None else None
-            tasks = list(intent.tasks) if intent is not None else []
-            # D3 (Phase 4 B6): the Start seat enforces the SAME four-
-            # conjunction lifecycle truth the client reads (门禁三) — "the
-            # button is disabled" is the first line, never the only one.
-            # The structural guards (no pending plan / empty chain) and the
-            # projection verdict (material / adjudication / prerequisite /
-            # active conflicting run) all surface as machine-readable codes
-            # before paid create_run, never as disguised business errors.
-            from app.pipeline.lifecycle import (  # deferred: chat → pipeline
-                evaluate_start_gate,  # only, one-directional
-                project_lifecycle,
-            )
-            from app.ui_locale import current_ui_language  # deferred
-
-            stamp = await project_lifecycle(
-                db,
-                project,
-                pending_question=message,
-                # The branch guarantees task_book — pass the plan flag
-                # directly: the answer write above precedes this dispatch,
-                # so is_pending_plan (which requires an UNANSWERED row)
-                # always reads False here and would flip the gatherer into
-                # its prerequisite branch, blocking every Start.
-                pending_plan=True,
-                ui_language=current_ui_language() or "en",
-            )
-            gate = evaluate_start_gate(
-                has_pending_plan=intent is not None,
-                effective_tasks_nonempty=bool(tasks),
-                stamp=stamp,
-                # ADR-129: the film conjuncts — active draft, presented-draft
-                # match (token / fingerprint), review hold.
-            )
-            if gate is not None:
-                detail: dict[str, Any] = {"code": gate.code}
-                if gate.blockers:
-                    detail["blockers"] = list(gate.blockers)
-                raise HTTPException(gate.http_status, detail)
-            try:
-                # Entry constraints (clips-media gate included) reject at the
-                # birthplace — ValueError here is a client-facing 422.
-                # target_language is a pure fallback (language is a per-task
-                # param): derive it from the first task that carries one.
-                if not (intent.name or "").strip():
-                    # Same observability seat as _create_run_from_tasks
-                    # (ADR-058): the plan SHOULD carry the router's name.
-                    logger.info(
-                        "unnamed_proposal", path="plan_start",
-                        project_id=str(project.id),
-                    )
-                run = await submit_confirmed_tasks(
-                    db, project, pending, tasks, name=intent.name, instruction=intent.specific_instruction,
-                    confirmation_id=message.id, confirmed_via=confirmed_via,
-                    quote=(message.question or {}).get("estimate_credits"),
-                )
-            except ToolRejected as exc:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
-                ) from exc
-            except CreditsInsufficientError as exc:
-                # Same structured shortfall payload as the typed /generate
-                # endpoint (BILLING §7) — the dock renders the grey row off
-                # {code, balance, required}. BEFORE ValueError (it subclasses it).
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    {
-                        "code": "credits.insufficient",
-                        "balance": exc.balance,
-                        "required": exc.required,
-                    },
-                ) from exc
-            except ValueError as exc:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)
-                ) from exc
-            project.pending_brief = None
-            message.workflow_run_id = run.id
-
-
-    elif question.kind == "question" and message.workflow_run_id is not None:
-        # Direction interrupt (期 4) — but the run-id column alone does NOT
-        # prove one: a run_completed trigger's suggestion question also
-        # carries it as the display anchor (trigger_turn stamps it for the
-        # canvas/rerun references), and _suggestions_payload's contract is
-        # "no run marker — the generic continuation carries the pick". The
-        # real marker is a node PARKED in waiting. Answering a trigger pill
-        # through the interrupt seat used to no-op (resume → "idle" → zero
-        # continuation — the live-acceptance dead-exit red 2026-09-24); the
-        # pick now falls through to the generic 续聊 branch below.
-        run = await _parked_interrupt_run(db, message.workflow_run_id)
-        if run is not None:
-            if data.kind == "bail":
-                if await bail_waiting_interrupt(db, run) is not None:
-                    bailed_run_ids.append(UUID(str(run.id)))
-            else:
-                outcome = await resume_waiting_interrupt(db, run, message.answer)
-                if outcome == "blocked":
-                    follow_up = await _create_message(
-                        db,
-                        UUID(str(conversation.id)),
-                        "assistant",
-                        _resume_ack_line("", "blocked"),
-                        turn_id=turn_id,
-                    )
-        elif data.kind in ("option", "freeform", "group"):
-            # No parked node → this run id was the display anchor (trigger
-            # suggestion) or the interrupt already expired — the pick is the
-            # user's say, carried by the generic continuation (same seat as
-            # the no-run-id branch below).
-            with bind_conversation_turn(
-                conversation_id=conversation.id, turn_id=turn_id or message.id,
-                project_id=conversation.project_id,
-            ) as _usage_bind:
-                follow_up, _run_id, bailed_run_ids, _settled = (
-                    await _continue_chat_answer(
-                        db, user_id, conversation, question, data, option_label,
-                        suggestion_ref=_suggestion_ref_for(message, data),
-                        on_delta=on_delta,
-                        on_phase=on_phase,
-                        on_tool_call=on_tool_call,
-                        on_tool_ready=on_tool_ready,
-                        on_interim_prose=on_interim_prose,
-                        on_loop_event=on_loop_event,
-                        on_activity=on_activity,
-                        on_candidates=on_candidates,
-                        on_row_append=on_row_append,
-                        turn_id=turn_id,
-                    )
-                )
-            await fold_conversation_usage(
-                db,
-                user_id=user_id,
-                project_id=_usage_project_id,
-                accrued=_usage_bind.accrued,
-            )
-
     elif question.kind == "question" and data.kind in ("option", "freeform", "group"):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
@@ -2209,17 +1702,9 @@ async def answer_question(
                 accrued=_usage_bind.accrued,
             )
 
-    if defer_start_commit:
-        # The outer Chat Turn's final opening-row fence owns the only commit.
-        # Until then this Run/hold is invisible to workers and Stop can roll it back.
-        await db.flush()
-    else:
-        await db.commit()
-        if bailed_run_ids:
-            # Bailed interrupts settle COMPLETED (never FAILED, #5); each
-            # aggregated summary carries the interrupt's "Bailed by user" line
-            # as the user-abort note.
-            await finalize_bailed_runs(bailed_run_ids)
+    await db.commit()
+    if bailed_run_ids:
+        await finalize_bailed_runs(bailed_run_ids)
     await db.refresh(message)
     if follow_up is not None:
         await db.refresh(follow_up)
@@ -2627,29 +2112,6 @@ class TurnStopped(Exception):
     """A Stop decision won before this transcript/final-commit write."""
 
 
-# Dynamic lock ownership, scoped to one async Chat Turn. A nested Start holds
-# the opening-row DB lock through the outer final commit; its independent
-# transcript sessions must not re-acquire that lock from their own owner.
-# Other requests (notably Stop) have a different context and still serialize
-# on the database row. execute_chat_turn restores the previous value on exit.
-_TURN_ROW_LOCKS_HELD: ContextVar[frozenset[UUID]] = ContextVar(
-    "turn_row_locks_held", default=frozenset()
-)
-
-
-def _scope_turn_row_lock_ownership(fn):
-    """Clear this turn's shared lock ownership on commit, rollback or error."""
-    @wraps(fn)
-    async def wrapped(*args, **kwargs):
-        inherited = _TURN_ROW_LOCKS_HELD.get()
-        try:
-            return await fn(*args, **kwargs)
-        finally:
-            _TURN_ROW_LOCKS_HELD.set(inherited)
-
-    return wrapped
-
-
 async def _lock_turn_for_transcript_write(
     db: AsyncSession,
     turn_id: UUID,
@@ -2663,22 +2125,15 @@ async def _lock_turn_for_transcript_write(
     commit additionally require the opening Turn to remain in flight.
     ``populate_existing`` is load-bearing: this session may have loaded the row
     before waiting for its lock, and the post-wait database state must win.
-    When the outer nested-Start transaction already owns the fence, a fresh
-    transcript session in that same async context reads without re-locking:
-    its owner still excludes Stop, while a second lock request would wait on
-    the owner itself and prevent the outer commit forever.
     """
     query = (
         select(Message)
         .where(Message.id == turn_id)
         .execution_options(populate_existing=True)
     )
-    if turn_id not in _TURN_ROW_LOCKS_HELD.get():
-        # FOR NO KEY UPDATE still serializes Stop, final commit and transcript
-        # writers, but permits the FOR KEY SHARE check made by INSERTs whose
-        # messages.turn_id references this opening row. Full FOR UPDATE makes
-        # an independent transcript Session wait on its own outer Start.
-        query = query.with_for_update(key_share=True)
+    # NO KEY UPDATE serializes Stop and transcript writes, while permitting
+    # foreign-key checks from inserts of this opening's child messages.
+    query = query.with_for_update(key_share=True)
     row = (await db.execute(query)).scalar_one_or_none()
     if (
         row is None
@@ -3014,7 +2469,6 @@ async def persist_turn_failed_line(
         )
 
 
-@_scope_turn_row_lock_ownership
 async def execute_chat_turn(
     db: AsyncSession,
     prepared: PreparedTurn,

@@ -349,7 +349,7 @@ async def test_group_bail_preserves_answers_and_defaults_the_rest(database, monk
     assert _ready_after_bail(stored).required_next_action == "create_video"
 
 
-def test_legacy_answer_and_question_shapes_remain_readable():
+def test_plain_option_answer_needs_no_group_or_workflow():
     answer = AnswerPayload.model_validate(
         {
             "kind": "option",
@@ -361,27 +361,17 @@ def test_legacy_answer_and_question_shapes_remain_readable():
     assert answer.answers == []
     question = QuestionPayload.model_validate(
         {
-            "kind": "choice",
-            "question": "Legacy",
+            "kind": "question",
+            "question": "Choose",
             "options": [{"id": "1", "label": "One"}],
         }
     )
     assert question.kind == "question"
     assert question.items == []
-
-
-def test_run_creative_state_is_copied_only_without_a_version_ref():
-    from app.chat.service import _creative_run_context
-    from app.models.schemas import CreativeState, seal_creative_state
-
-    state = seal_creative_state(CreativeState(brief=Brief()))
-    pending = PendingPlan(creative_state=state)
-    assert (
-        _creative_run_context(pending, {})["creative_state"]["content_digest"]
-        == state.content_digest
-    )
-    assert _creative_run_context(pending, {"version_ref": {"composition_version_id": "v1"}}) == {}
-    assert _creative_run_context(None, {}) == {}
+    from pydantic import TypeAdapter, ValidationError
+    from app.models.schemas import AnswerRequest
+    with pytest.raises(ValidationError):
+        TypeAdapter(AnswerRequest).validate_python({"kind": "start"})
 
 
 def test_extended_single_slot_backfill_preserves_slot_types_and_creative_state():

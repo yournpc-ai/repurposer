@@ -9,11 +9,33 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
+from app.editing.timing import SOURCE_TIMEBASE
 from app.chat.video_turn_seats import align_recording_seat
 from app.models.schemas import AssetType, AlignRecordingArgs
 from app.models.tables import Asset, Project, User
 from app.pipeline.errors import user_error_line
 from app.tools.video.media_analysis import LoudnessAnalysisError, analyze_audio_bytes, read_report
+
+
+def spoken_draft(ids):
+    scenes, clips = [], []
+    for index, scene_id in enumerate(ids):
+        timing = {"start": index * 5 * SOURCE_TIMEBASE, "end": (index + 1) * 5 * SOURCE_TIMEBASE}
+        scenes.append({"scene_id": scene_id, "range": timing, "speech_clip_ids": [f"speech_{scene_id}"]})
+        clips.append({
+            "clip_id": f"speech_{scene_id}", "scene_id": scene_id, "range": timing,
+            "object": {"kind": "speech", "object_id": f"voice_{scene_id}", "text": scene_id,
+                       "voice_id": "English", "language": "en"},
+        })
+    return {
+        "content": {
+            "settings": {"width": 1920, "height": 1080, "fps": {"num": 24, "den": 1}, "timebase": SOURCE_TIMEBASE},
+            "scenes": scenes, "timeline": {"tracks": [
+                {"track_id": "dialogue", "kind": "audio", "role": "dialogue", "order": 0, "clips": clips},
+            ]},
+        },
+        "design": {"authoring": "high_level_scene"},
+    }
 
 
 async def _project(database, *, generated):
@@ -155,7 +177,6 @@ async def test_measured_score_has_playable_receipt_across_cache_and_history(data
     from app.tools.video import music_preparation as music
     from app.chat.editor_media import _record_audio
     from app.tools.video.narration_draft import reproject_narration_timing
-    from test.core.test_narration_timing import spoken_draft
 
     project, _ = await _project(database, generated=True)
     files = {}

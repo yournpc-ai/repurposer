@@ -531,16 +531,10 @@ class BriefAnswerItem(BaseModel):
 
 
 class AnswerPayload(BaseModel):
-    """The typed ``answer`` payload on a message.
-
-    ``bail`` is a first-class answer kind — a graceful exit, never a failure.
-    ``start`` is the plan confirmation (the answer that starts the run)
-    — a kind of its own, not a magic option id (C1).
-    """
-
+    """A user decision on one persistent question."""
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["option", "freeform", "bail", "start", "group"]
+    kind: Literal["option", "freeform", "bail", "group"]
     option_id: str | None = None
     text: str | None = None
     group_digest: str | None = None
@@ -574,24 +568,6 @@ class GroupAnswerRequest(BaseModel):
     answers: list[BriefAnswerItem] = Field(min_length=1, max_length=13)
 
 
-class StartAnswerRequest(BaseModel):
-    """Confirm the docked plan and start the run (task_book questions).
-
-    Replaces the phase-1 magic ``option_id="start"`` — the confirmation is a
-    kind of its own, so the kind-specific field (the review panel's edited
-    plan) is only valid here, never silently ignored on other kinds (C2).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["start"]
-    autonomy: Literal["auto", "review"] | None = None
-    # The review panel's edited plan (hand-edited slots marked explicit).
-    # Wins over the stored pending brief, so panel edits reach the run;
-    # None = use the stored pending brief.
-    intent: InferredIntent | None = None
-
-
 class BailAnswerRequest(BaseModel):
     """Bail — a graceful exit (back to draft / stop the parked run), never an error.
 
@@ -612,7 +588,6 @@ AnswerRequest = Annotated[
     OptionAnswerRequest
     | FreeformAnswerRequest
     | GroupAnswerRequest
-    | StartAnswerRequest
     | BailAnswerRequest,
     Field(discriminator="kind"),
 ]
@@ -2489,105 +2464,19 @@ class PlanEstimate(BaseModel):
 
 
 class QuestionPayload(BaseModel):
-    """The typed ``question`` payload on a message (the ask_user machinery —
-    the question machine).
-
-    The mechanism words live here — ``kind`` carries the *use* (plan
-    confirmation vs a plain question), never combined with the mechanism
-    (NAMING: use × mechanism combos are banned). ``content`` on the
-    message row keeps the question's human text. Defined after the brief
-    family: the task_book form stamps the merged brief (B3).
-    """
+    """One native question or bounded group of questions in the transcript."""
 
     model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="before")
-    @classmethod
-    def _upgrade_legacy_kind(cls, data: Any) -> Any:
-        """Stored rows written before the kind convergence spell ``choice``
-        (and the retired ``confirm`` seat) — upgrade on read, never written
-        (读容忍, same doctrine as the brief rows)."""
-        if isinstance(data, dict) and data.get("kind") in ("choice", "confirm"):
-            return {**data, "kind": "question"}
-        return data
-
-    @model_validator(mode="before")
-    @classmethod
-    def _drop_legacy_estimate(cls, data: Any) -> Any:
-        """Rows docked before the credits batch carry the never-supplied
-        ``estimate: str | None`` seat (always null, shape replaced by the
-        structured ``estimate_credits``) — drop it on read, never written
-        (读容忍, same doctrine as ``_drop_legacy_flags``)."""
-        if isinstance(data, dict):
-            return {k: v for k, v in data.items() if k != "estimate"}
-        return data
-
-    kind: Literal["task_book", "question"]
-    # The BARE question (ask 三分解剖 ②): the dock's title, the QA archive's
-    # Q line, and the reminder tail's quoted question. ``content`` carries the
-    # framing prose (解剖 ①) when the ask brought one, else the bare question
-    # itself (legacy rows, code-composed questions — read tolerance: every
-    # consumer falls back to ``content`` when this is empty).
+    kind: Literal["question"]
     question: str = ""
     options: list[Option] = Field(default_factory=list)
     allow_freeform: bool = True
-    # 推荐标记 (2026-09-27 一问拍一体化): at most one option id marked as
-    # the agent's recommendation — the dock renders its suffix. None on
-    # legacy rows / unrecommended asks (读容忍).
     recommended_id: str | None = None
-    # The dock's credits quotation (BILLING §7): task_book only, stamped at
-    # dock time from the estimate fold (N-34) × the consumption ratio —
-    # code-supplied, structured (data, localized at render), never a
-    # pre-formatted string. None until supplied / for plain questions.
-    estimate_credits: PlanEstimate | None = None
-    # 授权前移 (ADR-117 §4): task_book only — the confirmation conjunct
-    # computed ONCE at dock time (the prefs + guardrail + quote fold). The
-    # client's confirm pill renders only when ``requires_confirmation`` is
-    # true — it NEVER derives the need itself; ``confirm_reason`` selects
-    # the pill's label family (execution_pref → bare Start; credits_pref /
-    # above_guardrail → priced Start off ``quote_high``; unquotable → the
-    # deferred-price label). Absent on legacy rows = False/""/None/False
-    # (读容忍 — a pre-flip dock reads as the auto regime's under-line plan).
-    requires_confirmation: bool = False
-    confirm_reason: str = ""
-    quote_high: int | None = None
-    unquotable: bool = False
-    # task_book only: the needs_clarification reason KEYS (data, localized at
-    # render — never baked into `content`, which is user-facing prose).
-    reasons: list[str] = Field(default_factory=list)
-    # ask 一等动作牙齿 (ADR-052 B2): ``slot`` is the brief slot this
-    # question fills — the answer backfills it user-stated and the plan path
-    # None on every question that is not a brief ask (caption mode, direction
-    # interrupts, post-run shape C). ADR-078 判词④ adds ``asset_role``: the
-    # 角色消歧 dock ask — its options are code-built (id = asset id) and its
-    # answer settles the PendingPlan source/exemplar pins by code, never by
-    # LLM re-interpretation. ``default_path`` is the schema tooth of
-    # 提问策略 ③: what happens when the user skips — the framing prose
-    # (``content``) carries it visibly; the field keeps it machine-readable
-    # for the dock's × and the interjection reminder tail.
     slot: BriefQuestionSlot | Literal["asset_role"] | None = None
     default_path: str = ""
     items: list[BriefQuestionItem] = Field(default_factory=list)
     group_digest: str | None = None
-    # 预填评审卡 (ADR-052 B3): task_book only — the merged brief at
-    # dock time, so the plan card renders the agent's OWN understanding
-    # (valued slots with provenance) instead of blank form fields. Frozen
-    # with the question row; every re-dock stamps the fresh merge.
-    brief: Brief | None = None
-    # 计划行自完备 (2026-09-08, 方案 B): task_book only — the ADR-043
-    # derived preview ("you'll get") stamped at dock time. With the chain on
-    # the row's `intent` column and this on the payload, the docked row IS
-    # the whole plan card — the SSE envelope needs no pending-brief refetch
-    # (that GET stays the recovery seat). Read tolerance: absent on rows
-    # docked before the seal.
-    derived: list[dict] = Field(default_factory=list)
-    # 决策包阅读层 (ADR-089 §4 R16, iter-2 ③, N-57): task_book only — the
-    # Content Plans the docked chain was compiled from (plan_id / title /
-    # outputs / state — LLM-named product semantics, user-safe, never task
-    # params). 确认消费三层: this reading layer + the intent column's
-    # compiled tasks (evidence layer) + estimate_credits (费用语义五面).
-    # Empty on every non-exploration dock (读容忍: 旧行无此键).
-    plans: list[dict] = Field(default_factory=list)
 
 
 def question_group_digest(items: list[BriefQuestionItem], brief: Brief) -> str:
