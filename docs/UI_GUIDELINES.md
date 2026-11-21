@@ -1,6 +1,8 @@
 # UI Guidelines — Studio 视觉与交互设计系统
 
-> Status: 当前规范（2026-10-30；视觉与交互形态全文唯一家）
+> 通用设计系统（2026-11-21）：Home、Studio Shell、Projects、Settings、Login 与新通用组件使用 affectUI Clean。原语取自 `apps/web/src/components/ui/*-clean.tsx`，主题取自 `apps/web/src/styles.css` 的 `--aui-*`。弹层、焦点、键盘和控件尺寸遵循各 Clean 原语。仍依赖旧视觉约定的 Chat、共享 Composer 与媒体组件按 U3/U4 分批迁移。见 [消费者清单与验收](tasks/affectui-evidence/README.md)。
+>
+> 以下为 2026-10-30 版交互约定与迁移前视觉记录。
 > **Scope**：studio（`_app` 路由 + 共享组件）。落地页（`/` + `components/landing/`）是营销面，自有视觉语言，其 `rounded-full` / `border-border` / `font-medium` 用法是模板原生，不受本文约束。
 > 行为层规格（chat 回合 / dock 状态机 / 画布数据面）归 `CHAT_ARCHITECTURE.md`；本文只管视觉与交互形态。整体风格：克制、轻量、统一。
 

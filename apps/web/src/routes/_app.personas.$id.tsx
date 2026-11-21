@@ -16,26 +16,14 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Button } from "@/components/ui/button-clean"
+import { Card, CardHeader, CardContent } from "@/components/ui/card-clean"
+import { Dialog } from "@/components/ui/dialog-clean"
 import { TextField } from "@/components/ui/text-field-clean"
-import { Label } from "@/components/ui/label"
 import { TextArea } from "@/components/ui/text-area-clean"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select } from "@/components/ui/select-clean"
+import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { apiFetch } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 import { SkinEditor } from "@/components/persona/skin-editor"
@@ -338,9 +326,7 @@ function PersonaDetailPage() {
           jumps sideways on tab switch. */}
       <div className="mx-auto w-full max-w-4xl">
         <div className="mb-4">
-          <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link to="/personas" />}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          <Link to="/personas" aria-label={t("common.back")}><ArrowLeft size={18} /></Link>
         </div>
         <Card className="mb-6">
           <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-4">
@@ -391,29 +377,22 @@ function PersonaDetailPage() {
         </Card>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab} className="flex-1">
-        <div className="mx-auto w-full max-w-4xl">
-          <TabsList className="mb-6">
-            <TabsTrigger value="persona">{t("personaDetail.tabPersona")}</TabsTrigger>
-            <TabsTrigger value="materials">
-              {t("personaDetail.tabMaterials", { count: materials.length })}
-            </TabsTrigger>
-            <TabsTrigger value="skin">{t("personaDetail.tabSkin")}</TabsTrigger>
-          </TabsList>
+      <div className="flex-1">
+        <div className="mx-auto mb-6 w-full max-w-4xl">
+          <SegmentedControl kind="tabs" value={tab} onChange={setTab} aria-label={persona.name} options={[
+            { value: "persona", label: t("personaDetail.tabPersona"), controls: "persona-panel" },
+            { value: "materials", label: t("personaDetail.tabMaterials", { count: materials.length }), controls: "materials-panel" },
+            { value: "skin", label: t("personaDetail.tabSkin"), controls: "skin-panel" },
+          ]} />
         </div>
 
         <div className="mx-auto w-full max-w-4xl">
-          <TabsContent value="persona">
+          {tab === "persona" && <section id="persona-panel" role="tabpanel" aria-label={t("personaDetail.tabPersona")}>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
+              <CardHeader title={<>
                     <Fingerprint className="h-4 w-4" />
                     {t("personaDetail.personaTitle")}
-                  </CardTitle>
-                  <CardDescription>{t("personaDetail.personaDesc")}</CardDescription>
-                </div>
-                <Button
+                  </>} description={t("personaDetail.personaDesc")} action={<><Button
                   size="sm"
                   onClick={handleGeneratePersona}
                   disabled={generating || materials.length === 0}
@@ -421,35 +400,19 @@ function PersonaDetailPage() {
                   <Wand2 className="mr-2 h-4 w-4" />
                   {generating ? t("personaDetail.generating") : t("personaDetail.generate")}
                 </Button>
-              </CardHeader>
+              </>} />
               <CardContent>
                 <form onSubmit={handleUpdatePersona} className="space-y-6">
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="tone">{t("personaDetail.tone")}</Label>
-                      <Select
-                        value={emotionalTone}
-                        onValueChange={(v) => setEmotionalTone(v as Persona["emotional_tone"])}
-                      >
-                        <SelectTrigger id="tone">
-                          <SelectValue>
-                            {(value: string) => t(`personaDetail.tones.${value}`)}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(["rational", "passionate", "gentle", "sharp", "humorous"] as const).map(
-                            (tName) => (
-                              <SelectItem key={tName} value={tName}>
-                                {t(`personaDetail.tones.${tName}`)}
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
+                      <label htmlFor="tone">{t("personaDetail.tone")}</label>
+                      <Select id="tone" aria-label={t("personaDetail.tone")} value={emotionalTone}
+                        onChange={(value) => setEmotionalTone(value as Persona["emotional_tone"])}
+                        options={["rational", "passionate", "gentle", "sharp", "humorous"].map((value) => ({ value, label: t(`personaDetail.tones.${value}`) }))} />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="sentence_style">{t("personaDetail.sentenceStyle")}</Label>
+                      <label htmlFor="sentence_style">{t("personaDetail.sentenceStyle")}</label>
                       <TextField
                         id="sentence_style"
                         value={sentenceStyle}
@@ -459,7 +422,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>{t("personaDetail.fields.core_values")}</Label>
+                    <label>{t("personaDetail.fields.core_values")}</label>
                     <ChipList
                       items={coreValues}
                       onChange={setCoreValues}
@@ -469,7 +432,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>{t("personaDetail.fields.favorite_metaphors")}</Label>
+                    <label>{t("personaDetail.fields.favorite_metaphors")}</label>
                     <QuoteCardList
                       items={favoriteMetaphors}
                       onChange={setFavoriteMetaphors}
@@ -479,7 +442,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>{t("personaDetail.fields.typical_hooks")}</Label>
+                    <label>{t("personaDetail.fields.typical_hooks")}</label>
                     <QuoteCardList
                       items={typicalHooks}
                       onChange={setTypicalHooks}
@@ -489,7 +452,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>{t("personaDetail.fields.avoid_words")}</Label>
+                    <label>{t("personaDetail.fields.avoid_words")}</label>
                     <ChipList
                       items={avoidWords}
                       onChange={setAvoidWords}
@@ -500,14 +463,14 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <CardTitle className="text-base">{t("personaDetail.contentStrategyTitle")}</CardTitle>
-                    <CardDescription className="text-xs">
+                    <h4 className="text-base">{t("personaDetail.contentStrategyTitle")}</h4>
+                    <p className="text-xs">
                       {t("personaDetail.contentStrategyDesc")}
-                    </CardDescription>
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="audience">{t("personaDetail.audience")}</Label>
+                    <label htmlFor="audience">{t("personaDetail.audience")}</label>
                     <TextField
                       id="audience"
                       value={audience}
@@ -517,7 +480,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="cta">{t("personaDetail.cta")}</Label>
+                    <label htmlFor="cta">{t("personaDetail.cta")}</label>
                     <TextField
                       id="cta"
                       value={cta}
@@ -527,7 +490,7 @@ function PersonaDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="guidelines">{t("personaDetail.guidelines")}</Label>
+                    <label htmlFor="guidelines">{t("personaDetail.guidelines")}</label>
                     <TextArea
                       id="guidelines"
                       value={guidelines}
@@ -553,16 +516,11 @@ function PersonaDetailPage() {
                 onSaved={(voice) => setPersona((p) => (p ? { ...p, voice } : p))}
               />
             </div>
-          </TabsContent>
+          </section>}
 
-          <TabsContent value="materials">
+          {tab === "materials" && <section id="materials-panel" role="tabpanel" aria-label={t("personaDetail.tabMaterials", { count: materials.length })}>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>{t("personaDetail.pastMaterials")}</CardTitle>
-                  <CardDescription>{t("personaDetail.pastMaterialsDesc")}</CardDescription>
-                </div>
-                <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+              <CardHeader title={<>{t("personaDetail.pastMaterials")}</>} description={t("personaDetail.pastMaterialsDesc")} action={<><Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
                   <Upload className="mr-2 h-4 w-4" />
                   {uploading ? t("personaDetail.uploading") : t("common.upload")}
                 </Button>
@@ -573,7 +531,7 @@ function PersonaDetailPage() {
                   accept=".txt,.md,.pdf"
                   onChange={handleFileUpload}
                 />
-              </CardHeader>
+              </>} />
               <CardContent>
                 {materials.length === 0 ? (
                   <div className="rounded-lg bg-muted py-12 text-center">
@@ -606,22 +564,8 @@ function PersonaDetailPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t("personaDetail.rename")}
-                            onClick={() => openRename(asset)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t("common.delete")}
-                            onClick={() => setDeleteTarget(asset)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <IconButton size="sm" label={t("personaDetail.rename")} onClick={() => openRename(asset)} icon={<Pencil />} />
+                          <IconButton size="sm" label={t("common.delete")} onClick={() => setDeleteTarget(asset)} icon={<Trash2 />} />
                         </div>
                       </div>
                     ))}
@@ -629,32 +573,29 @@ function PersonaDetailPage() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </section>}
         </div>
 
         <div className="mx-auto w-full max-w-6xl">
-          <TabsContent value="skin">
+          {tab === "skin" && <section id="skin-panel" role="tabpanel" aria-label={t("personaDetail.tabSkin")}>
             <SkinEditor
               key={persona.id}
               personaId={persona.id}
               brand={persona.brand}
               onSaved={(brand) => setPersona((p) => (p ? { ...p, brand } : p))}
             />
-          </TabsContent>
+          </section>}
         </div>
-      </Tabs>
+      </div>
 
       {/* Rename */}
-      <Dialog
+      <Dialog size="sm" closeLabel={t("common.close")} title={t("personaDetail.renameTitle")}
         open={renameTarget !== null}
         onOpenChange={(open) => {
           if (!open) setRenameTarget(null)
         }}
       >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("personaDetail.renameTitle")}</DialogTitle>
-          </DialogHeader>
+
           <TextField
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
@@ -664,40 +605,37 @@ function PersonaDetailPage() {
             placeholder={t("personaDetail.renamePlaceholder")}
             autoFocus
           />
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setRenameTarget(null)}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setRenameTarget(null)}>
               {t("common.cancel")}
             </Button>
             <Button size="sm" disabled={!renameValue.trim() || renameBusy} onClick={handleRename}>
               {renameBusy ? t("common.saving") : t("common.save")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div>
+
       </Dialog>
 
       {/* Delete */}
-      <Dialog
+      <Dialog size="sm" closeLabel={t("common.close")} title={t("personaDetail.deleteConfirm")}
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
       >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("personaDetail.deleteConfirm")}</DialogTitle>
-          </DialogHeader>
+
           <p className="text-sm text-muted-foreground">
             {deleteTarget && t("personaDetail.deleteDesc", { title: assetTitle(deleteTarget) })}
           </p>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)}>
               {t("common.cancel")}
             </Button>
             <Button variant="destructive" size="sm" disabled={deleteBusy} onClick={handleDeleteMaterial}>
               {deleteBusy ? t("common.loading") : t("common.delete")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div>
+
       </Dialog>
     </div>
   )

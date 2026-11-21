@@ -38,13 +38,17 @@
 
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
-- UI components: shadcn/ui (base-ui version)
+- UI components: affectUI Clean (React 19), with existing Chat and media primitives tracked for U3/U4
 - Styling: Tailwind CSS v4
 - Icons: lucide-react (sole icon source)
 - Internationalization: i18next + react-i18next
 - State: React Context + hooks (no Redux / Zustand in this project)
 
-## shadcn / base-ui Conventions
+## 通用 UI
+
+新页面与通用控件使用 `apps/web/src/components/ui/*-clean.tsx` 中的实际导出和 Props。Clean 控制尺寸、动效、状态与弹层行为，`apps/web/src/styles.css` 提供明暗主题值。页面使用现有路由和 Context 接入真实数据。组件来源与剩余旧消费者见 [迁移清单](docs/tasks/affectui-evidence/README.md)。
+
+## 仍有消费者的旧 shadcn / Base UI
 
 ### Use `render` prop, not `asChild`
 The shadcn components used in this project are based on **base-ui**. Their trigger components (`Button`, `DialogTrigger`, `DropdownMenuTrigger`, `PopoverTrigger`, `SidebarMenuButton`, `TooltipTrigger`, etc.) **do not support the Radix-style `asChild`**; instead, they use the `render` prop to specify the rendered element.
@@ -63,7 +67,9 @@ Correct:
 - All icons must be imported from `lucide-react`. Hand-written SVG icons are prohibited, with two exceptions: third-party logos with no lucide alternative, and **the brand mark** — `src/components/LogoMark.tsx`; its geometry's source of truth is `LogoMark.tsx`, `public/favicon.svg` is the static baked-color copy and must be kept in sync.
 - **Inside `Button`, use `size-*` not `h-* w-*`**: every button variant pins `[&_svg:not([class*='size-'])]:size-N` — `h-5 w-5` does NOT match the `:not()` guard and gets silently overridden; `size-5` is exempt. Full size table = `docs/UI_GUIDELINES.md` §2.
 
-## UI 硬律（全文 → `docs/UI_GUIDELINES.md`）
+## U3/U4 尚待迁移界面的旧视觉约定
+
+以下约定供维护现有旧控件时查阅。Home、Studio Shell、Projects、Settings、Login 及新控件按上面的 affectUI Clean 约定施工。
 
 - **小圆角**：`rounded-md` = control 8px、`rounded-lg` = panel 10px、`rounded-xl` = 14px、`rounded-2xl` = 18px，大型 composer surface = 16px。`rounded-full` 仅四例外：真圆形图标钮 / 状态徽章红点 / home composer 钉底单行 stadium 条 / gallery 筛选 pill 行。`Badge` 用于元数据恒 `className="rounded-md"` 覆盖。
 - **控件三档**：sm / md / lg = `h-9`（36px）/ `h-11`（44px）/ `h-12.5`（50px）；同排控件同档中心线对齐，composer 底排用 sm。尺寸只用标准 spacing utilities，保证 `tailwind-merge` 能覆盖 CVA 默认档；pill / trigger 文字不加粗。

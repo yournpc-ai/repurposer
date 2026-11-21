@@ -305,6 +305,7 @@ function Layer({
       target?.focus({ preventScroll: true });
     }
     firstOpen.current = false;
+    if (modal) document.dispatchEvent(new Event("repurposer:modal-change"));
 
     // Escape: the native cancel when modal, a key listener when contained
     const cancel = (e: Event) => {
@@ -336,7 +337,10 @@ function Layer({
       el.removeEventListener("keydown", key);
       const inside = el.contains(document.activeElement);
       if (el.open) el.close();
-      if (modal) unlockScroll();
+      if (modal) {
+        unlockScroll();
+        document.dispatchEvent(new Event("repurposer:modal-change"));
+      }
       const at = document.activeElement;
       if (back?.isConnected && (inside || !at || at === document.body)) back.focus({ preventScroll: true });
     };

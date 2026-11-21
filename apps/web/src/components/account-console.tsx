@@ -17,7 +17,8 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
-import { cn } from "@/lib/utils"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Button } from "@/components/ui/button-clean"
 import { apiFetch } from "@/lib/api"
 import { setLocale, type Locale } from "@/lib/i18n"
 import { useTheme, type Theme } from "@/lib/theme/ThemeProvider"
@@ -25,7 +26,7 @@ import { clearAuth, getUser } from "@/lib/auth"
 import { useAuth } from "@/lib/auth-context"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import { formatCredits } from "@/components/credits/tx-row"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/ui/avatar-clean"
 
 /** The account console (ADR-046 D5) — the Popover the rail-foot avatar opens.
  * Grouping: the inset ACCOUNT block carries the actionable Credits value;
@@ -115,16 +116,9 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col">
       {/* Identity header */}
       <div className="flex items-center gap-2.5 px-1 pb-2.5">
-        <Avatar className="h-9 w-9">
-          <AvatarImage src="" alt={user?.name || user?.email || ""} />
-          <AvatarFallback className="bg-primary text-[11px] text-primary-foreground">
-            {(user?.name || user?.email || "U").charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+        <Avatar name={user?.name || user?.email} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-foreground">
-            {user?.name || user?.email}
-          </p>
+          <p className="truncate text-xs font-medium text-foreground">{user?.name || user?.email}</p>
           {user?.name && user.email && (
             <p className="truncate text-[11px] text-muted-foreground">{user.email}</p>
           )}
@@ -163,30 +157,21 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
       {/* 偏好: labeled rows with trailing controls (MiniMax row anatomy) —
           theme / language as trailing segmented, deep settings as a chevron
           row. */}
-      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">
-        {t("common.preferences")}
-      </p>
+      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">{t("common.preferences")}</p>
       <div className="flex flex-col gap-0.5 px-1">
         <div className="flex h-9 items-center gap-2 px-2">
           <Palette className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-foreground">{t("common.theme")}</span>
           <div className="ml-auto flex items-center gap-0.5 rounded-md bg-inset p-0.5">
             {THEME_OPTIONS.map(({ value, icon: Icon, labelKey }) => (
-              <button
+              <IconButton
                 key={value}
-                type="button"
-                title={t(labelKey)}
-                aria-label={t(labelKey)}
+                size="sm"
+                label={t(labelKey)}
+                icon={<Icon />}
+                pressed={theme === value}
                 onClick={() => setTheme(value)}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-[5px] transition-colors",
-                  theme === value
-                    ? "bg-card text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-              </button>
+              />
             ))}
           </div>
         </div>
@@ -195,19 +180,15 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
           <span className="text-xs text-foreground">{t("common.language")}</span>
           <div className="ml-auto flex items-center gap-0.5 rounded-md bg-inset p-0.5">
             {LOCALE_OPTIONS.map(({ value, labelKey }) => (
-              <button
+              <Button
                 key={value}
-                type="button"
+                size="sm"
+                variant={currentLocale === value ? "secondary" : "ghost"}
+                aria-pressed={currentLocale === value}
                 onClick={() => setLocale(value, i18n)}
-                className={cn(
-                  "flex h-6 items-center justify-center rounded-[5px] px-1.5 text-[11px] transition-colors",
-                  currentLocale === value
-                    ? "bg-card text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
               >
                 {t(labelKey)}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -227,9 +208,7 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* 帮助 */}
-      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">
-        {t("common.helpSection")}
-      </p>
+      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">{t("common.helpSection")}</p>
       <button
         type="button"
         onClick={handleReplayTour}

@@ -56,7 +56,7 @@ export const Route = createRootRoute({
             try {
               const theme = localStorage.getItem('repurposer-theme') || 'system';
               const resolved = theme === 'system'
-                ? 'dark'
+                ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
                 : theme;
               if (resolved !== 'dark') document.documentElement.classList.remove('dark');
               else document.documentElement.classList.add('dark');

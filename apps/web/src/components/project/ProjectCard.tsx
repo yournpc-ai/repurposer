@@ -1,23 +1,16 @@
 import { Link } from "@tanstack/react-router"
-import { Check, FolderKanban, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { FolderKanban, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BrandLoader } from "@/components/BrandLoader"
 import { ProcessingTile } from "@/components/ProcessingTile"
-import {
-  DeleteProjectDialog,
-  RenameProjectDialog,
-} from "@/components/project/project-dialogs"
+import { DeleteProjectDialog, RenameProjectDialog } from "@/components/project/project-dialogs"
+import { Checkbox } from "@/components/ui/checkbox-clean"
 import { Badge } from "@/components/ui/badge-clean"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { DropdownMenu } from "@/components/ui/dropdown-menu-clean"
+import { Card, CardHeader } from "@/components/ui/card-clean"
 import { formatDuration, formatRelativeTime } from "@/lib/utils"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -51,6 +44,7 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
   const [videoReady, setVideoReady] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
 
+  const menuTrigger = useRef<HTMLButtonElement>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -77,21 +71,17 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
 
   return (
     <>
-      <Link
-        to="/projects/$id"
-        params={{ id: project.id }}
-        // The project page is always canvas + dock (ADR-051) — its own state
-        // drives the dock's form (draft ⟺ the parked plan docks the
-        // confirm panel; processing ⟺ the dock attaches to the live run).
-        className="group block"
-      >
-        {/* Flat at rest (Flora 式): the thumbnail's own fill is the only
-            separation from the page — no card shell, no hairline (填充优先,
-            §4)。hover 语言 = 媒体区 border·/30 交互环 + 浮动钮（非 bg 座——
-            accent 在 6px padding 缝里读作糊框；环直接抱住媒体区，空井/视频
-            通吃）；选中 = 常驻 outline-2·/60（宽度+深度两档差，与实心勾选圈
-            同族），盖住 hover 档。 */}
-        <div className="rounded-xl p-1.5">
+      <div className="group relative">
+        {!active && onToggleSelect && (
+          <div className="absolute left-4 top-4 z-10 opacity-100 md:opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-[:checked]:opacity-100">
+            <Checkbox
+              aria-label={t("projects.selection.toggle")}
+              checked={!!selected}
+              onChange={onToggleSelect}
+            />
+          </div>
+        )}
+        <Card interactive selected={selected}>
           <div
             className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
               selected
@@ -103,29 +93,6 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
               live ? "bg-muted" : "bg-primary/10"
             }`}
           >
-            {!active && onToggleSelect ? (
-              // 多选圈（Flora 式）：rest 隐身，hover / 键盘触及 / 已选显形；
-              // 选中 = bg-foreground 实底 + Check（gallery 筛选 pill 的
-              // active 深底同 token）。点它不导航（⋯ 同款拦截）。
-              <button
-                type="button"
-                aria-label={t("projects.selection.toggle")}
-                aria-pressed={selected}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onToggleSelect()
-                }}
-                className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full transition-opacity ${
-                  selected
-                    ? "bg-foreground text-background opacity-100"
-                    : "bg-background text-transparent opacity-0 border border-foreground/20 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100"
-                }`}
-              >
-                <Check className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
             {live ? (
               // Live run — the layered processing tile is the life signal
               // (matte base, light shaft, mist, grain, halo), so the
@@ -161,67 +128,54 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
               </>
             )}
           </div>
-          <div className="min-w-0 px-1.5 pb-1 pt-2">
-            <p className="truncate text-sm font-medium">{project.title}</p>
-            <div className="mt-0.5 flex items-center justify-between gap-1">
-              <p className="truncate text-xs text-muted-foreground">
-                {bottomLine}
-              </p>
-            {/* "···" menu — rest 态隐身（扁平律的一部分），hover / 键盘
-                触及 / 菜单打开时显形（opacity 互换非 display——保键盘可达
-                与槽位几何，§7 同律；键盘触及 = has-[:focus-visible]，鼠标
-                点击的粘滞 focus 不算——那是 :focus-visible 的存在意义）。
-                wrapper 的 preventDefault + stopPropagation 挡住外层 <a> 的导航。 */}
-            <div
-              className={`shrink-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-hover:opacity-100 ${
-                menuOpen ? "opacity-100" : "opacity-0"
-              }`}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-            >
-              <DropdownMenu onOpenChange={setMenuOpen}>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t("projects.menuMore")}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      onClick={() => setRenameOpen(true)}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      {t("projects.rename")}
-                    </DropdownMenuItem>
-                    {/* Hidden while a run is live: deleting mid-run races the
-                        worker — it would finish rendering and re-write objects
-                        under the already-swept TOS prefixes, leaving orphans. */}
-                    {!active && (
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setDeleteOpen(true)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t("common.delete")}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            </div>
-          </div>
-        </div>
-      </Link>
+          <CardHeader
+            title={
+              <Link to="/projects/$id" params={{ id: project.id }}>
+                {project.title}
+              </Link>
+            }
+            description={bottomLine}
+            action={
+              <DropdownMenu
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                align="end"
+                trigger={({ triggerProps }) => (
+                  <IconButton
+                    ref={menuTrigger}
+                    {...triggerProps}
+                    label={t("projects.menuMore")}
+                    icon={<MoreHorizontal />}
+                  />
+                )}
+                items={[
+                  {
+                    label: t("projects.rename"),
+                    icon: <Pencil />,
+                    onSelect: () => {
+                      menuTrigger.current?.focus()
+                      setRenameOpen(true)
+                    },
+                  },
+                  ...(active
+                    ? []
+                    : [
+                        {
+                          label: t("common.delete"),
+                          danger: true,
+                          icon: <Trash2 />,
+                          onSelect: () => {
+                            menuTrigger.current?.focus()
+                            setDeleteOpen(true)
+                          },
+                        },
+                      ]),
+                ]}
+              />
+            }
+          />
+        </Card>
+      </div>
 
       <RenameProjectDialog
         projectId={project.id}

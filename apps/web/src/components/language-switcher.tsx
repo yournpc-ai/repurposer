@@ -1,13 +1,9 @@
 import { useTranslation } from "react-i18next"
-import { Globe, Check } from "lucide-react"
+import { Globe } from "lucide-react"
 
 import { setLocale, type Locale } from "@/lib/i18n"
-import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { DropdownMenu } from "@/components/ui/dropdown-menu-clean"
 
 const locales: { value: Locale; labelKey: string }[] = [
   { value: "zh", labelKey: "languages.zh" },
@@ -19,38 +15,11 @@ export function LanguageSwitcher() {
   const current: Locale = i18n.language === "en" ? "en" : "zh"
 
   return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label={t("common.language")}
-          />
-        }
-      >
-        <Globe className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverContent className="w-40 p-1" align="end">
-        <div className="flex flex-col gap-0.5">
-          {locales.map((loc) => {
-            const active = current === loc.value
-            return (
-              <Button
-                key={loc.value}
-                variant={active ? "secondary" : "ghost"}
-                className="justify-between"
-                size="sm"
-                onClick={() => setLocale(loc.value, i18n)}
-              >
-                <span>{t(loc.labelKey)}</span>
-                {active && <Check className="h-3.5 w-3.5" />}
-              </Button>
-            )
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <DropdownMenu align="end" title={t("common.language")}
+      trigger={({ triggerProps }) => <IconButton {...triggerProps} icon={<Globe />} label={t("common.language")} size="sm" />}
+      items={locales.map(({ value, labelKey }) => ({
+        label: t(labelKey), checked: current === value, onSelect: () => setLocale(value, i18n),
+      }))}
+    />
   )
 }

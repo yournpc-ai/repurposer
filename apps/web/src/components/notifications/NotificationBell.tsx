@@ -6,12 +6,8 @@ import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
-import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Popover } from "@/components/ui/popover-clean"
 import { apiFetch, apiPost } from "@/lib/api"
 import { connectChannel } from "@/lib/channels"
 
@@ -165,34 +161,11 @@ export function NotificationBell({ chip = true }: { chip?: boolean }) {
   const unread = data?.unread_count ?? 0
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("notifications.title")}
-            className={
-              // chip = the floating-corner form (own glass tile + hairline);
-              // bare = lives inside the MobileHeader's glass, no double tile.
-              // active:bg-accent — `hover:` never fires on touch; the press
-              // must still read (the header is a <md surface).
-              chip
-                ? "relative h-10 w-10 rounded-lg overlay-surface border border-subtle"
-                : "relative h-10 w-10 rounded-lg active:bg-accent"
-            }
-          >
-            <Bell className="h-5.5 w-5.5" />
-            {unread > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
-            )}
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-96 p-0">
-        <div className="px-4 pb-2 pt-3 text-sm font-semibold">
-          {t("notifications.title")}
-        </div>
+    <div className="relative">
+      <IconButton label={t("notifications.title")} icon={<Bell />} variant={chip ? "secondary" : "ghost"}
+        aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)} />
+      {unread > 0 && <span className="pointer-events-none absolute right-1 top-1 size-2 rounded-full bg-destructive" />}
+      <Popover open={open} onClose={() => setOpen(false)} title={t("notifications.title")} align="end" width={384} focusOnOpen>
         <div className="max-h-96 divide-y divide-border overflow-y-auto thin-scroll">
           {!data || data.items.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -209,7 +182,7 @@ export function NotificationBell({ chip = true }: { chip?: boolean }) {
             ))
           )}
         </div>
-      </PopoverContent>
-    </Popover>
+      </Popover>
+    </div>
   )
 }

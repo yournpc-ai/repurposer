@@ -1,14 +1,21 @@
 /* Content slots extracted from affectUI App Shell Inset and Assistant Home. */
 .ui-as-app {
-  --line: var(--border);
-  --ink: var(--foreground);
-  --panel: var(--background);
+  --line: var(--aui-border);
+  --ink: var(--aui-ink);
+  --panel: var(--aui-surface);
   --frame-gap: 8px;
-  --radius-panel: 14px;
+  --radius-panel: calc(var(--aui-radius-lg) + 2px);
+  display: flex;
   height: 100dvh;
   min-height: 0;
-  background: var(--sidebar);
+  background: var(--aui-subtle);
 }
+.ui-as-side { display: flex; flex-direction: column; flex: none; gap: 16px; width: 52px; min-height: 0; padding: 12px 8px; }
+.ui-as-side[data-expanded="true"] { width: 240px; }
+.ui-as-side__item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; border-radius: var(--aui-radius); font-size: 13px; }
+.ui-as-side__item:hover, .ui-as-side__item[aria-current="page"] { background: var(--aui-surface); }
+.ui-as-side__item:focus-visible { outline: 2px solid var(--aui-focus); }
+@media (max-width: 767px) { .ui-as-side { display: none; } .ui-as-side__item { min-height: 44px; } }
 .ui-as-main {
   /* Screens reflow their content by the width of this panel */
   container: ui-as-main / inline-size;

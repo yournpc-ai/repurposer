@@ -4,19 +4,12 @@ import { useTranslation } from "react-i18next"
 import { ArrowUpDown, FolderKanban, Search, Trash2, X } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { EmptyState } from "@/components/ui/empty-state"
-import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button-clean"
+import { DropdownMenu } from "@/components/ui/dropdown-menu-clean"
+import { EmptyState } from "@/components/ui/empty-state-clean"
+import { TextField } from "@/components/ui/text-field-clean"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
 import { ProjectCard } from "@/components/project/ProjectCard"
 import { DeleteProjectsDialog } from "@/components/project/project-dialogs"
 
@@ -44,6 +37,7 @@ function ProjectsPage() {
   const [query, setQuery] = useState("")
   const [sortField, setSortField] = useState<SortField>("updated")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(true)
   // Bulk selection (Flora 式): page-owned id set; the circle on each card
   // toggles, the bottom floating bar carries the only honest bulk action
@@ -63,12 +57,13 @@ function ProjectsPage() {
 
   // Lifted so cards can refetch after a rename/delete (onChanged).
   const fetchProjects = useCallback(async () => {
+    setFailed(false)
     try {
       const res = await apiFetch("/api/v1/projects", { toast: false })
       if (!res.ok) throw new Error("Failed to load projects")
       setProjects((await res.json()) as Project[])
     } catch {
-      // Leave the list empty if the API isn't ready yet; user can refresh.
+      setFailed(true)
     } finally {
       setLoading(false)
     }
@@ -80,20 +75,17 @@ function ProjectsPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = q
-      ? projects.filter((p) => p.title.toLowerCase().includes(q))
-      : [...projects]
+    const list = q ? projects.filter((p) => p.title.toLowerCase().includes(q)) : [...projects]
     // "Last modified" falls back to creation when a project was never
     // touched after birth (and vice versa); id keeps a stable order for
     // rows with no timestamps at all.
     const stamp = (p: Project) =>
       new Date(
-        (sortField === "updated"
-          ? (p.updated_at ?? p.created_at)
-          : (p.created_at ?? p.updated_at)) || 0
+        (sortField === "updated" ? (p.updated_at ?? p.created_at) : (p.created_at ?? p.updated_at)) || 0,
       ).getTime()
-    return list.sort((a, b) =>
-      (sortDir === "desc" ? stamp(b) - stamp(a) : stamp(a) - stamp(b)) || a.id.localeCompare(b.id)
+    return list.sort(
+      (a, b) =>
+        (sortDir === "desc" ? stamp(b) - stamp(a) : stamp(a) - stamp(b)) || a.id.localeCompare(b.id),
     )
   }, [projects, query, sortField, sortDir])
 
@@ -101,71 +93,66 @@ function ProjectsPage() {
     <div className="flex flex-1 flex-col p-6 md:p-8">
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
         <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("projects.title")}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("projects.title")}</h1>
           <div className="flex items-center gap-1">
-            <label className="relative">
-              <Search aria-hidden className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="search" className="w-40 pl-8 sm:w-60" value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label={t("projects.search")} placeholder={t("projects.searchPlaceholder")} />
-            </label>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-lg"
-                    aria-label={t("projects.sort.label")}
-                  >
-                    <ArrowUpDown className="size-4" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    {t("projects.sort.byField")}
-                  </DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={sortField}
-                    onValueChange={(v) => setSortField(v as SortField)}
-                  >
-                    <DropdownMenuRadioItem value="updated">
-                      {t("projects.sort.byUpdated")}
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="created">
-                      {t("projects.sort.byCreated")}
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    {t("projects.sort.order")}
-                  </DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={sortDir}
-                    onValueChange={(v) => setSortDir(v as SortDir)}
-                  >
-                    <DropdownMenuRadioItem value="desc">
-                      {t("projects.sort.desc")}
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="asc">
-                      {t("projects.sort.asc")}
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <TextField
+              type="search"
+              prefix={<Search size={16} />}
+              className="w-40 sm:w-60"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label={t("projects.search")}
+              placeholder={t("projects.searchPlaceholder")}
+            />
+            <DropdownMenu
+              align="end"
+              title={t("projects.sort.label")}
+              trigger={({ triggerProps }) => (
+                <IconButton {...triggerProps} label={t("projects.sort.label")} icon={<ArrowUpDown />} />
+              )}
+              items={[
+                {
+                  label: t("projects.sort.byUpdated"),
+                  checked: sortField === "updated",
+                  onSelect: () => setSortField("updated"),
+                },
+                {
+                  label: t("projects.sort.byCreated"),
+                  checked: sortField === "created",
+                  onSelect: () => setSortField("created"),
+                },
+                {
+                  label: t("projects.sort.desc"),
+                  divider: true,
+                  checked: sortDir === "desc",
+                  onSelect: () => setSortDir("desc"),
+                },
+                {
+                  label: t("projects.sort.asc"),
+                  checked: sortDir === "asc",
+                  onSelect: () => setSortDir("asc"),
+                },
+              ]}
+            />
           </div>
         </div>
 
         {loading ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            {t("common.loading")}
-          </p>
+          <Loading label={t("common.loading")} className="ui-as-folders">
+            {[0, 1, 2, 3].map((slot) => (
+              <Skeleton key={slot} height={144} />
+            ))}
+          </Loading>
+        ) : failed ? (
+          <EmptyState
+            bare
+            title={t("common.requestFailed")}
+            action={
+              <Button variant="secondary" onClick={fetchProjects}>
+                {t("credits.retry")}
+              </Button>
+            }
+          />
         ) : visible.length === 0 && query.trim() ? (
           // A search that finds nothing is not the empty page: quiet line,
           // no CTA (the CTA belongs to the true zero state only).
@@ -174,11 +161,15 @@ function ProjectsPage() {
           </p>
         ) : visible.length === 0 ? (
           <EmptyState
-            icon={FolderKanban}
+            bare
+            tall
+            icon={<FolderKanban />}
             title={t("projects.emptyTitle")}
-            description={t("projects.emptyDesc")}
+            text={t("projects.emptyDesc")}
             action={
-              <Button size="sm" render={<Link to="/home" />}>{t("projects.new")}</Button>
+              <Link to="/home" className="underline">
+                {t("projects.new")}
+              </Link>
             }
           />
         ) : (
@@ -213,14 +204,7 @@ function ProjectsPage() {
                 <Trash2 className="size-4" />
                 {t("projects.selection.delete")}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("projects.selection.clear")}
-                onClick={clearSelection}
-              >
-                <X className="size-4" />
-              </Button>
+              <IconButton label={t("projects.selection.clear")} icon={<X />} onClick={clearSelection} />
             </div>
           </div>
         ) : null}

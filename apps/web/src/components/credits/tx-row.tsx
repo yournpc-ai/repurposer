@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { formatMoney } from "@/lib/payments"
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge-clean"
 
 /** The wallet ledger row's wire shape + display composition — ONE seat for
  * both read surfaces (the CreditsPill popover and the SettingsDialog
@@ -167,7 +167,7 @@ export function SpendTableRow({ item }: { item: WalletTransaction }) {
         {outputs.length > 0 ? (
           <div className="flex flex-nowrap gap-1">
             {outputs.map((output) => (
-              <Badge key={output} variant="secondary" className="rounded-md">
+              <Badge key={output} tone="neutral">
                 {output}
               </Badge>
             ))}
@@ -230,7 +230,7 @@ export function TopupTableRow({ item }: { item: WalletTransaction }) {
         <SignedCredits amount={item.amount} />
       </td>
       <td className="px-4 py-3 text-right align-middle whitespace-nowrap">
-        <Badge variant="secondary" className="rounded-md">
+        <Badge tone="neutral">
           {t(isPurchase ? "credits.tx.success" : "credits.tx.credited")}
         </Badge>
       </td>

@@ -6,13 +6,7 @@ import { CircleCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button-clean"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog-clean"
 import { apiFetch } from "@/lib/api"
 import { fetchPaymentOrder } from "@/lib/payments"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
@@ -495,31 +489,25 @@ export function CreditsSection() {
       </div>
 
       <Dialog
-        open={successCredits !== null}
+        title={t("credits.paymentSuccess")} closeLabel={t("common.close")} open={successCredits !== null}
         onOpenChange={(open) => {
           if (!open) setSuccessCredits(null)
         }}
       >
-        <DialogContent className="gap-0 p-6 sm:max-w-md">
-          <DialogHeader className="pr-8">
-            <DialogTitle className="text-xl font-semibold">
-              {t("credits.paymentSuccess")}
-            </DialogTitle>
-          </DialogHeader>
+
           <div className="flex flex-col items-center py-8 text-center">
             <CircleCheck className="size-12 text-foreground" strokeWidth={1.5} />
-            <DialogDescription className="mt-5 text-sm leading-relaxed">
+            <p className="mt-5 text-sm leading-relaxed">
               {successCredits !== null
                 ? t("credits.topupSuccess", {
                     count: formatCredits(successCredits, i18n.language),
                   })
                 : ""}
-            </DialogDescription>
+            </p>
           </div>
           <Button type="button" size="lg" className="w-full" onClick={viewTransactions}>
             {t("common.done")}
           </Button>
-        </DialogContent>
       </Dialog>
     </>
   )

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { apiDelete, apiPost, apiPut } from "@/lib/api"
 import { Button } from "@/components/ui/button-clean"
-import { Dialog } from "@/components/ui/dialog-clean"
+import { AlertDialog, Dialog } from "@/components/ui/dialog-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 
 /** Shared rename/delete dialogs for a project — used by ProjectCard (list)
@@ -56,24 +56,31 @@ export function RenameProjectDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.renameTitle")}>
-        <TextField
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleRename()
-          }}
-          placeholder={t("projects.renamePlaceholder")}
-          autoFocus
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button size="sm" disabled={!value.trim() || busy} onClick={handleRename}>
-            {busy ? t("common.saving") : t("common.save")}
-          </Button>
-        </div>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="sm"
+      closeLabel={t("common.close")}
+      title={t("projects.renameTitle")}
+    >
+      <TextField
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleRename()
+        }}
+        aria-label={t("projects.renameTitle")}
+        placeholder={t("projects.renamePlaceholder")}
+        autoFocus
+      />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
+          {t("common.cancel")}
+        </Button>
+        <Button size="sm" disabled={!value.trim() || busy} onClick={handleRename}>
+          {busy ? t("common.saving") : t("common.save")}
+        </Button>
+      </div>
     </Dialog>
   )
 }
@@ -96,36 +103,21 @@ export function DeleteProjectDialog({
   onDeleted,
 }: DeleteProjectDialogProps) {
   const { t } = useTranslation()
-  const [busy, setBusy] = useState(false)
-
-  const handleDelete = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const res = await apiDelete(`/api/v1/projects/${projectId}`)
-      if (res.ok) {
-        onOpenChange(false)
-        onDeleted()
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.deleteConfirm")}>
-        <p className="text-sm text-muted-foreground">
-          {t("projects.deleteDesc", { title })}
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
-            {busy ? t("common.loading") : t("common.delete")}
-          </Button>
-        </div>
-    </Dialog>
+    <AlertDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      danger
+      title={t("projects.deleteConfirm")}
+      description={t("projects.deleteDesc", { title })}
+      cancelLabel={t("common.cancel")}
+      confirmLabel={t("common.delete")}
+      onConfirm={async () => {
+        const response = await apiDelete(`/api/v1/projects/${projectId}`)
+        if (!response.ok) throw new Error("Project deletion failed")
+        onDeleted()
+      }}
+    />
   )
 }
 
@@ -145,40 +137,20 @@ export function DeleteProjectsDialog({
   onDeleted,
 }: DeleteProjectsDialogProps) {
   const { t } = useTranslation()
-  const [busy, setBusy] = useState(false)
-
-  const handleDelete = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      // apiFetch already toasts the failure detail — only close + refetch on
-      // success, so a 422/404 leaves the selection on screen for a retry.
-      const res = await apiPost("/api/v1/projects/bulk-delete", {
-        ids: projectIds,
-      })
-      if (res.ok) {
-        onOpenChange(false)
-        onDeleted()
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const count = projectIds.length
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="sm" closeLabel={t("common.close")} title={t("projects.selection.deleteConfirm", { count })}>
-        <p className="text-sm text-muted-foreground">
-          {t("projects.selection.deleteDesc")}
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="destructive" size="sm" disabled={busy} onClick={handleDelete}>
-            {busy ? t("common.loading") : t("common.delete")}
-          </Button>
-        </div>
-    </Dialog>
+    <AlertDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      danger
+      title={t("projects.selection.deleteConfirm", { count: projectIds.length })}
+      description={t("projects.selection.deleteDesc")}
+      cancelLabel={t("common.cancel")}
+      confirmLabel={t("common.delete")}
+      onConfirm={async () => {
+        const response = await apiPost("/api/v1/projects/bulk-delete", { ids: projectIds })
+        if (!response.ok) throw new Error("Bulk project deletion failed")
+        onDeleted()
+      }}
+    />
   )
 }

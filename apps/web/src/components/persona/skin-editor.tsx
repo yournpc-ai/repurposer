@@ -5,26 +5,13 @@ import { Video } from "@repurposer/video-remotion"
 import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec"
 import { Check, RotateCcw, Save, Upload, X } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { IconButton } from "@/components/ui/icon-button-clean"
+import { Button } from "@/components/ui/button-clean"
+import { Card, CardHeader, CardContent } from "@/components/ui/card-clean"
 import { TextField } from "@/components/ui/text-field-clean"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch-clean"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { SegmentedControl } from "@/components/ui/segmented-control-clean"
+import { Select } from "@/components/ui/select-clean"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { MusicPanel } from "@/components/persona/music-panel"
@@ -297,7 +284,7 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <label className="text-xs text-muted-foreground">{label}</label>
       {children}
     </div>
   )
@@ -305,11 +292,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 /** Free-form font-size control: drag the slider or type an exact value. */
 function SizeControl({
+  label,
   value,
   onChange,
   min = 16,
   max = 120,
 }: {
+  label: string
   value: number
   onChange: (v: number) => void
   min?: number
@@ -317,15 +306,15 @@ function SizeControl({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <Slider
+      <input type="range"
         min={min}
         max={max}
         step={1}
-        value={[value]}
-        onValueChange={(v) => onChange(Array.isArray(v) ? v[0] : v)}
+        aria-label={label} value={value}
+        onChange={(e) => onChange(e.target.valueAsNumber)}
         className="flex-1"
       />
-      <TextField
+      <TextField aria-label={label}
         type="number"
         min={min}
         max={max}
@@ -413,24 +402,8 @@ function MediaUploadField({
             <video src={resolvedUrl} className="h-28 w-full object-cover" muted loop autoPlay />
           )}
           <div className="absolute right-1.5 top-1.5 flex gap-1">
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              className="h-6 w-6 rounded-md"
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload className="h-3 w-3" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              className="h-6 w-6 rounded-md"
-              onClick={onClear}
-            >
-              <X className="h-3 w-3" />
-            </Button>
+            <IconButton variant="secondary" size="sm" label={t("common.upload")} onClick={() => inputRef.current?.click()} icon={<Upload />} />
+            <IconButton variant="secondary" size="sm" label={t("common.remove")} onClick={onClear} icon={<X />} />
           </div>
         </div>
       ) : (
@@ -523,34 +496,18 @@ export function SkinEditor({
       {/* Settings — single column, grouped (craft keys are task-book defaults
           and intentionally absent, NAMING N-28) */}
       <Card>
-        <CardHeader>
-          <CardTitle>{t("personaDetail.skin.title")}</CardTitle>
-          <CardDescription>{t("personaDetail.skin.desc")}</CardDescription>
-        </CardHeader>
+        <CardHeader title={t("personaDetail.skin.title")} description={t("personaDetail.skin.desc")} />
         <CardContent className="space-y-6">
           <section className="space-y-4">
             <GroupLabel>{t("personaDetail.skin.groups.caption")}</GroupLabel>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t("personaDetail.skin.caption.font")}>
-                <Select
-                  value={skin.captionFont}
-                  onValueChange={(v) => update("captionFont", v ?? "inter")}
-                >
-                  <SelectTrigger className="h-9 w-full rounded-md text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FONTS.map((f) => (
-                      <SelectItem key={f.value} value={f.value}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Select aria-label={t("personaDetail.skin.caption.font")} value={skin.captionFont}
+                  options={FONTS.map(({ value, label }) => ({ value, label }))} onChange={(value) => update("captionFont", value)} />
               </Field>
             </div>
             <Field label={t("personaDetail.skin.caption.size")}>
-              <SizeControl
+              <SizeControl label={t("personaDetail.skin.caption.size")}
                 value={skin.captionSize}
                 onChange={(v) => update("captionSize", v)}
               />
@@ -613,7 +570,7 @@ export function SkinEditor({
             {skin.titleEnabled && (
               <>
                 <Field label={t("personaDetail.skin.titleCard.size")}>
-                  <SizeControl
+              <SizeControl label={t("personaDetail.skin.titleCard.size")}
                     value={skin.titleSize}
                     onChange={(v) => update("titleSize", v)}
                   />
@@ -645,21 +602,11 @@ export function SkinEditor({
                 {skin[enabledKey] && (
                   <>
                     <Field label={t("personaDetail.skin.introOutro.type")}>
-                      <ToggleGroup
-                        variant="outline"
-                        spacing={0}
-                        value={[skin[kindKey]]}
-                        onValueChange={(v) =>
-                          v[0] && update(kindKey, v[0] as IntroOutroKind)
-                        }
-                        className="w-full"
-                      >
-                        {(["text", "image", "video"] as const).map((k) => (
-                          <ToggleGroupItem key={k} value={k} className="flex-1 text-xs">
-                            {t(`personaDetail.skin.introOutro.kinds.${k}`)}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
+                      <SegmentedControl value={skin[kindKey]} aria-label={t("personaDetail.skin.introOutro.type")}
+                        onChange={(value) => update(kindKey, value)}
+                        options={(["text", "image", "video"] as const).map((value) => ({
+                          value, label: t(`personaDetail.skin.introOutro.kinds.${value}`),
+                        }))} />
                     </Field>
                     {skin[kindKey] === "text" ? (
                       <Field label={t(`personaDetail.skin.introOutro.${textKey}`)}>

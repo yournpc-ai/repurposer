@@ -11,6 +11,7 @@ export interface CheckoutReturn {
 }
 
 export interface SettingsDialogHandle {
+  modalOpen: boolean
   openSettings: (section?: SettingsSectionId, checkoutReturn?: CheckoutReturn) => void
   openCreditTopup: (shortfall?: CreditTopupRequest) => void
   checkoutReturn: CheckoutReturn | null

@@ -3,13 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Check, Mic, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button-clean"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardHeader, CardContent } from "@/components/ui/card-clean"
 import { apiFetch } from "@/lib/api"
 
 export type VoiceBlock = {
@@ -128,13 +122,7 @@ export function VoiceSection({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Mic className="h-4 w-4" />
-          {t("personaDetail.voice.title")}
-        </CardTitle>
-        <CardDescription>{t("personaDetail.voice.desc")}</CardDescription>
-      </CardHeader>
+      <CardHeader icon={<Mic />} title={t("personaDetail.voice.title")} description={t("personaDetail.voice.desc")} />
       <CardContent className="space-y-1">
         <input
           ref={fileRef}

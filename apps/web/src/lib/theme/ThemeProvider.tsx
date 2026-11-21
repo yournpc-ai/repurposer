@@ -61,9 +61,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(initial)
     const r = resolveTheme(initial)
     setResolved(r)
-    // The anti-FOUC inline script paints `system` as dark unconditionally;
-    // reconcile the DOM with the real resolution — without this a
-    // light-system user stays dark and the first toggle is a visual no-op.
+    // Keep the resolved state and the pre-paint document class in sync.
     applyResolved(r)
   }, [])
 

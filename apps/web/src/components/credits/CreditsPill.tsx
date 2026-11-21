@@ -6,11 +6,7 @@ import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button-clean"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover } from "@/components/ui/popover-clean"
 import { apiFetch, WALLET_REFRESH_EVENT } from "@/lib/api"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
@@ -77,30 +73,13 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
   if (!isAuthenticated) return null
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label={t("common.credits")}
-            className="group flex h-9 items-center gap-1.5 rounded-md px-2 text-[13px] transition-colors hover:bg-accent active:bg-accent"
-          >
-            <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-            {/* Quiet by default — the spend-point read is a glance, not a
-                banner; foreground only on hover. */}
-            <span className="tabular-nums text-muted-foreground transition-colors group-hover:text-foreground">
-              {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
-            </span>
-          </button>
-        }
-      />
-      <PopoverContent
-        side="bottom"
-        align="end"
-        sideOffset={8}
-        className="w-80 gap-0 p-0"
-      >
-        <div className="p-4">
+    <div className="relative">
+      <Button variant="ghost" aria-label={t("common.credits")} aria-haspopup="dialog" aria-expanded={open}
+        icon={<Zap size={16} />} onClick={() => setOpen(!open)}>
+        {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
+      </Button>
+      <Popover open={open} onClose={() => setOpen(false)} aria-label={t("common.credits")} align="end" width={320} focusOnOpen>
+        <div>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">
@@ -172,7 +151,7 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
             <ArrowRight className="size-3.5" />
           </button>
         </div>
-      </PopoverContent>
-    </Popover>
+      </Popover>
+    </div>
   )
 }

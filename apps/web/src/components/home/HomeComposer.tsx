@@ -11,13 +11,14 @@ import { acceptsStagedFile } from "@/lib/stagedFiles"
 import { useFileDrop } from "@/lib/useFileDrop"
 import { fileKindOf, type ChatMention } from "@/lib/mentions"
 import type { SkillOption } from "@/lib/skills"
+import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import { useAuth } from "@/lib/auth-context"
 import {
   MentionEditor,
   type MentionEditorHandle,
 } from "@/components/mentions/MentionEditor"
 
-import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
+import { Card } from "@/components/ui/card-clean"
 import { AssetChips } from "@/components/home/AssetChips"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
@@ -103,7 +104,8 @@ export function HomeComposer({
   const { t } = useTranslation()
   const { isAuthenticated, loginOpen } = useAuth()
   const { launching: isGenerating, launch } = useProjectLaunch()
-  const tourAllowed = canOpenTour(isAuthenticated, loginOpen)
+  const { modalOpen } = useSettingsDialog()
+  const tourAllowed = !modalOpen && canOpenTour(isAuthenticated, loginOpen)
 
   const [personaId, setPersonaId] = useState(AUTO_GENERATE)
   // Batch A (2026-09-18): picked files upload IMMEDIATELY into a pre-project
@@ -278,15 +280,7 @@ export function HomeComposer({
   }
   return (
     <>
-    <InputGroup
-      className={`border bg-card shadow-none dark:bg-card ${
-        dragging
-          ? "border-2 border-dashed border-foreground/30 "
-          : "border border-subtle"
-      }`}
-      style={{ borderRadius: 16 }}
-      {...dropProps}
-    >
+    <Card role="group" className={dragging ? "relative w-full outline-2 outline-dashed outline-ring" : "relative w-full"} {...dropProps}>
         {/* Drop affordance — the floating pill (screenshot parity): centered
             over the card, pointer-events-none so the drop always lands on
             the shell. Frosted floating layer (overlay-surface family) with
@@ -299,14 +293,13 @@ export function HomeComposer({
             </div>
           </div>
         )}
-        <InputGroupAddon
-          align="block-start"
+        <div role="group"
           className="min-h-0 overflow-hidden px-5 py-0 font-normal"
           style={{ display: staged.length && !assetsOpen ? undefined : "none", paddingTop: 16 }}
           onClick={focusEditor}
         >
           <AssetChips items={staged} onRemove={removeStaged} onRetry={retryStaged} />
-        </InputGroupAddon>
+        </div>
 
         {/* The input row: the bar's attach button (zero width when expanded)
             + the editor band. A plain row, not an addon — the inline-start
@@ -358,8 +351,7 @@ export function HomeComposer({
           </div>
         </div>
 
-        <InputGroupAddon
-          align="block-end"
+        <div role="group"
           className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
           style={{ marginTop: 8, paddingBottom: 12 }}
           onClick={focusEditor}
@@ -406,7 +398,7 @@ export function HomeComposer({
 
           </div>
 
-        </InputGroupAddon>
+        </div>
 
         <ComposerSendButton
           className="absolute"
@@ -417,7 +409,7 @@ export function HomeComposer({
           onClick={handleGenerate}
           label={t("chat.send")}
         />
-    </InputGroup>
+    </Card>
 
     <Tour
       steps={tourSteps}

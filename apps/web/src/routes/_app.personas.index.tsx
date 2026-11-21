@@ -4,26 +4,11 @@ import { useTranslation } from "react-i18next"
 import { Mic2, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button-clean"
-import { EmptyState } from "@/components/ui/empty-state"
+import { EmptyState } from "@/components/ui/empty-state-clean"
 import { TextField } from "@/components/ui/text-field-clean"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Select } from "@/components/ui/select-clean"
+import { Dialog } from "@/components/ui/dialog-clean"
+import { Avatar } from "@/components/ui/avatar-clean"
 import { Badge } from "@/components/ui/badge-clean"
 import { apiFetch } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
@@ -83,61 +68,38 @@ function PersonasPage() {
               {t("personas.subtitle")}
             </p>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger
-              render={
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t("personas.new")}
-                </Button>
-              }
-            />
-            <DialogContent className="sm:max-w-md">
+          <Dialog open={open} onOpenChange={setOpen} closeLabel={t("common.close")}
+            title={t("personas.dialogTitle")} description={t("personas.dialogDesc")}
+            trigger={<Button size="sm" icon={<Plus size={16} />}>{t("personas.new")}</Button>}>
               <form onSubmit={handleSubmit}>
-                <DialogHeader>
-                  <DialogTitle>{t("personas.dialogTitle")}</DialogTitle>
-                  <DialogDescription>{t("personas.dialogDesc")} </DialogDescription>
-                </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">{t("personas.labelName")}</Label>
+                    <label htmlFor="name">{t("personas.labelName")}</label>
                     <TextField id="name" value={name} onChange={(e) => setName(e.target.value)} required />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="title">{t("personas.labelTitle")}</Label>
+                    <label htmlFor="title">{t("personas.labelTitle")}</label>
                     <TextField id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="language">{t("common.language")}</Label>
-                    <Select value={language} onValueChange={(v) => setLanguage(v || "en")}>
-                      <SelectTrigger id="language">
-                        <SelectValue>
-                          {(value: string) => t(`languages.${value}`)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(["en", "fr", "de", "es", "it", "zh"] as const).map((lang) => (
-                          <SelectItem key={lang} value={lang}>
-                            {t(`languages.${lang}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <label htmlFor="language">{t("common.language")}</label>
+                    <Select id="language" aria-label={t("common.language")} value={language} onChange={setLanguage}
+                      options={["en", "fr", "de", "es", "it", "zh"].map((value) => ({ value, label: t(`languages.${value}`) }))} />
                   </div>
                 </div>
-                <DialogFooter>
+                <div className="mt-4 flex justify-end gap-2">
                   <Button type="submit" size="sm">{t("common.create")}</Button>
-                </DialogFooter>
+                </div>
               </form>
-            </DialogContent>
+
           </Dialog>
         </div>
 
         {personas.length === 0 ? (
           <EmptyState
-            icon={Mic2}
+            bare tall icon={<Mic2 />}
             title={t("personas.emptyTitle")}
-            description={t("personas.emptyDesc")}
+            text={t("personas.emptyDesc")}
             action={
               <Button size="sm" onClick={() => setOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -155,11 +117,7 @@ function PersonasPage() {
                 className="group rounded-xl bg-card p-5 border border-subtle transition-colors hover:bg-accent"
               >
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-11 w-11">
-                    <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                      {persona.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <Avatar name={persona.name} size={40} />
                   <div className="min-w-0">
                     <p className="truncate font-medium">{persona.name}</p>
                     {persona.title && (

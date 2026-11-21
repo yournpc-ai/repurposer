@@ -6,17 +6,11 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/ui/avatar-clean"
 import { Button } from "@/components/ui/button-clean"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog } from "@/components/ui/dialog-clean"
 import { TextField } from "@/components/ui/text-field-clean"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { TextArea } from "@/components/ui/text-area-clean"
 import { apiPost } from "@/lib/api"
 import { connectChannel, PLATFORMS, useChannels } from "@/lib/channels"
@@ -150,15 +144,11 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
   const editablePlatforms = selected.filter((p) => activeAccountFor(p))
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("publish.title")}</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange} title={t("publish.title")} closeLabel={t("common.close")}>
 
         {/* Channel picker */}
         <div className="space-y-2">
-          <Label>{t("publish.chooseChannels")}</Label>
+          <label>{t("publish.chooseChannels")}</label>
           <div className="grid grid-cols-2 gap-2">
             {PLATFORMS.map((platform) => {
               const account = activeAccountFor(platform)
@@ -190,14 +180,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                         onClick={() => toggle(platform)}
                         className="flex w-full items-center gap-2 text-left"
                       >
-                        <Avatar className="h-6 w-6">
-                          {account.avatar_url && (
-                            <AvatarImage src={account.avatar_url} />
-                          )}
-                          <AvatarFallback>
-                            {account.display_name.slice(0, 1).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <Avatar name={account.display_name} src={account.avatar_url ?? undefined} size={24} />
                         <span className="truncate text-xs text-muted-foreground">
                           {account.display_name}
                         </span>
@@ -221,25 +204,17 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
 
         {/* Per-platform payload drafts (state survives tab switches) */}
         {editablePlatforms.length > 0 && (
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => setActiveTab(v as ChannelPlatform)}
-            className="w-full"
-          >
-            <TabsList variant="line" className="w-full">
-              {editablePlatforms.map((platform) => (
-                <TabsTrigger key={platform} value={platform}>
-                  <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
-                  {PLATFORM_LABELS[platform]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div>
+            <SegmentedControl kind="tabs" variant="underline" value={activeTab ?? undefined} onChange={setActiveTab}
+              aria-label={t("publish.title")} options={editablePlatforms.map((platform) => ({
+                value: platform, label: PLATFORM_LABELS[platform], icon: <PlatformIcon platform={platform} />, controls: "publish-" + platform,
+              }))} />
             {editablePlatforms.map((platform) => (
-              <TabsContent key={platform} value={platform} className="space-y-3 pt-3">
+              <section key={platform} role="tabpanel" id={"publish-" + platform} aria-label={PLATFORM_LABELS[platform]} hidden={platform !== activeTab} className="space-y-3 pt-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor={`publish-title-${platform}`}>
+                  <label htmlFor={`publish-title-${platform}`}>
                     {t("publish.titleLabel")}
-                  </Label>
+                  </label>
                   <TextField
                     id={`publish-title-${platform}`}
                     value={drafts[platform].title}
@@ -249,9 +224,9 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor={`publish-caption-${platform}`}>
+                  <label htmlFor={`publish-caption-${platform}`}>
                     {t("publish.captionLabel")}
-                  </Label>
+                  </label>
                   <TextArea
                     id={`publish-caption-${platform}`}
                     minRows={5}
@@ -262,9 +237,9 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor={`publish-hashtags-${platform}`}>
+                  <label htmlFor={`publish-hashtags-${platform}`}>
                     {t("publish.hashtagsLabel")}
-                  </Label>
+                  </label>
                   <TextField
                     id={`publish-hashtags-${platform}`}
                     value={drafts[platform].hashtags}
@@ -273,9 +248,9 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
                     }
                   />
                 </div>
-              </TabsContent>
+              </section>
             ))}
-          </Tabs>
+          </div>
         )}
 
         {needsDisclosure(output) && (
@@ -304,7 +279,7 @@ export function PublishDialog({ output, open, onOpenChange }: PublishDialogProps
             {submitting ? t("publish.publishing") : t("publish.publishNow")}
           </Button>
         </div>
-      </DialogContent>
+
     </Dialog>
   )
 }

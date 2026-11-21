@@ -2,12 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { motion, useMotionValueEvent, useScroll } from "motion/react"
 import { ArrowDown, ArrowUp, FileText, Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import {
-  Attachment,
-  AttachmentContent,
-  AttachmentMedia,
-  AttachmentTitle,
-} from "@/components/ui/attachment"
+import { Badge } from "@/components/ui/badge-clean"
 import { LANDING_GALLERY } from "./content"
 import { DemoVideo } from "./CreationShowcase"
 import { LogoMark } from "@/components/LogoMark"
@@ -31,20 +26,10 @@ function StoryAttachments({ className = "" }: { className?: string }) {
   const { t } = useTranslation()
   return (
     <div role="group" aria-label={t("landing.story.attachments.label")} className={`flex min-w-0 flex-wrap gap-2 ${className}`}>
-      <Attachment size="xs">
-        <AttachmentMedia variant="image">
-          <img src={sample.posterUrl} alt="" />
-        </AttachmentMedia>
-        <AttachmentContent>
-          <AttachmentTitle className="font-normal">{t("landing.story.attachments.image")}</AttachmentTitle>
-        </AttachmentContent>
-      </Attachment>
-      <Attachment size="xs">
-        <AttachmentMedia><FileText /></AttachmentMedia>
-        <AttachmentContent>
-          <AttachmentTitle className="font-normal">{t("landing.story.attachments.document")}</AttachmentTitle>
-        </AttachmentContent>
-      </Attachment>
+      <Badge size="md" icon={<img src={sample.posterUrl} alt="" className="size-4 rounded-sm object-cover" />}>
+        {t("landing.story.attachments.image")}
+      </Badge>
+      <Badge size="md" icon={<FileText />}>{t("landing.story.attachments.document")}</Badge>
     </div>
   )
 }

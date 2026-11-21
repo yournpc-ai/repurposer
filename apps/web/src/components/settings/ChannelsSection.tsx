@@ -3,7 +3,7 @@
 import { useTranslation } from "react-i18next"
 
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/ui/avatar-clean"
 import { Badge } from "@/components/ui/badge-clean"
 import { Button } from "@/components/ui/button-clean"
 import { Card } from "@/components/ui/card-clean"
@@ -62,14 +62,7 @@ export function ChannelsSection() {
                 ) : account ? (
                   <>
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-7 w-7">
-                        {account.avatar_url && (
-                          <AvatarImage src={account.avatar_url} />
-                        )}
-                        <AvatarFallback>
-                          {account.display_name.slice(0, 1).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <Avatar name={account.display_name} src={account.avatar_url ?? undefined} size={24} />
                       <span className="truncate text-sm">
                         {account.display_name}
                       </span>

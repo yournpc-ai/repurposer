@@ -6,7 +6,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button-clean"
 import { cn } from "@/lib/utils"
 
 /**
@@ -288,7 +288,7 @@ export function Tour({
                 <div className="flex items-center gap-2">
                   {index > 0 && (
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       className="h-9"
                       onClick={goPrev}

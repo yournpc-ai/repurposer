@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Loader2, Pause, Play, Wand2 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { IconButton } from "@/components/ui/icon-button-clean"
 import { TextField } from "@/components/ui/text-field-clean"
-import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch-clean"
 import { apiFetch } from "@/lib/api"
 import { formatDuration } from "@/lib/utils"
@@ -134,12 +133,12 @@ export function MusicPanel({
               <span>{t("personaDetail.skin.music.gain")}</span>
               <span>{gainDb.toFixed(0)} dB</span>
             </div>
-            <Slider
+            <input type="range"
               min={-30}
               max={0}
               step={1}
-              value={[gainDb]}
-              onValueChange={(v) => onGainChange(Array.isArray(v) ? v[0] : v)}
+              aria-label={t("personaDetail.skin.music.gain")} value={gainDb}
+              className="w-full accent-primary" onChange={(e) => onGainChange(e.target.valueAsNumber)}
             />
           </div>
 
@@ -168,11 +167,11 @@ export function MusicPanel({
                     }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent/50"
                   >
-                    <Button
+                    <IconButton
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       className="h-7 w-7 shrink-0"
-                      aria-label={
+                      label={
                         playingId === piece.id
                           ? t("personaDetail.skin.music.pause")
                           : t("personaDetail.skin.music.play")
@@ -181,13 +180,12 @@ export function MusicPanel({
                         e.stopPropagation()
                         togglePreview(piece)
                       }}
-                    >
-                      {playingId === piece.id ? (
+                icon={playingId === piece.id ? (
                         <Pause className="h-3.5 w-3.5" />
                       ) : (
                         <Play className="h-3.5 w-3.5" />
                       )}
-                    </Button>
+              />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{piece.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
@@ -223,20 +221,19 @@ export function MusicPanel({
                 className="h-9 flex-1"
                 disabled={generating}
               />
-              <Button
-                variant="outline"
-                size="icon"
+              <IconButton
+                variant="secondary"
+                size="sm"
                 className="h-9 w-9 shrink-0"
-                aria-label={t("personaDetail.skin.music.generate")}
+                label={t("personaDetail.skin.music.generate")}
                 disabled={!prompt.trim() || generating}
                 onClick={generate}
-              >
-                {generating ? (
+                icon={generating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Wand2 className="h-4 w-4" />
                 )}
-              </Button>
+              />
             </div>
           </div>
         </>
