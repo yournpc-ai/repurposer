@@ -716,13 +716,16 @@ class ChatMessageResponse(BaseModel):
     def _editor_media_projection(self):
         intent = self.intent or {}
         if "editor_media" in intent or "media_permission" in intent:
-            accepted = bool(self.workflow_run_id or intent.get("export_job")) and "media_result" not in intent
             self.workflow_run_id = None
-            self.intent = {key: intent[key] for key in ("media_result",) if key in intent}
-            if accepted:
-                self.intent = {"media_status": "accepted", "operation": intent["tool"]}
+            self.intent = {key: intent[key] for key in (
+                "native_call_id", "media_job", "export_job", "media_result",
+            ) if key in intent}
+            if intent.get("media_job") or intent.get("export_job"):
+                self.intent["operation"] = intent["tool"]
+                if "media_result" not in intent:
+                    self.intent["media_status"] = "accepted"
         elif "resumed_media" in intent:
-            self.intent = {k: v for k, v in intent.items() if k not in {"resumed_media", "export_resume_attempts"}}
+            self.intent = {k: v for k, v in intent.items() if k not in {"resumed_media", "export_resume_attempts", "media_resume_attempts"}}
         return self
 
 

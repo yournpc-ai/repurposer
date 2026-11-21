@@ -1,0 +1,164 @@
+{
+  "migration": [
+    "rep_6d_qmopb4",
+    null,
+    null
+  ],
+  "provider": "minimax",
+  "model": "MiniMax-M3.1-Flash",
+  "project_id": "ab3882ce-0ac4-4f28-91d9-2134daad9ed8",
+  "turn_id": "6ea48683-cccc-4b8f-8e55-b2af5b736ef7",
+  "requests": 2,
+  "tool_schema": {
+    "type": "function",
+    "function": {
+      "name": "generate_music",
+      "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "maximum": 120,
+            "minimum": 0.25,
+            "multipleOf": 0.001,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "style": {
+            "enum": [
+              "light_electronic",
+              "ambient",
+              "driving_electronic"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "bpm": {
+            "default": 100,
+            "maximum": 200,
+            "minimum": 40,
+            "title": "Bpm",
+            "type": "integer"
+          },
+          "name": {
+            "default": "Electronic instrumental",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "style"
+        ],
+        "title": "GenerateMusicArgs",
+        "type": "object"
+      }
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "{\"works\": [], \"referenced_output\": null, \"selected\": null, \"project\": {\"title\": \"6D synthetic music\", \"project_id\": \"ab3882ce-0ac4-4f28-91d9-2134daad9ed8\", \"user_stated_constraints\": []}, \"assets\": [], \"fixed_media\": [{\"snapshot_id\": \"7133c06f-920d-5b31-b661-f483f35ab78f\", \"kind\": \"audio\", \"duration_ticks\": 270000, \"title\": \"Ambient 试听片段\"}], \"available_sources\": [{\"snapshot_id\": \"7133c06f-920d-5b31-b661-f483f35ab78f\", \"kind\": \"audio\", \"digest\": \"10f6d9c8377c1544d8c4798829877f4e2537d2e1bb05bd83d02a8ef0f04e95a5\", \"duration_ticks\": 270000, \"title\": \"Ambient 试听片段\", \"width\": null, \"height\": null, \"origin\": {\"kind\": \"programmatic_score\", \"run_id\": \"76d778ae-2857-5d7f-baf4-0624b5debf94\", \"synth_version\": \"numpy-electronic-v1\"}, \"view_id\": null, \"web_snapshot_id\": null}], \"delivery_scope\": \"Save the requested work and report any requested preview. Formal export is outside this request.\"}",
+      "name": "project_evidence"
+    },
+    {
+      "role": "user",
+      "content": "只生成一段三秒的 ambient 配乐供我试听。不要创建或修改视频，不需要导出。"
+    },
+    {
+      "role": "assistant",
+      "reasoning_content": "Just generate music 3 seconds ambient.",
+      "tool_calls": [
+        {
+          "id": "call_05b35fbb3eaa4df8b2867226",
+          "type": "function",
+          "function": {
+            "name": "generate_music",
+            "arguments": "{\"duration_seconds\": 3.0, \"style\": \"ambient\", \"name\": \"Ambient \\u8bd5\\u542c\\u7247\\u6bb5\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_05b35fbb3eaa4df8b2867226",
+      "name": "generate_music",
+      "content": "{\"peak\": 0.097015380859375, \"role\": \"music\", \"score\": {\"bpm\": {\"den\": 1, \"num\": 100}, \"style\": \"ambient\"}, \"digest\": \"10f6d9c8377c1544d8c4798829877f4e2537d2e1bb05bd83d02a8ef0f04e95a5\", \"status\": \"available\", \"music_id\": \"3e4bbca3-8e04-572a-a3fb-12d3e0d26b1e\", \"cache_hit\": false, \"snapshot_id\": \"7133c06f-920d-5b31-b661-f483f35ab78f\", \"analysis_digest\": \"2ebddc46326da1b11681e8341a24da5c54c0198ad438610fee4b306d7441c5d3\", \"charged_credits\": 0, \"duration_seconds\": 3.0, \"reserved_credits\": 0, \"added_to_composition\": false, \"delivered_to_chat\": true}"
+    }
+  ],
+  "job": {
+    "id": "76d778ae-2857-5d7f-baf4-0624b5debf94",
+    "status": "succeeded",
+    "claims": 1,
+    "credits_authorized": 0
+  },
+  "history": {
+    "id": "05b4bcbb-c138-4f7a-ab0e-9faaaa17cefd",
+    "seq": 3,
+    "intent": {
+      "native_call_id": "call_05b35fbb3eaa4df8b2867226",
+      "media_job": "76d778ae-2857-5d7f-baf4-0624b5debf94",
+      "media_result": {
+        "peak": 0.097015380859375,
+        "role": "music",
+        "score": {
+          "bpm": {
+            "den": 1,
+            "num": 100
+          },
+          "style": "ambient"
+        },
+        "digest": "10f6d9c8377c1544d8c4798829877f4e2537d2e1bb05bd83d02a8ef0f04e95a5",
+        "status": "available",
+        "music_id": "3e4bbca3-8e04-572a-a3fb-12d3e0d26b1e",
+        "cache_hit": false,
+        "snapshot_id": "7133c06f-920d-5b31-b661-f483f35ab78f",
+        "analysis_digest": "2ebddc46326da1b11681e8341a24da5c54c0198ad438610fee4b306d7441c5d3",
+        "charged_credits": 0,
+        "duration_seconds": 3.0,
+        "reserved_credits": 0,
+        "added_to_composition": false
+      },
+      "operation": "generate_music"
+    },
+    "blocks": [
+      "audio_playback"
+    ]
+  },
+  "run_count": 0,
+  "final": "已生成 3 秒 ambient 配乐（music_id 这份素材，风格 ambient，BPM 100，实测时长 3.0 秒），已交付到对话，可直接试听。\n\n未创建或修改任何视频，也未导出。",
+  "final_question": null,
+  "offered_tools": [
+    "ask_user",
+    "answer",
+    "get_understanding",
+    "get_asset",
+    "search_transcript",
+    "list_project_media",
+    "prepare_video_materials",
+    "create_video",
+    "extend_still",
+    "bind_clip_source",
+    "insert_audio",
+    "generate_image",
+    "generate_voice",
+    "generate_music",
+    "inspect_timeline",
+    "inspect_clip",
+    "split_clip",
+    "trim_clip",
+    "move_clip",
+    "translate",
+    "scale",
+    "preview_range",
+    "review_video",
+    "align_recording",
+    "get_narration_alignment",
+    "annotate_narration",
+    "read_conversation_context"
+  ],
+  "system": "你是视频剪辑师。用本轮用户提问的语言回答。修改片段前，按需读取时间线定位目标。制作影片时，空项目按用户要求用 create_video 将镜头直接保存为可编辑作品。若用户只要求生成素材，已交付的素材回执即完成该项请求，直接说明可从对话中查看或播放。颜色、运动、时长、交付范围以用户原话为准。只要求调整和复看时，复看后答复；正式导出需要交付意图。目标不明确时询问。可在同一响应提交独立的读取、素材生成或已知对象的修改。写入按声明次序保存。需要前项新标识时先看回执，再在下次决策引用。完成各项后再单独答复。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。同窗对照按 earlier 与 current 的标记读图。构图以用户点名的主体与取景要求为准，留边与是否填满画布是不同选择。当前预览满足要求就结束，不追加未请求的构图、画幅或配音选择；素材取景限制改善时说明已看到的局限。采样范围限制用于如实陈述证据，不是继续寻找假设问题的理由；用户点名的内容已在当前版本得到观察且没有待修发现时，停止追加观察并完成用户要求的后续交付或答复。以当前版本已观察窗口和用户要求为依据，说明发现的问题及未检查范围。调整前后的几何与时间以版本数据为准。描述源取景时，source_clipped_px 是源画面被画布裁掉的像素，canvas_borders_px 是画布留边像素；source_clipped_px 大于 0 时不能声称完整源画面，canvas_borders_px 大于 0 时不能声称留边已消除，主体或文字是否被裁切仍以实际帧为准。face_evidence.face_fully_visible=false 时不能声称检测到的人脸完整或有安全边距；expanded_face_fully_visible=false 时不能声称头肩完整。人脸框和扩边区域不证明头发、肩膀完整或构图自然，未检测到时明确未知。几何坐标数组逐字段直接引用，不要重算成不同边界。静态图片来源不等于输出静止；sample_frames 中的像素差异只证明所列采样时点的变化，不证明未观察时段的运动，描述输出前先核对这些帧。只有实际收到可感知声音才能评价听感。播放范围取自 window_seconds；描述抽样帧时只引用 sample_seconds 中实际解码的时点。混合波形只说明整体电平，声部重叠时间以各轨片段为准。如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。如果 preceding_reviewed_delivery 或 referenced_output 表明用户针对已交付的成片提出修改，仍需交付修订后的成片，除非用户只要预览。只有交付回执才表示正式成片已发到对话。审阅发现问题时根据用户目标决定是否继续修改；涉及用户硬要求的发现若仍未解决，交付和最终回复必须明确报告该未满足项，不能把有 Output 或有交付卡等同于目标完成。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。\n工具执行过程由活动行展示。正文用用户的语言说明观察、需要决定的问题和实际结果。提问时把问题与选项交给问题卡。\n对话语言：zh。从首次进度说明到提问、选项和交付，都用这种语言与用户交流。若用户在自己的话中明显切换语言，或明确指定另一种交流语言，以用户为准。旁白和字幕的语言选择仅适用于作品。",
+  "application_context": "\n未上传文件，本次仅有文本输入。\n目前的 Brief（代码合并后的状态。user-stated 字段是用户亲口说明的既定事实；已问字段行列出已问过的字段，不要再问）：\n- material: none\n确认设置：execution=auto, spending=auto。\n\n"
+}

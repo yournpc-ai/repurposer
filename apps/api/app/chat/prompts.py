@@ -387,10 +387,6 @@ def intent_router_system() -> str:
     return chat_system("plan")
 
 
-def chat_intent_system() -> str:
-    return chat_system("conversation")
-
-
 def trigger_system() -> str:
     return chat_system("event")
 

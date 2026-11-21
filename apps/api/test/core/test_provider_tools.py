@@ -830,24 +830,20 @@ async def test_derived_web_view_infers_its_unique_view_id():
 
 
 def test_chat_tool_loops_allow_twenty_bounded_iterations():
-    from app.chat.intent import chat_intent_agent, intent_router
+    from app.chat.intent import intent_router
 
     assert intent_router.max_iterations == 20
-    assert chat_intent_agent.max_iterations == 20
 
 
 def test_video_modes_use_the_shared_pending_question_rule():
     from app.agents.base import jinja_env
-    from app.chat.intent import chat_intent_agent, intent_router
+    from app.chat.intent import intent_router
     from app.chat.prompts import chat_system
 
     plan = chat_system("plan", available_tools=intent_router.tools)
-    conversation = chat_system("conversation", available_tools=chat_intent_agent.tools)
     assert plan.count("待回答的问题：") == 1
-    assert conversation.count("待回答的问题：") == 1
     assert plan.count("交流语言：") == 1
-    assert conversation.count("交流语言：") == 1
-    assert "pending_disposition" in plan and "pending_disposition" in conversation
+    assert "pending_disposition" in plan
 
     opening = jinja_env.get_template("chat/user.j2").render(
         mode="plan", recent=["- user: earlier"], message="latest answer",
@@ -919,14 +915,13 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
     assert "ask_user" in {tool.name for tool in ambiguous.tools}
 
 
-@pytest.mark.parametrize("mode", ["plan", "conversation"])
 @pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.asyncio
 async def test_final_video_provider_request_clears_pending_and_historical_media(
-    monkeypatch, mode, streaming,
+    monkeypatch, streaming,
 ):
     from app.agents import tool_loop
-    from app.chat.intent import chat_intent_agent, intent_router
+    from app.chat.intent import intent_router
     from app.providers.llm.base import ProviderCapabilities, ToolGeneration
 
     calls = []
@@ -973,10 +968,9 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
             return Template()
 
     monkeypatch.setattr(tool_loop, "jinja_env", Environment())
-    source = intent_router if mode == "plan" else chat_intent_agent
     agent = tool_loop.ToolLoopAgent(
-        name=f"video-round-{mode}-{streaming}", prompt="unused.j2", system="test",
-        assemble=lambda **_kwargs: ({}, None), tools=source.tools, client=Client(),
+        name=f"video-round-{streaming}", prompt="unused.j2", system="test",
+        assemble=lambda **_kwargs: ({}, None), tools=intent_router.tools, client=Client(),
     )
 
     async def restore(_snapshot, _messages):
@@ -993,7 +987,7 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
         from app.chat.prompts import assemble_video_round
 
         return assemble_video_round({
-            **facts, "mode": mode, "user_text": "Use the answered title",
+            **facts, "mode": "plan", "user_text": "Use the answered title",
             "pending_question": lambda: pending,
         })
 
@@ -1183,7 +1177,7 @@ async def test_observed_version_wire_has_no_optional_creation_or_questionnaire()
     from copy import copy
     from types import SimpleNamespace
     from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import chat_intent_agent
+    from app.chat.intent import intent_router
     from app.chat.prompts import assemble_video_round
     from app.providers.llm.base import ToolCall, ToolGeneration
 
@@ -1203,7 +1197,7 @@ async def test_observed_version_wire_has_no_optional_creation_or_questionnaire()
             ])
 
     client = Client()
-    agent = copy(chat_intent_agent)
+    agent = copy(intent_router)
     agent.client = client
 
     def assemble(**facts):
@@ -1214,7 +1208,7 @@ async def test_observed_version_wire_has_no_optional_creation_or_questionnaire()
         return None
 
     result = await agent.call_loop(execute, round_assembler=assemble,
-                                  message="预览当前版本 0–3 秒，不要正式导出。", context={"text": ""})
+                                  message="预览当前版本 0–3 秒，不要正式导出。")
     assert result.calls == ["answer"]
     assert len(client.wires) == 1
     names = {tool["function"]["name"] for tool in client.wires[0]}
@@ -1226,7 +1220,7 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
     from copy import copy
     from types import SimpleNamespace
     from app.agents.tool_loop import ChatTool
-    from app.chat.intent import chat_intent_agent
+    from app.chat.intent import intent_router
     from app.chat.turn_tools import video_rejection_stop
     from app.models.schemas import VideoRangeScrubTarget
     from app.providers.llm.base import ToolCall, ToolGeneration
@@ -1249,7 +1243,7 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
             self.requests += 1
             return result
 
-    agent = copy(chat_intent_agent)
+    agent = copy(intent_router)
     agent.client = Client()
     agent.tools = [
         ChatTool(name="preview_range", description="Preview", params_model=VideoRangeScrubTarget, terminal=False),
@@ -1263,7 +1257,7 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
         return ToolObservation("pending_media" if name == "preview_range" else "{}", ok=name != "preview_range")
 
     result = await agent.call_loop(execute, should_stop_rejection=video_rejection_stop,
-                                  message="Preview the saved work", context={"text": ""})
+                                  message="Preview the saved work")
     assert result.no_progress_tool == "preview_range"
     assert result.iterations == 3
     assert agent.client.requests == 3

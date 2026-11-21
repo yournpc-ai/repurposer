@@ -1,26 +1,4 @@
-"""The chat turn's tool set (ADR-077 判词② — action union 的机械翻译).
-
-Declarations only: name + model-facing description + params model. The
-executions live with the turn runners (``plan_turn.py`` / ``propose_turn.py``)
-because they need the service layer's machinery (the ask_user machinery,
-the run birthplace, the wiring door) — this module deliberately imports NOTHING from
-the chat service so the import DAG stays one-directional:
-
-    schemas ← turn_tools ← intent ← service ← plan_turn / propose_turn
-
-    (turn_tools ← perception: the read registry's executes import the
-    pipeline layer DEFERRED, so this module's own import stays light)
-
-Tool names are model-facing only — they never surface in user copy (简报 §3
-禁令). The PLAN_TOOLS / CHAT_TOOLS lists are the TERMINAL set (终态工具一调
-即停); the NON-terminal read tools are the perception family's projections
-below (T2b — ``app/chat/perception/`` is their registry home).
-
-Description discipline (注册表条目扰动 = prompt 扰动): terse behavioral
-contracts — WHEN to call, what the call does, what speech must precede it.
-The parameter semantics live in the params models' Field descriptions; the
-asking strategy / naming / disclosure rules stay in the system templates.
-"""
+"""Native tools offered to the editor and transcript prose filtering."""
 
 import re
 
@@ -30,23 +8,17 @@ from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
     AnnotateNarrationArgs,
-    ChatAnswerArgs,
-    ChatAskArgs,
     GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
     AlignRecordingArgs,
-    PresentPlanArgs,
-    ProposeTasksArgs,
-    RetryUploadArgs,
     ReviewVideoArgs,
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
-    StartRunArgs,
 )
 
 def video_rejection_stop(current: ToolRejected, previous: tuple[ToolRejected, ...]) -> bool:
@@ -417,14 +389,6 @@ def _video_project_tools() -> list[ChatTool]:
 
 PLAN_TOOLS = [
     ChatTool(
-        name="present_plan",
-        description="展示需要用户确认的已注册后台任务及费用。",
-        params_model=PresentPlanArgs,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.draft", done_key="chat.activity.draftDone",
-        ),
-    ),
-    ChatTool(
         name="ask_user",
         presentation=NATIVE_PRESENTATION,
         description=(
@@ -433,67 +397,16 @@ PLAN_TOOLS = [
         params_model=PlanAskArgs,
     ),
     ChatTool(
-        name="start_run",
-        description=(
-            "启动已确认方案的 Run。只有用户确认了已展示的方案才调用，例如在确认阶段表示“没问题，开始吧”。若是要求修改，调用 present_plan。"
-        ),
-        params_model=StartRunArgs,
-        presentation=ToolPresentation(
-            kind="run", active_key="chat.activity.run", done_key="chat.activity.runDone",
-        ),
-    ),
-    ChatTool(
         name="answer",
         presentation=NATIVE_PRESENTATION,
         description=(
-            "仅提供信息，如能力说明、项目解释或闲聊，不创建方案或 Run。先在消息正文中给出答复，同时调用本工具；没有正文的 answer 会被拒绝。"
-            "用户已点名的工作在创意方向达成一致后应展示为方案。官网视频在商定方向阶段可用有依据的总结及下一步问题结束本轮。"
+            "用消息正文回答用户，或根据本轮工具回执说明实际结果。"
+            "需要澄清时调用 ask_user。"
         ),
         params_model=PlanAnswerArgs,
     ),
 ]
 
-# Chat terminal actions: production, manual Graph CRUD, recovery and answers.
-CHAT_TOOLS = [
-    ChatTool(
-        name="propose_tasks",
-        description="展示需要用户确认的已注册后台任务及费用。",
-        params_model=ProposeTasksArgs,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.draft", done_key="chat.activity.draftDone",
-        ),
-    ),
-    # Production and recovery use the current Composition and Run contracts.
-    ChatTool(
-        name="retry_upload",
-        terminal=False,
-        description=(
-            "仅重传已经渲染完成但上传失败的视频。复用成片缓存，不重新渲染。若无缓存，如实返回需要重新渲染的结果。"
-        ),
-        params_model=RetryUploadArgs,
-        presentation=ToolPresentation(
-            kind="read", active_key="chat.activity.upload", done_key="chat.activity.uploadDone",
-        ),
-    ),
-    # Saved videos are revised only through the current Composition write door.
-    ChatTool(
-        name="ask_user",
-        presentation=NATIVE_PRESENTATION,
-        description=(
-            "集中澄清最影响下一步的问题，并展示问题和选项。开放探索和浏览时可提供值得选择的具体方向，标记倾向的一项，并允许用户安全跳过。"
-        ),
-        params_model=ChatAskArgs,
-    ),
-    ChatTool(
-        name="answer",
-        presentation=NATIVE_PRESENTATION,
-        description=(
-            "仅提供信息，如能力说明、执行进度（先调用 get_run_status）、已有结果解释或闲聊。工作请求交给提案工具，有歧义时调用 ask_user，不要用 answer 回避。"
-            "官网视频在尚无方案的创意方向阶段可在此结束；其他工作应展示提案或执行适当的修订。须在消息正文中给出答复并调用 answer，没有正文的调用会被拒绝。"
-        ),
-        params_model=ChatAnswerArgs,
-    ),
-]
 PLAN_READ_TOOLS = [
     *perception_chat_tools(
         "get_understanding", "get_asset", "search_music", "search_transcript",
@@ -520,7 +433,7 @@ CHAT_READ_TOOLS = [
 # machine vocabulary. Strip lines that are EXACTLY one registered tool's
 # name in brackets; a name mentioned mid-sentence is prose and stays.
 _TOOL_ECHO_NAMES = frozenset(
-    tool.name for tool in [*PLAN_TOOLS, *CHAT_TOOLS, *CHAT_READ_TOOLS]
+    tool.name for tool in [*PLAN_TOOLS, *PLAN_READ_TOOLS]
 ) | {"wrap_up"}  # the trigger turn's terminal (its module imports ours)
 _TOOL_ECHO_LINE = re.compile(r"^\[[a-z_]+\]\s*$")
 # A tail fragment that could still complete INTO a bare echo line — the

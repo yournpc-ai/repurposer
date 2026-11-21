@@ -286,3 +286,35 @@ it.each(["blocked", "stopped"])("stops following a journey after its durable %s 
   expect(reads).toBe(finalReads)
   expect(screen.queryByRole("button", { name: "chat.audio.play" })).toBeNull()
 })
+
+it("restores an in-flight native job and stops its original opening after refresh", async () => {
+  const time = "2026-11-21T12:00:00Z"
+  const base = { question: null, answer: null, workflow_run_id: null }
+  const rows: HistoryRow[] = [
+    { ...base, id: "opening", seq: 1, role: "user", turn_state: "in_flight", content: "record", created_at: time },
+    { ...base, id: "activity", seq: 2, role: "assistant", turn_id: "opening", content: "", created_at: time,
+      intent: { type: "activity", frame: { activity_id: "a", kind: "read", status: "active",
+        key: "chat.activity.audio", call_id: "call", group_id: "g", call_index: 0 } } },
+    { ...base, id: "receipt", seq: 3, role: "assistant", turn_id: "opening", content: "", created_at: time,
+      intent: { media_job: "job", native_call_id: "call", operation: "generate_voice", media_status: "accepted" } },
+  ]
+  vi.mocked(apiFetch).mockImplementation(async (path, options) => {
+    if (path.endsWith("/messages")) return Response.json({ items: rows })
+    if (path.includes("/chat/conversation?")) return Response.json({ id: "c" })
+    if (path.endsWith("/results")) return Response.json({ outputs: [] })
+    if (path.endsWith("/assets") || path.endsWith("/outputs")) return Response.json([])
+    if (path === "/api/v1/chat/turns/opening/stop") {
+      expect(options?.body).toMatchObject({ activity_ids: ["activity"] })
+      rows[0].turn_state = "cancelled"
+      rows[2] = { ...rows[2], content: "Recording outcome unknown", intent: {
+        native_call_id: "call", media_job: "job", media_result: { status: "provider_unknown" },
+      } }
+      return Response.json({ turn_state: "cancelled" })
+    }
+    return new Response(null, { status: 404 })
+  })
+  render(<AgentThread projectId="p" prompt="" onProjectChanged={vi.fn()} />)
+  fireEvent.click(await screen.findByRole("button", { name: "chat.stop" }))
+  expect(await screen.findByText("Recording outcome unknown")).toBeDefined()
+  expect(screen.queryByRole("button", { name: "chat.stop" })).toBeNull()
+})

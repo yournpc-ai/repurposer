@@ -594,6 +594,7 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "outputRefs",
       // Turn identity + history hydration metadata — not lifecycle/readiness.
       "turnId",
+      "serverMessageId",
       // Option-answer duplicate-Slot association — never turn/lifecycle derivation.
       "answeredQuestionId",
       // Exact Skill reference on its owning user message — not turn state.

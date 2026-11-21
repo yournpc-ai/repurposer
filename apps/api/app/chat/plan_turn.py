@@ -1,39 +1,4 @@
-"""The plan path's tool-loop runner (ADR-077 判词② — T2a 内核半边).
-
-The retired ``_plan_turn`` dispatch, re-homed: the intent router
-closes its turn with ONE terminal tool call — the four actions' mechanical
-translation (draft → ``present_plan``, ask → ``ask_user``, start →
-``start_run``, answer → ``answer``) — and the guardrails live INSIDE the
-tool executions:
-
-- 出书门槛 = ``present_plan``'s in-execution validation (media without
-  material / rootless + topic unasked → a REJECTION whose feedback names
-  the right tool; rootless after the topic was asked → an accept carrying
-  the code-composed draft-from-persona declaration);
-- ``start_run`` still runs through ``answer_question`` → ``create_run`` —
-  the only run birthplace, zero bypass, with the outer Turn owning its commit;
-- chain adjudication (``validate_task_list`` / ``check_transform_targets``)
-  rejections ARE the loop's feedback — the retired funnel repair round's
-  seat, now one bounded iteration each.
-
-A rejected call writes nothing. An accepted call's writes are flush-only —
-the caller commits, including ``start_run``: its deferred answer/Run/hold writes
-pass the outer opening-row Stop fence before the one final commit. The envelope absorb (declared-material promotion + brief merge +
-the pending-slot handshake) is idempotent per turn: it may run on several
-iterations, it writes at most once, and every gate reads the ONE merged
-brief (出书决策只看 brief).
-
-Storage shapes preserved: docked rows and ``message.intent`` still carry
-``InferredIntent`` dumps (built here from the accepted call's params plus
-the turn's prose), and an ask turn's brief-only ``pending_brief`` row is
-byte-identical. The 判词⑦ hybrid-flip machinery retired structurally — a
-tool call IS one action; the impossible hybrid shapes have no wire form
-anymore (their outcomes survive as rejections).
-
-T2b 感知族 (ADR-077 判词②): the read tools (``app/chat/perception/``)
-dispatch straight from ``execute`` — never a brief write, never an
-outcome — and ride back as a ToolObservation the loop feeds back.
-"""
+"""Native project editor turn, grounded context assembly and tool execution."""
 
 import json
 from datetime import UTC, datetime
@@ -60,33 +25,22 @@ from app.chat.intent import intent_router
 from app.chat.perception import PERCEPTION_TOOLS, run_perception_tool
 from app.chat.perception.executes import speaker_form_lines, understanding_digest_lines
 from app.chat.service import (
-    _active_run_line,
     _ask_content,
-    _auto_start_docked_plan,
     _bare_question,
     _cannot_do_text,
-    _compute_plan_reasons,
     _create_message,
     _design_no_progress_text,
     _dock_question,
-    _draft_from_persona_echo,
     _interim_prose_callback,
     _loop_incomplete_text,
-    _needs_media,
-    _prefers_zh,
     _reminder_block,
-    _safe_task_estimate,
     _sfx_import_failure_text,
     _topic_gate_question,
     _video_capability_text,
     _video_review_failure_text,
-    answer_question,
-    is_pending_plan,
     latest_pending_question,
     merge_brief,
-    resolve_confirmation_need,
     resolve_suggestion_note,
-    sync_plan_question,
 )
 from app.models.schemas import (
     AnnotateNarrationArgs,
@@ -106,7 +60,6 @@ from app.models.schemas import (
     PlanAnswerArgs,
     PlanAskArgs,
     AlignRecordingArgs,
-    PresentPlanArgs,
     QuestionPayload,
     QuestionProposal,
     ReviewVideoArgs,
@@ -116,8 +69,6 @@ from app.models.schemas import (
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
     SkillReference,
-    StartAnswerRequest,
-    StartRunArgs,
     missing_brief_question_items,
     question_group_digest,
     resolve_recommended_id,
@@ -132,7 +83,6 @@ from app.pipeline.assets import (
 )
 from app.platform.project_context import resolve_default_persona
 from app.platform.user_settings import read_confirmation_prefs
-from app.tools import ToolRejected, validate_task_list
 
 logger = structlog.get_logger()
 
@@ -743,9 +693,6 @@ class PlanTurn:
         return result
 
     async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected | WorkingDraftRejected | WorkingDraftUpdated:
-        if name == "present_plan":
-            assert isinstance(params, PresentPlanArgs)
-            return await self._present_plan(params, prose)
         if name in {"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"}:
             from app.chat.video_turn_seats import skill_read_seat
             return await skill_read_seat(
@@ -824,9 +771,6 @@ class PlanTurn:
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
-        if name == "start_run":
-            assert isinstance(params, StartRunArgs)
-            return await self._start_run(params, prose)
         if name == "answer":
             assert isinstance(params, PlanAnswerArgs)
             return await self._answer(params, prose)
@@ -897,268 +841,6 @@ class PlanTurn:
         if updated is not None:
             self.stored = updated
 
-    async def _present_plan(self, params: PresentPlanArgs, prose: str) -> str | None:
-        """Validate and dock the proposed production plan."""
-        db, project = self.db, self.project
-        stored = self._current_pending()
-        from app.chat.video_turn_seats import video_proposal_guard
-        video_guard = video_proposal_guard(params.tasks)
-        if video_guard is not None:
-            return video_guard
-        if params.production_intent is None:
-            return (
-                "production_intent is required. Judge whether the user's current "
-                "message asks for this work to be made now, set it explicitly "
-                "true or false, then call present_plan again."
-            )
-
-        # 空散文护栏 (ask_user 座的同形对称): the plan card carries no title
-        # — the echo IS its introduction (three duties), so a silent dock
-        # leaves the user facing a canvas they cannot read. Reject into the
-        # repair iteration instead of docking speech-less.
-        if not prose.strip():
-            return (
-                "a plan never docks without its introduction speech — the "
-                "card has no title of its own, your message IS the "
-                "introduction. Speak what you saw, the plan in your own "
-                "words, and what 'done' looks like as your message text, "
-                "then call present_plan."
-            )
-
-        if not params.tasks:
-            return (
-                "empty task list — a plan needs at least one task. If one "
-                "missing answer most decides quality, call ask_user; for a "
-                "purely informational reply, call answer."
-            )
-        merged_brief = await self._absorb(
-            params.brief,
-            params.material_text,
-            getattr(params, "material_urls", None),
-        )
-        # Chain adjudication (ADR-043): the registry validates the proposed
-        # task list — the rejection rides back as the loop's feedback (the
-        # retired repair round's seat), then the call retries bounded. The
-        # same-language adjudication rides the same door (2026-09-13): a
-        # translate/dub target that IS the faced source language is doomed by
-        # construction — the feedback names the fix ("中英双语 on an en source
-        # → target zh") before the user ever confirms.
-        try:
-            validate_task_list(params.tasks)
-        except (ToolRejected, ValueError) as e:
-            return f"{e} (available: {getattr(e, 'suggestions', [])})"
-
-        # 出书门槛 (ADR-052 B2 D2-C2 — the gate reads only the merged brief +
-        # the adjudicated chain):
-        #  - media-needing chain with material "none" and no plan on the table →
-        #    the missing root is the material itself: REJECT, the model answers
-        #    with the upload guidance in its own voice (the retired code line's
-        #    disclosure payload survives as the feedback's instruction);
-        #  - rootless (no topic / no material / no explicit grounded recipe) →
-        #    REJECT toward ask_user slot='topic' (the topic asks once);
-        #  - still rootless after the topic was asked → ACCEPT and dock with
-        #    the code-composed draft-from-persona declaration (提问策略③ — a
-        #    code-forced dock never borrows the LLM's voice).
-        plan_on_table = stored is not None and stored.intent is not None
-        media_blocked = (
-            not plan_on_table
-            and merged_brief.material_state.value == "none"
-            and any(_needs_media(t.tool) for t in params.tasks)
-        )
-        if media_blocked:
-            return (
-                "media-needing work (clips / dub / subtitles) but no source "
-                "material is attached or pasted — the missing root is the "
-                "material itself. Do NOT present this plan: call answer and "
-                "tell the user, in their language, that clips and voice dub "
-                "need a video, audio, or image upload — they can upload one "
-                "or paste their transcript to unlock them, or ask for the "
-                "text work only."
-            )
-        has_root = (
-            bool((merged_brief.topic.value or "").strip())
-            # S2 语义缝 (2026-09-12): a topic the model INFERRED after the
-            # user skipped the topic ask is not a root — the skip chose
-            # the default path (draft-from-persona, reason + code echo),
-            # and an inferred re-root silently bypasses both. Only the
-            # user's own words re-root a skipped slot. (With material
-            # attached the next clause roots the plan anyway, so the
-            # infer-from-material path is untouched.)
-            and (
-                merged_brief.topic.source == BriefSlotSource.USER_STATED
-                or "topic" not in merged_brief.asked
-            )
-        ) or (
-            merged_brief.material_state.value != "none"
-            or (
-                params.tasks_explicit
-                and bool((params.specific_instruction or "").strip())
-            )
-        )
-        if not has_root and "topic" not in merged_brief.asked:
-            self.saw_rootless_rejection = True
-            return (
-                "the brief has no root (no topic, no material, no explicitly "
-                "named grounded recipe) and the topic was never asked — a "
-                "rootless plan never docks. Call ask_user with slot='topic' "
-                "asking the ONE topic question (options from the persona "
-                "pantry; the default path = draft from the persona's style)."
-            )
-        if not has_root:
-            # Asked once, still rootless → the default path docks: the
-            # chain is the LLM's (registry-adjudicated), the declaration
-            # is code.
-            self.reasons_extra = ["draft_from_persona"]
-            self.echo_override = _draft_from_persona_echo(self.text)
-
-        # The intent object the storage shapes are built from (the accepted
-        # call's params + the turn's echo — the same fields the action
-        # union carried).
-        echo = self.echo_override if self.echo_override is not None else prose
-        reasons = await _compute_plan_reasons(db, project, InferredIntent(
-            action="draft",
-            tasks=params.tasks,
-            specific_instruction=params.specific_instruction,
-            tasks_explicit=params.tasks_explicit,
-            brief=params.brief,
-            name=params.name,
-        ))
-        reasons = [*reasons, *self.reasons_extra]
-
-        # A turn that omits persona_id must not clobber the persona choice an
-        # earlier turn made.
-        persona_id = self.request.persona_id
-        if persona_id is None and isinstance(project.pending_brief, dict):
-            persona_id = project.pending_brief.get("persona_id")
-
-        # Derived preview (ADR-043): dry-run the chain through compile_graph and
-        # project what it will make — the plan card's "you'll get" section. A
-        # chain that can't compile here (e.g. transform with no media anywhere)
-        # still docks, flagged by its reason — the birthplace rejects for real.
-        from app.pipeline.orchestrator import derive_plan_preview
-
-        try:
-            derived = await derive_plan_preview(db, project, params.tasks)
-        except (ToolRejected, ValueError):
-            derived = []
-        # Dock 载荷的估价面 (BILLING §7): the same dry-run compile's credits
-        # quotation (total + per-task marginal), degraded exactly like the
-        # preview — an unquotable/uncompilable chain docks quote-less.
-        task_estimate = await _safe_task_estimate(db, project, params.tasks)
-        # ADR-117 §4: the confirmation need is computed ONCE here — the
-        # echo's held clause (keyed on the stamped reason: the auto
-        # regime's guardrail/unquotable trip carries the honest
-        # correction) and the dock payload's stamp read the same object
-        # (passed through below).
-
-        need = await resolve_confirmation_need(
-            db, self.user_id, task_estimate,
-            production_intent=params.production_intent,  # ADR-139
-            # 7276ef13 ③: a change refused THIS turn holds the auto start.
-            # 定点收尾②复审: the drift hold reads the STANDING VERSION's
-            # persisted state (world truth — a rebuilt turn never loses it),
-            # never a turn-local flag.
-        )
-
-        # The late-turn guard: a concurrent Start committed while this refine
-        # was in flight — docking now would raise a plan over an active
-        # run (the zombie dock). Degrade to the active-run line.
-        active_line = await _active_run_line(db, project, self.text)
-        if active_line is not None:
-            assistant_message = await _create_message(
-                db,
-                self.conversation_id,
-                "assistant",
-                active_line,
-            )
-            self.outcome = (assistant_message, None, self.settled_pending, [])
-            return None
-
-        # The birth prompt freezes at the first dock (stored.prompt wins on every
-        # later write) — the brief is the accumulated state now, the prompt is
-        # only the plan's birth narrative (Start's instruction fallback).
-        birth_prompt = stored.prompt if stored and stored.prompt else self.text
-        # Caption mode (ADR-099 §8 default absorption): what the call didn't
-        # set rides the shared funnel — the user's own words (literal
-        # bilingual keyword) > the previous dock's value > source_only when a
-        # distinct second language makes the choice real. The stamped value
-        # Inherit the previous dock's NAME on an identical-chain re-dock
-        # (2026-09-09 取证): a bare confirmation the router misjudged as a
-        # draft re-proposes the SAME chain unnamed — the inherited name IS the
-        # LLM's own earlier naming of the same work, preserving it invents
-        # nothing.
-        name = params.name
-        if (
-            not (name or "").strip()
-            and stored is not None
-            and stored.intent is not None
-            and (stored.intent.name or "").strip()
-            and [t.model_dump(mode="json") for t in params.tasks]
-            == [t.model_dump(mode="json") for t in stored.intent.tasks]
-        ):
-            name = stored.intent.name
-
-        intent = InferredIntent(
-            action="draft",
-            tasks=params.tasks,
-            answer=echo,
-            specific_instruction=params.specific_instruction,
-            tasks_explicit=params.tasks_explicit,
-            brief=params.brief,
-            material_text=params.material_text,
-            name=name,
-        )
-        # Phase 3 Batch B ③: the retired "drafting" System Status label used
-        # to fire here — the draft ACTIVITY frame (opened at this call's
-        # name-known beat, settled at its acceptance) is the work's only
-        # user-safe face now (三通道分家).
-        from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
-        from app.editing.service import video_carry_state  # deferred: editing seam
-        project.pending_brief = PendingPlan(
-            prompt=birth_prompt,
-            intent=intent,
-            # brief (ADR-052 B2): the ONE merged brief — the call's update
-            # landed by source precedence + the material state code-stamped in
-            # the absorb; the gate and the ask execution read this same object.
-            brief=merged_brief,
-            creative_state=creative_state_with_brief(
-                creative_state_for_pending(stored) or CreativeState(), merged_brief
-            ),
-            reasons=reasons,
-            persona_id=persona_id,
-            derived=derived,
-            **video_carry_state(stored),
-            **self._role_pins(),
-        ).model_dump(mode="json")
-        bailed_run_ids = await sync_plan_question(
-            db, self.user_id, project, intent, birth_prompt, reasons=reasons,
-            derived=derived,
-            brief=merged_brief,
-            echo=echo,
-            estimate=task_estimate,
-            need=need,
-        )
-        question = await latest_pending_question(db, self.conversation_id)
-        assert question is not None  # sync_plan_question just docked it
-        self.outcome = (question, None, self.settled_pending, bailed_run_ids)
-        # ADR-117 §2 auto 开工道: when the dock owes no confirm beat, the
-        # SAME start machine fires on presentation (None = the dock waits
-        # for the user's beat — ask modes / guardrail / structural hold).
-        auto = await _auto_start_docked_plan(
-            db,
-            user_id=self.user_id,
-            conversation_id=self.conversation_id,
-            project=project,
-            turn_id=self.turn_id,
-            defer_start_commit=True,
-        )
-        if auto is not None:
-            answered_q, auto_run_id = auto
-            self.outcome = (question, auto_run_id, answered_q, bailed_run_ids)
-        return None
-
-    # ---- the exploration seats (iter-2 ③/⑤ — ADR-088 旅程四 chain) -----------
-
     async def _emit_milestone(self, key: str, count: int) -> None:
         """Fire one work-session milestone frame (iter-2 ⑥, N-57) at a door
         success — in-session interleave only, never persisted. No-op on the
@@ -1224,7 +906,7 @@ class PlanTurn:
         if not params.question.strip():
             return (
                 "empty question — speak the framing as your message text and "
-                "pass the bare question or group title, or call present_plan / answer "
+                "pass the bare question or group title, or call answer "
                 "instead."
             )
         # 判词⑦ 扩座 (2026-09-12, S5) as a REJECTION (its structural form):
@@ -1245,9 +927,7 @@ class PlanTurn:
             # a plan turn; the 出书门槛 docks the draft-from-persona plan
             # instead of looping the question.
             return (
-                f"slot '{params.slot}' was already asked once this plan "
-                "phase — each slot asks at most once. Call present_plan to "
-                "dock the plan now (the gate handles rootlessness)."
+                f"The question about {params.slot} was already asked. Use the available facts."
             )
         # ask 一等动作 (ADR-052 B2, 案 A 双实例): the pre-run router's ONE
         # question docks through the same machinery the chat path's ask_user
@@ -1276,8 +956,7 @@ class PlanTurn:
             if role_question is None:
                 return (
                     "fewer than two video files are attached — there is no "
-                    "role ambiguity to ask about. Call present_plan with the "
-                    "chain, or answer."
+                    "role ambiguity to ask about. Use the attached material."
                 )
             params = params.model_copy(
                 update={
@@ -1355,104 +1034,6 @@ class PlanTurn:
         self.outcome = (assistant_message, None, self.settled_pending, bailed_run_ids)
         return None
 
-
-    async def _start_run(self, params: StartRunArgs, prose: str) -> str | None:
-        """start → the docked plan is answered kind=start (G-1 path: the
-        run comes from the only birthplace, answer_question; zero bypass).
-        The turn's speech (the work-start line, ADR-093 §2) lands as a plain
-        assistant row first — created before the run births, so its stamp
-        orders before the task list by construction. The outer Turn's final
-        Stop-fenced commit lands speech, answer and Run atomically."""
-        db = self.db
-        stored = self._current_pending()
-        pending_question = await latest_pending_question(db, self.conversation_id)
-        confirmation = getattr(self, "video_confirmation", None)
-        if confirmation and confirmation["action"] == "start" and (
-            pending_question is None or str(pending_question.id) != confirmation["quote_message_id"]
-        ):
-            return "The production quote has changed. Present its current terms before starting."
-        if (
-            is_pending_plan(pending_question)
-            and stored is not None
-            and stored.intent is not None
-        ):
-            assert pending_question is not None  # is_pending_plan guarantees the row
-            # 旧 Start 失效 (ADR-129): the docked task_book presents a film
-            # draft version — a newer design beat minted a new draft token,
-            # so this Start would confirm a board the user is no longer
-            # reviewing. Steer back to the current draft (re-dock, then
-            # start), never a silent old-version run.
-            # 起始句 = 普通 assistant 行 (ADR-093 §2): the model's own words
-            # persist or nothing does — an empty prose stays an honest
-            # absence (a template fill-in is prohibited speech), keeping
-            # the envelope's assistant_message on the answered plan row.
-            start_message = None
-            if prose.strip():
-                start_message = await _create_message(
-                    db,
-                    self.conversation_id,
-                    "assistant",
-                    prose.strip(),
-                )
-            answered, _follow_up = await answer_question(
-                db, self.user_id, UUID(str(pending_question.id)),
-                # The review panel's edited plan rides along (typed Start
-                # parity): dropping prior_intent here would execute the
-                # stored chain and silently discard the user's panel edits.
-                StartAnswerRequest(
-                    kind="start",
-                    intent=self.request.prior_intent,
-                ),
-                # ④ snapshot channel (N-57): the confirmation arrived as a
-                # chat reply (the start_run tool), not the dock pill.
-                confirmed_via="chat_reply",
-                turn_id=self.turn_id or pending_question.turn_id,
-                defer_start_commit=True,
-            )
-            # The outer Chat Turn's final Stop fence commits the run, answer
-            # and cleared pending brief in one transaction.
-            self.outcome = (
-                start_message or answered,
-                UUID(str(answered.workflow_run_id)),
-                answered,
-                [],
-            )
-            return None
-        if stored is not None and stored.intent is not None:
-            # Nothing startable right now. Never overwrite a stored plan
-            # with a start-call misfire: re-dock the stored plan unchanged.
-            # Unless a run started concurrently — then the plan is moot and
-            # re-docking would raise a plan over an active run.
-            active_line = await _active_run_line(db, self.project, self.text)
-            if active_line is not None:
-                assistant_message = await _create_message(
-                    db,
-                    self.conversation_id,
-                    "assistant",
-                    active_line,
-                )
-                self.outcome = (assistant_message, None, self.settled_pending, [])
-                return None
-            bailed_run_ids = await sync_plan_question(
-                db, self.user_id, self.project, stored.intent, stored.prompt,
-                reasons=stored.reasons, derived=stored.derived,
-                brief=stored.brief,
-                echo=stored.intent.answer,
-                estimate=await _safe_task_estimate(db, self.project, stored.intent.tasks),
-                # The re-dock replays the stored echo verbatim; the film
-                # version's token + number ride so the Start gate compares
-                # against the CURRENT draft (ADR-129).
-            )
-            question = await latest_pending_question(db, self.conversation_id)
-            assert question is not None  # sync_plan_question just docked it
-            self.outcome = (question, None, self.settled_pending, bailed_run_ids)
-            return None
-        return (
-            "no plan is on the table — nothing to start. If the user "
-            "wants work, call present_plan with the chain; if one missing "
-            "answer decides quality, call ask_user. A start call can never "
-            "create a plan."
-        )
 
     async def _answer(self, params: PlanAnswerArgs, prose: str) -> str | None:
         """answer → a plain assistant message; the stored plan stays

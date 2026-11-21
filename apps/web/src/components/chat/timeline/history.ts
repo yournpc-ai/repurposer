@@ -768,6 +768,7 @@ export function mapHistoryRows(
         ...(mark ? { mediaOpeningId: mark.openingId, sceneOrder: sceneOrder(raw) } : {}),
         ...(continuation ? { continuationTurnId: continuation } : {}),
         turnId: m.turn_id ?? undefined,
+        serverMessageId: m.id,
         hydrated: true,
       }
       const hydrated = m.seq == null ? positioned : { ...positioned, seq: m.seq }

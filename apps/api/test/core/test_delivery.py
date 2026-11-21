@@ -224,26 +224,6 @@ async def test_stop_during_media_handoff_keeps_delivered_answer_and_fences_the_n
 
 
 @pytest.mark.asyncio
-async def test_present_plan_requires_an_explicit_production_intent_judgment():
-    from app.chat.plan_turn import PlanTurn
-    from app.models.schemas import ChatRequest, PresentPlanArgs
-
-    request = ChatRequest(project_id=uuid4(), message="制作产品宣传片")
-    turn = PlanTurn(
-        db=None,
-        user_id=uuid4(),
-        conversation=SimpleNamespace(id=uuid4()),
-        project=SimpleNamespace(pending_brief=None),
-        request=request,
-    )
-    result = await turn._present_plan(
-        PresentPlanArgs(tasks=[], production_intent=None),
-        "Prepare the scene images.",
-    )
-    assert "production_intent is required" in result
-    assert "true or false" in result
-
-
 async def test_no_progress_without_saved_version_does_not_claim_saved_history():
     from app.chat.service import _design_no_progress_text
 
@@ -874,47 +854,6 @@ async def test_finalization_uses_real_delivery(database, monkeypatch, render_sta
         assert project.status == (ProjectStatus.REVIEW if successful or partial else ProjectStatus.DRAFT)
         assert len(events) == 1
         assert events[0][1] == ("run_completed" if successful or partial else "run_failed")
-
-
-async def test_typed_upload_retry_is_not_swallowed_by_trigger_run_anchor(database):
-    """Typing the docked option verbatim must reach the chat tool loop. The
-    trigger row's run id is a display anchor, not a parked-interrupt marker."""
-    from app.chat.service import (
-        _create_message,
-        _get_or_create_project_conversation,
-        prepare_chat_turn,
-    )
-    from app.chat.trigger_turn import _suggestions_payload
-    from app.models.schemas import ChatRequest, SuggestionItem
-
-    uid = await owner(database)
-    async with database() as db:
-        project = Project(user_id=uid, title="upload", language="zh")
-        db.add(project)
-        await db.flush()
-        run = WorkflowRun(project_id=project.id, status=WorkflowStatus.FAILED)
-        db.add(run)
-        await db.flush()
-        conversation = await _get_or_create_project_conversation(db, uid, project.id)
-        question = await _create_message(
-            db,
-            conversation.id,
-            "assistant",
-            "视频已生成，但上传失败。",
-            workflow_run_id=run.id,
-            question=_suggestions_payload(
-                [SuggestionItem(label="重新上传")], "zh"
-            ).model_dump(mode="json"),
-        )
-        await db.commit()
-        prepared = await prepare_chat_turn(
-            db, uid, ChatRequest(project_id=project.id, message="重新上传")
-        )
-        assert prepared.interrupt_reply is None
-        assert prepared.answered_question is not None
-        assert prepared.answered_question.id == question.id
-        assert prepared.user_message.intent["answered_question_id"] == str(question.id)
-        assert prepared.plan_path is False
 
 
 @pytest.mark.parametrize("succeeds", [True, False])

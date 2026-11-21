@@ -1,38 +1,9 @@
-"""Intent agents (two distinct jobs behind the SINGLE chat surface, NAMING §5).
+"""Project editor tool-loop declaration and user context assembly."""
 
-Both are declared ``ToolLoopAgent`` instances (ADR-077 判词② — the bounded
-tool-loop form, 2026-09-14): the action union retired into the tool set
-(type field = tool name, per-state fields = params — a mechanical
-translation), prose rides the content channel (it streams; the typewriter
-law's key-order tooth retired with the JSON payload), and the adjudication
-repair round re-homed into the loop (a rejected call's reason echoes back,
-bounded by ``max_iterations``). The model-facing prose lives one file over
-(``chat/prompts.py``, Mastra instructions.md-style same-site extraction);
-the tool declarations in ``chat/turn_tools.py``; this module is declarations
-+ turn assembly only.
-
-``intent_router`` — the plan builder (plan path, CHAT_ARCH §3): free-form
-text → present_plan (draft/refine the plan) / ask_user (the ONE deciding
-question) / start_run (prose confirmation of the docked plan) / answer.
-Invoked only from the chat service's plan path — first-turn projects and
-pending-plan refinement turns. Provider failures propagate as LLMError:
-the route boundary answers 502 with the localized provider line (2026-08-14
-裁定 — a fabricated default plan looks like a real plan and Start would
-spend a paid run on it; an honest failure beats a wrong plan, and the
-user_key taxonomy makes the failure presentable).
-
-``chat_intent_agent`` — the chat loop's intent proposer: production,
-Composition revision, clarification and ordinary answers. Rejected calls return
-as bounded feedback, never as an alternate product workflow.
-"""
-
-from typing import Any
 
 from app.agents.tool_loop import ToolLoopAgent
-from app.chat.prompts import chat_intent_system, intent_router_system
+from app.chat.prompts import intent_router_system
 from app.chat.turn_tools import (
-    CHAT_READ_TOOLS,
-    CHAT_TOOLS,
     PLAN_READ_TOOLS,
     PLAN_TOOLS,
 )
@@ -257,27 +228,6 @@ intent_router = ToolLoopAgent(
     assemble=_assemble_plan_turn,
     # The current Composition authoring and production tools share one loop.
     tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
-    max_iterations=20,
-    service_per_call=True,
-)
-
-
-def _assemble_chat_turn(message: str, context: dict[str, Any]):
-    """Chat-turn inputs: the user message plus the deterministic context
-    digest (``agents/contexts.py``). Adjudication feedback never passes
-    through here — it is the funnel's reserved ``repair_feedback`` kwarg."""
-    context_text = context.get("text", "")
-    return ({"context_text": context_text, "message": message}, [])
-
-
-chat_intent_agent = ToolLoopAgent(
-    name="chat_intent",
-    prompt="chat/user.j2",
-    system=chat_intent_system(),
-    temperature=0.2,
-    assemble=_assemble_chat_turn,
-    # Saved video edits use the same Composition and Run contracts as first creation.
-    tools=[*CHAT_TOOLS, *CHAT_READ_TOOLS],
     max_iterations=20,
     service_per_call=True,
 )

@@ -1,46 +1,4 @@
-"""Generic chat service.
-
-A conversation is the universal container — always project-scoped (the
-original prompt plus project-level follow-ups). Asset-scoped conversations
-are retired (ADR-041 D8): product chat lives in the project conversation,
-and the product the user points at rides the message as an @-mention chip
-(ADR-058 — the focus_output transport is write-retired, old rows read back).
-
-The public surface is intentionally tiny: ``chat()`` takes a user message,
-locates or creates the right conversation, assembles deterministic context,
-and lets the intent agent propose (CHAT_ARCH §3). It is the ONLY intent
-surface (intent-surface-unification W1): project-scope turns before the
-first run — or while a plan is pending — go through the plan path
-(``_plan_turn``: build / refine / confirm the plan via the intent router);
-everything else goes to the chat-path proposer (``_propose_turn``).
-
-ADR-077 判词② (2026-09-14): both turns run the bounded tool loop — the
-action union retired into the terminal tool set (type = tool name, fields =
-params), the guardrails live inside the executions, and the loop itself is
-side-effect-free (``app/chat/plan_turn.py`` / ``app/chat/propose_turn.py``;
-the two names above are shims). The write doors never moved:
-
-- propose_tasks / edit_graph → compile_graph via ``_create_run_from_tasks``
-  (the ONLY run birthplace; wiring resolves through ``apply_wiring_ops`` first)
-- ask_user                → a typed question docked above the input
-- edit_output             → the precise edit (ADR-090; Final Hardening B1 —
-                            the ONLY edit verb): one controlled registry op
-                            journaled with message lineage, then re-render
-- answer                  → a purely informational reply (capability /
-                            progress / explanation / small talk) landing as a
-                            plain assistant message — no run, no dock (G-4)
-
-ask_user 机器 (the ask_user machinery): a message may carry a typed
-``question`` payload; ``answer`` NULL = pending. Pending questions dock above
-the input (QuestionDock); answered ones collapse into the flow as answered
-questions. At
-most one pending question per conversation — a newer question retires the
-previous one (bail: superseded). While a question is pending, a
-free-text message is mapped deterministically (autoResume, zero LLM): an
-option letter/number/label hit answers with that option; otherwise
-``allow_freeform`` records the text as a freeform answer; otherwise the text
-is a new intent and the question stays pending.
-"""
+"""Project Chat openings, question answers, native editor turns and durable transcript writes."""
 
 import re
 from contextvars import ContextVar
@@ -61,12 +19,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-# The two chat agents no longer take calls HERE (the turn runners —
-# app/chat/plan_turn.py / propose_turn.py — drive them through the tool
-# loop); importing the declarations module keeps them registered in AGENTS
-# at startup (the orchestrator's roster self-check walks it).
-from app.chat.intent import chat_intent_agent as _chat_intent_agent  # noqa: F401
-from app.chat.intent import intent_router as _intent_router  # noqa: F401
 from app.chat.suggestions import (
     build_suggestion_records,
     compose_suggestion_note,
@@ -82,7 +34,6 @@ from app.models.schemas import (
     Brief,
     BriefSlot,
     BriefSlotSource,
-    ChatMention,
     ChatMessageResponse,
     ChatRequest,
     ChatResponse,
@@ -456,76 +407,6 @@ async def _parked_interrupt_run(
 
 async def _load_project(db: AsyncSession, project_id: UUID) -> Project | None:
     return await db.get(Project, project_id)
-
-
-async def _create_run_from_tasks(
-    db: AsyncSession,
-    project: Project,
-    tasks: list[TaskItem],
-    summary: str,
-    instruction: str | None = None,
-    name: str | None = None,
-    source_asset_id: str | None = None,
-    exemplar_asset_id: str | None = None,
-) -> UUID:
-    """Dispatch a proposed task list through the ONLY run birthplace.
-
-    A user-level shortfall converts to the structured 422 HERE — the chat
-    dispatch's single conversion point (BILLING §7): every dispatch path
-    (the judged start, both repair re-dispatches) then raises the same
-    ``{code, balance, required}`` the typed Start's answer endpoint raises,
-    the repair handlers' broad ValueError catches never swallow it, and the
-    SSE turn pump carries it as the turn.failed frame the dock renders as
-    its grey row (入流灰行, 双路同语义).
-
-    ``instruction`` overrides the run's plan instruction (default = the
-    summary): the wiring revision path pins the edited node program here
-    (the writers' GenerationContext.instruction steers the rewrite).
-
-    ``name`` = the proposer's fresh naming of the run (ADR-058 — LLM 建图时
-    命名), stored on run.context via TaskSpec; the receipt title and the
-    completion line read it instead of any frozen-params template.
-
-    ``source_asset_id`` / ``exemplar_asset_id`` = the 资产角色 pins (ADR-078
-    判词④), computed by the caller (a mention pin or the inherited
-    conversation pins — propose_turn's seat), riding TaskSpec → run.context
-    verbatim. create_run validates them at the birthplace (422 on a
-    non-project / non-video exemplar).
-    """
-    from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
-
-    if not (name or "").strip():
-        # 二源律的可观测座 (ADR-058): the fallback chain label is legal but
-        # silent — count every run an LLM proposal SHOULD have named and
-        # didn't, so the unnamed rate is visible instead of the frozen-params
-        # template quietly coming back.
-        logger.info("unnamed_proposal", path="chat_dispatch", project_id=str(project.id))
-    try:
-        from app.tools.video.production import latest_video_approval
-        run = await create_run(
-            db,
-            project,
-            TaskSpec(
-                tasks=tasks,
-                target_language=first_task_language(tasks) or project.language or "en",
-                instruction=instruction or summary,
-                scope="full",
-                source_asset_id=source_asset_id,
-                exemplar_asset_id=exemplar_asset_id,
-                name=name or None,
-                video_authorized_by=await latest_video_approval(db, project),
-            ),
-        )
-    except CreditsInsufficientError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            {
-                "code": "credits.insufficient",
-                "balance": exc.balance,
-                "required": exc.required,
-            },
-        ) from exc
-    return run.id
 
 
 def _prefers_zh(text: str) -> bool:
@@ -1925,21 +1806,7 @@ async def _continue_chat_answer(
     on_row_append=None,
     turn_id: UUID | None = None,
 ) -> tuple[Message | None, UUID | None, list[UUID], Any]:
-    """The generic question-answer 续聊 continuation: the user's pick is
-    their say for the next turn. The archived question and its answer
-    enter the model transcript with their respective speaker roles.
-    Dispatch: asset_role answers pin by code, brief-slot answers backfill
-    user-stated, everything else (ADR-081 trigger suggestions, plain asks)
-    rides plan-or-propose by the project's run state. Two seats call this:
-    the no-run-id branch and the interrupt branch's not-parked fall-through
-    (a trigger suggestion's run id is a display anchor, not a park marker).
-    ``suggestion_ref`` (ADR-099 §4): a trigger suggestion pick's provenance,
-    code-reconstructed from the answered row (the row IS the source turn,
-    the option id IS the suggestion id) — it rides into the turn so the
-    pick lands as a named control event, never as fresh anonymous input.
-    Returns (follow_up, run_id, bailed_run_ids, extra) — extra is the plan
-    path's answered dump or the proposal path's settled question, both
-    advisory to the caller."""
+    """Persist the user decision before continuing the project editor on the same opening."""
     project = await db.get(Project, conversation.project_id)
     say = (
         (data.text if data.kind == "freeform" else None)
@@ -1969,111 +1836,18 @@ async def _continue_chat_answer(
     await db.commit()
     if project is not None:
         await db.refresh(project)
-    if question.slot == "asset_role" and project is not None:
-        # 资产角色消歧的答复落 pin (ADR-078 判词④): the pins settled by
-        # CODE above (the option id IS the asset id — _settle_role_answer);
-        # the plan path resumes on the pinned plan.
-        follow_up, run_id, answered, bailed = await _plan_turn(
-            db,
-            user_id,
-            conversation,
-            project,
-            ChatRequest(project_id=project.id, message=say),
-            recent=recent,
-            on_delta=on_delta,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_interim_prose=on_interim_prose,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
-            on_row_append=on_row_append,
-            turn_id=turn_id,
-        )
-        return follow_up, run_id, bailed, answered
-    if (question.slot is not None or data.kind == "group") and project is not None:
-        # ask 一等动作的答复回填 (ADR-052 B2 D2-C1): the brief slot took
-        # the answer user-stated at the seam; the plan path resumes on the
-        # enriched brief — draft the (now-rooted) plan or ask the next
-        # deciding slot. The answer text rides as the turn's message so
-        # the router sees it as the user's own words.
-        follow_up, run_id, answered, bailed = await _plan_turn(
-            db,
-            user_id,
-            conversation,
-            project,
-            ChatRequest(project_id=project.id, message=say),
-            group_answer_submitted=data.kind == "group",
-            recent=recent,
-            on_delta=on_delta,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_interim_prose=on_interim_prose,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
-            on_row_append=on_row_append,
-            turn_id=turn_id,
-        )
-        return follow_up, run_id, bailed, answered
-    # 选项语法统一律 (ADR-081): trigger suggestion questions land here —
-    # the picked label is the user's say. Dispatch by the project's run
-    # state (the same probe prepare_chat_turn runs): a PRE-FIRST-RUN pick
-    # (the understanding-warmed dock) must draft a PLAN — falling into the
-    # proposal path would answer a "make me X" pick with proposal tools
-    # instead of a plan.
-    has_runs = None
-    if project is not None:
-        has_runs = (
-            await db.execute(
-                select(WorkflowRun.id)
-                .where(WorkflowRun.project_id == project.id)
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-    if project is not None and has_runs is None:
-        follow_up, run_id, answered, bailed = await _plan_turn(
-            db,
-            user_id,
-            conversation,
-            project,
-            ChatRequest(
-                project_id=project.id, message=say, suggestion_ref=suggestion_ref
-            ),
-            recent=recent,
-            on_delta=on_delta,
-            on_phase=on_phase,
-            on_tool_call=on_tool_call,
-            on_tool_ready=on_tool_ready,
-            on_interim_prose=on_interim_prose,
-            on_loop_event=on_loop_event,
-            on_activity=on_activity,
-            on_candidates=on_candidates,
-            on_row_append=on_row_append,
-            turn_id=turn_id,
-        )
-        return follow_up, run_id, bailed, answered
-    follow_up, run_id, bailed, settled = await _propose_turn(
-        db, user_id, conversation, project, say, [], recent,
-        suggestion_ref=suggestion_ref,
-        on_delta=on_delta,
-        # I-PFA-06 parity (Batch B 验收修复): the chat-path continuation
-        # needs the phase pipe too — a film design span on this branch
-        # reports its System Status labels through it (and clears them at
-        # the span's exit).
-        on_phase=on_phase,
-        on_tool_call=on_tool_call,
-        on_tool_ready=on_tool_ready,
-        on_interim_prose=on_interim_prose,
-        on_loop_event=on_loop_event,
-        on_activity=on_activity,
-        on_candidates=on_candidates,
-        on_row_append=on_row_append,
-        turn_id=turn_id,
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    follow_up, run_id, answered, bailed = await _plan_turn(
+        db, user_id, conversation, project,
+        ChatRequest(project_id=project.id, message=say, suggestion_ref=suggestion_ref),
+        group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
+        on_delta=on_delta, on_phase=on_phase, on_tool_call=on_tool_call,
+        on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
+        on_loop_event=on_loop_event, on_activity=on_activity,
+        on_candidates=on_candidates, on_row_append=on_row_append,
     )
-    return follow_up, run_id, bailed, settled
+    return follow_up, run_id, bailed, answered
 
 
 def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> dict:
@@ -2742,95 +2516,17 @@ async def _plan_turn(
     )
 
 
-async def _propose_turn(
-    db: AsyncSession,
-    user_id: UUID,
-    conversation: Conversation,
-    project: Project | None,
-    text: str,
-    mentions: list[ChatMention],
-    recent: list[Message],
-    skill: SkillReference | None = None,
-    skill_ambiguity: list[str] | None = None,
-    suggestion_ref: SuggestionRef | None = None,
-    on_delta=None,
-    on_reasoning=None,
-    on_phase=None,
-    on_tool_call=None,
-    on_tool_ready=None,
-    on_interim_prose=None,
-    on_loop_event=None,
-    on_activity=None,
-    on_candidates=None,
-    on_row_append=None,
-    turn_id: UUID | None = None,
-) -> tuple[Message | None, UUID | None, list[UUID], Message | None]:
-    """One assistant turn after the user input is settled (CHAT_ARCH §3).
-
-    Shared by ``chat()`` and the choice-answer continuation in
-    ``answer_question`` (the answer endpoint doubles as resume). Returns the
-    assistant message (None when the turn closes without a row — the
-    degrade paths land their own shape), the dispatched
-    run id if any, the run ids whose parked
-    interrupt was cascade-bailed, and the pending question this turn settled
-    by judgment (ADR-053 R2). Flush-only — the caller commits.
-
-    ADR-077 判词② (2026-09-14): the dispatch retired into the tool
-    loop — this body is a shim; the turn lives in ``app/chat/propose_turn.py``
-    (the chat intent agent's terminal tools propose_tasks / edit_output /
-    revise_output / edit_graph / ask_user / answer + the iter-3 S2
-    exploration verbs).
-    Deferred import: the runner imports THIS module's machinery.
-    """
-    from app.chat.propose_turn import run_propose_turn
-
-    return await run_propose_turn(
-        db,
-        user_id,
-        conversation,
-        project,
-        text,
-        mentions,
-        recent,
-        skill=skill,
-        skill_ambiguity=skill_ambiguity,
-        suggestion_ref=suggestion_ref,
-        on_delta=on_delta,
-        on_reasoning=on_reasoning,
-        on_phase=on_phase,
-        on_tool_call=on_tool_call,
-        on_tool_ready=on_tool_ready,
-        on_interim_prose=on_interim_prose,
-        on_loop_event=on_loop_event,
-        on_activity=on_activity,
-        on_candidates=on_candidates,
-        on_row_append=on_row_append,
-        turn_id=turn_id,
-    )
-
-
 @dataclass
 class PreparedTurn:
-    """chat() phase-1 output (chat SSE, intent-surface-unification W2).
-
-    Everything decided before the LLM call: conversation, the persisted user
-    message, a deterministically answered question (autoResume), the canned
-    interrupt-resume reply when the turn needs no LLM at all, and the
-    plan-path dispatch bit. All 4xx-raising validation lives in phase 1 so a
-    streaming route can raise plain HTTP errors before the SSE response
-    starts; phase 2 (``execute_chat_turn``) only runs the agent turn, commits
-    once at the end, and assembles the response.
-    """
+    """Owned project and durable input committed before the native tool loop begins."""
 
     user_id: UUID
     conversation: Conversation
     conversation_id: UUID
     user_message: Message
-    project: Project | None
+    project: Project
     history: list[Message]
     answered_question: Message | None
-    interrupt_reply: Message | None
-    plan_path: bool
     skill: SkillReference | None = None
     skill_ambiguity: list[str] | None = None
 
@@ -3037,6 +2733,8 @@ async def prepare_chat_turn(
     user_message.turn_state = "in_flight"
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     history = await list_conversation_messages(db, conversation_id)
     # Deterministic autoResume (zero LLM): while a question is pending,
     # the user's free text settles it ONLY on an unambiguous option hit
@@ -3092,82 +2790,6 @@ async def prepare_chat_turn(
         if confirmation is not None:
             user_message.intent = {**(user_message.intent or {}), "video_confirmation": confirmation}
 
-    interrupt_reply: Message | None = None
-    plan_path = False
-    parked_interrupt_run: WorkflowRun | None = None
-    if answered_question is not None and answered_question.workflow_run_id is not None:
-        # A run id alone is only a display anchor on trigger suggestions.
-        # Match the answer endpoint: only a genuinely PARKED step takes the
-        # interrupt wake; otherwise the user's words continue through chat.
-        candidate_run = await _parked_interrupt_run(
-            db, answered_question.workflow_run_id
-        )
-        if candidate_run is not None:
-            parked_interrupt_run = candidate_run
-    if parked_interrupt_run is not None:
-        assert answered_question is not None
-        # Interrupt autoResume (期 4): a typed answer to the docked direction
-        # question takes the same dispatch as the answer endpoint — wake the
-        # parked run. No LLM turn on top: the wake IS the continuation (the
-        # step flow shows the run resuming), so the acknowledgment is a
-        # deterministic line. R1 B3: a blocked arbitration (another run
-        # holds the authority) speaks the parked line instead.
-        from app.pipeline.orchestrator import resume_waiting_interrupt
-
-        outcome = await resume_waiting_interrupt(
-            db, parked_interrupt_run, answered_question.answer
-        )
-        decided = (answered_question.answer or {}).get("text") or (
-            answered_question.answer or {}
-        ).get("option_id") or ""
-        interrupt_reply = await _create_message(
-            db,
-            conversation_id,
-            "assistant",
-            _resume_ack_line(decided, outcome),
-            turn_id=user_message.id,
-        )
-    else:
-        # Plan path dispatch (intent-surface-unification W1): this endpoint is
-        # the ONLY intent surface. A turn goes to the plan path (plan
-        # build / refine / confirm via the intent router) while a plan is
-        # pending or before the project's first run; everything else goes to
-        # the four-state proposer. (Conversations are project-scope only —
-        # ADR-041 D8.)
-        if project is not None:
-            if is_pending_plan(pending):
-                plan_path = True
-            elif (
-                answered_question is not None
-                and isinstance(answered_question.question, dict)
-                and answered_question.question.get("slot")
-            ):
-                # ask 一等动作的答复回 plan path (D2-C1): the backfill already
-                # landed above — the plan path re-judges on the enriched
-                # brief (draft the rooted plan, or ask the next slot).
-                plan_path = True
-            elif (
-                not isinstance(project.pending_brief, dict)
-                or project.pending_brief.get("intent") is None
-            ):
-                # A brief-only pending_brief row (an ask-turn write) keeps
-                # the pre-run probe — the project is still in its plan phase.
-                has_runs = (
-                    await db.execute(
-                        select(WorkflowRun.id)
-                        .where(WorkflowRun.project_id == project.id)
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-                plan_path = has_runs is None
-
-    # Input durability commit (交互完整性批 A): everything above is
-    # deterministic and COMPLETE at this point — the conversation, the
-    # durable user row (turn_state='in_flight'), a deterministic autoResume
-    # settle, the interrupt wake. It commits NOW, before the agent turn:
-    # entry-cap 4xx above still reject pre-persistence (nothing to roll
-    # back), but from here on the request is received, provably. The agent
-    # turn's own writes land in execute_chat_turn's commit.
     await db.commit()
 
     # 标记随这次 commit 死亡: the fresh-conversation mark's only purpose
@@ -3188,8 +2810,6 @@ async def prepare_chat_turn(
         project=project,
         history=history,
         answered_question=answered_question,
-        interrupt_reply=interrupt_reply,
-        plan_path=plan_path,
         skill=skill_resolution.reference,
         skill_ambiguity=[
             f"{option.name} v{option.version_number}"
@@ -3625,96 +3245,24 @@ async def execute_chat_turn(
     is "Thinking…" (2026-09-10 用户拍板). None (the JSON path, repair
     iterations, answer_question's continuation) keeps the one-shot calls.
     """
-    if prepared.interrupt_reply is not None:
-        assistant_message = prepared.interrupt_reply
-        run_id = None
-        bailed_run_ids: list[UUID] = []
-    else:
-        # 会话层计量 (ADR-117 D3): the turn-entry seam binds the usage
-        # ledger — the canned interrupt reply needs no LLM (empty ledger,
-        # zero rows), the agent branches meter through record_usage.
-        with bind_conversation_turn(
-            conversation_id=UUID(str(prepared.conversation.id)),
-            turn_id=prepared.user_message.id,
-            project_id=prepared.conversation.project_id,
-        ) as _usage_bind:
-            if prepared.plan_path:
-                (
-                    assistant_message,
-                    run_id,
-                    plan_answered,
-                    bailed_run_ids,
-                ) = await _plan_turn(
-                    db,
-                    prepared.user_id,
-                    prepared.conversation,
-                    prepared.project,
-                    request,
-                    skill=prepared.skill,
-                    skill_ambiguity=prepared.skill_ambiguity,
-                    recent=prepared.history,
-                    on_delta=on_delta,
-                    on_reasoning=on_reasoning,
-                    on_phase=on_phase,
-                    on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
-                    on_interim_prose=on_interim_prose,
-                    on_loop_event=on_loop_event,
-                    on_activity=on_activity,
-                    on_candidates=on_candidates,
-                    on_row_append=on_row_append,
-                    turn_id=prepared.user_message.id,
-                )
-                if plan_answered is not None:
-                    prepared.answered_question = plan_answered
-            else:
-                (
-                    assistant_message,
-                    run_id,
-                    bailed_run_ids,
-                    chat_settled,
-                ) = await _propose_turn(
-                    db,
-                    prepared.user_id,
-                    prepared.conversation,
-                    prepared.project,
-                    request.message,
-                    request.mentions,
-                    prepared.history,
-                    skill=prepared.skill,
-                    skill_ambiguity=prepared.skill_ambiguity,
-                    suggestion_ref=request.suggestion_ref,
-                    on_delta=on_delta,
-                    on_reasoning=on_reasoning,
-                    on_phase=on_phase,
-                    on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
-                    on_interim_prose=on_interim_prose,
-                    on_loop_event=on_loop_event,
-                    on_activity=on_activity,
-                    on_candidates=on_candidates,
-                    on_row_append=on_row_append,
-                    turn_id=prepared.user_message.id,
-                )
-                if chat_settled is not None:
-                    # 插话判定结算 (ADR-053 R2): the agent judged this very
-                    # message the pending question's answer — surface the
-                    # settled row so the client's pill clears and the
-                    # AnsweredQuestion block lands.
-                    prepared.answered_question = chat_settled
-        # The usage row rides the turn's own commit below (billing write
-        # discipline); a zero-LLM turn (repair-loop canned replies aside)
-        # writes nothing.
-        await fold_conversation_usage(
-            db,
-            user_id=prepared.user_id,
-            project_id=(
-                UUID(str(prepared.project.id))
-                if prepared.project is not None
-                else None
-            ),
-            accrued=_usage_bind.accrued,
+    with bind_conversation_turn(
+        conversation_id=prepared.conversation_id, turn_id=prepared.user_message.id,
+        project_id=prepared.project.id,
+    ) as usage:
+        assistant_message, run_id, answered, bailed_run_ids = await _plan_turn(
+            db, prepared.user_id, prepared.conversation, prepared.project, request,
+            skill=prepared.skill, skill_ambiguity=prepared.skill_ambiguity,
+            recent=prepared.history, turn_id=prepared.user_message.id,
+            on_delta=on_delta, on_reasoning=on_reasoning, on_phase=on_phase,
+            on_tool_call=on_tool_call, on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
+            on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
+            on_row_append=on_row_append,
         )
+        if answered is not None:
+            prepared.answered_question = answered
+    await fold_conversation_usage(
+        db, user_id=prepared.user_id, project_id=prepared.project.id, accrued=usage.accrued,
+    )
 
     # Stop and settlement serialize on the opening row. If Stop won, raising
     # here rolls back every uncommitted assistant/run/hold write in this Turn.

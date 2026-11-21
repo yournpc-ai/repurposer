@@ -932,6 +932,7 @@ export function AgentThread({
   const firstMessageSentRef = useRef(false)
   const [openingHistory, setOpeningHistory] = useState<"loading" | "empty" | "occupied" | "failed">("loading")
   const [historyAttempt, setHistoryAttempt] = useState(0)
+  const [recoveredJobTurn, setRecoveredJobTurn] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const activeChatStopRef = useRef<ActiveChatStop | null>(null)
   /** The Turn owning the global pending flag; late old requests cannot clear
@@ -1224,10 +1225,19 @@ export function AgentThread({
         const rows = data.items
         if (!cancelled) setOpeningHistory(rows.some((row) => row.role === "user") ? "occupied" : "empty")
         const active = new Set(rows.filter((r) => r.turn_state === "in_flight").map((r) => r.id))
-        watchingMedia = rows.some((r) => {
-          const intent = r.intent as { media_status?: string; media_result?: unknown } | null
-          return r.turn_id && active.has(r.turn_id) && (intent?.media_status === "accepted" || intent?.media_result)
+        const receipt = rows.slice().reverse().find((row) => {
+          const intent = row.intent as { media_job?: string; export_job?: string } | null
+          return row.turn_id && active.has(row.turn_id) && (intent?.media_job || intent?.export_job)
         })
+        const previouslyWatching = watchingMedia
+        watchingMedia = !!receipt
+        if (!cancelled) {
+          setRecoveredJobTurn(receipt?.turn_id ?? null)
+          if (receipt || previouslyWatching) {
+            const question = rows.slice().reverse().find((row) => row.question && !row.answer)
+            setPendingQuestion(dockWorthyQuestion(question ?? null))
+          }
+        }
         const history = mapHistoryRows(rows, { t })
         // Fill missing archive rows at their persisted seq positions. Live
         // rows keep their identity and typing state; a recovered live tail
@@ -1238,11 +1248,11 @@ export function AgentThread({
           observeJourney(data.items ?? [])
           for (const row of data.items ?? []) noteObservedSeq(row.seq)
           if (history.length > 0) {
-            const settled = new Map(history.filter((m) => m.activity && m.activity.status !== "active")
+            const frames = new Map(history.filter((m) => m.activity)
               .map((m) => [m.id, m.activity]))
             setMessages((prev) => prependMissingHistory(prev.map((m) =>
-              m.activity?.status === "active" && settled.has(m.id)
-                ? { ...m, activity: settled.get(m.id) } : m), history))
+              m.activity?.status === "active" && frames.has(m.serverMessageId ?? m.id)
+                ? { ...m, activity: frames.get(m.serverMessageId ?? m.id) } : m), history))
           }
         }
       } catch {
@@ -3631,6 +3641,14 @@ export function AgentThread({
     latestUser.id === journey.openingId || latestUser.serverMessageId === journey.openingId ||
     latestUser.turnId === journey.openingId)
 
+  const stopFrontier = (turnId: string) => {
+    const structureIds = new Set<string>()
+    for (const [id, owner] of visibleStructureTurnsRef.current) {
+      if (owner === turnId) structureIds.add(id)
+    }
+    return visibleFrontierForTurn(messagesRef.current, turnId, structureIds)
+  }
+
   const handleStop = async () => {
     if (stopPending || runCancelPending) return
     const controller = abortRef.current
@@ -3672,7 +3690,21 @@ export function AgentThread({
       }
       return
     }
-    if (!controller) return
+    if (!controller) {
+      if (!recoveredJobTurn) return
+      setStopPending(true)
+      try {
+        const response = await apiFetch(`/api/v1/chat/turns/${recoveredJobTurn}/stop`, {
+          method: "POST", body: stopFrontier(recoveredJobTurn),
+        })
+        if (response.ok) setHistoryAttempt((attempt) => attempt + 1)
+      } catch {
+        // History polling retains the server outcome if the request is interrupted.
+      } finally {
+        setStopPending(false)
+      }
+      return
+    }
     const context = activeChatStopRef.current
     if (!context || context.controller !== controller) {
       // Answer streams keep their existing abort/answer settlement; the Chat
@@ -3695,11 +3727,7 @@ export function AgentThread({
     try {
       const turnId = await context.turnIdPromise
       if (!turnId) return
-      const structureIds = new Set<string>()
-      for (const [serverMessageId, ownerTurnId] of visibleStructureTurnsRef.current) {
-        if (ownerTurnId === turnId) structureIds.add(serverMessageId)
-      }
-      const frontier = visibleFrontierForTurn(messagesRef.current, turnId, structureIds)
+      const frontier = stopFrontier(turnId)
       const res = await apiFetch(`/api/v1/chat/turns/${turnId}/stop`, {
         method: "POST",
         body: frontier,
@@ -4052,7 +4080,7 @@ export function AgentThread({
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
-  const canStop = (chatBusy && abortRef.current !== null) || runAttached || journeyActive
+  const canStop = (chatBusy && abortRef.current !== null) || runAttached || journeyActive || recoveredJobTurn !== null
   const chatScroller = (
     <ChatConversation
       messages={messages}

@@ -49,6 +49,12 @@ async def test_native_music_request_replay_stop_and_permission(database, monkeyp
             return editor_media.submit_editor_media(turn, "generate_music", args, comp, version, "call-1")
         twin = await asyncio.gather(submit(turn), submit(turn))
         assert twin[0].intent["media_job"] == twin[1].intent["media_job"] and twin[0].id == twin[1].id
+        from app.models.schemas import ChatMessageResponse
+        receipt_wire = ChatMessageResponse.model_validate(twin[0]).intent
+        assert receipt_wire == {
+            "operation": "generate_music", "media_status": "accepted",
+            "native_call_id": "call-1", "media_job": twin[0].intent["media_job"],
+        }
         with pytest.raises(ValueError, match="different parameters"):
             await submit(turn, args.model_copy(update={"bpm": 92}))
         assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0

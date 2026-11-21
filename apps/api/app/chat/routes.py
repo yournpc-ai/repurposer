@@ -160,11 +160,11 @@ def _make_tool_call_hook(queue: asyncio.Queue, projector: ActivityProjector | No
 
 
 def _new_activity_projector() -> ActivityProjector:
-    from app.chat.intent import chat_intent_agent, intent_router
+    from app.chat.intent import intent_router
 
     from app.chat.conversation_context import conversation_context_tool
 
-    return ActivityProjector([*intent_router.tools, *chat_intent_agent.tools, conversation_context_tool()])
+    return ActivityProjector([*intent_router.tools, conversation_context_tool()])
 
 
 def _activity_frame(frame) -> str:

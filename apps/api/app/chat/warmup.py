@@ -14,10 +14,6 @@ few cents). Failure posture: warmup NEVER blocks or fails startup — each
 call is guarded, errors are logged and dropped. The user message content is
 irrelevant to the cached prefix; the reply is discarded.
 
-Scope: the three chat agents (plan path / chat path / trigger turn) — the
-user-perceived-latency surfaces. Pipeline agents (worker process) stay
-unwarmed: run latency is not first-byte-critical and their prompts are
-smaller.
 """
 
 import structlog
@@ -30,13 +26,13 @@ logger = structlog.get_logger()
 
 
 def _chat_agents() -> list[ToolLoopAgent]:
-    """The three chat-path agents, imported lazily (this module is loaded by
+    """Active agents, imported lazily (this module is loaded by
     app.main's lifespan — the agents' modules must not load earlier than
     they already do)."""
-    from app.chat.intent import chat_intent_agent, intent_router
+    from app.chat.intent import intent_router
     from app.chat.trigger_turn import trigger_agent
 
-    return [intent_router, chat_intent_agent, trigger_agent]
+    return [intent_router, trigger_agent]
 
 
 async def warm_chat_prefixes() -> None:
