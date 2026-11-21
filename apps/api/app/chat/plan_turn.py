@@ -611,17 +611,7 @@ class PlanTurn:
                 name,
                 params,
             )
-        # 插话判定结算 (ADR-053 R2 — the plan-path seat, 2026-09-27 一问拍
-        # 一体化): the disposition rides every terminal call's envelope, the
-        # chat path's `_settle_by_disposition` mirror — judgment is the LLM's,
-        # settlement is code's. "answer" settles the pending plain question
-        # as freeform with the user's OWN WORDS (原话一视同仁: an answer, a
-        # deferral like "你更推荐什么？", an option discussion all engage the
-        # question); "skip" bails it; "none" leaves it (the reply gets the
-        # reminder tail below). The slot absorb (_absorb) is the narrower
-        # code fast path and composes — it sees pending_q=None after this.
-        # Plan-path plain questions are never parked interrupts (prepare
-        # filters workflow_run_id), so there is no wake branch here.
+        # Require the model to address the pending question before writing.
         if (
             name == "create_video"
             and self.pending_q is not None

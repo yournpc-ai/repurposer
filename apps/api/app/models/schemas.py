@@ -1573,8 +1573,7 @@ class ChatRequest(BaseModel):
     # silently adopted nor silently dropped).
     suggestion_ref: SuggestionRef | None = None
     # The composer's persona choice rides the first message; written into the
-    # pending brief only when the plan path docks a plan (a later turn
-    # omitting it never clobbers the stored choice).
+    # project brief. Later turns may omit it to keep the stored choice.
     persona_id: UUID | None = None
 
 
@@ -1689,7 +1688,7 @@ class ToneSettings(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# brief（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
+# Project brief: the dialog engine's structured
 # state. Five slots, each with provenance; the intent router proposes a full
 # update every plan turn and code merges by source precedence (merge_brief —
 # LLM proposes, code decides; user-stated is never reverse-overwritten).

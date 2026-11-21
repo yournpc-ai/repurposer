@@ -13,41 +13,24 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/skill-package-promo-video.md` 当前实施与验收 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1；涉及 Chat/Graph/Run 接缝再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
+| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/skill-package-promo-video.md` 当前实施与验收 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1；涉及 Chat 和后台作业再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
 | 宣传视频核心 Skill / 渐进式内外置 Skill 包 | `VIDEO_PROJECT.md` §0、§4.3.2、§7、§8 → `tasks/skill-package-promo-video.md` 当前批次；在同一合同核对 Remotion 工程与发布门 |
-| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §2.2、§8.1.2 → `tasks/skill-package-promo-video.md` 核对直接 Op、当前工作面与剩余验收。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` §5 |
+| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §2.2、§8.1.2 → `tasks/skill-package-promo-video.md` 核对直接 Op、当前工作面与剩余验收。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | Chat TurnBlock 四阶段施工 | `CHAT_ARCHITECTURE.md` §8.10 → `tasks/chat-turn-block-implementation.md` 当前阶段 → `VIDEO_PROJECT.md` §12 目标目录；视频接缝再读 §10 与统一视频合同 P5 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
 | 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
 | 模块 / 表 / 队列 / worker | `MODULE_ARCHITECTURE.md` §4 / §5 / §7 的对应小节；迁移再加 `DATABASE_MIGRATIONS.md` |
-| Agent / tools / graph / 报价 | `AGENT_ARCHITECTURE.md` §2 / §4 / §5 / §7 / §8 中对应小节 |
-| 意图路由 / plan path / brief | `DIALOG_WORKFLOW.md` §2、§4 + `CHAT_ARCHITECTURE.md` §3 |
+| 原生工具、后台作业与报价 | `AGENT_ARCHITECTURE.md`、`BILLING.md` |
 | 渲染 / video-spec / 编辑器 | `RENDERING.md` §3、§6、§8 中对应小节；作品结构读 VIDEO_PROJECT，编辑器交互再加 `VIDEO_EDITOR.md` |
 | 积分 / 钱包 / 授权 / 估价 | `BILLING.md` 对应章节 + 当前任务涉及的确认规则 |
 | 支付 / Stripe / 充值 / webhook | `PAYMENTS.md` 对应架构、凭据/部署、订单或 webhook 章节 + `tasks/stripe-credit-topup.md` 当前施工与验收 |
 | 新功能 / 用户体验 | `JOURNEYS.md` 的对应旅程与缺口，不通读其他旅程；目标架构只有被动到才读 `ARCHITECTURE_NORTH_STAR.md` 对应章节 |
 | 决策 / 排障 | `DECISIONS.md` 按主题和编号定点读；排障查当前代码、测试与运行证据，不依赖历史文档库 |
 
-## 架构金字塔（常驻导航）
+## 编辑器文档入口
 
-> **任何需求 / 概念 / 评审，先在金字塔上定位它属于哪一层。** 金字塔是常驻的：层的归层——新词进对应层文档，新层才动本表。
-
-```
-┌─ 愿景层：Agentic Content OS（对外叙事 + 愿景↔现行对照表）—— ARCHITECTURE_NORTH_STAR.md §1 / §1.1
-├─ 概念层：执行五概念 + 内容世界六概念词典 —— NORTH_STAR §2 / §2.1（加词先过 NAMING.md）
-├─ 方向层：五态（CURRENT / TARGET / PLANNED / OPEN / REJECTED）—— NORTH_STAR §3~§9
-├─ 模块层：六层模块图 + 表归属契约 —— MODULE_ARCHITECTURE.md
-├─ 工程层：Model / Harness / Graph / Loop 四层地图 —— AGENT_ARCHITECTURE.md
-├─ 旅程/排期层：用户旅程 —— JOURNEYS.md ｜ 当前批次 —— PROGRESS.md §0
-└─ 代码层：apps/api/app/（经表归属契约查到文件）
-```
-
-**定位规则**：
-1. 新需求 → 先答两问：「动金字塔哪一层」+「JOURNEYS 哪条旅程哪一拍」——两问都答不上 = 需求还没想清楚，不立项；
-2. 新概念词 → 归对应层文档的词典/契约；禁止在层外发明平行词汇；
-3. 愿景词 → 先查 §1.1 对照表有没有现行座位；**没有座位的愿景词不许落进代码命名**（词汇版「把 OPEN 写成 CURRENT」）；
-4. 某层发生变化 → 同批更新该层文档；层结构本身变化 → 才动本表。
+产品目标与专业剪辑扩展由主合同维护，运行事实见 AGENT_ARCHITECTURE、CHAT_ARCHITECTURE 和 API。架构验收、真实模型样本和浏览器回放保存在 tasks/agent-editor-evidence/iteration-6。
 
 ## 信息类型 → 唯一事实源
 
@@ -63,7 +46,6 @@
 | 目标架构 / 可靠性主线 | `ARCHITECTURE_NORTH_STAR.md` | 只承载跨模块目标架构与可靠性主线（五态：CURRENT/TARGET/PLANNED/OPEN/REJECTED）；具体 PLANNED 产品需求、启动条件和验收仍归 PROGRESS 与当前任务合同；现状归 MODULE_ARCHITECTURE.md |
 | 模块架构 / 表归属 | `MODULE_ARCHITECTURE.md` | 六层模块图 + 跨模块契约 |
 | 身份/运营层概念架构 | `POSITIONING.md` | 定位根 / 人设分区 / 渠道 / 选题的概念树只住这里，其他文档只引用 |
-| 对话→生产概念架构 | `DIALOG_WORKFLOW.md` | 厚 agent 判词 / 双引擎 workflow / brief / canonical 词汇（router·understand·plan）只住这里，其他文档只引用 |
 | Video Project 目标架构与施工 | `VIDEO_PROJECT.md` / `tasks/skill-package-promo-video.md` | 目标文档 §12 唯一定义新旧目录与逐项处置，其余章节载 Project / Composition / CompositionVersion、Track/Clip/Object、Skill、全局跨 Chat 引用、旁白/字幕、Run/Graph 接缝与 video-spec 的已拍板目标；能力、直接 Op、当前工作面与剩余验收由当前视频合同统筹。当前状态只见 PROGRESS §0 与统一合同 |
 | 用户旅程 | `JOURNEYS.md` | 旅程逐拍 / 分支树 / 体验规格横切 / 缺口登记只住这里；新功能开工先答「在哪条旅程哪一拍」 |
 | 积分 / 钱包 / 计费架构 | `BILLING.md` | credit / wallet / credit_transactions / hold→capture→release / configs / 比例参数 / 负余额语义只住这里，其他文档只引用 |
@@ -87,8 +69,7 @@
 | `tasks/website-promo-evidence-brief-workflow.md` | **官网品牌宣传片证据链**：扩展 Brief、BrandProfile、集中问题组、素材试制与分轮验收 | 当前合同，Iteration 1A 已落码，后续真实验收开放 | 改官网宣传片的需求澄清、品牌理解、素材试制或全链继承前 |
 | `tasks/website-promo-iteration2-media-slice.md` | **官网两幕媒体薄片四轮子合同**：分镜中枢、通用 N 幕双来源图片、统一媒体分析、TTS、纯电子 BGM、Scene 局部渲染与 MP4 | 当前施工子合同，未开始；每轮独立出口与授权 | 执行 Iteration 2 当前四轮前；每轮只实现和验证自己的出口，后续能力不得提前虚报 |
 | `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145/146）；§0 为各阶段必读方针，当前实现/欠账归 PROGRESS 与 `tasks/skill-package-promo-video.md`，不以目标目录冒充实现 | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
-| `AGENT_ARCHITECTURE.md` | 四层工程地图（Model / Harness / Graph / Loop，ADR-039）+ 工具包/花名册/NodeBase/估价 | 活跃 | 动 generation/agents/tools 前 |
-| `DIALOG_WORKFLOW.md` | 对话→生产概念架构母文档：双引擎 workflow / canonical 词汇 / brief + ask_user / 有界 loop 节点 | 现行规范（实现状态以 `PROGRESS.md` 为准） | 动 chat 意图层 / plan path / 多轮对话 / agent 概念前 |
+| `AGENT_ARCHITECTURE.md` | Native Tool、领域作业、恢复身份与作品 | 活跃 | 修改 Agent 执行契约时核对 |
 | `VIDEO_EDITOR.md` | Chat 定向修订、版本指认、Scrub 与 Inspector | Chat 修订现行，精确编辑验收开放 | 动编辑器前 |
 | `RENDERING.md` | **video-spec 与交付链**：编译、预览、渲染、上传、探测、缓存重传与所有权 | 活跃 | 动 renderer、执行与交付前 |
 | `MUSIC_ARCHITECTURE.md` | 音乐库、人设音乐选择、自定义生成与启动 reconcile | 当前实现： persona 皮肤面板可自定义生成，Chat `add_music` 只选库；prompt 缓存、配额、上传与更多入口 deferred | 动音乐前 |

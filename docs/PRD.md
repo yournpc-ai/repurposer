@@ -206,7 +206,7 @@ An AI agent for knowledge experts: it turns existing video, audio, transcripts, 
 ## 8. 技术与数据边界
 
 - 技术架构：`MODULE_ARCHITECTURE.md`；生成编排：`AGENT_ARCHITECTURE.md`。
-- Chat 与画布：`CHAT_ARCHITECTURE.md`；对话概念：`DIALOG_WORKFLOW.md`。
+- Chat、费用授权与恢复见 `CHAT_ARCHITECTURE.md`，原生工具见 `AGENT_ARCHITECTURE.md`。
 - 渲染：`RENDERING.md`；编辑器：`VIDEO_EDITOR.md`；Film：其当前总设计与 execution/progress。
 - 表结构以 `apps/api/app/models/tables.py` 与 migrations 为代码事实源；新表、新模块和认领源必须登记。
 - API 规格以 `API.md` 与当前 FastAPI 路由/schema 为准。

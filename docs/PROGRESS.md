@@ -75,7 +75,7 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 [ ] 完成后更新当前快照、剩余风险与下一步；不追加会话编年史
 ```
 
-**Non-negotiable constraints**：LLM 面不直接写 DB；拓扑由代码裁决；tool schema 是 action 边界；`apply_wiring_ops` 是唯一图写口；`_mutate` 双层 dedupe 不得破坏；video-spec 是唯一在线渲染协议且不得混入 renderer 私有概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；`craft_scan` 零 LLM；终态写携带执行身份；project `{PENDING,RUNNING}` 至多一个 owner。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
+**Non-negotiable constraints**：LLM 面不直接写 DB；tool schema 是 action 边界；`apply_composition_edits` 是作品编辑写口；`_mutate` 双层 dedupe 不得破坏；video-spec 是唯一在线渲染协议且不得混入 renderer 私有概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；`craft_scan` 零 LLM；终态写携带执行身份；project `{PENDING,RUNNING}` 至多一个 owner。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
 
 ## 1. 后续能力、延期事项与上线条件
 

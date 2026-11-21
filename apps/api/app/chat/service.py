@@ -370,7 +370,7 @@ async def resolve_confirmation_need(
     )
 
 
-# ---- brief (DIALOG_WORKFLOW §2.4, ADR-052 B2) --------------------------------
+# ---- user-stated brief --------------------------------
 
 _SOURCE_RANK: dict[BriefSlotSource, int] = {
     BriefSlotSource.DEFAULT: 0,

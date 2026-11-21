@@ -24,8 +24,8 @@
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
-- **Chat 意图 / 多轮 / brief**：`docs/DIALOG_WORKFLOW.md` §2、§4 + CHAT_ARCHITECTURE §3；不读旧交互迁移报告代替现行法。
-- **Agent / tools / graph**：`docs/AGENT_ARCHITECTURE.md` §2（四层地图）、§4（Graph）、§5（Harness）、§7（工具包）；报价另读 §8。
+- **Chat、多轮与用户约束**：读 `docs/CHAT_ARCHITECTURE.md` 和 `docs/tasks/new-agent.md`。
+- **Agent、原生工具与后台作业**：读 `docs/AGENT_ARCHITECTURE.md`，费用与结算另读 `docs/BILLING.md`。
 - **Rendering**：`docs/RENDERING.md` 管 video-spec、渲染、上传、围栏与交付。作品结构见 VIDEO_PROJECT，编辑器交互见 VIDEO_EDITOR。
 - **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
 - **Payments / Stripe / 充值**：长期架构、凭据/部署、订单字段与 webhook 规则读 `docs/PAYMENTS.md`；首批一次性积分充值施工与验收读 `docs/tasks/stripe-credit-topup.md`。
@@ -144,7 +144,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Persona Skin Block (brand)
 
-**ADR-038**：皮肤 = 人设 `brand` JSONB 块（caption 字号/字体/颜色/位置 + style-preset + 标题 + intro/outro + 音乐 `musicId`/`musicMood`/`musicEnabled`）；无独立 brand template 模块，`/brand-template` 307 → `/personas`。**`brand: null` = 系统默认皮肤**。编辑 = 人设页第三 tab「皮肤」（左设置 + 右 Remotion `<Player>` 实时预览，与产物像素级一致，`components/persona/skin-editor.tsx`）；存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体 = `POST /personas/{id}/media(/upload-url)`（随人设删）。**`logo` 键无渲染消费路径，不入 UI**。**Craft/format 字段非人设列**：`aspect` / `fillMode` / `captionEnabled` / filler removal / 音乐默认 = 配方注册表 + 计划默认；写作风格不在人设表列，住 风格六件 + `guidelines`。烘焙路径见 `MODULE_ARCHITECTURE.md §7` / `brand.py`（`brand_ref` = persona id）。**`brand_template_id` 不出现在任何请求载荷**——composer 单身份控件，`persona_id` 经首条 chat 消息送达并在 `create_run` 钉入 `run.context.persona_id`。
+**ADR-038**：皮肤 = 人设 `brand` JSONB 块（caption 字号/字体/颜色/位置 + style-preset + 标题 + intro/outro + 音乐 `musicId`/`musicMood`/`musicEnabled`）；无独立 brand template 模块，`/brand-template` 307 → `/personas`。**`brand: null` = 系统默认皮肤**。编辑 = 人设页第三 tab「皮肤」（左设置 + 右 Remotion `<Player>` 实时预览，与产物像素级一致，`components/persona/skin-editor.tsx`）；存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体 = `POST /personas/{id}/media(/upload-url)`（随人设删）。**`logo` 键无渲染消费路径，不入 UI**。**Craft/format 字段非人设列**：`aspect` / `fillMode` / `captionEnabled` / filler removal / 音乐默认 = 配方注册表 + 计划默认；写作风格不在人设表列，住 风格六件 + `guidelines`。烘焙路径见 `MODULE_ARCHITECTURE.md §7` / `brand.py`（`brand_ref` = persona id）。**`brand_template_id` 不出现在任何请求载荷**——composer 单身份控件，`persona_id` 经首条 Chat 消息送达，当前人设选择保存在项目 Brief。
 
 ## Persona Voice Block (voice)
 
