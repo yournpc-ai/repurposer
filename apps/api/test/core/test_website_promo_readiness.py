@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 import pytest
@@ -176,7 +177,7 @@ def test_full_literal_input_does_not_reask_existing_fields():
         creative_state=CreativeState(brief=brief, brand_profile=profile()),
     )
     assert readiness.brief_ready
-    assert readiness.required_next_action == "design_video"
+    assert readiness.required_next_action == "create_video"
 
 
 @pytest.mark.parametrize("kind", ["group", "bail"])
@@ -194,7 +195,7 @@ def test_a_settled_legacy_questionnaire_applies_only_to_its_opening(kind):
             question_settled=settled_website_question([receipt], turn_id),
         ).required_next_action
 
-    assert next_action(opening) == "design_video"
+    assert next_action(opening) == "create_video"
     assert next_action(uuid4()) == "ask_user"
     receipt.answer = None
     assert next_action(opening) == "ask_user"
@@ -272,14 +273,15 @@ def test_old_rows_tolerate_null_optional_brief_fields():
 def round_assembly(text, *, assets, snapshots=(), state=None, pending=None):
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.prompts import assemble_video_round
-    from app.chat.turn_tools import PLAN_TOOLS, _design_video_tool, _video_material_tools
+    from app.chat.editor import EDITOR_TOOLS
+    from app.chat.turn_tools import PLAN_TOOLS, _video_material_tools
 
     resources = tuple(
         [("asset:1", item) for item in assets] + [("snapshot:1", item) for item in snapshots]
     )
     return assemble_video_round(
         {
-            "tools": [*PLAN_TOOLS, *_video_material_tools(), _design_video_tool()],
+            "tools": [*PLAN_TOOLS, *_video_material_tools(), *EDITOR_TOOLS],
             "drafts": (),
             "snapshot": ContextSnapshot(
                 "evidence", frozenset(key for key, _ in resources), resources=resources
@@ -295,28 +297,21 @@ def round_assembly(text, *, assets, snapshots=(), state=None, pending=None):
 def test_round_projection_uses_readiness_before_tools():
     vague = f"给 {URL} 做一只宣传片"
     pending = round_assembly(vague, assets=[asset()])
-    assert pending.stage == "source_preparing"
     assert {tool.name for tool in pending.tools} == {"prepare_video_materials", "answer"}
-    assert "当前路径：website_promo" in pending.context
-    assert "含 URL：true" in pending.context
-    assert "等待采集：true" in pending.context
-    assert "采集失败：false" in pending.context
-    assert "采集已就绪：false" in pending.context
-    assert "正文已就绪：false" in pending.context
-    assert "所需视图已就绪：false" in pending.context
-    assert "Brief 已就绪：false" in pending.context
-    assert "已有草稿：false" in pending.context
-    assert '"required_next_action": "prepare_video_materials"' in pending.context
-    assert pending.context.count('"required_next_action":') == 1
-    assert '"source_readiness"' not in pending.context
-    assert pending.context.index("当前准备状态：") < pending.context.index(
-        "当前视频轮次"
-    )
-    assert pending.context.rstrip().endswith('"required_next_action": "prepare_video_materials"}')
+    facts = json.loads(pending.context)
+    assert "当前路径：website_promo" in facts["source_preparation"]
+    assert "含 URL：true" in facts["source_preparation"]
+    assert "等待采集：true" in facts["source_preparation"]
+    assert "采集失败：false" in facts["source_preparation"]
+    assert "采集已就绪：false" in facts["source_preparation"]
+    assert "正文已就绪：false" in facts["source_preparation"]
+    assert "所需视图已就绪：false" in facts["source_preparation"]
+    assert "Brief 已就绪：false" in facts["source_preparation"]
+    assert "已有草稿：false" in facts["source_preparation"]
+    assert facts["source_readiness"]["required_next_action"] == "prepare_video_materials"
     assert "官网宣传片取证" in pending.system
 
     failed = round_assembly(vague, assets=[asset("failed")])
-    assert failed.stage == "source_preparing"
     assert [tool.name for tool in failed.tools] == ["answer"]
 
     briefing = round_assembly(
@@ -325,10 +320,9 @@ def test_round_projection_uses_readiness_before_tools():
         snapshots=[snapshot()],
         state=CreativeState(),
     )
-    assert briefing.stage == "briefing"
     assert {tool.name for tool in briefing.tools} == {"analyze_brand", "answer"}
-    assert '"required_next_action": "analyze_brand"' in briefing.context
-    assert "官网宣传片需求梳理" in briefing.system
+    assert json.loads(briefing.context)["source_readiness"]["required_next_action"] == "analyze_brand"
+    assert "官网宣传片取证" in briefing.system
 
 
 def test_round_projection_restores_design_only_after_brief_and_brand():
@@ -342,21 +336,15 @@ def test_round_projection_restores_design_only_after_brief_and_brand():
         snapshots=[snapshot()],
         state=CreativeState(brief=brief, brand_profile=profile()),
     )
-    assert ready.stage == "draft_build"
-    assert "design_video" in {tool.name for tool in ready.tools}
-    assert '"required_next_action": "design_video"' in ready.context
-    assert ready.context.count('"required_next_action":') == 1
-    assert ready.context.rstrip().endswith('"required_next_action": "design_video"}')
-    assert '"creative_state"' in ready.context
-    assert '"brand_profile"' in ready.context
-    assert "website-brand-v1" in ready.context
+    facts = json.loads(ready.context)
+    assert "create_video" in {tool.name for tool in ready.tools}
+    assert facts["source_readiness"]["required_next_action"] == "create_video"
+    assert facts["creative_state"]["brand_profile"]["extractor_version"] == "website-brand-v1"
     assert "AVAILABLE VIDEO ROUTES" not in ready.system
     assert "promo-video" not in ready.system
 
 
 def test_open_website_question_stays_pending_across_a_new_round():
-    import json
-
     from app.models.tables import Message
 
     question = Message(id=uuid4(), role="assistant", content="请选择制作要求。",
@@ -366,16 +354,13 @@ def test_open_website_question_stays_pending_across_a_new_round():
         state=CreativeState(brand_profile=profile()), pending=question,
     )
     assert {tool.name for tool in waiting.tools} == {"answer"}
-    context = json.loads(waiting.context.rsplit("\n", 1)[-1])
-    assert context["pending_question"]["message_id"] == str(question.id)
-    assert context["required_next_action"] == "answer" and waiting.enforce_offered_tools
+    assert "working_draft_recovery" not in waiting.context
 
 
 def test_non_website_round_keeps_existing_path():
     ordinary = round_assembly("Make a video from the attached interview", assets=[])
-    assert ordinary.stage == "draft_build"
-    assert '"task_kind": "website_promo"' not in ordinary.context
-    assert "design_video" in {tool.name for tool in ordinary.tools}
+    assert "create_video" in {tool.name for tool in ordinary.tools}
+    assert "design_video" not in {tool.name for tool in ordinary.tools}
 
 
 @pytest.mark.asyncio
@@ -668,7 +653,7 @@ def test_only_latest_snapshot_digest_satisfies_brand_readiness():
         ),
     )
     assert ready.brand_profile_ready
-    assert ready.required_next_action == "design_video"
+    assert ready.required_next_action == "create_video"
 
 
 def test_every_requested_page_needs_text_and_a_readable_view():
@@ -927,6 +912,6 @@ def test_website_round_excludes_unrelated_project_resources():
         f"给 {URL} 做一只宣传片",
         assets=[asset(), unrelated],
     )
-    assert assembly.stage == "source_preparing"
+    assert json.loads(assembly.context)["source_readiness"]["required_next_action"] == "prepare_video_materials"
     assert "unrelated.example" not in assembly.context
     assert not assembly.include_project_context

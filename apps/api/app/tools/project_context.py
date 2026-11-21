@@ -259,9 +259,21 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
     from app.chat.conversation_context import context_items
 
     draft_snapshot_ids: set[UUID] = set()
+    rejected_migrations = []
     conversations = (await db.scalars(select(Conversation).where(
         Conversation.project_id == project_id, Conversation.user_id == owner_id
     ))).all()
+    for conversation in conversations:
+        for draft_id, migration in (conversation.context or {}).get("working_draft_migrations", {}).items():
+            if migration.get("status") == "rejected":
+                rejected_migrations.append({
+                    "draft_id": draft_id, "reason": migration.get("reason"),
+                    "conversation_id": str(conversation.id), "original_record_preserved": True,
+                })
+    if rejected_migrations:
+        resources.append(("working-draft-recovery:rejected", {
+            "kind": "working_draft_recovery", "status": "rejected", "drafts": rejected_migrations,
+        }))
     for conversation in conversations:
         for item in context_items(conversation.context):
             candidate = item.get("candidate") or {}

@@ -512,6 +512,11 @@ class ToolRejected:
     candidate_digest: str | None = None
 
 
+def rejection_arguments_digest(tool_name, arguments, params=None):
+    normalized = params.model_dump(mode="json") if params is not None else arguments
+    return tool_progress_digest(tool_name, normalized)
+
+
 @dataclass(frozen=True)
 class TerminalAccepted:
     """A TERMINAL call's execute returned accept (the stop) — the work the
@@ -817,7 +822,6 @@ class ToolLoopAgent:
         accepted_reads: list[str] = []
         observation_results: list[tuple[str, bool]] = []
         version_saved = False
-        draft_finalized = False
 
         def _finish(result: LoopResult) -> LoopResult:
             result.observations = list(observation_results)
@@ -1076,7 +1080,6 @@ class ToolLoopAgent:
                     new_result=bool(new_result_ok),
                     new_result_tool=observation_results[-1][0] if new_result_ok else None,
                     version_saved=version_saved,
-                    draft_finalized=draft_finalized,
                 )
                 assembled_result_count = len(observation_results)
             else:
@@ -1277,7 +1280,7 @@ class ToolLoopAgent:
             prose = result.content
             if assembled.project_reply:
                 prose = assembled.project_reply(prose)
-                if any(not by_name[c.name].terminal for c in result.tool_calls if c.name in by_name):
+                if not assembled.stream_prose and any(not by_name[c.name].terminal for c in result.tool_calls if c.name in by_name):
                     prose = ""  # The Activity owns pre-execution speech for editor operations.
             if (
                 len(result.tool_calls) == 1
@@ -1353,6 +1356,7 @@ class ToolLoopAgent:
                 )
             batched = len(result.tool_calls) > 1
             response_prose = prose
+            response_has_prose = bool(prose.strip())
             prose_handled = False
             wire_calls = [
                 {"id": call.id or f"call_{iteration}_{index}", "type": "function",
@@ -1774,7 +1778,7 @@ class ToolLoopAgent:
                 # Read speech lands before execution. Terminal speech belongs to its
                 # answer/card. With no delivery hook, the ledger keeps both.
                 prose_handled = True
-                if (assembled.acknowledgment and not tool.terminal and not prose.strip()
+                if (assembled.acknowledgment and not tool.terminal and not response_has_prose
                         and not interim_proses_sent and not speech_parts):
                     prose = assembled.acknowledgment
                 # Draft judgments speak only from their accepted observation.
@@ -1962,8 +1966,6 @@ class ToolLoopAgent:
                     # carries this fact; tool.ok alone includes save=false.
                     if outcome.ok and outcome.version_saved:
                         version_saved = True
-                        if dispatch_name == "design_video" and assembled.stage in {"draft_build", "draft_finalize"}:
-                            draft_finalized = True
                     last_read_name = dispatch_name
                     accepted_reads.append(dispatch_name)
                     observation_results.append((dispatch_name, outcome.ok))
@@ -2019,6 +2021,27 @@ class ToolLoopAgent:
                             prose=speech, tool_name=dispatch_name, params=params,
                             iterations=iteration + 1, calls=calls,
                         ))
+                    if not outcome.ok and not parallel_params:
+                        from app.chat.editor import EDITOR_NAMES
+
+                        logger.info(
+                            "tool_loop_rejection", agent=self.name, iteration=iteration,
+                            kind="execute_guardrail", tool=dispatch_name, detail=outcome.text[:200],
+                        )
+                        stopped = await _reject(
+                            ToolRejected(
+                                kind="execute_guardrail", tool_name=dispatch_name, iteration=iteration,
+                                detail=outcome.text[:200],
+                                duration_ms=int((time.monotonic() - iteration_started) * 1000),
+                                candidate_digest=(
+                                    rejection_arguments_digest(dispatch_name, call.arguments, params)
+                                    if dispatch_name in EDITOR_NAMES or dispatch_name == "create_video" else None
+                                ),
+                            ),
+                            feedback=outcome.text, iteration=iteration,
+                        )
+                        if stopped is not None:
+                            return stopped
                     continue
                 if isinstance(outcome, TerminalRefusal):
                     if is_correction:
@@ -2110,11 +2133,13 @@ class ToolLoopAgent:
                     (candidate_record.arguments if is_draft_merge and candidate_record is not None else params.model_dump(mode="json") if params is not None else {}),
                     candidate_record=candidate_record if (is_correction or is_draft_merge) else None,
                     candidate_active=is_draft_merge, target_tool=dispatch_name if (is_correction or is_draft_merge) else None)
+                from app.chat.editor import EDITOR_NAMES
+
                 rejection_digest = (
                     candidate_progress_digest(candidate_record)
                     if candidate_record is not None and (is_correction or is_draft_merge)
-                    else tool_progress_digest(dispatch_name, call.arguments)
-                    if dispatch_name in {"design_video", "split_clip"}
+                    else rejection_arguments_digest(dispatch_name, call.arguments, params)
+                    if dispatch_name in EDITOR_NAMES or dispatch_name == "create_video"
                     else None
                 )
                 stopped = await _reject(

@@ -2,7 +2,7 @@
 name: text-animation
 description: First-version direction for a native text-animation video using exact user copy and content-driven native text and shape animation.
 license: Proprietary
-compatibility: Repurposer design_video native motion-graphics first design and native Preset expansion; optional video-template.json is not used.
+compatibility: Repurposer create_video native text/title/list scenes and static or entrance title motion; optional video-template.json and arbitrary component demos are not executed.
 metadata:
   version: "1.0.0"
   author: repurposer

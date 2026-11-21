@@ -25,7 +25,7 @@ from app.models.tables import SkillVersion, UserSkill
 from app.skills import SKILL_REGISTRY, SkillValidationError, _parse_skill_md
 from app.skills.store import get_skill_version
 
-# Only packs with a real design_video consumer are selectable video Skills.
+# Only packs with a real create_video / current-Editor consumer are selectable video Skills.
 # The broader instruction-pack registry also contains writers and other crafts.
 _BUILTIN_VIDEO_CAPABILITIES = {
     "promo-video": (

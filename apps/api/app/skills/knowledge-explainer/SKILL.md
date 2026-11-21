@@ -2,7 +2,7 @@
 name: knowledge-explainer
 description: First-version direction for a script-led knowledge explainer using READY narration alignment, word anchors, native Presets, and controlled draw-2d or remotion-project Generators.
 license: Proprietary
-compatibility: Repurposer design_video READY source-aligned narration, bounded draw-2d, or an isolated remotion-project runner when the deployment enables one.
+compatibility: Repurposer create_video fixed sources, native text and READY aligned narration; controlled Generator resources require an external Skill and enabled component bake.
 metadata:
   version: "1.0.0"
   author: repurposer

@@ -328,7 +328,7 @@ async def test_group_bail_uses_defaults_without_user_stated(database, monkeypatc
     ):
         assert getattr(stored.brief, slot).source == BriefSlotSource.DEFAULT
     assert stored.creative_state.brief.target_seconds.value == 30
-    assert _ready_after_bail(stored).required_next_action == "design_video"
+    assert _ready_after_bail(stored).required_next_action == "create_video"
 
 
 @pytest.mark.asyncio
@@ -346,7 +346,7 @@ async def test_group_bail_preserves_answers_and_defaults_the_rest(database, monk
     assert stored.brief.narration_language.value == "en"
     assert stored.brief.production_direction.value == "website · product_evidence"
     assert stored.brief.aspect.value == "16:9"
-    assert _ready_after_bail(stored).required_next_action == "design_video"
+    assert _ready_after_bail(stored).required_next_action == "create_video"
 
 
 def test_legacy_answer_and_question_shapes_remain_readable():

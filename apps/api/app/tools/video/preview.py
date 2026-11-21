@@ -8,15 +8,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
-import json
 from copy import deepcopy
 from fractions import Fraction
-from typing import Any, Literal
-from uuid import NAMESPACE_URL, UUID, uuid5
+from typing import Any
+from uuid import UUID
 
 import av
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.schemas import (
@@ -34,7 +32,6 @@ from app.editing.video_spec import CompileError, compile_video_spec
 from app.models.schemas import (
     MediaInput,
     MediaInputType,
-    VideoDraftRef,
     VideoObjectScrubTarget,
     VideoScrubTarget,
     VideoRangeScrubTarget,
@@ -353,166 +350,14 @@ async def enrich_video_scrub(
     return {**read, "scrub": target.model_dump(mode="json"), "video_preview": preview}
 
 
-class VideoDraftReviewTarget(BaseModel):
-    """The current Scene, optionally joined to its immediately previous Scene."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    scene_id: str = Field(min_length=1, max_length=64)
-    include_previous_scene: bool = False
-    start_seconds: float = Field(ge=0, allow_inf_nan=False)
-    end_seconds: float = Field(gt=0, allow_inf_nan=False)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("include_previous_scene") is None:
-            return {**data, "include_previous_scene": False}
-        return data
-
-    @model_validator(mode="after")
-    def _bounded(self) -> "VideoDraftReviewTarget":
-        if self.end_seconds <= self.start_seconds:
-            raise ValueError("review end_seconds must be after start_seconds")
-        if self.end_seconds - self.start_seconds > 24:
-            raise ValueError("one working-draft review is limited to 24 seconds")
-        return self
 
 
-class WorkingDraftReviewJudgment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    evidence_id: str = Field(min_length=24, max_length=24)
-    observed: str | None = Field(default=None, min_length=1, max_length=1000,
-                                 description="描述目标场景中实际可见的内容，再与要求比较。")
-    verdict: Literal["pass", "issue", "uncertain"]
-    summary: str = Field(min_length=1, max_length=1000)
-    clip_ids: list[str] = Field(default_factory=list, max_length=16)
-    resolves_issue_ids: list[str] = Field(default_factory=list, max_length=16)
 
 
-class ReviewWorkingDraftArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    draft_ref: VideoDraftRef
-    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
-    include_previous_scene: bool = False
-    judgment: WorkingDraftReviewJudgment | None = Field(
-        default=None,
-        description="针对当前 evidence_id 记录观察到的画面事实，填写 pass、issue 或 uncertain。",
-    )
-    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
-    _review_target: VideoDraftReviewTarget | None = PrivateAttr(default=None)
-    _confirmation_retry: bool = PrivateAttr(default=False)
-
-    @model_validator(mode="after")
-    def _initial_target_only(self) -> "ReviewWorkingDraftArgs":
-        if self.judgment is not None and self.scene_id is not None:
-            raise ValueError("a judgment uses the current evidence_id only")
-        if self.include_previous_scene and self.scene_id is None:
-            raise ValueError("a preceding join requires a target Scene")
-        return self
-
-    def bind_working_draft(self, value: dict[str, Any]) -> None:
-        self._working_draft = deepcopy(value)
-        if self.judgment is None:
-            from app.agents.working_drafts import working_draft_review_facts
-
-            if self.scene_id is not None:
-                from app.agents.candidate_correction import CorrectionError
-
-                if (value.get("review") or {}).get("started"):
-                    raise CorrectionError("invalid_review_target", "continue the current review using the server-selected window")
-                content = CompositionContent.model_validate(value["content"])
-                scenes = sorted(content.scenes, key=lambda scene: scene.range.start)
-                index = next((i for i, scene in enumerate(scenes) if scene.scene_id == self.scene_id), None)
-                if index is None or (index == 0 and self.include_previous_scene):
-                    raise CorrectionError("invalid_review_target", "the requested Scene or preceding join does not exist in the draft")
-                scene = scenes[index]
-                timebase = content.settings.timebase
-                start = scene.range.start / timebase
-                end = scene.range.end / timebase
-                if self.include_previous_scene:
-                    start = max(scenes[index - 1].range.start / timebase, start - 1.5)
-                self._review_target = VideoDraftReviewTarget(
-                    scene_id=self.scene_id, include_previous_scene=self.include_previous_scene,
-                    start_seconds=start, end_seconds=end,
-                )
-                self._working_draft["review"] = {
-                    "started": True, "scope": {"start": start, "end": end}, "scene_id": self.scene_id,
-                }
-                return
-            target = working_draft_review_facts(value)["next_review_target"]
-            if target is not None:
-                self._confirmation_retry = bool(target.get("confirmation_retry"))
-                self._review_target = VideoDraftReviewTarget.model_validate({
-                    key: target[key] for key in VideoDraftReviewTarget.model_fields
-                })
 
 
-def project_working_draft_review(
-    content: CompositionContent, target: VideoDraftReviewTarget
-) -> tuple[CompositionContent, dict[str, Any]]:
-    scenes = sorted(content.scenes, key=lambda scene: scene.range.start)
-    index = next((i for i, scene in enumerate(scenes) if scene.scene_id == target.scene_id), None)
-    if index is None:
-        raise ScrubTargetError("the review scene_id does not exist in this working draft")
-    current = scenes[index]
-    previous = scenes[index - 1] if target.include_previous_scene and index > 0 else None
-    if target.include_previous_scene and previous is None:
-        raise ScrubTargetError("the first Scene has no previous Scene to join")
-    lower = previous.range.start if previous is not None else current.range.start
-    timebase = content.settings.timebase
-    if (
-        round(target.start_seconds * timebase) < lower
-        or round(target.end_seconds * timebase) > current.range.end
-        or round(target.end_seconds * timebase) <= current.range.start
-    ):
-        raise ScrubTargetError("the review window must cover the current Scene and only its immediate predecessor")
-    segment = VideoSegmentScrubTarget(
-        scene_id=target.scene_id,
-        start_seconds=target.start_seconds,
-        end_seconds=target.end_seconds,
-    )
-    projected, scope = project_video_scrub(
-        content,
-        segment,
-        allow_outside_target=previous is not None,
-        allow_complete=True,
-    )
-    scope["review_target"] = target.model_dump(mode="json")
-    scope["scene_ids"] = [
-        scene.scene_id for scene in scenes
-        if scene.range.start < round(target.end_seconds * timebase)
-        and round(target.start_seconds * timebase) < scene.range.end
-    ]
-    scope["current_scene_ordinal"] = index + 1
-    return projected, scope
 
 
-def _representative_preview_frame(
-    video: bytes, *, window_start: float, scene_start: float, window_end: float, retry: bool,
-) -> tuple[bytes, float]:
-    from app.tools.video.review import ReviewError, _decode_frame, _jpeg
-
-    if not video or len(video) > 32 * 1024 * 1024:
-        raise ScrubTargetError("the continuous preview exceeded its 32 MiB evidence budget")
-    target_duration = window_end - max(window_start, scene_start)
-    offset = min(0.75, target_duration / 3) if retry else min(0.25, target_duration / 4)
-    try:
-        with av.open(io.BytesIO(video), mode="r") as container:
-            stream = next((item for item in container.streams if item.type == "video"), None)
-            if stream is None:
-                raise ScrubTargetError("the preview has no decodable video stream")
-            fps = Fraction(stream.average_rate or 30)
-            target = Fraction(str(window_end - offset - window_start))
-            frame, actual = _decode_frame(container, stream, target, fps)
-            seconds = round(window_start + float(actual), 6)
-            if seconds < max(window_start, scene_start) or seconds >= window_end:
-                raise ScrubTargetError("the preview frame falls outside the target Scene")
-            return _jpeg(frame), seconds
-    except (av.FFmpegError, ReviewError) as exc:
-        raise ScrubTargetError("the target Scene's representative frame could not be decoded") from exc
 
 
 async def render_preview(spec: dict) -> bytes:
@@ -529,8 +374,86 @@ async def render_preview(spec: dict) -> bytes:
     return response.content
 
 
+def source_geometry(content, clip, source_width, source_height):
+    obj = clip.object
+    if obj.fit != "contain" or obj.transform.rotation or clip.animations:
+        return {}
+    box, tr = obj.layout, obj.transform
+    ratio = min(box.width / source_width, box.height / source_height)
+    ox, oy = (box.width / 2, box.height / 2) if tr.origin == "center" else (0, 0)
+    x = box.x + tr.x + ox + ((box.width - source_width * ratio) / 2 - ox) * tr.scale
+    y = box.y + tr.y + oy + ((box.height - source_height * ratio) / 2 - oy) * tr.scale
+    right = x + source_width * ratio * tr.scale
+    bottom = y + source_height * ratio * tr.scale
+    canvas_width, canvas_height = content.settings.width, content.settings.height
+    clipped = {
+        "left": round(max(0.0, -x), 2),
+        "top": round(max(0.0, -y), 2),
+        "right": round(max(0.0, right - canvas_width), 2),
+        "bottom": round(max(0.0, bottom - canvas_height), 2),
+    }
+    borders = {
+        "left": round(max(0.0, x), 2),
+        "top": round(max(0.0, y), 2),
+        "right": round(max(0.0, canvas_width - right), 2),
+        "bottom": round(max(0.0, canvas_height - bottom), 2),
+    }
+    return {
+        "source_bounds_canvas_px": [round(v, 2) for v in (x, y, right, bottom)],
+        "source_visible_bounds_canvas_px": [
+            round(max(0.0, x), 2), round(max(0.0, y), 2),
+            round(min(float(canvas_width), right), 2), round(min(float(canvas_height), bottom), 2),
+        ],
+        "source_clipped_px": clipped,
+        "canvas_borders_px": borders,
+        "canvas_px": [canvas_width, canvas_height],
+        "whole_source_inside_canvas": not any(clipped.values()),
+    }
+
+
+def face_geometry(bbox, score, geometry):
+    source_width, source_height = geometry["source_pixels"]
+    canvas_width, canvas_height = geometry["canvas_px"]
+    left, top, right, bottom = geometry["source_bounds_canvas_px"]
+    sx, sy = (right - left) / source_width, (bottom - top) / source_height
+    x, y, width, height = bbox
+
+    def project(box):
+        px, py, pw, ph = box
+        return [round(left + px * sx, 2), round(top + py * sy, 2),
+                round(left + (px + pw) * sx, 2), round(top + (py + ph) * sy, 2)]
+
+    def clipped(box):
+        px, py, pw, ph = box
+        x0, y0 = left + px * sx, top + py * sy
+        x1, y1 = left + (px + pw) * sx, top + (py + ph) * sy
+        return {
+            "left": round(max(0.0, -x0), 2), "top": round(max(0.0, -y0), 2),
+            "right": round(max(0.0, x1 - canvas_width), 2),
+            "bottom": round(max(0.0, y1 - canvas_height), 2),
+        }
+
+    expanded = (
+        max(0.0, x - width / 2), max(0.0, y - height / 2),
+        min(float(source_width), x + width * 1.5) - max(0.0, x - width / 2),
+        min(float(source_height), y + height * 1.5) - max(0.0, y - height / 2),
+    )
+    return {
+        "source_bbox_px": [round(value, 2) for value in bbox],
+        "canvas_bbox_px": project(bbox),
+        "canvas_clipped_px": clipped(bbox),
+        "face_fully_visible": not any(clipped(bbox).values()),
+        "expanded_face_source_bbox_px": [round(value, 2) for value in expanded],
+        "expanded_face_canvas_bbox_px": project(expanded),
+        "expanded_face_canvas_clipped_px": clipped(expanded),
+        "expanded_face_fully_visible": not any(clipped(expanded).values()),
+        "confidence": round(score, 4),
+    }
+
+
 async def source_framing(db, owner_id, content, covered, sample_seconds):
     """Compare a single static video layout with its fixed, uncropped source."""
+    import asyncio
     from app.editing.timing import SOURCE_TIMEBASE
     from app.models.tables import SourceSnapshot
     from app.providers import storage
@@ -570,21 +493,61 @@ async def source_framing(db, owner_id, content, covered, sample_seconds):
 
     facts = {"snapshot_id": str(snapshot.id), "source_seconds": float(actual),
              "source_pixels": [width, height], "fit": obj.fit, "transform": obj.transform.model_dump()}
-    # For contain, the source is centered inside its layout box before the
-    # renderer's origin-relative scale and canvas-space translation.
-    if square_upright and obj.fit == "contain" and not obj.transform.rotation and not clip.animations:
-        box, tr = obj.layout, obj.transform
-        ratio = min(box.width / width, box.height / height)
-        ox, oy = (box.width / 2, box.height / 2) if tr.origin == "center" else (0, 0)
-        x = box.x + tr.x + ox + ((box.width - width * ratio) / 2 - ox) * tr.scale
-        y = box.y + tr.y + oy + ((box.height - height * ratio) / 2 - oy) * tr.scale
-        right, bottom = x + width * ratio * tr.scale, y + height * ratio * tr.scale
-        facts["source_bounds_canvas_px"] = [round(v, 2) for v in (x, y, right, bottom)]
-        facts["canvas_px"] = [content.settings.width, content.settings.height]
-        facts["whole_source_inside_canvas"] = x >= 0 and y >= 0 and right <= content.settings.width and bottom <= content.settings.height
+    if square_upright:
+        geometry = {**source_geometry(content, clip, width, height), "source_pixels": [width, height]}
+        facts.update(geometry)
+        if geometry:
+            from app.providers.vision import detect_faces
+
+            scale = min(1.0, 640 / max(width, height))
+            try:
+                faces = await asyncio.to_thread(
+                    detect_faces, frame.to_ndarray(format="bgr24"),
+                    (max(32, int(width * scale)), max(32, int(height * scale))),
+                )
+                facts["face_evidence"] = {
+                    "status": "detected" if faces else "no_face_detected",
+                    "source_seconds": float(actual),
+                    "faces": [face_geometry(face.bbox, face.score, geometry) for face in faces],
+                    "scope": "YuNet face boxes only; expanded boxes are context, not proof of complete hair, shoulders or natural framing.",
+                }
+            except Exception as exc:
+                import structlog
+
+                structlog.get_logger().warning("preview_face_detection_unavailable", error_type=type(exc).__name__)
+                facts["face_evidence"] = {"status": "unavailable", "reason": type(exc).__name__}
     return facts, MediaInput(type=MediaInputType.IMAGE, mime="image/jpeg",
                              caption=f"Uncropped SOURCE at {float(actual):g}s, before fit or transform. Compare with the rendered composition.",
                              data_url="data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"))
+
+
+def preview_sample_frames(intervals):
+    if len(intervals) <= 2:
+        return sorted({index for start, end in intervals
+                       for index in (start, (start + end - 1) // 2, end - 1)})
+    if len(intervals) <= 6:
+        return [(start + end - 1) // 2 for start, end in intervals]
+    return [(intervals[i * (len(intervals) - 1) // 5][0]
+             + intervals[i * (len(intervals) - 1) // 5][1] - 1) // 2 for i in range(6)]
+
+
+def sampled_frame_facts(frames):
+    from PIL import Image, ImageChops
+
+    facts = []
+    previous = None
+    for jpeg, seconds in frames:
+        with Image.open(io.BytesIO(jpeg)) as source:
+            current = source.convert("RGB")
+        facts.append({
+            "seconds": seconds,
+            "jpeg_sha256": hashlib.sha256(jpeg).hexdigest(),
+            "pixel_difference_from_previous_bbox_px": (
+                None if previous is None else list(ImageChops.difference(previous, current).getbbox() or ())
+            ),
+        })
+        previous = current
+    return facts
 
 
 async def saved_preview_media(preview: dict, version_id: UUID):
@@ -606,7 +569,6 @@ async def saved_preview_media(preview: dict, version_id: UUID):
     clips = [clip for track in spec["tracks"] if track["kind"] == "visual" for clip in track["clips"]]
     cuts = sorted({0, spec["duration_frames"], *(c[k] for c in clips for k in ("start_frame", "end_frame"))})
     intervals = [(start, end) for start, end in zip(cuts, cuts[1:]) if start < end]
-    samples = intervals if len(intervals) <= 6 else [intervals[i * (len(intervals) - 1) // 5] for i in range(6)]
     frames = []
     try:
         with av.open(io.BytesIO(video)) as container:
@@ -614,8 +576,8 @@ async def saved_preview_media(preview: dict, version_id: UUID):
             if stream is None:
                 raise ScrubTargetError("The preview contains no video stream.")
             has_audio = bool(container.streams.audio)
-            for start, end in samples:
-                target = Fraction((start + end - 1) // 2, 1) / fps
+            for index in preview_sample_frames(intervals):
+                target = Fraction(index, 1) / fps
                 frame, actual = _decode_frame(container, stream, target, fps)
                 frames.append((_jpeg(frame), round(bounds["start"] + float(actual), 6)))
     except (av.FFmpegError, ReviewError) as exc:
@@ -655,6 +617,7 @@ async def saved_preview_media(preview: dict, version_id: UUID):
         "version_id": str(version_id), "scope": preview["scope"],
         "mp4_sha256": hashlib.sha256(video).hexdigest(),
         "sample_seconds": [time for _, time in frames],
+        "sample_frames": sampled_frame_facts(frames),
         "visual_windows": [
             {"from": round(bounds["start"] + float(start / fps), 6),
              "to": round(bounds["start"] + float(end / fps), 6),
@@ -675,109 +638,3 @@ async def saved_preview_media(preview: dict, version_id: UUID):
                                            requested_probes=["decode", "pcm_stats", "loudness"])
         evidence["mixed_audio"] = {k: measured.media_facts[k] for k in ("decode", "pcm_stats", "loudness")}
     return tuple(media), evidence
-
-
-async def prepare_working_draft_review(
-    db: AsyncSession,
-    *,
-    owner_id: UUID,
-    args: ReviewWorkingDraftArgs,
-) -> tuple[dict[str, Any], tuple[MediaInput, MediaInput]]:
-    """Compile and render only an authenticated draft's bounded review window."""
-    from app.editing.store import _raw_snapshot_ids
-    from app.models.schemas import canonical_json_hash
-    from app.pipeline.rendering import absolutize_video
-    from app.tools.video.components import ComponentError
-    from app.tools.video.programs import ProgramError, prepare_generator_media
-
-    state = args._working_draft or {}
-    target = args._review_target
-    if target is None:
-        raise ScrubTargetError("record the current evidence judgment before requesting another preview")
-    content = CompositionContent.model_validate(state.get("content") or {})
-    projected, scope = project_working_draft_review(content, target)
-    snapshot_ids = _raw_snapshot_ids(content.model_dump(mode="json"))
-    facts = await snapshot_facts(db, snapshot_ids)
-    if any(facts.get(snapshot_id, {}).get("owner_id") != owner_id for snapshot_id in snapshot_ids):
-        raise ScrubTargetError("a draft source is not accessible to this user")
-    from app.editing.validators import validate_content
-
-    validate_content(content, facts)
-    try:
-        generator_media = await prepare_generator_media(projected, snapshots=facts)
-    except (ProgramError, ComponentError) as exc:
-        raise ScrubTargetError(f"working-draft Generator preview is unavailable: {exc}") from exc
-    content_digest = canonical_json_hash(content.model_dump(mode="json"))
-    design = state.get("design") or {}
-    composition_id = UUID(str(design["composition_id"])) if design.get("composition_id") else uuid5(
-        NAMESPACE_URL, f"repurposer:draft-composition:{args.draft_ref.draft_id}"
-    )
-    preview_identity = uuid5(NAMESPACE_URL, f"repurposer:draft-preview:{args.draft_ref.draft_id}")
-    preview = compile_video_scrub(
-        content,
-        facts,
-        composition_id=composition_id,
-        version_id=preview_identity,
-        content_digest=content_digest,
-        target=VideoSegmentScrubTarget(
-            scene_id=target.scene_id,
-            start_seconds=target.start_seconds,
-            end_seconds=target.end_seconds,
-        ),
-        generator_media=generator_media,
-        allow_outside_target=target.include_previous_scene,
-        allow_complete=True,
-    )
-    if preview["status"] != "ready":
-        raise ScrubTargetError(
-            "working-draft preview is unavailable: "
-            + json.dumps({key: value for key, value in preview.items() if key != "video_spec"}, ensure_ascii=False)
-        )
-    preview["video_spec"] = absolutize_video(preview["video_spec"])
-    video = await render_preview(preview["video_spec"])
-    scene = next(scene for scene in content.scenes if scene.scene_id == target.scene_id)
-    jpeg, frame_seconds = _representative_preview_frame(
-        video, window_start=target.start_seconds, scene_start=scene.range.start / content.settings.timebase,
-        window_end=target.end_seconds, retry=args._confirmation_retry,
-    )
-    media_digest = hashlib.sha256(video).hexdigest()
-    evidence = {
-        "schema_version": 1,
-        "draft_ref": args.draft_ref.model_dump(mode="json"),
-        "content_digest": content_digest,
-        "scope": scope,
-        "requirements": design,
-        "observation": {
-            "mode": "continuous_mp4",
-            "continuous": True,
-            "media_digest": media_digest,
-            "size_bytes": len(video),
-            "duration_seconds": scope["source_range_seconds"]["end"] - scope["source_range_seconds"]["start"],
-            "representative_frame": {
-                "scene_id": target.scene_id, "output_seconds": frame_seconds,
-                "digest": hashlib.sha256(jpeg).hexdigest(),
-            },
-            "confirmation_retry": args._confirmation_retry,
-        },
-        "limitations": [
-            "Only the listed draft window was rendered and attached; no Run, Output or saved version was created.",
-            "Visual continuous evidence does not by itself prove perceived audio quality or audio-visual synchronization.",
-        ],
-    }
-    media = MediaInput(
-        type=MediaInputType.VIDEO,
-        mime="video/mp4",
-        data_url="data:video/mp4;base64," + base64.b64encode(video).decode("ascii"),
-        caption=(
-            f"Working draft {args.draft_ref.draft_id} content {content_digest}; continuous MP4 "
-            f"covering {json.dumps(scope['source_range_seconds'])} in Scenes {scope['scene_ids']}. "
-            f"Media SHA-256 {media_digest}. This is not a saved-version Scrub or delivered Output."
-        ),
-    )
-    still = MediaInput(
-        type=MediaInputType.IMAGE, mime="image/jpeg",
-        data_url="data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii"),
-        caption=f"Representative frame from this MP4 at output {frame_seconds:.3f}s in target Scene "
-                f"{target.scene_id}. Use it for visible content, and the MP4 for motion or joins.",
-    )
-    return evidence, (media, still)

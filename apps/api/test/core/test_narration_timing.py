@@ -9,7 +9,6 @@ import pytest
 from app.editing.schemas import speech_text_digest
 from app.editing.timing import SOURCE_TIMEBASE as TPS
 from app.models.tables import Message
-from app.tools.video.design import CompositionDesignVideoArgs, _design_composition_locked
 from app.tools.video.narration_draft import NarrationDraftError, assert_narration_ready_for_score
 
 
@@ -34,61 +33,6 @@ def spoken_draft(ids):
     }
 
 
-@pytest.mark.asyncio
-async def test_retiming_first_ready_scene_reprojects_all_following_cues_in_the_working_draft(monkeypatch):
-    draft = spoken_draft(["a", "b", "c"])
-    owner_id, project_id = uuid4(), uuid4()
-    facts = []
-    for scene in draft["content"]["scenes"]:
-        start = scene["range"]["start"]
-        facts.append({
-            "scene_id": scene["scene_id"], "text_digest": speech_text_digest(scene["scene_id"]),
-            "alignment": {"alignment_id": str(uuid4()), "status": "READY"},
-            "snapshot": {"snapshot_id": str(uuid4()), "digest": "a" * 64},
-            "source_duration_ticks": 2 * TPS, "source_timebase": TPS,
-            "scene_range": dict(scene["range"]), "cues": [{
-                "source_range": {"start": TPS, "end": 2 * TPS},
-                "output_range": {"start": start + TPS, "end": start + 2 * TPS},
-            }],
-        })
-    draft["design"]["narrations"] = facts
-    alignment = SimpleNamespace(id=uuid4(), status="READY", content_digest="f" * 64,
-                                text_digest=speech_text_digest("a"))
-    audio = SimpleNamespace(id=uuid4(), origin_project_id=project_id, digest="a" * 64,
-                            meta={"analysis_ref": {"digest": "f" * 64}})
-    payload = SimpleNamespace(duration_ticks=2 * TPS, source_timebase=TPS, sentences=[
-        SimpleNamespace(sentence_id="s1", text="a", text_start=0, text_end=1, start_tick=TPS, end_tick=2 * TPS),
-    ])
-    monkeypatch.setattr("app.tools.video.alignment_store.ready_alignment",
-                        AsyncMock(return_value=(alignment, audio, payload)))
-    monkeypatch.setattr("app.tools.video.media_analysis.read_report", AsyncMock(return_value={
-        "media_kind": "audio", "analysis_scope": "full", "source_ref": {"digest": audio.digest},
-        "media_facts": {"decode": {"fully_decoded": True}},
-    }))
-    args = CompositionDesignVideoArgs.model_validate({
-        "narration_update": {"scene_id": "a", "target_duration_seconds": 7, "alignment_id": str(alignment.id)},
-        "draft_ref": {"draft_id": "d", "draft_digest": "a" * 64},
-    })
-    args.bind_working_draft(draft)
-    updated = await _design_composition_locked(
-        None, owner_id=owner_id, project_id=project_id, args=args, request_id=None,
-        skill=None, builtin_skill=None, skill_package=None,
-    )
-    output = updated.arguments
-    projected = {f["scene_id"]: f for f in output["design"]["narrations"]}
-    for index, source in enumerate(facts[1:], start=1):
-        fact = projected[source["scene_id"]]
-        assert fact["snapshot"] == source["snapshot"] and fact["alignment"] == source["alignment"]
-        assert fact["cues"][0]["source_range"] == source["cues"][0]["source_range"]
-        assert fact["cues"][0]["output_range"] == {
-            "start": (5 * index + 3) * TPS, "end": (5 * index + 4) * TPS,
-        }
-        assert fact["scene_range"] == output["content"]["scenes"][index]["range"]
-    assert_narration_ready_for_score(output)
-    stale = deepcopy(output)
-    stale["design"]["narrations"][0]["cues"][0]["output_range"] = {"start": 0, "end": TPS}
-    with pytest.raises(NarrationDraftError, match="stale narration timing"):
-        assert_narration_ready_for_score(stale)
 
 @pytest.mark.asyncio
 async def test_batch_start_pins_every_scene_in_one_ordered_run_and_one_hold(database, monkeypatch):

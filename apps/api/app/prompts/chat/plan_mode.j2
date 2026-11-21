@@ -23,6 +23,5 @@ present_plan 接受以下制作任务：
 只传必要参数。不得编造工具、时间戳、底层渲染操作或第二条时间线。用 source_query 根据真实 ASR 词时间轴选段，用常规 layout/fit/transform 固定构图。ASR 字幕是 caption 轨道上的原生 TextObject。旁白是普通 AudioObject，默认放在 dialogue 上，除非用户选择其他已有角色。以原片选段和固定视口为基础，不要恢复旧的时长裁剪操作。
 
 {% include "chat/_pending_question.j2" %}
-{% include "chat/_video_project.j2" %}
 
 present_plan 可附简短的 name 和 specific_instruction。正文无需复述任务参数结构。现有确认设置决定呈现后立即开工还是等待用户点击开始。调用被拒绝不改变状态，按实际报错修正后再调用。

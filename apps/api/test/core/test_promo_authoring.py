@@ -147,14 +147,10 @@ def revision_args(version, action):
     )
 
 
-def test_generic_design_and_high_level_revision_wires_stay_closed():
-    from app.chat.turn_tools import _design_video_tool
-    from app.tools.video.design import CompositionDesignVideoArgs
+def test_native_create_and_high_level_revision_wires_stay_closed():
+    from app.chat.editor_create import CreateVideoArgs
 
-    design = _design_video_tool()
-    assert design.params_model is CompositionDesignVideoArgs
-    _, schema = design.wire_view(design.description, design.params_model.model_json_schema())
-    assert schema["additionalProperties"] is False
+    assert CreateVideoArgs.model_json_schema()["additionalProperties"] is False
 
     raw = {
         "base_ref": {
@@ -654,54 +650,6 @@ async def test_generic_scene_video_window_preserves_each_timebase_and_fails_clos
         })
 
 
-def test_complete_unreviewed_high_level_draft_projects_save_only():
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.turn_tools import _design_video_tool, resolve_video_stage, video_round_tools
-
-    arguments = {
-        "content": {
-            "scenes": [{"scene_id": "lead", "range": {"start": 0, "end": 90000}}],
-            "timeline": {"tracks": [{
-                "track_id": "trk_title",
-                "kind": "visual",
-                "role": "title",
-                "order": 0,
-                "clips": [{
-                    "clip_id": "clp_lead",
-                    "scene_id": "lead",
-                    "range": {"start": 0, "end": 90000},
-                }],
-            }]},
-        },
-        "design": {"authoring": "high_level_scene"},
-    }
-    draft = SimpleNamespace(
-        candidate_id="cnd_complete",
-        candidate_digest="d" * 64,
-        arguments=arguments,
-        errors=[],
-    )
-    resolution = resolve_video_stage(
-        tools=[_design_video_tool()],
-        drafts=[draft],
-        snapshot=ContextSnapshot("", frozenset()),
-        user_text="Save that draft",
-    )
-    assert resolution["stage"] == "draft_finalize"
-    tools = video_round_tools(
-        [_design_video_tool()],
-        resolution=resolution,
-        snapshot=ContextSnapshot("", frozenset()),
-    )
-    schema = tools[0].wire_view(tools[0].description, tools[0].params_model.model_json_schema())[1]
-    assert set(schema["properties"]) == {"draft_ref", "save", "scrub", "pending_disposition"}
-
-    from app.agents.working_drafts import working_draft_review_facts
-    from app.tools.video.design import CandidateDesignError, _set_current_scene_timing
-
-    assert working_draft_review_facts(arguments)["save_ready"] is True
-    with pytest.raises(CandidateDesignError, match="save=true"):
-        _set_current_scene_timing(arguments["content"], "lead", 90000)
 
 
 def test_add_audio_effect_expands_to_a_trimmed_audio_clip():

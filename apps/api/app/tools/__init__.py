@@ -43,7 +43,7 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
     for entry in [
         ToolEntry(
             name="produce_video",
-            description="渲染已完整展示并获批准的现有视频版本。先用 design_video 完成设计，制作期间不得重新设计或修改内容。",
+            description="渲染已完整展示并获批准的现有 CompositionVersion。先用当前编辑器保存确切作品，制作期间不得重新设计或修改内容。",
             behavior="deterministic",
             params_model=ProduceVideoParams,
             summary_templates={"en": "Prepared video · {total_seconds:g}s",

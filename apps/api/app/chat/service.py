@@ -3046,6 +3046,18 @@ async def prepare_chat_turn(
     user_message.turn_state = "in_flight"
 
     project = await _load_project(db, UUID(str(conversation.project_id)))
+    if project is not None:
+        from app.chat.editor_create import _active_working_drafts
+
+        if any(_active_working_drafts(conversation)):
+            from app.chat.editor_create import migrate_working_drafts
+            from app.models.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as migration_db:
+                migrated_project = await migration_db.get(Project, project.id)
+                migrated_conversation = await migration_db.get(Conversation, conversation.id)
+                await migrate_working_drafts(migration_db, migrated_project, migrated_conversation)
+            await db.refresh(conversation)
     history = await list_conversation_messages(db, conversation_id)
     # Deterministic autoResume (zero LLM): while a question is pending,
     # the user's free text settles it ONLY on an unambiguous option hit

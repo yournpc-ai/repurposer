@@ -2,7 +2,7 @@
 name: talking-head-video
 description: First-version direction for a vertical talking-head motion video made from real footage, with timed native captions and restrained graphic emphasis.
 license: Proprietary
-compatibility: Repurposer design_video mixed real-video first design; no component runtime or source-aligned narration required.
+compatibility: Repurposer create_video fixed real-video scenes, native captions and current Editor; no component runtime or source-aligned narration required.
 metadata:
   version: "1.0.0"
   author: repurposer

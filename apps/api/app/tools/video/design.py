@@ -1,14 +1,8 @@
-"""Incremental Composition authoring and immutable version saving.
-
-``design_video`` merges complete settings, sources and entities into one
-ConversationContext-backed working draft. Only ``save=true`` resolves and
-validates the assembled Composition, then calls ``apply_composition_edits``.
-"""
+"""Shared fixed-source scene expansion and website material preparation."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import time
 from copy import deepcopy
@@ -20,9 +14,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PrivateAttr,
-    TypeAdapter,
-    ValidationError,
     model_validator,
 )
 from sqlalchemy import select
@@ -30,11 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.errors import AgentOutputError, AgentStopError
 from app.agents.working_drafts import (
-    WorkingDraftUpdated,
     apply_working_draft_writes,
-    working_draft_arguments,
 )
-from app.editing.audio import MusicBed, instantiate_music_bed
 from app.editing.edits import (
     AddClip,
     AddTrack,
@@ -46,7 +34,6 @@ from app.editing.edits import (
 )
 from app.editing.presets import PresetError, expand_preset
 from app.editing.schemas import (
-    SCHEMA_VERSION,
     Clip,
     CompositionContent,
     GeneratorObject,
@@ -56,7 +43,6 @@ from app.editing.schemas import (
     RemotionResource,
     RemotionSourceFile,
     Scene,
-    SourceBinding,
     SpeechObject,
     TimeRange,
     Track,
@@ -65,19 +51,6 @@ from app.editing.schemas import (
     VideoObject,
     WebObject,
 )
-from app.editing.service import (
-    compute_change_set,
-    version_read_dict,
-)
-from app.editing.store import (
-    _raw_snapshot_ids,
-    _resolve_raw_snapshot_references,
-    apply_composition_edits,
-    content_of,
-    get_video_version,
-    snapshot_facts,
-)
-from app.editing.storyboard import storyboard_payload
 from app.editing.timing import (
     SOURCE_TIMEBASE,
     frames_to_ticks,
@@ -89,21 +62,15 @@ from app.models.database import AsyncSessionLocal
 from app.models.schemas import (
     AssetStatus,
     AssetType,
-    BuiltInSkillReference,
-    ExternalSkillReference,
-    SkillReference,
-    VideoDraftRef,
-    VideoScrubTarget,
 )
 from app.models.tables import Asset, Output, Project, SourceSnapshot
-from app.skills.loading import SkillCreativeContext, load_skill_creative_context
+from app.skills.loading import SkillCreativeContext
 from app.tools.research.capture import (
     CapturePlan,
     CaptureRequest,
     capture_plan_digest,
     compile_capture_request,
 )
-from app.tools.video.narration_draft import SceneNarrationUpdate
 from app.tools.video.preparation import (
     snapshot_audio_asset,
     snapshot_image_asset,
@@ -112,7 +79,6 @@ from app.tools.video.preparation import (
     snapshot_video_output,
     snapshot_web_asset,
 )
-from app.tools.video.visual_assets import ExistingImageSource, SceneAssetSpec
 
 logger = structlog.get_logger()
 
@@ -143,32 +109,15 @@ class CandidateDesignError(DesignError):
         self.working_content = deepcopy(working_content)
 
 
-class CompositionCopyReference(BaseModel):
-    """将显示文案关联到固定原文行，无需再次转写引用。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str | None = Field(
-        default=None, min_length=1, max_length=9000,
-        description="逐字引用时省略。仅当显示文字与固定原文行不同时填写实际措辞。",
-    )
-    snapshot_id: UUID
-    snapshot_digest: str | None = Field(
-        default=None,
-        min_length=64,
-        max_length=64,
-        description="可选，填写源快照返回的不可变摘要。传入时服务端会校验，不仅凭引用判定。",
-    )
-    line_id: str = Field(min_length=1, max_length=80)
 
 
 class SkillGeneratorPlacement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     resource_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
-    scene_id: str
-    track_id: str
-    clip_id: str
+    scene_id: str | None = Field(default=None, description="首稿由服务端绑定当前 shot，省略。")
+    track_id: str | None = Field(default=None, description="省略时使用主视觉轨。")
+    clip_id: str | None = Field(default=None, description="首稿由服务端生成稳定 ID，省略。")
     layout: LayoutBox | None = None
 
 
@@ -251,6 +200,10 @@ class CompositionSceneAuthoring(BaseModel):
         default=None,
         description="可选，设置来源在布局内的固定变换，不逐帧跟踪或创建 crop_track。",
     )
+    skill_resource: SkillGeneratorPlacement | None = Field(
+        default=None,
+        description="当前绑定外部 Skill 已声明的受控 Generator 及其场景、轨道位置。",
+    )
     headline: str | None = Field(
         default=None, min_length=1, max_length=9000,
         description="title-lockup 的原生主标题。items 非空时省略 headline。",
@@ -278,8 +231,8 @@ class CompositionSceneAuthoring(BaseModel):
 
     @model_validator(mode="after")
     def _expressible_scene(self) -> "CompositionSceneAuthoring":
-        if self.snapshot_id is None and self.headline is None and not self.items:
-            raise ValueError("a scene needs a frozen source, headline or native items")
+        if self.snapshot_id is None and self.headline is None and not self.items and self.skill_resource is None:
+            raise ValueError("a scene needs a frozen source, headline, native items or a declared Skill Generator")
         if self.supporting_text is not None and self.headline is None:
             raise ValueError("supporting_text needs a headline")
         if self.items and self.headline is not None:
@@ -314,234 +267,6 @@ class CompositionSceneAuthoring(BaseModel):
         return self
 
 
-class CompositionDesignVideoArgs(EntityWrites):
-    """向服务端 Composition 工作草稿写入一次完整值。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _draft_wire(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        normalized = dict(data)
-        for key in EntityWrites.model_fields:
-            value = normalized.get(key)
-            if value is None or value == "" or value == {}:
-                normalized[key] = []
-            elif isinstance(value, (dict, str)):
-                normalized[key] = [value]
-        for key in (
-            "settings", "sources", "draft_ref", "copy_references",
-            "composition_id", "scene_count", "target_seconds", "fps", "aspect",
-            "background", "language", "name", "pending_disposition", "scrub",
-            "focus_clip_id", "focus_element_id", "verbatim_copy",
-            "scene", "scene_plan", "scene_assets", "narration_update", "source_ids", "music_snapshot_id",
-        ):
-            if normalized.get(key) in (None, ""):
-                normalized.pop(key, None)
-        if normalized.get("save") in (None, ""):
-            normalized["save"] = False
-        return normalized
-
-    draft_ref: VideoDraftRef | None = Field(
-        default=None,
-        description="design_video 返回的最新 draft_ref，仅新建草稿时省略。",
-    )
-    scene_id: str | None = Field(
-        default=None,
-        description="单场续写的已有 Scene。将该场的 Clip 放入 tracks[].clips。初次写入及仅保存时省略。",
-    )
-    scene_plan: list[CompositionScenePlan] | None = Field(
-        default=None,
-        description="按播放顺序列出叙事场景，节拍数以作品需要为准。时间范围和原生实体由服务端推导。",
-    )
-    scene_assets: list[SceneAssetSpec] | None = Field(
-        default=None,
-        max_length=64,
-        description="已有 scene_plan ID 对应的画面来源要求。只添加或替换传入场景的规格，此次写入不生成媒体或 Composition 版本。",
-    )
-    narration_update: SceneNarrationUpdate | None = Field(
-        default=None,
-        description="实际旁白到位后，修改或确认一个目标场景。服务端解析 READY 对齐、实测时长、提示点、刻度和未改动的媒体摘要。",
-    )
-    source_ids: list[UUID] | None = Field(
-        default=None,
-        max_length=256,
-        description="可供本草稿使用的固定 SourceSnapshot ID，服务端验证并绑定相应摘要。",
-    )
-    scene: CompositionSceneAuthoring | None = Field(
-        default=None,
-        description="当前一个 Scene 的来源、构图、原生文案及 Preset 意图，原生实体和时序由服务端推导。",
-    )
-    music_snapshot_id: UUID | None = Field(
-        default=None,
-        description="用于既有全局背景音乐的已准备音频 SourceSnapshot。",
-    )
-    composition_id: UUID | None = Field(
-        default=None,
-        description="用户明确要求开放式重写时，基于该作品当前保存的版本初始化工作草稿。",
-    )
-    settings: VersionSettings | None = Field(
-        default=None,
-        description="本次更改制作设置时提供完整设置；省略则沿用现值。",
-    )
-    sources: list[SourceBinding] | None = Field(
-        default=None,
-        max_length=256,
-        description="本次更改来源绑定时提供完整列表；省略则沿用现值。",
-    )
-    save: bool = Field(
-        default=False,
-        description="false 将本次内容合入工作草稿。true 仅校验并保存已有 draft_ref。所有设置、来源或实体改动须在之前的 save=false 调用中完成。",
-    )
-    scrub: VideoScrubTarget | None = Field(
-        default=None,
-        description="仅在 save=true 且动态检查有助于回答用户时，可选一个限定的 Scene/Clip 时间窗或单独的 Object。默认省略，不得指定整片。",
-    )
-    name: str | None = Field(default=None, max_length=255)
-    copy_references: list[CompositionCopyReference] | None = Field(
-        default=None,
-        max_length=64,
-        description="已写入 Clip 的原生文字的可选来源。TextObject.text 始终填写实际显示文字。copy_references 给出 snapshot_id 和 line_id；与固定原文行一致时省略其 text。",
-    )
-    verbatim_copy: list[str] | None = Field(
-        default=None,
-        max_length=64,
-        description="仅当用户要求确切的屏幕文案时，按播放顺序列出原始短语。每个短语须在一个原生文字 Clip 中恰好出现一次。",
-    )
-    language: str | None = Field(
-        default=None,
-        description="已商定或明确点名的视频语言。省略则沿用现值。",
-    )
-    scene_count: int | None = Field(
-        default=None,
-        ge=1,
-        description="用户明确固定的确切场景数。不要根据自己的大纲推断约束。",
-    )
-    target_seconds: float | None = Field(
-        default=None,
-        gt=0,
-        le=118,
-        description="用户明确固定的确切总时长。只说短视频不代表指定了固定时长。",
-    )
-    fps: Literal[24, 25, 30, 60] | None = Field(
-        default=None,
-        description="用户明确固定的整数帧率，其他情况省略。",
-    )
-    aspect: Literal["16:9", "9:16", "1:1"] | None = Field(
-        default=None,
-        description="用户明确固定的画布宽高比。",
-    )
-    background: str | None = Field(
-        default=None,
-        pattern=r"^#[0-9a-fA-F]{6}$",
-        description="用户明确固定的画布背景。",
-    )
-    pending_disposition: Literal["answer", "skip", "none"] = Field(
-        default="none",
-        description="有待回答问题时，answer 表示回应原问题，skip 表示拒答，none 表示无关插话。",
-    )
-    focus_clip_id: str | None = Field(
-        default=None,
-        description="用真实的固定元素修复这个确切网页 Clip 的构图，与 focus_element_id 配合使用。",
-    )
-    focus_element_id: str | None = Field(
-        default=None,
-        description="目标 Clip 当前视图中的真实元素 ID，镜头动画由服务端计算。",
-    )
-    skill_resource: SkillGeneratorPlacement | None = Field(
-        default=None,
-        description="将 list_skill_shots 返回的 generator_resources ID 放到视觉轨道。若目标 Scene 或视觉 Track 尚不存在，在 scenes 和 tracks 中提供。"
-                    "宿主将创建该 Clip，勿在 clips 重复填写。其固定时长须与 Scene 一致。全画布时省略 layout。使用 save=false。",
-    )
-    _working_draft: dict[str, Any] | None = PrivateAttr(default=None)
-    _explicit_constraints: dict[str, Any] | None = PrivateAttr(default=None)
-    _creative_state: Any = PrivateAttr(default=None)
-    # Issued by the current project's media journey after reviewing its SceneAssetSpecs.
-    _reviewed_scene_images: list[dict[str, Any]] | None = PrivateAttr(default=None)
-
-    @model_validator(mode="after")
-    def _draft_target(self) -> "CompositionDesignVideoArgs":
-        if self.draft_ref is not None and self.composition_id is not None:
-            raise ValueError("continue a draft or initialize from composition_id, not both")
-        if self.scrub is not None and not self.save:
-            raise ValueError("scrub belongs only on the final save=true call")
-        if (self.focus_clip_id is None) != (self.focus_element_id is None):
-            raise ValueError("focus_clip_id and focus_element_id must be supplied together")
-        if self.focus_clip_id is not None and (
-            self.entity_writes().has_changes() or self.settings is not None or self.sources is not None
-            or self.skill_resource is not None or self.scene_id is not None
-            or self.scene is not None or self.scene_plan is not None
-        ):
-            raise ValueError("a web framing repair changes only its target Clip; submit no other content writes")
-        if self.scene_plan is not None:
-            if (
-                not self.scene_plan or self.draft_ref is not None or self.save or self.scene is not None
-                or self.scene_id is not None or self.entity_writes().has_changes()
-                or self.settings is not None or self.sources is not None
-            ):
-                raise ValueError("scene_plan starts a new draft without raw entities or a save")
-            scene_ids = [scene.scene_id for scene in self.scene_plan]
-            if len(scene_ids) != len(set(scene_ids)):
-                raise ValueError("scene_plan scene_id values must be unique")
-        if self.source_ids is not None and self.scene_plan is None:
-            raise ValueError("source_ids belongs to the initial scene_plan")
-        if self.scene is not None:
-            if self.draft_ref is None:
-                raise ValueError("a high-level scene continuation requires an existing draft_ref")
-            if self.save:
-                raise ValueError("save=true only commits the existing draft; omit scene")
-            if (
-                self.scene_id is not None or self.scene_plan is not None
-                or self.entity_writes().has_changes() or self.settings is not None or self.sources is not None
-            ):
-                raise ValueError("a high-level scene writes creative intent only, not raw entities")
-        if self.scene_id is not None:
-            if self.draft_ref is None:
-                raise ValueError("a single-scene continuation requires an existing draft_ref")
-            if self.save:
-                raise ValueError("save=true only commits the existing draft; omit scene_id")
-            if (
-                self.scenes or self.clips or self.transitions
-                or self.remove_scene_ids or self.remove_track_ids or self.remove_clip_ids
-                or self.remove_transition_ids or self.settings is not None or self.sources is not None
-            ):
-                raise ValueError("a single-scene continuation writes only tracks[].clips for its scene_id")
-        if self.scene_assets is not None and self.draft_ref is None and self.scene_plan is None:
-            raise ValueError("scene_assets need an initial scene_plan or an existing draft_ref")
-        if self.narration_update is not None:
-            if self.draft_ref is None or self.save:
-                raise ValueError("narration_update changes one existing draft with save=false")
-            if (
-                self.scene is not None or self.scene_plan is not None or self.scene_assets is not None
-                or self.scene_id is not None or self.entity_writes().has_changes()
-                or self.settings is not None or self.sources is not None
-            ):
-                raise ValueError("narration_update changes only its target Scene")
-        if self.save and self.draft_ref is None:
-            raise ValueError("save=true requires an existing draft_ref; create and update the draft with save=false first")
-        if self.save and (
-            self.entity_writes().has_changes()
-            or self.settings is not None
-            or self.sources is not None
-            or self.focus_clip_id is not None
-            or self.skill_resource is not None
-            or self.scene is not None
-            or self.scene_plan is not None
-            or self.scene_assets is not None
-            or self.narration_update is not None
-        ):
-            raise ValueError("save=true only commits the existing draft; submit settings, sources and entity writes with save=false first")
-        return self
-
-    def entity_writes(self) -> EntityWrites:
-        return EntityWrites.model_validate({
-            key: getattr(self, key) for key in EntityWrites.model_fields
-        })
-
-    def bind_working_draft(self, value: dict[str, Any]) -> None:
-        self._working_draft = deepcopy(value)
 
 
 _EXPLICIT_CONSTRAINT_FIELDS = ("scene_count", "target_seconds", "fps", "aspect", "background")
@@ -647,41 +372,6 @@ def explicit_design_constraints(
     return resolved
 
 
-def bind_explicit_design_constraints(
-    args: CompositionDesignVideoArgs,
-    *,
-    user_text: str = "",
-    brief=None,
-) -> CompositionDesignVideoArgs:
-    trusted = explicit_design_constraints(
-        user_text, brief=brief, draft=getattr(args, "_working_draft", None),
-    )
-    content = (getattr(args, "_working_draft", None) or {}).get("content")
-    for field in _EXPLICIT_CONSTRAINT_FIELDS:
-        supplied = getattr(args, field)
-        if supplied is None:
-            continue
-        expected = trusted.get(field)
-        matches = (
-            supplied.lower() == str(expected).lower()
-            if field == "background" and expected is not None
-            else supplied == expected
-        )
-        if expected is None or not matches:
-            message = (
-                f"{field} was not fixed by the user; omit it and use the server default or creative freedom"
-                if expected is None
-                else f"{field} must preserve the user-fixed value {expected}"
-            )
-            raise CandidateDesignError(
-                message,
-                errors=[{"loc": [field], "type": "user_constraint", "msg": message, "expected": expected, "actual": supplied}],
-                working_content=content if isinstance(content, dict) else None,
-            )
-    for field, value in trusted.items():
-        setattr(args, field, value)
-    args._explicit_constraints = trusted
-    return args
 
 
 class CaptureUnavailable(DesignError):
@@ -1121,412 +811,18 @@ async def _execute_capture_plan(
 
 
 
-async def _direct_copy_evidence(
-    db: AsyncSession,
-    *,
-    owner_id: UUID,
-    references: list[CompositionCopyReference],
-    candidate: CompositionContent,
-) -> list[dict[str, Any]]:
-    """Resolve display copy to immutable source text by stable line identity."""
-    from app.tools.video.preparation import resolve_frozen_line
-
-    displayed: dict[str, list[dict[str, str]]] = {}
-    for track in candidate.timeline.tracks:
-        for clip in track.clips:
-            if clip.object.kind == "text":
-                displayed.setdefault(clip.object.text, []).append({
-                    "object_id": clip.object.object_id,
-                    "text": clip.object.text,
-                })
-    evidence: list[dict[str, Any]] = []
-    mismatches: list[dict[str, Any]] = []
-    for index, reference in enumerate(references):
-        snapshot = await db.get(SourceSnapshot, reference.snapshot_id)
-        if snapshot is None or snapshot.owner_id != owner_id:
-            raise CandidateDesignError("copy reference snapshot is not accessible to this user")
-        if reference.snapshot_digest is not None and reference.snapshot_digest != snapshot.digest:
-            raise CandidateDesignError("copy reference snapshot_digest does not match the immutable snapshot")
-        line = resolve_frozen_line(snapshot, reference.line_id)
-        text = reference.text if reference.text is not None else line["text"]
-        if text not in displayed:
-            folded = text.casefold()
-            candidates = [
-                item
-                for objects in displayed.values()
-                for item in objects
-                if folded in item["text"].casefold() or item["text"].casefold() in folded
-            ][:4]
-            mismatches.append({
-                "loc": ["copy_references", index, "text"],
-                "type": "copy_reference_mismatch",
-                "msg": f"copy reference {reference.line_id!r} does not exactly match a native TextObject",
-                "reference_text": text,
-                "line_id": reference.line_id,
-                "candidate_text_objects": candidates,
-            })
-            continue
-        evidence.append({
-            "text": text,
-            "snapshot_id": str(snapshot.id),
-            "line_id": line["line_id"],
-            "quote": line["text"],
-        })
-    if mismatches:
-        raise CandidateDesignError(
-            "copy references do not exactly match native TextObjects",
-            errors=mismatches,
-        )
-    return evidence
 
 
-def _complete_direct_generator_outputs(composition: dict[str, Any]) -> dict[str, Any]:
-    """Derive omitted controlled-generator rasters from their exact clip window."""
-    normalized = deepcopy(composition)
-    settings = normalized.get("settings")
-    timeline = normalized.get("timeline")
-    tracks = timeline.get("tracks") if isinstance(timeline, dict) else None
-    if not isinstance(settings, dict) or not isinstance(tracks, list):
-        return normalized
-    raw_fps = settings.get("fps")
-    fps = raw_fps if isinstance(raw_fps, dict) else {}
-    fps_num = fps.get("num", 30)
-    fps_den = fps.get("den", 1)
-    timebase = settings.get("timebase", 90000)
-    if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in (fps_num, fps_den, timebase)):
-        return normalized
-    if fps_num % fps_den:
-        return normalized
-    output_fps = fps_num // fps_den
-    for track in tracks:
-        clips = track.get("clips") if isinstance(track, dict) else None
-        if not isinstance(clips, list):
-            continue
-        for clip in clips:
-            obj = clip.get("object") if isinstance(clip, dict) else None
-            time_range = clip.get("range") if isinstance(clip, dict) else None
-            if (
-                not isinstance(obj, dict)
-                or obj.get("kind") != "generator"
-                or obj.get("producer") not in {"draw-2d", "remotion-project"}
-                or obj.get("output") is not None
-                or not isinstance(time_range, dict)
-            ):
-                continue
-            start, end = time_range.get("start"), time_range.get("end")
-            if (
-                not isinstance(start, int) or isinstance(start, bool)
-                or not isinstance(end, int) or isinstance(end, bool)
-            ):
-                continue
-            frame_ticks = (end - start) * fps_num
-            tick_denominator = timebase * fps_den
-            if frame_ticks <= 0 or frame_ticks % tick_denominator:
-                continue
-            obj["output"] = {
-                "width": settings.get("width"),
-                "height": settings.get("height"),
-                "fps": output_fps,
-                "duration_frames": frame_ticks // tick_denominator,
-                "background": settings.get("background", "#000000"),
-            }
-    return normalized
 
 
-def _native_copy_text(candidate: CompositionContent) -> list[str]:
-    from app.editing.schemas import TextObject
-
-    native_text = sorted(
-        (
-            (clip.range.start, track.order, clip.object.text)
-            for track in candidate.timeline.tracks
-            for clip in track.clips
-            if isinstance(clip.object, TextObject) and clip.object.caption is None
-        ),
-        key=lambda item: item[:2],
-    )
-    return [text for _, _, text in native_text]
 
 
-def _validate_scene_verbatim_copy(
-    *, args: CompositionDesignVideoArgs, composition: dict[str, Any]
-) -> None:
-    if args.verbatim_copy is None:
-        return
-    candidate = CompositionContent.model_validate(composition)
-    actual = _native_copy_text(candidate)
-    covered = {
-        clip.scene_id
-        for track in candidate.timeline.tracks if track.kind == "visual"
-        for clip in track.clips
-    }
-    complete = bool(candidate.scenes) and all(
-        scene.scene_id in covered for scene in candidate.scenes
-    )
-    expected = args.verbatim_copy
-    if actual == (expected if complete else expected[:len(actual)]):
-        return
-    raise CandidateDesignError(
-        "the native Text Clips must contain only the requested exact copy in playback order",
-        errors=[{
-            "loc": ["verbatim_copy"],
-            "type": "verbatim_copy_mismatch",
-            "msg": "correct the native Text Clips to match the requested phrases exactly once and in order",
-            "expected": expected,
-            "actual": actual,
-        }],
-    )
 
 
-def _validate_direct_design(
-    *,
-    args: CompositionDesignVideoArgs,
-    composition: dict[str, Any],
-) -> CompositionContent:
-    """Validate the direct final object and explicit user constraints."""
-    from app.config import settings
-    from app.editing.timing import ticks_to_frames, ticks_to_seconds
-    from app.editing.video_spec import VIDEO_MAX_FRAMES
-
-    composition = _complete_direct_generator_outputs(composition)
-    try:
-        candidate = CompositionContent.model_validate(composition)
-    except ValidationError as exc:
-        from app.agents.arguments import resolve_error_path
-
-        errors = json.loads(exc.json(include_input=False, include_url=False))
-        schema = CompositionContent.model_json_schema()
-        for error in errors:
-            error["loc"] = list(resolve_error_path(composition, error["loc"], schema))
-        raise CandidateDesignError(
-            "the assembled Composition is invalid",
-            errors=errors,
-        ) from exc
-    if args.scene_count is not None and len(candidate.scenes) != args.scene_count:
-        raise CandidateDesignError(f"the user fixed scene_count={args.scene_count}; candidate has {len(candidate.scenes)}")
-    if isinstance(args, CompositionDesignVideoArgs) and args.verbatim_copy is not None:
-        actual = _native_copy_text(candidate)
-        if actual != args.verbatim_copy:
-            raise CandidateDesignError(
-                "the native Text Clips must contain only the requested exact copy in playback order",
-                errors=[{
-                    "loc": ["verbatim_copy"],
-                    "type": "verbatim_copy_mismatch",
-                    "msg": "correct the native Text Clips to match the requested phrases exactly once and in order",
-                    "expected": args.verbatim_copy,
-                    "actual": actual,
-                }],
-            )
-    duration = ticks_to_seconds(
-        max((scene.range.end for scene in candidate.scenes), default=0),
-        candidate.settings.timebase,
-    )
-    if args.target_seconds is not None and abs(duration - args.target_seconds) > 1 / 30:
-        raise CandidateDesignError(f"the user fixed target_seconds={args.target_seconds}; candidate has {float(duration):g}")
-    total_ticks = max(
-        (clip.range.end for track in candidate.timeline.tracks for clip in track.clips),
-        default=0,
-    )
-    total_frames = ticks_to_frames(
-        total_ticks,
-        candidate.settings.timebase,
-        candidate.settings.fps.num,
-        candidate.settings.fps.den,
-    )
-    if total_frames > VIDEO_MAX_FRAMES:
-        fps = candidate.settings.fps.num / candidate.settings.fps.den
-        raise CandidateDesignError(
-            f"the current video production policy allows at most {VIDEO_MAX_FRAMES} frames "
-            f"({VIDEO_MAX_FRAMES / fps:g} seconds at {fps:g} fps); the candidate has "
-            f"{total_frames} frames ({total_frames / fps:g} seconds). Shorten the timeline "
-            "and keep every scene, clip and animation inside the shortened work."
-        )
-    if args.background is not None and candidate.settings.background.lower() != args.background.lower():
-        raise CandidateDesignError("candidate background must equal the user's exact requested color")
-    if args.aspect is not None:
-        ratios = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1)}
-        numerator, denominator = ratios[args.aspect]
-        if candidate.settings.width * denominator != candidate.settings.height * numerator:
-            raise CandidateDesignError(f"candidate settings must use the requested {args.aspect} canvas")
-    generator_objects = [
-        clip.object
-        for track in candidate.timeline.tracks
-        for clip in track.clips
-        if isinstance(clip.object, GeneratorObject)
-    ]
-    if not settings.component_bake_enabled and any(
-        obj.producer == "remotion-project" for obj in generator_objects
-    ):
-        raise CandidateDesignError("remotion-project is unavailable in this deployment")
-    return candidate
 
 
-async def _save_composition_version(
-    db: AsyncSession,
-    *,
-    owner_id: UUID,
-    project_id: UUID,
-    args: CompositionDesignVideoArgs,
-    request_id: str | None,
-    composition: Any,
-    base_version: Any,
-    base_content: CompositionContent | None,
-    direct_composition: dict[str, Any],
-    direct_candidate: CompositionContent,
-    provenance: dict[str, Any],
-    name: str,
-    skill: SkillCreativeContext | None,
-    builtin_skill: BuiltInSkillReference | None,
-    route_builtin_id: str | None,
-) -> dict[str, Any]:
-    """Save one fully resolved and validated assembled Composition."""
-    creative_state = args._creative_state or (
-        base_content.creative_state if base_content is not None else None
-    )
-    if creative_state is not None:
-        direct_composition["creative_state"] = creative_state.model_dump(mode="json")
-    if base_version is not None:
-        provenance = deepcopy(base_version.skill_provenance or {})
-    if skill is not None:
-        provenance["external_skill"] = skill.provenance
-        provenance["skill_reference"] = ExternalSkillReference(
-            kind="external", skill_version_id=skill.version.id
-        ).model_dump(mode="json")
-    if builtin_skill is not None:
-        provenance["skill_version"] = builtin_skill.version
-        provenance["skill_reference"] = builtin_skill.model_dump(mode="json")
-    provenance.setdefault("language", args.language or ((base_version.skill_provenance or {}).get("language") if base_version else None))
-    resource_snapshot_ids = {
-        resource.snapshot_id
-        for track in direct_candidate.timeline.tracks
-        for clip in track.clips
-        if isinstance(clip.object, GeneratorObject) and clip.object.project is not None
-        for resource in clip.object.project.resources
-    }
-    preflight_facts = await snapshot_facts(db, resource_snapshot_ids)
-    if any(
-        snapshot_id not in preflight_facts
-        or preflight_facts[snapshot_id].get("owner_id") != owner_id
-        for snapshot_id in resource_snapshot_ids
-    ):
-        raise DesignError("component resources must be owned by this user")
-    if composition is None:
-        composition, version, replayed = await apply_composition_edits(
-            db,
-            owner_id=owner_id,
-            origin_project_id=project_id,
-            content=direct_composition,
-            request_id=request_id,
-            name=name,
-            skill_provenance=provenance,
-        )
-        base_content = None
-    else:
-        composition, version, replayed = await apply_composition_edits(
-            db,
-            owner_id=owner_id,
-            composition_id=composition.id,
-            base_version_id=base_version.id,
-            base_digest=base_version.content_digest,
-            content=direct_composition,
-            request_id=request_id,
-            skill_provenance=provenance,
-        )
-
-    new_content = content_of(version)
-    facts = await snapshot_facts(db, {b.snapshot_id for b in new_content.sources})
-    payload = storyboard_payload(
-        new_content,
-        composition_id=composition.id,
-        version_id=version.id,
-        version=version.version,
-        content_digest=version.content_digest,
-        source_facts=facts,
-    )
-    read = version_read_dict(composition, version, payload)
-    if base_content is not None:
-        read["change_set"] = compute_change_set(base_content, new_content)
-    if skill is not None:
-        read["skill_adaptation"] = skill.presentation
-    read["replayed"] = replayed
-    return read
 
 
-def _apply_focus_write(
-    content: dict[str, Any], args: CompositionDesignVideoArgs, facts: dict[str, Any]
-) -> dict[str, Any]:
-    if args.focus_clip_id is None:
-        return content
-    from app.editing.grounding import camera_keyframes, resolve_focus
-    from app.editing.validators import validate_content
-
-    updated = deepcopy(content)
-    clip = next(
-        (
-            clip for track in (updated.get("timeline") or {}).get("tracks") or []
-            for clip in track.get("clips") or []
-            if clip.get("clip_id") == args.focus_clip_id
-        ),
-        None,
-    )
-    if clip is None or (clip.get("object") or {}).get("kind") != "web":
-        raise DesignError("focus_clip_id must name an existing web Clip in the current draft")
-    snapshot_id = str((clip.get("source") or {}).get("snapshot_id") or "")
-    fact = facts.get(UUID(snapshot_id)) or {}
-    view = next(
-        (
-            view for view in (fact.get("meta") or {}).get("views") or []
-            if view.get("view_id") == clip["object"].get("view_id")
-        ),
-        None,
-    )
-    if view is None:
-        raise DesignError("the target Clip's frozen view is unavailable")
-    focus = resolve_focus(view.get("elements") or [], args.focus_element_id)
-    settings = updated["settings"]
-    clip_ticks = int(clip["range"]["end"]) - int(clip["range"]["start"])
-    zoom, positions = camera_keyframes(
-        focus,
-        view_width=int(view["width"]),
-        view_height=int(view["height"]),
-        canvas_width=int(settings["width"]),
-        canvas_height=int(settings["height"]),
-        clip_ticks=clip_ticks,
-        arrival_frac=0.45,
-    )
-    animations = [
-        animation for animation in clip.get("animations") or []
-        if animation.get("property") not in {"transform.scale", "transform.position"}
-    ]
-    existing = {
-        animation.get("property"): animation.get("animation_id")
-        for animation in clip.get("animations") or []
-    }
-    animations.extend([
-        {
-            "animation_id": existing.get("transform.scale") or f"{clip['clip_id']}_focus_scale",
-            "target_object_id": clip["object"]["object_id"],
-            "property": "transform.scale",
-            "keyframes": [
-                {"at": 0, "value": 1.08},
-                {"at": positions[1][0], "value": zoom},
-                {"at": clip_ticks, "value": round(min(zoom * 1.01, 2.05), 3)},
-            ],
-        },
-        {
-            "animation_id": existing.get("transform.position") or f"{clip['clip_id']}_focus_position",
-            "target_object_id": clip["object"]["object_id"],
-            "property": "transform.position",
-            "keyframes": [
-                {"at": at, "value": [float(value[0]), float(value[1])]}
-                for at, value in positions
-            ],
-        },
-    ])
-    clip["animations"] = animations
-    validated = CompositionContent.model_validate(updated)
-    validate_content(validated, facts)
-    return validated.model_dump(mode="json")
 
 
 async def _place_skill_generator(
@@ -1553,6 +849,8 @@ async def _place_skill_generator(
         package.owner_id != owner_id or package.package_identity != skill.version.id
     ):
         raise DesignError("select a Generator from the current bound external Skill version")
+    if not placement.scene_id or not placement.track_id or not placement.clip_id:
+        raise DesignError("the host must bind the Generator's scene, track and clip")
     declaration, declaration_digest = await package.generator_declaration(placement.resource_id)
     scene = next((s for s in content["scenes"] if s["scene_id"] == placement.scene_id), None)
     track = next(
@@ -1712,7 +1010,7 @@ def _set_current_scene_timing(
     if current is None or current["scene_id"] != scene_id:
         complete = current is None
         message = (
-            "every planned Scene is filled; submit only the current draft_ref with save=true"
+            "every planned Scene is filled; edit the saved Composition instead of adding a duplicate shot"
             if complete else
             "scene writes must follow scene_plan order and target the current unfilled Scene"
         )
@@ -2077,387 +1375,10 @@ async def _expand_scene_authoring(
     return candidate.model_dump(mode="json")
 
 
-def _music_bed_write(
-    content: dict[str, Any],
-    music_snapshot_id: UUID | None,
-    facts: dict[UUID, dict[str, Any]],
-) -> dict[str, Any]:
-    if music_snapshot_id is None:
-        return content
-    if not isinstance(music_snapshot_id, UUID):
-        music_snapshot_id = UUID(str(music_snapshot_id))
-    music = facts.get(music_snapshot_id)
-    if music is None or music.get("kind") != "audio" or not music.get("storage_key") or not music.get("duration_ticks"):
-        raise CandidateDesignError(
-            "music_snapshot_id must be a prepared audio snapshot with real duration",
-            errors=[{"loc": ["music_snapshot_id"], "type": "source_not_ready", "msg": "choose a prepared music snapshot"}],
-            working_content=content,
-        )
-    updated = deepcopy(content)
-    updated["timeline"]["tracks"] = [
-        track for track in updated["timeline"]["tracks"] if track.get("track_id") != "trk_music"
-    ]
-    total_ticks = max((scene["range"]["end"] for scene in updated["scenes"]), default=0)
-    candidate = CompositionContent.model_validate(updated)
-    ops = TypeAdapter(list[Op]).validate_python(instantiate_music_bed(
-        MusicBed(
-            snapshot_id=music_snapshot_id,
-            snapshot_digest=music["digest"],
-            duration_ticks=music["duration_ticks"],
-        ),
-        total_ticks=total_ticks,
-        timebase=candidate.settings.timebase,
-    ))
-    bound = {binding.snapshot_id for binding in candidate.sources}
-    ops = [
-        op for op in ops
-        if not isinstance(op, BindSource) or op.snapshot_id not in bound
-    ]
-    audio_orders = {track.order for track in candidate.timeline.tracks if track.kind == "audio"}
-    for op in ops:
-        if isinstance(op, AddTrack) and op.track.kind == "audio":
-            order = 0
-            while order in audio_orders:
-                order += 1
-            op.track.order = order
-            audio_orders.add(order)
-    return apply_ops(candidate, ops, {music_snapshot_id: music["digest"]}).model_dump(mode="json")
 
 
-def _fit_scene_plan_target(
-    content: dict[str, Any], target_seconds: float
-) -> dict[str, Any]:
-    updated = deepcopy(content)
-    settings = VersionSettings.model_validate(updated["settings"])
-    target = seconds_to_ticks(target_seconds, settings.timebase)
-    natural = max((scene["range"]["end"] for scene in updated["scenes"]), default=0)
-    if target < natural:
-        raise CandidateDesignError(
-            "target_seconds is shorter than the scenes' minimum reading time",
-            errors=[{
-                "loc": ["target_seconds"], "type": "duration_too_short",
-                "msg": f"the current scenes need {natural / settings.timebase:g} seconds",
-            }],
-            working_content=content,
-        )
-    extra = target - natural
-    if extra and updated["scenes"]:
-        final_id = updated["scenes"][-1]["scene_id"]
-        updated["scenes"][-1]["range"]["end"] = target
-        for track in updated["timeline"]["tracks"]:
-            for clip in track.get("clips") or []:
-                if clip.get("scene_id") == final_id:
-                    clip["range"]["end"] += extra
-    return updated
 
 
-async def _design_composition_locked(
-    db: AsyncSession,
-    *,
-    owner_id: UUID,
-    project_id: UUID,
-    args: CompositionDesignVideoArgs,
-    request_id: str | None,
-    skill: SkillCreativeContext | None,
-    builtin_skill: BuiltInSkillReference | None,
-    skill_package: Any,
-) -> dict[str, Any] | WorkingDraftUpdated:
-    """Merge high-level creative intent or complete entities, then save."""
-    state = args._working_draft
-    skill_resources = deepcopy((state or {}).get("design", {}).get("skill_resources") or {})
-    if state is not None:
-        update = deepcopy(state.get("design") or {})
-        # working_draft_arguments merges only the incoming scene specs by scene_id.
-        update.pop("scene_assets", None)
-        update.pop("skill_resources", None)
-        update.pop("narrations", None)
-        update.pop("authoring", None)
-        for field in (*_EXPLICIT_CONSTRAINT_FIELDS, "user_constraints"):
-            update.pop(field, None)
-        explicit_constraints = args._explicit_constraints
-        args = args.model_copy(update=update)
-        args._working_draft = state
-        args._explicit_constraints = explicit_constraints
-
-    composition = None
-    base_version = None
-    base_content = None
-    if args.composition_id is not None:
-        composition, base_version = await get_video_version(
-            db, owner_id=owner_id, composition_id=args.composition_id
-        )
-        base_content = content_of(base_version)
-
-    high_level_draft = (
-        getattr(args, "scene_plan", None) is not None or getattr(args, "scene", None) is not None
-        or (state or {}).get("design", {}).get("authoring") == "high_level_scene"
-    )
-    if state is not None:
-        content = deepcopy(state["content"])
-    else:
-        content = (
-            base_content.model_dump(mode="json")
-            if base_content is not None
-            else {
-                "schema_version": SCHEMA_VERSION,
-                "sources": [],
-                "scenes": [],
-                "timeline": {"tracks": [], "transitions": []},
-            }
-        )
-        content = apply_working_draft_writes(
-            content,
-            args.entity_writes(),
-            settings=args.settings,
-            sources=args.sources,
-        )
-    if args.scene_plan is not None:
-        if args.scene_count is not None and len(args.scene_plan) != args.scene_count:
-            raise CandidateDesignError(
-                "scene_plan must preserve the user-fixed Scene count",
-                errors=[{
-                    "loc": ["scene_plan"], "type": "user_constraint",
-                    "msg": "scene_plan must preserve the user-fixed Scene count",
-                    "expected": args.scene_count, "actual": len(args.scene_plan),
-                }],
-            )
-        source_ids = set(args.source_ids or [])
-        if args.music_snapshot_id is not None:
-            source_ids.add(args.music_snapshot_id)
-        if args.scene is not None and args.scene.narration_snapshot_id is not None:
-            source_ids.add(args.scene.narration_snapshot_id)
-        facts = await snapshot_facts(db, source_ids)
-        if any(
-            snapshot_id not in facts or facts[snapshot_id].get("owner_id") != owner_id
-            for snapshot_id in source_ids
-        ):
-            raise DesignError("a referenced source snapshot is not accessible to this user")
-        dimensions = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}
-        aspect = args.aspect or "16:9"
-        width, height = dimensions[aspect]
-        derived_settings = args.settings or VersionSettings(
-            width=width,
-            height=height,
-            fps={"num": args.fps or 30, "den": 1},
-            background=args.background or "#F8FAFC",
-        )
-        bindings = [
-            SourceBinding(snapshot_id=snapshot_id, snapshot_digest=facts[snapshot_id]["digest"])
-            for snapshot_id in args.source_ids or []
-        ]
-        content = apply_working_draft_writes(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "sources": [],
-                "scenes": [],
-                "timeline": {"tracks": [], "transitions": []},
-            },
-            EntityWrites(),
-            settings=derived_settings,
-            sources=bindings,
-        )
-        content = _scene_plan_write(content, args.scene_plan)
-    original_scene_content = deepcopy(content) if args.scene is not None else None
-    try:
-        if args.scene is not None:
-            scene = args.scene
-            source_ids = _raw_snapshot_ids(content)
-            approved = None
-            if args._reviewed_scene_images is not None and scene.snapshot_id is not None:
-                approved = next((
-                    item.get("snapshot") for item in args._reviewed_scene_images
-                    if item["scene_id"] == scene.scene_id
-                ), None)
-                if not approved or approved.get("snapshot_id") != str(scene.snapshot_id):
-                    message = "Use the current approved picture for this scene from approved_images."
-                    raise CandidateDesignError(message, errors=[{
-                        "loc": ["scene", "snapshot_id"], "type": "source_not_ready", "msg": message,
-                    }])
-                # These images are prepared after scene_plan freezes its initial sources.
-                source_ids.add(scene.snapshot_id)
-            facts = await snapshot_facts(db, source_ids)
-            if approved is not None:
-                image = facts.get(scene.snapshot_id) or {}
-                if (
-                    image.get("owner_id") != owner_id
-                    or image.get("kind") != "image"
-                    or not image.get("storage_key")
-                    or not approved.get("digest")
-                    or image.get("digest") != approved["digest"]
-                ):
-                    message = "The reviewed picture could not be resolved at its approved digest."
-                    raise CandidateDesignError(message, errors=[{
-                        "loc": ["scene", "snapshot_id"], "type": "source_not_ready", "msg": message,
-                    }])
-            parent_ids = {
-                UUID(str(parent))
-                for fact in facts.values()
-                if (parent := (fact.get("meta") or {}).get("web_snapshot_id"))
-            }
-            if parent_ids - set(facts):
-                facts = await snapshot_facts(db, set(facts) | parent_ids)
-            if any(facts[snapshot_id].get("owner_id") != owner_id for snapshot_id in facts):
-                raise DesignError("a referenced source snapshot is not accessible to this user")
-            content = await _expand_scene_authoring(content, args.scene, facts, owner_id=owner_id)
-            _validate_scene_verbatim_copy(args=args, composition=content)
-        if high_level_draft and not args.save and args.music_snapshot_id is not None:
-            music_facts = await snapshot_facts(db, {args.music_snapshot_id})
-            content = _music_bed_write(content, args.music_snapshot_id, music_facts)
-    except CandidateDesignError as exc:
-        if original_scene_content is not None:
-            exc.working_content = original_scene_content
-        raise
-    if args.skill_resource is not None:
-        try:
-            content, declaration_digest = await _place_skill_generator(
-                db, owner_id=owner_id, project_id=project_id, content=content,
-                placement=args.skill_resource, skill=skill, package=skill_package,
-            )
-        except CandidateDesignError as exc:
-            exc.working_content = deepcopy(content)
-            raise
-        clip_id = args.skill_resource.clip_id
-        skill_resources[clip_id] = {
-            "resource_id": args.skill_resource.resource_id,
-            "declaration_digest": declaration_digest,
-            "skill_version_id": str(skill.version.id),
-        }
-    content_source_ids = _raw_snapshot_ids(content)
-    existing_images = [
-        (spec.scene_id, spec.source) for spec in args.scene_assets or []
-        if isinstance(spec.source, ExistingImageSource)
-    ]
-    facts = await snapshot_facts(db, content_source_ids | {
-        source.snapshot_id for _, source in existing_images
-    })
-    if any(
-        snapshot_id not in facts or facts[snapshot_id].get("owner_id") != owner_id
-        for snapshot_id in content_source_ids
-    ):
-        raise DesignError("a referenced source snapshot is not accessible to this user")
-    for scene_id, source in existing_images:
-        image = facts.get(source.snapshot_id) or {}
-        if (
-            image.get("owner_id") != owner_id or image.get("kind") != "image"
-            or image.get("digest") != source.snapshot_digest
-        ):
-            raise DesignError(
-                f"Scene {scene_id} needs a fixed image. Use the snapshot_id and digest "
-                "from the same image resource returned by prepare_video_materials. For a webpage "
-                "screenshot, select its view with material_targets to read the image reference."
-            )
-    content = _apply_focus_write(content, args, facts)
-    if args.skill_resource is not None:
-        content = _resolve_raw_snapshot_references(content, facts, owner_id=owner_id)
-        await db.commit()
-    if args.scene_assets is not None:
-        from app.tools.video.visual_assets import VisualAssetError, scene_asset_specs
-
-        try:
-            scene_asset_specs(content, args.scene_assets)
-        except VisualAssetError as exc:
-            raise DesignError(str(exc)) from exc
-    narration_fact = None
-    if args.narration_update is not None:
-        from app.tools.video.narration_draft import update_scene_narration
-
-        try:
-            content, narration_fact = await update_scene_narration(
-                db, owner_id=owner_id, project_id=project_id,
-                draft=state or {}, update=args.narration_update,
-            )
-        except ValueError as exc:
-            raise CandidateDesignError(
-                str(exc),
-                errors=[{
-                    "loc": ["narration_update"], "type": "narration_retiming", "msg": str(exc),
-                }],
-                working_content=deepcopy((state or {}).get("content") or content),
-            ) from exc
-    args._working_draft = working_draft_arguments(args, content)
-    if args.narration_update is not None:
-        design = args._working_draft["design"]
-        design["narrations"] = [
-            item for item in design.get("narrations") or []
-            if item.get("scene_id") != args.narration_update.scene_id
-        ]
-        if narration_fact is not None:
-            design["narrations"].append(narration_fact)
-    if args._working_draft["design"].get("narrations"):
-        from app.tools.video.narration_draft import NarrationDraftError, reproject_narration_timing
-
-        try:
-            reproject_narration_timing(args._working_draft)
-        except NarrationDraftError as exc:
-            raise CandidateDesignError(
-                str(exc),
-                errors=[{"loc": ["narration_update"], "type": "narration_retiming", "msg": str(exc)}],
-                working_content=deepcopy((state or {}).get("content") or content),
-            ) from exc
-    if skill_resources:
-        args._working_draft["design"]["skill_resources"] = skill_resources
-    if not args.save:
-        return WorkingDraftUpdated(args._working_draft)
-
-    if args.save and high_level_draft:
-        if args.target_seconds is not None:
-            content = _fit_scene_plan_target(content, args.target_seconds)
-        content = _music_bed_write(content, args.music_snapshot_id, facts)
-        facts = await snapshot_facts(db, _raw_snapshot_ids(content))
-
-    if args.save:
-        from app.agents.working_drafts import assert_working_draft_review_ready
-
-        assert_working_draft_review_ready(args._working_draft or {})
-    try:
-        direct_composition = _complete_direct_generator_outputs(content)
-        direct_composition = _resolve_raw_snapshot_references(
-            direct_composition, facts, owner_id=owner_id
-        )
-        builtin_id = builtin_skill.skill_id if builtin_skill is not None else None
-        inherited_provenance = base_version.skill_provenance or {} if base_version else {}
-        inherited_reference = inherited_provenance.get("skill_reference")
-        inherited_builtin_id = (
-            inherited_reference.get("skill_id")
-            if isinstance(inherited_reference, dict) and inherited_reference.get("kind") == "builtin"
-            else None
-        )
-        route_builtin_id = builtin_id or inherited_builtin_id
-        arc_id = getattr(args, "arc_id", None) or inherited_provenance.get("arc_id")
-        direct_candidate = _validate_direct_design(args=args, composition=direct_composition)
-        references = args.copy_references or []
-        provenance = {
-            "skill": route_builtin_id,
-            "mode": "composition",
-            "language": args.language,
-            **({"arc_id": arc_id} if arc_id is not None else {}),
-            "copy_evidence": await _direct_copy_evidence(
-                db, owner_id=owner_id, references=references, candidate=direct_candidate,
-            ),
-        }
-        if skill_resources:
-            provenance["skill_generator_resources"] = skill_resources
-        name = (args.name or "").strip()[:255]
-    except CandidateDesignError as exc:
-        exc.working_content = deepcopy(content)
-        raise
-    return await _save_composition_version(
-        db,
-        owner_id=owner_id,
-        project_id=project_id,
-        args=args,
-        request_id=request_id,
-        composition=composition,
-        base_version=base_version,
-        base_content=base_content,
-        direct_composition=direct_composition,
-        direct_candidate=direct_candidate,
-        provenance=provenance,
-        name=name,
-        skill=skill,
-        builtin_skill=builtin_skill,
-        route_builtin_id=route_builtin_id,
-    )
 
 
 async def prepare_video_materials(
@@ -2731,137 +1652,3 @@ async def capture_video_web(
             "media_files": len(images),
             "media_omitted": omitted,
         }, images
-
-
-
-
-async def design_video(
-    *,
-    owner_id: UUID,
-    project_id: UUID,
-    args: CompositionDesignVideoArgs,
-    request_id: str | None,
-    skill_version_id: UUID | None = None,
-    skill_reference: SkillReference | None = None,
-    skill_package: Any = None,
-    request_context: dict[str, Any] | None = None,
-) -> dict[str, Any] | WorkingDraftUpdated:
-    """The incremental Composition design entry, optionally Skill-bound."""
-    context = request_context or {}
-    from app.chat.readiness import infer_task_kind
-
-    existing_scene_assets = (
-        (getattr(args, "_working_draft", None) or {}).get("design", {}).get("scene_assets")
-    )
-    if (
-        infer_task_kind(str(context.get("user_text") or "")) == "website_promo"
-        and args.scene_assets is None
-        and not existing_scene_assets
-    ):
-        content = (getattr(args, "_working_draft", None) or {}).get("content")
-        raise CandidateDesignError(
-            "website promo needs SceneAssetSpec before other design writes",
-            errors=[{
-                "loc": ["scene_assets"],
-                "type": "required_visual_asset_foundation",
-                "msg": "Attach SceneAssetSpec for every planned Scene before scene authoring, music, narration or saving.",
-            }],
-            working_content=content if isinstance(content, dict) else None,
-        )
-    if isinstance(context.get("brief"), dict):
-        from app.models.schemas import CreativeState, PendingPlan, seal_creative_state
-
-        pending = PendingPlan.model_validate(context["brief"])
-        args._creative_state = pending.creative_state or seal_creative_state(
-            CreativeState(brief=pending.brief)
-        )
-    args = bind_explicit_design_constraints(
-        args, user_text=str(context.get("user_text") or ""), brief=context.get("brief"),
-    )
-    if skill_reference is not None and skill_version_id is not None:
-        raise DesignError("bind one Skill reference, not two")
-    builtin_skill = None
-    if isinstance(skill_reference, BuiltInSkillReference):
-        from app.skills.resolution import SkillResolutionError, get_builtin_skill_option
-
-        try:
-            option = get_builtin_skill_option(skill_reference.skill_id, version=skill_reference.version)
-        except SkillResolutionError as exc:
-            raise DesignError(str(exc)) from exc
-        if option.reference != skill_reference:
-            raise DesignError("built-in Skill version is unavailable")
-        builtin_skill = skill_reference
-    elif isinstance(skill_reference, ExternalSkillReference):
-        skill_version_id = skill_reference.skill_version_id
-    async with AsyncSessionLocal() as db:
-        if args.scene_assets and args._creative_state and args._creative_state.brand_profile:
-            from app.tools.video.visual_citations import validate_website_scene_citations
-
-            await validate_website_scene_citations(
-                db, owner_id=owner_id, state=args._creative_state, specs=args.scene_assets,
-                user_text="\n".join(filter(None, (
-                    (context.get("brief") or {}).get("prompt"), context.get("user_text"),
-                ))),
-                source_ids=set(args.source_ids or ()) | _raw_snapshot_ids(
-                    (args._working_draft or {}).get("content") or {}
-                ),
-            )
-        skill = (
-            await load_skill_creative_context(
-                db,
-                owner_id=owner_id,
-                skill_version_id=skill_version_id,
-            )
-            if skill_version_id is not None
-            else None
-        )
-        if args.save and infer_task_kind(str(context.get("user_text") or "")) == "website_promo":
-            from app.tools.video.visual_assets import (
-                VisualAssetError,
-                cached_visual_asset,
-                current_scene_assets,
-            )
-            if current_scene_assets(args._working_draft or {}):
-                raise CandidateDesignError(
-                    "website promo audio/media preparation remains an unsaved working draft",
-                    errors=[{
-                        "loc": ["save"], "type": "media_preparation_scope",
-                        "msg": "Do not save a CompositionVersion during scene media preparation.",
-                    }],
-                    working_content=(args._working_draft or {}).get("content"),
-                )
-
-            try:
-                for spec in current_scene_assets(args._working_draft or {}):
-                    if await cached_visual_asset(
-                        owner_id=owner_id, project_id=project_id, spec=spec
-                    ) is None:
-                        raise VisualAssetError(
-                            f"scene {spec.scene_id} has no fixed PNG, analysis and ContentReview"
-                        )
-            except VisualAssetError as exc:
-                raise CandidateDesignError(
-                    "website promo visual assets must be fixed before saving",
-                    errors=[{
-                        "loc": ["prepare_visual_assets"],
-                        "type": "visual_assets_not_prepared",
-                        "msg": str(exc),
-                    }],
-                    working_content=(args._working_draft or {}).get("content"),
-                ) from exc
-        try:
-            return await _design_composition_locked(
-                db,
-                owner_id=owner_id,
-                project_id=project_id,
-                args=args,
-                request_id=request_id,
-                skill=skill,
-                builtin_skill=builtin_skill,
-                skill_package=skill_package,
-            )
-        except AgentStopError as exc:
-            active_package = skill.package if skill is not None else None
-            if active_package is not None:
-                exc.facts = active_package.execution_facts
-            raise

@@ -251,6 +251,11 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
 
     if turn.turn_id in _TURN_ROW_LOCKS_HELD.get():
         raise ValueError("This request is already settling another authorization.")
+    if name == "generate_voice":
+        from app.chat.editor_create import voice_generation_forbidden
+
+        if voice_generation_forbidden(getattr(turn, "text", "")):
+            raise ValueError("The user explicitly disallowed narration generation.")
     identity = str(uuid5(turn.turn_id, call_id))
     params = args.model_dump(mode="json")
     composition_id = str(composition.id) if composition else None

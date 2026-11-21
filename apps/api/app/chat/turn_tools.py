@@ -23,11 +23,9 @@ asking strategy / naming / disclosure rules stay in the system templates.
 """
 
 import re
-from copy import deepcopy
-from dataclasses import replace
 
 from app.agents.tool_loop import ChatTool, NATIVE_PRESENTATION, ToolPresentation, ToolPresentationVariant, ToolRejected, prune_wire_parameters
-from app.chat.editor import EDITOR_NAMES, EDITOR_TOOLS
+from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
@@ -52,74 +50,15 @@ from app.models.schemas import (
     StartRunArgs,
 )
 
-MAX_DESIGN_CORRECTIONS_PER_TURN = 2
-
-
-def video_rejection_stop(
-    current: ToolRejected, previous: tuple[ToolRejected, ...]
-) -> bool:
-    """Bound failed video design attempts without touching other tool loops.
-
-    An exact repeated candidate signature stops on the second failure. When a
-    rejected Composition carries a candidate digest, the same error text with
-    a new digest is a materially changed attempt, not no-progress. Different
-    validation/execution errors may still be genuine repairs, so they retain
-    two more attempts; the third design rejection in one turn ends the loop
-    regardless of signature. Accepted reads and successful designs do not
-    erase the failure budget: this is a per-turn failed-design cap, not the
-    deferred unified nested-LLM budget.
-    """
-    if current.tool_name != "design_video":
-        return False
-    history = (*previous, current)
-    if previous:
-        last = previous[-1]
-        if (
-            last.tool_name == current.tool_name
-            and last.kind == current.kind
-            and last.detail == current.detail
-            and last.candidate_digest == current.candidate_digest
-        ):
-            return True
-    return sum(event.tool_name == "design_video" for event in history) >= 3
-
-
-_DESIGN_VIDEO_DESCRIPTION = (
-    "通过向服务端工作草稿写入完整值构建视频。只写本次要处理的设置、来源、Scenes、Tracks、Clips 或 Transitions，未写入的范围保持原状。"
-    "新轨道的首批 Clip 直接放入该 Track 的 clips。单独写 Clip 时，clips 项格式为 {track_id, clip}。save=false 将修改合入工作草稿。"
-    "save=true 仅校验并保存已有 draft_ref，不附新的内容。保存不会启动制作。"
-)
-
-
-def _design_video_wire_view(description: str, parameters: dict) -> tuple[str, dict]:
-    from app.config import settings
-
-    pruned = deepcopy(parameters)
-    if settings.component_bake_enabled:
-        return description, pruned
-    pruned = prune_wire_parameters(pruned, {"skill_resource"})
-    producer = pruned.get("$defs", {}).get("GeneratorObject", {}).get("properties", {}).get("producer", {})
-    if isinstance(producer.get("enum"), list):
-        producer["enum"] = [item for item in producer["enum"] if item != "remotion-project"]
-    return description + "当前部署不支持 remotion-project。", pruned
-
-
-def _design_video_tool() -> ChatTool:
-    from app.tools.video.design import CompositionDesignVideoArgs
-
-    return ChatTool(
-        name="design_video",
-        terminal=False,
-        description=_DESIGN_VIDEO_DESCRIPTION,
-        params_model=CompositionDesignVideoArgs,
-        wire_view=_design_video_wire_view,
-        draftable=True,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.videoDesign",
-            done_key="chat.activity.videoDesignDone", defer_start=True,
-            policy="design", receipt_kind="component",
-        ),
-    )
+def video_rejection_stop(current: ToolRejected, previous: tuple[ToolRejected, ...]) -> bool:
+    same = [event for event in previous
+            if event.tool_name == current.tool_name and event.kind == current.kind
+            and event.detail == current.detail and event.candidate_digest == current.candidate_digest]
+    if same and (current.candidate_digest is not None or previous[-1] is same[-1]):
+        return True
+    return current.tool_name == "create_video" and sum(
+        event.tool_name == current.tool_name for event in (*previous, current)
+    ) >= 3
 
 
 _REVIEW_VIDEO_DESCRIPTION = (
@@ -140,24 +79,6 @@ _REVIEW_VIDEO_TOOL = ChatTool(
 )
 
 
-def _review_working_draft_tool() -> ChatTool:
-    from app.tools.video.preview import ReviewWorkingDraftArgs
-
-    return ChatTool(
-        name="review_working_draft",
-        terminal=False,
-        draft_reader=True,
-        description=(
-            "只传 draft_ref 可检查服务端选择的下一个限定连续时间窗。查看所附 MP4 和代表帧，再针对其 evidence_id 记录观察与结论。"
-            "窗口、证据标识和审阅状态由服务端管理。草稿发生变化后，保存前须取得新证据。"
-        ),
-        params_model=ReviewWorkingDraftArgs,
-        presentation=ToolPresentation(
-            kind="draft", active_key="chat.activity.videoReview",
-            done_key="chat.activity.videoReviewDone", defer_start=True,
-            policy="working_draft_review", receipt_kind="video_draft_review",
-        ),
-    )
 
 
 def _show_video_presets_tool() -> ChatTool:
@@ -232,7 +153,7 @@ _SELECT_MUSIC_TOOL = ChatTool(
     terminal=False,
     description=(
         "选择用户从先前已结算的 Music 候选卡按序号点名的曲目。只传 candidate_set_id 和从零起的 member_index。服务端解析本地曲库条目，返回 music_id，不下载、不修改版本。"
-        "将该 ID 传给 prepare_video_materials 的 material_music_ids，启动草稿时把返回的快照用作 music_snapshot_id。修改已保存版本需使用支持的修订 Op。"
+        "将该 ID 传给 prepare_video_materials 的 material_music_ids，再把返回的固定音频快照用 insert_audio 放入当前作品。修改已保存版本使用当前编辑工具。"
     ),
     params_model=SelectMusicArgs,
     presentation=ToolPresentation(
@@ -404,129 +325,14 @@ def _explicit_constraint_wire(
     return parameters
 
 
-def _verbatim_copy_requested(user_text: str) -> bool:
-    return bool(re.search(
-        r"逐字|一字不差|原文不变|不得改写|exact(?:\s+\w+)*\s+copy|verbatim",
-        user_text, re.IGNORECASE,
-    ))
 
 
-def _music_choice_requested(user_text: str) -> bool:
-    has_music = bool(re.search(r"音乐|配乐|music", user_text, re.IGNORECASE))
-    has_choice = bool(re.search(
-        r"候选|试听|比较|选择|挑选|选一首|candidate|compare|listen|choose|pick",
-        user_text, re.IGNORECASE,
-    ))
-    return has_music and has_choice
 
 
-def _pending_facts(message) -> dict | None:
-    if message is None:
-        return None
-    intent = getattr(message, "intent", None) or {}
-    return {
-        "message_id": str(getattr(message, "id", "")),
-        "content": getattr(message, "content", None),
-        "question": getattr(message, "question", None) or intent.get("question"),
-    }
 
 
-def _named_reference(value, key: str) -> str | None:
-    if isinstance(value, dict):
-        if isinstance(value.get(key), str):
-            return value[key]
-        for nested in value.values():
-            found = _named_reference(nested, key)
-            if found:
-                return found
-    elif isinstance(value, list):
-        for nested in value:
-            found = _named_reference(nested, key)
-            if found:
-                return found
-    return None
 
 
-def resolve_video_stage(
-    *, tools: list[ChatTool], drafts, snapshot, user_text: str = "",
-    pending_question=None, target_hint=None, readiness=None,
-) -> dict:
-    """Resolve current evidence before projecting the target and tool stage."""
-    from app.agents.working_drafts import working_draft_review_facts
-
-    resources = [
-        resource for _key, resource in (getattr(snapshot, "resources", ()) or ())
-        if resource.get("kind") == "composition"
-    ]
-    pending = _pending_facts(pending_question)
-    if readiness is not None and readiness.task_kind == "website_promo":
-        gated = {"draft": None, "target": None, "pending": pending, "readiness": readiness}
-        if readiness.capture_failed or not (readiness.text_ready and readiness.required_views_ready):
-            return {"stage": "source_preparing", **gated}
-        if not readiness.brand_profile_ready:
-            return {"stage": "briefing", **gated}
-        if readiness.required_next_action == "ask_user" or (
-            pending and (pending.get("question") or {}).get("items")
-        ):
-            return {"stage": "briefing", **gated}
-    hint = target_hint or {}
-    if not isinstance(hint, dict):
-        hint = {"base_ref": getattr(hint, "base_ref", None)}
-    hinted_draft = _named_reference(pending, "draft_id") or _named_reference(hint, "draft_id")
-    explicit_draft = hinted_draft or next(
-        (draft.candidate_id for draft in drafts if draft.candidate_id in user_text), None
-    )
-    if explicit_draft is None and re.search(r"\b(?:working\s+)?draft\b|草稿", user_text, re.IGNORECASE):
-        explicit_draft = drafts[0].candidate_id if len(drafts) == 1 else None
-    selected_draft = next(
-        (draft for draft in drafts if draft.candidate_id == explicit_draft), None
-    )
-    if selected_draft is None and len(drafts) == 1 and (not resources or explicit_draft):
-        selected_draft = drafts[0]
-    if selected_draft is not None:
-        facts = working_draft_review_facts(selected_draft.arguments)
-        has_content = bool((selected_draft.arguments.get("content") or {}).get("scenes"))
-        sequential_requested = bool(re.search(
-            r"(?:^|[。！？；，,\s])(?:请)?按(?:播放顺序|幕)(?:审查|审片|检查)|"
-            r"(?:^|[.!?]\s+)(?:please\s+)?(?:review|check)\b[^.!?\n]*\b(?:in playback order|scene by scene)\b",
-            user_text, re.IGNORECASE,
-        ))
-        review_requested = facts["review_started"] or sequential_requested
-        complete_without_review = bool(facts["scenes"]) and all(
-            scene["clip_ids"] for scene in facts["scenes"]
-        )
-        save_deferred = bool(re.search(
-            r"(?:do\s+not|don't|never)\s+save\b|\bnot\s+save\b|"
-            r"不(?:要|用)?保存|暂不保存|先不保存",
-            user_text, re.IGNORECASE,
-        ))
-        website_draft = readiness is not None and readiness.task_kind == "website_promo"
-        empty_timeline = not any(scene["clip_ids"] for scene in facts["scenes"])
-        if empty_timeline and not facts["awaiting_judgment"] and not selected_draft.errors:
-            stage = "draft_build"
-        elif website_draft and not review_requested:
-            stage = "draft_build"
-        elif selected_draft.errors:
-            stage = "draft_repair"
-        elif complete_without_review and not review_requested:
-            stage = "draft_hold" if save_deferred else "draft_finalize"
-        elif not has_content or not review_requested:
-            stage = "draft_build"
-        elif facts["open_issues"] and not facts["unreviewed_ranges_seconds"] and not facts["awaiting_judgment"]:
-            stage = "draft_repair"
-        elif facts["save_ready"] and facts["review_started"]:
-            stage = "draft_finalize"
-        else:
-            stage = "draft_review"
-        return {"stage": stage, "draft": selected_draft, "target": None, "pending": pending, "empty_timeline": empty_timeline}
-    if resources or drafts:
-        return {"stage": "resolve_target", "draft": None, "target": None, "candidates": resources, "pending": pending}
-    return {
-        "stage": "draft_build" if any(tool.name == "design_video" for tool in tools) else "none",
-        "draft": None,
-        "target": None,
-        "pending": pending,
-    }
 
 
 def _website_briefing_question_wire(
@@ -590,317 +396,14 @@ def _website_briefing_question_wire(
     )
 
 
-def video_round_tools(
-    tools: list[ChatTool], *, resolution: dict, snapshot, skill=None,
-    material_pending: bool = False, package_sessions: dict | None = None,
-    user_text: str = "",
-) -> list[ChatTool]:
-    """Project declarations from the same resolved target used by the prompt."""
-    from app.tools.video.design import explicit_design_constraints
-
-    stage = resolution["stage"]
-    active_draft = resolution.get("draft") is not None
-    draft_arguments = resolution["draft"].arguments if active_draft else None
-    project_facts = next(
-        (
-            resource for _key, resource in (getattr(snapshot, "resources", ()) or ())
-            if resource.get("kind") == "project"
-        ),
-        {},
-    )
-    user_constraints = resolution.get("user_constraints")
-    if user_constraints is None:
-        user_constraints = explicit_design_constraints(
-            user_text,
-            constraints=project_facts.get("user_stated_constraints") or (),
-            draft=draft_arguments,
-        )
-        resolution["user_constraints"] = user_constraints
-    target = resolution.get("target")
-    has_saved_version = target is not None or bool(
-        snapshot is not None and (
-            any(key.startswith("composition:") for key in snapshot.keys)
-            or any(resource.get("kind") == "composition" for _key, resource in snapshot.resources)
-        )
-    )
-    has_prepared_sources = bool(
-        snapshot is not None and any(key.startswith("snapshot:") for key in snapshot.keys)
-    )
-    package = (
-        package_sessions.get(skill.model_dump_json())
-        if package_sessions is not None and skill is not None else None
-    )
-    defer_design = (
-        not active_draft and not has_saved_version
-        and material_pending and not has_prepared_sources
-    )
-    readiness = resolution.get("readiness")
-    stage_tools = {
-        "source_preparing": (
-            {"answer"} if readiness is not None and readiness.capture_failed
-            else {"prepare_video_materials", "answer"}
-        ),
-        "briefing": {"analyze_brand", "answer"},
-        "resolve_target": {"ask_user", "answer", "get_video_version", "read_conversation_context"},
-        "draft_build": {
-            "ask_user", "answer", "read_conversation_context",
-            "get_understanding", "get_web_page", "get_asset", "list_project_media",
-            "list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview",
-            "prepare_video_materials", "capture_web", "design_video", "review_working_draft",
-            "align_recording", "get_narration_alignment", "annotate_narration",
-            "search_music", "show_music_candidates", "select_music",
-            "show_video_presets", "select_video_preset", "search_sfx", "import_sfx",
-        },
-        "draft_review": {"review_working_draft", "ask_user", "answer", "read_conversation_context"},
-        "draft_repair": {"design_video", "ask_user", "answer", "read_conversation_context"},
-        "draft_finalize": {"design_video", "answer", "read_conversation_context"},
-        "draft_hold": {"answer", "read_conversation_context"},
-    }
-    if resolution.get("empty_timeline"):
-        stage_tools["draft_build"].discard("review_working_draft")
-    if stage == "briefing" and readiness.brand_profile_ready:
-        stage_tools["briefing"] = {"answer"} if resolution.get("pending") else {"ask_user"}
-    if stage == "draft_build" and not active_draft and readiness and readiness.task_kind == "website_promo":
-        stage_tools["draft_build"].discard("ask_user")
-    review_facts = {}
-    if stage == "draft_review" and active_draft:
-        from app.agents.working_drafts import working_draft_review_facts
-
-        review_facts = working_draft_review_facts(resolution["draft"].arguments)
-        if review_facts["confirmation_blocked"]:
-            stage_tools["draft_review"] = {"answer"}
-    focus_clip_ids: list[str] = []
-    focus_element_ids: list[str] = []
-    complete_repair = False
-    if stage == "draft_repair" and active_draft:
-        from app.agents.working_drafts import working_draft_review_facts
-
-        draft_facts = working_draft_review_facts(resolution["draft"].arguments)
-        complete_repair = bool(draft_facts["scenes"]) and all(
-            scene["clip_ids"] for scene in draft_facts["scenes"]
-        ) and not draft_facts["open_issues"]
-        editable = draft_facts["editable_targets"]
-        issue_clip_ids = {
-            clip_id for issue in draft_facts["open_issues"] for clip_id in issue.get("clip_ids") or []
-        }
-        targets = [clip for clip in editable if not issue_clip_ids or clip.get("clip_id") in issue_clip_ids]
-        focus_clip_ids = [clip["clip_id"] for clip in targets if (clip.get("object") or {}).get("kind") == "web"]
-        snapshots = {
-            str(resource.get("snapshot_id")): resource
-            for key, resource in (getattr(snapshot, "resources", ()) or ())
-            if key.startswith("snapshot:")
-        }
-        for clip in targets:
-            source = clip.get("source") or {}
-            view_id = (clip.get("object") or {}).get("view_id")
-            view = next(
-                (
-                    view for view in (snapshots.get(str(source.get("snapshot_id"))) or {}).get("views") or []
-                    if view.get("view_id") == view_id
-                ),
-                None,
-            )
-            focus_element_ids.extend(
-                str(element["id"]) for element in (view or {}).get("targets") or [] if element.get("id")
-            )
-        focus_element_ids = list(dict.fromkeys(focus_element_ids))
-    projected = []
-    for tool in tools:
-        # Video rounds never need the manual Canvas read/write tools. Keep
-        # their existing manual-surface executors, but do not spend model
-        # context on unrelated graph operations.
-        if tool.name in {"get_graph", "get_node", "edit_graph"}:
-            continue
-        if tool.name == "create_video":
-            continue  # The native first-version seat is offered by the editor projection.
-        if tool.name in EDITOR_NAMES:
-            if has_saved_version or tool.name.startswith("generate_"):
-                projected.append(tool)
-            continue
-        if stage in stage_tools and tool.name not in stage_tools[stage]:
-            continue
-        if (
-            stage == "draft_build"
-            and tool.name in {"show_music_candidates", "select_music"}
-            and not _music_choice_requested(user_text)
-        ):
-            continue
-        if skill is not None and tool.name == "start_run" and not has_saved_version:
-            continue
-        if defer_design and tool.name == "design_video":
-            continue
-        if tool.name in {"present_plan", "propose_tasks"} and (
-            (active_draft and not (draft_arguments or {}).get("design", {}).get("scene_assets"))
-            or (skill is not None and not has_saved_version)
-        ):
-            continue
-        if tool.name in {"get_video_version"} and not has_saved_version:
-            continue
-        if (
-            stage in {"briefing", "draft_build"}
-            and tool.name == "ask_user"
-            and readiness is not None
-            and readiness.brand_profile_ready
-            and readiness.brief_missing_slots
-        ):
-            from app.chat.readiness import stated_direction_inputs
-
-            projected.append(replace(
-                tool,
-                wire_view=lambda description, parameters: (
-                    _website_briefing_question_wire(
-                        description, parameters, readiness.brief_missing_slots,
-                        stated_direction_inputs(readiness.brief),
-                    )
-                ),
-            ))
-            continue
-        if tool.name == "review_working_draft":
-            draft = resolution.get("draft")
-            if draft is None or not (draft.arguments.get("content") or {}).get("scenes"):
-                continue
-            awaiting = review_facts.get("awaiting_judgment", False)
-            observed_required = any(
-                item["representative_frame"] and item["evidence_id"] in review_facts["unjudged_evidence_ids"]
-                for item in review_facts.get("evidence", [])
-            )
-
-            def review_wire(description: str, parameters: dict, *, needs_judgment=awaiting, needs_observation=observed_required, initial=stage == "draft_build"):
-                if needs_judgment:
-                    parameters = prune_wire_parameters(parameters, {"scene_id", "include_previous_scene"})
-                    parameters["required"] = list(dict.fromkeys([
-                        *parameters.get("required", []), "judgment",
-                    ]))
-                    if needs_observation:
-                        parameters["$defs"]["WorkingDraftReviewJudgment"]["required"].append("observed")
-                    return "为当前尚未判定的 evidence_id 记录结论，不要重复请求同一预览。", parameters
-                if initial:
-                    return (
-                        "只有具体的动态疑问或用户要求时才启动局部预览。选择 scene_id，可附前一场衔接。只有用户要求开始顺序审阅时才省略 scene_id。",
-                        prune_wire_parameters(parameters, {"judgment"}),
-                    )
-                return "获取服务端选定的下一段连续预览。", prune_wire_parameters(
-                    parameters, {"judgment", "scene_id", "include_previous_scene"}
-                )
-
-            projected.append(replace(tool, wire_view=review_wire))
-            continue
-        if tool.name != "design_video":
-            projected.append(tool)
-            continue
-
-        previous_wire = tool.wire_view
-        allow_skill_resource = (
-            stage == "draft_build" and getattr(package, "package_identity", None) is not None
-        )
-        if active_draft:
-            def continuing_wire(description: str, parameters: dict, *, previous=previous_wire, current_stage=stage, skill_resources=allow_skill_resource, high_level=not allow_skill_resource, constraints=user_constraints, repair_complete=complete_repair):
-                if previous is not None:
-                    description, parameters = previous(description, parameters)
-                parameters = _explicit_constraint_wire(parameters, constraints, include_fixed=False)
-                hidden = {"composition_id"}
-                if not skill_resources:
-                    hidden.add("skill_resource")
-                parameters = prune_wire_parameters(parameters, hidden)
-                parameters["required"] = list(dict.fromkeys([
-                    *parameters.get("required", []), "draft_ref",
-                ]))
-                if current_stage == "draft_finalize":
-                    allowed = {"draft_ref", "save", "scrub", "pending_disposition"}
-                    parameters = prune_wire_parameters(
-                        parameters, set(parameters.get("properties") or {}) - allowed
-                    )
-                    return "用 save=true 仅保存已审阅的现有 draft_ref，不再写入内容。", parameters
-                if current_stage == "draft_repair":
-                    if focus_clip_ids and focus_element_ids:
-                        allowed = {"draft_ref", "focus_clip_id", "focus_element_id", "pending_disposition"}
-                        parameters = prune_wire_parameters(
-                            parameters, set(parameters.get("properties") or {}) - allowed
-                        )
-                        parameters["properties"]["focus_clip_id"]["enum"] = focus_clip_ids
-                        parameters["properties"]["focus_element_id"]["enum"] = focus_element_ids
-                        parameters["required"] = ["draft_ref", "focus_clip_id", "focus_element_id"]
-                        return "使用固定视图中的一个元素修复一个网页 Clip 的构图。", parameters
-                    if repair_complete and high_level:
-                        allowed = {"draft_ref", "save", "pending_disposition"}
-                        parameters = prune_wire_parameters(
-                            parameters, set(parameters.get("properties") or {}) - allowed
-                        )
-                        return (
-                            "计划中的 Scene 均已在当前草稿内。不重开计划或新增字段。仅用 save=true 保存现有 draft_ref，不写内容。",
-                            parameters,
-                        )
-                if high_level:
-                    allowed = {
-                        "draft_ref", "scene", "scene_assets", "narration_update",
-                        "save", "scrub", "pending_disposition",
-                    }
-                    if (draft_arguments or {}).get("design", {}).get("scene_assets"):
-                        allowed.difference_update({"save", "scrub"})
-                    parameters = prune_wire_parameters(
-                        parameters, set(parameters.get("properties") or {}) - allowed
-                    )
-                    return (
-                        "编写一个当前 Scene、更新其 SceneAssetSpec，或在对齐达到 READY 后执行一次 narration_update。"
-                        "场景素材准备阶段只保留未保存的工作草稿，不保存 CompositionVersion 或附加预览。服务端推导来源标识、真实提示点、Tracks、Clips、Objects 及整数时序。",
-                        parameters,
-                    )
-                allowed = {
-                    "draft_ref", "scene_id", "tracks", "save", "scrub", "pending_disposition",
-                    "copy_references", "verbatim_copy",
-                }
-                if skill_resources:
-                    allowed.add("skill_resource")
-                parameters = prune_wire_parameters(
-                    parameters, set(parameters.get("properties") or {}) - allowed
-                )
-                return (
-                    "用最新 draft_ref 和 scene_id 续写工作草稿中一个已有场景。tracks[].clips 只放该场完整的 Clip，无顶层 clips 数组。"
-                    "复用 draft_tracks 中已有 Track 的 ID、kind、role、order；服务端保留此次写入范围以外的所有 Clip。新 Track 一次声明完整的 kind、role、order。"
-                    "动画和 object 同放在 Clip 上。最终调用只设 save=true 校验并保存现有 draft_ref，不传 scene_id 或写入内容。",
-                    parameters,
-                )
-
-            projected.append(replace(
-                tool,
-                description="续写或保存当前视频工作草稿。",
-                wire_view=continuing_wire,
-            ))
-        else:
-            def initial_wire(description: str, parameters: dict, *, previous=previous_wire, skill_resources=allow_skill_resource, high_level=not allow_skill_resource, constraints=user_constraints):
-                if previous is not None:
-                    description, parameters = previous(description, parameters)
-                parameters = _explicit_constraint_wire(parameters, constraints, include_fixed=True)
-                hidden = {"draft_ref"} if has_saved_version else {"draft_ref", "composition_id"}
-                if not skill_resources:
-                    hidden.add("skill_resource")
-                if high_level:
-                    hidden.update({
-                        "settings", "sources", "scenes", "tracks", "clips", "transitions", "scene_id",
-                        "remove_scene_ids", "remove_track_ids", "remove_clip_ids", "remove_transition_ids",
-                        "save", "scrub", "skill_resource", "scene", "focus_clip_id", "focus_element_id",
-                        "copy_references",
-                    })
-                    if not _verbatim_copy_requested(user_text):
-                        hidden.add("verbatim_copy")
-                    description = (
-                        "用 scene_plan、source_ids 和可选 scene_assets/music_snapshot_id 开始工作草稿。scene_plan 只决定叙事顺序，scene_assets 只为其中已有的场景 ID 附上当前画面要求。"
-                        "服务端推导设置、来源绑定及初始时序。先准备所需画面，再在后续 Scene 写入中绑定固定快照。保存不会启动制作。"
-                    )
-                return description, prune_wire_parameters(parameters, hidden)
-
-            projected.append(replace(tool, wire_view=initial_wire))
-    return projected
 
 
 def _video_project_tools() -> list[ChatTool]:
     return [
         *_skill_authoring_read_tools(),
         *_video_material_tools(),
-        _design_video_tool(),
         *EDITOR_TOOLS,
         _REVIEW_VIDEO_TOOL,
-        _review_working_draft_tool(),
         _show_video_presets_tool(),
         _SELECT_VIDEO_PRESET_TOOL,
         _SEARCH_SFX_TOOL,

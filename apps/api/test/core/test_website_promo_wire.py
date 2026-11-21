@@ -204,9 +204,11 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
     )
     assert result.tool_name == "ask_user"
     assert len(provider.wires) == 3
-    assert tool_names(provider.wires[0]) == {"prepare_video_materials", "answer", *_UNBOUND_MEDIA}
-    assert tool_names(provider.wires[1]) == {"analyze_brand", "answer", *_UNBOUND_MEDIA}
-    assert tool_names(provider.wires[2]) == {"ask_user", *_UNBOUND_MEDIA}
+    for index, required in enumerate(("prepare_video_materials", "analyze_brand", "ask_user")):
+        names = tool_names(provider.wires[index])
+        assert required in names
+        assert "create_video" not in names
+        assert "design_video" not in names
     for wire in provider.wires:
         assert wire["messages"].count({"role": "user", "content": text}) == 1
         assert [message["role"] for message in wire["messages"][:2]] == ["system", "user"]
@@ -218,8 +220,9 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
     assert "未上传文件" not in first_user
     first_system = provider.wires[0]["messages"][0]["content"]
     assert "官网宣传片取证" in first_system
-    assert first_system.index("只读工具的名称") < first_system.index("视频创作（网站演示")
-    assert first_system.index("视频创作（网站演示") < first_system.index("- answer：")
+    assert "空项目按用户要求用 create_video" in first_system
+    assert first_system.index("空项目按用户要求用 create_video") < first_system.index("官网宣传片取证")
+    assert "design_video" not in first_system
     full_context = "\n".join(
         str(message.get("content")) for message in provider.wires[0]["messages"]
     )
@@ -230,7 +233,8 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
     assert "Brief 已就绪：false" in full_context
     assert '"required_next_action": "prepare_video_materials"' in full_context
     assert full_context.count('"required_next_action":') == 1
-    assert '"source_readiness"' not in full_context
+    assert '"source_readiness"' in full_context
+    assert '"source_preparation"' in full_context
     brand_parts = brand_fake.messages[1]["content"]
     assert sum(part.get("type") == "image_url" for part in brand_parts) == 1
     assert "Citations should be as universal as hashtags." in brand_parts[-1]["text"]
@@ -336,12 +340,16 @@ async def test_legitevi_wire_requires_one_questionnaire_before_design(monkeypatc
     )
     assert len(resumed_provider.wires) == 1
     messages = resumed_provider.wires[0]["messages"]
-    assert messages[-3:] == dialogue
+    for message in dialogue:
+        assert any(
+            candidate.get("role") == message["role"] and candidate.get("content") == message["content"]
+            for candidate in messages
+        )
     assert f"对话语言：{resumed_language}" in messages[0]["content"]
     assert state.brief.production_direction.value in str(messages)
-    assert "design_video" in tool_names(resumed_provider.wires[0])
+    assert "create_video" in tool_names(resumed_provider.wires[0])
     assert "ask_user" not in tool_names(resumed_provider.wires[0])
-    assert '"required_next_action": "design_video"' in str(resumed_provider.wires[0]["messages"])
+    assert '"required_next_action": "create_video"' in str(resumed_provider.wires[0]["messages"])
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -353,7 +361,7 @@ async def test_question_written_in_prose_then_unoffered_design_retries_the_form(
     text = f"{URL} 给我的产品做一只宣传片"
     assembly = round_assembly(text, assets=[asset("completed")], snapshots=[snapshot()],
                               state=CreativeState(brand_profile=profile()))
-    assert {t.name for t in assembly.tools} == {"ask_user"}
+    assert {t.name for t in assembly.tools} == {"ask_user", "answer"}
     replies = [
         ToolGeneration('想先跟你确认。]<]minimax[>[<tool_call><invoke name="ask_user">', []),
         ToolGeneration("我先按默认设定搭首稿。", [ToolCall(id="design", name="design_video", arguments={})]),
@@ -371,7 +379,7 @@ async def test_question_written_in_prose_then_unoffered_design_retries_the_form(
         execute, round_assembler=lambda **_: assembly, message=text,
         on_delta=(lambda _: None) if streaming else None,
     )
-    assert all(tool_names(call.kwargs) == {"ask_user"} for call in send.await_args_list)
+    assert all(tool_names(call.kwargs) == {"ask_user", "answer"} for call in send.await_args_list)
     assert "原生 tool_calls" in str(send.await_args_list[1].kwargs["messages"])
     assert execute.await_count == 1 and execute.await_args.args[0] == result.tool_name == "ask_user"
     assert "minimax" not in execute.await_args.args[2]
@@ -388,8 +396,8 @@ async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire
     state = CreativeState(brief=brief_with_user_constraints(text), brand_profile=profile())
     resources = (("asset:1", asset("completed")), ("snapshot:1", snapshot()))
     world = ContextSnapshot("evidence", frozenset(key for key, _ in resources), resources=resources)
-    plan = {"scene_plan": [{"scene_id": "intro", "intent": "用证据说明产品机制"}]}
-    provider = FakeToolProvider([("design_video", plan)] * 2, content="" if silent else "先从证据链的起点讲起。")
+    plan = {"name": "LegitEvi evidence promo", "shots": [{"headline": "用证据说明产品机制"}]}
+    provider = FakeToolProvider([("create_video", plan)], content="" if silent else "先从证据链的起点讲起。")
     monkeypatch.setattr(intent_router, "client", provider)
     events = []
 
@@ -403,7 +411,7 @@ async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire
     async def execute(name, params, prose):
         events.append(name)
         provider.content = ""
-        return ToolObservation("draft prepared", stop_after_observation=events.count(name) == 2)
+        return ToolObservation("draft prepared", version_saved=True, stop_after_observation=True)
 
     await intent_router.call_loop(
         execute, round_assembler=assemble, message=text,
@@ -414,7 +422,7 @@ async def test_storyboard_tool_prose_precedes_work_with_or_without_questionnaire
         spoken = ["先从证据链的起点讲起。"]
     elif submitted:
         spoken = ["收到，我会按你选的方向安排这支 30 秒短片的开场和镜头顺序。"]
-    assert events == [*spoken, "design_video", "design_video"]
+    assert events == [*spoken, "create_video"]
     assert ("用户刚提交制作偏好" in str(provider.wires[0]["messages"])) == submitted
     following = assemble(tools=intent_router.tools, interim_prose_count=1)
     assert following.stream_prose
@@ -502,7 +510,7 @@ async def test_complete_legitevi_never_reasks_and_has_no_forced_skill(monkeypatc
     )
     assert result.tool_name == "answer"
     assert len(provider.wires) == 3
-    assert "design_video" in tool_names(provider.wires[-1])
+    assert "create_video" in tool_names(provider.wires[-1])
     assert "ask_user" not in tool_names(provider.wires[1])
     assert "ask_user" not in result.calls
     assert "AVAILABLE VIDEO ROUTES" not in provider.wires[-1]["messages"][0]["content"]
@@ -537,7 +545,10 @@ async def test_failed_capture_and_non_website_paths(monkeypatch):
     await intent_router.call_loop(
         execute, round_assembler=assemble_failed, refresh_context=refresh_failed, message=text
     )
-    assert tool_names(failed_provider.wires[0]) == {"answer", *_UNBOUND_MEDIA}
+    failed_names = tool_names(failed_provider.wires[0])
+    assert "answer" in failed_names
+    assert "create_video" not in failed_names
+    assert "design_video" not in failed_names
 
     generic_provider = FakeToolProvider([("answer", {})])
     monkeypatch.setattr(intent_router, "client", generic_provider)

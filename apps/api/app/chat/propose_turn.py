@@ -99,7 +99,6 @@ from app.chat.service import (
     resolve_suggestion_note,
     sync_plan_question,
 )
-from app.chat.turn_tools import video_rejection_stop
 from app.models.schemas import (
     AnnotateNarrationArgs,
     AnswerPayload,
@@ -473,7 +472,7 @@ class ChatTurn:
                 params,
             )
         if (
-            name == "design_video"
+            name == "create_video"
             and self.pending_judgable
             and params is not None
             and "pending_disposition" not in params.model_fields_set
@@ -526,12 +525,6 @@ class ChatTurn:
         if name == "capture_web":
             from app.chat.video_turn_seats import capture_web_seat
             return await capture_web_seat(project=self.project, args=params)
-        if name == "design_video":
-            from app.chat.video_turn_seats import author_specialized_draft
-            return await author_specialized_draft(self, params, self._settle_by_disposition)
-        if name == "review_working_draft":
-            from app.chat.video_turn_seats import review_working_draft_seat
-            return await review_working_draft_seat(project=self.project, args=params)
         if name == "review_video":
             assert isinstance(params, ReviewVideoArgs)
             from app.chat.video_turn_seats import review_video_seat
@@ -750,8 +743,8 @@ class ChatTurn:
         the stored pending. Sets the turn's outcome to the docked question
         (never a run). Returns None when docked; a STRING is the film
         guardrail's steering observation (the storyboard was never presented
-        for this exact chain — the call never docked, the tool loop's repair
-        iteration carries the redirect to design_video).
+        for this exact chain — the call never docked, and the model receives
+        the rejection rather than a substitute first-draft execution path).
 
         iter-3 S2 (R6 parity): the exploration dock rides the SAME seat —
         ``plans`` (the decision package's reading layer) + ``plan_task_map``
@@ -1045,9 +1038,7 @@ class ChatTurn:
                     "assistant",
                     _design_no_progress_text(
                         self.text,
-                        version_saved=(
-                            video_read is not None
-                        ),
+                        version_saved=bool(video_read or result.version_saved),
                         video_read=video_read,
                     ),
                 )
@@ -1104,7 +1095,12 @@ class ChatTurn:
                     self.db,
                     self.conversation_id,
                     "assistant",
-                    result.prose,
+                    result.prose or (
+                        _design_no_progress_text(
+                            self.text, version_saved=True, video_read=self._video_presentation_pending,
+                        )
+                        if result.version_saved else "The requested work was not completed."
+                    ),
                     intent=AnswerProposal(text=result.prose).model_dump(mode="json"),
                 )
                 # The bare reply IS the presentation when the model closed
@@ -1239,7 +1235,7 @@ async def run_propose_turn(
             else None
         )
     from app.chat.conversation_context import ConversationContext, conversation_context_tool
-    from app.chat.turn_tools import tools_for_bound_skill
+    from app.chat.turn_tools import tools_for_bound_skill, video_rejection_stop
     conversation_context = (
         ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
                             turn_id=turn_id, skill=getattr(turn, "skill", None))

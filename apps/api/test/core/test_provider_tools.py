@@ -699,7 +699,7 @@ def _composition_resource(*, suffix="one", provenance=None):
 def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=False,
                  package_sessions=None, user_text="review the draft", pending_question=None,
                  active_repair=None, mode="plan", iteration=None, interim_prose_count=0,
-                 new_result=False, version_saved=False, draft_finalized=False):
+                 new_result=False, version_saved=False):
     from app.chat.prompts import assemble_video_round
 
     return assemble_video_round({
@@ -711,7 +711,6 @@ def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=Fal
         "package_sessions": package_sessions,
         "user_text": user_text,
         "version_saved": version_saved,
-        "draft_finalized": draft_finalized,
         "pending_question": pending_question,
         "active_repair": active_repair,
         "mode": mode,
@@ -745,10 +744,13 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
 
     prepared = _video_round(
         declared,
-        snapshot=ContextSnapshot("prepared", frozenset({"project:one", "snapshot:source:digest"})),
+        snapshot=ContextSnapshot(
+            "prepared", frozenset({"project:one", "snapshot:source:digest"}),
+            resources=(("snapshot:source:digest", {"kind": "image", "snapshot_id": "source", "digest": "d" * 64}),),
+        ),
         skill=skill, material_pending=True,
     ).tools
-    assert "design_video" in {tool.name for tool in prepared}
+    assert "create_video" in {tool.name for tool in prepared}
     assert "present_plan" not in {tool.name for tool in prepared}
 
     saved_resource = _composition_resource(provenance={"skill": "promo-video"})
@@ -764,139 +766,46 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
     assert {"split_clip", "inspect_timeline", "preview_range"} <= saved_names
     assert not {"revise_video", "present_plan", "start_run"} & saved_names
     assert "design_video" not in saved_names
+    assert "create_video" not in saved_names
 
 
 @pytest.mark.asyncio
-async def test_builtin_promo_active_draft_uses_single_scene_writes(installed_promo):
-    from uuid import uuid4
+async def test_incomplete_working_draft_cannot_resume_legacy_protocol(installed_promo):
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot, tool_spec
-    from app.agents.working_drafts import merge_working_draft
+    from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
     from app.chat.turn_tools import tools_for_bound_skill
-    from app.editing.schemas import CompositionContent, VersionSettings
-    from app.editing.validators import validate_content
+    from app.editing.schemas import VersionSettings
     from app.skills.resolution import get_builtin_skill_option
-    from app.tools.video.design import (
-        CompositionDesignVideoArgs,
-        CompositionScenePlan,
-        _expand_scene_authoring,
-        _music_bed_write,
-        _scene_plan_write,
-    )
+    from app.chat.editor_create import CreateVideoArgs
 
     skill = get_builtin_skill_option("promo-video").reference
-    initial = _video_round(
-        tools_for_bound_skill(intent_router.tools, skill),
-        snapshot=ContextSnapshot("prepared", frozenset({"snapshot:source:digest"})), skill=skill,
-        user_text="Use this exact copy in order",
-    )
-    initial_design = next(tool for tool in initial.tools if tool.name == "design_video")
-    initial_properties = tool_spec(initial_design)["function"]["parameters"]["properties"]
-    assert {"scene_plan", "source_ids", "music_snapshot_id", "verbatim_copy"} <= set(initial_properties)
-    assert not {"settings", "sources", "scenes", "tracks", "clips", "scene_id"} & set(initial_properties)
-
-    source_id, music_id = uuid4(), uuid4()
-    content = _scene_plan_write({
-        "schema_version": 1,
-        "settings": VersionSettings(width=1920, height=1080).model_dump(mode="json"),
-        "sources": [{"snapshot_id": str(source_id), "snapshot_digest": "d" * 64}],
-        "scenes": [], "timeline": {"tracks": [], "transitions": []},
-    }, [
-        CompositionScenePlan(scene_id="first", intent="Show the real product"),
-        CompositionScenePlan(scene_id="second", intent="Close on the next step"),
-    ])
     draft = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": content, "design": {}}, errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
+        tool_name="design_video",
+        arguments={"content": {"settings": VersionSettings(width=1920, height=1080).model_dump(mode="json"), "scenes": [], "timeline": {"tracks": []}}, "design": {}},
+        errors=[], schema=CreateVideoArgs.model_json_schema(),
         scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
         base_keys=frozenset(), call_id="call",
     )
-    round = _video_round(
+    assembly = _video_round(
         tools_for_bound_skill(intent_router.tools, skill), drafts=(draft,),
         snapshot=ContextSnapshot("draft"), skill=skill,
     )
-    design = next(tool for tool in round.tools if tool.name == "design_video")
-    assert design.params_model is CompositionDesignVideoArgs
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert {"draft_ref", "scene"} <= set(properties)
-    assert not {"scenes", "clips", "tracks", "settings", "sources", "scene_id"} & set(properties)
-    assert "高层 scene 对象" in round.system
-    assert "默认声音" in round.system
-
-    args = CompositionDesignVideoArgs.model_validate({
-        "draft_ref": {"draft_id": draft.candidate_id, "draft_digest": draft.candidate_digest},
-        "scene": {
-            "scene_id": "first",
-            "snapshot_id": str(source_id), "view_id": "view-0",
-            "source_motion": "hold",
-            "headline": "OxValue",
-            "supporting_text": "Defensible valuations",
-            "text_preset": "title-lockup",
-            "narration": "See the evidence behind every valuation.",
-            "narration_language": "en",
-        },
-    })
-    merged = merge_working_draft(draft, args)
-    assert merged["content"] == content
-    assert merged["design"]["authoring"] == "high_level_scene"
-    facts = {
-        source_id: {
-            "kind": "web", "digest": "d" * 64, "storage_key": "web.json",
-            "meta": {"views": [{
-                "view_id": "view-0", "storage_key": "view.png", "digest": "v" * 64,
-                "width": 1440, "height": 900, "elements": [],
-            }]},
-        },
-        music_id: {
-            "kind": "audio", "digest": "a" * 64, "storage_key": "music.mp3",
-            "duration_ticks": 900000, "meta": {},
-        },
-    }
-    expanded = await _expand_scene_authoring(merged["content"], args.scene, facts)
-    expanded = _music_bed_write(expanded, music_id, facts)
-    expanded = _music_bed_write(expanded, str(music_id), facts)
-    assert sum(binding["snapshot_id"] == str(music_id) for binding in expanded["sources"]) == 1
-    assert sum(track["track_id"] == "trk_music" for track in expanded["timeline"]["tracks"]) == 1
-    candidate = CompositionContent.model_validate(expanded)
-    validate_content(candidate, facts)
-    assert candidate.scenes[1].range.start == candidate.scenes[0].range.end
-    source_clips = [clip for track in candidate.timeline.tracks for clip in track.clips
-                    if clip.object.kind == "web"]
-    assert len(source_clips) == 1
-    assert source_clips[0].source.snapshot_digest == "d" * 64
-    texts = [clip.object.text for track in candidate.timeline.tracks for clip in track.clips
-             if clip.object.kind == "text"]
-    assert texts == ["OxValue", "Defensible valuations"]
-    speech = [clip for track in candidate.timeline.tracks for clip in track.clips
-              if clip.object.kind == "speech"]
-    assert len(speech) == 1
-    assert speech[0].object.text == "See the evidence behind every valuation."
-    assert speech[0].object.language == "en"
-    assert speech[0].object.voice_id == "presenter_male"
-    assert speech[0].clip_id in candidate.scenes[0].speech_clip_ids
-    music = next(track for track in candidate.timeline.tracks if track.track_id == "trk_music")
-    assert music.clips and all(clip.scene_id is None for clip in music.clips)
-    from app.editing.service import format_storyboard_text
-    from app.editing.storyboard import storyboard_payload
-
-    presentation = storyboard_payload(
-        candidate, composition_id=uuid4(), version_id=uuid4(), version=1, content_digest="c" * 64,
-    )
-    assert presentation["scenes"][0]["narration"] == "See the evidence behind every valuation."
-    read = {**presentation, "composition_name": "Promo", "base_ref": {}, "storyboard": presentation}
-    assert f"Music: {len(music.clips)} saved Clip(s) in this version." in format_storyboard_text(read)
-    assert "Narration: reviewed SpeechObjects" in format_storyboard_text(read)
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
+    assert "design_video" not in assembly.system
+    assert "不调用旧创作协议" in assembly.system
 
 
 def test_scene_plan_and_explicit_count_have_no_six_scene_cap():
     from app.skills.external import SkillPolicy
-    from app.tools.video.design import CompositionDesignVideoArgs, CompositionScenePlan
+    from app.chat.editor_create import CreateVideoArgs
 
-    scenes = [CompositionScenePlan(scene_id=f"scene-{index}", intent=f"Beat {index}") for index in range(7)]
-    args = CompositionDesignVideoArgs.model_validate({"scene_plan": scenes, "scene_count": 7})
-    assert len(args.scene_plan) == 7
-    assert args.scene_count == 7
+    args = CreateVideoArgs.model_validate({
+        "name": "Seven beats",
+        "shots": [{"headline": f"Beat {index}", "duration_seconds": 1} for index in range(7)],
+    })
+    assert len(args.shots) == 7
     assert SkillPolicy(scene_count=7).scene_count == 7
 
 
@@ -945,75 +854,16 @@ async def test_derived_web_view_infers_its_unique_view_id():
     assert web.source.snapshot_id == parent_id
 
 
-@pytest.mark.asyncio
-async def test_high_level_scene_verbatim_copy_fails_while_current_scene_is_retryable():
-    from app.agents.working_drafts import working_draft_diagnostic
-    from app.editing.schemas import VersionSettings
-    from app.tools.video.design import (
-        CandidateDesignError,
-        CompositionDesignVideoArgs,
-        CompositionSceneAuthoring,
-        CompositionScenePlan,
-        _expand_scene_authoring,
-        _scene_plan_write,
-        _validate_scene_verbatim_copy,
-    )
-
-    content = _scene_plan_write({
-        "schema_version": 1,
-        "settings": VersionSettings(width=1920, height=1080).model_dump(mode="json"),
-        "sources": [], "scenes": [], "timeline": {"tracks": [], "transitions": []},
-    }, [
-        CompositionScenePlan(scene_id="first", intent="Introduce the product"),
-        CompositionScenePlan(scene_id="second", intent="Close"),
-    ])
-    args = CompositionDesignVideoArgs(verbatim_copy=[
-        "OxValue", "Intelligence, with accountability", "Close",
-    ])
-    invalid = await _expand_scene_authoring(content, CompositionSceneAuthoring(
-        scene_id="first", headline="OxValue",
-        supporting_text="INTELLIGENCE, WITH ACCOUNTABILITY",
-    ), {})
-    with pytest.raises(CandidateDesignError) as rejected:
-        _validate_scene_verbatim_copy(args=args, composition=invalid)
-    issue = rejected.value.issues[0]
-    assert issue["actual"] == ["OxValue", "INTELLIGENCE, WITH ACCOUNTABILITY"]
-    diagnostic = working_draft_diagnostic(SimpleNamespace(
-        candidate_id="cnd_copy", candidate_digest="d" * 64, errors=[issue],
-    ))
-    assert diagnostic["errors"][0]["expected"] == args.verbatim_copy
-    assert diagnostic["errors"][0]["actual"] == issue["actual"]
-
-    first = await _expand_scene_authoring(content, CompositionSceneAuthoring(
-        scene_id="first", headline="OxValue",
-        supporting_text="Intelligence, with accountability",
-    ), {})
-    _validate_scene_verbatim_copy(args=args, composition=first)
-    second = await _expand_scene_authoring(first, CompositionSceneAuthoring(
-        scene_id="second", headline="Wrong close",
-    ), {})
-    with pytest.raises(CandidateDesignError) as rejected_last:
-        _validate_scene_verbatim_copy(args=args, composition=second)
-    assert rejected_last.value.issues[0]["actual"][-1] == "Wrong close"
-    valid = await _expand_scene_authoring(first, CompositionSceneAuthoring(
-        scene_id="second", headline="Close",
-    ), {})
-    _validate_scene_verbatim_copy(args=args, composition=valid)
 
 
-def test_legacy_expanded_draft_recovers_through_save_only_protocol():
+def test_legacy_draft_does_not_reopen_save_only_protocol():
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot, tool_spec
-    from app.agents.working_drafts import merge_working_draft
+    from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
-    from app.chat.turn_tools import resolve_video_stage, video_round_tools
-    from app.tools.video.design import CompositionDesignVideoArgs
+    from app.chat.editor_create import CreateVideoArgs
 
     content = {
-        "scenes": [{
-            "scene_id": "lead", "range": {"start": 0, "end": 90000},
-            "intent": "Lead", "speech_clip_ids": [],
-        }],
+        "scenes": [{"scene_id": "lead", "range": {"start": 0, "end": 90000}, "intent": "Lead", "speech_clip_ids": []}],
         "sources": [],
         "timeline": {"tracks": [{
             "track_id": "trk_title", "kind": "visual", "role": "title", "order": 0,
@@ -1022,34 +872,14 @@ def test_legacy_expanded_draft_recovers_through_save_only_protocol():
     }
     record = CandidateRecord.create(
         tool_name="design_video",
-        arguments={
-            "content": content,
-            "design": {"arc_id": "product-evidence", "shots": [{"shot": "brand-emergence"}]},
-        },
-        errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
+        arguments={"content": content, "design": {"arc_id": "product-evidence"}},
+        errors=[], schema=CreateVideoArgs.model_json_schema(),
         scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
         base_keys=frozenset(), call_id="legacy-call",
     )
-    args = CompositionDesignVideoArgs.model_validate({
-        "save": True,
-        "draft_ref": {"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-    })
-    merged = merge_working_draft(record, args)
-    assert merged["content"] == content
-    resolution = resolve_video_stage(
-        tools=intent_router.tools, drafts=(record,),
-        snapshot=ContextSnapshot("legacy", frozenset()), user_text="Save that draft",
-    )
-    assert resolution["stage"] == "draft_finalize"
-    projected = video_round_tools(
-        intent_router.tools, resolution=resolution,
-        snapshot=ContextSnapshot("legacy", frozenset()),
-    )
-    design = next(tool for tool in projected if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert "draft_ref" in properties and "save" in properties
-    assert not {"shots", "tracks", "clips", "scene", "scene_plan"} & set(properties)
+    assembly = _video_round(intent_router.tools, drafts=(record,), snapshot=ContextSnapshot("legacy"), user_text="Save that draft")
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
 
 
 def test_chat_tool_loops_allow_twenty_bounded_iterations():
@@ -1072,19 +902,6 @@ def test_video_modes_use_the_shared_pending_question_rule():
     assert conversation.count("交流语言：") == 1
     assert "pending_disposition" in plan and "pending_disposition" in conversation
 
-    video = chat_system(
-        "plan", available_tools=intent_router.tools,
-        video_stage="draft_build", video_speech="opening", scene_authoring=True,
-    )
-    assert video.count("交流语言：") == 1
-    ordered_rules = (
-        "交流语言：", "只读工具的名称", "调用被拒绝时", "视频创作（网站演示",
-        "- answer：", "- ask_user：", "待回答的问题：",
-    )
-    assert [video.index(rule) for rule in ordered_rules] == sorted(
-        video.index(rule) for rule in ordered_rules
-    )
-
     opening = jinja_env.get_template("chat/user.j2").render(
         mode="plan", recent=["- user: earlier"], message="latest answer",
         asset_lines=["- page (web_page)"], understanding_lines=["- Summary: evidence"],
@@ -1101,7 +918,7 @@ def test_video_modes_use_the_shared_pending_question_rule():
     )
 
 
-def test_missing_package_session_keeps_generic_high_level_protocol(installed_promo):
+def test_missing_package_session_uses_native_create_protocol(installed_promo):
     from app.agents.tool_loop import ContextSnapshot, tool_spec
     from app.chat.intent import intent_router
     from app.chat.turn_tools import tools_for_bound_skill
@@ -1115,88 +932,33 @@ def test_missing_package_session_keeps_generic_high_level_protocol(installed_pro
         skill=skill,
         package_sessions={},
     )
-    design = next(tool for tool in projected.tools if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert "scene_plan" in properties and "tracks" not in properties
-    assert "高层 scene 对象" in projected.system
+    create = next(tool for tool in projected.tools if tool.name == "create_video")
+    properties = tool_spec(create)["function"]["parameters"]["properties"]
+    assert "shots" in properties and "scene_plan" not in properties
+    assert "create_video" in projected.system
 
 
-def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
+def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
-    from app.tools.video.design import CompositionDesignVideoArgs
-
-    draft = CandidateRecord.create(
-        tool_name="design_video",
-        arguments={"content": {
-            "scenes": [{"scene_id": "first", "range": {"start": 0, "end": 90000}}],
-            "timeline": {"tracks": []}, "sources": [{"snapshot_id": "frozen-web"}],
-        }, "design": {}},
-        errors=[], schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="call",
-    )
-    review = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"))
-    assert review.stage == "draft_build"
-    assert "review_working_draft" not in {tool.name for tool in review.tools}
-    assert {"design_video", "ask_user", "answer"} <= {
-        tool.name for tool in review.tools
-    }
-    assert "design_video" in review.system
-    sequential = _video_round(
-        intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"),
-        user_text="请按播放顺序审查当前工作草稿。",
-    )
-    assert sequential.stage == "draft_build"
-    assert "review_working_draft" not in {tool.name for tool in sequential.tools}
-    negated = _video_round(
-        intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"),
-        user_text="不要按播放顺序检查，直接保存草稿。",
-    )
-    assert negated.stage == "draft_build"
-    from app.agents.tool_loop import tool_spec
-    from app.agents.working_drafts import record_working_draft_review
-
-    with_evidence = draft.updated(record_working_draft_review(draft.arguments, {
-        "content_digest": "c" * 64,
-        "scope": {"source_range_seconds": {"start": 0.0, "end": 1.0}, "scene_ids": ["first"], "clip_ids": []},
-        "observation": {"media_digest": "e" * 64},
-    }), [], call_id="review")
-    web_snapshot = ContextSnapshot("draft", resources=((
-        "snapshot:frozen-web:digest",
-        {"kind": "web", "snapshot_id": "frozen-web", "citable_lines": [{"text": "frozen source page only"}]},
-    ),))
-    judging = _video_round(intent_router.tools, drafts=(with_evidence,), snapshot=web_snapshot)
-    assert judging.stage == "draft_review"
-    assert {tool.name for tool in judging.tools} == {"review_working_draft", "ask_user", "answer", "generate_image", "generate_music", "generate_voice"}
-    judging_tool = next(tool for tool in judging.tools if tool.name == "review_working_draft")
-    assert "judgment" in tool_spec(judging_tool)["function"]["parameters"]["required"]
-    assert "frozen source page only" not in judging.context
-    assert "editable_targets" not in judging.context
-    assert judging.include_observation_media
 
     saved = _composition_resource()
     snapshot = ContextSnapshot(
         "complete project and an unrelated asset", frozenset({"composition:ver-one:digest"}),
         resources=(("composition:ver-one:digest", saved),),
     )
-    edited = _video_round(
-        intent_router.tools, drafts=(draft,), snapshot=snapshot,
-        user_text="Change the second Scene title",
-    )
+    edited = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the second Scene title")
     assert edited.caller_state["video_target"] == saved
-    assert EDITOR_NAMES <= {tool.name for tool in edited.tools}
+    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in edited.tools}
     assert not {"design_video", "review_working_draft"} & {tool.name for tool in edited.tools}
     assert "complete project and an unrelated asset" not in edited.context
     assert "title-second" not in edited.context
     assert edited.include_observation_media
-    presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True,
+    presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True,
                               user_text="Review the draft and deliver the MP4")
     assert presenting.caller_state["video_target"] == saved
-    assert EDITOR_NAMES <= {tool.name for tool in presenting.tools}
-
-    draft_only = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True, draft_finalized=True,
+    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in presenting.tools}
+    draft_only = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True,
                              user_text="请保存初稿给我看。")
     assert {t.name for t in draft_only.tools} == {"answer"}
 
@@ -1206,7 +968,7 @@ def test_video_round_resolves_draft_review_saved_edit_ambiguity_and_repair():
         snapshot=ContextSnapshot("two", resources=(("one", saved), ("two", other))),
     )
     assert ambiguous.caller_state["video_target"] is None
-    assert EDITOR_NAMES <= {tool.name for tool in ambiguous.tools}
+    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in ambiguous.tools}
     assert "ask_user" in {tool.name for tool in ambiguous.tools}
 
 
@@ -1323,7 +1085,7 @@ def test_editor_tools_do_not_depend_on_requested_action():
     first = _video_round(intent_router.tools, snapshot=snapshot, user_text="Split the second clip")
     second = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the title")
     assert {t.name for t in first.tools} == {t.name for t in second.tools}
-    assert EDITOR_NAMES <= {t.name for t in second.tools}
+    assert (EDITOR_NAMES - {"create_video"}) <= {t.name for t in second.tools}
     assert not {"start_run", "revise_video", "design_video"} & {t.name for t in second.tools}
     assert "clip_targets" not in second.context and "title-second" not in second.context
 
@@ -1349,635 +1111,116 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
     assert not edit.stream_prose and edit.project_reply is not None
 
 
-def test_draft_repair_focus_schema_uses_real_clip_and_element_ids():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot, tool_spec
-    from app.chat.intent import intent_router
-    from app.tools.video.design import CompositionDesignVideoArgs
-
-    content = {
-        "settings": {"timebase": 90000},
-        "scenes": [{"scene_id": "review", "range": {"start": 0, "end": 90000}}],
-        "timeline": {"tracks": [{
-            "track_id": "main", "clips": [{
-                "clip_id": "clp_review_web", "scene_id": "review", "range": {"start": 0, "end": 90000},
-                "object": {"kind": "web", "view_id": "view-3"},
-                "source": {"snapshot_id": "source-3"},
-            }],
-        }]},
-    }
-    draft = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": content, "design": {}},
-        errors=[{"msg": "bad framing"}], schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="call",
-    )
-    source = {
-        "kind": "web", "snapshot_id": "source-3",
-        "views": [{"view_id": "view-3", "targets": [{"id": "s3e10"}, {"id": "s3e11"}]}],
-    }
-    round = _video_round(
-        intent_router.tools, drafts=(draft,),
-        snapshot=ContextSnapshot("source", resources=(("snapshot:source-3", source),)),
-    )
-    design = next(tool for tool in round.tools if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert set(properties) == {"draft_ref", "focus_clip_id", "focus_element_id", "pending_disposition"}
-    assert properties["focus_clip_id"]["enum"] == ["clp_review_web"]
-    assert properties["focus_element_id"]["enum"] == ["s3e10", "s3e11"]
-    assert {"focus_clip_id", "focus_element_id"} <= set(
-        tool_spec(design)["function"]["parameters"]["required"]
-    )
-    assert '"element_ids": ["s3e10", "s3e11"]' in round.context
-
-
-@pytest.mark.asyncio
-async def test_review_result_identity_survives_stale_history_restore(monkeypatch):
-    from app.agents import tool_loop
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope, RestoredCandidate
-    from app.agents.working_drafts import WorkingDraftReviewed, record_working_draft_judgment, record_working_draft_review
-    from app.chat.intent import intent_router
-    from app.models.schemas import canonical_json_hash
-    from app.providers.llm.base import ProviderCapabilities, ToolGeneration
-    from app.tools.video.design import CompositionDesignVideoArgs
-    from app.tools.video.preview import WorkingDraftReviewJudgment
-
-    content = {
-        "settings": {"timebase": 90000},
-        "scenes": [
-            {"scene_id": "input", "range": {"start": 0, "end": 360000}},
-            {"scene_id": "review", "range": {"start": 360000, "end": 720000}},
-        ],
-        "timeline": {"tracks": [{"track_id": "visual", "clips": [
-            {"clip_id": "intro", "scene_id": "input", "range": {"start": 0, "end": 360000}},
-            {"clip_id": "ending", "scene_id": "review", "range": {"start": 360000, "end": 720000}},
-        ]}]},
-    }
-    initial = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": content, "design": {}}, errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="fixture",
-    )
-    evidence = {
-        "content_digest": canonical_json_hash(content),
-        "scope": {"source_range_seconds": {"start": 0.0, "end": 4.0}, "scene_ids": ["input"], "clip_ids": ["intro"]},
-        "observation": {"media_digest": "e" * 64},
-    }
-    reviewed_arguments = record_working_draft_review(initial.arguments, evidence)
-    evidence_id = reviewed_arguments["review"]["reviews"][-1]["evidence_id"]
-    requests = []
-
-    class Client:
-        capabilities = ProviderCapabilities(supports_native_tools=True)
-
-        async def generate_with_tools(self, **kwargs):
-            requests.append(kwargs)
-            count = len(requests)
-            if count == 1:
-                return ToolGeneration("", [ToolCall(id="preview", name="review_working_draft", arguments={
-                    "draft_ref": {"draft_id": initial.candidate_id, "draft_digest": initial.candidate_digest},
-                })])
-            if count == 2:
-                current = initial.updated(reviewed_arguments, [], call_id="preview")
-                return ToolGeneration("", [ToolCall(id="judge", name="review_working_draft", arguments={
-                    "draft_ref": {"draft_id": current.candidate_id, "draft_digest": current.candidate_digest},
-                    "judgment": {"evidence_id": evidence_id, "verdict": "pass", "summary": "Scene 1 passes"},
-                })])
-            return ToolGeneration("done", [ToolCall(id="answer", name="answer", arguments={})])
-
-    class Template:
-        def render(self, **_kwargs):
-            return "review"
-
-    class Environment:
-        def get_template(self, _name):
-            return Template()
-
-    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
-    agent = tool_loop.ToolLoopAgent(
-        name="review-current-draft-restore", prompt="unused.j2", system="test",
-        assemble=lambda **_kwargs: ({}, None), tools=intent_router.tools, client=Client(),
-    )
-
-    async def restore(_snapshot, _messages):
-        return tool_loop.ConversationHistory(candidates=(RestoredCandidate(
-            candidate_id=initial.candidate_id, candidate_digest=initial.candidate_digest,
-            tool_name=initial.tool_name, arguments=initial.arguments, errors=[], base_keys=frozenset(), call_id="fixture",
-        ),))
-
-    async def execute(name, params, _speech):
-        if name == "answer":
-            return None
-        if params.judgment is None:
-            return WorkingDraftReviewed(reviewed_arguments, tool_loop.ToolObservation(
-                json.dumps({"evidence_id": evidence_id}), context_lifetime="call",
-            ))
-        judged = record_working_draft_judgment(params._working_draft, WorkingDraftReviewJudgment(
-            evidence_id=evidence_id, verdict="pass", summary="Scene 1 passes",
-        ))
-        return WorkingDraftReviewed(judged, tool_loop.ToolObservation(
-            json.dumps({"judgment": "accepted"}), context_lifetime="call",
-        ))
-
-    def assemble(**facts):
-        from app.chat.prompts import assemble_video_round
-
-        return assemble_video_round({**facts, "mode": "plan", "user_text": "Review both Scenes in playback order"})
-
-    result = await agent.call_loop(
-        execute, refresh_context=lambda: _immediate(tool_loop.ContextSnapshot("")),
-        restore_context=restore, round_assembler=assemble, candidate_scope=initial.scope,
-    )
-    assert result.tool_name == "answer"
-    assert len(requests) == 3
-    final_text = json.dumps(requests[-1]["messages"], ensure_ascii=False)
-    final_fact = json.loads(next(
-        message["content"].split("\n", 1)[1]
-        for message in requests[-1]["messages"]
-        if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
-    ))
-    assert final_fact["draft"]["unjudged_evidence_ids"] == []
-    assert final_fact["draft"]["next_review_target"]["scene_id"] == "review"
-
-
-@pytest.mark.asyncio
-async def test_accepted_issue_summary_is_interim_once_before_repair(monkeypatch):
-    from app.agents import tool_loop
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope, RestoredCandidate
-    from app.agents.working_drafts import WorkingDraftUpdated, record_working_draft_review
-    from app.chat.intent import intent_router
-    from app.chat.video_turn_seats import review_working_draft_seat
-    from app.models.schemas import canonical_json_hash
-    from app.providers.llm.base import ProviderCapabilities, ToolGeneration
-    from app.tools.video.design import CompositionDesignVideoArgs
-    from app.tools.video.preview import ReviewWorkingDraftArgs, WorkingDraftReviewJudgment
-
-    content = {"settings": {"timebase": 90000}, "scenes": [{"scene_id": "review", "range": {"start": 0, "end": 90000}}], "timeline": {"tracks": []}}
-    arguments = record_working_draft_review({"content": content, "design": {}}, {
-        "content_digest": canonical_json_hash(content),
-        "scope": {"source_range_seconds": {"start": 0.0, "end": 1.0}, "scene_ids": ["review"], "clip_ids": []},
-        "observation": {"media_digest": "e" * 64},
-    })
-    record = CandidateRecord.create(
-        tool_name="design_video", arguments=arguments, errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="fixture",
-    )
-    judgment = WorkingDraftReviewJudgment(
-        evidence_id=arguments["review"]["reviews"][-1]["evidence_id"],
-        verdict="issue", summary="Value / Defend are not visible",
-    )
-    accepted_args = ReviewWorkingDraftArgs(
-        draft_ref={"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-        judgment=judgment,
-    )
-    accepted_args.bind_working_draft(record.arguments)
-    accepted = await review_working_draft_seat(project=None, args=accepted_args)
-    assert accepted.observation.accepted_interim_prose == judgment.summary
-    events = []
-    requests = []
-
-    class Client:
-        capabilities = ProviderCapabilities(supports_native_tools=True)
-
-        async def generate_with_tools(self, **kwargs):
-            requests.append(kwargs)
-            if len(requests) == 1:
-                return ToolGeneration("The second scene has a framing issue.", [ToolCall(id="judge", name="review_working_draft", arguments={
-                    "draft_ref": {"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-                    "judgment": judgment.model_dump(mode="json"),
-                })])
-            if len(requests) == 2:
-                current = record.updated(accepted.arguments, [], call_id="judge")
-                return ToolGeneration("I'll apply the repair now.", [ToolCall(id="repair", name="design_video", arguments={
-                    "draft_ref": {"draft_id": current.candidate_id, "draft_digest": current.candidate_digest},
-                    "save": False,
-                })])
-            return ToolGeneration("done", [ToolCall(id="answer", name="answer", arguments={})])
-
-    class Template:
-        def render(self, **_kwargs):
-            return "review"
-
-    class Environment:
-        def get_template(self, _name):
-            return Template()
-
-    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
-    agent = tool_loop.ToolLoopAgent(
-        name="accepted-issue-interim", service_per_call=True, prompt="unused.j2", system="test",
-        assemble=lambda **_kwargs: ({}, None), tools=intent_router.tools, client=Client(),
-    )
-
-    async def restore(_snapshot, _messages):
-        return tool_loop.ConversationHistory(candidates=(RestoredCandidate(
-            candidate_id=record.candidate_id, candidate_digest=record.candidate_digest,
-            tool_name=record.tool_name, arguments=record.arguments, errors=[], base_keys=frozenset(), call_id="fixture",
-        ),))
-
-    async def execute(name, params, _speech):
-        if name == "review_working_draft":
-            events.append("review_execute")
-            return await review_working_draft_seat(project=None, args=params)
-        if name == "design_video":
-            events.append("repair_execute")
-            return WorkingDraftUpdated(params._working_draft)
-        return None
-
-    async def on_interim(text):
-        events.append(f"interim:{text}")
-
-    async def on_event(event):
-        if isinstance(event, tool_loop.ReadAccepted):
-            events.append("accepted")
-
-    def assemble(**facts):
-        from app.chat.prompts import assemble_video_round
-
-        return assemble_video_round({**facts, "mode": "plan", "user_text": "Review and repair"})
-
-    result = await agent.call_loop(
-        execute, refresh_context=lambda: _immediate(tool_loop.ContextSnapshot("")),
-        restore_context=restore, round_assembler=assemble, candidate_scope=record.scope,
-        on_interim_prose=on_interim, on_loop_event=on_event,
-    )
-    assert result.tool_name == "answer"
-    assert events == [
-        "interim:The second scene has a framing issue.", "review_execute", "accepted",
-        "interim:I'll apply the repair now.", "repair_execute", "accepted",
-    ]
-
-    passing_args = ReviewWorkingDraftArgs(
-        draft_ref={"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-        judgment=WorkingDraftReviewJudgment(
-            evidence_id=judgment.evidence_id, verdict="pass", summary="ordinary pass",
-        ),
-    )
-    passing_args.bind_working_draft(record.arguments)
-    passing = await review_working_draft_seat(project=None, args=passing_args)
-    assert passing.observation.accepted_interim_prose is None
-
-
-def test_copy_only_draft_hold_projects_skill_receipt_without_media():
+def test_draft_repair_schema_is_not_offered():
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
-    from app.tools.video.design import CompositionDesignVideoArgs
+    from app.chat.editor_create import CreateVideoArgs
 
-    content = {
-        "scenes": [{
-            "scene_id": "lead", "range": {"start": 0, "end": 90000},
-            "intent": "Lead", "speech_clip_ids": [],
-        }],
-        "sources": [],
-        "timeline": {"tracks": [{
-            "track_id": "trk_title", "kind": "visual", "role": "title", "order": 0,
-            "clips": [{"clip_id": "clp_lead", "scene_id": "lead", "range": {"start": 0, "end": 90000}}],
-        }], "transitions": []},
-    }
     draft = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": content, "design": {}}, errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
+        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
+        errors=[{"msg": "bad framing"}], schema=CreateVideoArgs.model_json_schema(),
         scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
         base_keys=frozenset(), call_id="call",
     )
-    receipt = {
-        "kind": "skill_read_receipt", "package_identity": "promo@1",
-        "skill_reference": {"kind": "builtin", "skill_id": "promo-video", "version": "1.0.0"},
-        "reads": [{"path": "references/sequences/message-first-spotlight.md", "digest": "a" * 64}],
-        "preview_checks": [], "media_files_actually_read": 1, "receipt_contains_media": False,
-    }
-    snapshot = ContextSnapshot(
-        "draft", frozenset(), resources=(("skill-read:promo@1", receipt),),
-    )
-    round = _video_round(
-        intent_router.tools, drafts=(draft,), snapshot=snapshot,
-        user_text="Only clarify the draft; do not save it.",
-    )
-    assert round.stage == "draft_hold"
-    assert "a" * 64 in round.context and "receipt_contains_media" in round.context
-    assert round.include_observation_media is False
-    assert {tool.name for tool in round.tools} == {"answer", "generate_image", "generate_music", "generate_voice"}
+    assembly = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"))
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
 
 
-@pytest.mark.asyncio
-async def test_high_level_provider_requests_fold_prior_scene_writes_and_projections(monkeypatch):
-    from copy import deepcopy
-    from types import SimpleNamespace
-
-    from app.agents import tool_loop
-    from app.agents.candidate_correction import CandidateScope
-    from app.agents.working_drafts import WorkingDraftUpdated
-    from app.chat.conversation_context import conversation_context_tool
-    from app.chat.intent import intent_router
-    from app.chat.turn_tools import tools_for_bound_skill
-    from app.providers.llm.base import ProviderCapabilities, ToolGeneration
-    from app.tools.video.design import _scene_plan_write
-
-    source_id = "23003fb4-a081-5abe-a979-d5fca44c0294"
-    source_key = f"snapshot:{source_id}:{'s' * 64}"
-    source = {
-        "kind": "web", "snapshot_id": source_id, "digest": "s" * 64,
-        "citable_lines": [{"line_id": "line-1", "text": "VERBATIM SOURCE ONLY NEEDED FOR PLANNING"}],
-        "views": [{
-            "view_id": "hero", "heading": "Real product view", "width": 1440, "height": 900,
-            "targets": [{"id": "value-card", "kind": "text", "text": "Value / Defend"}],
-        }],
-    }
-    snapshot = tool_loop.ContextSnapshot(
-        "FULL UNRELATED PROJECT CATALOG\n" + json.dumps(source, ensure_ascii=False),
-        frozenset({source_key}), resources=((source_key, source),),
-        skill_method="COMPLETE SKILL METHOD FOR PLANNING",
-    )
-    skill = SimpleNamespace(skill_id="promo-video")
-    tools = [*tools_for_bound_skill(intent_router.tools, skill), conversation_context_tool()]
-    requests = []
-    scope = CandidateScope(owner_id="owner", conversation_id="conversation")
-
-    class Client:
-        capabilities = ProviderCapabilities(supports_native_tools=True)
-
-        async def generate_with_tools(self, **kwargs):
-            requests.append(kwargs)
-            count = len(requests)
-            if count == 1:
-                return ToolGeneration("", [
-                    ToolCall(id="music-search", name="search_music", arguments={}),
-                    ToolCall(id="skill-read", name="read_skill_reference", arguments={"path": "shot.md"}),
-                ])
-            current = next(
-                message["content"] for message in reversed(requests[-1]["messages"])
-                if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
-            )
-            facts = json.loads(current.rsplit("\n", 1)[-1])
-            if count == 2:
-                return ToolGeneration("", [ToolCall(id="plan", name="design_video", arguments={
-                    "name": "Real source promo",
-                    "scene_plan": [
-                        {"scene_id": "first", "intent": "Establish the actual product"},
-                        {"scene_id": "second", "intent": "Show Value / Defend in the current product"},
-                    ],
-                    "source_ids": [source_id],
-                })])
-            if count in {3, 4}:
-                scene_id = facts["next_unfilled_scene"]["scene_id"]
-                return ToolGeneration("", [ToolCall(id=f"scene-{count}", name="design_video", arguments={
-                    "draft_ref": facts["draft_ref"],
-                    "scene": {"scene_id": scene_id, "headline": f"Exact headline {scene_id}"},
-                })])
-            if count == 5:
-                return ToolGeneration("", [ToolCall(id="save", name="design_video", arguments={
-                    "draft_ref": facts["draft_ref"], "save": True,
-                })])
-            return ToolGeneration("Saved storyboard", [ToolCall(id="answer", name="answer", arguments={})])
-
-    class Template:
-        def render(self, **_kwargs):
-            return "Make a promo from the real source; keep the user's exact requested headline."
-
-    class Environment:
-        def get_template(self, _name):
-            return Template()
-
-    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
-    agent = tool_loop.ToolLoopAgent(
-        name="high-level-context-convergence", prompt="unused.j2", system="test",
-        assemble=lambda **_kwargs: ({}, None), tools=tools, client=Client(), max_iterations=20,
-    )
-
-    async def execute(name, params, _speech):
-        if name == "answer":
-            return None
-        if name == "search_music":
-            return tool_loop.ToolObservation("Tech House is a searched candidate, never a saved Clip")
-        if name == "read_skill_reference":
-            return tool_loop.ToolObservation("DETAILED SKILL REFERENCE NEEDED BEFORE PLAN")
-        if params.save:
-            return tool_loop.ToolObservation("SAVED VERSION with presentation_rows and no music track", version_saved=True)
-        if params.scene_plan is not None:
-            content = _scene_plan_write({
-                "schema_version": 1,
-                "settings": {"width": 1920, "height": 1080, "timebase": 90000, "fps": {"num": 30, "den": 1}},
-                "sources": [{"snapshot_id": source_id, "snapshot_digest": "s" * 64}],
-                "scenes": [], "timeline": {"tracks": [], "transitions": []},
-            }, params.scene_plan)
-            return WorkingDraftUpdated({"content": content, "design": {"authoring": "high_level_scene"}})
-        content = deepcopy(params._working_draft["content"])
-        scene_id = params.scene.scene_id
-        scene = next(item for item in content["scenes"] if item["scene_id"] == scene_id)
-        content["timeline"]["tracks"][0]["clips"].append({
-            "clip_id": f"clip-{scene_id}", "scene_id": scene_id, "range": deepcopy(scene["range"]),
-            "object": {"kind": "text", "text": params.scene.headline},
-        })
-        return WorkingDraftUpdated({"content": content, "design": {"authoring": "high_level_scene"}})
-
-    def assemble(**facts):
-        from app.chat.prompts import assemble_video_round
-
-        return assemble_video_round({
-            **facts, "mode": "plan", "skill": skill,
-            "user_text": "Make a promo from the real source; keep the user's exact requested headline.",
-        })
-
-    result = await agent.call_loop(
-        execute, refresh_context=lambda: _immediate(snapshot), round_assembler=assemble,
-        candidate_scope=scope,
-    )
-    assert result.tool_name == "answer"
-    assert len(requests) == 6
-    stages = []
-    for request in requests:
-        current = next(
-            message["content"] for message in reversed(request["messages"])
-            if isinstance(message.get("content"), str) and "当前视频轮次" in message["content"]
-        )
-        stages.append(json.loads(current.rsplit("\n", 1)[-1])["video_stage"])
-        assert "DISCOVERY GOALS" not in request["messages"][0]["content"]
-        assert not {"present_plan", "propose_candidates", "review_video"} & {
-            item["function"]["name"] for item in request["tools"]
-        }
-    assert stages == [
-        "draft_build", "draft_build", "draft_build", "draft_build", "draft_finalize", "draft_present",
-    ]
-    first_text = json.dumps(requests[0]["messages"], ensure_ascii=False)
-    assert "COMPLETE SKILL METHOD FOR PLANNING" in first_text
-    assert "VERBATIM SOURCE ONLY NEEDED FOR PLANNING" in first_text
-    assert "DETAILED SKILL REFERENCE NEEDED BEFORE PLAN" in json.dumps(requests[1]["messages"])
-    for request in requests[2:4]:
-        text = json.dumps(request["messages"], ensure_ascii=False)
-        assert "DETAILED SKILL REFERENCE NEEDED BEFORE PLAN" not in text
-        assert "COMPLETE SKILL METHOD FOR PLANNING" not in text
-        assert "VERBATIM SOURCE ONLY NEEDED FOR PLANNING" not in text
-        assert "FULL UNRELATED PROJECT CATALOG" not in text
-        assert source_id in text and "value-card" in text
-        assert "Establish the actual product" in text
-        assert "Show Value / Defend in the current product" in text
-        assert "prepare_video_materials" in {item["function"]["name"] for item in request["tools"]}
-        assert "editable_targets" not in text
-    for request in requests[2:5]:
-        assert sum(
-            message.get("name") == "design_video"
-            for message in request["messages"] if message.get("role") == "tool"
-        ) == 1
-    finalizing_text = json.dumps(requests[4]["messages"], ensure_ascii=False)
-    assert "Exact headline first" not in finalizing_text
-    assert "Exact headline second" in finalizing_text
-    assert {item["function"]["name"] for item in requests[4]["tools"]} == {"design_video", "answer", "read_conversation_context", "generate_image", "generate_music", "generate_voice"}
-    assert {item["function"]["name"] for item in requests[5]["tools"]} == {"answer"}
-    presented_text = json.dumps(requests[5]["messages"], ensure_ascii=False)
-    assert "SAVED VERSION with presentation_rows and no music track" in presented_text
-    assert "Tech House" not in presented_text
-
-
-def test_explicit_design_constraints_share_wire_execution_and_draft_facts(installed_promo):
+def test_restored_draft_review_is_not_offered():
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot, tool_spec
-    from app.agents.working_drafts import working_draft_arguments
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.editor_create import CreateVideoArgs
+
+    record = CandidateRecord.create(
+        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
+        errors=[], schema=CreateVideoArgs.model_json_schema(),
+        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
+        base_keys=frozenset(), call_id="fixture",
+    )
+    assembly = _video_round(intent_router.tools, drafts=(record,), snapshot=ContextSnapshot("draft"))
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
+
+
+def test_copy_only_draft_cannot_reopen_legacy_hold():
+    from app.agents.candidate_correction import CandidateRecord, CandidateScope
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.editor_create import CreateVideoArgs
+
+    draft = CandidateRecord.create(
+        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
+        errors=[], schema=CreateVideoArgs.model_json_schema(),
+        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
+        base_keys=frozenset(), call_id="call",
+    )
+    assembly = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"), user_text="Only clarify the draft; do not save it.")
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
+
+
+def test_native_create_projection_keeps_skill_context(installed_promo):
+    from types import SimpleNamespace
+    from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
     from app.chat.turn_tools import tools_for_bound_skill
-    from app.editing.schemas import VersionSettings
+
+    skill = SimpleNamespace(skill_id="promo-video")
+    snapshot = ContextSnapshot("fresh", frozenset({"project:one"}), skill_method="COMPLETE SKILL METHOD FOR PLANNING")
+    projected = _video_round(tools_for_bound_skill(intent_router.tools, skill), snapshot=snapshot, skill=skill)
+    assert "create_video" in {tool.name for tool in projected.tools}
+    assert "design_video" not in {tool.name for tool in projected.tools}
+    assert "COMPLETE SKILL METHOD FOR PLANNING" in projected.context
+
+
+def test_explicit_constraints_use_native_create_parameters(installed_promo):
+    from app.agents.tool_loop import ContextSnapshot, tool_spec
+    from app.chat.editor_create import CreateVideoArgs
+    from app.chat.intent import intent_router
+    from app.chat.turn_tools import tools_for_bound_skill
     from app.skills.resolution import get_builtin_skill_option
-    from app.tools.video.design import (
-        CandidateDesignError,
-        CompositionDesignVideoArgs,
-        _scene_plan_write,
-        bind_explicit_design_constraints,
-        explicit_design_constraints,
-    )
 
     skill = get_builtin_skill_option("promo-video").reference
     tools = tools_for_bound_skill(intent_router.tools, skill)
-    snapshot = ContextSnapshot(
-        "prepared", frozenset({"snapshot:source:digest"}),
-        resources=(("project:one", {"kind": "project", "user_stated_constraints": []}),),
-    )
-    unspecified = _video_round(tools, snapshot=snapshot, skill=skill, user_text="Make a promo from this site")
-    design = next(tool for tool in unspecified.tools if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert not {"scene_count", "target_seconds", "aspect", "background"} & set(properties)
-    assert "verbatim_copy" not in properties
-    assert not {"show_music_candidates", "select_music"} & {tool.name for tool in unspecified.tools}
-    assert "search_music" in {tool.name for tool in unspecified.tools}
-    choosing = _video_round(
-        tools, snapshot=snapshot, skill=skill,
-        user_text="Show me music candidates to compare before choosing",
-    )
-    assert "show_music_candidates" in {tool.name for tool in choosing.tools}
-    with pytest.raises(CandidateDesignError, match="not fixed by the user") as bypass:
-        bind_explicit_design_constraints(CompositionDesignVideoArgs.model_validate({
-            "scene_plan": [{"scene_id": "one", "intent": "Open"}], "aspect": "16:9",
-        }), user_text="Make a promo from this site")
-    assert bypass.value.issues[0]["loc"] == ["aspect"]
-
-    request = "做 3 幕，总时长 24 秒，画幅 9:16，背景 #A1b2C3"
-    fixed = _video_round(tools, snapshot=snapshot, skill=skill, user_text=request)
-    design = next(tool for tool in fixed.tools if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    expected = {"scene_count": 3, "target_seconds": 24.0, "aspect": "9:16", "background": "#A1B2C3"}
-    assert {field: properties[field]["enum"] for field in expected} == {
-        field: [value] for field, value in expected.items()
-    }
-    assert '"user_constraints"' in fixed.context and '"aspect": "9:16"' in fixed.context
-    args = CompositionDesignVideoArgs.model_validate({
-        "scene_plan": [
-            {"scene_id": "one", "intent": "Open"},
-            {"scene_id": "two", "intent": "Prove"},
-            {"scene_id": "three", "intent": "Close"},
-        ],
-        **expected,
+    snapshot = ContextSnapshot("prepared", frozenset({"snapshot:source:digest"}))
+    projected = _video_round(tools, snapshot=snapshot, skill=skill, user_text="做 3 幕，总时长 24 秒，画幅 9:16，背景 #A1b2C3")
+    create = next(tool for tool in projected.tools if tool.name == "create_video")
+    properties = tool_spec(create)["function"]["parameters"]["properties"]
+    assert {"shots", "aspect", "background"} <= set(properties)
+    assert not {"scene_count", "target_seconds", "design_video"} & set(properties)
+    args = CreateVideoArgs.model_validate({
+        "name": "Constraint check", "aspect": "9:16", "background": "#A1B2C3",
+        "shots": [{"headline": "One", "duration_seconds": 8}, {"headline": "Two", "duration_seconds": 8}, {"headline": "Three", "duration_seconds": 8}],
     })
-    bound = bind_explicit_design_constraints(args, user_text=request)
-    content = _scene_plan_write({
-        "schema_version": 1,
-        "settings": VersionSettings(width=1080, height=1920, background="#A1B2C3").model_dump(mode="json"),
-        "sources": [], "scenes": [], "timeline": {"tracks": [], "transitions": []},
-    }, bound.scene_plan)
-    draft_arguments = working_draft_arguments(bound, content)
-    assert draft_arguments["design"]["user_constraints"] == expected
-    record = CandidateRecord.create(
-        tool_name="design_video", arguments=draft_arguments, errors=[],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"), call_id="plan",
-        base_keys=frozenset(),
-    )
-    continued = _video_round(tools, drafts=(record,), snapshot=snapshot, skill=skill, user_text="继续")
-    design = next(tool for tool in continued.tools if tool.name == "design_video")
-    properties = tool_spec(design)["function"]["parameters"]["properties"]
-    assert not {"scene_count", "target_seconds", "aspect", "background"} & set(properties)
-    assert all(f'"{field}"' in continued.context for field in expected)
-    save = CompositionDesignVideoArgs.model_validate({
-        "save": True,
-        "draft_ref": {"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-    })
-    save.bind_working_draft(record.arguments)
-    restored = bind_explicit_design_constraints(save, user_text="保存当前草稿")
-    assert restored._explicit_constraints == expected
-    assert restored.aspect == "9:16" and restored.target_seconds == 24
-
-    wrong = CompositionDesignVideoArgs.model_validate({
-        "draft_ref": {"draft_id": record.candidate_id, "draft_digest": record.candidate_digest},
-        "scene": {"scene_id": "one", "headline": "Keep this draft"}, "aspect": "16:9",
-    })
-    wrong.bind_working_draft(record.arguments)
-    with pytest.raises(CandidateDesignError, match="preserve the user-fixed value") as rejected:
-        bind_explicit_design_constraints(wrong, user_text="继续")
-    assert rejected.value.working_content == content
-    assert rejected.value.issues[0]["expected"] == "9:16"
-
-    brief = {"brief": {"constraints": [
-        {"value": "画幅 9:16", "source": "user-stated"},
-        {"value": "画幅 16:9", "source": "inferred"},
-    ]}}
-    assert explicit_design_constraints("继续", brief=brief)["aspect"] == "9:16"
-    assert explicit_design_constraints("exactly 2 scenes and 8 seconds") == {
-        "scene_count": 2, "target_seconds": 8.0,
-    }
-    assert explicit_design_constraints("a 4-second component-mode storyboard")["target_seconds"] == 4.0
-    assert explicit_design_constraints("Make one 9:16 video with a fixed cover crop")["aspect"] == "9:16"
+    assert args.aspect == "9:16" and args.background == "#A1B2C3"
+    assert sum(shot.duration_seconds for shot in args.shots) == 24
 
 
-def test_complete_draft_repair_only_saves_the_existing_draft(installed_promo):
+def test_complete_draft_repair_is_not_offered(installed_promo):
     from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot, tool_spec
+    from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
     from app.chat.turn_tools import tools_for_bound_skill
     from app.skills.resolution import get_builtin_skill_option
-    from app.tools.video.design import CompositionDesignVideoArgs
+    from app.chat.editor_create import CreateVideoArgs
 
-    content = {
-        "settings": {"timebase": 90000},
-        "scenes": [{"scene_id": "one", "range": {"start": 0, "end": 90000}, "intent": "Done"}],
-        "timeline": {"tracks": [{
-            "track_id": "trk_main", "kind": "visual", "role": "main", "order": 0,
-            "clips": [{
-                "clip_id": "clp_done", "scene_id": "one", "range": {"start": 0, "end": 90000},
-                "object": {"kind": "text", "text": "Already written"},
-            }],
-        }], "transitions": []},
-        "sources": [],
-    }
     record = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": content, "design": {"authoring": "high_level_scene"}},
+        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {"authoring": "high_level_scene"}},
         errors=[{"loc": ["aspect_ratio"], "type": "extra_forbidden", "msg": "Extra inputs are not permitted"}],
-        schema=CompositionDesignVideoArgs.model_json_schema(),
+        schema=CreateVideoArgs.model_json_schema(),
         scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
         base_keys=frozenset(), call_id="bad-save",
     )
     skill = get_builtin_skill_option("promo-video").reference
-    round = _video_round(
+    assembly = _video_round(
         tools_for_bound_skill(intent_router.tools, skill), drafts=(record,),
         snapshot=ContextSnapshot("current draft"), skill=skill, user_text="保存当前草稿",
     )
-    assert round.stage == "draft_repair"
-    design = next(tool for tool in round.tools if tool.name == "design_video")
-    spec = tool_spec(design)["function"]
-    properties = spec["parameters"]["properties"]
-    assert set(properties) == {"draft_ref", "save", "pending_disposition"}
-    assert not {"scene_plan", "scene", "aspect_ratio"} & set(properties)
-    assert "Extra inputs are not permitted" in round.context
-    assert "计划中的 Scene 均已在当前草稿内" in spec["description"]
+    assert assembly.stage == "working_draft_unavailable"
+    assert {tool.name for tool in assembly.tools} == {"answer"}
 
 
 def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_preview():
@@ -1998,3 +1241,152 @@ def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_pre
     assert facts["already_saved_this_turn"] == [receipt]
     assert facts["selected"] == saved["base_ref"]
     assert "recently_edited_clips" not in facts and "observed_preview" not in facts
+
+
+
+def test_create_rejection_stops_repeated_or_unproductive_attempts():
+    from app.agents.tool_loop import ToolRejected
+    from app.chat.turn_tools import video_rejection_stop
+
+    first = ToolRejected(kind="params_validation", tool_name="create_video", iteration=0, detail="bad shot", duration_ms=0)
+    same = ToolRejected(kind="params_validation", tool_name="create_video", iteration=1, detail="bad shot", duration_ms=0)
+    assert video_rejection_stop(first, ()) is False
+    assert video_rejection_stop(same, (first,)) is True
+    other = ToolRejected(kind="execute_guardrail", tool_name="create_video", iteration=1, detail="other", duration_ms=0)
+    third = ToolRejected(kind="execute_guardrail", tool_name="create_video", iteration=2, detail="third", duration_ms=0)
+    assert video_rejection_stop(other, (first,)) is False
+    assert video_rejection_stop(third, (first, other)) is True
+    assert video_rejection_stop(ToolRejected(kind="execute_guardrail", tool_name="split_clip", iteration=0, detail="bad", duration_ms=0), (first, other)) is False
+    preview = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=0, detail="generator_preview_failed: registerRoot missing", duration_ms=0)
+    assert video_rejection_stop(preview, ()) is False
+    assert video_rejection_stop(preview, (preview,)) is True
+    pending = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=0,
+                           detail="pending_media", duration_ms=0, candidate_digest="same-window")
+    animated = ToolRejected(kind="execute_guardrail", tool_name="translate", iteration=1,
+                            detail="Keyframes control this property. Its static transform cannot make this edit.",
+                            duration_ms=0, candidate_digest="same-transform")
+    changed = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=2,
+                           detail="pending_media", duration_ms=0, candidate_digest="another-window")
+    assert video_rejection_stop(pending, (pending, animated)) is True
+    assert video_rejection_stop(animated, (pending, animated, changed)) is True
+    assert video_rejection_stop(changed, (pending, animated)) is False
+
+
+def test_saved_version_does_not_reopen_creation_or_optional_questionnaire():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+
+    resource = _composition_resource()
+    snapshot = ContextSnapshot("saved", resources=(("work", resource),))
+    assembly = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True)
+    names = {tool.name for tool in assembly.tools}
+    assert "create_video" not in names
+    assert "ask_user" not in names
+    assert "translate" in names
+
+
+def test_completed_delivery_does_not_reopen_optional_questionnaire():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    resource = _composition_resource()
+    assembly = assemble_video_round({
+        "tools": intent_router.tools,
+        "snapshot": ContextSnapshot("saved", resources=(("work", resource),)),
+        "user_text": "把刚才已审阅的 MP4 交付给我，不要再导出。",
+        "delivered": {"composition_version_id": resource["version_id"], "delivered_to_chat": True},
+    })
+    assert "ask_user" not in {tool.name for tool in assembly.tools}
+
+
+@pytest.mark.asyncio
+async def test_observed_version_wire_has_no_optional_creation_or_questionnaire():
+    from copy import copy
+    from types import SimpleNamespace
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import chat_intent_agent
+    from app.chat.prompts import assemble_video_round
+    from app.providers.llm.base import ToolCall, ToolGeneration
+
+    resource = _composition_resource()
+    snapshot = ContextSnapshot("saved", resources=(("work", resource),))
+
+    class Client:
+        capabilities = SimpleNamespace(supports_native_tools=True)
+
+        def __init__(self):
+            self.wires = []
+
+        async def generate_with_tools(self, **kwargs):
+            self.wires.append(kwargs["tools"])
+            return ToolGeneration(content="Done", tool_calls=[
+                ToolCall(id="finish", name="answer", arguments={"pending_disposition": "none"}),
+            ])
+
+    client = Client()
+    agent = copy(chat_intent_agent)
+    agent.client = client
+
+    def assemble(**facts):
+        return assemble_video_round({**facts, "snapshot": snapshot, "user_text": "预览当前版本 0–3 秒，不要正式导出。",
+                                    "last_preview": {"version_id": resource["version_id"]}})
+
+    async def execute(_name, _params, _speech):
+        return None
+
+    result = await agent.call_loop(execute, round_assembler=assemble,
+                                  message="预览当前版本 0–3 秒，不要正式导出。", context={"text": ""})
+    assert result.calls == ["answer"]
+    assert len(client.wires) == 1
+    names = {tool["function"]["name"] for tool in client.wires[0]}
+    assert "ask_user" not in names and "create_video" not in names
+
+
+@pytest.mark.asyncio
+async def test_failed_observations_stop_across_equivalent_arguments_and_other_reads():
+    from copy import copy
+    from types import SimpleNamespace
+    from app.agents.tool_loop import ChatTool
+    from app.chat.intent import chat_intent_agent
+    from app.chat.turn_tools import video_rejection_stop
+    from app.models.schemas import VideoRangeScrubTarget
+    from app.providers.llm.base import ToolCall, ToolGeneration
+
+    calls = [
+        ToolCall(id="first", name="preview_range", arguments={"start_seconds": 0, "end_seconds": 2}),
+        ToolCall(id="other", name="other_read", arguments={"start_seconds": 0, "end_seconds": 2}),
+        ToolCall(id="second", name="preview_range", arguments={"kind": "range", "start_seconds": 0, "end_seconds": 2}),
+        ToolCall(id="unexpected", name="other_read", arguments={"start_seconds": 0, "end_seconds": 2}),
+    ]
+
+    class Client:
+        capabilities = SimpleNamespace(supports_native_tools=True)
+
+        def __init__(self):
+            self.requests = 0
+
+        async def generate_with_tools(self, **_kwargs):
+            result = ToolGeneration(content="", tool_calls=[calls[self.requests]])
+            self.requests += 1
+            return result
+
+    agent = copy(chat_intent_agent)
+    agent.client = Client()
+    agent.tools = [
+        ChatTool(name="preview_range", description="Preview", params_model=VideoRangeScrubTarget, terminal=False),
+        ChatTool(name="other_read", description="Read", params_model=VideoRangeScrubTarget, terminal=False),
+    ]
+    agent.max_iterations = 6
+
+    async def execute(name, _params, _speech):
+        from app.agents.tool_loop import ToolObservation
+
+        return ToolObservation("pending_media" if name == "preview_range" else "{}", ok=name != "preview_range")
+
+    result = await agent.call_loop(execute, should_stop_rejection=video_rejection_stop,
+                                  message="Preview the saved work", context={"text": ""})
+    assert result.no_progress_tool == "preview_range"
+    assert result.iterations == 3
+    assert agent.client.requests == 3
+    assert [event.tool_name for event in result.rejections] == ["preview_range", "preview_range"]

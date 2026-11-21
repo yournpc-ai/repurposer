@@ -221,103 +221,6 @@ async def test_stop_during_media_handoff_keeps_delivered_answer_and_fences_the_n
             await _lock_turn_for_transcript_write(db, turn_id)
 
 
-@pytest.mark.parametrize("save_version", [False, True])
-async def test_loop_exhaustion_distinguishes_working_draft_from_saved_version(
-    database, monkeypatch, save_version
-):
-    """A successful save=false observation is retained work, not a saved version."""
-    import json
-    from app.agents import tool_loop
-    from app.agents.working_drafts import WorkingDraftUpdated, working_draft_arguments
-    from app.chat.plan_turn import PlanTurn
-    from app.editing.schemas import SCHEMA_VERSION
-    from app.models.schemas import ChatRequest
-    from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
-    from app.tools.video.design import CompositionDesignVideoArgs
-
-    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
-
-    class Client:
-        capabilities = ProviderCapabilities(supports_native_tools=True)
-
-        def __init__(self):
-            self.rounds = 0
-
-        async def generate_with_tools(self, *, messages, **_kwargs):
-            self.rounds += 1
-            arguments = {}
-            if self.rounds == 2:
-                arguments = {
-                    "save": True,
-                    "draft_ref": json.loads(messages[-1]["content"])["draft_ref"],
-                }
-            return ToolGeneration("", [ToolCall(
-                id=f"call-{self.rounds}", name="design_video", arguments=arguments,
-            )])
-
-    class Template:
-        def render(self, **_kwargs):
-            return "test"
-
-    class Environment:
-        def get_template(self, _name):
-            return Template()
-
-    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
-    agent = tool_loop.ToolLoopAgent(
-        name=f"test-video-save-fact-{save_version}-{uuid4().hex}",
-        prompt="unused.j2",
-        system="test",
-        assemble=lambda **_kwargs: ({}, []),
-        tools=[tool_loop.ChatTool(
-            name="design_video",
-            description="Design and save a Composition",
-            params_model=CompositionDesignVideoArgs,
-            terminal=False,
-            draftable=True,
-        )],
-        client=Client(),
-        max_iterations=2,
-    )
-
-    async def execute(_name, params, _speech):
-        if not params.save:
-            return WorkingDraftUpdated(working_draft_arguments(params, {
-                "schema_version": SCHEMA_VERSION,
-                "sources": [],
-                "scenes": [],
-                "timeline": {"tracks": [], "transitions": []},
-            }))
-        if save_version:
-            return tool_loop.ToolObservation(
-                json.dumps({"ok": True, "saved": True}), ok=True, version_saved=True,
-            )
-        return "Composition validation failed"
-
-    result = await agent.call_loop(execute)
-    assert result.exhausted is True
-    assert result.version_saved is save_version
-
-    uid = await owner(database)
-    conversation_id, _, project_id = await _open_turn(database, uid)
-    async with database() as db:
-        project = await db.get(Project, project_id)
-        request = ChatRequest(project_id=project_id, message="制作产品宣传片")
-        turn = PlanTurn(
-            db, uid, SimpleNamespace(id=conversation_id), project, request,
-        )
-        turn.text = request.message
-        message, _, _, _ = await turn.finish(result)
-        message_id = message.id
-        await db.commit()
-
-    async with database() as db:
-        content = (await db.get(Message, message_id)).content
-        if save_version:
-            assert "作品版本已保存" in content
-        else:
-            assert "尚未保存本轮修改" in content
-            assert "作品版本已保存" not in content
 
 
 @pytest.mark.asyncio
@@ -1187,7 +1090,7 @@ async def test_cancel_upload_cleans_only_its_own_claim(database, monkeypatch, su
         assert await db.scalar(select(func.count()).select_from(CreditTransaction)) == 0
 
 
-async def test_first_design_skill_inherits_until_a_saved_version(database, monkeypatch, installed_promo):
+async def test_first_create_skill_inherits_until_a_saved_version(database, monkeypatch, installed_promo):
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
@@ -1199,7 +1102,7 @@ async def test_first_design_skill_inherits_until_a_saved_version(database, monke
     from app.chat.prompts import assemble_video_round
     from app.chat.turn_tools import tools_for_bound_skill
     from app.models.schemas import ChatRequest
-    from app.tools.video.design import CompositionDesignVideoArgs
+    from app.chat.editor_create import CreateVideoArgs
     from app.skills.resolution import get_builtin_skill_option
 
     uid = await owner(database)
@@ -1230,7 +1133,7 @@ async def test_first_design_skill_inherits_until_a_saved_version(database, monke
             "mode": "plan",
             "user_text": "Continue with one shot",
         }).tools
-        assert next(tool for tool in projected if tool.name == "design_video").params_model is CompositionDesignVideoArgs
+        assert next(tool for tool in projected if tool.name == "create_video").params_model is CreateVideoArgs
 
         assert continued.user_message.intent["skill_binding"] == "inherited"
         continued.user_message.turn_state = "settled"
@@ -1414,3 +1317,78 @@ async def test_home_opening_is_admitted_once_even_after_retraction(database, mon
     async with database() as db:
         assert await stop_turn_at_visible_frontier(db, winners[0], ChatTurnStopRequest()) == "retracted"
     assert await admit() is None
+
+
+@pytest.mark.parametrize("save_version", [False, True])
+async def test_native_create_stops_after_save_or_reports_failure(database, monkeypatch, save_version):
+    import json
+    from app.agents import tool_loop
+    from app.chat.editor_create import CreateVideoArgs
+    from app.chat.plan_turn import PlanTurn
+    from app.models.schemas import ChatRequest
+    from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+
+    class Client:
+        capabilities = ProviderCapabilities(supports_native_tools=True)
+
+        def __init__(self):
+            self.rounds = 0
+
+        async def generate_with_tools(self, **_kwargs):
+            self.rounds += 1
+            return ToolGeneration("", [ToolCall(
+                id=f"call-{self.rounds}", name="create_video",
+                arguments={"name": "Title", "shots": [{"headline": "Hello", "duration_seconds": 3}]},
+            )])
+
+    class Template:
+        def render(self, **_kwargs):
+            return "test"
+
+    class Environment:
+        def get_template(self, _name):
+            return Template()
+
+    monkeypatch.setattr(tool_loop, "jinja_env", Environment())
+    agent = tool_loop.ToolLoopAgent(
+        name=f"test-native-save-{save_version}-{uuid4().hex}",
+        prompt="unused.j2", system="test", assemble=lambda **_kwargs: ({}, []),
+        tools=[tool_loop.ChatTool(
+            name="create_video", description="Create the first version",
+            params_model=CreateVideoArgs, terminal=False,
+        )], client=Client(), max_iterations=2,
+    )
+
+    async def execute(_name, _params, _speech):
+        if save_version:
+            return tool_loop.ToolObservation(
+                json.dumps({"ok": True, "saved": True}), ok=True,
+                version_saved=True, stop_after_observation=True,
+            )
+        return "Composition validation failed"
+
+    result = await agent.call_loop(execute)
+    assert result.exhausted is not save_version
+    assert result.version_saved is save_version
+
+    uid = await owner(database)
+    conversation_id, _, project_id = await _open_turn(database, uid)
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        request = ChatRequest(project_id=project_id, message="制作产品宣传片")
+        turn = PlanTurn(db, uid, SimpleNamespace(id=conversation_id), project, request)
+        turn.text = request.message
+        message, _, _, _ = await turn.finish(result)
+        message_id = message.id
+        await db.commit()
+
+    async with database() as db:
+        content = (await db.get(Message, message_id)).content
+        if save_version:
+            assert "最近保存的分镜版本" in content
+            assert "做不了" not in content
+        else:
+            assert "尚未保存本轮修改" in content
+            assert "作品版本已保存" not in content

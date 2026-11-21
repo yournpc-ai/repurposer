@@ -12,7 +12,6 @@ video_presentation slice) and the storyboard block on the presenting row.
 import json
 import re
 import time
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -20,25 +19,13 @@ import structlog
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.agents.tool_loop import TerminalRefusal, ToolObservation
-from app.agents.working_drafts import (
-    WorkingDraftRejected,
-    WorkingDraftReviewed,
-    WorkingDraftUpdated,
-    exception_errors,
-    record_working_draft_review,
-    working_draft_arguments,
-    working_draft_review_facts,
-)
 from app.chat.activity_receipts import (
     SkillReadReceipt,
-    VideoDraftReviewReceipt,
-    component_receipt,
     music_search_receipt,
     music_selection_receipt,
     sfx_import_receipt,
     sfx_search_receipt,
 )
-from app.editing.validators import ContentValidationError
 from app.models.schemas import (
     AnnotateNarrationArgs,
     BuiltInSkillReference,
@@ -587,236 +574,10 @@ async def capture_web_seat(*, project: Project, args: Any) -> ToolObservation:
     )
 
 
-async def review_working_draft_seat(*, project: Project, args: Any) -> WorkingDraftReviewed | str:
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.preview import ScrubTargetError, prepare_working_draft_review
-
-    state = args._working_draft or {}
-    if not isinstance(state.get("content"), dict):
-        return "review_working_draft needs the authenticated current working draft"
-    if args.judgment is not None:
-        from app.agents.working_drafts import record_working_draft_judgment
-
-        try:
-            updated = record_working_draft_judgment(state, args.judgment)
-        except ValueError as exc:
-            return str(exc)
-        return WorkingDraftReviewed(updated, ToolObservation(json.dumps({
-            "ok": True,
-            "saved": False,
-            "judgment": next(
-                review["judgment"] for review in updated["review"]["reviews"]
-                if review["evidence_id"] == args.judgment.evidence_id
-            ),
-            "review": working_draft_review_facts(updated),
-        }, ensure_ascii=False), context_lifetime="call",
-            accepted_interim_prose=(
-                args.judgment.summary if args.judgment.verdict == "issue" else None
-            ),
-        ))
-    started = {
-        "content": state["content"],
-        "design": state.get("design") or {},
-        "review": {
-            **(state.get("review") or {}),
-            "schema_version": 1,
-            "started": True,
-            "reviews": list((state.get("review") or {}).get("reviews") or []),
-            "invalidated": list((state.get("review") or {}).get("invalidated") or []),
-        },
-    }
-    try:
-        async with AsyncSessionLocal() as db:
-            evidence, media = await prepare_working_draft_review(
-                db, owner_id=project.user_id, args=args,
-            )
-    except (ScrubTargetError, ValueError) as exc:
-        return WorkingDraftReviewed(started, ToolObservation(json.dumps({
-            "ok": False,
-            "saved": False,
-            "error": str(exc),
-            "review": working_draft_review_facts(started),
-        }, ensure_ascii=False), ok=False))
-    updated = record_working_draft_review(state, evidence)
-    evidence["evidence_id"] = updated["review"]["reviews"][-1]["evidence_id"]
-    observation = evidence["observation"]
-    receipt = VideoDraftReviewReceipt(
-        evidence_id=evidence["evidence_id"],
-        draft_digest=evidence["draft_ref"]["draft_digest"],
-        content_digest=evidence["content_digest"],
-        media_digest=observation["media_digest"],
-        source_range_seconds=evidence["scope"]["source_range_seconds"],
-        scene_ids=evidence["scope"]["scene_ids"],
-        continuous=True,
-    )
-    return WorkingDraftReviewed(updated, ToolObservation(json.dumps({
-        "ok": True,
-        "saved": False,
-        "evidence": evidence,
-        "review": working_draft_review_facts(updated),
-    }, ensure_ascii=False), images=media, receipt=receipt, context_lifetime="call"))
 
 
-async def author_specialized_draft(turn, args, settle_pending):
-    """Continue the website, bound Skill or retained working draft on either chat surface."""
-    if turn.project is None:
-        return "A project is required to save a video."
-    stopped = getattr(turn, "_video_design_stopped", None)
-    if stopped is not None:
-        return stopped
-    turn._video_call_counter += 1
-    read, feedback = await design_video_seat(
-        project=turn.project, args=args,
-        request_id=await video_request_id(turn.db, turn.conversation_id, turn._video_call_counter),
-        skill=turn.skill, skill_ambiguity=turn.skill_ambiguity,
-        package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}), user_text=turn.text,
-    )
-    if read is None:
-        if isinstance(feedback, ToolObservation) and not feedback.ok:
-            turn._video_design_stopped = feedback
-        return feedback
-    await settle_pending(args.pending_disposition)
-    read["fresh_design"] = True
-    turn._video_presentation_pending = read
-    return feedback
 
 
-async def design_video_seat(
-    *,
-    project: Project,
-    args: Any,
-    request_id: str,
-    skill: SkillReference | None = None,
-    skill_ambiguity: list[str] | None = None,
-    package_sessions: dict[str, Any] | None = None,
-    user_text: str = "",
-    pending_brief: dict | None = None,
-) -> tuple[dict[str, Any] | None, Any]:
-    """Merge one draft write or save the assembled version through the write door."""
-
-    from app.agents.errors import AgentStopError
-    from app.editing.edits import EditError  # deferred: write door
-    from app.editing.service import format_storyboard_text  # deferred: editing seam
-    from app.editing.store import (  # deferred: write door
-        CandidateContentError,
-        CompositionNotFound,
-        PermissionDenied,
-    )
-    from app.providers.llm.base import LLMError
-    from app.tools.video.design import (  # deferred: tool seam
-        CandidateDesignError,
-        DesignError,
-        design_video,
-    )
-
-    if skill_ambiguity:
-        return None, (
-            "名称与多个 Skill 匹配，design_video 暂缓："
-            + ", ".join(skill_ambiguity)
-            + "。询问用户指的是哪个 Skill 和版本。尚未设计版本。"
-        )
-    if args.composition_id is not None:
-        return None, (
-            "已有作品的修改需要使用当前作品的剪辑工具。"
-        )
-    try:
-        read = await design_video(
-            owner_id=project.user_id,
-            project_id=project.id,
-            args=args,
-            request_id=request_id,
-            skill_reference=skill,
-            skill_package=(
-                package_sessions.get(skill.model_dump_json())
-                if package_sessions is not None and skill is not None else None
-            ),
-            request_context={
-                "user_text": user_text,
-                "brief": pending_brief or getattr(project, "pending_brief", None),
-            },
-        )
-        if isinstance(read, WorkingDraftUpdated):
-            return None, read
-    except (AgentStopError, LLMError) as exc:
-        facts = getattr(exc, "facts", {"stage": "design", "version_saved": False, "run_started": False})
-        return None, ToolObservation(
-            "DESIGN STOPPED: " + str(exc) + "\n" + json.dumps(facts, ensure_ascii=False)
-            + "\n如实说明失败原因和已完成的阶段。没有保存新版本或启动制作，本轮不要重试 design_video 或启动制作。此前已发生模型调用，不能据此声称零用量或零费用。"
-              "只报告已知阶段事实，不声称所有素材均已通过或编造费用。来源与视图绑定不符属于装配错误，不能证明页面缺少元素。"
-              "按 preview_checks/media_files 的事实说明。Skill 镜头预览与原生预设相互独立，不能仅因没有匹配的原生预设就声称已读取的 Skill 预览缺失。"
-              "用平实语言说清进展、阻碍及保存和制作状态，不罗列参数字段、内部 ID、计数器或堆栈。不要声称重复请求就能解决问题，也不要让用户重发制作指令或另答无关偏好问题。",
-            ok=False,
-        )
-    except (CompositionNotFound, PermissionDenied):
-        return None, (
-            "that video work does not exist in this project — never "
-            "retry with the same reference; if the user named an older "
-            "work, say honestly it is gone"
-        )
-    except CandidateContentError as exc:
-        return None, WorkingDraftRejected(
-            str(exc), exception_errors(exc), working_draft_arguments(args, exc.content)
-        )
-    except CandidateDesignError as exc:
-        content = exc.working_content or (getattr(args, "_working_draft", None) or {}).get("content")
-        if not isinstance(content, dict):
-            return None, f"design_video rejected: {exc}"
-        return None, WorkingDraftRejected(
-            str(exc), exception_errors(exc), working_draft_arguments(args, content)
-        )
-    except (ContentValidationError, EditError) as exc:
-        content = (getattr(args, "_working_draft", None) or {}).get("content")
-        if isinstance(content, dict):
-            return None, WorkingDraftRejected(
-                str(exc), exception_errors(exc), working_draft_arguments(args, content)
-            )
-        return None, f"design_video rejected: {exc}"
-    except (DesignError, ValueError) as exc:
-        return None, f"design_video rejected: {exc}"
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.programs import generator_preview_images
-
-    if args.scrub is not None:
-        from app.tools.video.preview import ScrubTargetError, prepare_saved_video_scrub
-        try:
-            async with AsyncSessionLocal() as preview_db:
-                read = await prepare_saved_video_scrub(
-                    preview_db, read, owner_id=project.user_id, target=args.scrub
-                )
-        except ScrubTargetError as exc:
-            read["scrub_rejected"] = str(exc)
-    redraft = read.get("change_set") is not None
-    preview = read.get("video_preview") or {}
-    scope = preview.get("scope") or {}
-    scrub_facts = ""
-    if read.get("scrub_rejected"):
-        scrub_facts = "\nLOCAL SCRUB NOT PROVIDED: " + read["scrub_rejected"]
-    if preview:
-        scrub_facts = (
-            "\nLOCAL SCRUB (not an Output or a complete-video preview; "
-            "an isolated Object does not prove scene layout, occlusion or joins):\n"
-            + json.dumps({
-                "status": preview.get("status"),
-                "reason": preview.get("reason"),
-                "scope": scope,
-                "generator_previews": read.get("generator_previews") or [],
-            }, ensure_ascii=False)
-        )
-    return read, ToolObservation(
-        f"Video version {read['version']} saved "
-        f"(composition {read['composition_id']}; "
-        f"{'the earlier versions stay in history' if redraft else 'first version'}; "
-        "no plan docked, no run started, nothing has been produced)."
-        + scrub_facts
-        + "\nSAVED VERSION (execution truth):\n"
-        + format_storyboard_text(read),
-        version_saved=True,
-        images=tuple(await generator_preview_images(
-            read, clip_ids=set(scope.get("clip_ids") or [])
-        )) if scope else (),
-        receipt=component_receipt(read),
-        context_keys=_version_context_keys(read),
-    )
 
 
 async def show_video_presets_seat(

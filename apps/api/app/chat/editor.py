@@ -731,7 +731,10 @@ async def execute_editor(turn, name, args):
             )
             preview = read["video_preview"]
             if preview["status"] != "ready":
-                raise ValueError(preview.get("reason") or preview["status"])
+                reason = preview.get("reason") or preview["status"]
+                if preview.get("detail"):
+                    reason += f": {preview['detail']}"
+                raise ValueError(reason)
             # The renderer consumes the prepared immutable specification.
             await db.close()
             media, evidence = await saved_preview_media(preview, version.id)

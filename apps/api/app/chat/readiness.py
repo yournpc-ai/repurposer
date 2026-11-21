@@ -394,7 +394,7 @@ def compute_source_readiness(
     ):
         required_next = "ask_user"
     else:
-        required_next = "design_video"
+        required_next = "create_video"
     return SourceReadiness(
         task_kind=kind,
         has_url=bool(urls),
