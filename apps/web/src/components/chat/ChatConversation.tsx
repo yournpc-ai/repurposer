@@ -81,9 +81,7 @@ interface ChatConversationProps {
   runId: string | null
   chatBusy: boolean
   onSuggestionClick: (suggestion: SuggestionPill) => void
-  onRunStarted: (runId: string) => void
   onStructureVisible: RegisterStructureVisibility
-  pendingPlanMessageId: string | null
   presentationRecovery: VideoPresentationRecoveryFact | null
   currentActivityRowKeysRef: RefObject<Set<string>>
   liveWorkFoldKey: string | null
@@ -153,9 +151,7 @@ export function ChatConversation({
   runId,
   chatBusy,
   onSuggestionClick,
-  onRunStarted,
   onStructureVisible,
-  pendingPlanMessageId,
   presentationRecovery,
   currentActivityRowKeysRef,
   liveWorkFoldKey,
@@ -338,8 +334,6 @@ export function ChatConversation({
                 <ComponentSlot
                   key={key}
                   slot={slot}
-                  onRunStarted={onRunStarted}
-                  pendingPlanMessageId={pendingPlanMessageId}
                   presentationRecovery={presentationRecovery}
                   structureId={m.serverMessageId}
                   structureTurnId={m.turnId}

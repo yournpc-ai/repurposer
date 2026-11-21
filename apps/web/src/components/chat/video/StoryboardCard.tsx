@@ -25,7 +25,6 @@ export function StoryboardCard({
   messageId,
   prosePresented,
   allowPresentationAck,
-  onRunStarted,
   onReady,
 }: {
   block: VideoStoryboardBlock
@@ -34,10 +33,8 @@ export function StoryboardCard({
    * release. Blocks are stamped after finalization on the live path; history
    * rows are already static. */
   prosePresented: boolean
-  /** Live first presentation, or the server's exact pending/authorized
-   * delayed-start recovery. Ordinary history passes false. */
+  /** The live card or the current incomplete presentation restored from history. */
   allowPresentationAck: boolean
-  onRunStarted?: (id: string) => void
   onReady?: (ready: boolean) => void
 }) {
   const { t } = useTranslation()
@@ -125,7 +122,7 @@ export function StoryboardCard({
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     ).then(async () => {
       if (cancelled || !messageId || !read.presentation_digest) return
-      const response = await apiFetch(
+      await apiFetch(
         `/api/v1/chat/messages/${block.presented_message_id || messageId}/video-presentation`,
         {
           method: "POST",
@@ -136,10 +133,6 @@ export function StoryboardCard({
           },
         },
       ).catch(() => {})
-      if (response?.ok) {
-        const result = await response.json()
-        if (result.run_id && !cancelled) onRunStarted?.(result.run_id)
-      }
     })
     return () => {
       cancelled = true
@@ -153,7 +146,6 @@ export function StoryboardCard({
     messageId,
     block.presented_message_id,
     block.composition_version_id,
-    onRunStarted,
   ])
 
   if (failed) {

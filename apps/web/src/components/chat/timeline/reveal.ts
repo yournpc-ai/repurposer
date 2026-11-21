@@ -3,7 +3,6 @@ import type { OverlayMessage, VideoStoryboardBlock } from "./types"
 /** Existing pending_brief.video_presentation recovery facts. This is a read
  * projection of the server's pending/authorized receipt, not a client flag. */
 export interface VideoPresentationRecoveryFact {
-  authorized_revision_message_id?: string | null
   presented_message_id?: string | null
   composition_version_id?: string | null
   content_digest?: string | null
@@ -12,13 +11,11 @@ export interface VideoPresentationRecoveryFact {
 
 export function shouldAcknowledgePresentation({
   history,
-  pendingPlanMessageId,
   recovery,
   messageId,
   block,
 }: {
   history: boolean
-  pendingPlanMessageId: string | null
   recovery?: VideoPresentationRecoveryFact | null
   messageId: string
   block: VideoStoryboardBlock
@@ -27,12 +24,11 @@ export function shouldAcknowledgePresentation({
   // A live first presentation is the ordinary ACK path. History is different:
   // mounting an old card proves nothing about authorization or recovery.
   if (!history) return true
-  if (!pendingPlanMessageId || !recovery?.authorized_revision_message_id) return false
+  if (!recovery?.presented_message_id) return false
   if (recovery.presentation_complete === true) return false
   const presentedMessageId = block.presented_message_id ?? messageId
   return (
-    recovery.presented_message_id === pendingPlanMessageId &&
-    presentedMessageId === pendingPlanMessageId &&
+    recovery.presented_message_id === presentedMessageId &&
     recovery.composition_version_id === block.composition_version_id &&
     recovery.content_digest != null &&
     recovery.content_digest === block.content_digest

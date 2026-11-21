@@ -18,18 +18,14 @@ import type { RegisterStructureVisibility } from "../structureVisibility"
  * bus. */
 export function ComponentSlot({
   slot,
-  onRunStarted,
   onOpen,
-  pendingPlanMessageId = null,
   presentationRecovery,
   structureId,
   structureTurnId,
   onStructureVisible,
 }: {
   slot: ComponentSlotFact
-  onRunStarted?: (runId: string) => void
   onOpen?: (outputId: string) => void
-  pendingPlanMessageId?: string | null
   presentationRecovery?: VideoPresentationRecoveryFact | null
   structureId?: string
   structureTurnId?: string
@@ -90,8 +86,6 @@ export function ComponentSlot({
   return (
     <StoryboardSlot
       slot={slot}
-      onRunStarted={onRunStarted}
-      pendingPlanMessageId={pendingPlanMessageId}
       presentationRecovery={presentationRecovery}
       onStructureVisible={onStructureVisible}
     />
@@ -100,14 +94,10 @@ export function ComponentSlot({
 
 function StoryboardSlot({
   slot,
-  onRunStarted,
-  pendingPlanMessageId = null,
   presentationRecovery,
   onStructureVisible,
 }: {
   slot: Extract<ComponentSlotFact, { kind: "storyboard" }>
-  onRunStarted?: (runId: string) => void
-  pendingPlanMessageId?: string | null
   presentationRecovery?: VideoPresentationRecoveryFact | null
   onStructureVisible?: RegisterStructureVisibility
 }) {
@@ -122,7 +112,6 @@ function StoryboardSlot({
   const prosePresented = priorDrained && message.content.trim().length > 0
   const allowPresentationAck = shouldAcknowledgePresentation({
     history: message.hydrated === true,
-    pendingPlanMessageId,
     recovery: presentationRecovery,
     messageId: message.id,
     block: slot.block,
@@ -145,7 +134,6 @@ function StoryboardSlot({
             messageId={message.id}
             prosePresented={prosePresented}
             allowPresentationAck={allowPresentationAck}
-            onRunStarted={onRunStarted}
             onReady={handleReady}
           />
         </RevealSlot>

@@ -4107,13 +4107,7 @@ export function AgentThread({
       runId={historySettled || runStartedExplicitly ? runId : null}
       chatBusy={chatBusy}
       onSuggestionClick={handleSuggestionClick}
-      onRunStarted={landOnStartedRun}
       onStructureVisible={registerStructureVisibility}
-      pendingPlanMessageId={
-        pendingQuestion?.question?.kind === "task_book" && !pendingQuestion.answer
-          ? pendingQuestion.id
-          : null
-      }
       presentationRecovery={presentationRecovery}
       currentActivityRowKeysRef={currentActivityRowKeysRef}
       liveWorkFoldKey={liveWorkFoldKey}

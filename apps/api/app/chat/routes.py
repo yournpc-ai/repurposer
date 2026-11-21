@@ -1271,6 +1271,7 @@ async def complete_video_presentation(
         raise HTTPException(404, "Presentation not found")
     project = await get_project_for_user(db, conversation.project_id, current_user.id)
     await db.refresh(project, with_for_update=True)
+    await db.refresh(message, with_for_update=True)
     from app.editing.service import video_version_read
     from app.models.schemas import PendingPlan
     stored = PendingPlan.model_validate(project.pending_brief or {})
@@ -1280,7 +1281,8 @@ async def complete_video_presentation(
                                     version_id=data.composition_version_id)
     block = next((b for b in message.blocks or []
                   if b.get("composition_version_id") == expected
-                  and b.get("kind") == "video_storyboard"), None)
+                  and b.get("kind") == "video_storyboard"
+                  and (b.get("scrub") or {}).get("kind") != "range"), None)
     if (not block or block.get("content_digest", read["content_digest"]) != read["content_digest"]
             or read["presentation_digest"] != data.presentation_digest):
         raise HTTPException(409, "Presentation does not match the saved version")
@@ -1306,15 +1308,7 @@ async def complete_video_presentation(
         update={"video_presentation": receipt}
     ).model_dump(mode="json")
     await db.commit()
-    run_id = None
-    if receipt.get("authorized_revision_message_id") and stored.intent is not None:
-        from app.chat.service import _auto_start_docked_plan
-        started = await _auto_start_docked_plan(db, user_id=current_user.id,
-            conversation_id=conversation.id, project=project)
-        if started is not None:
-            run_id = str(started[1])
-        await db.commit()
-    return {"accepted": True, "run_id": run_id}
+    return {"accepted": True}
 
 
 @chat_router.post("/messages/{id}/answer", response_model=AnswerResponse)

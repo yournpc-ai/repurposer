@@ -63,7 +63,6 @@ describe("storyboard presentation ACK recovery", () => {
     content_digest: "digest-1",
   }
   const recovery = {
-    authorized_revision_message_id: "revision-1",
     presented_message_id: "plan-1",
     composition_version_id: "version-1",
     content_digest: "digest-1",
@@ -73,7 +72,6 @@ describe("storyboard presentation ACK recovery", () => {
   it("a live first presentation still requires DTO, prose drain and playable previews", () => {
     const allowed = shouldAcknowledgePresentation({
       history: false,
-      pendingPlanMessageId: null,
       recovery: null,
       messageId: "local-preview",
       block,
@@ -102,7 +100,6 @@ describe("storyboard presentation ACK recovery", () => {
   it("ordinary static history never ACKs even when every display gate is ready", () => {
     const allowed = shouldAcknowledgePresentation({
       history: true,
-      pendingPlanMessageId: null,
       recovery: null,
       messageId: "old-message-echo",
       block,
@@ -116,49 +113,33 @@ describe("storyboard presentation ACK recovery", () => {
     })).toBe(false)
   })
 
-  it("the exact pending authorized receipt is the only historical recovery path", () => {
+  it("refresh acknowledges the exact pending presentation without a plan or authorization", () => {
     expect(shouldAcknowledgePresentation({
       history: true,
-      pendingPlanMessageId: "plan-1",
       recovery,
       messageId: "plan-1-echo",
       block,
     })).toBe(true)
   })
 
-  it("answered, rejected or non-pending plans cannot inherit recovery", () => {
-    for (const pendingPlanMessageId of [null, "another-plan"]) {
-      expect(shouldAcknowledgePresentation({
-        history: true,
-        pendingPlanMessageId,
-        recovery,
-        messageId: "plan-1-echo",
-        block,
-      })).toBe(false)
-    }
-  })
-
   it("a completion receipt on either source suppresses another ACK", () => {
     expect(shouldAcknowledgePresentation({
       history: true,
-      pendingPlanMessageId: "plan-1",
       recovery: { ...recovery, presentation_complete: true },
       messageId: "plan-1-echo",
       block,
     })).toBe(false)
     expect(shouldAcknowledgePresentation({
       history: false,
-      pendingPlanMessageId: null,
       recovery: null,
       messageId: "local-preview",
       block: { ...block, presentation_complete: true },
     })).toBe(false)
   })
 
-  it("message, version or digest drift cannot inherit authorization", () => {
+  it("message, version or digest drift cannot acknowledge another presentation", () => {
     const mismatches = [
       { recovery: { ...recovery, presented_message_id: "other-message" }, block },
-      { recovery: { ...recovery, authorized_revision_message_id: null }, block },
       { recovery, block: { ...block, presented_message_id: "other-message" } },
       { recovery: { ...recovery, composition_version_id: "version-2" }, block },
       { recovery: { ...recovery, content_digest: "digest-2" }, block },
@@ -168,7 +149,6 @@ describe("storyboard presentation ACK recovery", () => {
     for (const mismatch of mismatches) {
       expect(shouldAcknowledgePresentation({
         history: true,
-        pendingPlanMessageId: "plan-1",
         messageId: "plan-1-echo",
         ...mismatch,
       })).toBe(false)
