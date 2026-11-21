@@ -22,6 +22,7 @@ projects = import_module("app.pipeline.routes.projects")
 def client_for(database, uid):
     app = FastAPI()
     app.include_router(projects.router, prefix="/projects")
+    app.include_router(import_module("app.pipeline.routes.outputs").router, prefix="/outputs")
 
     async def session():
         async with database() as db:

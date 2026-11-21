@@ -3,16 +3,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import text
+from sqlalchemy import delete, select
 
 from app.config import settings
 from app.dependencies import DBDep, get_current_user, get_current_user_required
-from app.models.schemas import OutputPosterResponse, OutputResponse
-from app.models.tables import User
+from app.models.schemas import OutputPosterResponse, OutputResponse, PublicationState
+from app.models.tables import Output, Project, Publication, User
 from app.pipeline.output_posters import ensure_output_poster
 from app.pipeline.outputs import (
     composition_version_number,
-    delete_outputs_fk_safe,
     output_to_response,
 )
 from app.platform.project_context import get_output_for_user
@@ -71,17 +70,23 @@ async def delete_output(
     output_id: UUID, db: DBDep,
     current_user: User = Depends(get_current_user_required),
 ) -> None:
-    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
+    output = await get_output_for_user(db, output_id, current_user.id)
+    # Admission for a publication takes these locks in the same order.
+    await db.scalar(select(Project.id).where(Project.id == output.project_id).with_for_update(read=True, key_share=True))
+    output = await db.get(Output, output_id, populate_existing=True, with_for_update=True)
+    if output is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Output not found")
+    pending = await db.scalar(select(Publication.id).where(
+        Publication.output_id == output.id,
+        Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING, PublicationState.UNKNOWN)),
+    ).limit(1))
+    if pending:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This video has a scheduled publication or a pending platform result.")
     files = output.files or {}
-    for key in (files.get("video"), files.get("image")):
-        await delete_file(key)
-    await delete_file((output.publishing or {}).get("cover_image_url"))
-    await delete_outputs_fk_safe(db, [output_id])
-    await db.execute(
-        text(
-            "UPDATE workflow_steps SET status = 'skipped', updated_at = now() "
-            "WHERE kind = 'render' AND status = 'pending' "
-            "AND spec->>'output_id' = :oid"
-        ), {"oid": str(output_id)},
-    )
+    keys = (files.get("video"), files.get("image"), (output.publishing or {}).get("cover_image_url"))
+    await db.execute(delete(Publication).where(Publication.output_id == output.id))
+    await db.delete(output)
     await db.commit()
+    for key in keys:
+        if key:
+            await delete_file(key)

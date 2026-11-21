@@ -6,12 +6,12 @@ messages own their exact video references; these helpers never create a gallery.
 
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.models.schemas import OutputResponse
-from app.models.tables import CompositionVersion, Output, Publication
+from app.models.tables import CompositionVersion, Output
 
 
 def visible_outputs_stmt() -> Select:
@@ -80,13 +80,3 @@ async def list_visible_outputs(db: AsyncSession, project_id: UUID) -> list[Outpu
         .order_by(Output.created_at.desc())
     )
     return list(result.scalars().all())
-
-
-async def delete_outputs_fk_safe(
-    db: AsyncSession, doomed: list[UUID] | Select[tuple[UUID]]
-) -> None:
-    """Delete dependent Publication rows before their restricted Output rows."""
-    if isinstance(doomed, list) and not doomed:
-        return
-    await db.execute(delete(Publication).where(Publication.output_id.in_(doomed)))
-    await db.execute(delete(Output).where(Output.id.in_(doomed)))

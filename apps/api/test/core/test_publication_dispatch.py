@@ -82,6 +82,7 @@ async def test_post_response_loss_blocks_repost_and_deletion(database, monkeypat
                 await core.create_publication(db, user_id=uid, project_id=pid, output_id=oid,
                                               channel_account_id=cid, client_key="new-click")
         async with client_for(database, uid) as api:
+            assert (await api.delete(f"/outputs/{oid}")).status_code == 409
             assert (await api.delete(f"/projects/{pid}")).status_code == 409
         for cleanup in cleanup_calls:
             cleanup.assert_not_awaited()
