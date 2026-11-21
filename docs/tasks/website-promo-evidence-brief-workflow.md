@@ -1,6 +1,6 @@
 # 官网品牌宣传片：证据驱动 Brief、品牌档案与素材试制
 
-> Status: 当前任务合同（2026-11-17，Iteration 1A 已落码；fake-provider/临时数据库/Web 自动验收及真实网页、准备阶段与集中作答已复验；首稿和后续媒体迭代尚未开始，不属于本批施工或验收面）。本合同收敛官网宣传片的集中澄清、品牌理解、素材试制和全链继承；实施状态与优先级以 `PROGRESS.md` 为准，现行作品、渲染与 Chat 规则仍以母文档为准。
+> 历史实施与验收记录。以下流程、样片版本与测试结果按当时实现保留。现行官网取证、自然语言创作与显式 Skill 合同见 [VIDEO_PROJECT](../VIDEO_PROJECT.md)，收官证据见[本批记录](agent-editor-evidence/iteration-6/final-closure.md)。
 
 ## 0. 目标、范围与硬边界
 

@@ -12,7 +12,7 @@
 2. **CompositionVersion 是不可变编辑版本**，自身直接承载设置、素材引用、Scenes 与 Timeline；Timeline 只是版本内部的时间结构。
 3. **Track 上是 Clip，Clip 内是 Object**；Animation 统一作用于 Object 属性，Transition 表达 Clip 之间的衔接。
 4. **Storyboard 是 CompositionVersion 的分镜读面**，不是第二份可独立修改的作品数据。
-5. **`/promo-video` 绑定部署方固定的 Shotcraft 版本**。技能方法通过 Chat 读取，共用作品版本与原生编辑工具。
+5. 只有用户的显式 Skill 选择会产生 `request.skill`，普通视频分类词直接进入 Agent 创作。**`/promo-video` 绑定部署方固定的 Shotcraft 版本**。技能方法通过 Chat 读取，共用作品版本与原生编辑工具。
 6. **Chat 接收用户目标**。Agent 选择原生工具，Worker 执行各自领域的后台工作。
 7. **video-spec 是唯一在线渲染契约**，renderer-neutral；旧 ClipSpec 与 Film 实现已退出，不建设第三套永久视频架构。
 8. **不为旧 FilmStoryboard、film-spec、ClipSpec 或旧项目内容建设迁移层**。旧 Film 与 Clip 的实现已删除；保留新 CompositionVersion、素材和必要共享血缘，退役产物只做定向清理。
@@ -312,7 +312,7 @@ draw-2d 的来源字段为 `producer/code/parameters/output`，program_digest �
 
 `remotion-project` 是当前受控 producer：Agent 根据真实讲稿、文案、素材与 Skill 方法编写完整 Remotion 工程，可自主组织多文件、多组件、共享 helper、Composition 注册与内部时间线。自由 component 设计把 1–6 个独立 Generator 顺序放进同一个普通 Composition；不同叙事阶段可分 Scene，连续变换也可保持一个长 Scene，每幕最长 30 秒、总长不超过 118 秒，不把多幕作品烘焙成一个不可定位来源的整体。CompositionVersion 保存每幕不可变文件集合及逐文件 digest、入口、Composition id、typed props/props_schema、固定图片资源、完整画布 30fps 输出与锁定依赖，digest 覆盖全部生产来源。用户显式 @ 的已处理 IMAGE Asset 先冻结为本人 SourceSnapshot，Director 只能逐字段回引服务端给出的资源身份；外部 SkillVersion 图片继续按包身份校验，URL、视频 Output、未声明媒体与网络资源不得进入。`staticFile` 的参数可以是字符串字面量、props、变量或计算表达式；bake 只改写临时执行副本，为直接调用注入运行时守卫，实际路径必须精确命中当前 Generator 的已声明资源，未声明路径、遍历、URL 与非字符串仍拒绝，CompositionVersion 中原始源码及 digest 不变。内联 SVG 可使用同文档 `url(#id)` 滤镜/遮罩引用；data-URI 与外部 URL 仍禁止，程序纹理由内联 SVG/普通元素生成。受控上游 runner 只允许审核后的声明 API、依赖和固定素材，禁止动态安装、未声明 import/eval、网络、业务文件、DB、调度与计费。当前隔离实现仅支持 macOS Seatbelt：外部网络与本地 PostgreSQL/MySQL/Redis 端口拒绝，仅保留渲染所需 loopback；读取限于声明依赖/render 包与临时工作目录，写入限于工作目录；全局一次一个 bake，CPU 220s、墙钟 240s、进程树 RSS 8GiB、临时目录 512MiB、固定图片单资源 16MiB/单组件合计 32MiB、MP4 24MiB、PNG 4MiB、结果 40MiB，并回收所有后代进程组与临时树。API 开关与 render `/health` 的活跃隔离必须同时成立，设计才开放；其他平台、未配置或健康检查失败均 fail-closed。确认前只保存来源与静态结构，不执行 bake；授权制作后按 digest 固定 MP4/PNG，参数或代码修订经唯一写口产生新版本并只重做受影响媒体。重要独立文字、字幕、旁白和音乐保留原生对象；图形关系必需的短标签可随代码画面烘焙，但不因此获得独立原生可编辑性。
 
-普通 Chat 的工作草稿按完整 Scene/Track/Clip/Transition 合并，重复或非法实体仍拒绝。空 props 与语义为空的 props_schema（包括仅含空 type/properties 的等价形态）规范化为封闭的零参数合同；受控 Generator 未给 output 时，服务端仅按所属 Composition 画布/fps/背景与 Clip 整数时间窗推导，不能精确整除为帧时仍拒绝。网页 Generator 图片只能复制准备结果中的 `fixed_resource` 完整身份，不能把 web Snapshot 与某个 view 的文件路径拼成资源。
+create_video 把首稿直接保存为不可变版本。空 props 与语义为空的 props_schema（包括仅含空 type/properties 的等价形态）规范化为封闭的零参数合同；受控 Generator 未给 output 时，服务端仅按所属 Composition 画布/fps/背景与 Clip 整数时间窗推导，不能精确整除为帧时仍拒绝。网页 Generator 图片只能复制准备结果中的 `fixed_resource` 完整身份，不能把 web Snapshot 与某个 view 的文件路径拼成资源。
 
 旋转轨道消费者已验证 Agent 原创三轨道、几何符号及差速/反向运动；初版与 `speed_multiplier` 修订各有独立 program digest 和精确预览，固定媒体与原生 Text/Image 同版合成，重试准备复用同一固定媒体而不重新创作。该出口是 run-less 领域消费者证据，不代表正式 Chat 计费旅程已通过。
 
@@ -554,7 +554,7 @@ VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Ski
 - **正式公开 Gallery 上架**只接受对应 Skill 已走完真实「预填 → 首稿 → 授权 → 制作 → 交付 → 修订」的样片；实际文件必须包含声明的音乐/SFX/旁白，完整动态观看和实际试听通过。当前 Home 开发/手测入口与五个诚实空态不等于这道公开验收已通过。Home 自动静音播放不改变成片音轨事实，占位、静音或仅 run-less 的领域样片不能证明可售能力。四类逐张验收，不以其中一类通过代替其余三类。
 - Chat 内组件选择复用 Candidate Surface：`show_video_presets` 展示 2–4 个真实动态 `video_preset_set`，`VideoPresetCandidateSurface` 只负责播放与呈现；用户下一轮用普通语言选择，`select_video_preset` 只记录 selection，不写版本或创建 Job。应用选择时由模型在当前目标上提交直接 `apply_preset` Op，写出实际创作结果，不把 candidate set/member 当作编辑载荷；不跳外部 Gallery、不复制内部镜头名、不新增候选查询端点。浏览 Preset 是可选比较，不是制作前置。
 - 非 Skill Recipe 继续使用 PromptTemplate；Recipe 不进入 @ picker，也不借 Skill 之名获得隐藏执行参数。视频 Skill chip 是独立实体，不把既有 Recipe 改名成 Skill。
-- 自然语言明确点名时只解算唯一可访问 Skill，歧义必须询问。一次创作至多绑定一个显式 Skill，普通 Chat 未显式选择时仍可按现有设计路由进行通用创作。
+- 新 opening 只消费用户提交的 request.skill，服务端核验版本和访问权。未选择时，Agent 直接使用原生工具。历史版本保留创建时的 provenance。
 - Strict/Adaptive 只约束首版设计。CompositionVersion 出生后，后续时间、内容与 Generator 修订使用对应原生编辑工具，不重新执行 Skill；`skill_provenance` 仅保留来源血缘。制作完成由既有 delivery 正文 + Output 卡收口，不自动打开 Workbench/Inspector 或固定追加下一步建议；后续创作与修订动作仍回到普通 Chat。
 
 ## 8. Chat、原生工具与正式导出
@@ -563,8 +563,8 @@ Agent 在普通 Chat 中读取素材、创建作品、检查时间线并执行�
 
 ### 8.1.1 生成媒体与程序化画面的生产边界（draw-2d / remotion-project / image-generation 已接）
 
-- 内容版本用 GeneratorObject 保存可审阅的程序或模型请求，语义见 §4.3.2。draw-2d 与隔离部署下的 remotion-project 共用“提出要求→有界代码创作→精确动态预览/代表帧→局部改程序→再预览”闭环。Generator 的代码与诊断只围绕目标 Clip，不与整片共享一份巨型 JSON；完成后的完整 Generator Clip 合并进工作草稿，重要原生文字、字幕和音频不随之烘焙失去身份。
-- 预览与生产始终使用相同源码、完整画布、fps 与时间窗，并标明对应 program_digest；修改后不得沿用旧预览冒充新版。工作草稿保存为 CompositionVersion 后，可在正式导出 前准备有界的本地程序预览并读取真实代表帧；模型媒体仍按授权与费用规则执行。预览失败只诊断对应 Generator，不要求重交其他 Scene/Track/Clip。
+- 内容版本用 GeneratorObject 保存可审阅的程序或模型请求，语义见 §4.3.2。draw-2d 与隔离部署下的 remotion-project 共用“提出要求→有界代码创作→精确动态预览/代表帧→局部改程序→再预览”闭环。Generator 的代码与诊断只围绕目标 Clip，不与整片共享一份巨型 JSON；完成后的 Generator Clip 属于作品版本，重要原生文字、字幕和音频不随之烘焙失去身份。
+- 预览与生产始终使用相同源码、完整画布、fps 与时间窗，并标明对应 program_digest；修改后不得沿用旧预览冒充新版。保存 CompositionVersion 后，可在正式导出 前准备有界的本地程序预览并读取真实代表帧；模型媒体仍按授权与费用规则执行。预览失败只诊断对应 Generator，不要求重交其他 Scene/Track/Clip。
 - 预览和纠错复用现有有界 agent/harness，冻结实际尝试次数、资源与费用上限；不新建开放式自主循环或通用 look 平台。运行器缺失、容量、超时、内存/临时空间、传输与缓存完整性错误不当作源码修复，也不降级成截图、静态图或短循环。首个程序消费者须给出可播放短预览或动态序列、执行诊断及 Agent 可读取的代表画面；模型无法看图时如实声明并接受用户视觉反馈。
 - 生成输入须固定用户素材/参考、请求参数、供应商及模型版本（可获得时）、程序与依赖资源身份、尺寸/时长等输出约束；相关费用与授权进入 MediaJob。image-generation 的设计/修订只保存请求，报价按本次缺失图片数计算，授权制作才真实生成。供应商私有参数留在 provider 边界，不进入通用 VideoObject。
 - 本地受控的程序生产与导入外部 Skill 脚本分开：外部 scripts/ 不因引入程序画面而获得执行权限。代码画面运行须隔离可用能力、依赖、时间/资源与外部访问；只围绕实际样例建立最小执行边界，不开发通用插件平台。
@@ -620,7 +620,7 @@ Skill 的方法、项目来源及用户约束与当前作品共同进入普通 C
 当前 `page_readings` 的 consult-first 继续作为网页读取缓存；新架构不以重复缓存代替素材身份。
 
 1. **SourceSnapshot**：以 asset_id/canonical URL、content digest、captured_at、manifest/transcript/views 与不可变存储键固定一次内容。refresh 产生新快照，旧 CompositionVersion 不变。
-2. **版本绑定**：CompositionVersion.sources 记录实际使用的快照。工作草稿最终提交时以显式 sources 为已绑定集合，把 Clip source 与 Generator resource 的真实引用补齐为绑定并覆盖为服务端 digest；“被引用”不等于“已绑定”。后续修订不从聊天历史猜 URL、截图、素材时长或文本版本。
+2. **版本绑定**：CompositionVersion.sources 记录实际使用的快照。提交版本时以显式 sources 为已绑定集合，把 Clip source 与 Generator resource 的真实引用补齐为绑定并覆盖为服务端 digest；“被引用”不等于“已绑定”。后续修订不从聊天历史猜 URL、截图、素材时长或文本版本。
 3. **MaterialDigest**：Chat 上下文确定性列出已有素材、读取/采集状态、当前版本绑定和可更新事实；不全文重复注入。
 4. **读取复用**：同回合、同 canonical read key、同快照复用 Observation；设计装配器直接读取已绑定 manifest，不要求模型为导演再次调用 `get_web_page`。
 5. **显式刷新**：只有用户明确请求或选择新快照才更新绑定；新旧 digest 不同必须呈现，不静默替换。

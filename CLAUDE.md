@@ -38,7 +38,7 @@
 
 ## Tech Stack
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
-- UI components: affectUI Clean (React 19), with remaining Chat primitives tracked for the Editor handoff
+- UI components: affectUI Clean (React 19)
 - Styling: Tailwind CSS v4
 - Icons: lucide-react (sole icon source)
 - Internationalization: i18next + react-i18next
@@ -48,13 +48,9 @@
 
 新页面与通用控件使用 `apps/web/src/components/ui/*-clean.tsx` 中的实际导出和 Props。Clean 控制尺寸、动效、状态与弹层行为，`apps/web/src/styles.css` 提供明暗主题值。页面使用现有路由和 Context 接入真实数据。组件来源与剩余旧消费者见 [迁移清单](docs/tasks/affectui-evidence/README.md)。
 
-## 仍有消费者的旧 shadcn / Base UI
-
-AgentThread 和 ChatConversation 仍消费旧 Button。该组件支持 Base UI 的 `render` 属性。媒体全屏查看与 Composer 面板采用 Clean Dialog 和 Popover，各自的属性见组件源码。
-
 ### Icons
-- All icons must be imported from `lucide-react`. Hand-written SVG icons are prohibited, with two exceptions: third-party logos with no lucide alternative, and **the brand mark** — `src/components/LogoMark.tsx`; its geometry's source of truth is `LogoMark.tsx`, `public/favicon.svg` is the static baked-color copy and must be kept in sync.
-- **Inside the remaining legacy `Button`, use `size-*` not `h-* w-*`**: every button variant pins `[&_svg:not([class*='size-'])]:size-N` — `h-5 w-5` does NOT match the `:not()` guard and gets silently overridden; `size-5` is exempt. Full size table = `docs/UI_GUIDELINES.md` §2.
+
+Use lucide-react for application icons. Third-party logos and the existing brand mark retain their own geometry.
 
 ## Studio 界面约定
 

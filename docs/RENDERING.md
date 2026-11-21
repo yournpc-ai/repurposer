@@ -1,5 +1,7 @@
 # Rendering — video-spec 与交付链
 
+正式成片上传至当前公开 TOS 桶的 exports/ 路径。交付消息绑定已审阅的 Output 和不可变版本。
+
 > Status: 现行契约（2026-11-16）。作品与预览见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，发布和视听验收见 [统一视频合同](tasks/skill-package-promo-video.md)。
 
 ## 1. 一条链

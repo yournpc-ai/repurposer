@@ -1,6 +1,6 @@
 # UI Guidelines — Studio 视觉与交互设计系统
 
-> 通用设计系统（2026-11-21）：Home、Studio Shell、Projects、Settings、Login 与新通用组件使用 affectUI Clean。原语取自 `apps/web/src/components/ui/*-clean.tsx`，主题取自 `apps/web/src/styles.css` 的 `--aui-*`。弹层、焦点、键盘和控件尺寸遵循各 Clean 原语。仍依赖旧视觉约定的 Chat、共享 Composer 与媒体组件按 U3/U4 分批迁移。见 [消费者清单与验收](tasks/affectui-evidence/README.md)。
+> 通用组件使用 affectUI Clean，Tailwind CSS v4 负责布局和响应式。Chat 使用单一原生滚动视口，跟随行为取自 Agent Thread，展开工具组时保存当前阅读位置。
 >
 > 以下为 2026-10-30 版交互约定与迁移前视觉记录。
 > **Scope**：studio（`_app` 路由 + 共享组件）。落地页（`/` + `components/landing/`）是营销面，自有视觉语言，其 `rounded-full` / `border-border` / `font-medium` 用法是模板原生，不受本文约束。
@@ -14,7 +14,7 @@
   2. 状态徽章 / 红点（通知角标）；
   3. home composer 钉底后的**单行探索条**（stadium / 半高圆角；展开的 composer 为 16px surface 圆角）——stadium 只属于真单行盒，dock 输入组全形态恒 `rounded-xl`；
   4. home 配方货架的**一级 family pill 轨**（stadium pills 坐在 `bg-muted` 轨槽上：active = `bg-foreground` 深底 pill，inactive = 透明文字态 + `hover:bg-accent`）。
-- shadcn `Badge` 基座是 `rounded-full`——用于元数据标签（时长 / 画幅 / 标签）时恒 `className="rounded-md"` 覆盖。
+- 元数据标签使用现有 Clean Badge。
 - **控件三档**：sm / md / lg = `h-9` 36px / `h-11` 44px / `h-12.5` 50px；icon 按钮对应 `size-9` / `size-11` / `size-12.5`。同排控件用同档并保持中心线对齐；composer 底排用 sm（`h-9`），圆钮 / cost-confirm pill / send 同高，glyph 统一 `size-4.5`。**尺寸只用标准 spacing utilities**，不用自定义 `h-control-*`：CVA 默认档必须能被 `className` 经 `tailwind-merge` 正确覆盖，避免同卡左右按钮或局部紧凑覆盖失效。
 - pill / 下拉触发器**文字不加粗**（禁 `font-medium`），保持轻量。
 - **Button 内图标用 `size-*`，不用 `h-* w-*`**：每个 button variant 钉了 `[&_svg:not([class*='size-'])]:size-N`（`size="icon"` 钉 3.5 = 14px）——`h-5 w-5` 不匹配 `:not()` 守卫，会被静默覆盖成 14px；`size-5` 含 `size-` 字样因此豁免。
@@ -47,7 +47,7 @@
 ### 4.1 配方货架与卡面（ADR-048 + RECIPES §4 / §4.8）
 
 - 封面是单色工艺示意图，**永不实拍**。rest = 内联 SVG 静态封面（`components/recipes/covers/<id>.svg`，foreground 灰阶自驱双主题反转，16:10，左输入→右输出）；hover 播 CSS keyframe 过程动画（零视频零声音零媒体请求）。
-- **Recipe 卡没有真实成对示例 = 不进货架**（RECIPES §4.8 准入）。Home 视频货架固定为产品宣传 / 口播动效 / 文字动画 / 知识讲解四个主 Tab，各含两个典型应用子 Tab；主 Tab 短名复用 `skills.builtin.<id>.shortName`，完整 Skill chip 名不变。当前只呈现对应新链真实样片，旧 Film 与复用占位片不混入；暂无样片的应用保留子 Tab，并在同一货架容器内显示 en/zh「该应用暂无样片」空态，不用替代素材填充。demo 视频 autoplay loop/muted，hover / keyboard focus = 半透明灰色 `media-scrim` 操作显影（中央「使用提示词」+ 左下声音钮 + 右下纯视觉放大标记）并尽力开声（浏览器 autoplay 拒声则保持静音，声音钮的真实点击解锁）；声音 = home 全局单例，后一张开声只静音前一张、前一张视频继续播放；离屏卡片暂停解码（可见性闸），回视口恢复静音循环。
+- Home 的网站产品、文字动画和概念讲解示例向 Composer 预填可编辑文字。文字动画只预填需求。
 - 货架解剖 = 两级 tab（一级 family pill 轨 + 下划线子 tab，子 tab 唯一时不渲染该行）+ 白容器横滑（`bg-card` + `border-subtle` + `rounded-lg`，in-flow 零 shadow；‹ › 翻页钮按方向在真可翻时出现——禁死按钮）。
 - **媒体卡悬浮动作同档**：中央 Use-prompt = 唯一 primary 实心行动（无边界），左下声音钮与右下 expand affordance = secondary 安静控件（无装饰边界）；左右容器同尺寸（当前 `size-9`），glyph 同尺寸（当前 `size-4.5`），非交互装饰钮镜像 Button 几何，不另起尺寸。中央主行动用显式紧凑覆盖，CVA 大档不得穿透它的 `h-9`。
 - **卡片点击唯一归宿 = composer 预填** `promptTemplate`（配方 = 提示词，ADR-040）——永不是模板编辑器，无 inspect overlay 形态。预填同时把 composer 带回视口（钉底态零滚动，文档流态滚内部 scrollport 至居中）并聚焦；模板必填空位 = 提示词文本内的可见占位符（当前 MG demo = 网站链接），插入后即选中，未替换发送本地拦截；占位符永不变成隐藏字段或第二个输入面。
@@ -80,7 +80,7 @@
 ## 6. Composer / 输入卡
 
 - **质感配方**：16px surface 圆角（`rounded-surface`）+ 内部空气（`p-5`、输入区 `h-24`）+ **耳语级中控区**——底排控件一律 `variant="ghost"` 纯文字 + 小图标，send 是唯一深色实心锚点。**填充灰（`bg-muted`/`bg-inset`）只给内容容器（inset 块、信息 pill、badge），永不给操作按钮**。
-- **结构**：shell = shadcn `InputGroup`（`MentionEditor` 根挂 `data-slot="input-group-control"`）重涂卡律——`border` + `border-subtle` + `bg-card` + **无 shadow**；保留 block-start / block-end addon 解剖 + focus-within `outline` + cursor-text 点击聚焦。**密度活在 addon 上不在容器上**：padding asymmetric（20/20/12）；折叠带同动画过渡 maxHeight 与单边 padding（flex item 的 padding 在 `max-height:0` 下不裁剪——静态 padding 类禁用）。
+- Composer 保留 MentionEditor 的输入、附件、发送和键盘行为，控件使用当前 Clean 组件。
 - 三带：① 顶 = 资产 chips（视频缩略+时长 / 音频波形+时长 / 文档 icon+格式；page count 走 pdf.js 不上 chip；上传中 spinner+%；× 删且删资产）② 中 = `MentionEditor` 带 ③ 底 = 控制行。
 - **Skill chip = 行内绿色斜杠族**：与 @ mention 一样插在 caret / 首条预填内容内的 `contenteditable=false` 节点，显示 `/名称` 并使用 `text-success` + `bg-success-subtle` 淡绿底；@ 保持中性色且必须有可见填充阶——普通 `bg-card` 输入面用 `bg-muted`，muted dock 浮层内反转为 `bg-card`，不得与宿主同色。Skill 不得另起输入框外行。结构化 reference 仍由 `selectedSkill` 承载，chip 节点不序列化进 prompt 或 mentions；picker 保持中性，绿色只属于输入框内已选 Skill 与已发送消息中的同一 chip。mention 与 Skill 都不带 ×，Backspace / Delete / 选区删除、发送消费与 Stop 恢复都同步同一绑定，跨形态不 remount。
 - **Home 形变（钉底律）**：hero 簇（一行问句 + composer 卡）= 纯 in-flow 内容，随滚动自然离场，**顶部零吸附**；tabs 轨吸顶（plain `sticky top-0`，零测量）。composer 的滚动坍缩 morph 保留：scroll-linked `dockP`（槽位滚出视口前最后 140px 纯函数），**禁时钟过渡**；槽位完全滚出后**同一 DOM 翻成 `fixed` 视口底部 stadium 条**（§1 例外 3）——零 reparent（MentionEditor 永不 unmount），槽位在翻转瞬间钉等高占位（几何零变化 = scrollTop 钳位反馈环结构性死亡，标题抖动族的修法）；入场动画 `home-dock-in` 只走 transform/opacity（离散翻转的时钟动画合法，scroll-linked morph 自身永禁）。属性 = 插值（padding 20→16、editor 带 = **内容驱动高**（rest = 80 floor / 136 cap〔4 行〕随稿长定高，超出 editor 自滚——固定高裁两行稿的坑永禁）→56、chips/控制行折叠、radius 16→40、send 锚点）。**半径走内联 style**（绕开 `has-data-[align=*]` 的 `:has()` 优先级）。钉底条的 attach 面板 / tooltip 向上开（`side="top"`）；mention picker 视口自适应无需改。rest offset = `h-[20vh]` spacer 兄弟节点。

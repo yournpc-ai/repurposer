@@ -5,8 +5,8 @@
 ## 0. 当前硬边界
 
 - 不引入新作品根、第二意图面、第二内容写口、第二生产链、运行期镜头注册表或通用插件平台。作品内容只经 `apply_composition_edits` 形成 CompositionVersion。
-- 首稿经 `scene_plan/scene` 或必要的完整实体写入同一服务端工作草稿；保存版局部修订由 `revise_video` 直接接收当前目标所需的一批 Op。一次用户意图、一批 Op、一次完整校验、一个原子版本，不再经过同义 action union。
-- 模型每轮只读取当前工作面：当前 base_ref/draft_ref、目标现值、相关来源、实际选区、当前错误和兼容工具。旧参数、旧媒体和已覆盖结果在完整送达一次后按现有生命周期退役，不叠加成第二份作品状态。
+- 首稿经 create_video 直接保存 CompositionVersion，局部修订经原生编辑工具调用 apply_composition_edits。
+- 模型每轮只读取当前工作面：当前 base_ref、目标现值、相关来源、实际选区、当前错误和兼容工具。旧参数、旧媒体和已覆盖结果在完整送达一次后按现有生命周期退役，不叠加成第二份作品状态。
 - Generator 允许 Agent 按创作需要现场编写完整 draw-2d 或 Remotion 工程，包括多文件、组件、共享 helper、视觉公式和内部时间线。限制的是权限、依赖、资源和隔离执行，不是工程内部的视觉创意。
 - 直接 Op 不是自由代码通道；Generator 也不是业务调度、数据库、任意网络或任意文件通道。外部 Skill 脚本和 TSX 仍只是不可信参考，读取不等于执行授权。
 - 原生文字、字幕、声音和需要独立精修的对象保留原生身份；Generator 只烘焙其负责的视觉范围。最终 video-spec 仍只消费固定媒体，不含 React/Remotion、生成任务或模型请求。
@@ -15,7 +15,7 @@
 
 ## 1. 统一 Skill 与 Generator 资源
 
-内置包位于 `app/skills/<skill_id>/`，随应用部署和内部注册；外部包持久化为 owner 隔离、不可变 SkillVersion。两者共用 `SKILL.md`、references、sequences、gallery、demos 和可选 template。镜头卡与序列是创作资源，不是强制阶段或执行注册表。
+随应用部署的内置包从 app/skills 加载。promo-video 从 MANAGED_SKILL_ROOT 下的配置版本加载，外部 SkillVersion 按 owner 和不可变版本读取。
 
 `list_skill_shots / read_skill_reference / read_skill_demo / get_skill_preview` 继续提供有 owner、路径、文本和媒体边界的读取。模型可见工具按当前 Skill、草稿、版本、Output 与真实制作意图逐轮投影；完整工具结果按 call id 回传，权限、来源、取消、失败和制作授权不因投影改变。
 
@@ -31,12 +31,12 @@ Generator producer 继续为 `draw-2d / remotion-project / image-generation`。�
 
 ### 2.1 当前工作面的字段合同
 
-不新增通用 context 容器。`ContextSnapshot` 继续承载本轮业务资源，`RoundAssembly` 继续承载 System、工具、动态 context、媒体和结果保留策略；视频工作面使用 `CURRENT VIDEO ROUND`，权威状态仍归 CompositionVersion、SourceSnapshot、PendingPlan 与服务端工作草稿。
+ContextSnapshot 刷新项目资源，RoundAssembly 投影当前工具、证据和已保存版本。
 
 | 当前工作 | 默认保留字段 | 默认不投影 |
 |---|---|---|
-| 官网证据与 Brief | `task_kind`、`source_readiness`、`required_next_action`、当前 URL 对应 Asset/Snapshot、当前 CreativeState、正文与实际 PNG | 无关 URL、其他作品、无关素材和 Skill 注册表 |
-| 草稿续写/保存 | `draft_ref`、content_digest、Scene 摘要、`next_unfilled_scene`、必要 `draft_tracks`、当前错误和 save_ready | 已完成幕的完整提交参数、旧媒体和整份作品 |
+| 官网证据 | 当前 URL、采集状态、真实正文和页面视图、已有品牌依据 | 其他项目或页面的证据 |
+| 新建作品 | 当前用户需求、显式 Skill、已准备的来源 | 历史样片内容 |
 | 审片 | 当前 `next_review_target`、有效/失效范围、待判断 evidence、实际当前媒体和 open issues | `editable_targets` 全量对象、无关来源正文和历史媒体 |
 | 局部修复 | 当前 finding、受影响 `clip_ids`、相关 editable targets、当前错误与可用直接 Op | 未受影响 Scene、其他目标、完整旧候选和无关 Op |
 | 保存版修订 | `base_ref`、目标当前值、相关来源、兼容 Op、可选 `selected_region` 与 `region_target_candidates` | 完整 CreativeState、其他作品、无关 Clip 和不兼容 Op |
@@ -52,7 +52,7 @@ Generator producer 继续为 `draw-2d / remotion-project / image-generation`。�
 - `chat/prompts.py::assemble_video_round` 负责按阶段删选资源、字段、媒体和当前动作；不得把完整项目快照默认转发。
 - `chat/turn_tools.py` 负责当前目标兼容的直接 Op 与工具 schema；不得把全部 Op 或完整作品定义无差别发给模型。
 - `agents/tool_loop.py` 负责每轮刷新、真实结果配对和折叠；不得把历史结果累积成第二工作面。
-- `agents/working_drafts.py` 与 `ConversationContext` 继续保存草稿和可恢复事实；不得为了 prompt 投影新增 Draft/Context 主表。
+- ConversationContext 保存有作用域的工具事实，版本由 CompositionVersion 保存。
 
 ## 3. 剩余真实能力与发布验收
 

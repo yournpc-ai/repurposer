@@ -1,6 +1,8 @@
 # Repurposer · Agent Editor v1
 
-> Iteration 6A/6B（2026-11-21）：原生 export_video 已在隔离环境用私有成片完成真实渲染、审阅、恢复与交付。ExportJob 只处理已固定媒体。现有 TOS 桶允许公开读取，6D 云端验收只使用获准公开的合成素材。[验收与上线边界](agent-editor-evidence/iteration-6/export.md)
+> **现行创作入口（2026-11-22）**　Chat 只在 opening 带有显式 `request.skill` 时加载固定方法包。文字动画直接调用原生工具。官网宣传片需要可核验的原站材料，品牌分析和创作偏好由 Agent 按需处理。正式导出使用公开 TOS 桶。
+
+> 历史环境，Iteration 6A/6B（2026-11-21）：原生 export_video 已在隔离环境用私有成片完成真实渲染、审阅、恢复与交付。ExportJob 只处理已固定媒体。现有 TOS 桶允许公开读取，6D 云端验收只使用获准公开的合成素材。[验收与上线边界](agent-editor-evidence/iteration-6/export.md)
 
 ## Agent + Tool 唯一创作架构、后台执行退役与五面一体施工总合同
 
@@ -2098,7 +2100,7 @@ Iteration 6 关闭条件：
 
 # 16. 下一批开工入口
 
-**当前唯一授权主线：Iteration 6A → 6B → 6C → 6D。**
+当前批次为 I6 收官。6A–6D 的实施与当时验收见各切片记录。
 
 施工 Agent 首先阅读本合同全文，尤其是：
 
@@ -2139,4 +2141,4 @@ Iteration 6 关闭条件：
 
 **施工总原则：尽可能删除旧架构，而不是在旧架构外再包一层新架构。**
 
-**下一步先完成 6A 的实际消费者与故障审计，再以 6B 的单个 ExportJob 作为第一项真实破坏性替换；没有真实五面验收，不进入下一刀。**
+本批按原生工具、显式 Skill、真实来源、不可变版本和 Job 回执验收。官网取证完成后由 Agent 决定创作方法。收官状态见[本批记录](agent-editor-evidence/iteration-6/final-closure.md)。

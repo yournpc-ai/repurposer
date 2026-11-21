@@ -66,7 +66,7 @@
 | `UI_GUIDELINES.md` | **Studio 视觉/交互设计系统**：圆角与按钮 / 图标 / 浮层选型 / 卡面纵深 / 灰梯 / 浮层冰霜 / composer 视觉解剖 / 侧栏解剖 / 页面布局 / 画布形态 | 活跃 | 动 `_app` UI / 共享组件前 |
 | `ARCHITECTURE_NORTH_STAR.md` | **目标架构与可靠性主线**（North Star）：Agent=Decision Producer / Execution Kernel=可靠性核心 / Structured Media=领域核心 + 执行概念词典 + 五态纪律 + 技术依赖 | 活跃 | 动执行内核、可靠性、agent 边界或 Media IR 方向时读对应章节；不是所有 coding 任务的通用全文前置 |
 | `POSITIONING.md` | 定位根概念架构（运营层母文档）：定位/人设/渠道/选题概念树 + 产品流程 + 实施范围 | 已拍板方向（ADR-042），未实施；启动条件与验收归 `PROGRESS.md` §1.1 | 动身份模块/渠道/选题/home 前 |
-| `tasks/website-promo-evidence-brief-workflow.md` | **官网品牌宣传片证据链**：扩展 Brief、BrandProfile、集中问题组、素材试制与分轮验收 | 当前合同，Iteration 1A 已落码，后续真实验收开放 | 改官网宣传片的需求澄清、品牌理解、素材试制或全链继承前 |
+| `tasks/website-promo-evidence-brief-workflow.md` | 官网宣传片早期实施与验收 | 历史 | 现行合同见 VIDEO_PROJECT §7 和 I6 [收官报告](tasks/agent-editor-evidence/iteration-6/final-closure.md) |
 | `tasks/website-promo-iteration2-media-slice.md` | **官网两幕媒体薄片四轮子合同**：分镜中枢、通用 N 幕双来源图片、统一媒体分析、TTS、纯电子 BGM、Scene 局部渲染与 MP4 | 当前施工子合同，未开始；每轮独立出口与授权 | 执行 Iteration 2 当前四轮前；每轮只实现和验证自己的出口，后续能力不得提前虚报 |
 | `VIDEO_PROJECT.md` | **视频作品目标架构**：Project / Composition / CompositionVersion、Scene/Storyboard、Track/Clip/Object、Animation/TextPart、Skill/VideoTemplate、SourceSnapshot、全局 @ 引用、旁白/字幕、Graph/Run 接缝与 video-spec | 已拍板目标（ADR-145/146）；§0 为各阶段必读方针，当前实现/欠账归 PROGRESS 与 `tasks/skill-package-promo-video.md`，不以目标目录冒充实现 | 新 Film/MG 架构、视频 CRUD、Skill、时间/动画或渲染替换施工前 |
 | `AGENT_ARCHITECTURE.md` | Native Tool、领域作业、恢复身份与作品 | 活跃 | 修改 Agent 执行契约时核对 |

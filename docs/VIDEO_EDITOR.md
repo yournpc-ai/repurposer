@@ -1,5 +1,7 @@
 # 视频编辑与局部预览
 
+文字动画由 Agent 直接用原生文字、预设与动画制作。新建和局部修改分别由 create_video 和具体编辑工具写入版本。
+
 > Status: Chat 修订现行，精确编辑验收开放（2026-11-16）。作品模型见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，渲染见 [RENDERING](RENDERING.md)，实施与剩余验收见 [统一视频合同](tasks/skill-package-promo-video.md)。
 
 ## 1. 编辑入口
