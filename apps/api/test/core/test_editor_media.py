@@ -154,6 +154,70 @@ async def test_generation_does_not_bind_an_older_version_and_insert_replays(data
 
 
 @pytest.mark.asyncio
+async def test_native_remove_clip_preserves_original_and_other_tracks(database, monkeypatch):
+    from uuid import UUID
+
+    from app.chat.editor import ClipArgs, InsertAudioArgs, edit_clip
+    from app.editing.store import StaleBase
+    from app.models.tables import CompositionVersion, SourceSnapshot
+    from test.core.fixtures import AUDIO_SNAPSHOT
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    owner = await _user(database)
+    pid = await _project(database, owner)
+    await _snapshots(database, owner)
+    comp, original, _ = await _create(database, owner, pid)
+    async with database() as db:
+        project = await db.get(Project, pid)
+        source = await db.get(SourceSnapshot, AUDIO_SNAPSHOT)
+        source.origin_project_id = pid
+        conversation = Conversation(user_id=owner, project_id=pid)
+        db.add(conversation)
+        await db.commit()
+        opening = await service._create_message(db, conversation.id, "user", "Add a second take")
+        opening.turn_state = "in_flight"
+        await db.commit()
+
+    async def edit(name, args, version, call_id, preview=None):
+        base = dict(composition_id=str(comp.id), composition_version_id=str(version.id),
+                    content_digest=version.content_digest)
+        async with database() as db:
+            return await edit_clip(db, project=project, opening_id=opening.id, conversation_id=conversation.id,
+                                   name=name, args=args, base=base, call_id=call_id, observed_preview=preview)
+
+    duplicate = await edit("insert_audio", InsertAudioArgs(source_id=AUDIO_SNAPSHOT, start_seconds=0),
+                           original, "double")
+    async with database() as db:
+        before = await db.get(CompositionVersion, UUID(duplicate["version_id"]))
+        opening = await service._create_message(db, conversation.id, "user", "实际预览疑似叠音的片段，再按证据移除重复。")
+        opening.turn_state = "in_flight"
+        await db.commit()
+    target = ClipArgs(clip_id=duplicate["added_clips"][0])
+    with pytest.raises(ValueError, match="Preview the affected window"):
+        await edit("remove_clip", target, before, "remove")
+    preview = dict(version_id=str(before.id), content_digest=before.content_digest, mp4_sha256="7"*64,
+                   windows=[{"start": 4, "end": 5}])
+    with pytest.raises(ValueError, match="containing this clip"):
+        await edit("remove_clip", target, before, "remove", preview)
+    preview["windows"] = [{"start": 0, "end": 4}]
+    with pytest.raises(ValueError, match="does not exist"):
+        await edit("remove_clip", ClipArgs(clip_id="absent"), before, "missing", preview)
+    result = await edit("remove_clip", target, before, "remove", preview)
+    replay = await edit("remove_clip", target, before, "remove")
+    assert replay["replayed"] and replay["version_id"] == result["version_id"]
+    with pytest.raises(StaleBase):
+        await edit("remove_clip", target, before, "stale", preview)
+    async with database() as db:
+        after = await db.get(CompositionVersion, UUID(result["version_id"]))
+        def clips(version):
+            return {clip["clip_id"]: (track["track_id"], clip)
+                    for track in version.timeline["tracks"] for clip in track["clips"]}
+        assert after.base_version_id == before.id
+        assert clips(before)[target.clip_id][1]["source"] == clips(before)["clp_bed"][1]["source"]
+        assert clips(after) == clips(original)
+
+
+@pytest.mark.asyncio
 async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(database, monkeypatch):
     from app.chat.editor import GenerateVoiceArgs
     from app.editing.schemas import SpeechObject

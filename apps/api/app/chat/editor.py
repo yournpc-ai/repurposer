@@ -21,7 +21,7 @@ from app.editing.store import (
     content_of,
     get_video_version,
 )
-from app.editing.temporal import timeline_duration
+from app.editing.temporal import resolve_temporal_target, timeline_duration
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import VideoRangeScrubTarget, canonical_json_hash
@@ -207,6 +207,13 @@ EDITOR_TOOLS = (
         "inspectClip",
     ),
     _editor_tool(
+        "remove_clip",
+        "Remove one identified clip after inspecting its source, timing and relations. "
+        "If asked to listen or watch first, preview the affected window before removing it. "
+        "Linked clips and dependent captions must remain intact. Other clips keep their positions.",
+        ClipArgs, "removeClip",
+    ),
+    _editor_tool(
         "split_clip",
         "Split a clip and its linked media at a clip-local second. Save one version.",
         SplitClipArgs,
@@ -247,7 +254,7 @@ EDITOR_NAMES = frozenset(tool.name for tool in EDITOR_TOOLS)
 WRITE_TOOLS = {
     t.name: t
     for t in EDITOR_TOOLS
-    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs)
+    if t.name == "remove_clip" or t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs)
 }
 
 
@@ -283,7 +290,8 @@ def _clip_facts(track, clip, content):
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
         **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
         **({"text": obj.text[:160]} if obj.kind == "text" else {}),
-        **({"text": obj.text, "language": obj.language, "voice_id": obj.voice_id}
+        **({"text": obj.text, "language": obj.language, "voice_id": obj.voice_id,
+            "alignment_id": str(obj.alignment.alignment_id) if obj.alignment else None}
            if obj.kind == "speech" else {}),
     }
 
@@ -291,8 +299,8 @@ def _clip_facts(track, clip, content):
 def requests_observation_first(text: str) -> bool:
     """Honor an explicit watch-then-decide request before its first edit."""
     return bool(re.search(
-        r"(?:实际|先).{0,8}(?:看片|看一下|预览|播放).{0,65}(?:问题|不合适|发现).{0,20}(?:改|调)|"
-        r"\b(?:watch|preview|review)\b.{0,100}\b(?:if|before)\b.{0,65}\b(?:fix|edit|adjust|change)\w*",
+        r"(?:实际|先).{0,8}(?:看片|看一下|预览|播放|试听).{0,65}(?:问题|不合适|发现|再).{0,20}(?:改|调|移除|删除)|"
+        r"\b(?:watch|listen|preview|review)\b.{0,100}\b(?:if|before|then)\b.{0,65}\b(?:fix|edit|adjust|change|remove|delete)\w*",
         text, re.I | re.S,
     ))
 
@@ -348,6 +356,11 @@ async def edit_clip(
         if (preview.get("version_id") != str(version.id) or preview.get("content_digest") != version.content_digest
                 or not preview.get("mp4_sha256") or current_group_id() and preview.get("decision") == current_group_id()):
             raise ValueError("The user asked to see the footage before deciding on an edit. Preview the affected window of this version and inspect the returned frames first.")
+        if name == "remove_clip" and args.clip_id in clips:
+            span = clips[args.clip_id].range
+            rate = content.settings.timebase
+            if not any(w["start"] < span.end / rate and w["end"] > span.start / rate for w in preview.get("windows", [])):
+                raise ValueError("Preview the affected window containing this clip before removing it.")
     prior = next((c for c in commits if c["request"] == str(identity)), None)
     fingerprint = canonical_json_hash({"tool": name, "args": args.model_dump(mode="json")})
     if prior and prior["fingerprint"] != fingerprint:
@@ -425,6 +438,14 @@ async def edit_clip(
                                        range=TimeRange(start=scene.range.start, end=end)))
             ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id,
                                   range=TimeRange(start=target.range.start, end=end)))
+        elif name == "remove_clip":
+            from app.editing.revisions import RemoveClipOp, expand_revision_op
+
+            related = resolve_temporal_target(content, EditTarget(kind="clip", id=target.clip_id), action="delete")
+            if related.clip_ids != {target.clip_id}:
+                raise ValueError("Removing this clip would also remove linked clips or derived captions.")
+            ops = expand_revision_op(RemoveClipOp(op="remove_clip", clip_id=target.clip_id), content, facts={})
+            extra["removed_clip_id"] = target.clip_id
         elif name == "split_clip":
             cut = target.range.start + _ticks(args.time, rate)
             if not target.range.start < cut < target.range.end:
@@ -624,6 +645,8 @@ async def execute_editor(turn, name, args):
                     if recent.get("version_id") == result["base_version_id"]
                     else {}
                 )
+                if name == "remove_clip":
+                    focused.pop(result["removed_clip_id"], None)
                 for clip in result["changed_clips"]:
                     focused[clip["clip_id"]] = {
                         k: clip[k]

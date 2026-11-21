@@ -10,6 +10,8 @@ chat/plan_turn.py 组装当前消息、项目素材、已知 Brief 及其来源�
 
 ## 媒体、授权和交付
 
+检查旁白时，`inspect_clip` 返回原文、声音、源快照、时间窗及已绑定的对齐标识。已有待配音对象用 `bind_clip_source` 绑定录音，独立声音用 `insert_audio` 放置。Agent 可在检查和预览后以 `remove_clip(clip_id)` 移除单个重复片段。它复用既有 RemoveClip 和写入事务，校验所属项目、基础版本及摘要，同一原生调用可重放。需要一并删除关联片段或派生字幕时，单项删除会被拒绝。其他片段保留原位置。
+
 chat/editor_media.py 在生成前校验 opening、项目、原生 call ID、参数指纹和报价。需要授权时持久化带 approve/decline 选项的问题。服务端在回答原问题时使用原参数和上限。报价问题、授权接受、供应商实际返回以及钱包结算分别有自己的事实。
 
 MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快照、摘要、时长或尺寸、计费与可用状态。插入时间线产生新的 CompositionVersion。ExportJob 固定确切版本与渲染规格；成功的 Output 可以审阅。review_video 读取真实 MP4，deliver_video 核对审片摘要、版本及字节后写入持久交付消息。后续修改保存新版本，之前的卡继续指向当时的 Output。

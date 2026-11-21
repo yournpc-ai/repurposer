@@ -135,6 +135,7 @@ Agent 直接调用：
 ```text
 split_clip(...)
 trim_clip(...)
+remove_clip(...)
 move_clip(...)
 translate(...)
 scale(...)
@@ -596,11 +597,12 @@ Output 固定由某个版本产生的正式媒体。
 
 - `split_clip`；
 - `trim_clip`；
+- `remove_clip` 以当前版本的片段 ID 移除单项，保留其他片段的位置；
 - `move_clip`；
 - `translate`；
 - `scale`；
 - `insert_audio`；
-- 未来的 `insert_clip`、`remove_clip`、`set_text`、`add_keyframe`。
+- 未来的 `insert_clip`、`set_text`、`add_keyframe`。
 
 只修改 Composition 内容。
 
