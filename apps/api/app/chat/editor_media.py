@@ -217,6 +217,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             if receipt.intent.get("media_result") or receipt.question or receipt.intent.get("export_job") or receipt.intent.get("media_job"):
                 return receipt
         else:
+            from app.chat.editor_create import media_generation_forbidden
+
+            if name in KINDS and media_generation_forbidden(opening.content or ""):
+                raise ValueError("Use the existing project sources. The user excluded new media.")
             if opening.turn_state != "in_flight":
                 raise ValueError("This media request has ended.")
             if composition:

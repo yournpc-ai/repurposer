@@ -1059,7 +1059,7 @@ def draft_only_request(text: str) -> bool:
     return bool(re.search(
         r"(?:只(?:要|需|看|出|做)|仅(?:需|要)?)(?:可编辑的?)?(?:初稿|草稿|分镜|预览)|"
         r"(?:不要|不用|无需|不需要|暂不|先不|别|不)(?:正式)?(?:导出|交付)|"
-        r"\b(?:preview only|draft only|only (?:a |the )?(?:draft|preview)|(?:do not|don't|no) (?:formal )?(?:export|render|deliver))\b",
+        r"\b(?:preview only|draft only|only (?:a |the )?(?:draft|preview)|no new media or export|(?:do not|don't|no) (?:formal )?(?:export|render|deliver))\b",
         text, re.I,
     ))
 

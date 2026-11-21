@@ -1058,6 +1058,22 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
     assert not edit.stream_prose and edit.project_reply is not None
 
 
+def test_existing_media_only_offer_keeps_creation_and_excludes_generation():
+    from app.agents.tool_loop import ContextSnapshot, tool_spec
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    turn = assemble_video_round({
+        "tools": intent_router.tools, "snapshot": ContextSnapshot("empty"),
+        "user_text": "Create a cut from the uploaded footage. No new media or export.",
+    })
+    tools = {tool.name: tool for tool in turn.tools}
+    assert {"create_video", "prepare_video_materials"} <= tools.keys()
+    assert not {"generate_voice", "generate_image", "generate_music", "export_video"} & tools.keys()
+    shot = tool_spec(tools["create_video"])["function"]["parameters"]["$defs"]["FirstShot"]["properties"]
+    assert "narration" not in shot and "snapshot_id" in shot
+
+
 def test_fixed_recording_is_available_before_word_alignment():
     from app.agents.tool_loop import ContextSnapshot, tool_spec
     from app.chat.intent import intent_router

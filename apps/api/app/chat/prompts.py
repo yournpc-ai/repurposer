@@ -79,6 +79,9 @@ def _native_creation_tools(tools, *, facts, readiness):
         readiness.task_kind == "website_promo" and readiness.brand_profile_ready
         and readiness.brief_missing_slots
     )
+    from app.chat.editor_create import voice_generation_forbidden
+
+    voice_excluded = voice_generation_forbidden(facts.get("user_text") or "")
     fixed_voice = any(r.get("role") == "narration" and r.get("status") == "available"
                       for r in facts.get("media_receipts") or [])
     aligned_voice = any((r.get("alignment") or {}).get("status") == "READY" for _, r in resources)
@@ -90,8 +93,9 @@ def _native_creation_tools(tools, *, facts, readiness):
                 hidden = set()
                 if not external or not settings.component_bake_enabled:
                     hidden.add("skill_resource")
-                if fixed_voice:
+                if fixed_voice or voice_excluded:
                     hidden.update({"narration", "narration_voice_id", "narration_language"})
+                if fixed_voice:
                     description += " 本轮旁白已固定，保存画面后可用 insert_audio 放入原音。"
                 if fixed_voice and not aligned_voice:
                     hidden.update({"narration_snapshot_id", "narration_alignment_id"})
@@ -230,6 +234,12 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video", "align_recording", "get_narration_alignment", "annotate_narration"}
+        from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
+
+        if media_generation_forbidden(user_text):
+            names.difference_update({"generate_voice", "generate_music", "generate_image"})
+        elif voice_generation_forbidden(user_text):
+            names.discard("generate_voice")
         if not native_creation:
             names.discard("create_video")
         completed_delivery = facts.get("delivered") or {}

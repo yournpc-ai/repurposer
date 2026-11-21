@@ -1,4 +1,5 @@
 """Save an editable first version from ordered shots through the Composition store."""
+import re
 from typing import Literal
 from uuid import uuid5
 
@@ -20,10 +21,18 @@ from app.tools.video.design import (
 )
 
 
-def voice_generation_forbidden(text: str) -> bool:
-    import re
-
+def media_generation_forbidden(text: str) -> bool:
+    """An explicit instruction to work exclusively with existing material."""
     return bool(re.search(
+        r"(?:^|[.!?。！？;；\n])\s*(?:no new media(?: or export)?|"
+        r"(?:do not|don't) generate (?:any )?new media|"
+        r"(?:不要|不用|禁止)(?:生成|新增)(?:任何)?(?:新)?素材)(?=\s*(?:$|[.!?。！？;；，,\n]))",
+        text or "", re.IGNORECASE,
+    ))
+
+
+def voice_generation_forbidden(text: str) -> bool:
+    return media_generation_forbidden(text) or bool(re.search(
         r"(?:不要|不用|不需要|禁止|不)(?:生成|合成|新增|创建|制作|使用|提供)?[^。！？；\n]{0,8}(?:配音|旁白|语音)"
         r"|(?:do not|don't|without|no)\s+(?:\w+\s+){0,4}(?:voice|narration|speech)",
         text or "", re.IGNORECASE,

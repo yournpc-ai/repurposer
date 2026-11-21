@@ -514,3 +514,33 @@ async def test_unrequested_paid_image_uses_exact_quote(database, monkeypatch, wo
         assert await db.scalar(select(func.count()).select_from(MediaJob)) == 0
         assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(
             CreditTransaction.kind.in_(("capture", "hold")))) == 0
+
+
+@pytest.mark.asyncio
+async def test_existing_media_instruction_rejects_generation_before_any_receipt(database, monkeypatch):
+    from app.chat.editor import GenerateImageArgs
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    monkeypatch.setattr(editor_media, "AsyncSessionLocal", database)
+    owner = await _user(database)
+    pid = await _project(database, owner)
+    async with database() as db:
+        project = await db.get(Project, pid)
+        convo = Conversation(project_id=pid, user_id=owner)
+        db.add(convo)
+        await db.commit()
+        opening = await service._create_message(db, convo.id, "user", "Edit the footage. No new media or export.")
+        opening.turn_state = "in_flight"
+        await db.commit()
+        turn = SimpleNamespace(project=project, user_id=owner, turn_id=opening.id, conversation_id=convo.id)
+        with pytest.raises(ValueError, match="excluded new media"):
+            await editor_media.submit_editor_media(
+                turn, "generate_image", GenerateImageArgs(prompt="Placeholder"), None, None, "call",
+            )
+        assert await db.scalar(select(func.count()).select_from(Message).where(
+            Message.turn_id == opening.id, Message.id != opening.id,
+        )) == 0
+        assert await db.scalar(select(func.count()).select_from(MediaJob)) == 0
+        assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(
+            CreditTransaction.kind.in_(("capture", "hold")),
+        )) == 0

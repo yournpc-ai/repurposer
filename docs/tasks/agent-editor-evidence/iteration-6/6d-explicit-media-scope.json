@@ -1,0 +1,74 @@
+{
+  "project": "53042497-f81b-469d-91c8-8a46e0b08e74",
+  "user_request": "Create and save a 3-second editable video composition using only the uploaded moving ball clip. Keep its original sound. No new media or export.",
+  "before": {
+    "request": "70ae038a-c7fb-414f-900f-fb1d38fe50bf",
+    "offered_generation": [
+      "generate_image",
+      "generate_voice",
+      "generate_music"
+    ],
+    "shot_arguments": [
+      "snapshot_id",
+      "view_id",
+      "element_id",
+      "source_start_seconds",
+      "source_end_seconds",
+      "source_query",
+      "captions_asr",
+      "narration_snapshot_id",
+      "narration_alignment_id",
+      "narration",
+      "narration_language",
+      "narration_voice_id",
+      "source_gain_db",
+      "source_muted",
+      "source_fit",
+      "source_transform",
+      "headline",
+      "supporting_text",
+      "items",
+      "text_preset",
+      "source_motion",
+      "duration_seconds",
+      "text_color",
+      "title_motion"
+    ],
+    "model": "MiniMax-M3.1-Flash"
+  },
+  "after": {
+    "request": "f8d41c6e-996f-49e6-bb0f-ebda6e18463a",
+    "offered_generation": [],
+    "shot_arguments": [
+      "snapshot_id",
+      "view_id",
+      "element_id",
+      "source_start_seconds",
+      "source_end_seconds",
+      "source_query",
+      "captions_asr",
+      "narration_snapshot_id",
+      "narration_alignment_id",
+      "source_gain_db",
+      "source_muted",
+      "source_fit",
+      "source_transform",
+      "headline",
+      "supporting_text",
+      "items",
+      "text_preset",
+      "source_motion",
+      "duration_seconds",
+      "text_color",
+      "title_motion"
+    ],
+    "model": "MiniMax-M3.1-Flash"
+  },
+  "saved_version": "d6bc9bc0-c45a-4f46-9d9e-093e79e3ac4e",
+  "first_quote": {
+    "intent": "generate_voice",
+    "credits": 1,
+    "question": "b3ddd0af-cc8a-4a4c-9805-e243c81e2331",
+    "answer": "decline"
+  }
+}
