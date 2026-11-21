@@ -41,7 +41,7 @@ function Home() {
 
   const lastPrefillRef = useRef<string | null>(null)
   const handlePrefill = useCallback(
-    (prefillKey: string, skill: SkillOption, { replaceDraft = false } = {}) => {
+    (prefillKey: string, skill: SkillOption | null, { replaceDraft = false } = {}) => {
       const placeholder = t("recipes.shelf.urlPlaceholder")
       const text = t(prefillKey, { placeholder })
       const draft = prompt.trim()
@@ -70,7 +70,7 @@ function Home() {
     if (!handoff) return
     handlePrefill(
       handoff.promptKey,
-      skillOptionForReference(handoff.skill, skillOptions),
+      handoff.skill ? skillOptionForReference(handoff.skill, skillOptions) : null,
     )
   }, [handlePrefill, skillOptions])
 
@@ -86,7 +86,7 @@ function Home() {
         {examples.map(({ skillId, label, demo }) => (
           <Button key={demo} variant="secondary"
             onClick={() => handlePrefill(`recipes.shelf.demos.${demo}.prompt`,
-              skillOptionForReference({ kind: "builtin", skill_id: skillId, version: BUILTIN_SKILL_VERSIONS[skillId] }, skillOptions),
+              skillId ? skillOptionForReference({ kind: "builtin", skill_id: skillId, version: BUILTIN_SKILL_VERSIONS[skillId] }, skillOptions) : null,
               { replaceDraft: true })}>
             {t(`recipes.shelf.subs.${label}`)}
           </Button>
@@ -98,6 +98,6 @@ function Home() {
 
 const examples = [
   { skillId: "promo-video", label: "website-product", demo: "product-promo-oxvalue-product-evidence" },
-  { skillId: "text-animation", label: "opinion-text", demo: "text-short-clear-rhythm" },
+  { skillId: null, label: "opinion-text", demo: "text-short-clear-rhythm" },
   { skillId: "knowledge-explainer", label: "concept-explainer", demo: "knowledge-explainer-clear-expression" },
 ] as const

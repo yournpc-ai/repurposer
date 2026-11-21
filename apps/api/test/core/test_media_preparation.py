@@ -393,7 +393,9 @@ async def test_covered_history_media_folds_and_read_by_id_restores_original(data
         project = Project(user_id=user.id, title='history')
         db.add(project)
         await db.flush()
-        conversation = Conversation(user_id=user.id, project_id=project.id, context={'schema_version': 1, 'items': [item]})
+        demo = {**item, 'id': f'{turn_id}:2:0:demo', 'tool': 'read_skill_demo',
+                'skill_reference': {'kind':'builtin', 'skill_id':'promo-video', 'version':'a'}}
+        conversation = Conversation(user_id=user.id, project_id=project.id, context={'schema_version': 1, 'items': [item, demo]})
         db.add(conversation)
         await db.flush()
         db.add(Message(id=turn_id, conversation_id=conversation.id, role='user', content='original', turn_state='settled'))
@@ -405,6 +407,7 @@ async def test_covered_history_media_folds_and_read_by_id_restores_original(data
         return ('original media',), []
     monkeypatch.setattr(context, '_media', media)
     restored = await context.read(ReadConversationContextArgs(item_ids=[item['id']]))
+    assert not (await context.read(ReadConversationContextArgs(item_ids=[demo['id']]))).ok
     assert restored.images == ('original media',)
     assert 'full original observation' in restored.text
 

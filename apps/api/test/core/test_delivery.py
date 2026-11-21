@@ -421,7 +421,7 @@ async def test_stop_winning_final_commit_rolls_back_the_reservation(database):
         assert await billing.held(db, uid) == 0
 
 
-async def test_first_create_skill_inherits_until_a_saved_version(database, monkeypatch, installed_promo):
+async def test_unbound_opening_has_native_creation_without_skill_context(database, monkeypatch, installed_promo):
     monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
@@ -450,10 +450,10 @@ async def test_first_create_skill_inherits_until_a_saved_version(database, monke
         first.turn_state = "settled"
         await db.commit()
         continued = await prepare_chat_turn(
-            db, uid, ChatRequest(project_id=project.id, message="Continue with one shot")
+            db, uid, ChatRequest(project_id=project.id, message="制作一个产品宣传片 promo-video")
         )
-        assert continued.skill == skill
-        assert continued.user_message.intent["skill"] == skill.model_dump(mode="json")
+        assert continued.skill is None
+        assert not (continued.user_message.intent or {}).get("skill")
         declared = tools_for_bound_skill(intent_router.tools, continued.skill)
         projected = assemble_video_round({
             "tools": declared,
@@ -462,34 +462,11 @@ async def test_first_create_skill_inherits_until_a_saved_version(database, monke
             "skill": continued.skill,
             "material_pending": False,
             "mode": "plan",
-            "user_text": "Continue with one shot",
+            "user_text": continued.user_message.content,
         }).tools
         assert next(tool for tool in projected if tool.name == "create_video").params_model is CreateVideoArgs
 
-        assert continued.user_message.intent["skill_binding"] == "inherited"
-        continued.user_message.turn_state = "settled"
-        await db.commit()
-        ordinary = await prepare_chat_turn(
-            db, uid, ChatRequest(project_id=project.id, message="What else can you do?")
-        )
-        assert ordinary.skill is None
-        ordinary.user_message.turn_state = "settled"
-        await db.commit()
-        switched = await prepare_chat_turn(
-            db, uid, ChatRequest(
-                project_id=project.id, message="Use text animation instead",
-                skill=get_builtin_skill_option("text-animation").reference,
-            ),
-        )
-        assert switched.skill.skill_id == "text-animation"
-        switched.user_message.turn_state = "settled"
-        await db.commit()
-        await pinned_video_version(db, project)
-        await db.commit()
-        saved = await prepare_chat_turn(
-            db, uid, ChatRequest(project_id=project.id, message="What changed?")
-        )
-        assert saved.skill is None
+        assert not {tool.name for tool in projected} & {"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"}
 
 
 async def test_video_edit_read_returns_current_base_and_only_requested_clip(database):

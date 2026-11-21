@@ -313,6 +313,7 @@ def _constraint_text_values(text: str) -> dict[str, Any]:
             )
             break
     duration_patterns = (
+        r"(?:制作|生成|剪辑|剪|做)(?:一[条个支部段])?\s*(\d+(?:\.\d+)?)\s*秒(?=[、，,的])",
         r"\bexactly\s+\d+\s+(?:scenes|shots)\s+and\s+(\d+(?:\.\d+)?)\s*(?:seconds|s)\b",
         r"\b(\d+(?:\.\d+)?)-second\s+(?:[a-z-]+\s+)*(?:storyboard|video|promo|film)\b",
         r"(?:总时长|总长度|成片时长|视频时长|total\s+duration|duration|length)"
@@ -1278,6 +1279,7 @@ async def _expand_scene_authoring(
             height = min(settings.height * 0.70, max(160.0, len(scene.items) * 96.0))
             ops.extend(expand_preset("list-reveal", candidate, {
                 "items": [{"text": item} for item in scene.items],
+                **({"text_color": scene.text_color} if hasattr(scene, "text_color") else {}),
                 "range": current.range.model_dump(mode="json"),
                 "scene_id": scene.scene_id,
                 "layout": {

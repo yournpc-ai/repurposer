@@ -142,7 +142,6 @@ async def video_target_hint(db, project, mentions=()):
 
 async def video_context_lines(
     db, project, mentions=(), *, skill: SkillReference | None = None,
-    skill_ambiguity: list[str] | None = None,
 ):
     """Skill, candidate and presentation facts; resources have one fresh assembler."""
     import json
@@ -169,12 +168,6 @@ async def video_context_lines(
         lines.append(
             "服务端仅为本轮首稿绑定的 Skill："
             + json.dumps(skill.model_dump(mode="json"), ensure_ascii=False)
-        )
-    if skill_ambiguity:
-        lines.append(
-            "用户提供的名称可能指以下多个 Skill："
-            + ", ".join(skill_ambiguity)
-            + "。设计前先询问用户指的是哪个 Skill 和版本。"
         )
     # Assets, page bodies, frozen sources and complete compositions ride the
     # fresh shared project context, never a second stale identity-only list.
@@ -361,9 +354,9 @@ async def prepare_bound_skill_context(*, project, skill, message, package_sessio
             project=project, skill=skill, package_sessions=package_sessions,
             name="read_skill_reference", args=root_args))
     method = (
-        "BOUND SKILL METHOD（服务端读取的包内资源）。在宿主工作流程中采用其创作方法，模式选择、工具执行和授权均遵循宿主规则。\n" + root.text
+        "BOUND SKILL METHOD（服务端读取的包内资源）。按用户选择采用创作方法。示例仅作参考。工具访问与费用授权由宿主核验。\n" + root.text
     )
-    read_project = project_context_reader(project.id, project.user_id)
+    read_project = project_context_reader(project.id, project.user_id, skill.model_dump(mode="json"))
 
     async def read():
         current = await read_project()

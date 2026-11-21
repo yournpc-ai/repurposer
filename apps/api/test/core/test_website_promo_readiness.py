@@ -4,7 +4,6 @@ from uuid import uuid4
 import pytest
 
 from app.chat.readiness import (
-    WEBSITE_PROMO_REQUIRED_SLOTS,
     brief_with_user_constraints,
     compute_source_readiness,
 )
@@ -120,8 +119,6 @@ def test_new_url_is_pending_until_real_text_and_png_exist():
     assert not readiness.capture_ready
     assert not readiness.text_ready
     assert not readiness.required_views_ready
-    assert readiness.required_next_action == "prepare_video_materials"
-    assert readiness.brief_missing_slots == list(WEBSITE_PROMO_REQUIRED_SLOTS)
 
 
 def test_completed_capture_requires_readable_png_not_only_shots():
@@ -133,27 +130,6 @@ def test_completed_capture_requires_readable_png_not_only_shots():
     assert readiness.capture_ready
     assert readiness.text_ready
     assert not readiness.required_views_ready
-    assert readiness.required_next_action == "prepare_video_materials"
-
-
-def test_ready_evidence_requires_brand_then_missing_brief_slots():
-    without_brand = compute_source_readiness(
-        user_text=f"给 {URL} 做一只宣传片",
-        assets=[asset("completed")],
-        snapshots=[snapshot()],
-        creative_state=CreativeState(),
-    )
-    assert without_brand.required_next_action == "analyze_brand"
-    assert without_brand.brief_missing_slots == list(WEBSITE_PROMO_REQUIRED_SLOTS)
-
-    with_brand = compute_source_readiness(
-        user_text=f"给 {URL} 做一只宣传片",
-        assets=[asset("completed")],
-        snapshots=[snapshot()],
-        creative_state=CreativeState(brand_profile=profile()),
-    )
-    assert with_brand.brand_profile_ready
-    assert with_brand.required_next_action == "ask_user"
 
 
 def test_full_literal_input_does_not_reask_existing_fields():
@@ -169,37 +145,6 @@ def test_full_literal_input_does_not_reask_existing_fields():
     assert brief.narration_language.value == "en"
     assert brief.subtitle_languages.value == ["en"]
     assert brief.aspect.value == "16:9"
-
-    readiness = compute_source_readiness(
-        user_text=text,
-        assets=[asset("completed")],
-        snapshots=[snapshot()],
-        creative_state=CreativeState(brief=brief, brand_profile=profile()),
-    )
-    assert readiness.brief_ready
-    assert readiness.required_next_action == "create_video"
-
-
-@pytest.mark.parametrize("kind", ["group", "bail"])
-def test_a_settled_legacy_questionnaire_applies_only_to_its_opening(kind):
-    from app.chat.readiness import settled_website_question
-    from app.models.tables import Message
-
-    opening = uuid4()
-    receipt = Message(turn_id=opening, question={"kind": "question", "group_digest": "a" * 64,
-                      "items": [{"slot": "target_seconds"}]}, answer={"kind": kind})
-    def next_action(turn_id):
-        return compute_source_readiness(
-            user_text=f"给 {URL} 做一只宣传片", snapshots=[snapshot()],
-            creative_state=CreativeState(brand_profile=profile()),
-            question_settled=settled_website_question([receipt], turn_id),
-        ).required_next_action
-
-    assert next_action(opening) == "create_video"
-    assert next_action(uuid4()) == "ask_user"
-    receipt.answer = None
-    assert next_action(opening) == "ask_user"
-
 
 def test_brand_analysis_cannot_choose_the_release_setting_for_the_user():
     from app.models.schemas import AnalyzeBrandArgs
@@ -217,26 +162,6 @@ def test_brand_analysis_cannot_choose_the_release_setting_for_the_user():
     assert args.brief.narrative_mode.value == "Customer story"
 
 
-@pytest.mark.parametrize("known_slot, known_value", [
-    ("purpose", "conference opener"), ("narrative_mode", "customer story"),
-])
-def test_partial_legacy_direction_only_asks_for_the_unsettled_choice(known_slot, known_value):
-    import json
-
-    brief = complete_brief().model_copy(update={
-        "purpose": BriefSlot(), "narrative_mode": BriefSlot(),
-        known_slot: BriefSlot(value=known_value, source=BriefSlotSource.USER_STATED),
-    })
-    state = CreativeState(brief=brief, brand_profile=profile())
-    text = f"给 {URL} 做一只宣传片"
-    readiness = compute_source_readiness(user_text=text, snapshots=[snapshot()], creative_state=state)
-    assert readiness.brief_missing_slots == ["production_direction"]
-    assert readiness.required_next_action == "ask_user"
-    assembly = round_assembly(text, assets=[asset("completed")], snapshots=[snapshot()], state=state)
-    round_facts = json.loads(assembly.context.rsplit("\n", 1)[-1])
-    assert round_facts["known_direction_inputs"] == {known_slot: known_value}
-
-
 def test_failed_capture_never_becomes_brand_ready():
     readiness = compute_source_readiness(
         user_text=f"给 {URL} 做一只宣传片",
@@ -245,7 +170,6 @@ def test_failed_capture_never_becomes_brand_ready():
     )
     assert readiness.capture_failed
     assert not readiness.brand_profile_ready
-    assert readiness.required_next_action == "answer"
 
 
 def test_non_website_promo_does_not_inherit_website_gate():
@@ -254,7 +178,6 @@ def test_non_website_promo_does_not_inherit_website_gate():
         creative_state=CreativeState(brief=complete_brief(), brand_profile=profile()),
     )
     assert readiness.task_kind == "generic"
-    assert readiness.required_next_action is None
 
 
 def test_old_rows_tolerate_null_optional_brief_fields():
@@ -270,7 +193,7 @@ def test_old_rows_tolerate_null_optional_brief_fields():
     assert brief.subtitle_languages.value is None
 
 
-def round_assembly(text, *, assets, snapshots=(), state=None, pending=None):
+def round_assembly(text, *, assets, snapshots=(), state=None, pending=None, material_pending=False):
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.prompts import assemble_video_round
     from app.chat.editor import EDITOR_TOOLS
@@ -290,42 +213,26 @@ def round_assembly(text, *, assets, snapshots=(), state=None, pending=None):
             "user_text": text,
             "creative_state": state,
             "pending_question": pending,
+            "material_pending": material_pending,
         }
     )
 
 
-def test_round_projection_uses_readiness_before_tools():
-    vague = f"给 {URL} 做一只宣传片"
-    pending = round_assembly(vague, assets=[asset()])
-    assert {tool.name for tool in pending.tools} == {"prepare_video_materials", "answer"}
-    facts = json.loads(pending.context)
-    assert "当前路径：website_promo" in facts["source_preparation"]
-    assert "含 URL：true" in facts["source_preparation"]
-    assert "等待采集：true" in facts["source_preparation"]
-    assert "采集失败：false" in facts["source_preparation"]
-    assert "采集已就绪：false" in facts["source_preparation"]
-    assert "正文已就绪：false" in facts["source_preparation"]
-    assert "所需视图已就绪：false" in facts["source_preparation"]
-    assert "Brief 已就绪：false" in facts["source_preparation"]
-    assert "已有草稿" not in facts["source_preparation"]
-    assert facts["source_readiness"]["required_next_action"] == "prepare_video_materials"
-    assert "官网宣传片取证" in pending.system
-
-    failed = round_assembly(vague, assets=[asset("failed")])
-    assert [tool.name for tool in failed.tools] == ["answer"]
-
-    briefing = round_assembly(
-        vague,
-        assets=[asset("completed")],
-        snapshots=[snapshot()],
-        state=CreativeState(),
-    )
-    assert {tool.name for tool in briefing.tools} == {"analyze_brand", "answer"}
-    assert json.loads(briefing.context)["source_readiness"]["required_next_action"] == "analyze_brand"
-    assert "官网宣传片取证" in briefing.system
+def test_website_creation_requires_real_source_and_leaves_method_to_agent():
+    text = f"给 {URL} 做一只宣传片"
+    waiting = round_assembly(text, assets=[asset()])
+    names = {tool.name for tool in waiting.tools}
+    assert {"ask_user", "capture_web", "prepare_video_materials"} <= names
+    assert "create_video" not in names
+    captured = {**asset("completed"), "text_snapshot_id": "snapshot-1"}
+    source = {**snapshot(), "canonical_url": None}
+    ready = round_assembly(text, assets=[captured], snapshots=[source], material_pending=True)
+    assert json.loads(ready.context)["available_sources"][0]["snapshot_id"] == "snapshot-1"
+    assert {"create_video", "ask_user", "analyze_brand"} <= {tool.name for tool in ready.tools}
+    assert "required_next_action" not in ready.context and "bound_skill_method" not in ready.context
 
 
-def test_round_projection_restores_design_only_after_brief_and_brand():
+def test_round_projection_preserves_user_constraints_and_brand_evidence():
     text = (
         f"给 {URL} 做一只 60 秒、16:9、国际科技感与使命叙事、英文配音和英文字幕的品牌官网宣传片。"
     )
@@ -338,7 +245,6 @@ def test_round_projection_restores_design_only_after_brief_and_brand():
     )
     facts = json.loads(ready.context)
     assert "create_video" in {tool.name for tool in ready.tools}
-    assert facts["source_readiness"]["required_next_action"] == "create_video"
     assert facts["creative_state"]["brand_profile"]["extractor_version"] == "website-brand-v1"
     assert "AVAILABLE VIDEO ROUTES" not in ready.system
     assert "promo-video" not in ready.system
@@ -607,7 +513,6 @@ def test_unrelated_single_snapshot_and_obsolete_extractor_never_ready():
         ),
     )
     assert not unrelated.brand_profile_ready
-    assert unrelated.required_next_action == "prepare_video_materials"
 
     obsolete = profile().model_copy(update={"extractor_version": "obsolete-v0"})
     stale = compute_source_readiness(
@@ -619,7 +524,6 @@ def test_unrelated_single_snapshot_and_obsolete_extractor_never_ready():
         ),
     )
     assert not stale.brand_profile_ready
-    assert stale.required_next_action == "analyze_brand"
 
 
 def test_only_latest_snapshot_digest_satisfies_brand_readiness():
@@ -639,7 +543,6 @@ def test_only_latest_snapshot_digest_satisfies_brand_readiness():
         creative_state=stale_state,
     )
     assert not stale.brand_profile_ready
-    assert stale.required_next_action == "analyze_brand"
 
     current_profile = profile().model_copy(update={
         "source_refs": [BrandSourceRef(snapshot_id="snapshot-1", digest="b" * 64)]
@@ -653,7 +556,6 @@ def test_only_latest_snapshot_digest_satisfies_brand_readiness():
         ),
     )
     assert ready.brand_profile_ready
-    assert ready.required_next_action == "create_video"
 
 
 def test_every_requested_page_needs_text_and_a_readable_view():
@@ -673,7 +575,6 @@ def test_every_requested_page_needs_text_and_a_readable_view():
     assert readiness.text_ready
     assert not readiness.required_views_ready
     assert not readiness.brand_profile_ready
-    assert readiness.required_next_action == "prepare_video_materials"
 
 
 def test_brand_extraction_normalizes_observed_provider_dialects():
@@ -912,6 +813,5 @@ def test_website_round_excludes_unrelated_project_resources():
         f"给 {URL} 做一只宣传片",
         assets=[asset(), unrelated],
     )
-    assert json.loads(assembly.context)["source_readiness"]["required_next_action"] == "prepare_video_materials"
     assert "unrelated.example" not in assembly.context
     assert not assembly.include_project_context

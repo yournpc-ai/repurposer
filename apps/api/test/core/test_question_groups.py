@@ -14,7 +14,6 @@ from app.models.schemas import (
     BrandSourceRef,
     Brief,
     BriefAnswerItem,
-    BriefQuestionOption,
     BriefQuestionItem,
     BriefSlot,
     BriefSlotSource,
@@ -177,7 +176,9 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
         conversation = Conversation(id=uuid4(), user_id=user.id, project_id=project.id)
         payload = group_payload()
         request = group_request(payload)
+        opening_id = uuid4()
         question = Message(
+            turn_id=opening_id,
             id=uuid4(),
             conversation_id=conversation.id,
             role="assistant",
@@ -191,7 +192,7 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
         await db.flush()
         db.add(conversation)
         await db.flush()
-        db.add(Message(id=uuid4(), conversation_id=conversation.id, role="user",
+        db.add(Message(id=opening_id, conversation_id=conversation.id, role="user", turn_state="settled",
                        content="给官网做一支宣传片", seq=0))
         db.add(question)
         await db.commit()
@@ -206,9 +207,15 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
 
     async def no_model_follow_up(*args, **kwargs):
         assert kwargs["group_answer_submitted"]
+        from app.chat.service import _interim_prose_callback, _lock_turn_for_final_commit
+        assert kwargs["turn_id"] == opening_id
+        await _interim_prose_callback(args[0], conversation_id, turn_id=opening_id)("检查来源")
+        async with database() as writer:
+            assert (await _lock_turn_for_final_commit(writer, opening_id)).turn_state == "in_flight"
         continuations.append(conversation_messages(kwargs["recent"]))
         return None, None
 
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
     monkeypatch.setattr("app.chat.service._plan_turn", no_model_follow_up)
     async with database() as db:
         answered, follow_up = await answer_question(
@@ -235,7 +242,8 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
             await db.scalar(
                 select(func.count(Message.id)).where(Message.conversation_id == conversation_id)
             )
-        ) == 2
+        ) == 3
+        assert (await db.get(Message, opening_id)).turn_state == "settled"
         with pytest.raises(HTTPException) as replay:
             await answer_question(
                 db, user_id, question_id, request
@@ -297,41 +305,18 @@ async def _answer_group_bail(database, monkeypatch, answers):
     return answered, stored
 
 
-def _ready_after_bail(stored):
-    from app.chat.readiness import compute_source_readiness
-    from test.core.test_website_promo_readiness import snapshot
-
-    evidence = snapshot()
-    evidence["snapshot_id"] = str(SNAPSHOT_ID)
-    return compute_source_readiness(
-        user_text=f"给 {URL} 做一只宣传片",
-        snapshots=[evidence],
-        creative_state=stored.creative_state,
-    )
-
-
 @pytest.mark.asyncio
-async def test_group_bail_uses_defaults_without_user_stated(database, monkeypatch):
+async def test_group_bail_leaves_unanswered_fields_empty(database, monkeypatch):
     answered, stored = await _answer_group_bail(database, monkeypatch, [])
     assert answered.answer["kind"] == "bail"
     assert answered.answer["answers"] == []
-    assert stored.brief.target_seconds.value == 30
-    assert stored.brief.production_direction.value == "website · product_evidence"
-    assert stored.brief.narration_language.value == "en"
-    assert stored.brief.subtitle_languages.value == ["en"]
-    assert stored.brief.aspect.value == "16:9"
-    assert stored.brief.tone.value == "minimal_tech"
-    for slot in (
-        "production_direction", "target_seconds", "narration_language",
-        "subtitle_languages", "aspect", "tone",
-    ):
-        assert getattr(stored.brief, slot).source == BriefSlotSource.DEFAULT
-    assert stored.creative_state.brief.target_seconds.value == 30
-    assert _ready_after_bail(stored).required_next_action == "create_video"
+    for slot in ("production_direction", "target_seconds", "narration_language", "subtitle_languages", "aspect", "tone"):
+        assert getattr(stored.brief, slot).value is None
+    assert stored.creative_state.brief.target_seconds.value is None
 
 
 @pytest.mark.asyncio
-async def test_group_bail_preserves_answers_and_defaults_the_rest(database, monkeypatch):
+async def test_group_bail_preserves_only_submitted_answers(database, monkeypatch):
     answered, stored = await _answer_group_bail(
         database,
         monkeypatch,
@@ -341,11 +326,8 @@ async def test_group_bail_preserves_answers_and_defaults_the_rest(database, monk
     assert len(answered.answer["answers"]) == 1
     assert stored.brief.target_seconds.value == 60
     assert stored.brief.target_seconds.source == BriefSlotSource.USER_STATED
-    assert stored.brief.production_direction.source == BriefSlotSource.DEFAULT
-    assert stored.brief.narration_language.value == "en"
-    assert stored.brief.production_direction.value == "website · product_evidence"
-    assert stored.brief.aspect.value == "16:9"
-    assert _ready_after_bail(stored).required_next_action == "create_video"
+    assert stored.brief.production_direction.value is None
+    assert stored.brief.aspect.value is None
 
 
 def test_plain_option_answer_needs_no_group_or_workflow():
@@ -397,30 +379,6 @@ async def test_streamed_ask_only_announces_activity():
     assert queue.get_nowait().startswith("event: assistant.thinking")
 
 
-def test_website_promo_question_items_reject_more_than_three_options():
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    items[0].options = [
-        BriefQuestionOption(id=str(index), label=f"Option {index}", value=f"Option {index}") for index in range(1, 5)
-    ]
-    with pytest.raises(ValueError, match="1-3"):
-        website_promo_question_items(items, Brief())
-
-
-@pytest.mark.parametrize(("slot", "invalid"), [
-    ("narration_language", ["zh", "en"]), ("target_seconds", "30–45"),
-    ("subtitle_languages", ["英文"]), ("aspect", "4:3"),
-])
-def test_website_question_requires_usable_production_values(slot, invalid):
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    next(item for item in items if item.slot == slot).options[0].value = invalid
-    with pytest.raises(ValueError, match=slot):
-        website_promo_question_items(items, Brief())
-
-
 def test_group_digest_ignores_code_owned_material_bookkeeping():
     payload = group_payload()
     before = Brief()
@@ -432,22 +390,6 @@ def test_group_digest_ignores_code_owned_material_bookkeeping():
     assert question_group_digest(payload.items, before) == question_group_digest(
         payload.items, after
     )
-
-
-def test_website_promo_group_requires_current_missing_fields_and_unique_options():
-    from app.chat.readiness import website_promo_question_items
-
-    items = website_items()
-    assert len(website_promo_question_items(items, Brief())) == 5
-
-    with pytest.raises(ValueError, match="one items group"):
-        website_promo_question_items([], Brief())
-    with pytest.raises(ValueError, match="include every missing field"):
-        website_promo_question_items(items[:1], Brief())
-
-    items[0].options[1].id = items[0].options[0].id
-    with pytest.raises(ValueError, match="unique option ids"):
-        website_promo_question_items(items, Brief())
 
 
 def test_group_title_stays_out_of_the_message_prose():
@@ -464,66 +406,17 @@ def test_group_title_stays_out_of_the_message_prose():
     ["zh-CN", "en-US"],
 ])
 def test_subtitle_choices_preserve_authored_labels_order_and_language_sets(values):
-    from app.chat.readiness import website_promo_question_items
+    from app.models.schemas import missing_brief_question_items
 
     form = website_question_arguments()
     subtitles = next(item for item in form["items"] if item["slot"] == "subtitle_languages")
     options = [{"label": f"Choice {i}", "value": value} for i, value in enumerate(values)]
     subtitles["options"] = options
     items = [BriefQuestionItem.model_validate(item) for item in form["items"]]
-    result = next(i for i in website_promo_question_items(items, Brief()) if i.slot == "subtitle_languages")
+    result = next(i for i in missing_brief_question_items(items, Brief()) if i.slot == "subtitle_languages")
     assert [(o.label, o.value) for o in result.options] == [
         (o["label"], [o["value"]] if isinstance(o["value"], str) else o["value"]) for o in options
     ]
-
-
-@pytest.mark.asyncio
-async def test_website_question_repair_keeps_the_editors_invitation(monkeypatch):
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
-    from app.chat import plan_turn
-    from app.chat.intent import intent_router
-    from app.models.schemas import ChatRequest
-    from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
-    from test.core.test_website_promo_readiness import asset, profile, round_assembly, snapshot
-
-    pending = website_pending()
-    project = Project(id=uuid4(), pending_brief=pending.model_dump(mode="json"))
-    turn = plan_turn.PlanTurn(
-        None, uuid4(), Conversation(id=uuid4()), project,
-        ChatRequest(project_id=project.id, message=pending.prompt),
-    )
-    turn.text = pending.prompt
-    monkeypatch.setattr(turn, "_absorb", AsyncMock(return_value=Brief()))
-    dock = AsyncMock(return_value=Message(id=uuid4()))
-    monkeypatch.setattr(plan_turn, "_dock_question", dock)
-
-    form = website_question_arguments()
-    invitation = "我看过官网了，想听听你打算怎么用这支片子。"
-    attempts = [
-        (invitation, {k: v for k, v in form.items() if k != "question"}),
-        ("我修正了一下表单。", {**form, "items": form["items"][:-1]}),
-        ("我补上了缺少的字段。", form),
-    ]
-    monkeypatch.setattr(intent_router, "client", SimpleNamespace(
-        capabilities=ProviderCapabilities(supports_native_tools=True),
-        generate_with_tools=AsyncMock(side_effect=[
-            ToolGeneration(content=words, tool_calls=[ToolCall(id=str(i), name="ask_user", arguments=args)])
-            for i, (words, args) in enumerate(attempts)
-        ]),
-    ))
-    assembly = round_assembly(
-        pending.prompt, assets=[asset("completed")], snapshots=[snapshot()],
-        state=CreativeState(brand_profile=profile()),
-    )
-    result = await intent_router.call_loop(
-        turn.execute, tools=assembly.tools, round_assembler=lambda **_: assembly, message=pending.prompt,
-    )
-    assert result.tool_name == "ask_user"
-    dock.assert_awaited_once()
-    assert dock.await_args.args[2] == invitation
-    assert dock.await_args.kwargs["intent"]["ask"]["prose"] == invitation
 
 
 def test_native_history_includes_intervening_dialogue_and_places_dock_pick_at_submission():

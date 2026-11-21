@@ -306,69 +306,6 @@ def _explicit_constraint_wire(
 
 
 
-def _website_briefing_question_wire(
-    description: str, parameters: dict, missing_slots: list[str], known_direction: dict[str, str]
-) -> tuple[str, dict]:
-    parameters = prune_wire_parameters(parameters, {
-        "options", "slot", "recommended_id", "brief", "material_text",
-        "material_urls", "allow_freeform", "pending_disposition",
-    })
-    properties = parameters["properties"]
-    properties["question"]["description"] = "用对话语言为整份表单写简短的总标题，例如「宣传片制作偏好」。每一页的具体问题写在 items 中。"
-    local_string = {"type": "string", "minLength": 1}
-    language_code = {"type": "string", "description": "BCP 47 语言代码。"}
-
-    def fields(**properties):
-        return {
-            "type": "object", "properties": properties,
-            "required": list(properties), "additionalProperties": False,
-        }
-
-    option_values = {
-        "production_direction": local_string,
-        "target_seconds": {"type": "integer", "minimum": 1},
-        "narration_language": language_code,
-        "subtitle_languages": {"type": "array", "items": language_code, "minItems": 1},
-        "aspect": {"type": "string", "enum": ["16:9", "9:16", "1:1"]},
-    }
-    direction_question = "这支片会在哪里播放？你希望我们怎样讲这个故事？"
-    if "purpose" in known_direction:
-        direction_question = "在你选定的播放场合，你希望我们怎样讲这个故事？"
-    elif "narrative_mode" in known_direction:
-        direction_question = "刚才讨论的这支片会在哪里播放？"
-    questions = {
-        "production_direction": (
-            f"请用用户的语言询问：{direction_question} 每个选项的标签和值均写明播放场合及根据网站证据建议的叙事方式，保留用户已说明的条件。受众信息放在 Brief 中，来源 URL 用于指明调研素材。"
-        ),
-        "target_seconds": "询问期望片长，标签注明秒数，值为对应的整数秒。",
-        "narration_language": "询问旁白要说哪种语言。每个选项标签只写一种语言。",
-        "subtitle_languages": "询问字幕需要哪些语言。两种候选语言应分别提供单语选项，也可以另给双语选项。每个选项的 value 都是语言代码数组。",
-        "aspect": "询问用户需要什么画幅，标签和值都用画面比例。",
-    }
-    properties["items"] = {
-        "type": "array", "minItems": len(missing_slots), "maxItems": len(missing_slots),
-        "description": (
-            "按顺序在本组中各询问一次：" + ", ".join(missing_slots)
-            + "。问题和用户可见的所有选项文字均使用对话语言。"
-        ),
-        "items": {"anyOf": [
-            fields(
-                slot={"type": "string", "enum": [slot]},
-                question={**local_string, "description": questions[slot]},
-                options={"type": "array", "minItems": 1, "maxItems": 3,
-                         "items": fields(label=local_string, value=option_values[slot])},
-            ) for slot in missing_slots
-        ]},
-    }
-    parameters["required"] = ["question", "items", "default_path"]
-    return (
-        "用对话语言展示一份澄清表单。每个待决定的事项各有问题和选项，用户一次提交整份表单。",
-        prune_wire_parameters(parameters, set()),
-    )
-
-
-
-
 def _video_project_tools() -> list[ChatTool]:
     return [
         *_skill_authoring_read_tools(),

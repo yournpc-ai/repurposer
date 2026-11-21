@@ -69,7 +69,7 @@ export function LandingSkills() {
             {LANDING_GALLERY.map((item, index) => {
               const selected = index === active
               const offset = (index - active + 1 + LANDING_GALLERY.length) % LANDING_GALLERY.length - 1
-              const name = t(`skills.builtin.${item.skill.skill_id}.shortName`)
+              const name = item.skill ? t(`skills.builtin.${item.skill.skill_id}.shortName`) : t(`landing.gallery.items.${item.id}.title`)
               return (
                 <button
                   key={item.id}
@@ -80,7 +80,7 @@ export function LandingSkills() {
                   aria-label={selected ? t("landing.skills.create", { name }) : name}
                   onClick={() => selected ? create(item) : selectSkill(index)}
                 >
-                  <span>{selected && <span aria-hidden="true">/</span>}{name}</span>
+                  <span>{selected && item.skill && <span aria-hidden="true">/</span>}{name}</span>
                   {selected && <span className="landing-skill-arrow"><ArrowUp aria-hidden="true" /></span>}
                 </button>
               )

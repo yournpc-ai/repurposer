@@ -543,7 +543,7 @@ const en = {
         },
         "text-short-clear-rhythm": {
           prompt:
-            "Use this Skill to help me animate this copy:\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\nMaking complex ideas clear takes more than cutting words.\nIt takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
+            "Animate this copy:\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\nMaking complex ideas clear takes more than cutting words.\nIt takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
         },
         "knowledge-explainer-clear-expression": {
           prompt:

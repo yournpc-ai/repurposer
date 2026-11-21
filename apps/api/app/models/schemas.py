@@ -552,7 +552,7 @@ class BailAnswerRequest(BaseModel):
     """Bail — a graceful exit (back to draft / stop the parked run), never an error.
 
     A clarification group may include its already-selected answers; remaining
-    fields follow the server-owned task defaults. Legacy bails omit both.
+    fields remain open. Legacy bails omit both.
     """
 
     model_config = ConfigDict(extra="forbid")

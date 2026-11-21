@@ -283,6 +283,8 @@ def _clip_facts(track, clip, content):
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
         **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
         **({"text": obj.text[:160]} if obj.kind == "text" else {}),
+        **({"text": obj.text, "language": obj.language, "voice_id": obj.voice_id}
+           if obj.kind == "speech" else {}),
     }
 
 

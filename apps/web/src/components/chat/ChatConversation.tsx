@@ -39,15 +39,7 @@ import { buildConversationBlocks } from "./timeline/project"
 import { deliveryOutputReveal, hasMessageOutputs, type VideoPresentationRecoveryFact } from "./timeline/reveal"
 
 
-/** Send-time follow re-arm (2026-09-24, user-reported auto-scroll failures).
- * The scroller library only auto-follows while its mode is "following-
- * bottom", which disengages the moment the viewport sits >8px off the
- * bottom. SENDING is
- * the user's explicit "take me to the live edge" intent, so every send
- * calls scrollToEnd: the library's own entry both jumps AND re-engages
- * following-bottom (the just-appended bubble is then caught by the
- * content-change handler under the same follow mode). This bridge lives
- * inside the Provider — the hook can't be called from the dock's body. */
+/** Sending a message returns the thread to the live edge. */
 function ScrollerSendBridge({
   apiRef,
 }: {
@@ -184,7 +176,7 @@ export function ChatConversation({
     // flicker). Every other row's id never changes, so the fallback is free.
     <Fragment key={m.birthKey ?? m.id}>
       <MessageScrollerItem
-        messageId={m.id}
+        data-message-id={m.id}
         data-message-scroller-reading-edge={
           m.role === "assistant" && m.content ? "" : undefined
         }
@@ -363,16 +355,7 @@ export function ChatConversation({
     ? renderConversationMessage(unit.message) : renderActivityUnit(unit)
 
   return (
-    <MessageScrollerProvider
-      // autoScroll: the assistant's streaming reply's live edge
-      // follows the viewport as the bubble grows (independent of
-      // scrollAnchor — which only fires on a NEW anchored row).
-      // Explicit even though shadcn defaults to true: future-proofs
-      // against upstream default drift, and makes the intent
-      // auditable to the next reader. The provider owns the prop —
-      // not MessageScroller.Root (which is a plain div).
-      autoScroll
-    >
+    <MessageScrollerProvider>
       <ScrollerSendBridge apiRef={scrollerSendRef} />
       <MessageScroller className="h-full">
         <MessageScrollerViewport className="scroll-fade-y thin-scroll">
@@ -412,7 +395,7 @@ export function ChatConversation({
         </MessageScrollerViewport>
         {/* Jump-to-latest pill — appears only when the user has scrolled
             up off the bottom (the primitive tracks visibility). */}
-        <MessageScrollerButton direction="end" />
+        <MessageScrollerButton />
       </MessageScroller>
     </MessageScrollerProvider>
   )

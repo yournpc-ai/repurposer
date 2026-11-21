@@ -253,7 +253,7 @@ async def _project(factory, owner_id):
 
 
 @pytest.mark.asyncio
-async def test_skill_binding_survives_an_unsaved_clarification_turn(database, monkeypatch, installed_promo):
+async def test_new_opening_does_not_inherit_historical_skill(database, monkeypatch, installed_promo):
     from app.chat.service import prepare_chat_turn
     from app.models.schemas import ChatRequest
     from app.models.tables import Conversation, Message
@@ -298,8 +298,8 @@ async def test_skill_binding_survives_an_unsaved_clarification_turn(database, mo
         prepared = await prepare_chat_turn(
             db, owner, ChatRequest(project_id=project, message="save the draft"),
         )
-        assert prepared.skill == skill
-        assert prepared.user_message.intent["skill_binding"] == "inherited"
+        assert prepared.skill is None
+        assert not (prepared.user_message.intent or {}).get("skill")
 
 
 async def _sources(factory, owner_id):

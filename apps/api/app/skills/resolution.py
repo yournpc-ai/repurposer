@@ -2,14 +2,11 @@
 
 This is deliberately separate from @mentions and from the tool registry. A
 reference is validated against deployed built-ins or the owner's immutable
-SkillVersion before the turn; natural-language names bind only on a unique
-match. No resolver searches arbitrary packages or grants creative instructions
+SkillVersion before the turn. No resolver searches arbitrary packages or grants creative instructions
 any additional tool, material, network, file, production or billing rights.
 """
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
@@ -36,28 +33,11 @@ _BUILTIN_VIDEO_CAPABILITIES = {
         "progressive_skill_package",
     ),
     "talking-head-video": ("mixed_real_video", "timed_captions"),
-    "text-animation": ("native_motion_graphics",),
     "knowledge-explainer": ("narration_alignment", "drawing_v1", "remotion_project"),
 }
 
-# Display names live in the web locales; these aliases are the deterministic
-# natural-language binding face for the same exact built-in references.
-_BUILTIN_SKILL_ALIASES = {
-    "promo-video": ("Promotional video", "宣传视频制作"),
-    "talking-head-video": ("Talking-head motion video", "口播动效视频制作"),
-    "text-animation": ("Text animation video", "文字动画视频制作"),
-    "knowledge-explainer": ("Knowledge explainer video", "知识讲解视频制作"),
-}
-
-
 class SkillResolutionError(ValueError):
     """An explicit reference is unknown, foreign, stale or undeclared."""
-
-
-@dataclass(frozen=True)
-class SkillResolution:
-    reference: SkillReference | None = None
-    ambiguous: tuple[SkillOption, ...] = ()
 
 
 def get_builtin_skill_option(skill_id: str, *, version: str | None = None) -> SkillOption:
@@ -132,113 +112,21 @@ async def list_available_skills(
     return options
 
 
-def _normalized_name(value: str) -> str:
-    return re.sub(r"[\W_]+", " ", value.casefold(), flags=re.UNICODE).strip()
-
-
-def _version_mentioned(normalized_message: str, option: SkillOption) -> bool:
-    reference = option.reference
-    if isinstance(reference, ExternalSkillReference):
-        if option.version_number is None:
-            return False
-        version = str(option.version_number)
-    else:
-        version = _normalized_name(reference.version)
-    return bool(
-        re.search(
-            rf"(?<![a-z0-9])(?:v(?:ersion)?|版本)\s*{re.escape(version)}(?![a-z0-9])",
-            normalized_message,
-        )
-    )
-
-
-def _has_version_query(normalized_message: str) -> bool:
-    return bool(
-        re.search(r"(?<![a-z0-9])(?:v(?:ersion)?|版本)\s*\d", normalized_message)
-    )
-
-
-def resolve_named_skill(
-    message: str,
-    options: list[SkillOption],
-    *,
-    prior_options: tuple[SkillOption, ...] = (),
-) -> SkillResolution:
-    """Bind a unique accessible name/version, including an ambiguity follow-up."""
-    normalized_message = _normalized_name(message)
-    matches: dict[str, SkillOption] = {}
-    for option in options:
-        aliases = [option.name]
-        if isinstance(option.reference, BuiltInSkillReference):
-            aliases.extend((option.skill_id, *_BUILTIN_SKILL_ALIASES.get(option.skill_id, ())))
-        for alias in dict.fromkeys(aliases):
-            name = _normalized_name(alias)
-            if not name:
-                continue
-            # ASCII word edges prevent substring guesses ("craft" inside
-            # "minecraft"); CJK may directly adjoin a Latin or Chinese Skill name.
-            if not re.search(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", normalized_message):
-                continue
-            identity = (
-                f"builtin:{option.skill_id}:{option.reference.version}"
-                if isinstance(option.reference, BuiltInSkillReference)
-                else f"external:{option.reference.skill_version_id}"
-            )
-            matches.setdefault(identity, option)
-
-    versioned = [
-        option for option in matches.values()
-        if _version_mentioned(normalized_message, option)
-    ]
-    if len(versioned) == 1:
-        return SkillResolution(reference=versioned[0].reference)
-    if versioned or (_has_version_query(normalized_message) and matches):
-        return SkillResolution(
-            ambiguous=tuple(versioned or matches.values())
-        )
-    if len(matches) > 1:
-        return SkillResolution(ambiguous=tuple(matches.values()))
-    if matches:
-        return SkillResolution(reference=next(iter(matches.values())).reference)
-
-    # A short "v2" answer may bind only a candidate persisted by the previous
-    # ambiguous turn. The caller intersects those refs with current access.
-    prior = [
-        option for option in prior_options
-        if _version_mentioned(normalized_message, option)
-    ]
-    if len(prior) == 1:
-        return SkillResolution(reference=prior[0].reference)
-    if _has_version_query(normalized_message) and prior_options:
-        return SkillResolution(ambiguous=tuple(prior or prior_options))
-    return SkillResolution()
-
-
 async def resolve_chat_skill(
     db: AsyncSession,
     *,
     owner_id: UUID,
     reference: SkillReference | None,
-    message: str,
-    prior_references: list[SkillReference] | None = None,
-) -> SkillResolution:
-    """Validate a chip, or resolve a unique natural-language Skill name."""
+) -> SkillReference | None:
+    """Only the submitted picker reference can bind a method to this opening."""
     if reference is None:
-        options = await list_available_skills(db, owner_id=owner_id)
-        prior = tuple(
-            option
-            for option in options
-            if any(option.reference == old for old in prior_references or [])
-        )
-        return resolve_named_skill(message, options, prior_options=prior)
+        return None
     if isinstance(reference, BuiltInSkillReference):
         option = get_builtin_skill_option(reference.skill_id, version=reference.version)
         if option.reference != reference:
             raise SkillResolutionError("built-in Skill version is unavailable")
-        return SkillResolution(reference=option.reference)
+        return option.reference
     version = await get_skill_version(
         db, owner_id=owner_id, skill_version_id=reference.skill_version_id
     )
-    return SkillResolution(
-        reference=ExternalSkillReference(kind="external", skill_version_id=version.id)
-    )
+    return ExternalSkillReference(kind="external", skill_version_id=version.id)

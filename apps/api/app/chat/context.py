@@ -112,7 +112,6 @@ async def build_context(
     pending: Message | None,
     confirmation: tuple[str, str] | None = None,
     skill=None,
-    skill_ambiguity: list[str] | None = None,
     include_pending: bool = True,
 ) -> dict[str, Any]:
     """Assemble the intent context deterministically (CHAT_ARCH §6, v1 scope):
@@ -132,7 +131,7 @@ async def build_context(
     ]
     from app.chat.video_turn_seats import video_context_lines
     lines.extend(await video_context_lines(
-        db, project, mentions, skill=skill, skill_ambiguity=skill_ambiguity,
+        db, project, mentions, skill=skill,
     ))
     if confirmation is not None:
         # The FACT seat — the mode-conditional LAW stays in the static

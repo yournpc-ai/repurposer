@@ -590,44 +590,6 @@ def _backfill_brief_group(project: Project, question: QuestionPayload, answers: 
     project.pending_brief = stored.model_dump(mode="json")
 
 
-async def _apply_website_promo_group_defaults(db: AsyncSession, project: Project) -> None:
-    from app.chat.readiness import (
-        creative_state_for_pending,
-        creative_state_with_brief,
-        infer_task_kind,
-        website_promo_default_brief,
-    )
-    from app.models.schemas import CreativeState
-    from app.models.tables import SourceSnapshot
-
-    stored = ProjectBrief.model_validate(project.pending_brief or {})
-    if infer_task_kind(stored.prompt) != "website_promo":
-        return
-    state = creative_state_for_pending(stored) or CreativeState()
-    profile = state.brand_profile
-    refs = profile.source_refs if profile is not None else state.source_refs
-    snapshot_ids = []
-    for ref in refs:
-        try:
-            snapshot_ids.append(UUID(str(ref.snapshot_id)))
-        except (ValueError, TypeError, AttributeError):
-            continue
-    snapshots = (
-        list((await db.scalars(
-            select(SourceSnapshot).where(SourceSnapshot.id.in_(snapshot_ids))
-        )).all())
-        if snapshot_ids
-        else []
-    )
-    stored.brief = website_promo_default_brief(
-        stored.brief,
-        snapshots,
-        fallback_language="zh" if _prefers_zh(stored.prompt) else "en",
-    )
-    stored.creative_state = creative_state_with_brief(state, stored.brief)
-    project.pending_brief = stored.model_dump(mode="json")
-
-
 # ---- 资产角色 (ADR-078 判词④): the role question + the pin settles -----------
 #
 # 判词④: source = the user's own material; reference/exemplar = the case whose
@@ -1264,39 +1226,51 @@ async def _continue_chat_answer(
         or (" · ".join(answer.text or answer.option_id or "" for answer in data.answers) if data.kind == "group" else "")
     )
     recent = await list_conversation_messages(db, UUID(str(conversation.id)))
-    # 输入耐久边界 (the answer continuation's ONE seam — prepare_chat_turn's
-    # input-durability commit's mirror): every settle write the answer
-    # implies — an asset_role pick's code-settled pins (ADR-078 判词④), a
-    # brief-slot answer's user-stated backfill (ADR-052 B2 D2-C1), and the
-    # answered row itself — lands in this ONE commit BEFORE the LLM
-    # continuation. Two laws ride it: ① the user's answer survives a
-    # continuation failure (a turn rollback never revokes a spoken answer);
-    # ② uncommitted, the settle write's flush holds the Project row lock to
-    # the request boundary, and the design beat's side-session NOWAIT begin
-    # reads THIS turn's own lock as contention — a refusal no in-turn retry
-    # can clear. The refresh restarts the continuation on committed truth:
-    # the seam released the row, and a concurrent request may have moved it
-    # in between, so nothing below decides on pre-commit state.
-    if project is not None and data.kind == "group":
-        _backfill_brief_group(project, question, answers=data.answers)
-    elif project is not None and question.slot == "asset_role":
-        await _settle_role_answer(db, project, data, say)
-    elif project is not None and question.slot is not None:
-        _backfill_brief_slot(project, question.slot, say)
-    await db.commit()
     if project is not None:
-        await db.refresh(project)
+        if question.items and data.kind in ("group", "bail"):
+            _backfill_brief_group(project, question, answers=data.answers)
+        elif question.slot == "asset_role":
+            if data.kind == "bail":
+                await _settle_default_role_pins(db, project)
+            else:
+                await _settle_role_answer(db, project, data, say)
+        elif question.slot is not None and data.kind != "bail":
+            _backfill_brief_slot(project, question.slot, say)
+    # The user's decision survives model or transport failure.
+    await db.commit()
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-    follow_up, _ = await _plan_turn(
-        db, user_id, conversation, project,
-        ChatRequest(project_id=project.id, message=say, suggestion_ref=suggestion_ref),
-        group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
-        on_delta=on_delta, on_phase=on_phase, on_tool_call=on_tool_call,
-        on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
-        on_loop_event=on_loop_event, on_activity=on_activity,
-        on_candidates=on_candidates, on_row_append=on_row_append,
-    )
+    await db.refresh(project)
+    if turn_id is not None:
+        from sqlalchemy import func
+        from app.chat.editor_recovery import editor_lock_key
+        from app.models.database import AsyncSessionLocal
+
+        # Hold the recovery lease throughout this continuation. Native tools
+        # inspect the opening in their own short transactions.
+        await db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn_id))))
+        async with AsyncSessionLocal() as state_db:
+            opening = await _lock_turn_for_transcript_write(state_db, turn_id)
+            opening.turn_state = "in_flight"
+            await state_db.commit()
+    try:
+        follow_up, _ = await _plan_turn(
+            db, user_id, conversation, project,
+            ChatRequest(project_id=project.id, message=say or "(The user skipped this question.)", suggestion_ref=suggestion_ref),
+            group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
+            on_delta=on_delta, on_phase=on_phase, on_tool_call=on_tool_call,
+            on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
+            on_loop_event=on_loop_event, on_activity=on_activity,
+            on_candidates=on_candidates, on_row_append=on_row_append,
+        )
+        if turn_id is not None:
+            opening = await _lock_turn_for_final_commit(db, turn_id)
+            opening.turn_state = "settled"
+    except BaseException:
+        await db.rollback()
+        if turn_id is not None:
+            await stamp_turn_failed(turn_id)
+        raise
     return follow_up
 
 
@@ -1429,7 +1403,10 @@ async def answer_question(
                     on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
                     on_row_append=on_row_append,
                 )
-    elif question.kind == "question" and data.kind in ("option", "freeform", "group"):
+    elif question.kind == "question" and (
+        data.kind in ("option", "freeform", "group")
+        or (data.kind == "bail" and (question.slot is not None or question.items))
+    ):
         # 续聊: the answer unblocks the conversation — the user's pick is
         # their say for the next turn, with the answered question in context.
         with bind_conversation_turn(
@@ -1463,63 +1440,6 @@ async def answer_question(
             project_id=_usage_project_id,
             accrued=_usage_bind.accrued,
         )
-
-    elif question.kind == "question" and data.kind == "bail" and (question.slot is not None or question.items):
-        # 默认路径 (提问策略③ / D2-C2): skipping a brief ask TAKES the default
-        # path — the plan path resumes. A group preserves its explicitly
-        # selected answers and fills only the remaining fields with defaults.
-        project = await db.get(Project, conversation.project_id)
-        if project is not None:
-            if question.items:
-                _backfill_brief_group(project, question, group_answers)
-                await _apply_website_promo_group_defaults(db, project)
-            if question.slot == "asset_role":
-                # 判词④'s promised default, kept by code: skip = upload
-                # order — first video the material, the next the exemplar
-                # (the default_path copy's exact promise).
-                await _settle_default_role_pins(db, project)
-            # 输入耐久边界 (_continue_chat_answer's seam, the bail branch's
-            # seat): the bail answer + the default pins commit BEFORE the
-            # plan turn — the design beat's NOWAIT begin must never meet
-            # this turn's own row lock, and the user's bail survives a
-            # continuation failure.
-            await db.commit()
-            await db.refresh(project)
-            recent = await list_conversation_messages(db, UUID(str(conversation.id)))
-            with bind_conversation_turn(
-                conversation_id=conversation.id, turn_id=turn_id or message.id,
-                project_id=conversation.project_id,
-            ) as _usage_bind:
-                follow_up, _ = await _plan_turn(
-                    db,
-                    user_id,
-                    conversation,
-                    project,
-                    ChatRequest(
-                        project_id=project.id,
-                        message=(
-                            "(The user skipped my question — take the default "
-                            "path and draft the plan.)"
-                        ),
-                    ),
-                    recent=recent,
-                    on_delta=on_delta,
-                    on_phase=on_phase,
-                    on_tool_call=on_tool_call,
-                    on_tool_ready=on_tool_ready,
-                    on_interim_prose=on_interim_prose,
-                    on_loop_event=on_loop_event,
-                    on_activity=on_activity,
-                    on_candidates=on_candidates,
-                    on_row_append=on_row_append,
-                    turn_id=turn_id,
-                )
-            await fold_conversation_usage(
-                db,
-                user_id=user_id,
-                project_id=_usage_project_id,
-                accrued=_usage_bind.accrued,
-            )
 
     await db.commit()
     await db.refresh(message)
@@ -1559,7 +1479,6 @@ async def _plan_turn(
     project: Project,
     request: ChatRequest,
     skill: SkillReference | None = None,
-    skill_ambiguity: list[str] | None = None,
     recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
@@ -1579,6 +1498,17 @@ async def _plan_turn(
     """Execute the native tool loop for an owned project opening."""
     from app.chat.plan_turn import run_plan_turn
 
+    if skill is None and turn_id is not None:
+        opening = next((row for row in recent or () if row.id == turn_id and row.role == "user"), None)
+        reference = (opening.intent or {}).get("skill") if opening else None
+        if reference:
+            from pydantic import TypeAdapter
+            from app.skills.resolution import resolve_chat_skill
+
+            skill = await resolve_chat_skill(
+                db, owner_id=user_id, reference=TypeAdapter(SkillReference).validate_python(reference),
+            )
+
     return await run_plan_turn(
         db,
         user_id,
@@ -1586,7 +1516,6 @@ async def _plan_turn(
         project,
         request,
         skill=skill,
-        skill_ambiguity=skill_ambiguity,
         recent=recent,
         group_answer_submitted=group_answer_submitted,
         authorized_media=authorized_media,
@@ -1617,7 +1546,6 @@ class PreparedTurn:
     history: list[Message]
     answered_question: Message | None
     skill: SkillReference | None = None
-    skill_ambiguity: list[str] | None = None
 
 
 async def prepare_chat_turn(
@@ -1690,83 +1618,8 @@ async def prepare_chat_turn(
     from app.skills.store import SkillNotFoundError
 
     pending = await latest_pending_question(db, conversation_id)
-    prior_skill_references: list[SkillReference] | None = None
-    inherited_skill: SkillReference | None = None
-    inherited_binding = False
-    if request.skill is None:
-        previous_users = list((await db.scalars(
-            select(Message)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.role == "user",
-                Message.turn_state == "settled",
-            )
-            .order_by(Message.seq.desc().nullslast(), Message.created_at.desc())
-            .limit(32)
-        )).all())
-        from pydantic import TypeAdapter
-
-        previous_with_ambiguity = next(
-            (row for row in previous_users if (row.intent or {}).get("skill_ambiguity")),
-            None,
-        )
-        raw_prior = (
-            (previous_with_ambiguity.intent or {}).get("skill_ambiguity")
-            if previous_with_ambiguity is not None else None
-        )
-        if isinstance(raw_prior, list):
-            try:
-                prior_skill_references = TypeAdapter(
-                    list[SkillReference]
-                ).validate_python(raw_prior)
-            except ValueError:
-                prior_skill_references = None
-        from app.models.tables import Composition, CompositionVersion
-
-        saved_version = await db.scalar(
-            select(CompositionVersion.id)
-            .join(Composition, CompositionVersion.composition_id == Composition.id)
-            .where(
-                Composition.origin_project_id == conversation.project_id,
-                Composition.owner_id == user_id,
-            )
-            .limit(1)
-        )
-        if saved_version is None and previous_users:
-            previous = previous_users[0]
-            intent = previous.intent or {}
-            # A clarification stays bound to the opening that asked it.
-            if intent.get("skill_binding") != "inherited" or (
-                pending is not None and pending.turn_id == previous.id
-            ):
-                raw_skill = intent.get("skill")
-                if raw_skill is not None:
-                    try:
-                        inherited_skill = TypeAdapter(SkillReference).validate_python(raw_skill)
-                    except ValueError:
-                        inherited_skill = None
-
     try:
-        skill_resolution = await resolve_chat_skill(
-            db,
-            owner_id=user_id,
-            reference=request.skill,
-            message=request.message,
-            prior_references=prior_skill_references,
-        )
-        if (
-            request.skill is None
-            and inherited_skill is not None
-            and skill_resolution.reference is None
-            and not skill_resolution.ambiguous
-        ):
-            inherited_binding = True
-            skill_resolution = await resolve_chat_skill(
-                db,
-                owner_id=user_id,
-                reference=inherited_skill,
-                message=request.message,
-            )
+        skill = await resolve_chat_skill(db, owner_id=user_id, reference=request.skill)
     except (SkillResolutionError, SkillNotFoundError) as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -1780,21 +1633,7 @@ async def prepare_chat_turn(
         request.message,
         attachments=[a.model_dump(mode="json") for a in request.attachments],
         mentions=[m.model_dump(mode="json") for m in request.mentions],
-        intent=(
-            {
-                "skill": skill_resolution.reference.model_dump(mode="json"),
-                **({"skill_binding": "inherited"} if inherited_binding else {}),
-            }
-            if skill_resolution.reference is not None
-            else {
-                "skill_ambiguity": [
-                    option.reference.model_dump(mode="json")
-                    for option in skill_resolution.ambiguous
-                ]
-            }
-            if skill_resolution.ambiguous
-            else None
-        ),
+        intent={"skill": skill.model_dump(mode="json")} if skill is not None else None,
         suggestion_ref=(
             request.suggestion_ref.model_dump(mode="json")
             if request.suggestion_ref is not None
@@ -1888,13 +1727,7 @@ async def prepare_chat_turn(
         project=project,
         history=history,
         answered_question=answered_question,
-        skill=skill_resolution.reference,
-        skill_ambiguity=[
-            f"{option.name} v{option.version_number}"
-            if option.version_number is not None
-            else option.name
-            for option in skill_resolution.ambiguous
-        ] or None,
+        skill=skill,
     )
 
 
@@ -2002,14 +1835,8 @@ def _interim_prose_callback(
 ):
     """Persist interim prose before exposing its stable row identity on SSE."""
     async def _emit(text: str) -> None:
-        if on_interim_prose is None:
-            if turn_id is None:
-                await _create_message(
-                    db, conversation_id, "assistant", text,
-                    intent={"type": "interim_prose"}, turn_id=turn_id,
-                )
-            else:
-                await persist_interim_prose(db, conversation_id, turn_id, text)
+        if turn_id is None:
+            await _create_message(db, conversation_id, "assistant", text, intent={"type": "interim_prose"})
             return
 
         from app.models.database import AsyncSessionLocal
@@ -2019,6 +1846,8 @@ def _interim_prose_callback(
                 interim_db, conversation_id, turn_id, text
             )
             await interim_db.commit()
+        if on_interim_prose is None:
+            return
         result = on_interim_prose(
             text,
             message.created_at.isoformat(),
@@ -2298,7 +2127,7 @@ async def execute_chat_turn(
     ) as usage:
         assistant_message, answered = await _plan_turn(
             db, prepared.user_id, prepared.conversation, prepared.project, request,
-            skill=prepared.skill, skill_ambiguity=prepared.skill_ambiguity,
+            skill=prepared.skill,
             recent=prepared.history, turn_id=prepared.user_message.id,
             on_delta=on_delta, on_reasoning=on_reasoning, on_phase=on_phase,
             on_tool_call=on_tool_call, on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,

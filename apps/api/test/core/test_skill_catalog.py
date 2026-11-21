@@ -98,7 +98,7 @@ async def test_managed_promo_reads_upstream_gallery_and_pins_release(tmp_path, m
 
     from app.config import settings
     from app.skills.package_reader import open_builtin_skill_package
-    from app.skills.resolution import SkillResolutionError, get_builtin_skill_option, resolve_named_skill
+    from app.skills.resolution import SkillResolutionError, get_builtin_skill_option
 
     release = tmp_path / "promo-video" / "snapshot-a"
     card = release / "references/shots/opening/brand.md"
@@ -120,7 +120,8 @@ async def test_managed_promo_reads_upstream_gallery_and_pins_release(tmp_path, m
 
     option = get_builtin_skill_option("promo-video")
     assert option.name == "video-shotcraft"
-    assert resolve_named_skill("/promo-video make a film", [option]).reference == option.reference
+    with pytest.raises(SkillResolutionError, match="unavailable"):
+        get_builtin_skill_option("text-animation", version="1.0.0")
     with pytest.raises(SkillResolutionError, match="unavailable"):
         get_builtin_skill_option("promo-video", version="1.0.0")
     reader = open_builtin_skill_package("promo-video", option.reference.version)

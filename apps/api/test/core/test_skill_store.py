@@ -133,9 +133,9 @@ async def test_skill_resolver_is_owner_scoped_and_version_exact(database):
     async with database() as db:
         reference = ExternalSkillReference(kind="external", skill_version_id=first.id)
         resolved = await resolve_chat_skill(
-            db, owner_id=owner_id, reference=reference, message="use external-method"
+            db, owner_id=owner_id, reference=reference
         )
-        assert resolved.reference == reference
+        assert resolved == reference
         options = await list_available_skills(db, owner_id=owner_id)
         external_ids = {
             option.reference.skill_version_id
@@ -147,25 +147,7 @@ async def test_skill_resolver_is_owner_scoped_and_version_exact(database):
             kind="external", skill_version_id=undeclared.id,
         ))
         assert method.capabilities == ["progressive_skill_package"]
-        ambiguous = await resolve_chat_skill(
-            db, owner_id=owner_id, reference=None, message="use external-method"
-        )
-        assert ambiguous.reference is None
-        assert len(ambiguous.ambiguous) == 3
-        follow_up = await resolve_chat_skill(
-            db,
-            owner_id=owner_id,
-            reference=None,
-            message="v2",
-            prior_references=[
-                ExternalSkillReference(kind="external", skill_version_id=first.id),
-                ExternalSkillReference(kind="external", skill_version_id=second.id),
-            ],
-        )
-        assert follow_up.reference == ExternalSkillReference(
-            kind="external", skill_version_id=second.id
-        )
         with pytest.raises(SkillNotFoundError):
             await resolve_chat_skill(
-                db, owner_id=other_id, reference=reference, message="use external-method"
+                db, owner_id=other_id, reference=reference
             )

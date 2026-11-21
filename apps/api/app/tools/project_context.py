@@ -48,6 +48,7 @@ def source_context(snapshot: Any) -> dict[str, Any]:
         from app.tools.video.preparation import frozen_source_lines
 
         resource.update({
+            "canonical_url": meta.get("canonical_url"),
             "citable_lines": [
                 {key: line.get(key) for key in ("line_id", "kind", "text") if line.get(key) is not None}
                 for line in frozen_source_lines(snapshot)
@@ -185,7 +186,7 @@ async def settled_skill_read_receipts(
     return merge_skill_read_receipts([item["receipt"] for item in items])
 
 
-async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> ContextSnapshot:
+async def load_project_context(db, *, project_id: UUID, owner_id: UUID, skill_reference: dict | None = None) -> ContextSnapshot:
     project = await db.scalar(select(Project).where(Project.id == project_id, Project.user_id == owner_id))
     if project is None:
         raise PermissionError("project context is not accessible")
@@ -229,8 +230,10 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
     # successful preview. History never claims to carry current visual evidence.
     skill_receipts = await settled_skill_read_receipts(
         db, project_id=project_id, owner_id=owner_id
-    )
-    for identity, receipt in list(skill_receipts.items())[:4]:
+    ) if skill_reference else {}
+    for identity, receipt in skill_receipts.items():
+        if receipt.get("skill_reference") != skill_reference:
+            continue
         resources.append((f"skill-read:{identity}", {
             "kind": "skill_read_receipt",
             "package_identity": identity,
@@ -333,9 +336,9 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
     return snapshot
 
 
-def project_context_reader(project_id: UUID, owner_id: UUID):
+def project_context_reader(project_id: UUID, owner_id: UUID, skill_reference: dict | None = None):
     """A fresh session sees tool writes committed outside the Chat transaction."""
     async def read() -> ContextSnapshot:
         async with AsyncSessionLocal() as db:
-            return await load_project_context(db, project_id=project_id, owner_id=owner_id)
+            return await load_project_context(db, project_id=project_id, owner_id=owner_id, skill_reference=skill_reference)
     return read

@@ -93,9 +93,6 @@ importers:
       '@repurposer/video-spec':
         specifier: workspace:*
         version: link:../../packages/video-spec
-      '@shadcn/react':
-        specifier: ^0.2.0
-        version: 0.2.0(@types/react@19.2.17)(react@19.2.7)
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.3.1(vite@8.1.0(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
@@ -150,9 +147,6 @@ importers:
       remotion:
         specifier: ^4.0.0
         version: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      shadcn:
-        specifier: ^4.11.0
-        version: 4.12.0(typescript@6.0.3)
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -205,6 +199,9 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0
+      shadcn:
+        specifier: ^4.11.0
+        version: 4.12.0(typescript@6.0.3)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -1247,17 +1244,6 @@ packages:
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
-
-  '@shadcn/react@0.2.0':
-    resolution: {integrity: sha512-g/LMtyL0eiHCHkOCelhYf32RC5nTMdtUNag1ZQRhSDCW+jnHxDY1Dajk7P6zJosOg8z2N4wzfKOY5sh54QTDYA==}
-    peerDependencies:
-      '@types/react': '>=19'
-      react: '>=19'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      react:
-        optional: true
 
   '@sindresorhus/merge-streams@4.0.0':
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
@@ -5718,11 +5704,6 @@ snapshots:
       react-refresh: 0.18.0
 
   '@sec-ant/readable-stream@0.4.1': {}
-
-  '@shadcn/react@0.2.0(@types/react@19.2.17)(react@19.2.7)':
-    optionalDependencies:
-      '@types/react': 19.2.17
-      react: 19.2.7
 
   '@sindresorhus/merge-streams@4.0.0': {}
 

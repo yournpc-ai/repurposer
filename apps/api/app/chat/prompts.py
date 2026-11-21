@@ -45,10 +45,9 @@ def _source_creation_facts(resources) -> list[dict]:
     return facts[-24:]
 
 
-def _native_creation_tools(tools, *, facts, readiness):
+def _native_creation_tools(tools, *, facts):
     from app.config import settings
-    from app.chat.readiness import stated_direction_inputs
-    from app.chat.turn_tools import _explicit_constraint_wire, _website_briefing_question_wire
+    from app.chat.turn_tools import _explicit_constraint_wire
     from app.models.schemas import ExternalSkillReference
     from app.tools.video.design import explicit_design_constraints
 
@@ -62,10 +61,6 @@ def _native_creation_tools(tools, *, facts, readiness):
         brief=pending,
     )
     external = isinstance(facts.get("skill"), ExternalSkillReference)
-    ask_website = (
-        readiness.task_kind == "website_promo" and readiness.brand_profile_ready
-        and readiness.brief_missing_slots
-    )
     from app.chat.editor_create import voice_generation_forbidden
 
     voice_excluded = voice_generation_forbidden(facts.get("user_text") or "")
@@ -97,13 +92,6 @@ def _native_creation_tools(tools, *, facts, readiness):
                 return description, parameters
 
             projected.append(replace(tool, wire_view=creation_wire))
-        elif tool.name == "ask_user" and ask_website:
-            projected.append(replace(tool, wire_view=lambda description, parameters: (
-                _website_briefing_question_wire(
-                    description, parameters, readiness.brief_missing_slots,
-                    stated_direction_inputs(readiness.brief),
-                )
-            )))
         else:
             projected.append(tool)
     return projected
@@ -165,7 +153,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         assets=[r for _, r in resources if r.get("kind") == "asset"],
         snapshots=[r for _, r in resources if r.get("kind") == "web"],
         creative_state=creative_state,
-        question_settled=facts.get("website_question_settled", False),
     )
     native_creation = (
         not works and not hint and not facts.get("active_repair")
@@ -250,6 +237,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                                 *(creative_state.brand_profile.source_refs
                                   if creative_state and creative_state.brand_profile else [])]
                 }
+                source_ids.update(
+                    resource["text_snapshot_id"] for _, resource in resources
+                    if resource.get("text_snapshot_id") and canonical_url(resource.get("url") or "") in urls
+                )
                 source_resources = [
                     (key, resource) for key, resource in resources
                     if resource.get("kind") == "project"
@@ -275,22 +266,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             if facts.get("material_pending_line"):
                 context["material_pending_line"] = facts["material_pending_line"]
             if readiness.task_kind == "website_promo":
-                from app.chat.readiness import render_readiness_context
-
                 names.update({"analyze_brand", "capture_web"})
                 context["source_readiness"] = readiness.model_dump()
-                context["source_preparation"] = render_readiness_context(readiness)
-                required = readiness.required_next_action
-                if required in {"prepare_video_materials", "analyze_brand"}:
-                    names = {required, "answer"}
-                elif required in {"answer", "ask_user"}:
-                    names = {required, "answer"}
-                elif not pending:
-                    names.discard("ask_user")
-                if required == "ask_user":
-                    from app.chat.readiness import stated_direction_inputs
-
-                    context["known_direction_inputs"] = stated_direction_inputs(readiness.brief)
+                if not (readiness.text_ready and readiness.required_views_ready):
+                    names.discard("create_video")
         from app.chat.video_turn_seats import asks_for_export, draft_only_request
         delivery = facts.get("preceding_delivery") or {}
         if selected and delivery.get("composition_id") == selected["composition_id"]:
@@ -336,7 +315,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
 
         tools = [t for t in facts["tools"] if t.name in names]
         if native_creation:
-            tools = _native_creation_tools(tools, facts=facts, readiness=readiness)
+            tools = _native_creation_tools(tools, facts=facts)
         def terminal_wire(tool):
             previous = tool.wire_view
 
@@ -363,21 +342,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
-        acknowledgment = None
-        if facts.get("group_answer_submitted") and readiness.task_kind == "website_promo":
-            context["questionnaire_acknowledged"] = "用户刚提交制作偏好；按其已选项继续，不重复询问。"
-            seconds = readiness.brief.target_seconds.value
-            if not facts.get("interim_prose_count"):
-                if (facts.get("speech_language") or "").startswith("zh"):
-                    film = f"这支 {seconds} 秒短片" if seconds else "这支短片"
-                    acknowledgment = f"收到，我会按你选的方向安排{film}的开场和镜头顺序。"
-                else:
-                    length = f"{seconds}-second " if seconds else ""
-                    acknowledgment = f"Got it. I’ll shape the {length}storyboard around your choices, starting with the opening."
         website_evidence_rule = (
-            "官网宣传片取证：讨论创意前，先读懂网站定位、视觉识别和核心主张。固定的正文和所需页面 PNG 均可读取后，才可询问制作或风格偏好、生成图片或旁白、设计分镜。遵循 required_next_action。采集失败时，说明实际错误和可行的恢复方式，不得编造 BrandProfile。原生 ask_user 用一份结构化问卷集中询问缺失偏好。"
-            + (jinja_env.get_template("chat/_pending_question.j2").render()
-               if any(t.name == "ask_user" for t in tools) else "")
+            "官网宣传片的产品主张和画面须来自这个网站的实际取证。采集失败时说明实际错误。"
             if readiness.task_kind == "website_promo" else ""
         )
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {"generate_voice", "generate_music", "generate_image"}
@@ -391,13 +357,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             stream_prose=native_creation and not media_ready,
             project_reply=(None if native_creation and not media_ready else
                            lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text)),
-            caller_state={"video_target": selected}, acknowledgment=acknowledgment,
+            caller_state={"video_target": selected},
             invitation_tool="ask_user" if any(t.name == "ask_user" for t in tools) else None,
-            missing_tool_feedback=(
-                "请通过原生 tool_calls 调用 ask_user，把全部缺失选项放进同一份问卷。正文只写给用户的邀请。"
-                if readiness.task_kind == "website_promo" and readiness.required_next_action == "ask_user"
-                and any(t.name == "ask_user" for t in tools) and not media_ready else None
-            ),
         )
     return RoundAssembly(
         tools=[tool for tool in facts["tools"] if tool.name == "answer"],

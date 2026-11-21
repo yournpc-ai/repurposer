@@ -9,19 +9,10 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.models.schemas import (
     Brief,
-    BriefQuestionItem,
     BriefSlot,
     BriefSlotSource,
     CreativeState,
     seal_creative_state,
-)
-
-WEBSITE_PROMO_REQUIRED_SLOTS = (
-    "production_direction",
-    "target_seconds",
-    "narration_language",
-    "subtitle_languages",
-    "aspect",
 )
 
 _URL_RE = re.compile(r"https?://[^\s<>\"'）】]+", re.IGNORECASE)
@@ -40,21 +31,11 @@ class SourceReadiness:
     capture_ready: bool
     text_ready: bool
     required_views_ready: bool
-    brief_missing_slots: list[str]
     brand_profile_ready: bool
-    required_next_action: str | None
     urls: list[str]
-    brief: Brief
-
-    @property
-    def brief_ready(self) -> bool:
-        return not self.brief_missing_slots
 
     def model_dump(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload.pop("brief")
-        payload["brief_ready"] = self.brief_ready
-        return payload
+        return asdict(self)
 
 
 def urls_from_text(text: str) -> list[str]:
@@ -78,17 +59,6 @@ def canonical_url(url: str) -> str:
 def infer_task_kind(user_text: str) -> str:
     return (
         "website_promo" if urls_from_text(user_text) and _PROMO_RE.search(user_text) else "generic"
-    )
-
-
-def settled_website_question(messages, turn_id) -> bool:
-    """Both submitting and skipping settle the questionnaire for this turn."""
-    return turn_id is not None and any(
-        message.turn_id == turn_id and (message.question or {}).get("group_digest")
-        and (message.answer or {}).get("kind") in {"group", "bail"}
-        and any(item.get("slot") in WEBSITE_PROMO_REQUIRED_SLOTS
-                for item in message.question.get("items") or [])
-        for message in messages or ()
     )
 
 
@@ -244,52 +214,6 @@ def current_web_snapshots(snapshots: list[Any] | tuple[Any, ...]) -> list[Any]:
     return [item[1] for item in sorted(latest.values(), key=lambda item: item[0])]
 
 
-def website_promo_evidence_language(
-    snapshots: list[Any] | tuple[Any, ...], *, fallback: str = "en"
-) -> str:
-    text = " ".join(
-        str(line.get("text") or "")
-        for snapshot in snapshots
-        for line in _line_facts(snapshot)
-    )
-    latin = len(re.findall(r"[A-Za-z]", text))
-    cjk = len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]", text))
-    if latin >= cjk and latin:
-        return "en"
-    if cjk:
-        return "zh"
-    return fallback
-
-
-def website_promo_default_brief(
-    stored: Brief,
-    snapshots: list[Any] | tuple[Any, ...] = (),
-    *,
-    fallback_language: str = "en",
-) -> Brief:
-    """Fill only missing fields after a group skip; user answers keep precedence."""
-    brief = stored.model_copy(deep=True)
-    language = website_promo_evidence_language(snapshots, fallback=fallback_language)
-    values = {
-        "target_seconds": 30,
-        "narration_language": language,
-        "subtitle_languages": [language],
-        "aspect": "16:9",
-    }
-    for slot, value in values.items():
-        if not getattr(brief, slot).value:
-            setattr(brief, slot, BriefSlot(value=value, source=BriefSlotSource.DEFAULT))
-    resolve_legacy_direction(brief)
-    if not brief.production_direction.value:
-        brief.production_direction = BriefSlot(
-            value=f"{brief.purpose.value or 'website'} · {brief.narrative_mode.value or 'product_evidence'}",
-            source=BriefSlotSource.DEFAULT,
-        )
-    if not brief.tone.value:
-        brief.tone = BriefSlot(value="minimal_tech", source=BriefSlotSource.DEFAULT)
-    return brief
-
-
 def compute_source_readiness(
     *,
     user_text: str,
@@ -297,7 +221,6 @@ def compute_source_readiness(
     assets: list[Any] | tuple[Any, ...] = (),
     snapshots: list[Any] | tuple[Any, ...] = (),
     creative_state: CreativeState | None = None,
-    question_settled: bool = False,
     task_kind: str | None = None,
 ) -> SourceReadiness:
     """Read current facts only; no status is persisted and no IO is performed."""
@@ -305,13 +228,6 @@ def compute_source_readiness(
     kind = task_kind or infer_task_kind(origin_text)
     urls = urls_from_text(origin_text)
     url_keys = {canonical_url(url) for url in urls}
-    stored_brief = creative_state.brief if creative_state is not None else Brief()
-    brief = (
-        brief_with_user_constraints(user_text, stored_brief)
-        if kind == "website_promo"
-        else stored_brief
-    )
-
     matched_assets = []
     for asset in assets:
         asset_type = str(
@@ -363,7 +279,6 @@ def compute_source_readiness(
     )
     capture_pending = not capture_ready and not capture_failed
 
-    missing = [slot for slot in WEBSITE_PROMO_REQUIRED_SLOTS if not getattr(brief, slot).value]
     source_identities = {_snapshot_identity(snapshot) for snapshot in matched_snapshots}
     profile = creative_state.brand_profile if creative_state is not None else None
     profile_identities = (
@@ -379,18 +294,6 @@ def compute_source_readiness(
         and source_identities
         and source_identities <= profile_identities
     )
-    if kind != "website_promo":
-        required_next = None
-    elif capture_failed:
-        required_next = "answer"
-    elif not evidence_ready:
-        required_next = "prepare_video_materials"
-    elif not brand_profile_ready:
-        required_next = "analyze_brand"
-    elif missing and not question_settled:
-        required_next = "ask_user"
-    else:
-        required_next = "create_video"
     return SourceReadiness(
         task_kind=kind,
         has_url=bool(urls),
@@ -399,77 +302,9 @@ def compute_source_readiness(
         capture_ready=capture_ready,
         text_ready=text_ready,
         required_views_ready=required_views_ready,
-        brief_missing_slots=missing,
         brand_profile_ready=brand_profile_ready,
-        required_next_action=required_next,
         urls=urls,
-        brief=brief,
     )
-
-
-def render_readiness_context(readiness: SourceReadiness) -> str:
-    lines = [
-        f"当前路径：{readiness.task_kind}",
-        "当前准备状态：",
-        f"- 含 URL：{str(readiness.has_url).lower()}",
-        *(f"- URL: {url}" for url in readiness.urls),
-        f"- 等待采集：{str(readiness.capture_pending).lower()}",
-        f"- 采集失败：{str(readiness.capture_failed).lower()}",
-        f"- 采集已就绪：{str(readiness.capture_ready).lower()}",
-        f"- 正文已就绪：{str(readiness.text_ready).lower()}",
-        f"- 所需视图已就绪：{str(readiness.required_views_ready).lower()}",
-        f"- 品牌档案已就绪：{str(readiness.brand_profile_ready).lower()}",
-        f"- Brief 已就绪：{str(readiness.brief_ready).lower()}",
-        "- Brief 缺失字段：[" + ", ".join(readiness.brief_missing_slots) + "]",
-    ]
-    return "\n".join(lines)
-
-
-def _valid_option_value(slot: str, value: Any) -> bool:
-    language = r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*"
-    if slot == "target_seconds":
-        return value > 0
-    if slot == "aspect":
-        return value in ("16:9", "9:16", "1:1")
-    if slot == "narration_language":
-        return isinstance(value, str) and bool(re.fullmatch(language, value))
-    if slot == "subtitle_languages":
-        return isinstance(value, list) and bool(value) and all(
-            isinstance(code, str) and re.fullmatch(language, code) for code in value
-        )
-    return isinstance(value, str) and bool(value.strip())
-
-
-def website_promo_question_items(items: list[BriefQuestionItem], brief: Brief) -> list[BriefQuestionItem]:
-    """Validate the selected clarification fields against the current Brief."""
-    from app.models.schemas import missing_brief_question_items
-
-    brief = brief.model_copy(deep=True)
-    resolve_legacy_direction(brief)
-    expected = [
-        slot for slot in WEBSITE_PROMO_REQUIRED_SLOTS if not getattr(brief, slot).value
-    ]
-    if not expected:
-        raise ValueError("every required Brief field is already present; continue without a clarification")
-    if not items:
-        raise ValueError(
-            "website promo clarification needs one items group covering the current missing fields: "
-            + ", ".join(expected)
-        )
-    group = missing_brief_question_items(items, brief)
-    actual = [item.slot for item in group]
-    if set(actual) != set(expected):
-        raise ValueError(
-            "include every missing field once in the same questionnaire: "
-            + ", ".join(expected)
-        )
-    for item in group:
-        if not 1 <= len(item.options) <= 3:
-            raise ValueError(f"{item.slot} needs 1-3 options")
-        for option in item.options:
-            if not _valid_option_value(item.slot, option.value):
-                raise ValueError(f"{item.slot} needs a valid value for each option")
-    return group
 
 
 def creative_state_for_pending(pending: Any) -> CreativeState | None:

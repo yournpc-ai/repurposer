@@ -34,7 +34,6 @@ export interface ChatSkillsResponse {
 export const BUILTIN_SKILL_VERSIONS = {
   "promo-video": "bdd94be16d60fa8f",
   "talking-head-video": "1.0.0",
-  "text-animation": "1.0.0",
   "knowledge-explainer": "1.0.0",
 } as const
 

@@ -102,7 +102,6 @@ class PlanTurn:
         project: Project,
         request: ChatRequest,
         skill: SkillReference | None = None,
-        skill_ambiguity: list[str] | None = None,
         on_phase=None,
         on_activity=None,
         on_candidates=None,
@@ -116,7 +115,6 @@ class PlanTurn:
         self.project = project
         self.request = request
         self.skill = skill
-        self.skill_ambiguity = skill_ambiguity or []
         self.on_phase = on_phase
         # 工作会话里程碑通道 (iter-2 ⑥): the SSE pump's projector feed —
         # called at the exploration door's successes; None = the one-shot
@@ -370,16 +368,12 @@ class PlanTurn:
                 material_pending_line = (
                     "此 URL 的网站采集仍在等待，页面尚不能用作可读证据。"
                 )
-            else:
-                material_pending_line = (
-                    "此 URL 已有网站采集结果。请先准备并核实已固定的正文和所需 PNG 视图，再作为可读证据使用。"
-                )
 
         recent_lines: list[str] = []
         from app.chat.video_turn_seats import video_context_lines
         recent_lines.extend(await video_context_lines(
             db, project, request.mentions,
-            skill=self.skill, skill_ambiguity=self.skill_ambiguity,
+            skill=self.skill,
         ))
         # The presented chain (ADR-043): the panel's current task list when the
         # caller sends one (hand edits ride along), else the stored plan's. The
@@ -808,37 +802,14 @@ class PlanTurn:
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:
         """Dock one clarification interaction through the ask_user machinery."""
         stored = self._current_pending()
-        from app.chat.readiness import (
-            brief_with_user_constraints,
-            creative_state_for_pending,
-            creative_state_with_brief,
-            infer_task_kind,
-            website_promo_question_items,
-        )
-        source_text = (
-            self.text if infer_task_kind(self.text) == "website_promo"
-            else (stored.prompt if stored else None) or self.text
-        )
-        website_promo = infer_task_kind(source_text) == "website_promo"
-        if website_promo and params.brief is not None:
-            return "Submit the questionnaire against the current Brief. Only the user's answers settle its missing fields."
+        from app.chat.readiness import creative_state_for_pending, creative_state_with_brief
+
         merged_brief = await self._absorb(
             params.brief, params.material_text, getattr(params, "material_urls", None),
         )
-        if website_promo:
-            merged_brief = brief_with_user_constraints(self.text, merged_brief)
-            current_state = creative_state_for_pending(stored)
-            if current_state is None or current_state.brand_profile is None:
-                return "website promo clarification requires analyze_brand before ask_user; no question was docked"
         group_items = []
         group_digest = None
-        if website_promo:
-            try:
-                group_items = website_promo_question_items(params.items, merged_brief)
-            except ValueError as exc:
-                return f"{exc}. Correct the form data privately and keep the invitation to the user."
-            group_digest = question_group_digest(group_items, merged_brief)
-        elif params.items:
+        if params.items:
             try:
                 group_items = missing_brief_question_items(params.items, merged_brief)
             except ValueError as exc:
@@ -1145,7 +1116,6 @@ async def run_plan_turn(
     project: Project,
     request: ChatRequest,
     skill: SkillReference | None = None,
-    skill_ambiguity: list[str] | None = None,
     recent: list[Message] | None = None,
     on_delta=None,
     on_reasoning=None,
@@ -1165,7 +1135,7 @@ async def run_plan_turn(
     """Assemble the opening and its receipts, execute native tools, and persist the reply."""
     turn = PlanTurn(
         db, user_id, conversation, project, request,
-        skill=skill, skill_ambiguity=skill_ambiguity,
+        skill=skill,
         on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
         on_row_append=on_row_append, turn_id=turn_id,
     )
@@ -1252,10 +1222,9 @@ async def run_plan_turn(
     turn._conversation_context = conversation_context
     context_tools = [conversation_context_tool()] if conversation_context is not None else []
 
-    from app.chat.readiness import creative_state_for_pending, infer_task_kind, settled_website_question
+    from app.chat.readiness import creative_state_for_pending, infer_task_kind
     from app.pipeline.assets import urls_in_text
     turn.infer_kwargs["pending_question"] = None
-    website_question_settled = settled_website_question(recent, turn_id)
 
     def assemble_round(**facts):
         target_hint = mention_target
@@ -1266,7 +1235,6 @@ async def run_plan_turn(
         )
         assembly = assemble_video_round({
             **facts,
-            "website_question_settled": website_question_settled,
             "group_answer_submitted": group_answer_submitted,
             "speech_language": speech_language or getattr(conversation, "ui_language", None),
             "mode": "plan",

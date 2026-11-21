@@ -3,7 +3,7 @@ import type { BuiltInSkillReference } from "@/lib/skills"
 const HANDOFF_KEY = "repurposer:landing-create"
 
 export type LandingCreateHandoff = {
-  skill: BuiltInSkillReference
+  skill: BuiltInSkillReference | null
   promptKey: string
 }
 
@@ -23,15 +23,14 @@ export function consumeLandingCreate(): LandingCreateHandoff | null {
     window.sessionStorage.removeItem(HANDOFF_KEY)
     const value = JSON.parse(raw) as Partial<LandingCreateHandoff>
     if (
-      value.skill?.kind !== "builtin" ||
-      typeof value.skill.skill_id !== "string" ||
-      typeof value.skill.version !== "string" ||
+      (value.skill !== null && (value.skill?.kind !== "builtin" ||
+        typeof value.skill.skill_id !== "string" || typeof value.skill.version !== "string")) ||
       typeof value.promptKey !== "string" ||
       !value.promptKey.startsWith("landing.gallery.items.")
     ) {
       return null
     }
-    return value as LandingCreateHandoff
+    return { promptKey: value.promptKey, skill: value.skill?.skill_id === "text-animation" ? null : value.skill }
   } catch {
     return null
   }

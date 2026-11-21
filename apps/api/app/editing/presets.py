@@ -276,6 +276,7 @@ class ListItem(_Params):
 
 
 class ListRevealParams(_Params):
+    text_color: str = Field(default="#111827", pattern=r"^#[0-9A-Fa-f]{6}$")
     items: list[ListItem] = Field(min_length=2, max_length=8)
     range: TimeRange
     layout: LayoutBox
@@ -1436,7 +1437,7 @@ def _expand_list_reveal(content: CompositionContent, params: ListRevealParams) -
             x=text_x, y=params.layout.y + index * row_height,
             width=params.layout.width - (text_x - params.layout.x), height=row_height,
         )
-        obj = _native_text(item.text, layout, _native_style(38, color="#111827", weight=600, align="left"))
+        obj = _native_text(item.text, layout, _native_style(38, color=params.text_color, weight=600, align="left"))
         group.add(obj, animations=_entrance(obj, at=at, duration=params.reveal, offset=(24.0, 0.0), blur=4.0))
         if item.checked is not None:
             mark_layout = LayoutBox(
@@ -1572,7 +1573,7 @@ def _expand_title_lockup(content: CompositionContent, params: TitleLockupParams)
         )
         subtitle = _native_text(
             params.subtitle, subtitle_layout,
-            _native_style(36, color="#4B5563", weight=500),
+            _native_style(36, color=params.style.color if params.style else "#4B5563", weight=500),
         )
         group.add(subtitle, animations=_entrance(
             subtitle, at=params.stagger, duration=params.reveal, offset=(0.0, 16.0), blur=4.0

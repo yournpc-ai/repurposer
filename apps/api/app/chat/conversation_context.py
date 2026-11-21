@@ -62,6 +62,13 @@ def context_items(context):
     return [item for item in context.get("items", []) if isinstance(item, dict)]
 
 
+def _method_visible(item, reference):
+    # get_skill_shot is the historical name retained in stored receipts.
+    return item["tool"] not in {
+        "read_skill_reference", "list_skill_shots", "get_skill_shot", "read_skill_demo", "get_skill_preview",
+    } or (reference is not None and item.get("skill_reference") == reference)
+
+
 def select_items(items, *, current_turn, valid_turns, keys, skill_reference, budget):
     """Newest complete records win; every omitted item gets an exact reason."""
     chosen, omitted, seen = [], [], set()
@@ -85,7 +92,7 @@ def select_items(items, *, current_turn, valid_turns, keys, skill_reference, bud
             reason = "turn deleted, cancelled or inaccessible"
         elif not item.get("persist", True) or item.get("lifetime") == "call":
             reason = "transient result"
-        elif name in {"read_skill_reference", "list_skill_shots", "get_skill_shot", "get_skill_preview"} and item.get("skill_reference") != skill_reference:
+        elif not _method_visible(item, skill_reference):
             reason = "different bound Skill/version"
         resource_keys = item.get("resource_keys") or []
         if not reason and item["ok"] and target_tool == "get_video_version":
@@ -334,6 +341,7 @@ class ConversationContext:
 
     async def read(self, args):
         items, valid_turns, _ = await self._load()
+        items = [item for item in items if _method_visible(item, self.skill_reference)]
         if not args.item_ids:
             available = [item for item in reversed(items) if item["turn_id"] in valid_turns]
             page = available[args.cursor:args.cursor + 16]

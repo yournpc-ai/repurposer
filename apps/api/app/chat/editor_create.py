@@ -1,7 +1,7 @@
 """Save an editable first version from ordered shots through the Composition store."""
 import re
 from typing import Literal
-from uuid import uuid5
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.json_schema import SkipJsonSchema
@@ -127,6 +127,16 @@ async def create_video(db, turn, args: CreateVideoArgs):
         if accessible != ids:
             raise ValueError("Choose fixed sources available in this project.")
         facts = await snapshot_facts(db, ids)
+        # A prepared web-view image is an alias for one view of its immutable parent.
+        parents = {UUID(fact["meta"]["web_snapshot_id"]) for fact in facts.values()
+                   if fact["meta"].get("origin") == "web_view" and fact["meta"].get("web_snapshot_id")}
+        if parents - ids:
+            owned = set(await db.scalars(select(SourceSnapshot.id).where(
+                SourceSnapshot.id.in_(parents - ids), SourceSnapshot.owner_id == owner,
+                SourceSnapshot.origin_project_id == project)))
+            if owned != parents - ids:
+                raise ValueError("The webpage behind this view is unavailable in this project.")
+            facts.update(await snapshot_facts(db, owned))
         from app.tools.video.design import explicit_design_constraints
 
         required = explicit_design_constraints(

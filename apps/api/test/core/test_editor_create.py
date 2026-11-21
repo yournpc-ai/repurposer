@@ -135,9 +135,14 @@ async def test_website_source_becomes_editable_version_with_user_constraints(dat
                        "width": 1280, "height": 720, "elements": []}],
         },
     )
-    text = "用 https://example.org/en 做一个总时长 3 秒、16:9、背景 #010203 的网页宣传片初稿，不要导出。"
+    image = SourceSnapshot(
+        id=uuid4(), owner_id=owner, origin_project_id=project_id, kind="image",
+        digest="b" * 64, storage_key="website/paper.png",
+        meta={"origin": "web_view", "web_snapshot_id": str(source.id), "view_id": "paper"},
+    )
+    text = "用 https://example.org/en 制作一条 3 秒、16:9、背景 #010203 的网页宣传片初稿，不要导出。"
     async with database() as db:
-        db.add(source)
+        db.add_all([source, image])
         project = await db.get(Project, project_id)
         brief = brief_with_user_constraints(text)
         project.pending_brief = ProjectBrief(prompt=text, brief=brief).model_dump(mode="json")
@@ -161,8 +166,8 @@ async def test_website_source_becomes_editable_version_with_user_constraints(dat
         turn.project = await db.get(Project, project_id)
         args = CreateVideoArgs(
             name="Website evidence", aspect="16:9", background="#010203",
-            shots=[{"snapshot_id": str(source.id), "view_id": "paper",
-                    "headline": "Evidence for everyone", "duration_seconds": 3}],
+            shots=[{"snapshot_id": str(image.id), "text_color": "#FAFAFA",
+                    "headline": "Evidence for everyone", "supporting_text": "Read the paper", "duration_seconds": 3}],
         )
         with bind_progress("website-first", None):
             result = await create_video(db, turn, args)
@@ -171,6 +176,7 @@ async def test_website_source_becomes_editable_version_with_user_constraints(dat
         assert saved.creative_state["brief"]["target_seconds"]["value"] == 3
         clips = [clip for track in saved.timeline["tracks"] for clip in track["clips"]]
         web = next(clip for clip in clips if clip["object"]["kind"] == "web")
+        assert all(clip["object"]["style"]["color"] == "#FAFAFA" for clip in clips if clip["object"]["kind"] == "text")
         assert web["object"]["view_id"] == "paper"
         assert web["source"] == {"snapshot_id": str(source.id), "snapshot_digest": source.digest, "source_range": None}
         assert sum((clip["range"]["end"] - clip["range"]["start"]) / saved.settings["timebase"] for clip in clips if clip["object"]["kind"] == "web") == 3
