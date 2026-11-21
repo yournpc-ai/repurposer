@@ -1,0 +1,11 @@
+{
+  "bucket": "repurposer-private-exports-sg",
+  "region": "ap-southeast-1",
+  "endpoint": "https://tos-s3-ap-southeast-1.volces.com",
+  "existing_legacy_bucket": "repurposer",
+  "listed_before": false,
+  "create_error": "AccessDenied",
+  "create_status": 403,
+  "request_id": "7bc207017dbee99f6b017dbe-b21c939-1xUj5q-CB-as1-tos-front-azb-6",
+  "listed_after": false
+}

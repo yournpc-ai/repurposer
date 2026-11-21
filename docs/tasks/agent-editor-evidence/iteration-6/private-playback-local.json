@@ -1,0 +1,48 @@
+[
+  {
+    "id": "d791201a-b8bc-5ed3-a241-112765bd6e04",
+    "version": "c2c66f86-1232-4843-873e-9d06a1cb07c2",
+    "frames": 240,
+    "spec_frames": 240,
+    "sha256": "c9cfbd6748758715d73b8deb06aa2f6f3ebb0e78a0816d5c2d06729fb8347e5b",
+    "stored_digest_match": true,
+    "private": true,
+    "play": [
+      {
+        "seconds": 0.161614,
+        "width": 320,
+        "ready": 4
+      },
+      {
+        "seconds": 0.17075,
+        "width": 320,
+        "ready": 4
+      }
+    ],
+    "expired_status": 403,
+    "browser_renewed": true
+  },
+  {
+    "id": "b6a263b9-6b9c-569f-a5f4-9b07c693eed3",
+    "version": "f772f104-24b5-4125-93f0-583c37807bba",
+    "frames": 188,
+    "spec_frames": 188,
+    "sha256": "08b81e33202ba9054ee9ae8a18f05ebad74a72e0fed0c9c1f07dde0fd6b90fa1",
+    "stored_digest_match": true,
+    "private": true,
+    "play": [
+      {
+        "seconds": 0.170676,
+        "width": 320,
+        "ready": 4
+      },
+      {
+        "seconds": 0.185495,
+        "width": 320,
+        "ready": 4
+      }
+    ],
+    "expired_status": 403,
+    "browser_renewed": true
+  }
+]

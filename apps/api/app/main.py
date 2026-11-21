@@ -113,6 +113,8 @@ _MAX_BODY_LOG = 2048
 
 
 def _redact(obj):
+    if isinstance(obj, str) and any(key in obj.lower() for key in ("x-amz-signature=", "x-tos-signature=")):
+        return "<signed storage URL>"
     if isinstance(obj, dict):
         return {
             k: ("***" if str(k).lower() in _SENSITIVE_KEYS else _redact(v))

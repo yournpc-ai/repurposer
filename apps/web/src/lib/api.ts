@@ -185,6 +185,19 @@ function isObjectStorageUrl(absolute: string): boolean {
   }
 }
 
+export function playbackPath(url: string | undefined | null): string | null {
+  if (!url) return null
+  const parsed = new URL(url, API_URL)
+  if (parsed.origin !== new URL(API_URL).origin) return null
+  return /^\/api\/v1\/outputs\/[0-9a-f-]{36}\/playback$/.test(parsed.pathname) ? parsed.pathname : null
+}
+
+export async function authorizePlayback(path: string, download = false) {
+  const response = await apiGet(path + (download ? "?download=true" : ""), { cache: "no-store" })
+  if (!response.ok) throw new Error("Could not authorize Output playback")
+  return await response.json() as { url: string; expires_in: number }
+}
+
 export async function downloadFile(
   url: string | null | undefined,
   filename: string
@@ -194,9 +207,10 @@ export async function downloadFile(
   // Public object-storage downloads use direct navigation, not a CORS fetch:
   // the storage attachment response saves the real bytes without touching a
   // prior no-cors <video>/<img> cache entry or buffering the whole video.
-  if (isObjectStorageUrl(absolute)) {
+  const privatePath = playbackPath(absolute)
+  if (privatePath || isObjectStorageUrl(absolute)) {
     const a = document.createElement("a")
-    a.href = absolute
+    a.href = privatePath ? (await authorizePlayback(privatePath, true)).url : absolute
     a.download = filename
     document.body.appendChild(a)
     a.click()

@@ -100,6 +100,12 @@ async def _fixed_original(row) -> dict:
     }
 
 
+async def pending_original_status(user_id: UUID, speech: SpeechObject) -> str | None:
+    content_hash, _, _ = _identity(user_id, speech)
+    row = await _row(user_id, content_hash)
+    return row.status if row is not None and row.status != "done" else None
+
+
 async def peek_original(user_id: UUID, speech: SpeechObject) -> dict | None:
     """Read-only quote/cache probe; never claims or synthesizes."""
     content_hash, _, _ = _identity(user_id, speech)

@@ -1,0 +1,59 @@
+{
+  "stack": "unmodified production API, Worker and S3 client with configuration only; local PostgreSQL and two MinIO buckets; native tool entry and Chrome",
+  "rows": [
+    {
+      "owner": "3e091194-ff70-4e7d-8294-86cb0c415542",
+      "output": "e4ba3710-3a5c-5a6c-abed-e4794af58e43",
+      "version": "59097f14-def5-4942-9f22-cf5c7a4a130d",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "4118d295-fe6e-42d8-ab10-7fe57fbfc9c0",
+      "output": "91b8b02c-535b-5aff-b962-ef4df3b5cf0e",
+      "version": "3c377b6e-9436-4cb0-a9c9-5edfdacffc70",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    }
+  ]
+}

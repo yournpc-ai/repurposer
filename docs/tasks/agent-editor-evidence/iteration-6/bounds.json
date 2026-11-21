@@ -1,0 +1,10 @@
+{
+  "accepted": 4,
+  "fifth_request": "rejected before hold",
+  "stop_before_claim": 3,
+  "expired_claims": 3,
+  "old_token_updates": 0,
+  "terminal": "failed",
+  "terminal_attempt": 3,
+  "captures": 0
+}

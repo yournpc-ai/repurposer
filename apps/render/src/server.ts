@@ -138,7 +138,7 @@ app.post("/preview", async (req, res) => {
 });
 
 // The only render contract is video-spec. Upload-only recovery never renders on cache miss.
-app.post(["/render", "/upload"], async (req, res) => {
+app.post(["/render", "/prepare-export", "/upload"], async (req, res) => {
   if (req.path === "/upload") req.body.upload_only = true;
   const { spec, outputs, render_id, upload_only } = req.body as {
     render_id?: string;
@@ -151,7 +151,12 @@ app.post(["/render", "/upload"], async (req, res) => {
     res.status(400).json({ error: "a valid video-spec is required" });
     return;
   }
-  if (!outputs?.video?.put_url) {
+  const prepareOnly = req.path === "/prepare-export";
+  if (prepareOnly && !render_id) {
+    res.status(400).json({ error: "A render identity is required" });
+    return;
+  }
+  if (!prepareOnly && !outputs?.video?.put_url) {
     res.status(400).json({ error: "outputs.video.put_url is required" });
     return;
   }
@@ -161,12 +166,17 @@ app.post(["/render", "/upload"], async (req, res) => {
   }
   try {
     const { videoPath } = await artifactsForRequest(
-      { id: render_id ?? outputs.video.key, spec: parsed.data },
+      { id: render_id ?? outputs!.video!.key, spec: parsed.data },
       upload_only === true,
       (outDir) => renderVideo(parsed.data, outDir, "video"),
     );
-    await uploadFile(outputs.video.put_url, videoPath, outputs.video.content_type, outputs.video.create_only);
-    res.json({ ok: true, video: outputs.video.key });
+    if (prepareOnly) {
+      res.json({ ready: true });
+      return;
+    }
+    const video = outputs!.video!;
+    await uploadFile(video.put_url, videoPath, video.content_type, video.create_only);
+    res.json({ ok: true, video: video.key });
   } catch (err) {
     console.error("video_render_failed", { render_id, error: err });
     const failure = failureBody(err);

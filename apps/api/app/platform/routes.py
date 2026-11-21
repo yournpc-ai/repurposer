@@ -456,7 +456,7 @@ async def get_wallet_transactions(
     ordered: list[tuple[str, _CreditTransaction]] = []  # (group key | "", row) newest-first
     for row in rows:
         ref = row.ref or {}
-        run_id = ref.get("run_id") if row.kind in ("hold", "capture", "release") else None
+        run_id = (ref.get("run_id") or ref.get("export_id")) if row.kind in ("hold", "capture", "release") else None
         if run_id:
             group = groups.setdefault(str(run_id), {"captures": 0, "at": row.created_at})
             if row.kind == "capture":
@@ -492,7 +492,7 @@ async def get_wallet_transactions(
     # carries the LLM-chosen plan name (source ①); the produced PUBLIC output
     # types are the client's honest-fallback facts (source ② 世界自证);
     # the project title feeds the row's meta line.
-    run_ids = [UUID(rid) for rid in groups]
+    run_ids = {UUID(row.ref["run_id"]) for key, row in ordered if key and row.ref.get("run_id")}
     run_rows = (
         list(
             (
@@ -564,11 +564,11 @@ async def get_wallet_transactions(
             hint_raw = str(ctx.get("instruction") or "").strip()
             items.append(
                 WalletTransactionItem(
-                    id=f"run:{key}",
+                    id=f"export:{key}" if (row.ref or {}).get("export_id") else f"run:{key}",
                     family="spend",
                     amount=spent,
-                    label=name,
-                    output_types=types_by_run.get(key, []),
+                    label=(("视频导出" if zh else "MP4 export") if (row.ref or {}).get("export_id") else name),
+                    output_types=["video"] if (row.ref or {}).get("export_id") else types_by_run.get(key, []),
                     hint=(
                         hint_raw if len(hint_raw) <= 36 else hint_raw[:36] + "…"
                     )

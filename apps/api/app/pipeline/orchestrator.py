@@ -345,7 +345,6 @@ async def create_run(
     task: TaskSpec,
     *,
     reuse_video_production: bool = False,
-    export_receipt: Message | None = None,
 ) -> WorkflowRun:
     """The only Run birthplace: authorize, compile, quote and reserve once.
 
@@ -378,7 +377,7 @@ async def create_run(
         pin_video_production,
         pin_visual_asset_preparation,
     )
-    video_context = await pin_video_production(db, project, task.tasks, task.video_authorized_by, export_receipt=export_receipt)
+    video_context = await pin_video_production(db, project, task.tasks, task.video_authorized_by)
     narration_context = await pin_narration_preparation(project, task.tasks)
     visual_context = await pin_visual_asset_preparation(db, project, task.tasks)
     music_context = await pin_music_preparation(db, project, task.tasks)

@@ -1,0 +1,275 @@
+{
+  "stack": "PostgreSQL, native tool harness, API, worker, renderer, local MinIO, Chrome",
+  "rows": [
+    {
+      "owner": "d8112121-de58-41bf-8936-af5d87830230",
+      "output": "c0652880-1d9e-57ef-ae02-042fe8f6da0d",
+      "version": "f01222ac-3e7e-4a6d-b8e1-0ccc974cbcf7",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "1091294b-d81d-4978-ab53-7308aad9a5d9",
+      "output": "209b78f1-a0e7-5b53-8713-06748550ae71",
+      "version": "aea37c66-bb21-4597-bc00-7cbe690be716",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "fccd5c4a-557b-4e26-ba2a-a50d8aef226f",
+      "output": "b8d59aa2-030e-59a9-a65b-04c1785f9bba",
+      "version": "9f994b3a-fd25-4b2b-838f-34c1562870d6",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "62897158-25e7-4ba7-9e41-4b24447cff34",
+      "output": "511f1cc2-6114-54ad-9e9c-3f83647ce9bd",
+      "version": "8ed8ee7c-bf4d-4185-a3be-580b96f5a416",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "9640e95e-af12-44fe-9891-4dccc0ba39b6",
+      "output": "fc97e303-b0ed-57ac-8f24-0e7eb78bfdbb",
+      "version": "a7538e85-e9b8-424f-bce4-5603efba3934",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "1ff5fd10-fa8f-43fe-9dce-317a67815149",
+      "output": "5f475bd4-b18a-56a2-95a3-39ad47662aa8",
+      "version": "08592aff-f467-4a97-b670-2129dc05a348",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "94700c5d-d0ad-44df-9cbb-8f43bc6dffb4",
+      "output": "8c03d54e-6056-53ed-89f1-8645732ad568",
+      "version": "614b775a-7f5d-451b-bf1b-c4d1a59c45ee",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "dff45c8a-1910-40f3-b30a-268a70638c85",
+      "output": "68da0631-6b73-5f60-a78c-b35da58e7ab6",
+      "version": "ad2d2fa5-96b7-41ef-9a17-bdbe1e587ace",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "47f0b60c-4c75-48b8-9f31-378c674a7f84",
+      "output": "1260c939-385a-5459-8b5f-7809f5e766aa",
+      "version": "001fdece-b472-4748-b967-fd11e9dbf4d9",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    },
+    {
+      "owner": "5f0129d3-569b-451b-b59a-ff47efdbcf92",
+      "output": "cd48560e-0d5b-5185-bd26-c566f2db286f",
+      "version": "a9e2bae7-30f2-47fe-9d4c-967c1431236d",
+      "attempt": 1,
+      "anon": 403,
+      "foreign": 403,
+      "play": true,
+      "download": 200,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ],
+      "same_call_receipt": true,
+      "changed_call_rejected": true,
+      "result_before_stop": "succeeded"
+    }
+  ]
+}

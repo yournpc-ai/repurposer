@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { downloadFile } from "@/lib/api"
+import { authorizePlayback, downloadFile, playbackPath } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 import type { MediaLightboxData } from "./mediaLightboxTypes"
 import { MediaRegionSelectionOverlay } from "./MediaRegionSelectionOverlay"
@@ -928,6 +928,27 @@ function MediaFrame({
   regionSelection?: MediaRegionSelectionControl
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const accessPath = active && item.kind === "video" ? playbackPath(item.url) : null
+  const [renewal, renew] = useState(0)
+  const [grant, setGrant] = useState<{ path: string; url: string; expiresAt: number } | null>(null)
+  const resumeAt = useRef(0)
+  const renewingUrl = useRef<string | null>(null)
+  useEffect(() => {
+    let live = true
+    if (accessPath) {
+      void authorizePlayback(accessPath).then(({ url, expires_in }) => {
+        if (live) setGrant({ path: accessPath, url, expiresAt: Date.now() + expires_in * 1000 })
+      }).catch(() => { if (live) setGrant(null) })
+    }
+    return () => { live = false }
+  }, [accessPath, renewal])
+  const renewIfExpired = () => {
+    if (!accessPath || grant?.path !== accessPath || Date.now() < grant.expiresAt) return
+    if (renewingUrl.current === grant.url) return
+    renewingUrl.current = grant.url
+    renew(n => n + 1)
+  }
+  const videoSrc = accessPath ? (grant?.path === accessPath ? grant.url : undefined) : item.url
 
   return (
     <motion.div
@@ -947,7 +968,15 @@ function MediaFrame({
               <video
                 ref={videoRef}
                 key={item.id ?? item.url}
-                src={item.url}
+                src={videoSrc}
+                onTimeUpdate={(event) => { resumeAt.current = event.currentTarget.currentTime }}
+                onLoadStart={renewIfExpired}
+                onPlay={renewIfExpired}
+                onSeeking={renewIfExpired}
+                onError={renewIfExpired}
+                onLoadedMetadata={event => {
+                  if (accessPath && resumeAt.current) event.currentTarget.currentTime = resumeAt.current
+                }}
                 poster={item.poster ?? undefined}
                 className="absolute inset-0 h-full w-full object-contain"
                 controls

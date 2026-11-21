@@ -1,0 +1,379 @@
+[
+  {
+    "composition": "c41b1ce9-ff18-4fb5-a273-c245819832f2",
+    "version": "91af32b3-770f-4eef-83e1-264b4d189e28",
+    "clip": "clp_generator",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "draw-2d",
+    "fixed": false
+  },
+  {
+    "composition": "ce1795ff-1296-44c9-acb7-714cfe8d0d62",
+    "version": "bd4f9951-9a10-4d51-b09d-cae48ad46a03",
+    "clip": "clp_generator",
+    "kind": "generator",
+    "version_outputs": 3,
+    "producer": "image-generation",
+    "fixed": false
+  },
+  {
+    "composition": "d5e2e575-80c2-4b3f-9ce0-a00c14868525",
+    "version": "e84be2ac-5f6e-4d21-bb4f-cdd5dd4de29e",
+    "clip": "clp_mg_1_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": null,
+    "unverified": "NoSuchKey",
+    "reason": "An error occurred (NoSuchKey) when calling the GetObject operation: The specified key does",
+    "original_status": "done",
+    "original_digest": "4bf5be0bd6171f02711cfe506b2eab1834170e11f924325b499d35c806707968",
+    "usage_characters": 9,
+    "has_provider_trace": true,
+    "alternate_keys": 0,
+    "accessible_exact_copies": 0,
+    "old_output_count": 2,
+    "existing_outputs": 0
+  },
+  {
+    "composition": "d5e2e575-80c2-4b3f-9ce0-a00c14868525",
+    "version": "e84be2ac-5f6e-4d21-bb4f-cdd5dd4de29e",
+    "clip": "clp_mg_2_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": null,
+    "unverified": "NoSuchKey",
+    "reason": "An error occurred (NoSuchKey) when calling the GetObject operation: The specified key does",
+    "original_status": "done",
+    "original_digest": "4923550c3b65aa6a367b02eab05f99ca328d1691f36636cd172d4cdfc0a9079a",
+    "usage_characters": 91,
+    "has_provider_trace": true,
+    "alternate_keys": 0,
+    "accessible_exact_copies": 0,
+    "old_output_count": 2,
+    "existing_outputs": 0
+  },
+  {
+    "composition": "c9e98472-e4bc-4f79-8fc0-a265bc9ecc7e",
+    "version": "d485a217-d49a-4592-8094-48579b74a274",
+    "clip": "clp_mg_1_speech",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "unverified": "NoSuchKey",
+    "reason": "An error occurred (NoSuchKey) when calling the GetObject operation: The specified key does",
+    "original_status": "done",
+    "original_digest": "4923550c3b65aa6a367b02eab05f99ca328d1691f36636cd172d4cdfc0a9079a",
+    "usage_characters": 91,
+    "has_provider_trace": true,
+    "alternate_keys": 0,
+    "accessible_exact_copies": 0,
+    "old_output_count": 1,
+    "existing_outputs": 0
+  },
+  {
+    "composition": "d7b867b7-fd65-49be-9fd7-65893d5bb46a",
+    "version": "1d10f75b-4244-4854-b2c6-fda4b3cdc972",
+    "clip": "clp_mg_1_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": null,
+    "unverified": "NoSuchKey",
+    "reason": "An error occurred (NoSuchKey) when calling the GetObject operation: The specified key does",
+    "original_status": "done",
+    "original_digest": "4923550c3b65aa6a367b02eab05f99ca328d1691f36636cd172d4cdfc0a9079a",
+    "usage_characters": 91,
+    "has_provider_trace": true,
+    "alternate_keys": 0,
+    "accessible_exact_copies": 0,
+    "old_output_count": 0,
+    "existing_outputs": 0
+  },
+  {
+    "composition": "eacbec96-f14a-4046-8572-6b876f85eb46",
+    "version": "bb8c5d79-3fc1-4595-afbb-604672b54d46",
+    "clip": "clp_mg_1_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": null,
+    "fixed_original": false,
+    "fixed_version_manifest": false
+  },
+  {
+    "composition": "eacbec96-f14a-4046-8572-6b876f85eb46",
+    "version": "bb8c5d79-3fc1-4595-afbb-604672b54d46",
+    "clip": "clp_mg_2_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": null,
+    "fixed_original": false,
+    "fixed_version_manifest": false
+  },
+  {
+    "composition": "c9c6f500-5004-43d9-9140-a2e5fe532fc2",
+    "version": "d73449a7-660b-4200-bbf8-a06e59b9d55a",
+    "clip": "clp_generator",
+    "kind": "generator",
+    "version_outputs": 1,
+    "producer": "draw-2d",
+    "fixed": false
+  },
+  {
+    "composition": "b13aef5c-2df5-4b3a-a48b-1441dd52a21b",
+    "version": "7f6ea43f-d113-4717-a891-446fd1ff937c",
+    "clip": "clp_generator",
+    "kind": "generator",
+    "version_outputs": 1,
+    "producer": "draw-2d",
+    "fixed": false
+  },
+  {
+    "composition": "1896a973-9081-4887-9fdb-f862043db2c9",
+    "version": "0b6cdb84-d22c-4bc6-8529-3c2897d83b56",
+    "clip": "clp_aligned_s0001_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": "cccf1c93-c047-5958-b0e3-c95f8d4e96ab",
+    "fixed": true
+  },
+  {
+    "composition": "09fbca18-551d-4049-87c0-f8777341a27d",
+    "version": "2d076994-465a-4ddf-9666-eb16b9bce420",
+    "clip": "clp_aligned_s0001_speech",
+    "kind": "speech",
+    "version_outputs": 0,
+    "binding": "cccf1c93-c047-5958-b0e3-c95f8d4e96ab",
+    "fixed": true
+  },
+  {
+    "composition": "d42d7f8c-4390-440b-af42-0b813cd9c4ef",
+    "version": "866b194d-ea31-4c01-af2f-5f17163e5af6",
+    "clip": "clp_aligned_1_generator",
+    "kind": "generator",
+    "version_outputs": 1,
+    "producer": "draw-2d",
+    "fixed": false
+  },
+  {
+    "composition": "d42d7f8c-4390-440b-af42-0b813cd9c4ef",
+    "version": "866b194d-ea31-4c01-af2f-5f17163e5af6",
+    "clip": "clp_aligned_s0001_speech",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": "cccf1c93-c047-5958-b0e3-c95f8d4e96ab",
+    "fixed": true
+  },
+  {
+    "composition": "89e76620-c978-47ee-80d5-0ca362b65d53",
+    "version": "2873107e-526d-49d9-a17d-bc55e69c10ab",
+    "clip": "clp_aligned_1_generator",
+    "kind": "generator",
+    "version_outputs": 1,
+    "producer": "draw-2d",
+    "fixed": false
+  },
+  {
+    "composition": "89e76620-c978-47ee-80d5-0ca362b65d53",
+    "version": "2873107e-526d-49d9-a17d-bc55e69c10ab",
+    "clip": "clp_aligned_s0001_speech",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": "7170c0ed-856a-5729-b757-d212b6fadd70",
+    "fixed": true
+  },
+  {
+    "composition": "c9cd6c14-9eef-4463-9bcb-09be6c00f42b",
+    "version": "0ff20eaf-833c-4315-b3ef-78bcc21023f7",
+    "clip": "c_hero",
+    "kind": "generator",
+    "version_outputs": 1,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "4837aad1-2523-4ebf-ba29-f2c36a0e9c0b",
+    "version": "b836ab97-0c1d-4db0-ac53-9cd7d19cb275",
+    "clip": "c-hero",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "9d306594-1102-49cc-a006-251d2f2f34d6",
+    "version": "26c10185-8293-4216-aa16-083f8d5c8773",
+    "clip": "clip_hero",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "9d306594-1102-49cc-a006-251d2f2f34d6",
+    "version": "26c10185-8293-4216-aa16-083f8d5c8773",
+    "clip": "clip_trio_a",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "9d306594-1102-49cc-a006-251d2f2f34d6",
+    "version": "26c10185-8293-4216-aa16-083f8d5c8773",
+    "clip": "clip_trio_b",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "9d306594-1102-49cc-a006-251d2f2f34d6",
+    "version": "26c10185-8293-4216-aa16-083f8d5c8773",
+    "clip": "clip_outro",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "8fc9cfb7-99a8-4a0f-a819-57706ac3eaa4",
+    "version": "f48349ce-d4f9-4b5c-8d3d-e54360f99f44",
+    "clip": "clp_shotcraft",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "c04aa11f-3604-4b56-8ef7-718044a85cdc",
+    "version": "0e2cd1ee-2467-4164-878e-9f21f0d26156",
+    "clip": "clip_dolly_zoom",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "815beebf-f75b-4cfe-a372-8ac9f37de09f",
+    "version": "f724db04-12d2-48a2-9e82-87bf064d76ee",
+    "clip": "clip_dolly_zoom",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "0db00346-2757-4933-987a-8a9e06f417be",
+    "version": "43036980-ad21-4b37-9975-52c137e4bbf2",
+    "clip": "clip-dolly-zoom",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "a814a866-149f-41ed-98e9-a33dcaf3149e",
+    "version": "39921cc8-3944-404e-a5ba-87b506f56d2d",
+    "clip": "clip_demo",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "1f8fbe8c-ca57-4d9b-9d54-54b3b8c727f9",
+    "version": "c1ce9712-22e7-42f4-b95f-a8995480c77a",
+    "clip": "clip_demo",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "e70deabd-2d23-4c03-9a6a-3b999fe8374a",
+    "version": "a4f3a9af-46ea-43f1-86e2-1c7acd2033df",
+    "clip": "clip_demo",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "50a3903d-c0aa-43b3-ad64-21b2b06ccc31",
+    "version": "dcf8cb92-1276-4e4e-92f2-daec30dd30d6",
+    "clip": "clip_demo",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": false
+  },
+  {
+    "composition": "23fd1569-c709-42fb-b1ff-4ceb08b9bde4",
+    "version": "dcafff80-9e36-4ded-90f7-e8f96a12a88e",
+    "clip": "clip_demo",
+    "kind": "generator",
+    "version_outputs": 0,
+    "producer": "remotion-project",
+    "fixed": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc1-open",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc2-claim",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc3-model",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc4-product",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc5-doodle",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  },
+  {
+    "composition": "499a95a4-80bf-4858-96d4-6a2a381ed630",
+    "version": "4a6f98a2-64cd-4178-8387-849b08cfbf17",
+    "clip": "clp_speech_sc6-cta",
+    "kind": "speech",
+    "version_outputs": 1,
+    "binding": null,
+    "fixed_original": true,
+    "fixed_version_manifest": true
+  }
+]

@@ -34,6 +34,7 @@ async def report_committed_edits(db, opening):
     labels = {
         "create_video": ("创建初稿", "create draft"),
         "insert_audio": ("插入音频", "insert audio"),
+        "bind_clip_source": ("绑定固定素材", "bind fixed source"),
         "split_clip": ("分割", "split"),
         "trim_clip": ("裁剪", "trim"),
         "extend_still": ("延长片尾画面", "extend closing still"),
@@ -140,7 +141,11 @@ async def recover_interrupted_edits(db, conversation_id):
             media = list(await db.scalars(select(Message).where(
                 Message.turn_id == row.id, Message.intent.has_key("editor_media"),
             ).order_by(Message.seq)))
-            pending = any(m.workflow_run_id and not m.intent.get("media_result") for m in media)
+            if any(m.intent.get("export_job") and m.intent.get("media_result") and
+                   not (row.intent or {}).get("resumed_media") for m in media):
+                # The worker polls durable results and competes for the existing opening lock.
+                continue
+            pending = any((m.workflow_run_id or m.intent.get("export_job")) and not m.intent.get("media_result") for m in media)
             if pending:
                 continue
             for receipt in media:
@@ -214,3 +219,22 @@ async def settle_media_activity(db, receipt):
         if success:
             frame["key"] = tool.presentation.done_key
         activity.intent = {**activity.intent, "frame": frame}
+
+
+async def resume_export_receipts():
+    """One bounded scan; the live API and every worker share the opening lock."""
+    from sqlalchemy.orm import aliased
+    from app.models.database import AsyncSessionLocal
+    from app.models.tables import ExportJob
+    from app.chat.editor_media import continue_media_turn
+
+    opening = aliased(Message)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(ExportJob.project_id, Message.id)
+            .join(Message, Message.id == ExportJob.receipt_id)
+            .join(opening, opening.id == Message.turn_id)
+            .where(opening.turn_state == "in_flight", Message.intent.has_key("media_result"))
+            .order_by(ExportJob.created_at).limit(32))).all()
+    for project_id, receipt_id in rows:
+        async with AsyncSessionLocal() as db:
+            await continue_media_turn(db, await db.get(Project, project_id), await db.get(Message, receipt_id))

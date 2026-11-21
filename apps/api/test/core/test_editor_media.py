@@ -224,6 +224,10 @@ async def test_voice_credit_shortfall_and_unknown_original_do_not_resubmit(datab
 
 @pytest.mark.asyncio
 async def test_export_quote_replay_competing_openings_and_stop(database, monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("app.pipeline.export_jobs.settings.s3_private_export_bucket", "export-test")
+    monkeypatch.setattr("app.pipeline.export_jobs.verify_private_export_storage", AsyncMock())
+    from app.models.tables import ExportJob
     from app.chat.editor import ExportVideoArgs
     from app.editing.store import apply_composition_edits
     from test.core.test_compositions import set_intent
@@ -266,23 +270,24 @@ async def test_export_quote_replay_competing_openings_and_stop(database, monkeyp
         execution = await editor_media.answer_media_permission(db, project, await db.get(Message, first.id), True)
         await db.commit()
         replay = await submit(turn)
-        assert replay.workflow_run_id == execution.workflow_run_id
+        assert replay.id == execution.id and replay.workflow_run_id is None
         user.settings = {"confirm_execution": "auto"}
         competing = await opening()
         with pytest.raises(ValueError):
             await submit(competing)
-        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 1
+        assert await db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
+        assert await db.scalar(select(func.count()).select_from(ExportJob)) == 1
         assert await db.scalar(select(func.count()).select_from(CreditTransaction).where(CreditTransaction.kind == "hold")) == 1
         _, newer, _ = await apply_composition_edits(db, owner_id=owner, composition_id=comp.id,
             base_version_id=version.id, ops=[set_intent("Updated while exporting")])
         assert newer.id != version.id
-        run = await db.get(WorkflowRun, execution.workflow_run_id)
-        assert run.context["version_ref"] == ref
+        job = await db.get(ExportJob, execution.intent["export_job"])
+        assert job.render_spec["provenance"] == ref
         replay_on_new_head = await editor_media.submit_editor_media(
             turn, "export_video", ExportVideoArgs(), comp, newer, "export1")
         assert replay_on_new_head.id == execution.id
         assert await service.stop_turn_at_visible_frontier(db, turn.turn_id, ChatTurnStopRequest()) == "cancelled"
-        assert (await db.get(WorkflowRun, run.id, populate_existing=True)).status.value == "cancelled"
+        assert (await db.get(ExportJob, job.id, populate_existing=True)).status == "cancelled"
 
 
 @pytest.mark.asyncio

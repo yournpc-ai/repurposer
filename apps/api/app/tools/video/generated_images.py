@@ -116,21 +116,19 @@ async def _cached_manifest(
     return manifest
 
 
-async def find_fixed_generated_image(clip: Clip) -> dict[str, Any] | None:
-    """Read the exact shared image, with no provider submission."""
-    obj = _image_object(clip)
-    return await _cached_manifest(obj, _manifest_key(obj, None, False))
-
-
-async def has_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> bool:
-    """Quote one missing image without generating it or mutating any state."""
+async def find_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> dict[str, Any] | None:
+    """Read the exact fixed image, preferring the composition's selected generation."""
     obj = _image_object(clip)
     pointer = _composition_key(obj, composition_id)
     if pointer is not None:
         current = await _cached_manifest(obj, pointer, stale_source_is_missing=True)
         if current is not None:
-            return True
-    return await _cached_manifest(obj, _manifest_key(obj, None, False)) is not None
+            return current
+    return await _cached_manifest(obj, _manifest_key(obj, None, False))
+
+
+async def has_fixed_generated_image(clip: Clip, *, composition_id: str | None = None) -> bool:
+    return await find_fixed_generated_image(clip, composition_id=composition_id) is not None
 
 
 def _decode_image(encoded: str) -> tuple[bytes, int, int, str, str]:

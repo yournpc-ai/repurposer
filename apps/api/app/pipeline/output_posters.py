@@ -61,7 +61,10 @@ async def ensure_output_poster(output: Output) -> str:
     if render_status != "completed" or not isinstance(video_key, str) or not video_key:
         raise ValueError("this Output has no completed delivered video file")
     media_digest = hashlib.sha256(video_key.encode("utf-8")).hexdigest()[:16]
-    key = f"output-posters/{output.id}-{media_digest}.jpg"
+    if storage.is_private_export(video_key):
+        key = video_key.removesuffix(".mp4") + ".jpg"
+    else:
+        key = f"output-posters/{output.id}-{media_digest}.jpg"
     if not await storage.exists(key):
         await storage.save(key, extract_poster(await storage.read(video_key)), content_type="image/jpeg")
     return key

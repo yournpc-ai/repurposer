@@ -1,0 +1,179 @@
+{
+  "stack": "isolated PostgreSQL, API, worker, existing Renderer, actual MiniMax, loopback MinIO",
+  "cases": [
+    {
+      "case": "seam-gap",
+      "job": "d791201a-b8bc-5ed3-a241-112765bd6e04",
+      "version": "c2c66f86-1232-4843-873e-9d06a1cb07c2",
+      "version_number": 2,
+      "content_digest": "4e94a64f6895c0e655edfccbf28fe3118c31211c7b7726500777a2fe497deb55",
+      "open": "7c64f101-ba2d-432a-b656-40a6c0111b88",
+      "status": "succeeded",
+      "attempt": 2,
+      "receipt": "e75d40b2-fc1f-4eba-9560-01386c850f56",
+      "turn_state": "settled",
+      "spec_frames": 240,
+      "storage_location": "tos://repurposer-private-6b/private-exports/4d2409aa-a73c-4401-a3a2-c805e669ef3b/f5e79530-4b47-4f5b-a0d7-9b710f9607e1/d791201a-b8bc-5ed3-a241-112765bd6e04.mp4",
+      "file_sha256": "c9cfbd6748758715d73b8deb06aa2f6f3ebb0e78a0816d5c2d06729fb8347e5b",
+      "ledger": [
+        [
+          "hold",
+          -16
+        ],
+        [
+          "release",
+          16
+        ],
+        [
+          "capture",
+          -16
+        ]
+      ],
+      "delivery_cards": 1,
+      "tool_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "ExportVideoArgs",
+        "type": "object"
+      },
+      "native_tools": [
+        {
+          "name": "inspect_timeline",
+          "id": "call_JsW5dbCzvgCkpUwFIC2blWiP",
+          "arguments": "{}"
+        },
+        {
+          "name": "preview_range",
+          "id": "call_SvQ4MFfVgggTu4sIMQiBTrl1",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 8}"
+        },
+        {
+          "name": "export_video",
+          "id": "call_function_ljjer7yhnjv1_1",
+          "arguments": "{}"
+        },
+        {
+          "name": "inspect_timeline",
+          "id": "call_Px8X9cizIAOIg9ZqOQEDG5mg",
+          "arguments": "{}"
+        },
+        {
+          "name": "preview_range",
+          "id": "call_Ci0eDJz9RUtEvpgLEiii5uJU",
+          "arguments": "{\"start_seconds\": 0, \"end_seconds\": 8}"
+        },
+        {
+          "name": "export_video",
+          "id": "call_function_t8ko2pf4259i_1",
+          "arguments": "{}"
+        },
+        {
+          "name": "review_video",
+          "id": "call_function_h7bifb0bi0qj_1",
+          "arguments": "{\"output_id\": \"d791201a-b8bc-5ed3-a241-112765bd6e04\", \"requirements\": \"保持当前保存版本完全不变，预览当前版本关键位置，正式导出 MP4 并交付\"}"
+        },
+        {
+          "name": "deliver_video",
+          "id": "call_function_waeihypwb3op_1",
+          "arguments": "{\"output_id\": \"d791201a-b8bc-5ed3-a241-112765bd6e04\"}"
+        }
+      ],
+      "tool_result": {
+        "role": "export",
+        "status": "available",
+        "output_id": "d791201a-b8bc-5ed3-a241-112765bd6e04",
+        "composition_id": "f65f37f0-9047-4065-adac-fb10373d62e3",
+        "content_digest": "4e94a64f6895c0e655edfccbf28fe3118c31211c7b7726500777a2fe497deb55",
+        "review_pending": true,
+        "duration_seconds": 8.0,
+        "composition_version_id": "c2c66f86-1232-4843-873e-9d06a1cb07c2"
+      },
+      "resumed": true
+    },
+    {
+      "case": "image-title-endcard",
+      "job": "b6a263b9-6b9c-569f-a5f4-9b07c693eed3",
+      "version": "f772f104-24b5-4125-93f0-583c37807bba",
+      "version_number": 3,
+      "content_digest": "a660d8b5206cb9d37123fbac14980c9fc958827f935b1d2dd9da12e52f604113",
+      "open": "b81301e0-3c4b-4fe7-a96b-92846327c745",
+      "status": "succeeded",
+      "attempt": 1,
+      "receipt": "49f23105-043a-4eab-a90c-a0d0c3af0fb1",
+      "turn_state": "settled",
+      "spec_frames": 188,
+      "storage_location": "tos://repurposer-private-6b/private-exports/811ee85f-4dcd-4240-b4b0-807cdc720ce1/0a6bac95-d0d3-48f7-a517-547797e1677e/b6a263b9-6b9c-569f-a5f4-9b07c693eed3.mp4",
+      "file_sha256": "08b81e33202ba9054ee9ae8a18f05ebad74a72e0fed0c9c1f07dde0fd6b90fa1",
+      "ledger": [
+        [
+          "hold",
+          -13
+        ],
+        [
+          "release",
+          13
+        ],
+        [
+          "capture",
+          -13
+        ]
+      ],
+      "delivery_cards": 1,
+      "tool_schema": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "ExportVideoArgs",
+        "type": "object"
+      },
+      "native_tools": [
+        {
+          "name": "inspect_timeline",
+          "id": "call-01d60128-6321-41f9-ad96-68b40daf3eb6",
+          "arguments": "{}"
+        },
+        {
+          "name": "preview_range",
+          "id": "call-43538ff3-ccdd-4ae8-a8d9-238d580b242b",
+          "arguments": "{\"start_seconds\":0,\"end_seconds\":6.25}"
+        },
+        {
+          "name": "export_video",
+          "id": "call_function_pkbwc29khock_1",
+          "arguments": "{}"
+        },
+        {
+          "name": "review_video",
+          "id": "call_function_6rmxhgdn5zij_1",
+          "arguments": "{\"output_id\": \"b6a263b9-6b9c-569f-a5f4-9b07c693eed3\", \"requirements\": \"保持当前保存版本完全不变；正式导出 MP4 并交付。成片应为 6.25s 左右的 320x180 画面：前段约 0-4.25s 显示标题画面\\\"Why the Moon changes shape\\\"及月亮图形，4.25-6.25s 为黑底尾卡文字\\\"Keep looking up.\\\"，无改动\"}"
+        },
+        {
+          "name": "deliver_video",
+          "id": "call_function_alubyj35arv6_1",
+          "arguments": "{\"output_id\": \"b6a263b9-6b9c-569f-a5f4-9b07c693eed3\"}"
+        }
+      ],
+      "tool_result": {
+        "role": "export",
+        "status": "available",
+        "output_id": "b6a263b9-6b9c-569f-a5f4-9b07c693eed3",
+        "composition_id": "9fd5bf81-7c45-4b21-a9a4-01ae690ac1b8",
+        "content_digest": "a660d8b5206cb9d37123fbac14980c9fc958827f935b1d2dd9da12e52f604113",
+        "review_pending": true,
+        "duration_seconds": 6.266666666666667,
+        "composition_version_id": "f772f104-24b5-4125-93f0-583c37807bba"
+      },
+      "resumed": false
+    }
+  ],
+  "counts": {
+    "export_jobs": 12,
+    "workflow_runs": 0,
+    "workflow_steps": 0
+  },
+  "stale_writer_accepted": false,
+  "fault": {
+    "at": "2026-11-21T11:22:02.392694+00:00",
+    "object_file": "d791201a-b8bc-5ed3-a241-112765bd6e04.mp4",
+    "fault": "SIGKILL worker after confirmed upload before probe/receipt"
+  }
+}

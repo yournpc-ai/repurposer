@@ -1,0 +1,10 @@
+{
+  "before": "dependencies_not_ready",
+  "dependency": "image-generation",
+  "before_jobs": 0,
+  "source_digest": "88deffd010a1372a3e35c858c93f62905ab3c26c3876afdccd5d0fedd1f98ac9",
+  "bound_version": "bad0b3d2-4ef8-4cd7-a176-904ea8785411",
+  "output": "08e0153b-9e56-5f47-8e35-242a65d50a5d",
+  "output_digest": "475942e3eb71256e94ccdd9f4515090363a6e47ba3ca22198fb36ad55f370aaa",
+  "evidence": "native export plus existing-snapshot binding through CAS. No provider generation exercised."
+}

@@ -513,7 +513,7 @@ async def _create_run_from_tasks(
                 source_asset_id=source_asset_id,
                 exemplar_asset_id=exemplar_asset_id,
                 name=name or None,
-                video_authorized_by=export_receipt.turn_id if export_receipt else await latest_video_approval(db, project),
+                video_authorized_by=await latest_video_approval(db, project),
             ),
         )
     except CreditsInsufficientError as exc:
@@ -2086,7 +2086,7 @@ def _creative_run_context(pending: PendingPlan | None, context: dict | None) -> 
 
 
 async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instruction,
-                                 confirmation_id, confirmed_via, quote, export_receipt=None):
+                                 confirmation_id, confirmed_via, quote):
     """Materialize an authorized request and its accounting scope in the caller transaction."""
     from app.pipeline.orchestrator import TaskSpec, create_run, first_task_language
     from app.tools.video.production import latest_video_approval
@@ -2116,8 +2116,7 @@ async def submit_confirmed_tasks(db, project, pending, tasks, *, name, instructi
             # the receipt title and completion line read it.
             name=name or None,
         ),
-        reuse_video_production=export_receipt is None,
-        export_receipt=export_receipt,
+        reuse_video_production=True,
     )
     _scope_user = await db.get(User, project.user_id)
     _scope_execution, _scope_credits = read_confirmation_prefs(
@@ -3450,13 +3449,16 @@ async def stop_turn_at_visible_frontier(
     await discard_turn_context(db, row.conversation_id, user_message_id)
 
     media_rows = {m.id for m in assistant_rows if (m.intent or {}).get("editor_media")
-                 and (m.workflow_run_id or (m.intent or {}).get("media_result"))}
+                 and (m.workflow_run_id or (m.intent or {}).get("export_job") or (m.intent or {}).get("media_result"))}
     deliveries = {m.id for m in assistant_rows if (m.intent or {}).get("reviewed_version") and (m.intent or {}).get("output_refs")}
     if media_rows:
         from app.pipeline.orchestrator import cancel_run
         project_id = await db.scalar(select(Conversation.project_id).where(Conversation.id == row.conversation_id))
         project = await db.get(Project, project_id, with_for_update=True)
         for message_id in media_rows:
+            if job_id := (by_id[message_id].intent or {}).get("export_job"):
+                from app.pipeline.export_jobs import cancel_export
+                await cancel_export(db, project, UUID(job_id))
             run_id = by_id[message_id].workflow_run_id
             if run_id is not None:
                 run = await db.get(WorkflowRun, run_id, with_for_update=True, populate_existing=True)

@@ -1310,6 +1310,8 @@ const zh: Resources = {
       imageUnavailable: "图片暂时无法显示",
       recordVoice: "正在生成旁白",
       recordVoiceDone: "旁白已生成",
+      bindClipSource: "正在绑定素材",
+      bindClipSourceDone: "已绑定素材",
       insertAudio: "正在加入音频",
       insertAudioDone: "已加入音频",
       visualAssets: "正在准备分镜画面…",

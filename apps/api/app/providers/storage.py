@@ -17,6 +17,7 @@ Key layout:
 
 import asyncio
 import base64
+import json
 import mimetypes
 import os
 import tempfile
@@ -118,7 +119,13 @@ def _unique_key(prefix: str, filename: str) -> str:
 
 def _normalize_key(key: str | None) -> str:
     """Strip leading slashes from a key."""
-    return (key or "").lstrip("/")
+    value = (key or "").lstrip("/")
+    if is_private_export(value):
+        bucket, _, path = value.removeprefix("tos://").partition("/")
+        if bucket != _private_bucket() or not path.startswith(PRIVATE_EXPORT_PREFIX):
+            raise ValueError("Unknown private object location.")
+        return path
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +205,60 @@ async def get_output_path(project_id: UUID, user_id: UUID | str, filename: str) 
 # ---------------------------------------------------------------------------
 
 
+PRIVATE_EXPORT_PREFIX = "private-exports/"
+
+
+def is_private_export(key: str | None) -> bool:
+    return bool(key and key.startswith("tos://"))
+
+
+def private_export_key(owner: UUID, project: UUID, output: UUID) -> str:
+    return f"{private_export_root()}{owner}/{project}/{output}.mp4"
+
+
+def _private_bucket() -> str:
+    bucket = settings.s3_private_export_bucket
+    if not bucket or bucket == settings.s3_bucket_name:
+        raise ValueError("Private export storage is not configured.")
+    return bucket
+
+
+def private_export_root() -> str:
+    return f"tos://{_private_bucket()}/{PRIVATE_EXPORT_PREFIX}"
+
+
+def _bucket(key: str) -> str:
+    if is_private_export(key):
+        _normalize_key(key)  # Validate the explicit bucket and its reserved namespace.
+        return _private_bucket()
+    return settings.s3_bucket_name
+
+
+async def verify_private_export_storage() -> None:
+    """Dedicated export bucket. Reject public grants and unverifiable policies before a hold or PUT."""
+    bucket = _private_bucket()
+    client = _get_s3_client()
+    acl = await asyncio.to_thread(client.get_bucket_acl, Bucket=bucket)
+    owner = acl["Owner"]["ID"]
+    if any(g["Grantee"].get("Type") != "CanonicalUser" or g["Grantee"].get("ID", "") != owner
+           for g in acl["Grants"]):
+        raise ValueError("Private export storage grants access outside its owner.")
+    try:
+        response = await asyncio.to_thread(client.get_bucket_policy, Bucket=bucket)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] == "NoSuchBucketPolicy":
+            return
+        raise
+    statements = json.loads(response["Policy"])["Statement"]
+    if any(statement.get("Effect") != "Deny" for statement in statements):
+        raise ValueError("Private export storage has an unverified policy grant.")
+
+
 def public_url(key: str | None) -> str | None:
     """Return the public read URL for an object key."""
     if not key:
+        return None
+    if is_private_export(key):
         return None
     base = settings.s3_public_url.rstrip("/")
     return f"{base}/{_normalize_key(key)}"
@@ -260,7 +318,7 @@ async def presign_upload(
     """Generate a presigned PUT URL for direct upload to object storage."""
     client = _get_s3_client()
     params: dict[str, str] = {
-        "Bucket": settings.s3_bucket_name,
+        "Bucket": _bucket(key),
         "Key": _normalize_key(key),
     }
     if create_only:
@@ -290,9 +348,11 @@ async def presign_download(
     """
     client = _get_s3_client()
     params: dict[str, str] = {
-        "Bucket": settings.s3_bucket_name,
+        "Bucket": _bucket(key),
         "Key": _normalize_key(key),
     }
+    if is_private_export(key):
+        params["ResponseCacheControl"] = "private, no-store"
     if filename:
         from urllib.parse import quote
 
@@ -312,7 +372,7 @@ async def save(key: str, data: bytes | BinaryIO, content_type: str | None = None
     client = _get_s3_client()
     body = data if isinstance(data, bytes) else data.read()
     params: dict[str, object] = {
-        "Bucket": settings.s3_bucket_name,
+        "Bucket": _bucket(key),
         "Key": _normalize_key(key),
         "Body": body,
     }
@@ -370,7 +430,7 @@ async def read(key: str) -> bytes:
     client = _get_s3_download_client()
     response = await asyncio.to_thread(
         client.get_object,
-        Bucket=settings.s3_bucket_name,
+        Bucket=_bucket(key),
         Key=_normalize_key(key),
     )
     return await asyncio.to_thread(response["Body"].read)
@@ -392,7 +452,7 @@ async def download_to_temp(key: str | None) -> Path | None:
     try:
         await asyncio.to_thread(
             client.download_file,
-            settings.s3_bucket_name,
+            _bucket(key),
             _normalize_key(key),
             tmp_path,
         )
@@ -425,7 +485,7 @@ def source_cache_path(key: str) -> Path:
     service's stage.ts mirrors this one hashing law)."""
     import hashlib
 
-    normalized = _normalize_key(key)
+    normalized = key if is_private_export(key) else _normalize_key(key)
     suffix = Path(normalized).suffix if len(Path(normalized).suffix) <= 8 else ""
     digest = hashlib.sha1(normalized.encode()).hexdigest()
     return SOURCE_CACHE_DIR / f"{digest}{suffix}"
@@ -440,7 +500,7 @@ async def download_to_cache(key: str | None) -> Path | None:
     """
     if not key:
         return None
-    normalized = _normalize_key(key)
+    normalized = key if is_private_export(key) else _normalize_key(key)
     dest = source_cache_path(normalized)
     if dest.exists() and dest.stat().st_size > 0:
         # LRU touch — eviction sorts by mtime.
@@ -469,7 +529,7 @@ async def _populate_source_cache(normalized: str, dest: Path) -> Path | None:
     client = _get_s3_download_client()
     try:
         await asyncio.to_thread(
-            client.download_file, settings.s3_bucket_name, normalized, str(tmp)
+            client.download_file, _bucket(normalized), _normalize_key(normalized), str(tmp)
         )
         tmp.rename(dest)
     except Exception:
@@ -507,7 +567,7 @@ async def delete(key: str | None) -> None:
     client = _get_s3_client()
     await asyncio.to_thread(
         client.delete_object,
-        Bucket=settings.s3_bucket_name,
+        Bucket=_bucket(key),
         Key=_normalize_key(key),
     )
 
@@ -524,7 +584,7 @@ async def _list_keys(prefix: str) -> list[str]:
     keys: list[str] = []
     for page in await asyncio.to_thread(
         lambda: list(
-            paginator.paginate(Bucket=settings.s3_bucket_name, Prefix=prefix)
+            paginator.paginate(Bucket=_bucket(prefix), Prefix=_normalize_key(prefix))
         ),
     ):
         for obj in page.get("Contents", []):
@@ -544,7 +604,7 @@ async def list_objects_with_age(prefix: str) -> list[tuple[str, float]]:
     objects: list[tuple[str, float]] = []
     for page in await asyncio.to_thread(
         lambda: list(
-            paginator.paginate(Bucket=settings.s3_bucket_name, Prefix=prefix)
+            paginator.paginate(Bucket=_bucket(prefix), Prefix=_normalize_key(prefix))
         ),
     ):
         for obj in page.get("Contents", []):
@@ -563,7 +623,7 @@ async def delete_prefix(prefix: str) -> None:
         batch = [{"Key": k} for k in keys[i : i + 1000]]
         await asyncio.to_thread(
             client.delete_objects,
-            Bucket=settings.s3_bucket_name,
+            Bucket=_bucket(prefix),
             Delete={"Objects": batch},
         )
 
@@ -572,6 +632,8 @@ async def delete_project_files(project_id: UUID, user_id: UUID | str) -> None:
     """Delete all files for a project."""
     await delete_prefix(get_project_upload_dir(project_id, user_id))
     await delete_prefix(get_project_output_dir(project_id, user_id))
+    if settings.s3_private_export_bucket:
+        await delete_prefix(f"{private_export_root()}{user_id}/{project_id}/")
 
 
 async def delete_persona_files(persona_id: UUID, user_id: UUID | str) -> None:
@@ -609,7 +671,7 @@ async def exists(key: str | None) -> bool:
     try:
         await asyncio.to_thread(
             client.head_object,
-            Bucket=settings.s3_bucket_name,
+            Bucket=_bucket(key),
             Key=_normalize_key(key),
         )
         return True
@@ -627,7 +689,7 @@ async def size(key: str | None) -> int | None:
     try:
         response = await asyncio.to_thread(
             client.head_object,
-            Bucket=settings.s3_bucket_name,
+            Bucket=_bucket(key),
             Key=_normalize_key(key),
         )
         return int(response["ContentLength"])

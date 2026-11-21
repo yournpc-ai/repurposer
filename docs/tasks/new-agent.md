@@ -1,4 +1,7 @@
 # Repurposer · Agent Editor v1
+
+> Iteration 6A/6B（2026-11-21）：原生 export_video 已在隔离环境用私有成片完成真实渲染、审阅、恢复与交付。ExportJob 只处理已固定媒体。新加坡 TOS 私有桶创建返回 403，云端发布待核验。[验收与上线边界](agent-editor-evidence/iteration-6/export.md)
+
 ## 破坏性架构重构与五面一体施工总合同
 
 **状态：Iteration 1–4 按各轮出口验收。Iteration 5 的真实看片、局部修订、正式 MP4 审阅、Studio 交付及连续修订已有完整样本。本轮两次访谈复跑均看到了修改后的正确构图并停止。完整主观听感与跨题材稳定性仍开放。**

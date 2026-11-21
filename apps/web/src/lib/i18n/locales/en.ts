@@ -1382,6 +1382,8 @@ const en = {
       imageUnavailable: "Image unavailable",
       recordVoice: "Recording narration…",
       recordVoiceDone: "Recorded narration",
+      bindClipSource: "Binding fixed media",
+      bindClipSourceDone: "Bound fixed media",
       insertAudio: "Adding audio…",
       insertAudioDone: "Added audio",
       visualAssets: "Preparing storyboard images…",

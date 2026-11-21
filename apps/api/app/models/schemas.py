@@ -716,11 +716,13 @@ class ChatMessageResponse(BaseModel):
     def _editor_media_projection(self):
         intent = self.intent or {}
         if "editor_media" in intent or "media_permission" in intent:
-            accepted = self.workflow_run_id is not None and "media_result" not in intent
+            accepted = bool(self.workflow_run_id or intent.get("export_job")) and "media_result" not in intent
             self.workflow_run_id = None
             self.intent = {key: intent[key] for key in ("media_result",) if key in intent}
             if accepted:
                 self.intent = {"media_status": "accepted", "operation": intent["tool"]}
+        elif "resumed_media" in intent:
+            self.intent = {k: v for k, v in intent.items() if k not in {"resumed_media", "export_resume_attempts"}}
         return self
 
 
@@ -3307,8 +3309,12 @@ class OutputResponse(BaseModel):
         """Resolve stored object keys in files/publishing to public URLs."""
         from app.providers.storage import resolve_stored_url
 
+        from app.providers.storage import is_private_export
+
         for key in ("video", "image"):
-            if self.files.get(key):
+            if key == "video" and is_private_export(self.files.get(key)):
+                self.files[key] = f"/api/v1/outputs/{self.id}/playback"
+            elif self.files.get(key):
                 self.files[key] = resolve_stored_url(self.files[key])
         if self.publishing.get("cover_image_url"):
             self.publishing["cover_image_url"] = resolve_stored_url(

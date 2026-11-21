@@ -1,0 +1,123 @@
+{
+  "users": [
+    "6ad5e0f4-f692-483e-bd38-c6c6babd133e",
+    "1bb56143-15ae-4c8c-996b-75e3129ce486",
+    "291a9328-8b20-4a7b-b27c-fc871c16d3dd",
+    "c80cabd1-b4d7-4ef8-87b9-a849bccd74e3",
+    "fd162ec7-b510-4316-a1d4-2d419093038c",
+    "cdb15ba7-627d-427a-bdb2-cba3bf7cf631",
+    "a309c6dd-b012-449d-b98a-b51f1a4500f9",
+    "65f7b02f-0291-480d-b256-c1eaa0a75da1",
+    "34f31415-7a55-4d11-b601-556f7b9424f7",
+    "20205322-7342-42e4-8337-8395438a67e1"
+  ],
+  "operations": [
+    {
+      "status": "available",
+      "id": "1f30bbd7-f6d5-5ecb-9bac-d775ccecb7ca",
+      "t": 3.894258458982222
+    },
+    {
+      "status": "available",
+      "id": "5a27e385-04e8-53e8-93e1-6503e722111c",
+      "t": 3.8943749589961953
+    },
+    {
+      "status": "cancelled",
+      "id": "85d2ca80-100e-54e5-aff8-b0929ce917c4",
+      "t": 0.8883855420281179
+    },
+    {
+      "status": "saved",
+      "version": "a4a088cb-dd6d-4d38-ba22-2a10c2e27da8",
+      "t": 0.21662941703107208
+    },
+    {
+      "status": "stale_base",
+      "t": 0.21799062500940636
+    },
+    {
+      "status": "saved",
+      "version": "54fc3b73-804c-4d64-9ef6-5b9b8fe6f172",
+      "t": 0.20927512500202283
+    },
+    {
+      "status": "saved",
+      "version": "b69ae59c-9779-4e67-bba0-30427b5d0a49",
+      "t": 0.21660354203777388
+    },
+    403,
+    403,
+    {
+      "bytes": 47681,
+      "t": 1.2045217920094728
+    },
+    403,
+    {
+      "status": "saved",
+      "version": "a1cd7082-a527-4e45-a1fe-f999213c9e32",
+      "t": 0.3511595840100199
+    }
+  ],
+  "jobs": [
+    {
+      "id": "1f30bbd7-f6d5-5ecb-9bac-d775ccecb7ca",
+      "status": "succeeded",
+      "attempt": 1,
+      "source_version": "e579b66a-0633-4ce6-a1d6-25896382ea92",
+      "result_version": "e579b66a-0633-4ce6-a1d6-25896382ea92",
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ]
+    },
+    {
+      "id": "5a27e385-04e8-53e8-93e1-6503e722111c",
+      "status": "succeeded",
+      "attempt": 1,
+      "source_version": "6a45a850-4c9c-48c7-85bb-b89a57f00870",
+      "result_version": "6a45a850-4c9c-48c7-85bb-b89a57f00870",
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ],
+        [
+          "capture",
+          -2
+        ]
+      ]
+    },
+    {
+      "id": "85d2ca80-100e-54e5-aff8-b0929ce917c4",
+      "status": "cancelled",
+      "attempt": 0,
+      "source_version": "f1f1bc6d-86cc-430a-b400-30d8a624985f",
+      "result_version": null,
+      "ledger": [
+        [
+          "hold",
+          -2
+        ],
+        [
+          "release",
+          2
+        ]
+      ]
+    }
+  ]
+}

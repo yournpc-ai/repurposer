@@ -192,7 +192,7 @@ def _row_payload(message: Message) -> dict:
         "turn_id": str(message.turn_id) if message.turn_id else None,
         "seq": message.seq,
         "intent": (ChatMessageResponse.model_validate(message).intent
-                   if "editor_media" in (message.intent or {}) else message.intent),
+                   if any(k in (message.intent or {}) for k in ("editor_media", "media_permission", "resumed_media")) else message.intent),
         "blocks": message.blocks or [],
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }

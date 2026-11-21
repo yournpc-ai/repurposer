@@ -76,6 +76,10 @@ class DeliverVideoArgs(BaseModel):
     output_id: UUID = Field(description="Exact MP4 Output inspected and chosen for delivery.")
 
 
+class BindClipSourceArgs(ClipArgs):
+    source_id: UUID = Field(description="Fixed project snapshot to bind to this pending media clip.")
+
+
 class SplitClipArgs(ClipArgs):
     time: float = Field(
         gt=0, allow_inf_nan=False, description="Seconds from the start of this clip."
@@ -167,6 +171,8 @@ EDITOR_TOOLS = (
         "export_video", "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
         ExportVideoArgs, "exportVideo",
     ),
+    _editor_tool("bind_clip_source", "Bind a fixed project snapshot to a pending voice or image clip. Preserve timing and layout; inspect the saved version before export.",
+                 BindClipSourceArgs, "bindClipSource"),
     _editor_tool(
         "insert_audio", "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
         InsertAudioArgs, "insertAudio",
@@ -240,7 +246,7 @@ EDITOR_NAMES = frozenset(tool.name for tool in EDITOR_TOOLS)
 WRITE_TOOLS = {
     t.name: t
     for t in EDITOR_TOOLS
-    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs)
+    if t.params_model in (SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs)
 }
 
 
@@ -347,7 +353,12 @@ async def edit_clip(
     extra = {}
     ops = []
     target = None
-    if isinstance(args, InsertAudioArgs):
+    if isinstance(args, BindClipSourceArgs):
+        from app.tools.video.export import bind_clip_source_ops
+
+        target = clips.get(args.clip_id)
+        ops = await bind_clip_source_ops(db, project, content, target, args.source_id)
+    elif isinstance(args, InsertAudioArgs):
         from app.editing.revisions import fixed_audio_ops
         from app.editing.timing import output_ticks_to_source_ticks, source_ticks_to_output_ticks
         from app.models.tables import SourceSnapshot
@@ -564,7 +575,7 @@ async def execute_editor(turn, name, args):
         try:
             if name in WRITE_TOOLS:
                 group = current_group_id()
-                if (group and isinstance(args, InsertAudioArgs) and
+                if (group and isinstance(args, (InsertAudioArgs, BindClipSourceArgs)) and
                         getattr(turn, "_generated_in_response", {}).get(str(args.source_id)) == group):
                     raise ValueError("Use the fixed source returned by generation in the next response.")
                 previous_write = getattr(turn, "_batch_commit", None)

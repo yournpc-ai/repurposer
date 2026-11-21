@@ -1,0 +1,95 @@
+{
+  "storage": "loopback MinIO, real SigV4, 10 independent browser contexts, storage layer only",
+  "results": [
+    {
+      "reader": 0,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 1,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 2,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 3,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 4,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 5,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 6,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 7,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 8,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    },
+    {
+      "reader": 9,
+      "anonymous": 403,
+      "expired": 403,
+      "signed_download": 200,
+      "width": 320,
+      "duplicate_put": 412,
+      "attachment": true
+    }
+  ]
+}

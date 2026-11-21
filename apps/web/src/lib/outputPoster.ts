@@ -15,6 +15,7 @@ function requestPoster(outputId: string): Promise<string | null> {
       return data.poster_url ?? null
     })
     .catch(() => null)
+    .finally(() => posterRequests.delete(outputId))
   posterRequests.set(outputId, request)
   return request
 }

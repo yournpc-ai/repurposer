@@ -1287,3 +1287,21 @@ class Config(Base):
     value = Column(JSONB, nullable=False)
     description = Column(String(512), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
+
+
+class ExportJob(Base):
+    """One native export of one observed version. The job id is also the reserved Output id."""
+
+    __tablename__ = "export_jobs"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    receipt_id = Column(UUID(as_uuid=True), ForeignKey("messages.id"), unique=True, nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    version_id = Column(UUID(as_uuid=True), ForeignKey("composition_versions.id"), nullable=False)
+    render_spec = Column(JSONB, nullable=False)
+    authorized_credits = Column(Integer, nullable=False)
+    status = Column(String(16), nullable=False)
+    attempt = Column(Integer, nullable=False, default=0)
+    claim_token = Column(UUID(as_uuid=True))
+    lease_until = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    __table_args__ = (Index("ix_export_jobs_queue", "status", "created_at"),)

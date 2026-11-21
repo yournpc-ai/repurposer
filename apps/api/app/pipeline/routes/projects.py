@@ -56,7 +56,7 @@ from app.platform.conversation_context import (
     latest_pending_question,
 )
 from app.platform.project_context import get_project_for_user
-from app.providers.storage import delete_file, delete_project_files, resolve_stored_url
+from app.providers.storage import delete_file, delete_project_files, is_private_export, presign_download, private_export_key, resolve_stored_url
 from app.ui_locale import current_ui_language
 
 router = APIRouter()
@@ -107,6 +107,7 @@ async def list_projects(
     thumb = (
         select(
             Output.project_id.label("project_id"),
+            Output.id.label("output_id"),
             Output.files["video"].as_string().label("video_url"),
             cast(
                 func.floor(cast(Output.payload["duration"].as_string(), Float)), Integer
@@ -135,7 +136,7 @@ async def list_projects(
     )
     has_runs = select(WorkflowRun.id).where(WorkflowRun.project_id == Project.id).exists()
     query = (
-        select(Project, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
+        select(Project, thumb.c.output_id, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
         .outerjoin(thumb, thumb.c.project_id == Project.id)
         .where(Project.user_id == current_user.id)
         .where(or_(has_messages, has_runs))
@@ -151,9 +152,13 @@ async def list_projects(
     rows = result.all()
 
     responses = []
-    for project, video_url, duration, render_spec in rows:
+    for project, output_id, video_url, duration, render_spec in rows:
         resp = ProjectResponse.model_validate(project)
-        resp.thumbnail_url = resolve_stored_url(video_url)
+        if is_private_export(video_url):
+            if video_url == private_export_key(current_user.id, project.id, output_id):
+                resp.thumbnail_url = await presign_download(video_url)
+        else:
+            resp.thumbnail_url = resolve_stored_url(video_url)
         resp.thumbnail_duration = duration
         resp.thumbnail_aspect = (render_spec or {}).get("aspect")
         responses.append(resp)
@@ -372,6 +377,12 @@ async def _delete_project_rows(db: DBDep, project: Project, user_id: UUID) -> No
     from runs, conversations/messages cascade from the project. The caller
     owns the transaction boundary (no commit here)."""
     project_id = UUID(str(project.id))
+    from app.models.tables import ExportJob
+    from app.pipeline.export_jobs import cancel_export
+    await db.execute(select(Project.id).where(Project.id == project_id).with_for_update())
+    for job_id in await db.scalars(select(ExportJob.id).where(ExportJob.project_id == project_id)):
+        await cancel_export(db, project, job_id)
+    await db.execute(delete(ExportJob).where(ExportJob.project_id == project_id))
     result = await db.execute(select(Asset).where(Asset.project_id == project_id))
     for asset in result.scalars().all():
         await delete_file(asset.file_url)

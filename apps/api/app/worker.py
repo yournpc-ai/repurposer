@@ -30,6 +30,7 @@ from app.distribution import (
     process_publication,
     reap_stale_publications,
 )
+from app.pipeline.export_jobs import claim_export, execute_export
 from app.pipeline.jobs import (
     STALE_NODE_REAP_SECONDS,
     claim_pending_asset,
@@ -75,6 +76,7 @@ _STAGING_REAP_INTERVAL_SECONDS = 3600
 _last_staging_reap = 0.0
 _staging_reap_task: asyncio.Task[None] | None = None
 
+_export_resume_task: asyncio.Task | None = None
 _running_node_tasks: set[asyncio.Task] = set()
 _running_render_tasks: set[asyncio.Task] = set()
 
@@ -177,6 +179,14 @@ async def _tick() -> bool:
     # nodes): the tick loop stays responsive while Chrome renders.
     while len(_running_render_tasks) < settings.render_concurrency:
         async with AsyncSessionLocal() as db:
+            export = await claim_export(db)
+        if export:
+            did_work = True
+            task = asyncio.create_task(execute_export(*export))
+            _running_render_tasks.add(task)
+            task.add_done_callback(_running_render_tasks.discard)
+            continue
+        async with AsyncSessionLocal() as db:
             render_id = await claim_pending_render(db)
         if render_id is None:
             break
@@ -184,6 +194,13 @@ async def _tick() -> bool:
         task = asyncio.create_task(_run_render(render_id))
         _running_render_tasks.add(task)
         task.add_done_callback(_running_render_tasks.discard)
+
+    global _export_resume_task
+    if _export_resume_task is None or _export_resume_task.done():
+        if _export_resume_task is not None and _export_resume_task.exception():
+            logger.warning("export_receipt_continuation_interrupted")
+        from app.chat.editor_recovery import resume_export_receipts
+        _export_resume_task = asyncio.create_task(resume_export_receipts())
 
     # Staging GC is scheduled only after every claim source has had its turn.
     # A slow storage sweep remains isolated from all subsequent ticks.

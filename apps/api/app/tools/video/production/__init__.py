@@ -37,8 +37,12 @@ async def reviewed_output_ref(db, project, output_id):
     from app.pipeline.run_review import output_is_delivered
     output = await db.scalar(select(Output).join(Project, Output.project_id == Project.id)
         .where(Output.id == output_id, Project.user_id == project.user_id))
-    if output is None or not output_is_delivered(output) or not output.workflow_step_id:
+    if output is None or not output_is_delivered(output):
         return None
+    if not output.workflow_step_id:
+        from app.models.tables import ExportJob
+        job = await db.get(ExportJob, output.id)
+        return job.render_spec.get("provenance") if job and job.status == "succeeded" else None
     step = await db.get(WorkflowStep, output.workflow_step_id)
     run = await db.get(WorkflowRun, step.run_id) if step else None
     ref = (run.context or {}).get("version_ref") if run else None
@@ -285,7 +289,7 @@ async def _presented_production_authority(db, project, composition, read, approv
     return {"video_authorized_by": str(approval.id), "video_presentation": receipt}
 
 
-async def pin_video_production(db, project, tasks, approved_by, *, export_receipt=None):
+async def pin_video_production(db, project, tasks, approved_by):
     video_tasks = [t for t in tasks or [] if t.tool == "produce_video"]
     if not video_tasks:
         return {}
@@ -315,22 +319,7 @@ async def pin_video_production(db, project, tasks, approved_by, *, export_receip
         for clip in clips
     ):
         raise ValueError("This saved video has no model-generated image to regenerate")
-    if export_receipt is None:
-        authority = await _presented_production_authority(db, project, composition, read, approved_by)
-    else:
-        preview = (export_receipt.intent or {}).get("export_preview") or {}
-        opening = await db.scalar(select(Message).join(Conversation).where(
-            Message.id == approved_by, Message.role == "user", Message.id == export_receipt.turn_id,
-            Message.conversation_id == export_receipt.conversation_id,
-            Conversation.user_id == project.user_id, Conversation.project_id == project.id,
-        ))
-        if (opening is None or composition.origin_project_id != project.id
-                or composition.current_version_id != ref.composition_version_id
-                or export_receipt.intent.get("tool") != "export_video"
-                or not preview.get("mp4_sha256") or not preview.get("model_media")
-                or any(preview.get(k) != v for k, v in read["base_ref"].items())):
-            raise ValueError("Export authorization does not match the observed version.")
-        authority = {"video_authorized_by": str(opening.id)}
+    authority = await _presented_production_authority(db, project, composition, read, approved_by)
     # The Composition lock serializes cross-Chat starts for the same work.
     active = await db.scalar(select(WorkflowRun.id).where(
         WorkflowRun.status.in_([WorkflowStatus.PENDING, WorkflowStatus.RUNNING]),
