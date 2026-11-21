@@ -293,14 +293,6 @@ async def review_video_seat(
     )
 
 
-def video_proposal_guard(tasks):
-    if any(t.tool == "produce_video" for t in tasks):
-        return "Export the observed version directly with export_video."
-    if any(t.tool in {"prepare_music", "prepare_narration", "prepare_visual_assets"} for t in tasks):
-        return "Generate media directly using the available media tools."
-    return None
-
-
 async def video_request_id(db, conversation_id: UUID, counter: int) -> str:
     """Key a call by its persisted user turn, never the whole conversation.
 

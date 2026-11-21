@@ -2055,59 +2055,6 @@ class ToneSettings(BaseModel):
     audience: Literal["academic", "industry", "general", "investor"] = "industry"
 
 
-class IntentSlot(BaseModel):
-    """任务槽: one line of the plan — one requested output (request layer).
-
-    N-20 layering: the IntentSlot says WHAT the user wants; the planner's
-    ``StoryboardSlot`` (派工层） says how the work is assigned. ``None`` fields
-    mean "plan default": count → the per-type default (clips 1 / quotes 3
-    / carousel 6). Language is a per-slot property (2026-08-05 restructure —
-    the plan-level field is retired): ``None`` is legacy/read-tolerant and
-    inherits the run's derived fallback. Same-type multi slots are how one run
-    produces e.g. an English and a German post. With ADR-043 the slot is a
-    COMPILE-TIME PROJECTION of the task chain (node ``spec.slot``), never a
-    request-layer declaration.
-
-    N-32: ``type`` is a plain ``str`` validated against the outputs registry
-    (the producer nodes' ``output_type`` declarations — a new output type is
-    one registry entry away, never a schema edit).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: str
-    count: int | None = None
-    focus: str | None = None
-    language: str | None = None
-    tone_override: str | None = None
-    explicit: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _tolerate_bare_type(cls, data: Any) -> Any:
-        """A bare type string (``"post"``) reads as a bare slot — legacy flat
-        plans (pre-slot) deserialize through this; new writes never
-        produce it (read tolerance, not a bridge layer)."""
-        if isinstance(data, str):
-            return {"type": data}
-        return data
-
-    @model_validator(mode="after")
-    def _known_output_type(self) -> "IntentSlot":
-        """Registry validation (N-32): the type must be a declared output
-        type. Rejects exactly what the retired Literal rejected — an unknown
-        type fails parse here, never silently downstream."""
-        # Deferred: models is the leaf layer. Importing the registry door
-        # (not bare graph) guarantees NODE_KINDS is populated regardless of
-        # process entry order.
-        import app.tools  # noqa: F401
-        from app.pipeline.graph import known_output_types
-
-        if self.type not in known_output_types():
-            raise ValueError(f"Unknown output type: {self.type}")
-        return self
-
-
 # ---------------------------------------------------------------------------
 # brief（DIALOG_WORKFLOW §2.4, ADR-052 B2): the dialog engine's structured
 # state. Five slots, each with provenance; the intent router proposes a full

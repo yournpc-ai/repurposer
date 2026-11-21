@@ -39,7 +39,7 @@ from app.models.tables import (
     SourceSnapshot,
     User,
 )
-from app.tools.video.produce import queue_composition_render
+from app.tools.video.export import fixed_export_spec
 from test.core.fixtures import (
     AUDIO_SNAPSHOT,
     AUDIO_DIGEST,
@@ -93,9 +93,8 @@ OP = TypeAdapter(Op)
 
 async def test_revision_uses_its_own_presentation_when_another_work_was_shown(database):
     """Two works in one Chat must not turn an approved revision into a read loop."""
-    from app.chat.video_turn_seats import stamp_video_presentation, video_proposal_guard
+    from app.chat.video_turn_seats import stamp_video_presentation
     from app.editing.service import video_version_read
-    from app.models.schemas import TaskItem
     from app.models.tables import Conversation, Message
 
     uid = await _user(database)
@@ -126,8 +125,6 @@ async def test_revision_uses_its_own_presentation_when_another_work_was_shown(da
             base_version_id=v1.id, ops=[set_intent("A brighter morning")])
         pending = await video_version_read(db, owner_id=uid, version_id=revised[1].id)
         pending["previous_version_ref"] = base["base_ref"]
-        task = TaskItem(tool="produce_video", params={"version_ref": pending["base_ref"]})
-        assert "export_video" in video_proposal_guard([task])
         assert "authorized_revision_message_id" not in pending
         assert project.pending_brief["video_presentation"]["composition_id"] == str(other.composition_id)
 
@@ -534,7 +531,7 @@ async def test_failed_batch_lands_no_version(database):
         assert n == 1
 
 
-async def test_queue_render_pins_output_lineage(database):
+async def test_native_export_spec_pins_version_and_checks_ownership(database):
     uid = await _user(database)
     pid = await _project(database, uid)
     await _snapshots(database, uid)
@@ -544,22 +541,8 @@ async def test_queue_render_pins_output_lineage(database):
         project = await db.get(Project, pid)
         composition = await db.get(Composition, comp.id)
         version = await db.get(CompositionVersion, ver.id)
-        output = await queue_composition_render(
-            db, project=project, composition=composition, version=version
-        )
-        await db.commit()
-        output_id = output.id
-
-    async with database() as db:
-        row = await db.get(Output, output_id)
-        # §2.2 three-fact pin + the work anchor law (work_id = Composition.id).
-        assert row.composition_id == comp.id
-        assert row.composition_version_id == ver.id
-        assert row.payload["composition_digest"] == ver.content_digest
-        assert row.work_id == comp.id
-        assert row.type == "video"
-        assert row.render_status is not None and row.render_status.value == "pending"
-        spec = row.render_spec
+        spec, missing = await fixed_export_spec(db, project, composition, version)
+        assert not missing
         assert spec["family"] == "video"
         assert spec["provenance"] == {
             "composition_id": str(comp.id),
@@ -570,17 +553,6 @@ async def test_queue_render_pins_output_lineage(database):
         assert spec["duration_frames"] == 120
         assert spec["fps"] == {"num": 30, "den": 1}
 
-        # The Output DTO (§10.3 read face) carries the lineage and the
-        # video spec survives serialization as its own envelope.
-        from app.models.schemas import OutputResponse
-
-        dto = OutputResponse.model_validate(row)
-        assert dto.composition_id == comp.id
-        assert dto.composition_version_id == ver.id
-        assert dto.render_spec is not None and dto.render_spec.family == "video"
-        assert dto.payload["composition_digest"] == ver.content_digest
-
-        # Cross-owner produce is refused (below, with a foreign project).
     # A project owned by a different user must not produce the composition.
     stranger = await _user(database)
     async with database() as db:
@@ -589,10 +561,8 @@ async def test_queue_render_pins_output_lineage(database):
         await db.flush()
         composition = await db.get(Composition, comp.id)
         version = await db.get(CompositionVersion, ver.id)
-        with pytest.raises(PermissionDenied):
-            await queue_composition_render(
-                db, project=foreign_project, composition=composition, version=version
-            )
+        with pytest.raises(ValueError, match="outside the current project"):
+            await fixed_export_spec(db, foreign_project, composition, version)
 
 
 async def test_nonexistent_snapshot_bind_rejected(database):

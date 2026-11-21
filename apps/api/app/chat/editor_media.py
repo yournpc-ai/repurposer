@@ -224,20 +224,26 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                         or current_group_id() and preview.get("decision") == current_group_id()):
                     raise ValueError("Inspect actual preview evidence for this version before deciding to export it.")
             elif name == "generate_image":
-                from app.tools.video.params import PrepareVisualAssetsParams
-                from app.tools.video.production import resolve_visual_asset_selection
                 from app.tools.video.visual_assets import SceneAssetSpec, preflight_scene_svgs
 
                 source = ({"kind": "controlled_svg", "program": args.svg} if args.svg else
                           {"kind": "minimax_image", "prompt": args.prompt})
                 spec = SceneAssetSpec(scene_id="editor_image", intent=args.prompt, source=source)
-                request = PrepareVisualAssetsParams(
-                    scene_assets=[spec], version_ref=getattr(turn, "_video_base_ref", None), opening_id=opening.id,
-                    evidence_snapshot_id=args.evidence_snapshot_id,
-                )
-                specs = await resolve_visual_asset_selection(db, project, request)
-                preflight_scene_svgs(specs)
-                params = {"scene": specs[0].model_dump(mode="json"), "review_basis": specs[0]._review_basis}
+                basis = {"user_words": [opening.content], "scene_roles": {spec.scene_id: opening.content}}
+                if args.evidence_snapshot_id:
+                    from app.models.tables import SourceSnapshot
+                    from app.tools.video.preparation import frozen_source_lines
+
+                    source = await db.get(SourceSnapshot, args.evidence_snapshot_id)
+                    if (source is None or source.kind != "web" or source.owner_id != turn.user_id
+                            or source.origin_project_id != project.id):
+                        raise ValueError("Select a verified webpage from this project.")
+                    lines = frozen_source_lines(source)
+                    if not lines:
+                        raise ValueError("The selected webpage has no verifiable text.")
+                    basis["source_evidence"] = "\n".join(line["text"] for line in lines)[:4000]
+                preflight_scene_svgs([spec])
+                params = {"scene": spec.model_dump(mode="json"), "review_basis": basis}
             activity_id = await db.scalar(select(Message.id).where(
                 Message.turn_id == opening.id, Message.intent["frame"]["status"].astext == "active",
                 Message.intent["frame"]["call_id"].astext == call_id,

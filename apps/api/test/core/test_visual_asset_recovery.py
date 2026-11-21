@@ -9,8 +9,7 @@ import pytest
 from PIL import Image
 
 from app.agents.base import jinja_env
-from app.chat.video_turn_seats import video_proposal_guard
-from app.models.schemas import TaskItem, VideoDraftRef
+from app.models.schemas import VideoDraftRef
 from app.models.tables import Project, SourceSnapshot
 from app.providers.llm.base import LLMSchemaError
 from app.tools.video import visual_assets
@@ -22,8 +21,6 @@ from app.tools.video.media_analysis import (
     store_content_review,
     store_media_analysis,
 )
-from app.tools.video.production import pin_visual_asset_preparation, video_quote_facts
-from app.tools.video.production.visual_assets import visual_asset_preparation_fact
 
 
 def image_draft():
@@ -40,16 +37,6 @@ def image_draft():
     draft = {"content": {"scenes": [{"scene_id": spec.scene_id} for spec in specs]},
              "design": {"scene_assets": [spec.model_dump(mode="json") for spec in specs]}}
     return draft, specs
-
-
-class VisualDraftDB:
-    def __init__(self, context):
-        self.context = context
-
-    async def scalars(self, query):
-        entity = query.column_descriptions[0]["entity"]
-        rows = [SimpleNamespace(context=self.context)] if entity.__name__ == "Conversation" else []
-        return SimpleNamespace(all=lambda: rows)
 
 
 @pytest.mark.asyncio
@@ -163,51 +150,6 @@ async def test_website_citation_reflows_preserve_full_frozen_or_supplied_dois():
 
 
 @pytest.mark.asyncio
-async def test_visual_preparation_resolves_only_selected_saved_scene(monkeypatch):
-    draft, specs = image_draft()
-    reference = VideoDraftRef(draft_id="draft", draft_digest="a" * 64)
-    candidate = {
-        "candidate_id": reference.draft_id,
-        "candidate_digest": reference.draft_digest,
-        "target_tool": "design_video",
-    }
-    db = VisualDraftDB({
-        "schema_version": 1,
-        "items": [{"candidate": candidate, "executed_arguments": draft}],
-    })
-    project = SimpleNamespace(id=uuid4(), user_id=uuid4(), pending_brief={})
-
-    from app.tools.video import generated_images
-
-    async def cache_miss(**kwargs):
-        return None
-
-    monkeypatch.setattr(visual_assets, "fixed_visual_asset_manifest", cache_miss)
-    monkeypatch.setattr(generated_images, "find_fixed_generated_image", lambda *a, **kw: cache_miss())
-    task = TaskItem(tool="prepare_visual_assets", params={"draft_ref": reference.model_dump(mode="json"), "scene_ids": ["s2"], "review_existing": False})
-    assert "directly" in video_proposal_guard([task])
-    assert (await video_quote_facts(db, project, [task]))["visual_images"] == 1
-    pinned = (await pin_visual_asset_preparation(db, project, [task]))["visual_asset_preparation"]
-    assert pinned["request"]["scene_ids"] == ["s2"]
-    assert pinned["scene_assets"] == [specs[1].model_dump(mode="json")]
-    legacy = task.model_copy(update={"params": {
-        "draft_ref": reference.model_dump(mode="json"),
-        "scene_assets": pinned["scene_assets"],
-    }})
-    assert "directly" in video_proposal_guard([legacy])
-    assert (await pin_visual_asset_preparation(db, project, [legacy]))[
-        "visual_asset_preparation"
-    ]["scene_assets"] == pinned["scene_assets"]
-
-    bad_scene = task.model_copy(update={"params": {**task.params, "scene_ids": ["unknown"]}})
-    with pytest.raises(ValueError, match="No current SceneAssetSpec"):
-        await pin_visual_asset_preparation(db, project, [bad_scene])
-    candidate["candidate_digest"] = "b" * 64
-    with pytest.raises(ValueError, match="stale or inactive"):
-        await pin_visual_asset_preparation(db, project, [task])
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("retry_fails", [False, True])
 async def test_review_recovery_reuses_snapshot_and_is_bounded(monkeypatch, retry_fails):
     stored = {}
@@ -290,33 +232,6 @@ async def test_review_recovery_reuses_snapshot_and_is_bounded(monkeypatch, retry
     assert cached["snapshot"] == manifest["snapshot"]
     assert cached["review_retry_of"] == initial_ref
     assert cached["content_review"]["status"] == ("unavailable" if retry_fails else "pass")
-    snapshot = SimpleNamespace(
-        id=snapshot_id,
-        owner_id=owner_id, origin_project_id=project_id, kind="image", digest=digest,
-        meta={"visual_asset": {
-            "scene_id": spec.scene_id, "request_digest": spec.request_digest(),
-            "analysis_ref": analysis_ref, "content_review_ref": initial_ref,
-        }},
-    )
-
-    async def get(model, identity):
-        return {(Project, project_id): project, (SourceSnapshot, snapshot_id): snapshot}.get(
-            (model, identity if model is Project else str(identity))
-        )
-
-    run = SimpleNamespace(project_id=project_id, context={"visual_asset_preparation": {
-        "request": {"scene_ids": ["s1"], "review_existing": True},
-        "scene_assets": [scene.model_dump(mode="json") for scene in (missing, spec)],
-        "result": {"assets": [reviewed], "failures": mixed.failures, "usage": {"images": 0}},
-    }})
-    step = SimpleNamespace(
-        kind="prepare_visual_assets", status="done", output_refs=[], cost={"units": {}},
-    )
-    fact = await visual_asset_preparation_fact(SimpleNamespace(get=get), run, [step])
-    assert fact["assets"][0]["snapshot_id"] == snapshot_id
-    assert fact["assets"][0]["content_review_ref"] == reviewed["content_review_ref"]
-    assert fact["usage_images"] == 0
-    assert fact["failures"] == mixed.failures
 
 
 @pytest.mark.asyncio
