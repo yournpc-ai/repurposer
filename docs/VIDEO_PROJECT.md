@@ -2,7 +2,7 @@
 
 > Agent 的模型可见工具、执行合同与验收状态见 [Agent Editor 主合同](tasks/new-agent.md)。本页记录作品结构、渲染边界及后续专业编辑目标。
 
-> Status: 已拍板目标架构，开发中（2026-11-17）。本文是新架构唯一目标事实源；能力与剩余验收统筹归 [当前视频合同](tasks/skill-package-promo-video.md)，当前批次归 PROGRESS §0。目标能力与单次模型/旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
+> Status: 已拍板目标架构，开发中（2026-11-17）。本文是新架构唯一目标事实源；能力与剩余验收统筹归 [当前视频合同](tasks/new-agent.md)，当前批次归 PROGRESS §0。目标能力与单次模型/旅程通过不代表全量实施或生产就绪，现行实现查代码与 RENDERING。
 >
 > 范围：先把网页宣传片与 MG 的创建、分镜、CRUD、版本、制作和交付做通；混合合成、程序化画面与生成媒体按施工合同分批接入。ASR 选段、固定视口、原生字幕与配音已归入普通 Composition 对象，旧 Clip/ClipSpec 已退役；完整 Scrub Inspector 后续独立迭代。**不把旧作品内容迁移到新模型**；退役产物按明确授权定向清理，新表、新列和索引仍须走 Alembic schema migration。
 
@@ -21,7 +21,7 @@
 
 **核心产品原则（2026-11-20 冻结）**　观察 → 操作 → 播放 → 判断 → 局部修订。用户通过 Chat 描述效果、观看作品并提出修改。Agent 在同一个 Composition 上选择对象和时间范围，通过有界工具执行编辑。代码维护引用、时序、版本和唯一写入口。构图可用代表帧检查，运动与声音需要播放受影响的片段。下一步编辑应能追溯到具体的观察、修改对象和复查结果。
 
-当前 Iteration 2 先完成媒体准备与可试听交付。第二轮通过后，用上述原则审查第三轮 Composition 与 Preview 设计：能否在同一工程中依据真实预览修改指定对象，并复查受影响片段。
+原生编辑、局部预览与正式成片的实际范围见 [I6 收官记录](tasks/agent-editor-evidence/iteration-6/final-closure.md)。
 
 ### 0.1 长期创作方针（所有阶段施工必读）
 
@@ -31,7 +31,7 @@
 2. **原生内容与媒体生产互补**：需要精确独立修改的文字、图形等保留原生身份；复杂、特殊、变化快的画面可通过程序或模型生产为媒体，并保留可再次生产的来源。创作层统一用 `GeneratorObject` 表达后者，具体边界见 §4.3.2。
 3. **代码也是创作材料**：受控程序路线须允许 Agent 根据需求编写、修改视觉程序，经预览反馈改善结果，不能只调用开发者预置效果。`draw-2d` 承载受控 2D 绘制；`remotion-project` 允许 Agent 按讲稿、文案和素材编写完整 Remotion 工程，包括多文件、多组件、共享 helper、Composition 注册与内部时间线。工程在上游隔离烘焙为固定媒体，最终 video-spec 仍无 React/Remotion。执行图的拓扑与权限仍由系统代码裁决；创作自由不等于业务调度、计费、数据库、动态依赖、网络或任意文件权限。
 4. **保存与制作固定到版本**。create_video 创建作品。Agent 通过原生编辑工具修改当前作品，通过 preview_range 观察具体版本与时间窗。正式导出使用独立费用授权和版本固定的 ExportJob。
-   首稿默认完整校验、保存并呈现分镜。模型遇到影响交付、可通过真实画面确认的具体动态疑点，或用户明确要求查看某个效果时，才检查对应幕或接缝。开启按幕审片后按播放顺序推进，复用仍有效的证据。保存后的 Chat 反馈以目标作品当前版本为基准，执行定向编辑，按需核对受影响的局部。当前接线与剩余验收见 [当前视频合同](tasks/skill-package-promo-video.md)。
+   首稿默认完整校验、保存并呈现分镜。模型遇到影响交付、可通过真实画面确认的具体动态疑点，或用户明确要求查看某个效果时，才检查对应幕或接缝。开启按幕审片后按播放顺序推进，复用仍有效的证据。保存后的 Chat 反馈以目标作品当前版本为基准，执行定向编辑，按需核对受影响的局部。当前接线与剩余验收见 [当前视频合同](tasks/new-agent.md)。
 5. **模型独立是领域边界，不是全模型已支持的声明**：作品、Skill、编辑操作不绑定某个模型品牌；文本/代码创作模型与媒体生产模型可不同，provider 能力、私有参数和用量留在适配边界。按真实消费者接入和验证，不先搭全供应商框架，也不承诺任意模型都有相同能力与质量。
 6. **分开验收表达、执行、创作、编辑**：能保存不等于能渲染，能渲染不等于 Chat 能稳定创作，媒体可播放不等于内部元素可编辑。每批说明四层的实际出口、证据与未支持项；通过动态预览和必要试听判断结果，静帧/结构检查不代替视听验收。
 7. **Skill 保存方法，扩展由真实需求驱动**：内置与外置 Skill 共用 `SKILL.md`、shot cards、sequences、静态 library index、demos 与可选 template 六类逻辑资源；Agent 经有界只读工具渐进读取选中的卡片、arc、预览和参考源码，不一次注入全包，也不建立 ShotRecipe 或运行期镜头注册表。外部能力按形态内化：instructions → 创作方法，结构 → VideoTemplate，局部参数 → Preset，媒体 → Asset/SourceSnapshot，动作 → 注册工具/provider，视觉程序 → 受控 Generator。声明式能力可校验后加载。外部脚本与普通 TSX 读取均为只读参考。包显式声明的 TSX 入口、源文件和固定资源经宿主校验及依赖锁定后，可组成不可变 Generator，按需交给现有隔离 runner 执行。字段、函数和执行能力随首个真实消费者增补；现有能力按统一合同分批交付，不因作品复杂便预设新的大阶段。
@@ -530,7 +530,7 @@ VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Ski
 
 发布目录为 `<MANAGED_SKILL_ROOT>/promo-video/<version>/`，当前目录版本由 `MANAGED_SKILL_VERSIONS` 选择，已绑定作品沿用自己的版本引用。部署方内部完成安装和注册，用户不安装包，不恢复仓库自研 Promo，也不增加新的 Skill 商店或自助安装路径。
 
-通用 PackageReader 按需读取方法、镜头卡、Gallery 变体和实际存在的预览；它们是创作证据，不是运行期镜头注册表。宿主负责采集、grounding、素材权限、估价、授权、TTS、存储、渲染与失败恢复，作品仍经 `create_video` 和原生编辑工具 和唯一内容写口保存。固定 VideoTemplate 若被其他现役 Skill 使用，只能确定性展开到同一 CompositionVersion，不能形成第二生产链。
+通用 PackageReader 按需读取方法、镜头卡、Gallery 变体和实际存在的预览；它们是创作证据，不是运行期镜头注册表。宿主负责采集、grounding、素材权限、估价、授权、TTS、存储、渲染与失败恢复，作品经 `create_video` 与原生编辑工具调用唯一内容写口保存。固定 VideoTemplate 若被其他现役 Skill 使用，只能确定性展开到同一 CompositionVersion，不能形成第二生产链。
 
 ### 7.3 外部 Skill 持久化与加载
 
@@ -545,8 +545,8 @@ VideoTemplate/Preset 实例化后展开进 CompositionVersion；之后修改 Ski
 
 ### 7.4 Skill 调用与 Home 入口
 
-- `/` 打开的 Skill picker 同时接纳平台内置 Skill 与当前用户可访问的外部 SkillVersion。内置 Skill 的 picker/chip 显示本地化用户任务名——产品宣传视频制作、口播动效视频制作、文字动画视频制作、知识讲解视频制作及对应英文——不显示内部实现包名；每个入口绑定当前可访问的明确 Skill 版本，不使用失效的默认 id 或目录回退。选中后形成可见 Skill chip，并随消息携带统一的 Skill 引用：内置 Skill 由注册表 id + 版本解算，用户 Skill 由不可变 SkillVersion id 解算；不能使用隐藏 recipe_id 或另一套发射载荷。
-- 文字动画首稿支持 Scene 内独立时间窗、字号/字重、位置与入场的多个 text_beats，各自展开为原生 TextObject/Clip；逐字保留来源顺序，校验时间窗、画布范围与基本阅读时长，旧单文字块仍兼容。首稿使用 Director 选定的原生文字/图形、配色、对齐与运动；不按 Skill 身份覆盖为固定深色舞台、第二幕关键词染色、末幕打字机或固定点击音。Preset 只在用户明确选择时展开，不自动混用 word/grapheme 层级。段落数不等于固定 Scene 数；既有版本保持不可变，新设计按当前方法生成。
+- `/` 打开的 Skill picker 同时接纳平台内置 Skill 与当前用户可访问的外部 SkillVersion。内置 Skill 的 picker/chip 显示本地化用户任务名——产品宣传视频制作、口播动效视频制作、知识讲解视频制作及对应英文——不显示内部实现包名；每个入口绑定当前可访问的明确 Skill 版本，不使用失效的默认 id 或目录回退。选中后形成可见 Skill chip，并随消息携带统一的 Skill 引用：内置 Skill 由注册表 id + 版本解算，用户 Skill 由不可变 SkillVersion id 解算；不能使用隐藏 recipe_id 或另一套发射载荷。
+- 文字动画首稿支持 Scene 内独立时间窗、字号/字重、位置与入场的多个 text_beats，各自展开为原生 TextObject/Clip；逐字保留来源顺序，校验时间窗、画布范围与基本阅读时长，旧单文字块仍兼容。首稿使用 Agent 选定的原生文字/图形、配色、对齐与运动；不按 Skill 身份覆盖为固定深色舞台、第二幕关键词染色、末幕打字机或固定点击音。Preset 只在用户明确选择时展开，不自动混用 word/grapheme 层级。段落数不等于固定 Scene 数；既有版本保持不可变，新设计按当前方法生成。
 - 每个作品至多绑定一个 Skill 版本。保存版保留不可变 Skill 引用、实际来源、声明 Generator 资源和用户明确约束的 provenance；完整重设计与普通修订继承出生血缘，历史空值不伪造回填。包内方法、幕纲与镜头卡只是按需读取的创作证据，不是另一套模型提交协议；Prompt 不复制包注册表。
 - Home 的视频 Skill 卡是同一入口的可选快捷形态：点击形成 Skill chip + 可编辑 prompt，与手动 `/任务名 + prompt` 使用完全相同的 `POST /chat` 载荷。卡片不自动发送、上传素材、建项目或导出，也不产生制作意图。当前只展示可解析、可访问的现役 Skill，不恢复固定 Recipe 画廊、多 Output 聚合或失效模板的默认回退。产品宣传混合网页、文字、图片和真实视频输入；其他视频能力按真实方法与当前可用素材诚实呈现，不拿旧样片冒充当前验收。
 
@@ -582,6 +582,8 @@ Skill 的方法、项目来源及用户约束与当前作品共同进入普通 C
 
 ### 8.3 Prompt 与 validator 分座
 
+当前 Chat 使用原生工具 schema，见 [CHAT_ARCHITECTURE](CHAT_ARCHITECTURE.md)。下列 Director 草稿协议记录此前专用生产实现的边界，不能作为新 Agent 首稿的提交格式。
+
 - Chat prompt：对话、工具选择、呈现和授权规则。
 - Skill instructions：创作方法与风格判断。
 - Director schema：当前支持的创意内容/槽位、精确脚本与 `visual_description`；`video/draw_2d_director` 承载 draw-2d 的受控来源/参数，`video/remotion_project_director` 承载 1–6 幕完整作品的受控多文件 TSX、固定图片与原生旁白拆分，`video/aligned_narration_director` 在真实对齐时间窗内选择至多一个 draw-2d 或 remotion-project 主视觉，`video/generated_image_director` 承载首个 image-generation 背景请求与独立标题。模板槽位不是永久创作边界，散文字段 null 读容忍；修码反馈只携带当前源码与世界诊断，不携带 assistant 言语草稿。
@@ -597,7 +599,7 @@ Skill 的方法、项目来源及用户约束与当前作品共同进入普通 C
 
 ### 8.4 代码位置
 
-工具注册与执行在 `apps/api/app/chat/editor.py`。内容提交复用 `app/editing/service.py`；媒体回执在 `app/chat/editor_media.py`；后台执行在 `app/pipeline/media_jobs.py` 和 `export_jobs.py`。分镜展示 ACK 记录于 `pending_brief.video_presentation`。
+工具注册与执行在 `apps/api/app/chat/editor.py`。内容提交复用 `app/editing/store.py::apply_composition_edits`；媒体回执在 `app/chat/editor_media.py`；后台执行在 `app/pipeline/media_jobs.py` 和 `export_jobs.py`。分镜展示 ACK 记录于 `pending_brief.video_presentation`。
 
 ### 8.5 基于画面证据的内容质量检查（静帧与确定性信号检查已接，完整检查待扩）
 

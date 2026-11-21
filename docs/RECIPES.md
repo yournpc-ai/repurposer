@@ -1,15 +1,23 @@
-# RECIPES — 配方与 Home 货架
+# Home 创作入口与配方记录
 
-> Status: 当前规范（2026-10-27）。本文描述配方、Home 货架及其兑现能力的现行边界；样片与入口的最新验收状态归 `tasks/home-creation-entry-refresh.md`，排期归 `PROGRESS.md`。
->
-> 配方是提示词，不是 mention、模板编辑器或隐藏执行通道。点击卡片只预填 composer；用户随后编辑并发送，才进入唯一的 `POST /chat` 意图面。
+> Status: Home 入口现行规范（2026-11-22）。历史货架记录从下方分隔线开始。
+
+Home 使用 `routes/_app.home.tsx`、`HomeComposer` 和 Chat 的 Skill 目录。三个示例预填可编辑的文字。网站宣传、知识讲解示例根据显式选择显示对应 Skill chip，观点文字动画示例仅填文字。用户可移除 chip，再编辑或发送。Landing 的创建意图在登录后传给同一 composer。
+
+新项目只凭消息中的具体 `request.skill` 绑定方法版本。普通文字动画和宣传片请求由 Agent 直接创作，作品、原生工具和交付规则见[当前合同](tasks/new-agent.md)。真实入口与固定版本的交付见[I6 验收](tasks/agent-editor-evidence/iteration-6/final-closure.md)。
+
+---
+
+## 历史配方货架（2026-10-27）
+
+以下保留原货架、配方 API、持久图与旧渲染 family 的设计记录。当时的「当前」及施工指令仅适用于该历史方案。
 
 ## 0. 当前事实
 
 - 服务端 `app/pipeline/recipes.py:RECIPE_REGISTRY` 注册八个配方：`multilingual-subs`、`voice-dub`、`highlight-clips`、`reframe`、`social-post`、`quote-cards`、`carousel` 为 `live`；`image-video` 为 `reserved`。`GET /api/v1/recipes` 提供公共只读投影。
 - Home 前端另以 `components/home/recipeFamilies.ts:RECIPE_FAMILIES` 组织用户任务货架。`ads` 是默认族；`talks` 与 `posts` 当前 `disabled`；`templates` 是未映射服务端卡片的 catch-all。
 - `DEMO_HIDDEN_CARDS` 当前隐藏 `quote-cards` 与 `image-video`。隐藏只影响货架曝光，不删除 live 能力、prompt 注册或公共 API。
-- Home 的三个示例分别预填网站产品宣传、观点文字片和概念讲解。文字动画仅预填可编辑文字。选择现役 Skill 会显示可删除的版本 chip。
+- Home 当前以四产品主 Tab × 八应用子 Tab 组织视频入口：产品宣传、口播动效、文字动画、知识讲解。文字动画、产品宣传、知识讲解各有一张完成内部真实旅程的新链样片，另外五个应用显示统一空态；真实样片与手动 Slash 使用同一 Skill chip + 可编辑 prompt，非 Skill Recipe 仍只预填 PromptTemplate。`promo-video` 是新的核心宣传 Skill，只有其真实链验收后才替换新入口，旧 launch-film 绑定不漂移。
 - 三张开发/手测样片已按内容寻址 key 上传并登记；内部机制、实际帧与浏览器回放证据不等于用户连续看片、实际试听或正式公开 Gallery 通过。知识片的标题/Generator 拥挤、口播指定真人素材 NoSuchKey 及全部剩余验收统一归 `tasks/skill-package-promo-video.md` P6；证据目录继续使用 `scratch/d5-category-anchors/`。
 - `RecipeCard` 只有 `status="live"` 才可点击；`reserved` 显示 Soon 且不可发射。点击不自动发送、不建项目或 run、不打开 overlay。
 - `packages/clip` 同时服务 editor preview 与 render service；clip-spec 与 film-spec 是平级 spec families，按 `spec.family` 分派。配方不得创建第三套 spec 或 renderer。
@@ -189,7 +197,7 @@ stacking
   → 当前图与 worker 执行
 ```
 
-- 首页视频案例的「开始创作」清空输入框里的文字和 @ 引用，填入该案例的提示词，仅有显式 Skill 的快捷入口同时绑定该版本，已选附件保留。落地页传入提示词时，空草稿或仍等于上次预填原文的草稿可直接替换，已有用户文字或 @ 引用时在末尾追加。使用 Skill 选择器只替换 Skill 绑定；Backspace / Delete / 选区删除按统一 Chip 律移除绑定。
+- 首页视频案例的「开始创作」清空输入框里的文字和 @ 引用，填入该案例的提示词并绑定对应 Skill，已选附件保留。落地页传入提示词时，空草稿或仍等于上次预填原文的草稿可直接替换，已有用户文字或 @ 引用时在末尾追加。使用 Skill 选择器只替换 Skill 绑定；Backspace / Delete / 选区删除按统一 Chip 律移除绑定。
 - 选文件本身不发送；只有 send 消费上传 chips。
 - 预填不暴露工具、spec、版本或内部配方 id，不锁死用户未要求的画幅、幕数、时长或配音。
 - 配方永不出现在 @ picker，不建立模板编辑器、第二发送钮或专用意图端点。视频 Skill 经专用 Skill picker 形成 Skill chip，不混入 @-entity registry。
@@ -197,7 +205,7 @@ stacking
 ### 7.3 布局与播放
 
 - Home 以 hero + composer 为主入口，货架位于其下；composer 滚动后是**视口底部**单行 stadium dock。
-- Landing 保留产品宣传、口播动效、文字动画和知识讲解四类展示。分类名称与已发布 demo 独立于可选 Skill 目录。
+- 首屏视频主分类固定为产品宣传、口播动效、文字动画、知识讲解，不再使用 Ads & UGC 或旧两产品作为可见范围；两级货架中唯一 videos family 不重复渲染父 tab。四类与内置 Skill 一一绑定，无真实样片的应用显示空态，不用旧片填充。Assistant 的全范围回答按这四类陈述视频能力，并另行保留其他真实内容能力，不维护第二份产品菜单。
 - 货架按用户任务组织，不按输出介质或渠道堆卡；空层级不渲染。
 - demo 视频默认静音循环；IntersectionObserver 离屏暂停、回视口恢复；声音遵循 Home 全局单例互斥。
 - 卡片画幅取真实文件，不拉伸；窄屏不得产生页面级横向溢出。

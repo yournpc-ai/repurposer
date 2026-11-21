@@ -13,13 +13,13 @@
 
 | 任务范围 | 最小阅读路径 |
 |---|---|
-| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/skill-package-promo-video.md` 当前实施与验收 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1；涉及 Chat 和后台作业再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
-| 宣传视频核心 Skill / 渐进式内外置 Skill 包 | `VIDEO_PROJECT.md` §0、§4.3.2、§7、§8 → `tasks/skill-package-promo-video.md` 当前批次；在同一合同核对 Remotion 工程与发布门 |
-| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §2.2、§8.1.2 → `tasks/skill-package-promo-video.md` 核对直接 Op、当前工作面与剩余验收。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` |
+| 新 Video Project / Film/MG 架构施工 | `VIDEO_PROJECT.md` §0 长期创作方针 → `tasks/new-agent.md` 当前实施与验收 → 目标文档命中章节；Generator 读 §4.3.2/§8.1.1；涉及 Chat 和后台作业再加 CHAT_ARCHITECTURE / AGENT_ARCHITECTURE 对应小节 |
+| 宣传视频核心 Skill / 渐进式内外置 Skill 包 | `VIDEO_PROJECT.md` §0、§4.3.2、§7、§8 → `tasks/new-agent.md` 当前批次；在同一合同核对 Remotion 工程与发布门 |
+| Composition 创作循环 / Project 与工具事实一致性 | `VIDEO_PROJECT.md` §2.2、§8.1.2 → `tasks/new-agent.md` 核对直接 Op、当前工作面与剩余验收。Chat 上下文读 `CHAT_ARCHITECTURE.md` §6，Agent 边界读 `AGENT_ARCHITECTURE.md` |
 | 修 Chat 显示 bug（活动 / SSE / 打字机 / dock） | `CHAT_ARCHITECTURE.md` §8（工作段重点 §8.6～§8.7）→ 命中的当前任务合同只读对应验收；工具或修订改动再选 §3 / §9 |
 | Chat TurnBlock 四阶段施工 | `CHAT_ARCHITECTURE.md` §8.10 → `tasks/chat-turn-block-implementation.md` 当前阶段 → `VIDEO_PROJECT.md` §12 目标目录；视频接缝再读 §10 与统一视频合同 P5 |
 | UI 视觉 / 组件 / 布局 | `UI_GUIDELINES.md` 对应章节；只有涉及 chat 行为才加读 CHAT_ARCHITECTURE |
-| 改 Home 货架 / 配方卡 / 样片 | `RECIPES.md` §4、§7 + `UI_GUIDELINES.md` §4.1；替换真实样片或处理入口欠账再看 `tasks/home-creation-entry-refresh.md` §2～§5 |
+| Home 示例、显式 Skill 与样片 | [Home 创作入口](RECIPES.md)、[UI 规范](UI_GUIDELINES.md)、[真实用户验收](tasks/agent-editor-evidence/iteration-6/final-closure.md) |
 | 模块 / 表 / 队列 / worker | `MODULE_ARCHITECTURE.md` §4 / §5 / §7 的对应小节；迁移再加 `DATABASE_MIGRATIONS.md` |
 | 原生工具、后台作业与报价 | `AGENT_ARCHITECTURE.md`、`BILLING.md` |
 | 渲染 / video-spec / 编辑器 | `RENDERING.md` §3、§6、§8 中对应小节；作品结构读 VIDEO_PROJECT，编辑器交互再加 `VIDEO_EDITOR.md` |
@@ -82,7 +82,7 @@
 | `CHAT_ARCHITECTURE.md` | Agent Interface 层 + **chat/画布行为唯一事实源**：tool registry / plan path / QuestionDock / SSE / 打字机律 / Candidate Surface / TurnBlock 与渐进揭示 / 两形态机 / mentions / 词表 v3 / 相机律 / 修订边界 | 活跃；live 验收欠账归当前任务合同 | 动 chat / dock / 画布行为 / registry / 进度推送前 |
 | `JOURNEYS.md` | **用户旅程母文档**：四条旅程逐拍 × 分支树 × 系统支撑表 × 缺口登记（ADR-077/078 与 ADR-088/089 的立项依据） | 活跃 | 新功能或体验改动前读对应旅程与缺口；技术评审倒查「让哪条旅程哪一拍变好」，不要求通读全部旅程 |
 | `MENTIONS.md` | @ 提及体系方针：请求 / 指认两族（当前 asset / output / workflow_step）+ 排除清单（配方、产出类型、自由参数、人设不新建成 mention）+ 判定三问 + @tool 立案方针 | 活跃 | 任何新 mention 类型立案前 |
-| `RECIPES.md` | 配方与 Home 货架母文档：prompt-only 发射、服务端 registry 与前端货架职责、caption catalog、dub/reframe/quote 链、样片证据分级与 R5 延期边界 | 当前规范；Home 真片/占位片与验收状态归 `tasks/home-creation-entry-refresh.md` | 动首页配方卡、字幕样式、dub/合成视频/分镜能力前 |
+| `RECIPES.md` | Home 示例预填、显式 Skill 选择与发送边界 | 首页规范，旧配方货架另标历史 | 修改 Home 创作入口前 |
 | `COMPETITIVE_ANALYSIS.md` | 七家竞品综合（Round 1.2） | 活跃 | 竞品概览 |
 | `LANDING.md` | 落地页当前结构、四产品 Gallery 与滚动形态、内测商业面、公开媒体边界及真实社交/法务配置 | 活跃 | 动落地页结构、Hero、Gallery、内测活动或公开入口前 |
 | `API.md` | API 参考 | 活跃 | 对接口前 |
