@@ -1,0 +1,16 @@
+{
+  "turn_id": "f8e741a5-cbd0-49e6-8d89-7aec0d3f8a9b",
+  "stop": {
+    "status": 200,
+    "body": {
+      "accepted": true,
+      "turn_state": "retracted"
+    }
+  },
+  "versions_before": 3,
+  "versions_after": 3,
+  "outputs_before": 0,
+  "outputs_after": 0,
+  "latest_turn_state": null,
+  "latest_content": "复看完成，当前版本已满足要求。\n\n**修改内容（版本 第 3 版，v3）**\n- 0–4.25 秒的对象（0–4.25 秒的片段）缩放由 1.25 调回 1.0，位移由 x=12 / y=-12 归零。\n- 原因：此前 fit=contain 的竖版画面被放大后上下被画布切掉（source_clipped_px 顶 34.5 / 底 10.5），\"STUDIO NOTES\" 角标和下方横条被裁断；归零后 source_clipped_px 四项均为 0，whole_source_inside_canvas = true。\n\n**复看结果（0s / 2.1s / 4.233s 三帧）**\n- 头部完整：发顶到下巴全部在画面内，上方留有背景余量；双肩与手臂、麦克风均在框内，无切边。\n- 人脸检测 face_fully_visible = true，扩边框 expanded_face_fully_visible = true，canvas_bbox_px [146.42, 63.9, 167.63, 93.23]，四周裁切为 0。需说明的是，该框只覆盖人脸本体，不能单独证明发丝与肩线；发顶与肩线完整性是按上述三帧画面直接观察确认的。\n- \"STUDIO NOTES\" 角标、\"IN CONVERSATION / Inside the studio\" 下半条现在完整显示，无残缺字形。\n- 代价：竖版 432×768 完整放入 320×180 画布后，左右各留边 109.38 像素（画布上下留边为 0）。这是\"保留完整源画面\"与\"填满画布\"之间的取舍，我按你的要求优先保证人物与字幕不被裁切；如果你更想要人物更大，可改回放大并接受上下裁切或改为背景填充。\n\n时长保持 4.25 秒不变，未做正式导出。画面音轨解码为静音（rms 0、peak 0），如需配音请另行说明。"
+}

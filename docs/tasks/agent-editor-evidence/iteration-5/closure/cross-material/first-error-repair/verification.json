@@ -1,0 +1,24 @@
+{
+  "verified": true,
+  "cases": 9,
+  "requests": 66,
+  "prompt_tokens": 619741,
+  "completion_tokens": 24615,
+  "usage_usd": 0.107729,
+  "browser_outputs": 3,
+  "browser_continuation": true,
+  "stop": {
+    "accepted": true,
+    "turn_state": "retracted"
+  },
+  "source_audio": {
+    "silent_source": {
+      "stream_present": true,
+      "fully_decoded": true,
+      "is_silent": true
+    },
+    "absent_source": {
+      "stream_present": false
+    }
+  }
+}

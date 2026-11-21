@@ -1,0 +1,116 @@
+[
+  {
+    "sample": "seam-gap",
+    "project_id": "f5e79530-4b47-4f5b-a0d7-9b710f9607e1",
+    "turn_id": "eca8e2b5-e270-4f69-8084-3d062c988e77",
+    "versions": 2,
+    "outputs": 0,
+    "runs": [
+      {
+        "run_id": "709d1512-fb40-4e30-aafc-289d05823445",
+        "status": "cancelled",
+        "steps": [
+          {
+            "id": "6fc1eb9c-edee-45bb-aa7b-4ab4f29b992a",
+            "kind": "produce_video",
+            "status": "cancelled",
+            "attempt": 262,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      },
+      {
+        "run_id": "a9a86a46-065a-4f0d-a5d2-14e74c093b97",
+        "status": "cancelled",
+        "steps": [
+          {
+            "id": "3e578732-47e3-4742-b1f7-685fb3876ea9",
+            "kind": "produce_video",
+            "status": "cancelled",
+            "attempt": 647,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      }
+    ],
+    "archive": "failed-seam-gap.json.gz"
+  },
+  {
+    "sample": "image-title-endcard",
+    "project_id": "0a6bac95-d0d3-48f7-a517-547797e1677e",
+    "turn_id": "905ff0bc-4b0a-4fb4-9ed4-6385d8a6abeb",
+    "versions": 3,
+    "outputs": 0,
+    "runs": [
+      {
+        "run_id": "7200b6ab-9979-4367-bb96-f264574b1bda",
+        "status": "cancelled",
+        "steps": [
+          {
+            "id": "74c2371c-0c65-493f-afad-acb6f0d30454",
+            "kind": "produce_video",
+            "status": "cancelled",
+            "attempt": 239,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      },
+      {
+        "run_id": "bbe90089-97ad-4276-bd18-c38d4961e052",
+        "status": "cancelled",
+        "steps": [
+          {
+            "id": "32eb4240-6117-4952-ad14-d40c41d98b09",
+            "kind": "produce_video",
+            "status": "cancelled",
+            "attempt": 508,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      }
+    ],
+    "archive": "failed-image-title-endcard.json.gz"
+  },
+  {
+    "sample": "media-generation",
+    "project_id": "da506313-9592-4bbf-9ce7-1878bf405f48",
+    "turn_id": "c4ed07bb-504d-459f-a56f-84c03a860061",
+    "versions": 1,
+    "outputs": 0,
+    "runs": [
+      {
+        "run_id": "4e84067b-0587-4d1e-bd3a-0c267844a90f",
+        "status": "cancelled",
+        "steps": [
+          {
+            "id": "63086f98-0a71-4faa-bb5e-43fb7151637e",
+            "kind": "prepare_narration",
+            "status": "cancelled",
+            "attempt": 671,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      },
+      {
+        "run_id": "310a4150-9235-46df-a0db-2ec352716843",
+        "status": "completed",
+        "steps": [
+          {
+            "id": "e69951e8-b390-4f72-8d18-6e9587f9860c",
+            "kind": "prepare_music",
+            "status": "done",
+            "attempt": 26,
+            "error": null,
+            "output_refs": []
+          }
+        ]
+      }
+    ],
+    "archive": "failed-media-generation.json.gz"
+  }
+]

@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "project_id": "10f29aa7-feb6-44bf-a0aa-1ebfcbec1e75",
+      "output_id": "c31e8b92-163e-497a-b7fa-dc6290583530",
+      "label": "open-output",
+      "sha256": "8fc4fe8ba196be94290e2649890d3ab96755599d6db2414869fe2ed853df7dd0"
+    },
+    {
+      "project_id": "c7fea268-7d4b-4f79-8b02-5d9a380aeb44",
+      "output_id": "fefd8629-c8ee-404a-95da-e9f4d0e1db5f",
+      "label": "subtitle-output",
+      "sha256": "1df39616b808b3a737b6b70360592a04b23c392bc5a6cd84f2fe4f356f46e189"
+    },
+    {
+      "project_id": "063ef7ac-dd81-42a4-92ca-e218dbc828d2",
+      "output_id": "83883407-0efb-4200-82c7-69930eb46476",
+      "label": "independent-output",
+      "sha256": "b44efdbc937e4eca72d1a557510673d80acf693758ae3351a10cd69bee067bce"
+    }
+  ],
+  "plays": [
+    {
+      "label": "open-output",
+      "before_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/10f29aa7-feb6-44bf-a0aa-1ebfcbec1e75/c31e8b92-163e-497a-b7fa-dc6290583530-0ee6f8b91fd34257d2b20d72016da2017f5d850fa8842a582d391f5c80ce63c1.mp4",
+        "time": 0.925554,
+        "ready": 4,
+        "paused": false
+      },
+      "after_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/10f29aa7-feb6-44bf-a0aa-1ebfcbec1e75/c31e8b92-163e-497a-b7fa-dc6290583530-0ee6f8b91fd34257d2b20d72016da2017f5d850fa8842a582d391f5c80ce63c1.mp4",
+        "time": 0.673591,
+        "ready": 4,
+        "paused": false
+      }
+    },
+    {
+      "label": "subtitle-output",
+      "before_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/c7fea268-7d4b-4f79-8b02-5d9a380aeb44/fefd8629-c8ee-404a-95da-e9f4d0e1db5f-8e48faaa6884a46a0b7a515cbdb9e8ea2b3f19ad849168e17b6a300df6d8a99c.mp4",
+        "time": 0.971442,
+        "ready": 4,
+        "paused": false
+      },
+      "after_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/c7fea268-7d4b-4f79-8b02-5d9a380aeb44/fefd8629-c8ee-404a-95da-e9f4d0e1db5f-8e48faaa6884a46a0b7a515cbdb9e8ea2b3f19ad849168e17b6a300df6d8a99c.mp4",
+        "time": 0.668382,
+        "ready": 4,
+        "paused": false
+      }
+    },
+    {
+      "label": "independent-output",
+      "before_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/063ef7ac-dd81-42a4-92ca-e218dbc828d2/83883407-0efb-4200-82c7-69930eb46476-fa8ded8e5541f0ac0f326da42327413bba39d7500f69e2efc50e380146b0bd71.mp4",
+        "time": 0.964426,
+        "ready": 4,
+        "paused": false
+      },
+      "after_reload": {
+        "src": "https://repurposer.tos-ap-southeast-1.volces.com/7c4b7be0-e068-4bed-82f4-685451d832bf/outputs/projects/063ef7ac-dd81-42a4-92ca-e218dbc828d2/83883407-0efb-4200-82c7-69930eb46476-fa8ded8e5541f0ac0f326da42327413bba39d7500f69e2efc50e380146b0bd71.mp4",
+        "time": 0.666281,
+        "ready": 4,
+        "paused": false
+      }
+    }
+  ],
+  "console_errors": []
+}

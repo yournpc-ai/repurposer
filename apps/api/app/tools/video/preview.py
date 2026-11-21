@@ -462,19 +462,23 @@ async def source_framing(db, owner_id, content, covered, sample_seconds):
 
     visible = [clip for track in content.timeline.tracks if track.kind == "visual"
                for clip in track.clips if clip.clip_id in covered]
-    if len(visible) != 1:
+    if not visible or any(clip.object.kind != "video" or not clip.source or not clip.source.source_range
+                          for clip in visible):
+        return None, None
+    source_refs = {(clip.source.snapshot_id, clip.source.snapshot_digest) for clip in visible}
+    if len(source_refs) != 1:
         return None, None
     clip = visible[0]
     obj = clip.object
-    if obj.kind != "video" or not clip.source or not clip.source.source_range:
-        return None, None
     snapshot = await db.get(SourceSnapshot, clip.source.snapshot_id)
     if not snapshot or snapshot.owner_id != owner_id or snapshot.digest != clip.source.snapshot_digest:
         return None, None
-    offset = Fraction(str(sample_seconds)) - Fraction(clip.range.start, content.settings.timebase)
-    if not 0 <= offset < Fraction(clip.range.end - clip.range.start, content.settings.timebase):
-        return None, None
-    target = Fraction(clip.source.source_range.start, SOURCE_TIMEBASE) + offset
+    multiple = len(visible) > 1
+    if not multiple:
+        offset = Fraction(str(sample_seconds)) - Fraction(clip.range.start, content.settings.timebase)
+        if not 0 <= offset < Fraction(clip.range.end - clip.range.start, content.settings.timebase):
+            return None, None
+        target = Fraction(clip.source.source_range.start, SOURCE_TIMEBASE) + offset
     try:
         length = await storage.size(snapshot.storage_key)
         if not length or length > 32 * 1024 * 1024:
@@ -483,16 +487,36 @@ async def source_framing(db, owner_id, content, covered, sample_seconds):
         if hashlib.sha256(data).hexdigest() != snapshot.digest:
             return {"available": False, "reason": "Source digest mismatch."}, None
         with av.open(io.BytesIO(data)) as container:
-            stream = container.streams.video[0]
-            frame, actual = _decode_frame(container, stream, target, Fraction(stream.average_rate or 30))
-            jpeg = _jpeg(frame)
-            width, height = frame.width, frame.height
-            square_upright = not frame.rotation and (stream.sample_aspect_ratio or 1) == 1
+            source_audio_present = bool(container.streams.audio)
+            if not multiple:
+                stream = container.streams.video[0]
+                frame, actual = _decode_frame(container, stream, target, Fraction(stream.average_rate or 30))
+                jpeg = _jpeg(frame)
+                width, height = frame.width, frame.height
+                square_upright = not frame.rotation and (stream.sample_aspect_ratio or 1) == 1
     except (OSError, IndexError, ReviewError, BotoCoreError, ClientError, av.FFmpegError):
         return {"available": False, "reason": "Could not decode fixed source reference."}, None
 
+    source_audio = {"stream_present": source_audio_present}
+    if source_audio_present:
+        from app.tools.video.media_analysis import MediaAnalysisError, analyze_audio_bytes
+
+        try:
+            measured = await asyncio.to_thread(
+                analyze_audio_bytes, data, snapshot_id=str(snapshot.id), source_digest=snapshot.digest,
+                requested_probes=["decode", "pcm_stats"],
+            )
+            source_audio.update(
+                fully_decoded=measured.media_facts["decode"]["fully_decoded"],
+                is_silent=measured.media_facts["pcm_stats"]["is_silent"],
+            )
+        except MediaAnalysisError:
+            source_audio["fully_decoded"] = False
+    if multiple:
+        return {"snapshot_id": str(snapshot.id), "source_audio": source_audio}, None
     facts = {"snapshot_id": str(snapshot.id), "source_seconds": float(actual),
-             "source_pixels": [width, height], "fit": obj.fit, "transform": obj.transform.model_dump()}
+             "source_pixels": [width, height], "fit": obj.fit, "transform": obj.transform.model_dump(),
+             "source_audio": source_audio}
     if square_upright:
         geometry = {**source_geometry(content, clip, width, height), "source_pixels": [width, height]}
         facts.update(geometry)
