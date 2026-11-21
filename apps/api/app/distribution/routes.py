@@ -54,6 +54,7 @@ _ERROR_STATUS = {
     "publication_not_found": status.HTTP_404_NOT_FOUND,
     "invalid_state": status.HTTP_400_BAD_REQUEST,
     "illegal_transition": status.HTTP_409_CONFLICT,
+    "publication_outcome_pending": status.HTTP_409_CONFLICT,
     "already_published": status.HTTP_409_CONFLICT,
     "channel_not_active": status.HTTP_409_CONFLICT,
 }

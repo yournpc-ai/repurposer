@@ -21,6 +21,7 @@ import structlog
 from app.config import settings
 from app.distribution.adapters.base import (
     normalize_network_errors,
+    BeforePublish,
     ChannelAccountPayload,
     JobHandle,
     PlatformError,
@@ -185,7 +186,7 @@ class TikTokAdapter:
 
     @normalize_network_errors
     async def begin_publish(
-        self, credentials: dict[str, Any], payload: dict[str, Any]
+        self, credentials: dict[str, Any], payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> JobHandle:
         media = payload.get("media") or {}
         video_url = media.get("video")
@@ -225,6 +226,7 @@ class TikTokAdapter:
                     if str(t).strip()
                 )
                 title = f"{title} {tags}".strip()
+            await before_publish()
             resp = await client.post(
                 f"{_API}/post/publish/video/init/",
                 headers=_bearer(credentials),
@@ -253,7 +255,7 @@ class TikTokAdapter:
 
     @normalize_network_errors
     async def await_publish(
-        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any]
+        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> PublishResult:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -273,7 +275,7 @@ class TikTokAdapter:
             if status_value == "FAILED":
                 reason = inner.get("fail_reason", "unknown")
                 raise _err(
-                    PlatformErrorKind.CONTENT_POLICY,
+                    PlatformErrorKind.PUBLISH_FAILED,
                     f"tiktok publish failed: {reason}",
                 )
             # PROCESSING_DOWNLOAD / PROCESSING / SEND_TO_USER_INBOX → keep polling

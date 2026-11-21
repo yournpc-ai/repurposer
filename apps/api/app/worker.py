@@ -122,10 +122,10 @@ async def _tick() -> bool:
     # promise to the user and must not queue behind ASR / nodes / renders.
     # The table is usually empty, so the check is nearly free.
     async with AsyncSessionLocal() as db:
-        pub_id = await claim_due_publication(db)
-    if pub_id is not None:
+        publication = await claim_due_publication(db)
+    if publication is not None:
         did_work = True
-        await process_publication(pub_id)
+        await process_publication(*publication)
 
     # Payment alerts are an outbox claim source: the API persists failures,
     # while this worker owns the external email call and its bounded retries.

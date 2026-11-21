@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.schemas import ChannelAccountStatus, PublicationState
-from app.models.tables import ChannelAccount, Output, Publication
+from app.models.tables import ChannelAccount, Output, Project, Publication
 
 logger = structlog.get_logger()
 
@@ -49,7 +49,9 @@ class DistributionError(Exception):
 _ALLOWED: dict[PublicationState, set[PublicationState]] = {
     PublicationState.DRAFT: {PublicationState.SCHEDULED, PublicationState.CANCELLED},
     PublicationState.SCHEDULED: {PublicationState.PUBLISHING, PublicationState.CANCELLED},
+    PublicationState.UNKNOWN: {PublicationState.PUBLISHED, PublicationState.FAILED, PublicationState.PUBLISHING},
     PublicationState.PUBLISHING: {
+        PublicationState.UNKNOWN,
         PublicationState.PUBLISHED,
         PublicationState.FAILED,
         # Backoff re-entry: a retryable platform failure parks the order back
@@ -89,7 +91,7 @@ async def _transition(
     if to_state == PublicationState.PUBLISHED:
         pub.published_at = datetime.now(UTC)
     await db.flush()
-    if to_state in (PublicationState.PUBLISHED, PublicationState.FAILED):
+    if to_state in (PublicationState.PUBLISHED, PublicationState.FAILED, PublicationState.UNKNOWN):
         await _notify_terminal(db, pub)
     logger.info(
         "publication_transition",
@@ -126,6 +128,9 @@ async def _notify_terminal(db: AsyncSession, pub: Publication) -> None:
             type="publish_succeeded",
             payload={**base, "platform_post_url": pub.platform_post_url},
         )
+        return
+    if pub.state == PublicationState.UNKNOWN:
+        await create_notification(db, user_id=pub.user_id, type="publish_unknown", payload=base)
         return
     error = pub.last_error or ""
     if error == "channel_token_expired":
@@ -282,7 +287,12 @@ async def create_publication(
     immediate publishes; scheduled publishes dedup on (output, channel, when).
     A duplicate submit returns the existing row instead of creating another.
     """
-    output = await db.get(Output, output_id)
+    owns_project = await db.scalar(select(Project.id).where(
+        Project.id == project_id, Project.user_id == user_id,
+    ).with_for_update(read=True, key_share=True))
+    if owns_project is None:
+        raise DistributionError("output_not_found")
+    output = await db.get(Output, output_id, with_for_update=True)
     if output is None or output.project_id != project_id:
         raise DistributionError("output_not_found")
     channel = await db.get(ChannelAccount, channel_account_id)
@@ -301,12 +311,23 @@ async def create_publication(
     if existing is not None:
         return existing
 
+    payload = _build_payload(output, channel, overrides)
+    pending = await db.scalar(select(Publication.id).where(
+        Publication.output_id == output_id, Publication.channel_account_id == channel_account_id,
+        Publication.payload == payload,
+        (Publication.state == PublicationState.UNKNOWN) | (
+            Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING))
+            & (Publication.dispatch_started_at.is_not(None) | Publication.platform_job_id.is_not(None))
+        ),
+    ).limit(1))
+    if pending:
+        raise DistributionError("publication_outcome_pending")
     pub = Publication(
         user_id=user_id,
         project_id=project_id,
         output_id=output_id,
         channel_account_id=channel_account_id,
-        payload=_build_payload(output, channel, overrides),
+        payload=payload,
         ai_disclosure=_classify_ai_disclosure(output),
         state=PublicationState.SCHEDULED,
         scheduled_at=scheduled_at,
@@ -329,9 +350,13 @@ async def cancel_publication(
     db: AsyncSession, pub_id: UUID, user_id: UUID
 ) -> Publication:
     """Cancel any pre-published order (published is terminal, §3.3)."""
-    pub = await db.get(Publication, pub_id)
+    pub = await db.get(Publication, pub_id, with_for_update=True, populate_existing=True)
     if pub is None or pub.user_id != user_id:
         raise DistributionError("publication_not_found")
+    if pub.state == PublicationState.UNKNOWN or pub.dispatch_started_at is not None or (
+        pub.platform_job_id and pub.state in (PublicationState.SCHEDULED, PublicationState.PUBLISHING)
+    ):
+        raise DistributionError("publication_outcome_pending")
     if pub.state == PublicationState.PUBLISHED:
         raise DistributionError("already_published")
     return await _transition(db, pub, PublicationState.CANCELLED)
@@ -346,7 +371,7 @@ async def retry_publication(
     (reconciliation, §7) rather than re-posting; otherwise it begins a new
     publish attempt.
     """
-    pub = await db.get(Publication, pub_id)
+    pub = await db.get(Publication, pub_id, with_for_update=True, populate_existing=True)
     if pub is None or pub.user_id != user_id:
         raise DistributionError("publication_not_found")
     if pub.state != PublicationState.FAILED:

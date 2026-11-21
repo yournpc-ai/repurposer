@@ -3391,6 +3391,7 @@ class PublicationState(StrEnum):
     APPROVED = "approved"
     SCHEDULED = "scheduled"
     PUBLISHING = "publishing"
+    UNKNOWN = "unknown"
     PUBLISHED = "published"
     FAILED = "failed"
     CANCELLED = "cancelled"

@@ -301,6 +301,7 @@ export type PublicationState =
   | "approved"
   | "scheduled"
   | "publishing"
+  | "unknown"
   | "published"
   | "failed"
   | "cancelled"
@@ -309,6 +310,7 @@ export type PublicationState =
 
 export type NotificationType =
   | "publish_succeeded"
+  | "publish_unknown"
   | "publish_failed"
   | "channel_expired"
 

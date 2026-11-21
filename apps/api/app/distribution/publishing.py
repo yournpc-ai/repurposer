@@ -1,25 +1,9 @@
-"""Worker-side publishing (DISTRIBUTION.md §6/§7/§10.3).
-
-The publication table is the worker's **fourth claim source** (alongside
-assets / plan nodes / renders), polled *first* each tick — a scheduled publish
-is a time promise to the user and must not queue behind ASR or renders.
-
-Claim predicate is ``due_at`` alone (§6): ``scheduled AND due_at <= now``
-starts a publish attempt (→ ``publishing``); ``publishing AND due_at <= now``
-is a poll lease (``due_at`` pushed forward so no other worker double-claims).
-Crash recovery needs no reaper for the common path — an orphaned row's lease
-simply expires and it is claimed again; ``platform_job_id`` is the
-reconciliation anchor for uncertain outcomes (§7: 禁盲重试).
-
-``attempt_count`` counts worker claims (attempts + polls); polls cap at
-``_MAX_CLAIMS`` so a platform stuck in "processing" cannot spin forever.
-"""
-
+"""Claim scheduled publications and reconcile platform receipts without reposting."""
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
@@ -55,39 +39,34 @@ _MAX_CLAIMS = 120
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def claim_due_publication(db: AsyncSession) -> UUID | None:
-    """Claim one due publication row. Returns its id, or None.
-
-    Single query ordered by ``due_at`` (the oldest promise first). A
-    ``scheduled`` row starts a publish attempt (→ ``publishing`` with a
-    begin-length lease); a ``publishing`` row is a poll continuation (short
-    lease). Both bump ``attempt_count``.
-    """
-    now = datetime.now(UTC)
-    pub = (
-        await db.execute(
-            select(Publication)
-            .where(
-                Publication.state.in_(
-                    [PublicationState.SCHEDULED, PublicationState.PUBLISHING]
-                ),
-                Publication.due_at <= now,
-            )
-            .order_by(Publication.due_at)
-            .with_for_update(skip_locked=True)
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+async def claim_due_publication(db: AsyncSession) -> tuple[UUID, UUID] | None:
+    """Claim one due order. An expired public-post dispatch may only be reconciled."""
+    pub = await db.scalar(
+        select(Publication).where(
+            Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING)),
+            Publication.due_at <= func.now(),
+        ).order_by(Publication.due_at, Publication.id).with_for_update(skip_locked=True).limit(1)
+    )
     if pub is None:
         return None
     if pub.state == PublicationState.SCHEDULED:
         await _transition(db, pub, PublicationState.PUBLISHING)
-        pub.due_at = now + BEGIN_LEASE
-    else:
-        pub.due_at = now + POLL_INTERVAL  # poll lease
+    if pub.dispatch_started_at is not None:
+        await _mark_unknown(db, pub)
+        await db.commit()
+        return None
+    token = uuid4()
+    pub.claim_token = token
+    pub.due_at = func.now() + BEGIN_LEASE
     pub.attempt_count += 1
     await db.commit()
-    return pub.id
+    return pub.id, token
+
+
+async def _mark_unknown(db, pub):
+    pub.due_at = None
+    if pub.state != PublicationState.UNKNOWN:
+        await _transition(db, pub, PublicationState.UNKNOWN, error="platform_outcome_unconfirmed")
 
 
 async def reap_stale_publications(db: AsyncSession) -> None:
@@ -135,70 +114,92 @@ def _adapter_payload(pub: Publication) -> dict:
     return payload
 
 
-async def process_publication(pub_id: UUID) -> None:
-    """Execute one claimed publication: begin publish or poll the job."""
+async def process_publication(pub_id: UUID, token: UUID) -> None:
     async with AsyncSessionLocal() as db:
-        pub = await db.get(Publication, pub_id)
-        if pub is None or pub.state != PublicationState.PUBLISHING:
+        # Polling an uploaded LinkedIn video can itself issue the public POST.
+        # The adapter calls before_publish immediately before that request.
+        pub = await db.scalar(select(Publication).where(
+            Publication.id == pub_id, Publication.claim_token == token,
+            Publication.state == PublicationState.PUBLISHING, Publication.due_at > func.clock_timestamp(),
+        ).with_for_update())
+        if pub is None:
             return
         if pub.attempt_count > _MAX_CLAIMS:
-            await _transition(db, pub, PublicationState.FAILED, error="publish_timeout")
+            if pub.platform_job_id:
+                await _mark_unknown(db, pub)
+            else:
+                await _transition(db, pub, PublicationState.FAILED, error="publish_timeout")
             await db.commit()
             return
 
-        channel = (
-            await db.get(ChannelAccount, pub.channel_account_id)
-            if pub.channel_account_id
-            else None
-        )
-        if channel is None:
-            await _transition(db, pub, PublicationState.FAILED, error="channel_disconnected")
+        channel = await db.get(ChannelAccount, pub.channel_account_id) if pub.channel_account_id else None
+        if channel is None or channel.status != ChannelAccountStatus.ACTIVE:
+            if pub.platform_job_id:
+                await _mark_unknown(db, pub)
+            else:
+                await _transition(db, pub, PublicationState.FAILED,
+                                  error="channel_disconnected" if channel is None else "channel_token_expired")
             await db.commit()
             return
-        if channel.status != ChannelAccountStatus.ACTIVE:
-            await _transition(
-                db, pub, PublicationState.FAILED, error="channel_token_expired"
-            )
+
+        async def before_publish():
+            if not await db.scalar(select(Publication.id).where(
+                Publication.id == pub_id, Publication.claim_token == token,
+                Publication.state == PublicationState.PUBLISHING, Publication.due_at > func.clock_timestamp(),
+            )):
+                raise RuntimeError("Publication claim expired before dispatch")
+            if pub.dispatch_started_at is not None:
+                raise RuntimeError("A public post is already awaiting reconciliation")
+            pub.dispatch_started_at = func.clock_timestamp()
             await db.commit()
-            return
+
+        async def owns_result():
+            await db.refresh(pub, with_for_update=True)
+            return pub.claim_token == token and pub.state in (PublicationState.PUBLISHING, PublicationState.UNKNOWN)
 
         adapter = get_adapter(channel.platform)
-        payload = _adapter_payload(pub)
-        now = datetime.now(UTC)
         try:
             account = await refresh_if_needed(db, channel)
             creds = usable_credentials(account)
-            if pub.platform_job_id is None:
-                handle = await adapter.begin_publish(creds, payload)
-                # Persist the job anchor immediately — a crash after this
-                # point reconciles via await_publish, never a blind re-post.
-                pub.platform_job_id = handle.job_id
-                if handle.post_id:
-                    pub.platform_post_id = handle.post_id
-                    pub.platform_post_url = handle.post_url
-                    await _transition(db, pub, PublicationState.PUBLISHED)
-                else:
-                    pub.due_at = now + POLL_INTERVAL
+            payload = _adapter_payload(pub)
+            if pub.platform_job_id:
+                result = await adapter.await_publish(creds, JobHandle(job_id=pub.platform_job_id),
+                                                     payload, before_publish=before_publish)
+                job_id = pub.platform_job_id
+                published = result.status == "published"
             else:
-                result = await adapter.await_publish(
-                    creds, JobHandle(job_id=pub.platform_job_id), payload
-                )
-                if result.status == "published":
-                    pub.platform_post_id = result.post_id
-                    pub.platform_post_url = result.post_url
-                    await _transition(db, pub, PublicationState.PUBLISHED)
-                else:
-                    pub.due_at = now + POLL_INTERVAL
-            await db.commit()
-            logger.info(
-                "publication_processed",
-                publication_id=str(pub.id),
-                state=pub.state.value,
-                job_id=pub.platform_job_id,
+                result = await adapter.begin_publish(creds, payload, before_publish=before_publish)
+                job_id = result.job_id
+                published = bool(result.post_id)
+            if not await owns_result():
+                return
+            pub.platform_job_id = job_id
+            pub.dispatch_started_at = pub.claim_token = None
+            pub.last_error = None
+            if published:
+                pub.platform_post_id, pub.platform_post_url = result.post_id, result.post_url
+                pub.due_at = None
+                await _transition(db, pub, PublicationState.PUBLISHED)
+            else:
+                if pub.state == PublicationState.UNKNOWN:
+                    await _transition(db, pub, PublicationState.PUBLISHING)
+                pub.due_at = func.now() + POLL_INTERVAL
+        except Exception as exc:
+            if not await owns_result():
+                return
+            uncertain = not isinstance(exc, PlatformError) or exc.kind in (
+                PlatformErrorKind.TRANSIENT, PlatformErrorKind.UNKNOWN,
             )
-        except PlatformError as e:
-            await _handle_platform_error(db, pub, channel, e)
-            await db.commit()
+            if pub.dispatch_started_at is not None and uncertain:
+                await _mark_unknown(db, pub)
+            elif isinstance(exc, PlatformError):
+                if pub.state == PublicationState.UNKNOWN:
+                    await _transition(db, pub, PublicationState.PUBLISHING)
+                pub.dispatch_started_at = pub.claim_token = None
+                await _handle_platform_error(db, pub, channel, exc)
+            else:
+                raise
+        await db.commit()
 
 
 async def _handle_platform_error(
@@ -223,13 +224,24 @@ async def _handle_platform_error(
         except PlatformError:
             channel.status = ChannelAccountStatus.EXPIRED
             db.add(channel)
-            await _transition(db, pub, PublicationState.FAILED, error="channel_token_expired")
+            if pub.platform_job_id:
+                await _mark_unknown(db, pub)
+            else:
+                await _transition(db, pub, PublicationState.FAILED, error="channel_token_expired")
             return
         await _transition(db, pub, PublicationState.SCHEDULED)
         pub.due_at = now
         return
 
+    if error.kind == PlatformErrorKind.PUBLISH_FAILED:
+        pub.platform_job_id = None
+        await _transition(db, pub, PublicationState.FAILED, error=detail)
+        return
     if error.kind in (PlatformErrorKind.VALIDATION, PlatformErrorKind.CONTENT_POLICY):
+        if pub.platform_job_id and channel.platform.value == "tiktok":
+            # Failure to read status does not prove the remote post failed.
+            await _mark_unknown(db, pub)
+            return
         # Deterministic — retrying changes nothing.
         await _transition(db, pub, PublicationState.FAILED, error=detail)
         return
@@ -251,3 +263,46 @@ async def _handle_platform_error(
     await _transition(db, pub, PublicationState.SCHEDULED)
     pub.due_at = now + timedelta(seconds=delay)
     pub.last_error = detail
+
+
+async def reconcile_publication(pub_id: UUID, *, evidence: str, post_id: str | None) -> bool:
+    """Record an operator's confirmed platform outcome, with no external publishing call."""
+    evidence = evidence.strip()
+    if not evidence or len(evidence) > 1000 or (post_id is not None and not 0 < len(post_id.strip()) <= 512):
+        raise ValueError("A concrete platform evidence reference and a valid outcome are required")
+    async with AsyncSessionLocal() as db:
+        pub = await db.get(Publication, pub_id, with_for_update=True)
+        if pub is None or pub.state != PublicationState.UNKNOWN:
+            return False
+        pub.reconciliation = {
+            "confirmed_at": datetime.now(UTC).isoformat(), "evidence": evidence,
+            "outcome": "published" if post_id else "confirmed_not_published",
+            "claim_token": str(pub.claim_token) if pub.claim_token else None,
+            "platform_job_id": pub.platform_job_id,
+        }
+        pub.dispatch_started_at = pub.claim_token = pub.due_at = None
+        pub.platform_post_id = post_id
+        if post_id:
+            pub.last_error = None
+            await _transition(db, pub, PublicationState.PUBLISHED)
+        else:
+            pub.platform_job_id = None
+            await _transition(db, pub, PublicationState.FAILED, error="confirmed_not_published")
+        await db.commit()
+        return True
+
+
+if __name__ == "__main__":
+    import argparse
+    import asyncio
+
+    parser = argparse.ArgumentParser(description="Record a verified external publication outcome.")
+    parser.add_argument("publication", type=UUID)
+    parser.add_argument("--evidence", required=True, help="Platform case or immutable evidence reference")
+    outcome = parser.add_mutually_exclusive_group(required=True)
+    outcome.add_argument("--post-id")
+    outcome.add_argument("--confirmed-not-published", action="store_true",
+                         help="Original sender is stopped and the platform confirmed the request cannot publish")
+    args = parser.parse_args()
+    changed = asyncio.run(reconcile_publication(args.publication, evidence=args.evidence, post_id=args.post_id))
+    print("Recorded." if changed else "No unresolved publication.")

@@ -22,6 +22,7 @@ import structlog
 from app.config import settings
 from app.distribution.adapters.base import (
     normalize_network_errors,
+    BeforePublish,
     ChannelAccountPayload,
     JobHandle,
     PlatformError,
@@ -163,7 +164,7 @@ class LinkedInAdapter:
 
     @normalize_network_errors
     async def begin_publish(
-        self, credentials: dict[str, Any], payload: dict[str, Any]
+        self, credentials: dict[str, Any], payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> JobHandle:
         media = payload.get("media") or {}
         video_url = media.get("video")
@@ -180,12 +181,14 @@ class LinkedInAdapter:
                 image_urn = await self._upload_media(
                     client, credentials, image_url, kind="images", urn_field="image"
                 )
+                await before_publish()
                 post_urn = await self._create_post(
                     client, credentials, payload, media_urn=image_urn, media_kind="image"
                 )
                 return JobHandle(
                     job_id=post_urn, post_id=post_urn, post_url=self._post_url(post_urn)
                 )
+            await before_publish()
             post_urn = await self._create_post(client, credentials, payload)
             return JobHandle(
                 job_id=post_urn, post_id=post_urn, post_url=self._post_url(post_urn)
@@ -193,7 +196,7 @@ class LinkedInAdapter:
 
     @normalize_network_errors
     async def await_publish(
-        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any]
+        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> PublishResult:
         """Poll an async video upload; create the post once AVAILABLE."""
         if job.post_id:
@@ -208,6 +211,7 @@ class LinkedInAdapter:
             _check(resp, "linkedin video status")
             status_value = resp.json().get("status")
             if status_value == _VIDEO_POLL_STATUS_AVAILABLE:
+                await before_publish()
                 post_urn = await self._create_post(
                     client, credentials, payload, media_urn=job.job_id, media_kind="video"
                 )

@@ -10,6 +10,7 @@ Platform error codes are normalized into ``PlatformError.kind``; the service
 layer only ever handles the unified kinds.
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -25,6 +26,7 @@ class PlatformErrorKind(StrEnum):
     TOKEN = "token"  # 401 / invalid grant → refresh once, then mark channel expired
     RATE_LIMIT = "rate_limit"  # back off and retry
     CONTENT_POLICY = "content_policy"  # platform rejected content → fail, no retry
+    PUBLISH_FAILED = "publish_failed"  # platform confirms terminal job failure
     VALIDATION = "validation"  # our payload is wrong for this platform → fail, no retry
     TRANSIENT = "transient"  # timeout / 5xx / uncertain → reconcile via job handle
     UNKNOWN = "unknown"
@@ -93,6 +95,9 @@ class PublishResult:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
+BeforePublish = Callable[[], Awaitable[None]]
+
+
 class PlatformAdapter(Protocol):
     """Per-platform OAuth + two-phase publish contract.
 
@@ -110,9 +115,9 @@ class PlatformAdapter(Protocol):
     async def refresh(self, credentials: dict[str, Any]) -> ChannelAccountPayload: ...
 
     async def begin_publish(
-        self, credentials: dict[str, Any], payload: dict[str, Any]
+        self, credentials: dict[str, Any], payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> JobHandle: ...
 
     async def await_publish(
-        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any]
+        self, credentials: dict[str, Any], job: JobHandle, payload: dict[str, Any], *, before_publish: BeforePublish
     ) -> PublishResult: ...

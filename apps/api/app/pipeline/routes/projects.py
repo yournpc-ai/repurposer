@@ -333,7 +333,7 @@ async def _delete_projects(db: AsyncSession, ids: list[UUID], user_id: UUID) -> 
         select(NarrationAlignment.id).join(SourceSnapshot, SourceSnapshot.id == NarrationAlignment.audio_snapshot_id)
         .where(SourceSnapshot.origin_project_id.in_(ids), NarrationAlignment.status.in_(("PENDING", "PROCESSING"))),
         select(Publication.id).where(Publication.project_id.in_(ids),
-            Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING))),
+            Publication.state.in_((PublicationState.SCHEDULED, PublicationState.PUBLISHING, PublicationState.UNKNOWN))),
         select(WorkflowRun.id).join(CreditTransaction, run_ref == cast(WorkflowRun.id, String))
         .where(WorkflowRun.project_id.in_(ids), CreditTransaction.user_id == user_id,
                CreditTransaction.kind.in_(("hold", "release")))

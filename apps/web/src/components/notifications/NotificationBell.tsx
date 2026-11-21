@@ -45,7 +45,9 @@ function NotificationRow({
   const titleKey =
     item.type === "publish_succeeded"
       ? "notifications.publishSucceeded"
-      : item.type === "channel_expired"
+      : item.type === "publish_unknown"
+        ? "notifications.publishUnknown"
+        : item.type === "channel_expired"
         ? "notifications.channelExpired"
         : "notifications.publishFailed"
 

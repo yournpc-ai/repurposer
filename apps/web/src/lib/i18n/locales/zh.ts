@@ -1792,6 +1792,7 @@ const zh: Resources = {
   notifications: {
     title: "通知",
     empty: "没有新通知",
+    publishUnknown: "{{platform}} 发布结果待核对",
     publishSucceeded: "已发布到 {{platform}}",
     publishFailed: "发布到 {{platform}} 失败",
     channelExpired: "{{platform}} 连接已过期",

@@ -164,21 +164,17 @@ created_at
 - **机构模式（P2，团队工作区）**：强制人工确认，审核人 ≠ 作者；`pending_review` 队列成为审核人的工作地点，驳回必填 reason；每次迁移写 `publication_events`（审核留痕 = 机构合规卖点）。
 - 文案类（LinkedIn 长文）Art.50(4) 的 editorial control 由**对话框内人工确认**构成（个人/机构同此，ADR-026），不依赖队列。
 
-## 6. 定时发布与 worker 认领
+## 6. 定时发布与 Worker 认领
 
-- **不需要新 worker**：复用现有 worker 进程（`python -m app.worker`，ADR-017）。publication 与 Asset / ready `workflow_steps` / `outputs.render_status` 并列使用 `FOR UPDATE SKIP LOCKED`；generation 认领 ready steps，不是扫 `workflow_runs.status`。
-- **两类 publication 租约都到期才认领**：`state=scheduled AND due_at <= now()` 发起发布；`state=publishing AND due_at <= now()` 继续平台状态轮询。首次 `due_at = scheduled_at`，失败退避与轮询间隔都改写 `due_at`，重试不会绕过退避窗口。
-- **认领优先级**：每个 worker 循环先查 publication（通常为空表，成本可忽略）再查其他源——定时发布是**对用户的时刻承诺**（"周三 9:00 发"），不能被 ASR/渲染等重任务挤后。
-- 认领后 `state=publishing` 再调 adapter；进程崩溃由 `reap_stale` 回收（与 Asset/Run 同款语义）。
-- **未来拆解阀门**：发布量上来、或要对平台限流做进程级隔离时，可拆独立 worker 进程——调用方不变（仍是写表认领），P1 不拆。
-- 用户时区在 UI 层转换，`scheduled_at`/`due_at` 一律 UTC。
+Publication 是独立业务。Worker 优先领取到期的发布单，使用数据库时钟、行锁和 claim_token。每次领取有独立身份。平台返回任务 ID 后，Worker 按 due_at 有界轮询。LinkedIn 视频的任务 ID 指向上传的视频，视频处理就绪后还需要一次创建帖子的请求。
 
-## 7. 幂等、重试与失败语义
+## 7. 发布、重试与核对
 
-- 建单即生成 `idempotency_key`：**立即发布**由对话框生成 `client_key`（每次发布意图一个，重试复用）——服务端 `now()` 每次不同，自身无法去重；**定时发布**用（target + channel + scheduled_at）哈希——用户选定的时间天然跨重试稳定。双击、刷新、重复提交不会在我方 DB 产生两条发布单。但注意：**平台不接受我们的幂等键**，"重复发布"不是平台会返回的错误码——不能指望它兜底。
-- **不确定结果必须对账，禁止盲重试**：请求发出后超时/5xx（平台可能已受理），先凭 `platform_job_id`（TikTok `publish_id` 状态查询 / LinkedIn video URN）查平台侧真实状态——确认未成才允许重试；确认已成则回写 `platform_post_id` 按成功处理。这是"两将军问题"的标准解法：平台 job 句柄是唯一的对账锚点。
-- 确定性失败退避：指数 backoff（如 1m/5m/30m，改写 `due_at`），`attempt_count` 超限 → `failed` 定格 + 界面提示，用户可手动重试或取消。
-- Token 类失败（401）→ 刷新后重试一次，仍失败落 `channel_accounts.status=expired` 并提示重连，**不算发布失败**。
+- 同一次用户操作复用 client_key 和发布单。平台创建公开帖子前，适配器把发送事实提交到同一 Publication。TikTok 的边界在 publish/video/init，LinkedIn 的边界在创建帖子，包括视频上传完成后的创建操作。
+- 已发出创建请求，响应丢失或 Worker 强杀时进入 unknown。通知中心显示“发布结果待核对”。保留原执行身份、平台任务 ID、发布内容和项目；同一成片、渠道与内容在核对期间也不能换 client_key 再次发布。
+- 平台已返回可查询任务 ID 时轮询已有任务。确认该请求成功后保存帖子 ID。明确拒绝的请求使用已有错误与退避策略。仍有未决外部事实时，取消、重发和项目删除均返回 409。
+- 运维可用 `python -m app.distribution.publishing PUBLICATION_UUID --post-id POST_ID --evidence CASE_REFERENCE` 登记已核实的帖子。只有原发送者已停止且平台证实请求最终未发布时，才可使用 `--confirmed-not-published`。时间、依据、执行身份和结果保存在原发布单。单纯查不到帖子不足以确认未发布。核对操作本身不会向平台发帖。
+- 后到的真实回执只归属原执行身份。人工核对和回执按行锁串行，终态只结算一次。
 
 ## 8. AI 内容披露（ADR-026 落地）
 

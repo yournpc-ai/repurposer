@@ -1885,6 +1885,7 @@ const en = {
   notifications: {
     title: "Notifications",
     empty: "You're all caught up",
+    publishUnknown: "{{platform}} publication awaits verification",
     publishSucceeded: "Published to {{platform}}",
     publishFailed: "Couldn't publish to {{platform}}",
     channelExpired: "{{platform}} connection expired",
