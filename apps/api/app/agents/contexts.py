@@ -1,29 +1,4 @@
-"""Harness-side context assembly (ADR-039 P3, AGENT_ARCH §5.3).
-
-One home for the deterministic prompt-context assembly every agent call
-stands on — the services orchestrate, they never assemble:
-
-- ``generation_context`` — the GenerationContext every generation node
-  builds from the run's plan (moved from ``pipeline/step_context.py``,
-  which keeps the mechanical media/digest helpers).
-- ``output_one_liner`` — a visible output's one-line label.
-- ``pack_instructions`` — weave an agent declaration's skill packs.
-
-The chat loop's intent context is the Agent Interface's OWN assembly and
-lives in ``app.chat.context.build_context`` (ADR-087 §6 Phase 5 ownership
-ruling — each layer assembles its own context; the harness no longer reads
-the conversation store or the outputs read face on chat's behalf).
-
-Digest doctrine (ADR-077 判词②, T2b 感知族): the fixed digest stops at
-IDENTITY level — what exists (assets / outputs / the graph / the latest
-run's one-line marker), so the agent knows what it may point at and which
-read tool answers the detail. Anything a read tool reads is never
-pre-injected: per-step run progress lives behind ``get_run_status``, an
-output's spec behind ``get_output_spec``, an asset's detail behind
-``get_asset``, the material understanding behind ``get_understanding``
-(the understanding-summary fixed injection — the interim B1 form — retired
-before ever landing; the tool IS the read).
-"""
+"""Format skill instructions and compact Output labels."""
 
 from typing import Any
 

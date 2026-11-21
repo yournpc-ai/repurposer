@@ -7,7 +7,6 @@ from dataclasses import replace
 from app.agents.base import jinja_env
 from app.agents.tool_loop import RoundAssembly, prune_wire_parameters
 from app.chat.editor import EDITOR_NAMES, project_editor_reply
-from app.tools import tool_catalog_lines
 
 ChatMode = str
 
@@ -18,7 +17,6 @@ def chat_system(mode: ChatMode, *, available_tools: list | None = None) -> str:
     return jinja_env.get_template("chat/system.j2").render(
         mode=mode,
         tool_names={tool.name for tool in available_tools or []},
-        tool_lines=tool_catalog_lines(),
         menu_lines="",
         include_menu=False,
         wiring_lines="",

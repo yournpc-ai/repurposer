@@ -414,16 +414,6 @@ PLAN_READ_TOOLS = [
     ),
     *_video_project_tools(),
 ]
-CHAT_READ_TOOLS = [
-    *perception_chat_tools(
-        "get_understanding", "get_run_status", "list_runs", "get_pending_plan",
-        "get_asset", "search_music", "search_transcript", "get_segment",
-        "get_web_page", "search_web", "list_project_media",
-    ),
-    *_video_project_tools(),
-]
-
-
 # ── 工具名回响 sanitizer (2026-09-30 用户拍板 — 彻底删掉) ──────────────────
 # The model sometimes echoes the tool it is calling as a BARE bracketed line
 # of prose ('[start_run]'): the name saturates its prompt (it must — it is

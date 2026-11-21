@@ -569,7 +569,7 @@ async def _process_asset(asset_id: UUID, token: UUID) -> None:
             # re-checks set completeness). Fire-and-forget so the tick moves
             # on; persona-bound assets (project_id=None) never warm.
             if asset.project_id is not None:
-                from app.pipeline.node_runners import (
+                from app.pipeline.understanding import (
                     warm_understanding,  # deferred: runtime-only edge
                 )
 

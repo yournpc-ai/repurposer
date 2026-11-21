@@ -33,7 +33,7 @@ from app.models.database import AsyncSessionLocal  # noqa: E402
 from app.models.schemas import AssetStatus, AssetType  # noqa: E402
 from app.models.tables import Asset, Output, Project, User  # noqa: E402
 from app.pipeline.asset_processing import ASSET_LEASE, _warm_tasks, process_asset  # noqa: E402
-from app.pipeline.node_runners import (  # noqa: E402
+from app.pipeline.understanding import (  # noqa: E402
     find_reusable_understanding,
     warm_understanding,
 )

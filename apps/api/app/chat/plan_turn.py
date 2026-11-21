@@ -326,7 +326,7 @@ class PlanTurn:
         # through to the excerpt / the user's own words.
         understanding_lines: list[str] | None = None
         if assets:
-            from app.pipeline.node_runners import (  # deferred: pipeline weight
+            from app.pipeline.understanding import (  # deferred: pipeline weight
                 find_reusable_understanding,
             )
             from app.pipeline.step_context import asset_digest

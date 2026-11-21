@@ -96,33 +96,6 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             activity_key="chat.inspecting.music",
         ),
         PerceptionTool(
-            name="get_run_status",
-            description=(
-                "读取最近 Run 的实时状态及各步骤进度，回答“做得怎么样了”“还要多久”等问题，不要猜测。"
-            ),
-            params_model=None,
-            execute=executes.get_run_status,
-            activity_key="chat.inspecting.runStatus",
-        ),
-        PerceptionTool(
-            name="list_runs",
-            description=(
-                "列出项目近期 Run，最新在前，用于回答之前运行过什么。最近一次的实时详情用 get_run_status。"
-            ),
-            params_model=None,
-            execute=executes.list_runs,
-            activity_key="chat.inspecting.runHistory",
-        ),
-        PerceptionTool(
-            name="get_pending_plan",
-            description=(
-                "读取当前展示并等待用户确认的方案（任务链、名称、额外要求），用于回答“刚才的计划是什么”。"
-            ),
-            params_model=None,
-            execute=executes.get_pending_plan,
-            activity_key="chat.inspecting.pendingPlan",
-        ),
-        PerceptionTool(
             name="search_transcript",
             description=(
                 "按主题检索项目转写文本（确定性关键词检索），返回带起止时间和逐字原文的候选段落，供判断选用。"

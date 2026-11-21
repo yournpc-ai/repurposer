@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-import app.pipeline.node_runners  # noqa: F401
 from app.tools.video.production.node import ProduceVideo  # noqa: F401
 from app.tools.video.params import (
 
@@ -82,22 +81,6 @@ TOOL_REGISTRY: dict[str, ToolEntry] = {
 
 def dispatchable_tools() -> list[ToolEntry]:
     return [entry for entry in TOOL_REGISTRY.values() if not entry.seat and entry.name in NODE_KINDS]
-
-
-def _params_doc(model: type[BaseModel]) -> str:
-    return ", ".join(
-        f"{name}: {field.description}" if field.description else name
-        for name, field in model.model_fields.items()
-    )
-
-
-def tool_catalog_lines(*, exclude: frozenset[str] = frozenset()) -> str:
-    return "\n".join(
-        f"- {entry.name}: {entry.description}"
-        + (f" (params: {_params_doc(entry.params_model)})" if entry.params_model else "")
-        for entry in dispatchable_tools()
-        if entry.llm_visible and entry.name not in exclude
-    )
 
 
 def capability_menu_lines() -> str:

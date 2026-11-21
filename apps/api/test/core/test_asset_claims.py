@@ -40,7 +40,7 @@ async def test_two_workers_and_expired_processor_cannot_overwrite_successor(data
     monkeypatch.setitem(assets.PROCESSORS, AssetType.TRANSCRIPT, [processor])
     activity = AsyncMock()
     monkeypatch.setattr(assets, "_record_reading_activity", activity)
-    monkeypatch.setattr("app.pipeline.node_runners.warm_understanding", AsyncMock())
+    monkeypatch.setattr("app.pipeline.understanding.warm_understanding", AsyncMock())
     claims = await asyncio.gather(claim(), claim())
     assert sum(bool(c) for c in claims) == 1
     first = asyncio.create_task(assets.process_asset(*(claims[0] or claims[1])))
@@ -63,3 +63,38 @@ async def test_two_workers_and_expired_processor_cannot_overwrite_successor(data
         assert "processing_stage" not in row.meta
         assert await db.scalar(select(Asset.id).where(Asset.processing_status == AssetStatus.PROCESSING)) is None
     activity.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_chat_and_asset_worker_materialize_one_understanding(database, monkeypatch):
+    from app.models.schemas import MaterialUnderstanding
+    from app.models.tables import Output
+    from app.pipeline import understanding
+
+    async with database() as db:
+        user = User(email="material@example.test")
+        db.add(user)
+        await db.flush()
+        project = Project(user_id=user.id, title="Same material")
+        db.add(project)
+        await db.flush()
+        db.add(Asset(project_id=project.id, user_id=user.id, type=AssetType.TRANSCRIPT,
+                     extracted_text="A single source", processing_status=AssetStatus.COMPLETED))
+        await db.commit()
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def analyze(*args):
+        entered.set()
+        await release.wait()
+        return MaterialUnderstanding(core_thesis="A single source")
+    provider = AsyncMock(side_effect=analyze)
+    monkeypatch.setattr(understanding, "AsyncSessionLocal", database)
+    monkeypatch.setattr(understanding, "_materialize_understanding", provider)
+    first = asyncio.create_task(understanding.warm_understanding(project.id))
+    await asyncio.wait_for(entered.wait(), 5)
+    second = asyncio.create_task(understanding.warm_understanding(project.id))
+    release.set()
+    await asyncio.wait_for(asyncio.gather(first, second), 5)
+    provider.assert_awaited_once()
+    async with database() as db:
+        assert await db.scalar(select(func.count(Output.id)).where(Output.type == "material_understanding")) == 1

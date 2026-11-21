@@ -20,7 +20,6 @@ capped (see the per-tool caps) so a read never floods the loop.
 
 from uuid import UUID
 
-import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
@@ -30,15 +29,11 @@ from app.models.schemas import (
     AssetType,
     GetVideoVersionParams,
     MaterialUnderstanding,
-    PendingPlan,
 )
 from app.models.tables import (
     Asset,
-    NarrationAlignment,
     Output,
     Project,
-    WorkflowRun,
-    WorkflowStep,
 )
 from app.editing.transcript import (
     build_anchored_transcript,
@@ -112,39 +107,6 @@ class SearchWebParams(BaseModel):
 
 
 # ---- shared rendering helpers ------------------------------------------------
-
-_RUN_STEP_PROGRESS_LIMIT = 12
-
-
-def _format_step_progress(steps: list[WorkflowStep]) -> list[str]:
-    """One quantified line per step of a run (G-2): ``kind: status —
-    summary``. Moved from ``agents/contexts.py`` (T2b digest slimming): the
-    per-step detail is no longer pre-injected into the fixed context — this
-    is ``get_run_status``'s rendering, called on demand. Capped — when a run
-    outgrows the budget the tail (current + upcoming work) is what a progress
-    question is about."""
-    rows = []
-    for step in steps:
-        row = f"- {step.kind}: {step.status}"
-        summary = (step.spec or {}).get("summary")
-        if summary:
-            row += f" — {summary}"
-        rows.append(row)
-    if len(rows) > _RUN_STEP_PROGRESS_LIMIT:
-        omitted = len(rows) - _RUN_STEP_PROGRESS_LIMIT
-        rows = [f"- … ({omitted} earlier steps omitted)"] + rows[
-            -_RUN_STEP_PROGRESS_LIMIT:
-        ]
-    return rows
-
-
-def _stamp(dt) -> str:
-    """Compact UTC timestamp for observation headers."""
-    return dt.strftime("%Y-%m-%d %H:%M UTC") if dt is not None else "?"
-
-
-# ---- the reads -----------------------------------------------------------------
-
 
 def _fmt_ts(seconds: float) -> str:
     """M:SS digest anchor (hours flatten into minutes — digest lines stay
@@ -378,9 +340,9 @@ async def understanding_observation(db: AsyncSession, project: Project) -> tuple
     import asyncio
 
     from app.models.database import AsyncSessionLocal  # deferred: worker seat
-    from app.pipeline.node_runners import (  # deferred: pipeline weight
+    from app.pipeline.understanding import (  # deferred: pipeline weight
         find_reusable_understanding,
-        kick_warm_inline,
+        warm_understanding,
     )
     from app.pipeline.step_context import asset_digest, list_assets
     from app.providers.llm import get_llm_client
@@ -449,8 +411,7 @@ async def understanding_observation(db: AsyncSession, project: Project) -> tuple
             # dead for this digest.
             if warm_kicked:
                 return _WARM_DEAD_TEXT, False
-            if not await kick_warm_inline(project.id):
-                continue  # another warm is in flight — keep polling
+            await warm_understanding(project.id)
             warm_kicked = True
 
 
@@ -496,172 +457,6 @@ async def search_music(db: AsyncSession, project: Project, params: SearchMusicPa
     for m in shown:
         duration = f"{m.duration_seconds}s" if m.duration_seconds else "?s"
         lines.append(f"- {m.title} — mood: {m.mood} · {duration} · music_id={m.id} (Music library, not Asset)")
-    return "\n".join(lines)
-
-
-async def get_run_status(db: AsyncSession, project: Project, params) -> str:
-    """The latest run's live status + per-step progress (G-2's seat — the
-    fixed digest carries only the one-line marker now; the detail lives
-    here). 「还要多久 / how far along」的答案从这读，永不猜."""
-    latest_run = (
-        await db.execute(
-            select(WorkflowRun)
-            .where(WorkflowRun.project_id == project.id)
-            .order_by(WorkflowRun.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if latest_run is None:
-        return "No runs yet in this project."
-    lines = [
-        f"Latest run {latest_run.id}: status={latest_run.status} "
-        f"(started {_stamp(latest_run.created_at)})"
-    ]
-    steps = list(
-        (
-            await db.execute(
-                select(WorkflowStep)
-                .where(WorkflowStep.run_id == latest_run.id)
-                .order_by(WorkflowStep.seq)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    progress = _format_step_progress(steps)
-    if progress:
-        lines.append("Steps:")
-        lines.extend(progress)
-    preparation = (latest_run.context or {}).get("narration_preparation") or {}
-    for part in preparation.get("scenes") or [preparation]:
-        alignment_id = (part.get("result") or {}).get("alignment_id")
-        if not alignment_id:
-            continue
-        alignment = await db.get(NarrationAlignment, UUID(str(alignment_id)))
-        if alignment is not None and alignment.owner_id == project.user_id:
-            lines.append(
-                f"Narration alignment {alignment.id}: status={alignment.status} "
-                f"audio_snapshot_id={alignment.audio_snapshot_id}"
-            )
-        else:
-            lines.append(f"Narration alignment {alignment_id}: unavailable")
-    return "\n".join(lines)
-
-
-_RUN_HISTORY_LIMIT = 5
-
-
-def _run_history_lines(runs: list[WorkflowRun]) -> list[str]:
-    """The run-history roster (pure renderer): newest first, one line per
-    run — id + status + start stamp + the run's receipt name (ADR-058, the
-    proposal's name rides run.context). Capped at the family's history
-    budget; the header owns the honest omission note."""
-    lines = []
-    for run in runs:
-        ctx = run.context if isinstance(run.context, dict) else {}
-        name = (ctx.get("name") or "").strip()
-        line = (
-            f"- {run.id} — {run.status} (started {_stamp(run.created_at)})"
-        )
-        if name:
-            line += f" — {name}"
-        lines.append(line)
-    return lines
-
-
-async def list_runs(db: AsyncSession, project: Project, params) -> str:
-    """The project's recent run history (newest first, capped) — the
-    「之前跑过什么 / what did we already make」 read. The LIVE detail of the
-    latest run stays get_run_status's seat; this read is the roster."""
-    runs = list(
-        (
-            await db.execute(
-                select(WorkflowRun)
-                .where(WorkflowRun.project_id == project.id)
-                .order_by(WorkflowRun.created_at.desc())
-                .limit(_RUN_HISTORY_LIMIT + 1)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not runs:
-        return "No runs yet in this project."
-    shown = runs[:_RUN_HISTORY_LIMIT]
-    omitted = len(runs) - len(shown)
-    header = f"Run history (newest first, {len(shown)} run(s)"
-    header += ", %d older omitted" % omitted if omitted else ""
-    header += "):"
-    return "\n".join([header, *_run_history_lines(shown)])
-
-
-def _pending_plan_lines(plan) -> list[str]:
-    """The docked plan's detail (pure renderer): the original request, the
-    receipt name, the task chain (registry tool + compact params), the
-    distilled extra instruction, the caption-mode answer. Params ride as
-    compact JSON, capped — the chain's SHAPE is the read's point."""
-    lines = []
-    intent = plan.intent
-    if plan.prompt:
-        lines.append(f"- Original request: {plan.prompt[:200]}")
-    if intent is not None and (intent.name or "").strip():
-        lines.append(f"- Name: {intent.name.strip()}")
-    if intent is not None and intent.tasks:
-        lines.append("- Tasks:")
-        for task in intent.tasks:
-            params_json = (
-                json.dumps(task.params, ensure_ascii=False) if task.params else ""
-            )
-            if len(params_json) > 160:
-                params_json = params_json[:160] + "…"
-            lines.append(
-                f"  - {task.tool}" + (f" {params_json}" if params_json else "")
-            )
-    if intent is not None and intent.specific_instruction:
-        lines.append(f"- Extra instruction: {intent.specific_instruction[:300]}")
-    # iter-3 S3 (A-1 观察合同 ≥ 行动合同): the decision package's READING
-    # layer — revise_plan's plan_id is reachable ONLY here on the chat
-    # path (the plan path sees the package block in its own context).
-    plans = getattr(plan, "plans", None) or []
-    if plans:
-        lines.append("- Content plans (name them by plan_id when revising):")
-        for i, p in enumerate(plans, start=1):
-            outputs = ", ".join(
-                str(o.get("kind", "?"))
-                + (f" ({o['language']})" if o.get("language") else "")
-                for o in (p.get("outputs") or [])
-            )
-            lines.append(
-                f"  {i}) plan_id={p.get('plan_id')} — "
-                f"{p.get('title') or '(unnamed)'}: {outputs} [{p.get('state')}]"
-            )
-    return lines
-
-
-async def get_pending_plan(db: AsyncSession, project: Project, params) -> str:
-    """The conversation's currently DOCKED plan (the PendingPlan awaiting the
-    user's Start) — the chat path's draft-plan read (audit §7(d), 2026-09-22):
-    the plan path sees this chain in its context; the chat path read it
-    here or not at all. 「我刚才让你做的那个计划是什么」从这读."""
-    raw = project.pending_brief if isinstance(project.pending_brief, dict) else None
-    if not raw:
-        return (
-            "No plan is docked for confirmation right now — nothing is "
-            "waiting for the user's Start."
-        )
-    try:
-        plan = PendingPlan.model_validate(raw)
-    except Exception:  # noqa: BLE001 — a stale-shaped row reads honestly
-        return "A docked plan exists but its stored shape is stale — it will be rebuilt on the next proposal."
-    if plan.intent is None or not plan.intent.tasks:
-        # Brief-only rows (an ask turn's write) carry no chain — the honest
-        # read is the same as no docked plan.
-        return (
-            "No plan is docked for confirmation right now — nothing is "
-            "waiting for the user's Start."
-        )
-    lines = ["Docked plan (waiting for the user's confirmation):"]
-    lines.extend(_pending_plan_lines(plan))
     return "\n".join(lines)
 
 
@@ -1069,38 +864,6 @@ async def list_project_media(db: AsyncSession, project: Project, params) -> str:
         )
     lines.append(_MEDIA_NOT_A_VIEWING_TRAILER)
     return "\n".join(lines)
-
-
-# ---- 资产角色 pins (ADR-078 判词④) — the shared inheritance read -------------
-
-
-async def _conversation_role_pins(
-    db: AsyncSession, project: Project
-) -> tuple[str | None, str | None]:
-    """The conversation's current role pins (source_asset_id,
-    exemplar_asset_id) — reference 常驻可回读's read seat. The pending plan's
-    pins win while one is on the table (the pre-run state — a role answer
-    just settled them); else the latest run's context pins (what the last
-    run actually ran with — the post-run inheritance the chat path's
-    proposal dispatch reads). Each None when unset. Pure read — the WRITE
-    seat is service.py's _stamp_role_pins, the only one."""
-    pending = project.pending_brief if isinstance(project.pending_brief, dict) else {}
-    source = pending.get("source_asset_id")
-    exemplar = pending.get("exemplar_asset_id")
-    if source or exemplar:
-        return (str(source) if source else None, str(exemplar) if exemplar else None)
-    latest_run = (
-        await db.execute(
-            select(WorkflowRun)
-            .where(WorkflowRun.project_id == project.id)
-            .order_by(WorkflowRun.created_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    ctx = (latest_run.context or {}) if latest_run is not None else {}
-    source = ctx.get("source_asset_id")
-    exemplar = ctx.get("exemplar_asset_id")
-    return (str(source) if source else None, str(exemplar) if exemplar else None)
 
 
 async def get_web_page(db: AsyncSession, project: Project, params: GetWebPageParams) -> str:
