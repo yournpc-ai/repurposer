@@ -271,7 +271,7 @@
 
 ## 4. API 命名
 
-- REST，复数资源，动作用子路径：`POST /outputs/{id}/render`、`POST /outputs/{id}/dub`。
+- REST，复数资源，动作用子路径：`POST /outputs/{id}/poster`。
 - 不为单个动作造 RPC 式端点（`/api/sendChat` 此类永不出现）。
 - 内部类型（如 `material_understanding` / `storyboard`）不得从任何公开响应漏出——统一经 `visible_outputs_stmt()` 过滤（ADR-030 D1）。
 

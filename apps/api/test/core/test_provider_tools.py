@@ -770,34 +770,6 @@ def test_bound_skill_tools_follow_material_and_saved_version_state():
     assert "create_video" not in saved_names
 
 
-@pytest.mark.asyncio
-async def test_incomplete_working_draft_cannot_resume_legacy_protocol(installed_promo):
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.turn_tools import tools_for_bound_skill
-    from app.editing.schemas import VersionSettings
-    from app.skills.resolution import get_builtin_skill_option
-    from app.chat.editor_create import CreateVideoArgs
-
-    skill = get_builtin_skill_option("promo-video").reference
-    draft = CandidateRecord.create(
-        tool_name="design_video",
-        arguments={"content": {"settings": VersionSettings(width=1920, height=1080).model_dump(mode="json"), "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-        errors=[], schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="call",
-    )
-    assembly = _video_round(
-        tools_for_bound_skill(intent_router.tools, skill), drafts=(draft,),
-        snapshot=ContextSnapshot("draft"), skill=skill,
-    )
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
-    assert "design_video" not in assembly.system
-    assert "不调用旧创作协议" in assembly.system
-
-
 def test_scene_plan_and_explicit_count_have_no_six_scene_cap():
     from app.skills.external import SkillPolicy
     from app.chat.editor_create import CreateVideoArgs
@@ -855,32 +827,6 @@ async def test_derived_web_view_infers_its_unique_view_id():
     assert web.source.snapshot_id == parent_id
 
 
-
-
-def test_legacy_draft_does_not_reopen_save_only_protocol():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.editor_create import CreateVideoArgs
-
-    content = {
-        "scenes": [{"scene_id": "lead", "range": {"start": 0, "end": 90000}, "intent": "Lead", "speech_clip_ids": []}],
-        "sources": [],
-        "timeline": {"tracks": [{
-            "track_id": "trk_title", "kind": "visual", "role": "title", "order": 0,
-            "clips": [{"clip_id": "clp_lead", "scene_id": "lead", "range": {"start": 0, "end": 90000}}],
-        }], "transitions": []},
-    }
-    record = CandidateRecord.create(
-        tool_name="design_video",
-        arguments={"content": content, "design": {"arc_id": "product-evidence"}},
-        errors=[], schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="legacy-call",
-    )
-    assembly = _video_round(intent_router.tools, drafts=(record,), snapshot=ContextSnapshot("legacy"), user_text="Save that draft")
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
 
 
 def test_chat_tool_loops_allow_twenty_bounded_iterations():
@@ -1118,57 +1064,6 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
     assert not edit.stream_prose and edit.project_reply is not None
 
 
-def test_draft_repair_schema_is_not_offered():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.editor_create import CreateVideoArgs
-
-    draft = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-        errors=[{"msg": "bad framing"}], schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="call",
-    )
-    assembly = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"))
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
-
-
-def test_restored_draft_review_is_not_offered():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.editor_create import CreateVideoArgs
-
-    record = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-        errors=[], schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="fixture",
-    )
-    assembly = _video_round(intent_router.tools, drafts=(record,), snapshot=ContextSnapshot("draft"))
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
-
-
-def test_copy_only_draft_cannot_reopen_legacy_hold():
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.editor_create import CreateVideoArgs
-
-    draft = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-        errors=[], schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="call",
-    )
-    assembly = _video_round(intent_router.tools, drafts=(draft,), snapshot=ContextSnapshot("draft"), user_text="Only clarify the draft; do not save it.")
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
-
-
 def test_native_create_projection_keeps_skill_context(installed_promo):
     from types import SimpleNamespace
     from app.agents.tool_loop import ContextSnapshot
@@ -1204,30 +1099,6 @@ def test_explicit_constraints_use_native_create_parameters(installed_promo):
     })
     assert args.aspect == "9:16" and args.background == "#A1B2C3"
     assert sum(shot.duration_seconds for shot in args.shots) == 24
-
-
-def test_complete_draft_repair_is_not_offered(installed_promo):
-    from app.agents.candidate_correction import CandidateRecord, CandidateScope
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.intent import intent_router
-    from app.chat.turn_tools import tools_for_bound_skill
-    from app.skills.resolution import get_builtin_skill_option
-    from app.chat.editor_create import CreateVideoArgs
-
-    record = CandidateRecord.create(
-        tool_name="design_video", arguments={"content": {"settings": {"timebase": 90000}, "scenes": [], "timeline": {"tracks": []}}, "design": {"authoring": "high_level_scene"}},
-        errors=[{"loc": ["aspect_ratio"], "type": "extra_forbidden", "msg": "Extra inputs are not permitted"}],
-        schema=CreateVideoArgs.model_json_schema(),
-        scope=CandidateScope(owner_id="owner", conversation_id="conversation"),
-        base_keys=frozenset(), call_id="bad-save",
-    )
-    skill = get_builtin_skill_option("promo-video").reference
-    assembly = _video_round(
-        tools_for_bound_skill(intent_router.tools, skill), drafts=(record,),
-        snapshot=ContextSnapshot("current draft"), skill=skill, user_text="保存当前草稿",
-    )
-    assert assembly.stage == "working_draft_unavailable"
-    assert {tool.name for tool in assembly.tools} == {"answer"}
 
 
 def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_preview():

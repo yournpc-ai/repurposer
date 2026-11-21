@@ -1,8 +1,4 @@
-"""Owned video Output reads, playback posters, rendering and deletion.
-
-Composition content changes belong to Chat's saved-version write door.
-This route exposes only owned video media, rendering and recovery.
-"""
+"""Owned Output reads, playback, posters and deletion."""
 
 from uuid import UUID
 
@@ -11,7 +7,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.dependencies import DBDep, get_current_user, get_current_user_required
-from app.models.schemas import OutputPosterResponse, OutputResponse, RenderStatus
+from app.models.schemas import OutputPosterResponse, OutputResponse
 from app.models.tables import User
 from app.pipeline.output_posters import ensure_output_poster
 from app.pipeline.outputs import (
@@ -89,28 +85,3 @@ async def delete_output(
         ), {"oid": str(output_id)},
     )
     await db.commit()
-
-
-@router.post("/{output_id}/render", response_model=OutputResponse, status_code=status.HTTP_202_ACCEPTED)
-async def render_output_endpoint(
-    output_id: UUID, db: DBDep,
-    current_user: User = Depends(get_current_user_required),
-):
-    output = await get_output_for_user(db, output_id, UUID(str(current_user.id)))
-    from app.models.tables import ExportJob
-    if await db.get(ExportJob, output.id):
-        raise HTTPException(status.HTTP_409_CONFLICT, "A verified export is immutable")
-    if output.archived_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Archived Output is read-only")
-    if output.type != "video":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This output cannot render")
-    if output.render_status in (RenderStatus.PENDING, RenderStatus.RENDERING):
-        return output
-    if not output.render_spec:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Video has no render_spec")
-    from app.pipeline.jobs import reset_output_render
-
-    reset_output_render(output)
-    await db.commit()
-    await db.refresh(output)
-    return output

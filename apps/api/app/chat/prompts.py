@@ -159,24 +159,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     if confirmation and confirmation["action"] == "produce" and not hint:
         ref = confirmation["base_ref"]
         hint = {"composition_id": ref["composition_id"], "version_id": ref["composition_version_id"]}
-    rejected_recovery = next((resource for _, resource in resources if resource.get("kind") == "working_draft_recovery"), None)
-    if rejected_recovery and not works:
-        return RoundAssembly(
-            tools=[tool for tool in facts["tools"] if tool.name == "answer"],
-            system="已有工作草稿无法安全转换，原记录仍然保留。说明没有保存新版本，也没有继续旧创作协议；如需另建作品必须先让用户明确。不得把当前请求当成空项目创建。",
-            context=json.dumps({"working_draft_recovery": rejected_recovery}, ensure_ascii=False),
-            stage="working_draft_unavailable", include_project_context=False,
-            opening_text=user_text, enforce_offered_tools=True,
-        )
     readiness = compute_source_readiness(
         user_text=user_text, source_text=facts.get("source_text"),
         assets=[r for _, r in resources if r.get("kind") == "asset"],
         snapshots=[r for _, r in resources if r.get("kind") == "web"],
-        creative_state=creative_state, draft_present=bool(facts.get("drafts")),
+        creative_state=creative_state,
         question_settled=facts.get("website_question_settled", False),
     )
     native_creation = (
-        not works and not hint and not facts.get("drafts") and not facts.get("active_repair")
+        not works and not hint and not facts.get("active_repair")
         and not facts.get("version_saved") and (not pending or facts.get("group_answer_submitted"))
         and any(tool.name == "create_video" for tool in facts["tools"])
     )
@@ -383,14 +374,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 if readiness.task_kind == "website_promo" and readiness.required_next_action == "ask_user"
                 and any(t.name == "ask_user" for t in tools) and not media_ready else None
             ),
-        )
-    if facts.get("drafts"):
-        return RoundAssembly(
-            tools=[tool for tool in facts["tools"] if tool.name == "answer"],
-            system="现有工作草稿无法安全转换为完整作品。保留原草稿，不调用旧创作协议，不声称已保存新版本。说明只能读取已有成果或从当前素材重新创建，然后调用 answer。",
-            context=json.dumps({"working_draft_recovery": "incomplete_or_invalid"}, ensure_ascii=False),
-            stage="working_draft_unavailable", include_project_context=False,
-            opening_text=user_text, enforce_offered_tools=True,
         )
     return RoundAssembly(
         tools=[tool for tool in facts["tools"] if tool.name == "answer"],

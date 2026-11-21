@@ -37,7 +37,6 @@ from app.pipeline.outputs import (
     chat_delivery_output_ids,
     is_chat_video_output,
     output_to_response,
-    run_to_response,
     workflow_step_to_response,
 )
 from app.platform.billing import (
@@ -415,41 +414,3 @@ async def list_chat_delivered_outputs(
         for output_id in refs
         if output_id in by_id or output_id not in extant_ids
     ]
-
-
-@router.get("/{project_id}/runs", response_model=list[RunResponse])
-async def list_project_runs(
-    project_id: UUID,
-    db: DBDep,
-    current_user: User | None = Depends(get_current_user),
-) -> list[WorkflowRun]:
-    """List generation runs for a project, newest first."""
-    await get_project_for_user(
-        db, project_id, current_user.id if current_user else None
-    )
-    result = await db.execute(
-        select(WorkflowRun)
-        .where(WorkflowRun.project_id == project_id)
-        .order_by(WorkflowRun.created_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-@router.get("/{project_id}/runs/{run_id}", response_model=RunResponse)
-async def get_project_run(
-    project_id: UUID,
-    run_id: UUID,
-    db: DBDep,
-    current_user: User | None = Depends(get_current_user),
-) -> RunResponse:
-    """Get a single generation run's status (with workflow steps + aggregated cost)."""
-    await get_project_for_user(
-        db, project_id, current_user.id if current_user else None
-    )
-    run = await db.get(WorkflowRun, run_id)
-    if run is None or run.project_id != project_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Run not found",
-        )
-    return await run_to_response(db, run)

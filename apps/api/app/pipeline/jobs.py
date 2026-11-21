@@ -53,18 +53,6 @@ def reset_asset_processing(asset: Asset) -> None:
     asset.attempt = 0
 
 
-def reset_output_render(output: Output) -> None:
-    """Same one-seat reset for renders (R1 B4a): status + token + error +
-    counter. The manual render endpoint calls this; intent-driven re-pends
-    (morph / verify / undo-redo / tool re-render) reset the counter at their
-    own seats — new intent = new budget; only the crash reap keeps counting.
-    """
-    output.render_status = RenderStatus.PENDING
-    output.render_claim_token = None
-    output.render_error = None
-    output.render_attempt = 0
-
-
 def _runtime_fanout_sql() -> str:
     """Fan-out kinds (render, D2) as a SQL literal list — node-declared
     (`runtime_fanout`), consumed kernel-wide. Built lazily: this module is

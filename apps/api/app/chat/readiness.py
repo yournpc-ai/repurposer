@@ -42,7 +42,6 @@ class SourceReadiness:
     required_views_ready: bool
     brief_missing_slots: list[str]
     brand_profile_ready: bool
-    draft_present: bool
     required_next_action: str | None
     urls: list[str]
     brief: Brief
@@ -298,7 +297,6 @@ def compute_source_readiness(
     assets: list[Any] | tuple[Any, ...] = (),
     snapshots: list[Any] | tuple[Any, ...] = (),
     creative_state: CreativeState | None = None,
-    draft_present: bool = False,
     question_settled: bool = False,
     task_kind: str | None = None,
 ) -> SourceReadiness:
@@ -389,9 +387,7 @@ def compute_source_readiness(
         required_next = "prepare_video_materials"
     elif not brand_profile_ready:
         required_next = "analyze_brand"
-    elif missing and not question_settled and (
-        not draft_present or infer_task_kind(user_text) == "website_promo"
-    ):
+    elif missing and not question_settled:
         required_next = "ask_user"
     else:
         required_next = "create_video"
@@ -405,7 +401,6 @@ def compute_source_readiness(
         required_views_ready=required_views_ready,
         brief_missing_slots=missing,
         brand_profile_ready=brand_profile_ready,
-        draft_present=draft_present,
         required_next_action=required_next,
         urls=urls,
         brief=brief,
@@ -426,7 +421,6 @@ def render_readiness_context(readiness: SourceReadiness) -> str:
         f"- 品牌档案已就绪：{str(readiness.brand_profile_ready).lower()}",
         f"- Brief 已就绪：{str(readiness.brief_ready).lower()}",
         "- Brief 缺失字段：[" + ", ".join(readiness.brief_missing_slots) + "]",
-        f"- 已有草稿：{str(readiness.draft_present).lower()}",
     ]
     return "\n".join(lines)
 

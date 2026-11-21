@@ -198,24 +198,6 @@ def step_estimate_deviation(node: WorkflowStep) -> dict | None:
     return out
 
 
-async def run_to_response(
-    db: AsyncSession,
-    run: WorkflowRun,
-    *,
-    with_steps: bool = True,
-) -> RunResponse:
-    resp = RunResponse.model_validate(run)
-    if with_steps:
-        result = await db.execute(
-            select(WorkflowStep).where(WorkflowStep.run_id == run.id).order_by(WorkflowStep.seq)
-        )
-        nodes = list(result.scalars().all())
-        ratio = await get_config(db, "credits.per_cost_usd")
-        resp.steps = [workflow_step_to_response(n, ratio=ratio) for n in nodes]
-        resp.cost = aggregate_step_cost(nodes)
-    return resp
-
-
 async def delete_outputs_fk_safe(
     db: AsyncSession, doomed: list[UUID] | Select[tuple[UUID]]
 ) -> None:

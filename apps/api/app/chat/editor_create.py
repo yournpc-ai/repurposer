@@ -1,5 +1,4 @@
 """Save an editable first version from ordered shots through the Composition store."""
-from copy import deepcopy
 from typing import Literal
 from uuid import uuid5
 
@@ -215,68 +214,3 @@ async def create_video(db, turn, args: CreateVideoArgs):
                  "animated": bool(clip["animations"])} for track in saved.timeline["tracks"] for clip in track["clips"]
                 if clip["object"]["kind"] == "text"
             ]}
-
-
-def _active_working_drafts(conversation):
-    from app.chat.conversation_context import context_items
-
-    seen = set()
-    for item in reversed(context_items(conversation.context)):
-        candidate = item.get("candidate") or {}
-        draft_id = candidate.get("candidate_id")
-        if not candidate.get("active", True) or item.get("target_tool") != "design_video" or not draft_id or draft_id in seen:
-            continue
-        seen.add(draft_id)
-        yield draft_id, item
-
-
-async def migrate_working_drafts(db, project, conversation):
-    from app.chat.readiness import creative_state_for_pending
-    from app.models.schemas import PendingPlan
-
-    stored_context = deepcopy(conversation.context or {})
-    migrations = dict(stored_context.get("working_draft_migrations") or {})
-    drafts = list(_active_working_drafts(conversation))
-    if not drafts:
-        return migrations
-    items = deepcopy(stored_context.get("items") or [])
-    owner_id, project_id, project_title = project.user_id, project.id, project.title
-    pending_brief = deepcopy(project.pending_brief)
-    for draft_id, item in drafts:
-        arguments = item.get("executed_arguments") or item.get("arguments") or {}
-        design = arguments.get("design") or {}
-        content = deepcopy(arguments.get("content") or {})
-        try:
-            if not content:
-                raise ValueError("the working draft has no Composition content")
-            provenance = {
-                key: deepcopy(design[key]) for key in (
-                    "skill_reference", "external_skill", "skill_version", "skill_generator_resources", "language",
-                ) if design.get(key) is not None
-            }
-            if pending_brief:
-                content["creative_state"] = creative_state_for_pending(
-                    PendingPlan.model_validate(pending_brief)
-                ).model_dump(mode="json")
-            _, version, _ = await apply_composition_edits(
-                db, owner_id=owner_id, origin_project_id=project_id,
-                name=design.get("name") or project_title, content=content,
-                request_id=str(uuid5(project_id, f"working-draft-migration:{draft_id}")),
-                skill_provenance=provenance or None,
-            )
-            migrations[draft_id] = {"status": "saved", "version_id": str(version.id)}
-            for record in items:
-                if (record.get("candidate") or {}).get("candidate_id") == draft_id:
-                    record["candidate"] = {**(record.get("candidate") or {}), "active": False}
-        except Exception as exc:
-            from app.editing.store import CandidateContentError, EditingError
-
-            if not isinstance(exc, (CandidateContentError, EditingError, ValueError)):
-                raise
-            migrations[draft_id] = {"status": "rejected", "reason": str(exc)}
-    conversation.context = {**stored_context, "schema_version": 1, "items": items,
-                            "working_draft_migrations": migrations}
-    await db.commit()
-    await db.refresh(project)
-    await db.refresh(conversation)
-    return migrations

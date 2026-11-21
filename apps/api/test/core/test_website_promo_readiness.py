@@ -191,7 +191,7 @@ def test_a_settled_legacy_questionnaire_applies_only_to_its_opening(kind):
     def next_action(turn_id):
         return compute_source_readiness(
             user_text=f"给 {URL} 做一只宣传片", snapshots=[snapshot()],
-            creative_state=CreativeState(brand_profile=profile()), draft_present=True,
+            creative_state=CreativeState(brand_profile=profile()),
             question_settled=settled_website_question([receipt], turn_id),
         ).required_next_action
 
@@ -307,7 +307,7 @@ def test_round_projection_uses_readiness_before_tools():
     assert "正文已就绪：false" in facts["source_preparation"]
     assert "所需视图已就绪：false" in facts["source_preparation"]
     assert "Brief 已就绪：false" in facts["source_preparation"]
-    assert "已有草稿：false" in facts["source_preparation"]
+    assert "已有草稿" not in facts["source_preparation"]
     assert facts["source_readiness"]["required_next_action"] == "prepare_video_materials"
     assert "官网宣传片取证" in pending.system
 

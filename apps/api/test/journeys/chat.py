@@ -391,11 +391,6 @@ class Ctx:
         check(res.status_code == 200, "GET results", res.text)
         return res.json()
 
-    async def runs(self, pid: str) -> list[dict]:
-        res = await self.client.get(f"/projects/{pid}/runs")
-        check(res.status_code == 200, "GET runs", res.text)
-        return res.json()
-
     async def cleanup(self) -> None:
         if self.keep:
             return

@@ -917,35 +917,6 @@ async def test_typed_upload_retry_is_not_swallowed_by_trigger_run_anchor(databas
         assert prepared.plan_path is False
 
 
-async def test_video_retry_endpoint_preserves_inflight_claim(database):
-    from fastapi import HTTPException
-    from app.pipeline.routes.outputs import render_output_endpoint
-    uid = await owner(database)
-    async with database() as db:
-        project = Project(user_id=uid, title="retry")
-        db.add(project)
-        await db.flush()
-        output = Output(project_id=project.id, type="video", render_status=RenderStatus.FAILED,
-                        render_spec={"family": "video", "tracks": []}, render_attempt=3,
-                        render_error="upload failed", render_claim_token=uuid4())
-        db.add(output)
-        await db.commit()
-        result = await render_output_endpoint(output.id, db, SimpleNamespace(id=uid))
-        assert result.render_status == RenderStatus.PENDING
-        assert result.render_attempt == 0 and result.render_error is None
-        assert result.render_claim_token is None
-        token = uuid4()
-        output.render_status, output.render_claim_token = RenderStatus.RENDERING, token
-        await db.commit()
-        result = await render_output_endpoint(output.id, db, SimpleNamespace(id=uid))
-        assert result.render_claim_token == token
-        output.type = "post"
-        await db.commit()
-        with pytest.raises(HTTPException) as rejected:
-            await render_output_endpoint(output.id, db, SimpleNamespace(id=uid))
-        assert rejected.value.status_code == 400
-
-
 @pytest.mark.parametrize("succeeds", [True, False])
 async def test_upload_tool_preserves_original_failed_run(database, monkeypatch, succeeds):
     """Re-upload is a foreground transfer; the failed production stays archived."""

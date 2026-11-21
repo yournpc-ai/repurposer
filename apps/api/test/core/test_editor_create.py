@@ -116,49 +116,6 @@ async def test_create_video_preserves_creative_state_and_external_skill(database
 
 
 @pytest.mark.asyncio
-async def test_working_draft_migration_saves_valid_content_and_rejects_without_data_loss(database):
-    from app.chat.editor_create import migrate_working_drafts
-    from app.editing.store import content_of
-    from test.core.fixtures import valid_content
-
-    owner = await _user(database)
-    project_id = await _project(database, owner)
-    await _snapshots(database, owner)
-    async with database() as db:
-        project = await db.get(Project, project_id)
-        conversation = Conversation(user_id=owner, project_id=project_id)
-        db.add(conversation)
-        await db.commit()
-        draft_id = "cnd_valid"
-        conversation.context = {"schema_version": 1, "items": [{
-            "id": "valid-item", "turn_id": str(uuid4()), "tool": "design_video", "target_tool": "design_video",
-            "executed_arguments": {"content": valid_content().model_dump(mode="json"), "design": {"name": "Recovered work"}},
-            "candidate": {"candidate_id": draft_id, "candidate_digest": "d" * 64, "active": True},
-            "text": "{}", "ok": True,
-        }]}
-        migrations = await migrate_working_drafts(db, project, conversation)
-        assert migrations[draft_id]["status"] == "saved"
-        versions = list((await db.scalars(select(CompositionVersion))).all())
-        assert len(versions) == 1
-        assert content_of(versions[0]).settings.width == 1920
-        assert conversation.context["items"][0]["candidate"]["active"] is False
-
-        invalid_id = "cnd_invalid"
-        conversation.context["items"].append({
-            "id": "invalid-item", "turn_id": str(uuid4()), "tool": "design_video", "target_tool": "design_video",
-            "executed_arguments": {"content": {"settings": {"width": 1920, "height": 1080}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-            "candidate": {"candidate_id": invalid_id, "candidate_digest": "e" * 64, "active": True},
-            "text": "{}", "ok": False,
-        })
-        migrations = await migrate_working_drafts(db, project, conversation)
-        assert migrations[invalid_id]["status"] == "rejected"
-        assert len(list((await db.scalars(select(CompositionVersion))).all())) == 1
-        assert conversation.context["items"][-1]["candidate"]["active"] is True
-        assert project.pending_brief is None
-        assert conversation.context["working_draft_migrations"][draft_id]["status"] == "saved"
-
-
-@pytest.mark.asyncio
 async def test_website_source_becomes_editable_version_with_user_constraints(database, monkeypatch):
     from app.chat.readiness import brief_with_user_constraints
     from app.models.schemas import PendingPlan
@@ -248,48 +205,7 @@ async def test_first_draft_rejects_explicitly_forbidden_speech_before_saving(dat
 
 
 @pytest.mark.asyncio
-async def test_rejected_draft_stays_visible_without_reopening_creation(database, monkeypatch):
-    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
-    from app.agents.tool_loop import ContextSnapshot
-    from app.chat.editor_create import migrate_working_drafts
-    from app.chat.intent import intent_router
-    from app.chat.prompts import assemble_video_round
-    from app.tools.project_context import load_project_context
-
-    owner = await _user(database)
-    project_id = await _project(database, owner)
-    async with database() as db:
-        project = await db.get(Project, project_id)
-        conversation = Conversation(user_id=owner, project_id=project_id)
-        db.add(conversation)
-        await db.commit()
-        conversation.context = {"schema_version": 1, "items": [{
-            "id": "invalid-only", "turn_id": str(uuid4()), "tool": "design_video", "target_tool": "design_video",
-            "executed_arguments": {"content": {"settings": {"width": 320, "height": 180}, "scenes": [], "timeline": {"tracks": []}}, "design": {}},
-            "candidate": {"candidate_id": "cnd_only_invalid", "candidate_digest": "e" * 64, "active": True},
-            "text": "{}", "ok": False,
-        }]}
-        await migrate_working_drafts(db, project, conversation)
-        snapshot = await load_project_context(db, project_id=project_id, owner_id=owner)
-        assert any(resource.get("kind") == "working_draft_recovery" for _, resource in snapshot.resources)
-        assembly = assemble_video_round({
-            "tools": intent_router.tools, "snapshot": snapshot,
-            "user_text": "请继续这个草稿。", "mode": "plan",
-        })
-        assert assembly.stage == "working_draft_unavailable"
-        assert {tool.name for tool in assembly.tools} == {"answer"}
-        assert conversation.context["items"][0]["candidate"]["active"] is True
-        from app.chat.service import prepare_chat_turn
-        from app.models.schemas import ChatRequest
-
-        turn = await prepare_chat_turn(db, owner, ChatRequest(project_id=project_id, message="请继续这个草稿。"))
-        assert await db.get(Message, turn.user_message.id) is not None
-        assert turn.user_message.turn_state == "in_flight"
-        assert await db.scalar(select(func.count()).select_from(Composition)) == 0
-
-
-@pytest.mark.asyncio
-async def test_empty_project_does_not_open_migration_session(database, monkeypatch):
+async def test_new_project_persists_chat_opening(database, monkeypatch):
     from app.chat.service import prepare_chat_turn
     from app.models.schemas import ChatRequest
 

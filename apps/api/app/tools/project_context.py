@@ -256,39 +256,12 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID) -> Conte
             "captured_view_count": len((asset.meta or {}).get("shots") or []),
             "language": (asset.meta or {}).get("language"),
         }))
-    from app.chat.conversation_context import context_items
-
-    draft_snapshot_ids: set[UUID] = set()
-    rejected_migrations = []
-    conversations = (await db.scalars(select(Conversation).where(
-        Conversation.project_id == project_id, Conversation.user_id == owner_id
-    ))).all()
-    for conversation in conversations:
-        for draft_id, migration in (conversation.context or {}).get("working_draft_migrations", {}).items():
-            if migration.get("status") == "rejected":
-                rejected_migrations.append({
-                    "draft_id": draft_id, "reason": migration.get("reason"),
-                    "conversation_id": str(conversation.id), "original_record_preserved": True,
-                })
-    if rejected_migrations:
-        resources.append(("working-draft-recovery:rejected", {
-            "kind": "working_draft_recovery", "status": "rejected", "drafts": rejected_migrations,
-        }))
-    for conversation in conversations:
-        for item in context_items(conversation.context):
-            candidate = item.get("candidate") or {}
-            if not candidate.get("active", True) or candidate.get("target_tool") != "design_video":
-                continue
-            arguments = item.get("executed_arguments") or {}
-            for source in (arguments.get("content") or {}).get("sources") or []:
-                if source.get("snapshot_id"):
-                    draft_snapshot_ids.add(UUID(str(source["snapshot_id"])))
     snapshots = (await db.scalars(
         select(SourceSnapshot).outerjoin(Asset, SourceSnapshot.asset_id == Asset.id)
         .where(SourceSnapshot.owner_id == owner_id, or_(
             (Asset.project_id == project_id) & (Asset.user_id == owner_id),
             SourceSnapshot.origin_project_id == project_id,
-            SourceSnapshot.id.in_(bound_snapshot_ids | draft_snapshot_ids),
+            SourceSnapshot.id.in_(bound_snapshot_ids),
         ))
         .order_by(SourceSnapshot.captured_at)
     )).all()
