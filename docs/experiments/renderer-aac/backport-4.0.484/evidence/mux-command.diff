@@ -1,0 +1,11 @@
+--- a/apps/render/src/audio.ts
++++ b/apps/render/src/audio.ts
+@@ -95,7 +95,7 @@
+   await execFileAsync(
+     ffmpeg,
+     ["-y", "-hide_banner", "-nostats", "-i", videoPath, "-c:v", "copy", "-af", filter,
+-      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", tmpPath],
++      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movie_timescale", "48000", tmpPath],
+     ffSpawnOpts(ffmpeg),
+   );
+   await fs.rename(tmpPath, videoPath);

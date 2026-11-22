@@ -1,0 +1,13 @@
+Scope: 3 of 4 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+.                                        | +248 +++++++++++++++++++++++++
+Progress: resolved 248, reused 0, downloaded 10, added 10
+Progress: resolved 248, reused 0, downloaded 51, added 50
+Progress: resolved 248, reused 0, downloaded 100, added 99
+Progress: resolved 248, reused 0, downloaded 159, added 148
+Progress: resolved 248, reused 0, downloaded 236, added 236
+Progress: resolved 248, reused 0, downloaded 246, added 248, done
+.../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.28.1/node_modules/esbuild postinstall: Done
+Done in 7.8s using pnpm v10.20.0

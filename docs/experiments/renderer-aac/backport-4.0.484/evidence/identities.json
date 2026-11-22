@@ -1,0 +1,56 @@
+{
+  "compositor": {
+    "ffmpeg": "54cc1e811f2ea1b313f64e29d60d060b93dde30f219617fe319f834cdcec5c94",
+    "libswscale.dylib": "6bd9dca71b42142fa5aedb18fd4410552fad47b5c73dd53bb576b4e91bc6dec6",
+    "index.js": "439eed71b21d9e5ad1223983ad7f60a286e24661905f2d918b6ff92430fe6964",
+    "libavformat.dylib": "1fe353f9bed5b3054162d33b92966fddd8c8c2924e08c9e45de468fcc411137c",
+    "libavutil.dylib": "cbc8cd9fdbc52f405910ded87cfc41c5f7e9a48f59aa36de465d6e9931bf24f0",
+    "README.md": "f163a3c334ce9e293ccb8c0d7f5cbdf3ab81a0adfed5e20ac4fbd66bfe1b7d9b",
+    "libavcodec.dylib": "fc685cdf51781d8848f183a5df6315b2f643a8b6e7c00437f33d49b5cce1798c",
+    "package.json": "385aeb4ba314a86d418a5f0322a3b4df131d4e9fab4f83768ae12e8ab9893b0d",
+    "libswresample.dylib": "9178f155406fff8ae8712a4b76991b6f5c14f0eed2efc478805757ef51c61e70",
+    "ffprobe": "6f6966ea279e7fb677bf97d21ec97cb5e8cc4612c65230e250c1f4cd5f1a6f03",
+    "libavdevice.dylib": "7814022cf1ac9ad4013bb3b917a057b698669f894ee3a49037564733313db32e",
+    "index.mjs": "bcd507a747b4d5cdcaf0fcf4da0cab5736a88ab7a6e3abb337db1c81c836140e",
+    "libavfilter.dylib": "025987548265193c5155866040b7ae84ad3c998546b63bd9e7cf233252fff893",
+    "index.d.ts": "32d05b74efe9deaffef9116eb9838fc6a7e4a7ba908e1142daf152bf60a22aca",
+    "remotion": "3622d4da6091f2c5f39e175e31edcc60b73c237f65c0cd756246a8c097b7df05"
+  },
+  "browser": {
+    "libEGL.dylib": "e190b140ca410b021f29ce1900b8adc291784ff40c503b93d7a7c24ed18ae059",
+    "headless_command_resources.pak": "8f7fa1b24e7758875d44e5cb17c0166fc00259461a5dcfaf2af7b7d3fd91a438",
+    "vk_swiftshader_icd.json": "d717d915e31e7c27948b80b36ab34e2d897888114c5c7d0af835f93eb53e58f5",
+    "chrome-headless-shell": "b469d05c698ccf9f4ae3dc43fb194fbdcf56f9da1fc46dcc19f2bf9fe2aa20b8",
+    "icudtl.dat": "c5da2fc389d1bb0ecb13fe22a8e069b7abc491f8aa5d16eb65d4ff32c85a46b6",
+    "headless_lib_strings.pak": "631b71876b4e515e88a1b1db65a295c95cf257d16b0373144bea62d8bbf07fc9",
+    "ABOUT": "34d078ce3003087a8374e7c6156fda374769b8047d6ddaf419d66414aa48edfb",
+    "v8_context_snapshot.arm64.bin": "1894fc7e1c6cc97f5eb24736cde63955682f8285419ca7a955793d0c4a921082",
+    "libvk_swiftshader.dylib": "0c32acab4bca15df60c2007874e54e6f0fa5f94bf3c89104faf9e8c6d7a590ee",
+    "headless_lib_data.pak": "63514db5e022e8807339fdd3de675fe55cf8033cef803192e4315f31bb999a6b",
+    "LICENSE.headless_shell": "98a0c49c45f759a3d5966c04f9ac5292b735d3082557e5ce8505136baf084e65",
+    "libGLESv2.dylib": "cb27c732f9d69a726c3fe91fa8bca21999b5981082a154b9fe09ae90d2053667",
+    "PrivacySandboxAttestationsPreloaded/manifest.json": "51c311a4ba03140bcd1c827f8d93dba50cadda736925903b26e95609275dbffd",
+    "PrivacySandboxAttestationsPreloaded/privacy-sandbox-attestations.dat": "59e345dc13aedee9ea46b92e58300ecaca944aaea9384c7af885400ac2ae8806",
+    "resources/accessibility/reading_mode_gdocs_helper_manifest.json": "c6312355c9bf024222ccd9bc1f211146bcf5ad7954eacf35704d517da2e3081e",
+    "resources/accessibility/reading_mode_gdocs_helper/gdocs_script.js": "d291adabcfcb1a4a4a2ffacdd9d04fdb473ab0d6903556bef7446be9c3646d86",
+    "resources/accessibility/reading_mode_gdocs_helper/content.js": "6c0aeaaf9a71ad68aa45764c111e70bb23aa0fbf406644a375b6b709cbbe4b6e"
+  },
+  "chromium_version": "Google Chrome for Testing 149.0.7790.0",
+  "platform": "26.5.2",
+  "machine": "arm64",
+  "pnpm": "10.20.0",
+  "node": "v22.15.0",
+  "tags": {
+    "540-frame_cache.rs": "32c69f753338a30e060481c37bf60c237809c496089b705b05510071602aa219",
+    "484-stringify-ffmpeg-filter.ts": "08c910897c2bf84dfe57c9b0206c8b734e64b6792847dc8a92e101a33a965895",
+    "540-stringify-ffmpeg-filter.ts": "304f151cffe08e3b1b22f12c175755f688212de589c11bff32b6cc2c2487ba5a",
+    "484-frame_cache.rs": "9382152ec45d1ada5577731b73b7f18bb10d9a319997a92bc0c0848b7a28819c"
+  },
+  "fixture_assets": {
+    "voice.wav": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+    "whoosh.wav": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+    "silence.wav": "27cb785df0cedf3e8136cf6893ae9a93a7220efc0420bd3e03dfc1c367f29638",
+    "main.mp4": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+    "impact2.wav": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0"
+  }
+}

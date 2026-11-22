@@ -1,0 +1,8 @@
+Patch: You can now edit the package at:
+
+  /tmp/i8-backport.VQZnjr/edit
+
+To commit your changes, run:
+
+  pnpm patch-commit '/tmp/i8-backport.VQZnjr/edit'
+

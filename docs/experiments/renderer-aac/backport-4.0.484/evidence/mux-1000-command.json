@@ -1,0 +1,23 @@
+{
+  "args": [
+    "/private/tmp/i8-backport.VQZnjr/clean/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+    "-y",
+    "-hide_banner",
+    "-nostats",
+    "-i",
+    "/tmp/i8-backport.VQZnjr/mac/run/boundary/raw.mp4",
+    "-c:v",
+    "copy",
+    "-af",
+    "atrim=end_sample=382000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.80:measured_TP=-7.55:measured_LRA=15.30:measured_thresh=-31.09:offset=0.04:linear=true:print_format=summary,aresample=48000,atrim=end_sample=382000",
+    "-ar",
+    "48000",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "/tmp/i8-backport.VQZnjr/mux-1000.mp4"
+  ],
+  "exit": 0,
+  "stderr": "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/tmp/i8-backport.VQZnjr/mac/run/boundary/raw.mp4':\n  Metadata:\n    major_brand     : isom\n    minor_version   : 512\n    compatible_brands: isomiso2avc1mp41\n    encoder         : Lavf61.7.100\n    comment         : Made with Remotion 4.0.484\n  Duration: 00:00:07.96, start: 0.000000, bitrate: 4696 kb/s\n  Stream #0:0[0x1](und): Video: h264 (avc1 / 0x31637661), yuvj420p(pc, bt470bg/unknown/unknown, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 4366 kb/s, 24 fps, 24 tbr, 90k tbn (default)\n      Metadata:\n        handler_name    : VideoHandler\n        vendor_id       : [0][0][0][0]\n        encoder         : Lavc61.19.100 libx264\n      Side data:\n        ICC Profile\n  Stream #0:1[0x2](und): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 320 kb/s (default)\n      Metadata:\n        handler_name    : SoundHandler\n        vendor_id       : [0][0][0][0]\nStream mapping:\n  Stream #0:0 -> #0:0 (copy)\n  Stream #0:1 -> #0:1 (aac (native) -> aac (native))\nPress [q] to stop, [?] for help\nOutput #0, mp4, to '/tmp/i8-backport.VQZnjr/mux-1000.mp4':\n  Metadata:\n    major_brand     : isom\n    minor_version   : 512\n    compatible_brands: isomiso2avc1mp41\n    comment         : Made with Remotion 4.0.484\n    encoder         : Lavf61.7.100\n  Stream #0:0(und): Video: h264 (avc1 / 0x31637661), yuvj420p(pc, bt470bg/unknown/unknown, progressive), 1920x1080 [SAR 1:1 DAR 16:9], q=2-31, 4366 kb/s, 24 fps, 24 tbr, 90k tbn (default)\n      Metadata:\n        handler_name    : VideoHandler\n        vendor_id       : [0][0][0][0]\n        encoder         : Lavc61.19.100 libx264\n      Side data:\n        ICC Profile\n  Stream #0:1(und): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 192 kb/s (default)\n      Metadata:\n        handler_name    : SoundHandler\n        vendor_id       : [0][0][0][0]\n        encoder         : Lavc61.19.100 aac\n[Parsed_loudnorm_2 @ 0x76d048a80] \nInput Integrated:    -20.5 LUFS\nInput True Peak:      -7.6 dBTP\nInput LRA:             4.0 LU\nInput Threshold:     -30.7 LUFS\n\nOutput Integrated:   -16.0 LUFS\nOutput True Peak:     -3.2 dBTP\nOutput LRA:            3.9 LU\nOutput Threshold:    -26.2 LUFS\n\nNormalization Type:   Dynamic\nTarget Offset:        +0.0 LU\n[out#0/mp4 @ 0x76d048300] video:4242KiB audio:122KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.167786%\nframe=  191 fps=0.0 q=-1.0 Lsize=    4371KiB time=00:00:07.87 bitrate=4547.3kbits/s speed=  13x    \n[aac @ 0x76d045500] Qavg: 27549.928\n"
+}

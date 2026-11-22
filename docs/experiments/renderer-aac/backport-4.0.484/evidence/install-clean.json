@@ -1,0 +1,14 @@
+{
+  "package_files": 653,
+  "version": "4.0.484",
+  "changed": {
+    "dist/esm/index.mjs": {
+      "original": "eaedda58c51c67685cceb95a395d36bb660ccc055bbd0e3197e1af754cd6feff",
+      "patched": "149686a78f0b646f9feeae2ebc063da30610c5b7b1dd3ca769a77f2f28d1c945"
+    },
+    "dist/stringify-ffmpeg-filter.js": {
+      "original": "73adbc935530651dd07f63c61778bbbe8664cb550db63762c6cf6733b64ed5f6",
+      "patched": "7214406bbf7fecdd95d7b1fc5a4ef9ac96aaee3a153a4ebd9318f0b417be54bd"
+    }
+  }
+}

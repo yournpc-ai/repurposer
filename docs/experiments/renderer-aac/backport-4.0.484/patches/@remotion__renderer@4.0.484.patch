@@ -1,0 +1,26 @@
+diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
+index afdd467918a7070b6548a5096fe6185b1d1b5b73..efee7eee6ef83361719a1457461fc371dae3a720 100644
+--- a/dist/esm/index.mjs
++++ b/dist/esm/index.mjs
+@@ -22737,7 +22737,7 @@ var stringifyFfmpegFilter = ({
+       toneFrequency && toneFrequency !== 1 ? `asetrate=${sampleRate}*${toneFrequency},aresample=${sampleRate},atempo=1/${toneFrequency}` : null
+     ].filter(truthy).join(",") + `[a0]`,
+     pad_end: padAtEnd > 0.0000001 ? "apad=pad_len=" + Math.round(padAtEnd * sampleRate) : null,
+-    pad_start: padStart === 0 ? null : `adelay=${new Array(channels + 1).fill((padStart * 1000).toFixed(0)).join("|")}`,
++    pad_start: padStart === 0 ? null : `adelay=${new Array(channels + 1).fill(`${Math.round(padStart * sampleRate)}S`).join("|")}`,
+     actualTrimLeft
+   };
+ };
+diff --git a/dist/stringify-ffmpeg-filter.js b/dist/stringify-ffmpeg-filter.js
+index c28e70b72a1b4113df49790301510852986fc8e4..e24cd125dc160eb6cf86cb84fe54662fff808b75 100644
+--- a/dist/stringify-ffmpeg-filter.js
++++ b/dist/stringify-ffmpeg-filter.js
+@@ -131,7 +131,7 @@ const stringifyFfmpegFilter = ({ channels, volume, fps, assetDuration, chunkLeng
+         padStart === 0
+             ? null
+             : `adelay=${new Array(channels + 1)
+-                .fill((padStart * 1000).toFixed(0))
++                .fill(`${Math.round(padStart * sampleRate)}S`)
+                 .join('|')}`,
+         actualTrimLeft,
+     };

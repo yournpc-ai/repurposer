@@ -1,0 +1,433 @@
+{
+  "boundary": {
+    "media": {
+      "raw.mp4": {
+        "sha256": "f8153a205a2fdd72c40132114da496e7bb1a32f3458df3ee93f1ba937d9cd344",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            382000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              716250
+            ],
+            "edits": [
+              [
+                382000,
+                7500,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              384048
+            ],
+            "edits": [
+              [
+                382000,
+                2048,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 2048,
+        "decoded": 382976
+      },
+      "video.mp4": {
+        "sha256": "f29a19397ebda9c68af4e021b5028bcf9522e573b6029202cb546275939b0820",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            382000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              716250
+            ],
+            "edits": [
+              [
+                382000,
+                7500,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              383024
+            ],
+            "edits": [
+              [
+                382000,
+                1024,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 1024,
+        "decoded": 382976
+      }
+    },
+    "video_payload": "05b0fcfaa347f9c6d707d61a3ad44dea103490603ea34e2e8723e9ab4214234d",
+    "matched_frames": 191
+  },
+  "edge": {
+    "media": {
+      "raw.mp4": {
+        "sha256": "5b3cef369df136bd9603fc0e2b283575fbf72f94a99d727ba5813931e323f97c",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            382080
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              716400
+            ],
+            "edits": [
+              [
+                382080,
+                7200,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              384128
+            ],
+            "edits": [
+              [
+                382080,
+                2048,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 2048,
+        "decoded": 382976
+      },
+      "video.mp4": {
+        "sha256": "beafe275580b9d314e7fc43d852376326420637324b5a229cdb85d9d9aae672a",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            382080
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              716400
+            ],
+            "edits": [
+              [
+                382080,
+                7200,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              383104
+            ],
+            "edits": [
+              [
+                382080,
+                1024,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 1024,
+        "decoded": 382976
+      }
+    },
+    "video_payload": "6fdada3cfaa6ae3359acd5a6a4a6a8fcda8fe9723399e4f3ea712cdd59df1415",
+    "matched_frames": 199
+  },
+  "success": {
+    "media": {
+      "raw.mp4": {
+        "sha256": "76a6df677bbd465f38315f52119214ab6313ce07d7a9022ecaed9f7002d0b46a",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            384000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              720000
+            ],
+            "edits": [
+              [
+                384000,
+                6000,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              386048
+            ],
+            "edits": [
+              [
+                384000,
+                2048,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 2048,
+        "decoded": 384000
+      },
+      "video.mp4": {
+        "sha256": "04bab1b4b27e1edd306bbf86f580942eb0605ce223433701c65d820f0aeca595",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            384000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              720000
+            ],
+            "edits": [
+              [
+                384000,
+                6000,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              385024
+            ],
+            "edits": [
+              [
+                384000,
+                1024,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 1024,
+        "decoded": 384000
+      }
+    },
+    "video_payload": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+    "matched_frames": 240
+  },
+  "encodeFail": {
+    "media": {
+      "raw.mp4": {
+        "sha256": "76a6df677bbd465f38315f52119214ab6313ce07d7a9022ecaed9f7002d0b46a",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            384000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              720000
+            ],
+            "edits": [
+              [
+                384000,
+                6000,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              386048
+            ],
+            "edits": [
+              [
+                384000,
+                2048,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 2048,
+        "decoded": 384000
+      },
+      "video.mp4": {
+        "sha256": "76a6df677bbd465f38315f52119214ab6313ce07d7a9022ecaed9f7002d0b46a",
+        "boxes": {
+          "movie_scale_duration": [
+            48000,
+            384000
+          ],
+          "vide": {
+            "media_scale_duration": [
+              90000,
+              720000
+            ],
+            "edits": [
+              [
+                384000,
+                6000,
+                1,
+                0
+              ]
+            ]
+          },
+          "soun": {
+            "media_scale_duration": [
+              48000,
+              386048
+            ],
+            "edits": [
+              [
+                384000,
+                2048,
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        "skip": 2048,
+        "decoded": 384000
+      }
+    },
+    "video_payload": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+    "matched_frames": 240
+  },
+  "pcm_24": {
+    "samples": 382000,
+    "tracks": {
+      "voice": {
+        "start": 14000,
+        "mix_lag": 0
+      },
+      "whoosh": {
+        "start": 68000,
+        "mix_lag": 0
+      },
+      "impact": {
+        "start": 96000,
+        "mix_lag": 0
+      }
+    },
+    "sha256": "97a387734dae8dd6654e7094c24473ea5f7eecd7843b97f831828604663183e5"
+  },
+  "negative_24": {
+    "boxes": {
+      "movie_scale_duration": [
+        1000,
+        7959
+      ],
+      "vide": {
+        "media_scale_duration": [
+          90000,
+          716250
+        ],
+        "edits": [
+          [
+            7959,
+            7500,
+            1,
+            0
+          ]
+        ]
+      },
+      "soun": {
+        "media_scale_duration": [
+          48000,
+          383024
+        ],
+        "edits": [
+          [
+            7958,
+            1024,
+            1,
+            0
+          ]
+        ]
+      }
+    },
+    "audio": {
+      "pts": -1024,
+      "dts": -1024,
+      "timebase": "1/48000",
+      "side": [
+        [
+          "skip_samples",
+          "00040000000000000000"
+        ]
+      ],
+      "valid": 381984,
+      "decoded": 382976,
+      "gaps": [],
+      "peak": 0.6898313760757446,
+      "lag": 0,
+      "stems": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "tail": 0
+    },
+    "sha256": "20635324d260a87dd8f98730dd697df39d3a84d5b993089445adc1aa33aa9d06",
+    "same_payload_as_positive": {
+      "audio": "4bc293370e48521d7e4800fd95761adc782074d52eb460696662d93a96fee233",
+      "video": "05b0fcfaa347f9c6d707d61a3ad44dea103490603ea34e2e8723e9ab4214234d"
+    }
+  },
+  "postpass_skips": {
+    "absent": {
+      "hash": "1cc785d3819fd3d5cacc3a7f49e7449242c01922e00f175e9785170f19d00ab0",
+      "frames": 240,
+      "audio_samples": null,
+      "peak": null
+    },
+    "silent": {
+      "hash": "d82271eb37fe28e6d3bae7118ce351a1c26f32be02bf144396c4252a1b233060",
+      "frames": 240,
+      "audio_samples": 384000,
+      "peak": 0.0
+    }
+  }
+}

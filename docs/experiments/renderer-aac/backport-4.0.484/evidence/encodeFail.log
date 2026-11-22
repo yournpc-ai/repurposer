@@ -1,0 +1,21 @@
+video loudnorm post-pass failed, keeping original audio: Error: Command failed: /private/tmp/i8-backport.VQZnjr/clean/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -y -hide_banner -nostats -i /tmp/i8-backport.VQZnjr/mac/run/encodeFail/.encode-fWZHlz/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k -movie_timescale 48000 /tmp/i8-backport.VQZnjr/mac/run/encodeFail/.encode-fWZHlz/baseline.loudnorm.mp4
+Unrecognized option 'i8-injected-invalid-option'.
+Error splitting the argument list: Option not found
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:414:12)
+    at ChildProcess.emit (node:events:530:35)
+    at maybeClose (node:internal/child_process:1101:16)
+    at Socket.<anonymous> (node:internal/child_process:456:11)
+    at Socket.emit (node:events:518:28)
+    at Pipe.<anonymous> (node:net:351:12) {
+  code: 8,
+  killed: false,
+  signal: null,
+  cmd: '/private/tmp/i8-backport.VQZnjr/clean/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -y -hide_banner -nostats -i /tmp/i8-backport.VQZnjr/mac/run/encodeFail/.encode-fWZHlz/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k -movie_timescale 48000 /tmp/i8-backport.VQZnjr/mac/run/encodeFail/.encode-fWZHlz/baseline.loudnorm.mp4',
+  stdout: '',
+  stderr: "Unrecognized option 'i8-injected-invalid-option'.\n" +
+    'Error splitting the argument list: Option not found\n'
+}
+{"mode":"encodeFail","result":{"videoPath":"/tmp/i8-backport.VQZnjr/mac/run/encodeFail/video.mp4"},"ms":9930,"files":["0.wav","0.wav-filter.txt","1.wav","1.wav-filter.txt","2.wav","2.wav-filter.txt","audio.wav","loudnorm.log","merged.wav-filter.txt","mix.mov","raw.mp4","video.mp4"]}

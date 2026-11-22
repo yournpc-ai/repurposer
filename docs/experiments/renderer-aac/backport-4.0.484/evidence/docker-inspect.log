@@ -1,0 +1,2 @@
+
+Error response from daemon: rpc error: code = Unknown desc = blob sha256:2690f95bdf32c950df2ecea68a26a82b1a46025527b1049fe8a3718d932469ee expected at /var/lib/desktop-containerd/daemon/io.containerd.content.v1.content/blobs/sha256/2690f95bdf32c950df2ecea68a26a82b1a46025527b1049fe8a3718d932469ee: open /var/lib/desktop-containerd/daemon/io.containerd.content.v1.content/blobs/sha256/2690f95bdf32c950df2ecea68a26a82b1a46025527b1049fe8a3718d932469ee: input/output error
