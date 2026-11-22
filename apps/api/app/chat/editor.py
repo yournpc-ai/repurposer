@@ -277,7 +277,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "preview_range",
-        "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+        "Publish this exact playback window in Chat, across all tracks. To play a local edit, copy its preview_range from recently_edited_clips. Include lead-in or tail only when the user wants a wider window. Times are absolute seconds (up to 12 seconds).",
         VideoRangeScrubTarget,
         "previewRange",
     ),

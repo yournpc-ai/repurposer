@@ -179,6 +179,13 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         }
         if facts.get("answered_this_opening"):
             context["clarified_request"] = user_text
+        if attachments := facts.get("attachments"):
+            project_assets = {r["asset_id"]: r for _, r in resources if r.get("kind") == "asset"}
+            context["opening_attachments"] = [
+                {"position": index, "asset_id": item.id, "type": project_assets[item.id]["type"], "name": item.name}
+                for index, item in enumerate(attachments, start=1)
+                if item.status == "uploaded" and item.id in project_assets
+            ]
         mentions = facts.get("asset_mentions") or {}
         if mentions:
             context["mentioned_assets"] = [
@@ -201,7 +208,14 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if selected and recent.get("composition_id") == selected["composition_id"]:
             context["already_saved_this_turn"] = recent["applied"]
             if recent["version_id"] == selected["version_id"]:
-                context["recently_edited_clips"] = list(recent["clips"].values())
+                clips = []
+                for clip in recent["clips"].values():
+                    start, end = clip.get("start_seconds"), clip.get("end_seconds")
+                    item = dict(clip)
+                    if start is not None and end is not None and 0 < end - start <= 12:
+                        item["preview_range"] = {"start_seconds": start, "end_seconds": end}
+                    clips.append(item)
+                context["recently_edited_clips"] = clips
         from app.chat.editor import requests_observation_first
 
         last_preview = facts.get("last_preview") or {}
@@ -373,7 +387,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         return RoundAssembly(
             tools=tools,
             system=("你是视频剪辑师，用用户的语言交流。检查本轮目标、所选作品、素材与已有回执。"
-                    "信息足够就直接编辑；用户指代的单个对象仍有多个可能时，先请用户指明。分镜按需表达。"
+                    "目标明确就编辑。多个素材符合描述且用户未指定全用时，写入前用 ask_user 让用户选定，以可辨特征或附件序号列出选项。分镜按需表达。"
                     "保留未要求改变的画面、字幕、动画和声音。依赖新增对象或素材时先读取上一步返回的标识。"
                     "按用户要求播放受影响窗口，在真实画面上核对效果，再决定是否继续修改。"
                     "采样帧、几何、波形与可感知声音分别限定了能报告的观察。"

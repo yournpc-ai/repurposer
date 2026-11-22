@@ -1,0 +1,4468 @@
+{
+  "cases": [
+    {
+      "project": "4bf2f8f0-ba99-44d4-bc09-9d12930f89b5",
+      "composition": "5d4752bc-4063-4033-be2d-e5787d398e06",
+      "inputs": [
+        {
+          "name": "产品图.png",
+          "model": "08",
+          "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+        },
+        {
+          "name": "产品图.png",
+          "model": "12",
+          "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ],
+      "versions": [
+        {
+          "id": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+          "n": 1,
+          "base": null,
+          "request": null,
+          "digest": "9cc5df4ce2609155c07d9c32b0056f87ca6a9bf689f87f99310988607d1eeea6"
+        },
+        {
+          "id": "449dad0f-c249-4a95-b754-e8ed793abf3e",
+          "n": 2,
+          "base": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+          "request": "7926a35b-4cd8-5bde-bd2f-ecd6524f830c",
+          "digest": "32d295ae7f1e0e4dc6e545b8cb95399d9c867e9c875cbec9484851183b0b5379"
+        },
+        {
+          "id": "e9527d29-1972-4a55-b2fe-837f878109f7",
+          "n": 3,
+          "base": "449dad0f-c249-4a95-b754-e8ed793abf3e",
+          "request": "bf7f59a1-3399-5097-946b-4dd37e784613",
+          "digest": "65e5f8b8dc6138e35b72a17378e84e3b27d2ace5ca4910934488c69d99ada9b5"
+        }
+      ],
+      "browser": {
+        "events": [
+          {
+            "path": "projects/4bf2f8f0-ba99-44d4-bc09-9d12930f89b5/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/4bf2f8f0-ba99-44d4-bc09-9d12930f89b5/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/4bf2f8f0-ba99-44d4-bc09-9d12930f89b5/assets",
+            "status": 201
+          },
+          {
+            "path": "projects/4bf2f8f0-ba99-44d4-bc09-9d12930f89b5/assets",
+            "status": 201
+          },
+          {
+            "path": "chat",
+            "status": 200,
+            "submitted": {
+              "project_id": "4bf2f8f0-ba99-44d4-bc09-9d12930f89b5",
+              "message": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+              "mentions": [],
+              "attachments": [
+                {
+                  "id": "5b351a10-6c41-4a00-ab2b-69dd1b7041f7",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 2184,
+                  "status": "uploaded"
+                },
+                {
+                  "id": "6753f606-5e6c-46a3-bd41-258163600a71",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 1922,
+                  "status": "uploaded"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "requests": [
+        {
+          "model_call_id": "e179839d-01e0-4f58-a58a-9f8172bd1f9a",
+          "turn_id": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:17:09.197901+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "5d4752bc-4063-4033-be2d-e5787d398e06",
+              "composition_version_id": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+              "content_digest": "9cc5df4ce2609155c07d9c32b0056f87ca6a9bf689f87f99310988607d1eeea6"
+            },
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 7998,
+            "completion_tokens": 80,
+            "total_tokens": 8078
+          },
+          "cached_tokens": 186,
+          "calls": [
+            {
+              "id": "call_01a203d527ba77d68458c842",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call_01a203d527d5732a81fa0f6f",
+              "name": "get_asset",
+              "args": {
+                "asset_id": "5b351a10-6c41-4a00-ab2b-69dd1b7041f7"
+              }
+            }
+          ],
+          "rate_card_usd": 0.0012477
+        },
+        {
+          "model_call_id": "464c3bb8-97c0-4d28-a3a4-fbc9a7279402",
+          "turn_id": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:17:10.985308+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "5d4752bc-4063-4033-be2d-e5787d398e06",
+              "composition_version_id": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+              "content_digest": "9cc5df4ce2609155c07d9c32b0056f87ca6a9bf689f87f99310988607d1eeea6"
+            },
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8773,
+            "completion_tokens": 124,
+            "total_tokens": 8897
+          },
+          "cached_tokens": 7998,
+          "calls": [
+            {
+              "id": "call_01a203d52d5a7579bd5ed6f3",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "5b351a10-6c41-4a00-ab2b-69dd1b7041f7",
+                  "6753f606-5e6c-46a3-bd41-258163600a71"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.00139035
+        },
+        {
+          "model_call_id": "e3ed3f55-ab72-4ee8-b2f5-290ecb8e30aa",
+          "turn_id": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:17:22.434791+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "5d4752bc-4063-4033-be2d-e5787d398e06",
+              "composition_version_id": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+              "content_digest": "9cc5df4ce2609155c07d9c32b0056f87ca6a9bf689f87f99310988607d1eeea6"
+            },
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9840,
+            "completion_tokens": 506,
+            "total_tokens": 10346
+          },
+          "cached_tokens": 186,
+          "calls": [
+            {
+              "id": "call_01a203d563317242bffe67be",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "37b2b365-5ceb-5f44-a919-d525edfc2827",
+                "start_seconds": 2,
+                "end_seconds": 3,
+                "position": "top_right",
+                "width_ratio": 0.28
+              }
+            },
+            {
+              "id": "call_01a203d563317242bffe67bf",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "f8b8c74e-41a4-522a-ba47-6c6da310e7f8",
+                "start_seconds": 3,
+                "end_seconds": 4,
+                "position": "top_right",
+                "width_ratio": 0.28
+              }
+            }
+          ],
+          "rate_card_usd": 0.0017795999999999999
+        },
+        {
+          "model_call_id": "17dd1b9f-c235-4075-b4aa-8a8951f07c28",
+          "turn_id": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:17:26.170816+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "5d4752bc-4063-4033-be2d-e5787d398e06",
+              "composition_version_id": "e9527d29-1972-4a55-b2fe-837f878109f7",
+              "content_digest": "65e5f8b8dc6138e35b72a17378e84e3b27d2ace5ca4910934488c69d99ada9b5"
+            },
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_7926a35b4cd85bdebd2fecd6524f830c",
+                "object_id": "obj_overlay_7926a35b4cd85bdebd2fecd6524f830c",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 3.0
+              },
+              {
+                "clip_id": "clp_overlay_bf7f59a133995097946b4dd37e784613",
+                "object_id": "obj_overlay_bf7f59a133995097946b4dd37e784613",
+                "kind": "image",
+                "start_seconds": 3.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": false
+        }
+      ],
+      "tool_receipts": {
+        "call_01a203d527ba77d68458c842": {
+          "name": "inspect_timeline",
+          "version_id": "c7658b2a-801a-4a44-bb9a-d01b4bd2020f",
+          "content_digest": "9cc5df4ce2609155c07d9c32b0056f87ca6a9bf689f87f99310988607d1eeea6"
+        },
+        "call_01a203d52d5a7579bd5ed6f3": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "37b2b365-5ceb-5f44-a919-d525edfc2827",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "f8b8c74e-41a4-522a-ba47-6c6da310e7f8",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203d563317242bffe67be": {
+          "name": "insert_visual"
+        },
+        "call_01a203d563317242bffe67bf": {
+          "name": "insert_visual",
+          "version_id": "e9527d29-1972-4a55-b2fe-837f878109f7",
+          "version": 3,
+          "base_version_id": "449dad0f-c249-4a95-b754-e8ed793abf3e",
+          "content_digest": "65e5f8b8dc6138e35b72a17378e84e3b27d2ace5ca4910934488c69d99ada9b5",
+          "changed_clips": [
+            {
+              "clip_id": "clp_overlay_bf7f59a133995097946b4dd37e784613",
+              "object_id": "obj_overlay_bf7f59a133995097946b4dd37e784613",
+              "kind": "image",
+              "track_id": "trk_overlay_bf7f59a133995097946b4dd37e784613",
+              "track_role": "effect",
+              "track_order": 3,
+              "scene_id": "demo",
+              "scene_number": 1,
+              "linked_group_id": null,
+              "start_seconds": 3.0,
+              "end_seconds": 4.0,
+              "source": {
+                "snapshot_id": "f8b8c74e-41a4-522a-ba47-6c6da310e7f8",
+                "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+                "source_range": null
+              },
+              "layout": {
+                "x": 446.4,
+                "y": 14.4,
+                "width": 179.20000000000002,
+                "height": 249.7939393939394
+              },
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "fit": "contain",
+              "animated_properties": []
+            }
+          ],
+          "replayed": false
+        }
+      },
+      "history": [
+        {
+          "seq": 1,
+          "id": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "role": "user",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "state": "failed",
+          "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。"
+        },
+        {
+          "seq": 2,
+          "id": "38be1743-51df-4dfe-b523-a373fce7cdbb",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203d527ba77d68458c842",
+            "call_index": 0,
+            "activity_id": "call_01a203d527ba77d68458c842"
+          }
+        },
+        {
+          "seq": 3,
+          "id": "494f3236-72c3-4285-a6ed-7015337e1cc3",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "activity": {
+            "key": "chat.inspectingDone.asset",
+            "status": "completed",
+            "call_id": "call_01a203d527d5732a81fa0f6f",
+            "call_index": 1,
+            "activity_id": "call_01a203d527d5732a81fa0f6f"
+          }
+        },
+        {
+          "seq": 5,
+          "id": "0ee333cd-6d69-42ad-999c-4b6d1281f733",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7"
+        },
+        {
+          "seq": 6,
+          "id": "7e519355-3cf0-43fc-ae0b-fea79f159fa7",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203d52d5a7579bd5ed6f3",
+            "activity_id": "d6831514dd9d4365aa69d57a950dd1f9"
+          }
+        },
+        {
+          "seq": 7,
+          "id": "6a86f939-5a11-411b-88cd-12646456fe1f",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:6753f606-5e6c-46a3-bd41-258163600a71"
+          }
+        },
+        {
+          "seq": 8,
+          "id": "298f2093-05a9-4974-891f-4a39f341485f",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:5b351a10-6c41-4a00-ab2b-69dd1b7041f7"
+          }
+        },
+        {
+          "seq": 9,
+          "id": "df612b24-57eb-4994-beca-6f617e5086b7",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203d563317242bffe67be",
+            "call_index": 0,
+            "activity_id": "call_01a203d563317242bffe67be"
+          }
+        },
+        {
+          "seq": 10,
+          "id": "24693a13-80b8-498f-b3cd-ab5d766d0b5b",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203d563317242bffe67bf",
+            "call_index": 1,
+            "activity_id": "call_01a203d563317242bffe67bf"
+          }
+        },
+        {
+          "seq": 11,
+          "id": "c97f78e9-e973-401c-a165-b55c28ce3717",
+          "role": "assistant",
+          "opening": "28edbbd5-e5d2-40fb-b304-d73bc9881ef7"
+        }
+      ],
+      "counts": {
+        "media_jobs": 0,
+        "export_jobs": 0,
+        "outputs": 0
+      },
+      "wallet_transactions": [],
+      "app_usage": []
+    },
+    {
+      "project": "82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84",
+      "composition": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+      "inputs": [
+        {
+          "name": "产品图.png",
+          "model": "08",
+          "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+        },
+        {
+          "name": "产品图.png",
+          "model": "12",
+          "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ],
+      "versions": [
+        {
+          "id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+          "n": 1,
+          "base": null,
+          "request": null,
+          "digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+        },
+        {
+          "id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+          "n": 2,
+          "base": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+          "request": "fba17b97-9fc2-5fab-9172-8978654636b4",
+          "digest": "cc51b15b5420e580c7a9b38fec2dc8732aba0984669ed36d9a86447609efbd58"
+        }
+      ],
+      "browser": {
+        "events": [
+          {
+            "path": "projects/82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84/assets",
+            "status": 201
+          },
+          {
+            "path": "projects/82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84/assets",
+            "status": 201
+          },
+          {
+            "path": "chat",
+            "status": 200,
+            "submitted": {
+              "project_id": "82de1a2b-8dca-4c4d-8dc2-9cbd7c062b84",
+              "message": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+              "mentions": [],
+              "attachments": [
+                {
+                  "id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 2184,
+                  "status": "uploaded"
+                },
+                {
+                  "id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 1922,
+                  "status": "uploaded"
+                }
+              ]
+            }
+          },
+          {
+            "path": "chat/messages/b0389cd9-5aa0-4094-ac92-ca9437f25bfd/answer",
+            "status": 200,
+            "submitted": {
+              "kind": "option",
+              "option_id": "b"
+            }
+          }
+        ],
+        "before_click_versions": [
+          "1ae48605-91d7-4f68-9c18-f8f6068b225d"
+        ],
+        "question_id": "b0389cd9-5aa0-4094-ac92-ca9437f25bfd",
+        "clicked": {
+          "id": "b",
+          "label": "只用 LAMP 12",
+          "description": "绿色圆角卡片 LAMP 12"
+        }
+      },
+      "requests": [
+        {
+          "model_call_id": "bad32022-9e19-45f0-a6e0-1a34d85fbd76",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:18.203613+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+              "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8108,
+            "completion_tokens": 182,
+            "total_tokens": 8290
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call_01a203d7372d7625890c1ce6",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call_01a203d7374a730c8837ad70",
+              "name": "get_asset",
+              "args": {
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956"
+              }
+            },
+            {
+              "id": "call_01a203d7379471efa2b6444b",
+              "name": "get_asset",
+              "args": {
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b"
+              }
+            }
+          ],
+          "rate_card_usd": 0.0013254
+        },
+        {
+          "model_call_id": "7b4e0626-114b-4394-92a8-7300a5ccf369",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:26.145783+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+              "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9027,
+            "completion_tokens": 133,
+            "total_tokens": 9160
+          },
+          "cached_tokens": 8108,
+          "calls": [
+            {
+              "id": "call_01a203d73d3976a6977777de",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "cf9367ed-31da-4027-940f-1fc698f81956",
+                  "56eaab05-814b-4530-b53a-82375324dc3b"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014338500000000002
+        },
+        {
+          "model_call_id": "162eb2cc-3361-4b2b-be57-07c905967403",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:33.552905+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+              "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 10096,
+            "completion_tokens": 660,
+            "total_tokens": 10756
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call_01a203d7659c71179b987616",
+              "name": "ask_user",
+              "args": {
+                "question": "2–4 秒叠加哪张产品图？",
+                "options": [
+                  {
+                    "id": "both",
+                    "label": "两张都用",
+                    "description": "LAMP 08 与 LAMP 12 都加入，与“两款绿色产品”的主题一致"
+                  },
+                  {
+                    "id": "a",
+                    "label": "只用 LAMP 08",
+                    "description": "竖版绿色海报 LAMP 08"
+                  },
+                  {
+                    "id": "b",
+                    "label": "只用 LAMP 12",
+                    "description": "绿色圆角卡片 LAMP 12"
+                  }
+                ],
+                "recommended_id": "both",
+                "pending_disposition": "answer"
+              }
+            }
+          ],
+          "rate_card_usd": 0.0019104
+        },
+        {
+          "model_call_id": "016b4eea-4056-423d-9168-0e5763c7dfcd",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:38.634925+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+              "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 2–4 秒叠加哪张产品图？\nUser answer: 只用 LAMP 12\nSelected option description: 绿色圆角卡片 LAMP 12",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8218,
+            "completion_tokens": 178,
+            "total_tokens": 8396
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call_01a203d76e9f71aa88abe9da",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_targets": [
+                  {
+                    "snapshot_id": "e6f2bc8c-d81f-5ecd-867b-24dee2810237"
+                  },
+                  {
+                    "snapshot_id": "cb3fb2ee-f6bf-58bc-a591-1cb7cbdb0ee0"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "call_01a203d76f6f70798eba0630",
+              "name": "inspect_timeline",
+              "args": {}
+            }
+          ],
+          "rate_card_usd": 0.0013395
+        },
+        {
+          "model_call_id": "a594ff26-7f68-4459-af4c-df0c13a500eb",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:42.326708+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+              "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 2–4 秒叠加哪张产品图？\nUser answer: 只用 LAMP 12\nSelected option description: 绿色圆角卡片 LAMP 12",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9891,
+            "completion_tokens": 214,
+            "total_tokens": 10105
+          },
+          "cached_tokens": 8218,
+          "calls": [
+            {
+              "id": "call_01a203d77f0a77299d291437",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "e6f2bc8c-d81f-5ecd-867b-24dee2810237",
+                "start_seconds": 2,
+                "end_seconds": 4,
+                "position": "top_right",
+                "width_ratio": 0.25
+              }
+            }
+          ],
+          "rate_card_usd": 0.00161205
+        },
+        {
+          "model_call_id": "0f6f884f-5676-408b-833a-4416c51464c9",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:44.289698+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+              "content_digest": "cc51b15b5420e580c7a9b38fec2dc8732aba0984669ed36d9a86447609efbd58"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 2–4 秒叠加哪张产品图？\nUser answer: 只用 LAMP 12\nSelected option description: 绿色圆角卡片 LAMP 12",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_fba17b979fc25fab91728978654636b4",
+                "object_id": "obj_overlay_fba17b979fc25fab91728978654636b4",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9611,
+            "completion_tokens": 126,
+            "total_tokens": 9737
+          },
+          "cached_tokens": 0,
+          "calls": [
+            {
+              "id": "chatcmpl-tool-b9dc234d408e4186",
+              "name": "preview_range",
+              "args": {
+                "kind": "range",
+                "start_seconds": 0,
+                "end_seconds": 6
+              }
+            }
+          ],
+          "rate_card_usd": 0.00151725
+        },
+        {
+          "model_call_id": "c41a0e85-ae2a-49c7-b846-7380b2f1f077",
+          "turn_id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:19:56.181107+00:00",
+          "tool_inventory_sha256": "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48",
+          "context": {
+            "selected": {
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+              "content_digest": "cc51b15b5420e580c7a9b38fec2dc8732aba0984669ed36d9a86447609efbd58"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "cf9367ed-31da-4027-940f-1fc698f81956",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "56eaab05-814b-4530-b53a-82375324dc3b",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 2–4 秒叠加哪张产品图？\nUser answer: 只用 LAMP 12\nSelected option description: 绿色圆角卡片 LAMP 12",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_fba17b979fc25fab91728978654636b4",
+                "object_id": "obj_overlay_fba17b979fc25fab91728978654636b4",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 14464,
+            "completion_tokens": 154,
+            "total_tokens": 14618
+          },
+          "cached_tokens": 176,
+          "calls": [],
+          "rate_card_usd": 0.0022619999999999997
+        }
+      ],
+      "tool_receipts": {
+        "call_01a203d7372d7625890c1ce6": {
+          "name": "inspect_timeline",
+          "version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+          "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+        },
+        "call_01a203d73d3976a6977777de": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "cb3fb2ee-f6bf-58bc-a591-1cb7cbdb0ee0",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "e6f2bc8c-d81f-5ecd-867b-24dee2810237",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203d76e9f71aa88abe9da": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "cb3fb2ee-f6bf-58bc-a591-1cb7cbdb0ee0",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "e6f2bc8c-d81f-5ecd-867b-24dee2810237",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203d76f6f70798eba0630": {
+          "name": "inspect_timeline",
+          "version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+          "content_digest": "7cdbc1d8ffe90ba75574dc6dd1afe7bc6a333cd722066f832e5bc112a173d32d"
+        },
+        "call_01a203d77f0a77299d291437": {
+          "name": "insert_visual",
+          "version_id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+          "version": 2,
+          "base_version_id": "1ae48605-91d7-4f68-9c18-f8f6068b225d",
+          "content_digest": "cc51b15b5420e580c7a9b38fec2dc8732aba0984669ed36d9a86447609efbd58",
+          "changed_clips": [
+            {
+              "clip_id": "clp_overlay_fba17b979fc25fab91728978654636b4",
+              "object_id": "obj_overlay_fba17b979fc25fab91728978654636b4",
+              "kind": "image",
+              "track_id": "trk_overlay_fba17b979fc25fab91728978654636b4",
+              "track_role": "effect",
+              "track_order": 2,
+              "scene_id": "demo",
+              "scene_number": 1,
+              "linked_group_id": null,
+              "start_seconds": 2.0,
+              "end_seconds": 4.0,
+              "source": {
+                "snapshot_id": "e6f2bc8c-d81f-5ecd-867b-24dee2810237",
+                "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+                "source_range": null
+              },
+              "layout": {
+                "x": 465.6,
+                "y": 14.4,
+                "width": 160.0,
+                "height": 223.03030303030303
+              },
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "fit": "contain",
+              "animated_properties": []
+            }
+          ],
+          "replayed": false
+        },
+        "chatcmpl-tool-b9dc234d408e4186": {
+          "name": "preview_range",
+          "version_id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+          "content_digest": "cc51b15b5420e580c7a9b38fec2dc8732aba0984669ed36d9a86447609efbd58",
+          "scope": {
+            "target": {
+              "kind": "range",
+              "start_seconds": 0.0,
+              "end_seconds": 6.0
+            },
+            "source_range_seconds": {
+              "start": 0.0,
+              "end": 6.0
+            },
+            "isolated_object": false,
+            "clip_ids": [
+              "clip_caption",
+              "clip_main",
+              "clp_overlay_fba17b979fc25fab91728978654636b4"
+            ]
+          },
+          "observed_mp4_sha256": "6339190dbab70ae1b4a702b3fe0ab88439cdbc4e72f9bcec5761b642c53c923b"
+        }
+      },
+      "history": [
+        {
+          "seq": 1,
+          "id": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "role": "user",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "state": "settled",
+          "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。"
+        },
+        {
+          "seq": 2,
+          "id": "77e48221-fa2f-4980-8045-1222b2f600a3",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203d7372d7625890c1ce6",
+            "call_index": 0,
+            "activity_id": "call_01a203d7372d7625890c1ce6"
+          }
+        },
+        {
+          "seq": 3,
+          "id": "e950931e-48b2-48d9-9d9e-b5c9ca32dd5f",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.inspectingDone.asset",
+            "status": "completed",
+            "call_id": "call_01a203d7374a730c8837ad70",
+            "call_index": 1,
+            "activity_id": "call_01a203d7374a730c8837ad70"
+          }
+        },
+        {
+          "seq": 4,
+          "id": "a6dd3bc6-6988-4a73-aa3d-b11d342575e0",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.inspectingDone.asset",
+            "status": "completed",
+            "call_id": "call_01a203d7379471efa2b6444b",
+            "call_index": 2,
+            "activity_id": "call_01a203d7379471efa2b6444b"
+          }
+        },
+        {
+          "seq": 6,
+          "id": "9bc98ed7-50d0-41e4-967b-af64dc94f941",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96"
+        },
+        {
+          "seq": 7,
+          "id": "8fd01d3f-6a47-47c1-9297-79fdff9cc891",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203d73d3976a6977777de",
+            "activity_id": "ad75d731d5e14a85bc4afbec01116e87"
+          }
+        },
+        {
+          "seq": 8,
+          "id": "61098476-c3e4-4769-9ae2-79a9f55135c8",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:56eaab05-814b-4530-b53a-82375324dc3b"
+          }
+        },
+        {
+          "seq": 9,
+          "id": "7c4152c9-e928-4079-b47a-9985e9049448",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:cf9367ed-31da-4027-940f-1fc698f81956"
+          }
+        },
+        {
+          "seq": 10,
+          "id": "b0389cd9-5aa0-4094-ac92-ca9437f25bfd",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "question": {
+            "kind": "question",
+            "slot": null,
+            "items": [],
+            "options": [
+              {
+                "id": "both",
+                "label": "两张都用",
+                "description": "LAMP 08 与 LAMP 12 都加入，与“两款绿色产品”的主题一致"
+              },
+              {
+                "id": "a",
+                "label": "只用 LAMP 08",
+                "description": "竖版绿色海报 LAMP 08"
+              },
+              {
+                "id": "b",
+                "label": "只用 LAMP 12",
+                "description": "绿色圆角卡片 LAMP 12"
+              }
+            ],
+            "question": "2–4 秒叠加哪张产品图？",
+            "default_path": "",
+            "group_digest": null,
+            "allow_freeform": true,
+            "recommended_id": "both"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "只用 LAMP 12",
+            "answers": [],
+            "option_id": "b",
+            "answered_at": "2026-11-22T15:19:38.531655Z",
+            "group_digest": null
+          }
+        },
+        {
+          "seq": 11,
+          "id": "d7b02a3b-8d5b-49ef-bb09-6e32d6e528b3",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203d76e9f71aa88abe9da",
+            "call_index": 0,
+            "activity_id": "call_01a203d76e9f71aa88abe9da"
+          }
+        },
+        {
+          "seq": 12,
+          "id": "c1ec1d84-f115-4179-9e0e-2edb899eb2b6",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203d76f6f70798eba0630",
+            "call_index": 1,
+            "activity_id": "call_01a203d76f6f70798eba0630"
+          }
+        },
+        {
+          "seq": 13,
+          "id": "d7260198-cbac-40db-a4e6-adadaef2fd30",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96"
+        },
+        {
+          "seq": 14,
+          "id": "7824e65e-8331-4d8f-8138-0bf009147331",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203d77f0a77299d291437",
+            "activity_id": "5e38929ddcdd4d61901b2ed4dc629664"
+          }
+        },
+        {
+          "seq": 15,
+          "id": "40f0f2f4-2aa3-4827-86e8-6398dad8577c",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "activity": {
+            "key": "chat.activity.previewRangeDone",
+            "status": "completed",
+            "call_id": "chatcmpl-tool-b9dc234d408e4186",
+            "activity_id": "68dabc4b3a7944e0b2247a91b4a39734"
+          }
+        },
+        {
+          "seq": 16,
+          "id": "ee42de4e-d724-47b7-a0aa-7f723230afb2",
+          "role": "assistant",
+          "opening": "f34a021f-eb4f-4b0f-97d7-4cb139f97e96",
+          "previews": [
+            {
+              "kind": "video_storyboard",
+              "composition_id": "4ba917c9-6ddd-4c5a-929d-08119ab74ae9",
+              "composition_version_id": "58b956a7-c71a-47d6-832f-0b164e0a9916",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 6.0,
+                "start_seconds": 0.0
+              },
+              "presented_message_id": "ee42de4e-d724-47b7-a0aa-7f723230afb2"
+            }
+          ]
+        }
+      ],
+      "counts": {
+        "media_jobs": 0,
+        "export_jobs": 0,
+        "outputs": 0
+      },
+      "wallet_transactions": [],
+      "app_usage": [
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 27231,
+          "output": 975,
+          "cached": 8364,
+          "usd": 0.00467
+        },
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 42184,
+          "output": 672,
+          "cached": 8522,
+          "usd": 0.006731
+        }
+      ]
+    },
+    {
+      "project": "909bfe53-044e-4db1-8f0d-fd7f2907f942",
+      "composition": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+      "inputs": [
+        {
+          "name": "产品图.png",
+          "model": "08",
+          "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+        },
+        {
+          "name": "产品图.png",
+          "model": "12",
+          "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ],
+      "versions": [
+        {
+          "id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "n": 1,
+          "base": null,
+          "request": null,
+          "digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+        },
+        {
+          "id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+          "n": 2,
+          "base": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "request": "da7dfbc1-2ee0-5c31-a412-8db48b2fd7f0",
+          "digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd"
+        }
+      ],
+      "browser": {
+        "events": [
+          {
+            "path": "projects/909bfe53-044e-4db1-8f0d-fd7f2907f942/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/909bfe53-044e-4db1-8f0d-fd7f2907f942/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/909bfe53-044e-4db1-8f0d-fd7f2907f942/assets",
+            "status": 201
+          },
+          {
+            "path": "projects/909bfe53-044e-4db1-8f0d-fd7f2907f942/assets",
+            "status": 201
+          },
+          {
+            "path": "chat",
+            "status": 200,
+            "submitted": {
+              "project_id": "909bfe53-044e-4db1-8f0d-fd7f2907f942",
+              "message": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+              "mentions": [],
+              "attachments": [
+                {
+                  "id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 2184,
+                  "status": "uploaded"
+                },
+                {
+                  "id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 1922,
+                  "status": "uploaded"
+                }
+              ]
+            }
+          },
+          {
+            "path": "chat/messages/cd05640d-36fe-4fc6-a8ae-3a220dc39028/answer",
+            "status": 200,
+            "submitted": {
+              "kind": "option",
+              "option_id": "2"
+            }
+          }
+        ],
+        "before_click_versions": [
+          "f90805f3-3e10-4660-b27a-09a50fb068ab"
+        ],
+        "question_id": "cd05640d-36fe-4fc6-a8ae-3a220dc39028",
+        "clicked": {
+          "id": "2",
+          "label": "附件2 LAMP 12（浅绿竖版）",
+          "description": "浅绿色竖版卡片，132×184，可放大显示更多细节"
+        },
+        "envelope": {
+          "id": "9c5683b3-3ac9-4bf3-a24e-1efae0fa9e6b",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "seq": 15,
+          "blocks": [
+            {
+              "kind": "video_storyboard",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.0,
+                "start_seconds": 2.0
+              },
+              "version": 2,
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "content_digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd",
+              "presentation_digest": "68fe9cfe53bff92f37637df1745fa50d1385f8b1472af404ec3a5ced6d5f5e7e",
+              "presented_message_id": "9c5683b3-3ac9-4bf3-a24e-1efae0fa9e6b",
+              "composition_version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7"
+            }
+          ]
+        },
+        "duplicate": {
+          "status": 200,
+          "response_tail": "event: answer.failed\ndata: {\"detail\": {\"code\": \"question.already_answered\"}, \"turn_id\": \"2bcf7916-2140-43e0-8c25-7513a9718da6\"}\n\n"
+        },
+        "versions_after": [
+          "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "90d3ff7d-014f-4090-9137-02c40d1f6de7"
+        ],
+        "live": {
+          "slots": 1,
+          "playback_seconds": [
+            2.019858,
+            2.17008
+          ],
+          "receipts": [
+            "Inspect timeline · Succeeded",
+            "list project media · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": null
+        },
+        "reload": {
+          "slots": 1,
+          "playback_seconds": [
+            2.001961,
+            2.154694
+          ],
+          "receipts": [
+            "Inspect timeline · Succeeded",
+            "list project media · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": null
+        }
+      },
+      "requests": [
+        {
+          "model_call_id": "f474ac6c-9697-49ab-9050-7ab656e8988c",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:27:36.000066+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+              "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8122,
+            "completion_tokens": 49,
+            "total_tokens": 8171
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call-aaa04a39-8ba2-479c-ba6d-90aed0e42185",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call-efb29ace-7903-41ba-9493-9cb0f943152e",
+              "name": "list_project_media",
+              "args": {}
+            }
+          ],
+          "rate_card_usd": 0.0012477
+        },
+        {
+          "model_call_id": "05ad0dc4-acae-4145-8ae0-5857f730a9c6",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:27:41.255446+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+              "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9021,
+            "completion_tokens": 169,
+            "total_tokens": 9190
+          },
+          "cached_tokens": 8064,
+          "calls": [
+            {
+              "id": "call-ae27d63d-f19f-4fe3-ae71-57ca9b98963a",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                  "dce1ceca-c01b-44b3-add0-e512ed2032f5"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014545499999999998
+        },
+        {
+          "model_call_id": "6cee582e-dd00-4acf-90dc-cbe502939d3b",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:27:53.602279+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+              "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9889,
+            "completion_tokens": 324,
+            "total_tokens": 10213
+          },
+          "cached_tokens": 7936,
+          "calls": [
+            {
+              "id": "call-faddd118-9de6-4530-bda1-1b5eea8de9f2",
+              "name": "ask_user",
+              "args": {
+                "question": "第 2–4 秒叠加哪一张绿色产品图？",
+                "options": [
+                  {
+                    "id": "1",
+                    "label": "附件1 LAMP 08（深绿横版）",
+                    "description": "深绿色横版卡片，220×120，放在画面右上角更协调"
+                  },
+                  {
+                    "id": "2",
+                    "label": "附件2 LAMP 12（浅绿竖版）",
+                    "description": "浅绿色竖版卡片，132×184，可放大显示更多细节"
+                  }
+                ],
+                "recommended_id": "1",
+                "default_path": "默认使用附件1（深绿 LAMP 08），叠加在右上角并播放预览"
+              }
+            }
+          ],
+          "rate_card_usd": 0.00167775
+        },
+        {
+          "model_call_id": "ba32f934-a7b0-47cf-b37d-d7b81b06d138",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:29:42.240528+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+              "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒叠加哪一张绿色产品图？\nUser answer: 附件2 LAMP 12（浅绿竖版）\nSelected option description: 浅绿色竖版卡片，132×184，可放大显示更多细节",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8262,
+            "completion_tokens": 147,
+            "total_tokens": 8409
+          },
+          "cached_tokens": 186,
+          "calls": [
+            {
+              "id": "call_01a203e0a559753f9346b4d2",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call_01a203e0a572750082eee4e2",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "dce1ceca-c01b-44b3-add0-e512ed2032f5"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.0013275000000000001
+        },
+        {
+          "model_call_id": "302ae6fa-1e0e-4de3-86e3-3bd9647b5033",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:29:45.541683+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+              "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒叠加哪一张绿色产品图？\nUser answer: 附件2 LAMP 12（浅绿竖版）\nSelected option description: 浅绿色竖版卡片，132×184，可放大显示更多细节",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9333,
+            "completion_tokens": 226,
+            "total_tokens": 9559
+          },
+          "cached_tokens": 8262,
+          "calls": [
+            {
+              "id": "call_01a203e0b27e773ead85bc20",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "bad3346d-0f33-503e-9dad-330d257b6f6f",
+                "start_seconds": 2,
+                "end_seconds": 4,
+                "position": "top_right",
+                "width_ratio": 0.22
+              }
+            }
+          ],
+          "rate_card_usd": 0.00153555
+        },
+        {
+          "model_call_id": "6bafb418-a62b-4bc3-9432-6383fc8f999f",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:29:47.317093+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+              "content_digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒叠加哪一张绿色产品图？\nUser answer: 附件2 LAMP 12（浅绿竖版）\nSelected option description: 浅绿色竖版卡片，132×184，可放大显示更多细节",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+                "object_id": "obj_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9578,
+            "completion_tokens": 74,
+            "total_tokens": 9652
+          },
+          "cached_tokens": 0,
+          "calls": [
+            {
+              "id": "call_322dc94513b941f78dc9a909",
+              "name": "preview_range",
+              "args": {
+                "start_seconds": 2,
+                "end_seconds": 4
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014811
+        },
+        {
+          "model_call_id": "7a1b93c8-fe24-4859-9385-68ae4d13c649",
+          "turn_id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:30:02.921871+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+              "content_digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒叠加哪一张绿色产品图？\nUser answer: 附件2 LAMP 12（浅绿竖版）\nSelected option description: 浅绿色竖版卡片，132×184，可放大显示更多细节",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+                "object_id": "obj_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 13098,
+            "completion_tokens": 180,
+            "total_tokens": 13278
+          },
+          "cached_tokens": 5704,
+          "calls": [],
+          "rate_card_usd": 0.0020727
+        }
+      ],
+      "tool_receipts": {
+        "call-aaa04a39-8ba2-479c-ba6d-90aed0e42185": {
+          "name": "inspect_timeline",
+          "version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+        },
+        "call-ae27d63d-f19f-4fe3-ae71-57ca9b98963a": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "13c8e9ac-b3a6-5c8b-8ff3-8e3d900be85e",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "asset_id": "390be146-115e-42b4-9b5e-fe8af44d4bd6",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "bad3346d-0f33-503e-9dad-330d257b6f6f",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e0a559753f9346b4d2": {
+          "name": "inspect_timeline",
+          "version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "content_digest": "4fe610823b46e6cf6953b9b4d282e7b9122ab9e3e18a11043857fe17d1278319"
+        },
+        "call_01a203e0a572750082eee4e2": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "bad3346d-0f33-503e-9dad-330d257b6f6f",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e0b27e773ead85bc20": {
+          "name": "insert_visual",
+          "version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+          "version": 2,
+          "base_version_id": "f90805f3-3e10-4660-b27a-09a50fb068ab",
+          "content_digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd",
+          "changed_clips": [
+            {
+              "clip_id": "clp_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+              "object_id": "obj_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+              "kind": "image",
+              "track_id": "trk_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+              "track_role": "effect",
+              "track_order": 2,
+              "scene_id": "demo",
+              "scene_number": 1,
+              "linked_group_id": null,
+              "start_seconds": 2.0,
+              "end_seconds": 4.0,
+              "source": {
+                "snapshot_id": "bad3346d-0f33-503e-9dad-330d257b6f6f",
+                "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+                "source_range": null
+              },
+              "layout": {
+                "x": 484.8,
+                "y": 14.4,
+                "width": 140.8,
+                "height": 196.26666666666668
+              },
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "fit": "contain",
+              "animated_properties": []
+            }
+          ],
+          "replayed": false
+        },
+        "call_322dc94513b941f78dc9a909": {
+          "name": "preview_range",
+          "version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+          "content_digest": "4f9a103a961757d779a8ac7f0e6a4d15e84e2cab59ef580c7f6e782e05db72bd",
+          "scope": {
+            "target": {
+              "kind": "range",
+              "start_seconds": 2.0,
+              "end_seconds": 4.0
+            },
+            "source_range_seconds": {
+              "start": 2.0,
+              "end": 4.0
+            },
+            "isolated_object": false,
+            "clip_ids": [
+              "clip_caption",
+              "clip_main",
+              "clp_overlay_da7dfbc12ee05c31a4128db48b2fd7f0"
+            ]
+          },
+          "observed_mp4_sha256": "c63449959159c6dc4b350a61082bd231edc54faff5208db1f35a9aca14b35292"
+        }
+      },
+      "history": [
+        {
+          "seq": 1,
+          "id": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "role": "user",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "state": "settled",
+          "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。"
+        },
+        {
+          "seq": 2,
+          "id": "f5526206-53b6-4c44-a1db-33e6f596017b",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call-aaa04a39-8ba2-479c-ba6d-90aed0e42185",
+            "call_index": 0,
+            "activity_id": "call-aaa04a39-8ba2-479c-ba6d-90aed0e42185"
+          }
+        },
+        {
+          "seq": 3,
+          "id": "41059a7e-fb13-4a04-8e33-56ccde3d976d",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.inspectingDone.projectMedia",
+            "status": "completed",
+            "call_id": "call-efb29ace-7903-41ba-9493-9cb0f943152e",
+            "call_index": 1,
+            "activity_id": "call-efb29ace-7903-41ba-9493-9cb0f943152e"
+          }
+        },
+        {
+          "seq": 5,
+          "id": "ed99357f-ed13-4a2f-b8fd-efadba056ef8",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6"
+        },
+        {
+          "seq": 6,
+          "id": "415efd57-975f-456f-8a5d-aaecfddc9c5e",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call-ae27d63d-f19f-4fe3-ae71-57ca9b98963a",
+            "activity_id": "8509dbeabe6b45a18eb03103ca5e0ba1"
+          }
+        },
+        {
+          "seq": 7,
+          "id": "5df2b668-0f56-4273-9f2b-08c2e86da44b",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:390be146-115e-42b4-9b5e-fe8af44d4bd6"
+          }
+        },
+        {
+          "seq": 8,
+          "id": "934888f3-7243-46e7-949b-3b7d629891bf",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:dce1ceca-c01b-44b3-add0-e512ed2032f5"
+          }
+        },
+        {
+          "seq": 9,
+          "id": "cd05640d-36fe-4fc6-a8ae-3a220dc39028",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "question": {
+            "kind": "question",
+            "slot": null,
+            "items": [],
+            "options": [
+              {
+                "id": "1",
+                "label": "附件1 LAMP 08（深绿横版）",
+                "description": "深绿色横版卡片，220×120，放在画面右上角更协调"
+              },
+              {
+                "id": "2",
+                "label": "附件2 LAMP 12（浅绿竖版）",
+                "description": "浅绿色竖版卡片，132×184，可放大显示更多细节"
+              }
+            ],
+            "question": "第 2–4 秒叠加哪一张绿色产品图？",
+            "default_path": "默认使用附件1（深绿 LAMP 08），叠加在右上角并播放预览",
+            "group_digest": null,
+            "allow_freeform": true,
+            "recommended_id": "1"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "附件2 LAMP 12（浅绿竖版）",
+            "answers": [],
+            "option_id": "2",
+            "answered_at": "2026-11-22T15:29:42.136515Z",
+            "group_digest": null
+          }
+        },
+        {
+          "seq": 10,
+          "id": "8c7d2059-5fe4-47d8-8e05-8067307fa4e0",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203e0a559753f9346b4d2",
+            "call_index": 0,
+            "activity_id": "call_01a203e0a559753f9346b4d2"
+          }
+        },
+        {
+          "seq": 11,
+          "id": "ebfb8d3c-557b-4a0a-bedd-77f120d47ae1",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203e0a572750082eee4e2",
+            "call_index": 1,
+            "activity_id": "call_01a203e0a572750082eee4e2"
+          }
+        },
+        {
+          "seq": 12,
+          "id": "2824b23c-c473-4bc8-8bbc-4d1cb358c146",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6"
+        },
+        {
+          "seq": 13,
+          "id": "1dbac472-42ce-41ac-8f56-f6b121ded5f2",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203e0b27e773ead85bc20",
+            "activity_id": "9d519bd7a26547348bc45a4d2d415603"
+          }
+        },
+        {
+          "seq": 14,
+          "id": "242640b1-76d9-4c68-a7d2-84ec12d6e539",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "activity": {
+            "key": "chat.activity.previewRangeDone",
+            "status": "completed",
+            "call_id": "call_322dc94513b941f78dc9a909",
+            "activity_id": "92c5b2da12424a83a8768f34a9a30927"
+          }
+        },
+        {
+          "seq": 15,
+          "id": "9c5683b3-3ac9-4bf3-a24e-1efae0fa9e6b",
+          "role": "assistant",
+          "opening": "2bcf7916-2140-43e0-8c25-7513a9718da6",
+          "previews": [
+            {
+              "kind": "video_storyboard",
+              "composition_id": "27cc74df-a9ac-4cdf-9a3a-164d2b82be8a",
+              "composition_version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.0,
+                "start_seconds": 2.0
+              },
+              "presented_message_id": "9c5683b3-3ac9-4bf3-a24e-1efae0fa9e6b"
+            }
+          ]
+        }
+      ],
+      "counts": {
+        "media_jobs": 0,
+        "export_jobs": 0,
+        "outputs": 0
+      },
+      "wallet_transactions": [],
+      "app_usage": [
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 27032,
+          "output": 542,
+          "cached": 16128,
+          "usd": 0.00438
+        },
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 40271,
+          "output": 627,
+          "cached": 14152,
+          "usd": 0.006417
+        }
+      ],
+      "requested_playback_exact": true,
+      "retained": {
+        "original_tracks": 2,
+        "original_settings_scenes_sources_equal": true,
+        "range_ticks": {
+          "end": 360000,
+          "start": 180000
+        },
+        "source_snapshot": "bad3346d-0f33-503e-9dad-330d257b6f6f",
+        "source_asset": "dce1ceca-c01b-44b3-add0-e512ed2032f5",
+        "source_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+        "clip_id": "clp_overlay_da7dfbc12ee05c31a4128db48b2fd7f0",
+        "object_id": "obj_overlay_da7dfbc12ee05c31a4128db48b2fd7f0"
+      },
+      "same_call_replay": {
+        "id": "call_01a203e0b27e773ead85bc20",
+        "version_id": "90d3ff7d-014f-4090-9137-02c40d1f6de7",
+        "replayed": true
+      },
+      "pixels_audio": {
+        "observed_preview_sha256": "c63449959159c6dc4b350a61082bd231edc54faff5208db1f35a9aca14b35292",
+        "baseline_sha256": "344923c97ed8982e9af79fdb8f820fb02b0c67d5a35dbe63d3045dbd0f6a4720",
+        "frames": 60,
+        "caption_band_mae": 0.31728038194444447,
+        "audio_correlation": 1.0,
+        "audio_samples": 98304
+      }
+    },
+    {
+      "project": "2f38c10c-ae16-49c4-905b-bb03ce00fbec",
+      "composition": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+      "inputs": [
+        {
+          "name": "产品图.png",
+          "model": "08",
+          "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+        },
+        {
+          "name": "产品图.png",
+          "model": "12",
+          "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ],
+      "versions": [
+        {
+          "id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "n": 1,
+          "base": null,
+          "request": null,
+          "digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+        },
+        {
+          "id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+          "n": 2,
+          "base": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "request": "0cd75644-17d6-5e00-ab6e-725596fe1db3",
+          "digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c"
+        }
+      ],
+      "browser": {
+        "events": [
+          {
+            "path": "projects/2f38c10c-ae16-49c4-905b-bb03ce00fbec/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/2f38c10c-ae16-49c4-905b-bb03ce00fbec/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/2f38c10c-ae16-49c4-905b-bb03ce00fbec/assets",
+            "status": 201
+          },
+          {
+            "path": "projects/2f38c10c-ae16-49c4-905b-bb03ce00fbec/assets",
+            "status": 201
+          },
+          {
+            "path": "chat",
+            "status": 200,
+            "submitted": {
+              "project_id": "2f38c10c-ae16-49c4-905b-bb03ce00fbec",
+              "message": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+              "mentions": [],
+              "attachments": [
+                {
+                  "id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 2184,
+                  "status": "uploaded"
+                },
+                {
+                  "id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 1922,
+                  "status": "uploaded"
+                }
+              ]
+            }
+          },
+          {
+            "path": "chat/messages/8e74cd96-57f9-471a-9993-9caea2cc11ac/answer",
+            "status": 200,
+            "submitted": {
+              "kind": "option",
+              "option_id": "opt2"
+            }
+          }
+        ],
+        "before_click_versions": [
+          "778862ea-8dd6-4832-8c57-4b41c854d0dc"
+        ],
+        "question_id": "8e74cd96-57f9-471a-9993-9caea2cc11ac",
+        "clicked": {
+          "id": "opt2",
+          "label": "附件 2：LAMP 12 绿色卡片",
+          "description": "132×184 的绿色圆角卡片，文字 LAMP 12"
+        },
+        "envelope": {
+          "id": "4cec3c20-f953-47f7-aa71-46246774ef5e",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "seq": 15,
+          "blocks": [
+            {
+              "kind": "video_storyboard",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.5,
+                "start_seconds": 1.5
+              },
+              "version": 2,
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "content_digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c",
+              "presentation_digest": "897ff7eb07a404c2ead2d937d1bc9916234a7b692fb92e675b08bdb019f5b1d9",
+              "presented_message_id": "4cec3c20-f953-47f7-aa71-46246774ef5e",
+              "composition_version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8"
+            }
+          ]
+        },
+        "duplicate": {
+          "status": 200,
+          "response_tail": "event: answer.failed\ndata: {\"detail\": {\"code\": \"question.already_answered\"}, \"turn_id\": \"458f3df6-a688-4a42-b14c-0c3c2fec5c35\"}\n\n"
+        },
+        "versions_after": [
+          "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8"
+        ],
+        "live": {
+          "slots": 1,
+          "playback_seconds": [
+            1.514591,
+            1.650988
+          ],
+          "receipts": [
+            "Inspect timeline · Succeeded",
+            "list project media · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": 0
+        },
+        "reload": {
+          "slots": 1,
+          "playback_seconds": [
+            1.509635,
+            1.648497
+          ],
+          "receipts": [
+            "Inspect timeline · Succeeded",
+            "list project media · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": 0
+        }
+      },
+      "requests": [
+        {
+          "model_call_id": "a9096fe2-c052-4df4-9158-dccb230a526d",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:19.755354+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+              "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8116,
+            "completion_tokens": 99,
+            "total_tokens": 8215
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call_58039c31958449f298ea1562",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call_3394a438b2a94b8f80a51106",
+              "name": "list_project_media",
+              "args": {}
+            }
+          ],
+          "rate_card_usd": 0.0012768
+        },
+        {
+          "model_call_id": "d8a47c4d-cc81-4f13-bacf-65d23548f525",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:21.830280+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+              "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9063,
+            "completion_tokens": 165,
+            "total_tokens": 9228
+          },
+          "cached_tokens": 8064,
+          "calls": [
+            {
+              "id": "call_4afc390886f44933b9888e1d",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                  "bd8ff3bc-d619-482a-9cda-458aae690b87"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014584499999999998
+        },
+        {
+          "model_call_id": "d79f8088-2b2c-471b-b86a-bf43c05af5d0",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:30.906519+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+              "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 10220,
+            "completion_tokens": 355,
+            "total_tokens": 10575
+          },
+          "cached_tokens": 187,
+          "calls": [
+            {
+              "id": "call_01a203e2553770f5ab0b5e49",
+              "name": "ask_user",
+              "args": {
+                "question": "第 2–4 秒要叠加哪一张绿色产品图？",
+                "options": [
+                  {
+                    "id": "opt1",
+                    "label": "附件 1：LAMP 08 深绿灯体",
+                    "description": "220×120 的深绿色灯体照片，文字 LAMP 08"
+                  },
+                  {
+                    "id": "opt2",
+                    "label": "附件 2：LAMP 12 绿色卡片",
+                    "description": "132×184 的绿色圆角卡片，文字 LAMP 12"
+                  }
+                ],
+                "recommended_id": "opt1"
+              }
+            }
+          ],
+          "rate_card_usd": 0.001746
+        },
+        {
+          "model_call_id": "85a4d934-fead-46a6-af98-bc2f7ddb6cfe",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:36.133836+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+              "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒要叠加哪一张绿色产品图？\nUser answer: 附件 2：LAMP 12 绿色卡片\nSelected option description: 132×184 的绿色圆角卡片，文字 LAMP 12",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8247,
+            "completion_tokens": 185,
+            "total_tokens": 8432
+          },
+          "cached_tokens": 128,
+          "calls": [
+            {
+              "id": "call_01a203e2616e7752883c9724",
+              "name": "inspect_timeline",
+              "args": {}
+            },
+            {
+              "id": "call_01a203e261847528be0b1291",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "bd8ff3bc-d619-482a-9cda-458aae690b87"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.0013480500000000002
+        },
+        {
+          "model_call_id": "fcca7331-f510-4c1f-8b60-5a2759f512b8",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:38.676723+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+              "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒要叠加哪一张绿色产品图？\nUser answer: 附件 2：LAMP 12 绿色卡片\nSelected option description: 132×184 的绿色圆角卡片，文字 LAMP 12",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9348,
+            "completion_tokens": 153,
+            "total_tokens": 9501
+          },
+          "cached_tokens": 8247,
+          "calls": [
+            {
+              "id": "call_01a203e26b4a7621a9d9b6d2",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "447f7a27-7fad-55f7-869b-af840098a57d",
+                "start_seconds": 2,
+                "end_seconds": 4,
+                "position": "top_right",
+                "width_ratio": 0.21
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014939999999999999
+        },
+        {
+          "model_call_id": "a741fe6d-ded9-4186-918e-fe94abe2d34f",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:40.144205+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+              "content_digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒要叠加哪一张绿色产品图？\nUser answer: 附件 2：LAMP 12 绿色卡片\nSelected option description: 132×184 的绿色圆角卡片，文字 LAMP 12",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_0cd7564417d65e00ab6e725596fe1db3",
+                "object_id": "obj_overlay_0cd7564417d65e00ab6e725596fe1db3",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9514,
+            "completion_tokens": 45,
+            "total_tokens": 9559
+          },
+          "cached_tokens": 7552,
+          "calls": [
+            {
+              "id": "call_d6f611b1a55e45938e921647",
+              "name": "preview_range",
+              "args": {
+                "start_seconds": 1.5,
+                "end_seconds": 4.5
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014540999999999998
+        },
+        {
+          "model_call_id": "c676b662-f8f5-43bc-8c86-23f15c9bf68d",
+          "turn_id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:31:49.887796+00:00",
+          "tool_inventory_sha256": "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726",
+          "context": {
+            "selected": {
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+              "content_digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒要叠加哪一张绿色产品图？\nUser answer: 附件 2：LAMP 12 绿色卡片\nSelected option description: 132×184 的绿色圆角卡片，文字 LAMP 12",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_0cd7564417d65e00ab6e725596fe1db3",
+                "object_id": "obj_overlay_0cd7564417d65e00ab6e725596fe1db3",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 13375,
+            "completion_tokens": 168,
+            "total_tokens": 13543
+          },
+          "cached_tokens": 7636,
+          "calls": [],
+          "rate_card_usd": 0.0021070499999999996
+        }
+      ],
+      "tool_receipts": {
+        "call_58039c31958449f298ea1562": {
+          "name": "inspect_timeline",
+          "version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+        },
+        "call_4afc390886f44933b9888e1d": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "21c711bd-fe73-57a4-b99a-5b2aab4ef39c",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "asset_id": "d135cc73-e02c-4902-a0c3-83cd9eb49325",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "447f7a27-7fad-55f7-869b-af840098a57d",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e2616e7752883c9724": {
+          "name": "inspect_timeline",
+          "version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "content_digest": "96b2ca0ac54f969b405747bd487009287966196ca7f7db32ee89a4da9173a148"
+        },
+        "call_01a203e261847528be0b1291": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "447f7a27-7fad-55f7-869b-af840098a57d",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e26b4a7621a9d9b6d2": {
+          "name": "insert_visual",
+          "version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+          "version": 2,
+          "base_version_id": "778862ea-8dd6-4832-8c57-4b41c854d0dc",
+          "content_digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c",
+          "changed_clips": [
+            {
+              "clip_id": "clp_overlay_0cd7564417d65e00ab6e725596fe1db3",
+              "object_id": "obj_overlay_0cd7564417d65e00ab6e725596fe1db3",
+              "kind": "image",
+              "track_id": "trk_overlay_0cd7564417d65e00ab6e725596fe1db3",
+              "track_role": "effect",
+              "track_order": 2,
+              "scene_id": "demo",
+              "scene_number": 1,
+              "linked_group_id": null,
+              "start_seconds": 2.0,
+              "end_seconds": 4.0,
+              "source": {
+                "snapshot_id": "447f7a27-7fad-55f7-869b-af840098a57d",
+                "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+                "source_range": null
+              },
+              "layout": {
+                "x": 491.20000000000005,
+                "y": 14.4,
+                "width": 134.4,
+                "height": 187.34545454545457
+              },
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "fit": "contain",
+              "animated_properties": []
+            }
+          ],
+          "replayed": false
+        },
+        "call_d6f611b1a55e45938e921647": {
+          "name": "preview_range",
+          "version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+          "content_digest": "32d17be4a8bbe867852e59745a4ebc5cdcdac3c49eac1db2c913b4c86f736d7c",
+          "scope": {
+            "target": {
+              "kind": "range",
+              "start_seconds": 1.5,
+              "end_seconds": 4.5
+            },
+            "source_range_seconds": {
+              "start": 1.5,
+              "end": 4.5
+            },
+            "isolated_object": false,
+            "clip_ids": [
+              "clip_caption",
+              "clip_main",
+              "clp_overlay_0cd7564417d65e00ab6e725596fe1db3"
+            ]
+          },
+          "observed_mp4_sha256": "e1ad7e08c8097b8aff7657b70a24cb7b1fe326a93b913af85cf2987432d6c2c9"
+        }
+      },
+      "history": [
+        {
+          "seq": 1,
+          "id": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "role": "user",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "state": "settled",
+          "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。"
+        },
+        {
+          "seq": 2,
+          "id": "ef0e9e1f-6b3e-47d5-9e25-4b57105aa223",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_58039c31958449f298ea1562",
+            "call_index": 0,
+            "activity_id": "call_58039c31958449f298ea1562"
+          }
+        },
+        {
+          "seq": 3,
+          "id": "b10cf33e-7cb6-431d-be91-2ea502d617ed",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.inspectingDone.projectMedia",
+            "status": "completed",
+            "call_id": "call_3394a438b2a94b8f80a51106",
+            "call_index": 1,
+            "activity_id": "call_3394a438b2a94b8f80a51106"
+          }
+        },
+        {
+          "seq": 5,
+          "id": "47aa42c8-a951-4758-a35f-de88bc208954",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35"
+        },
+        {
+          "seq": 6,
+          "id": "f5981285-3a1c-4989-bfa8-12f5b71117ac",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_4afc390886f44933b9888e1d",
+            "activity_id": "3c5dafd9fbc54cb89a5a8b1266132f65"
+          }
+        },
+        {
+          "seq": 7,
+          "id": "73cd5238-2e37-422e-b475-c8e60a18083d",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:bd8ff3bc-d619-482a-9cda-458aae690b87"
+          }
+        },
+        {
+          "seq": 8,
+          "id": "7e3ddba5-7cfa-4589-a6e9-659d2dc30a55",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:d135cc73-e02c-4902-a0c3-83cd9eb49325"
+          }
+        },
+        {
+          "seq": 9,
+          "id": "8e74cd96-57f9-471a-9993-9caea2cc11ac",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "question": {
+            "kind": "question",
+            "slot": null,
+            "items": [],
+            "options": [
+              {
+                "id": "opt1",
+                "label": "附件 1：LAMP 08 深绿灯体",
+                "description": "220×120 的深绿色灯体照片，文字 LAMP 08"
+              },
+              {
+                "id": "opt2",
+                "label": "附件 2：LAMP 12 绿色卡片",
+                "description": "132×184 的绿色圆角卡片，文字 LAMP 12"
+              }
+            ],
+            "question": "第 2–4 秒要叠加哪一张绿色产品图？",
+            "default_path": "",
+            "group_digest": null,
+            "allow_freeform": true,
+            "recommended_id": "opt1"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "附件 2：LAMP 12 绿色卡片",
+            "answers": [],
+            "option_id": "opt2",
+            "answered_at": "2026-11-22T15:31:36.027191Z",
+            "group_digest": null
+          }
+        },
+        {
+          "seq": 10,
+          "id": "98dddda5-b47a-4fee-bc48-abf2b50d2b41",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203e2616e7752883c9724",
+            "call_index": 0,
+            "activity_id": "call_01a203e2616e7752883c9724"
+          }
+        },
+        {
+          "seq": 11,
+          "id": "80dd2aef-6b1b-42cc-9ef7-cf26f2bb5e86",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203e261847528be0b1291",
+            "call_index": 1,
+            "activity_id": "call_01a203e261847528be0b1291"
+          }
+        },
+        {
+          "seq": 12,
+          "id": "da3b23ef-61c9-469e-9561-65456bbc4c10",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35"
+        },
+        {
+          "seq": 13,
+          "id": "a99411aa-e160-463e-995d-fd6ff66c1f71",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203e26b4a7621a9d9b6d2",
+            "activity_id": "7ed9a2fb009c4cbf9a56f01f74c16923"
+          }
+        },
+        {
+          "seq": 14,
+          "id": "ac07c806-3cdd-4fbc-9638-ab17af96c979",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "activity": {
+            "key": "chat.activity.previewRangeDone",
+            "status": "completed",
+            "call_id": "call_d6f611b1a55e45938e921647",
+            "activity_id": "226e9420516e48e1a8646051b9062e41"
+          }
+        },
+        {
+          "seq": 15,
+          "id": "4cec3c20-f953-47f7-aa71-46246774ef5e",
+          "role": "assistant",
+          "opening": "458f3df6-a688-4a42-b14c-0c3c2fec5c35",
+          "previews": [
+            {
+              "kind": "video_storyboard",
+              "composition_id": "d5509b1d-b9db-4365-8ce0-f45170284dc5",
+              "composition_version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.5,
+                "start_seconds": 1.5
+              },
+              "presented_message_id": "4cec3c20-f953-47f7-aa71-46246774ef5e"
+            }
+          ]
+        }
+      ],
+      "counts": {
+        "media_jobs": 0,
+        "export_jobs": 0,
+        "outputs": 0
+      },
+      "wallet_transactions": [],
+      "app_usage": [
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 27399,
+          "output": 619,
+          "cached": 8379,
+          "usd": 0.004481
+        },
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 40484,
+          "output": 551,
+          "cached": 23563,
+          "usd": 0.006403
+        }
+      ],
+      "requested_playback_exact": false,
+      "retained": {
+        "original_tracks": 2,
+        "original_settings_scenes_sources_equal": true,
+        "range_ticks": {
+          "end": 360000,
+          "start": 180000
+        },
+        "source_snapshot": "447f7a27-7fad-55f7-869b-af840098a57d",
+        "source_asset": "bd8ff3bc-d619-482a-9cda-458aae690b87",
+        "source_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+        "clip_id": "clp_overlay_0cd7564417d65e00ab6e725596fe1db3",
+        "object_id": "obj_overlay_0cd7564417d65e00ab6e725596fe1db3"
+      },
+      "same_call_replay": {
+        "id": "call_01a203e26b4a7621a9d9b6d2",
+        "version_id": "f2883dd7-fa5c-4b0d-a150-60aafd5a9ed8",
+        "replayed": true
+      },
+      "pixels_audio": {
+        "observed_preview_sha256": "e1ad7e08c8097b8aff7657b70a24cb7b1fe326a93b913af85cf2987432d6c2c9",
+        "baseline_sha256": "940c35be373e6cab22b38e89b460169db511b07b898131527e1266cd4c9505af",
+        "frames": 90,
+        "caption_band_mae": 0.4386160300925926,
+        "audio_correlation": 1.0,
+        "audio_samples": 146432
+      }
+    },
+    {
+      "project": "69174ffe-84c7-4749-9acd-012d4f37adbc",
+      "composition": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+      "inputs": [
+        {
+          "name": "产品图.png",
+          "model": "08",
+          "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+        },
+        {
+          "name": "产品图.png",
+          "model": "12",
+          "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ],
+      "versions": [
+        {
+          "id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "n": 1,
+          "base": null,
+          "request": null,
+          "digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+        },
+        {
+          "id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+          "n": 2,
+          "base": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "request": "716f9b46-127b-5265-8dc8-2e8e1dd78304",
+          "digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260"
+        }
+      ],
+      "browser": {
+        "events": [
+          {
+            "path": "projects/69174ffe-84c7-4749-9acd-012d4f37adbc/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/69174ffe-84c7-4749-9acd-012d4f37adbc/assets/upload-url",
+            "status": 200
+          },
+          {
+            "path": "projects/69174ffe-84c7-4749-9acd-012d4f37adbc/assets",
+            "status": 201
+          },
+          {
+            "path": "projects/69174ffe-84c7-4749-9acd-012d4f37adbc/assets",
+            "status": 201
+          },
+          {
+            "path": "chat",
+            "status": 200,
+            "submitted": {
+              "project_id": "69174ffe-84c7-4749-9acd-012d4f37adbc",
+              "message": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+              "mentions": [],
+              "attachments": [
+                {
+                  "id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 2184,
+                  "status": "uploaded"
+                },
+                {
+                  "id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                  "name": "产品图.png",
+                  "type": "image",
+                  "size": 1922,
+                  "status": "uploaded"
+                }
+              ]
+            }
+          },
+          {
+            "path": "chat/messages/c5a9d450-5df0-40de-ba63-42f9e6f3fcec/answer",
+            "status": 200,
+            "submitted": {
+              "kind": "option",
+              "option_id": "a"
+            }
+          }
+        ],
+        "before_click_versions": [
+          "b5756071-fbfc-4451-866c-8ccb6cd28e0d"
+        ],
+        "question_id": "c5a9d450-5df0-40de-ba63-42f9e6f3fcec",
+        "clicked": {
+          "id": "a",
+          "label": "附件 2（亮绿 LAMP 12 卡片）",
+          "description": "亮绿色圆角产品卡，绿色特征最明显，竖版 132×184"
+        },
+        "envelope": {
+          "id": "90a53675-c1e8-4e0c-bd04-5bf0118d7055",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "seq": 16,
+          "blocks": [
+            {
+              "kind": "video_storyboard",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.0,
+                "start_seconds": 2.0
+              },
+              "version": 2,
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "content_digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260",
+              "presentation_digest": "46a3a78feb479aaa2b34f1a67e4bca359f7c1a2150882eb45dfc77595e446dd2",
+              "presented_message_id": "90a53675-c1e8-4e0c-bd04-5bf0118d7055",
+              "composition_version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27"
+            }
+          ]
+        },
+        "duplicate": {
+          "status": 200,
+          "response_tail": "event: answer.failed\ndata: {\"detail\": {\"code\": \"question.already_answered\"}, \"turn_id\": \"746ca701-fe2e-4465-99e4-767d4d11a1f3\"}\n\n"
+        },
+        "versions_after": [
+          "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27"
+        ],
+        "live": {
+          "slots": 1,
+          "playback_seconds": [
+            2.012748,
+            2.155762
+          ],
+          "receipts": [
+            "get asset · Succeeded",
+            "get asset · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": 0
+        },
+        "reload": {
+          "slots": 1,
+          "playback_seconds": [
+            2.003398,
+            2.142627
+          ],
+          "receipts": [
+            "get asset · Succeeded",
+            "get asset · Succeeded",
+            "Inspect timeline · Succeeded",
+            "prepare video materials · Succeeded",
+            "prepare video materials · Succeeded",
+            "Inspect timeline · Succeeded",
+            "Insert image · Succeeded",
+            "Preview range · Succeeded"
+          ],
+          "question_buttons": 0
+        }
+      },
+      "requests": [
+        {
+          "model_call_id": "a93160e1-783c-4d84-86e8-acd2b189171f",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:31.319242+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+              "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8139,
+            "completion_tokens": 168,
+            "total_tokens": 8307
+          },
+          "cached_tokens": 5504,
+          "calls": [
+            {
+              "id": "call-a35b325b-c0d6-4ae1-ad12-35ace840c8bb",
+              "name": "get_asset",
+              "args": {
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4"
+              }
+            },
+            {
+              "id": "call-26510e62-2f1d-466a-9d0e-5f49549492eb",
+              "name": "get_asset",
+              "args": {
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1"
+              }
+            },
+            {
+              "id": "call-0fe60344-d5a6-418d-8bd7-a8a9f7a3ee06",
+              "name": "inspect_timeline",
+              "args": {}
+            }
+          ],
+          "rate_card_usd": 0.0013216500000000002
+        },
+        {
+          "model_call_id": "1c0e943a-4b79-4935-a057-39c5215c0e3d",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:34.974112+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+              "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9043,
+            "completion_tokens": 142,
+            "total_tokens": 9185
+          },
+          "cached_tokens": 8192,
+          "calls": [
+            {
+              "id": "call-55ebd284-77d2-4755-9bf9-ae1dcecc325e",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "dfa50d04-89d0-4832-87a4-825493297ff4",
+                  "707e381f-178c-4cef-9220-21a99123b4e1"
+                ]
+              }
+            }
+          ],
+          "rate_card_usd": 0.00144165
+        },
+        {
+          "model_call_id": "281dd460-746a-41a1-83d8-34f4785e6816",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:46.496745+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+              "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 10179,
+            "completion_tokens": 391,
+            "total_tokens": 10570
+          },
+          "cached_tokens": 187,
+          "calls": [
+            {
+              "id": "call_01a203e552bb767f9bcb9045",
+              "name": "ask_user",
+              "args": {
+                "question": "第 2–4 秒插入哪一张绿色产品图片？",
+                "options": [
+                  {
+                    "id": "a",
+                    "label": "附件 2（亮绿 LAMP 12 卡片）",
+                    "description": "亮绿色圆角产品卡，绿色特征最明显，竖版 132×184"
+                  },
+                  {
+                    "id": "b",
+                    "label": "附件 1（深绿 LAMP 08 包装图）",
+                    "description": "深墨绿色柱状包装，绿色偏暗，横版 220×120"
+                  }
+                ],
+                "recommended_id": "a"
+              }
+            }
+          ],
+          "rate_card_usd": 0.00176145
+        },
+        {
+          "model_call_id": "f617ab1b-2c62-4c9d-8d5e-1bd209799aa3",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:52.347830+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+              "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒插入哪一张绿色产品图片？\nUser answer: 附件 2（亮绿 LAMP 12 卡片）\nSelected option description: 亮绿色圆角产品卡，绿色特征最明显，竖版 132×184",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 8278,
+            "completion_tokens": 149,
+            "total_tokens": 8427
+          },
+          "cached_tokens": 176,
+          "calls": [
+            {
+              "id": "call_01a203e55fc3772da724d5c4",
+              "name": "prepare_video_materials",
+              "args": {
+                "material_asset_ids": [
+                  "707e381f-178c-4cef-9220-21a99123b4e1"
+                ]
+              }
+            },
+            {
+              "id": "call_01a203e55fc475ef9986e1ba",
+              "name": "inspect_timeline",
+              "args": {}
+            }
+          ],
+          "rate_card_usd": 0.0013311
+        },
+        {
+          "model_call_id": "06a7554a-ab75-4f40-bb70-b88bb672beaa",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:54.933932+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+              "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒插入哪一张绿色产品图片？\nUser answer: 附件 2（亮绿 LAMP 12 卡片）\nSelected option description: 亮绿色圆角产品卡，绿色特征最明显，竖版 132×184",
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9344,
+            "completion_tokens": 211,
+            "total_tokens": 9555
+          },
+          "cached_tokens": 8278,
+          "calls": [
+            {
+              "id": "call_01a203e56b32704692169c5f",
+              "name": "insert_visual",
+              "args": {
+                "source_id": "23a819e4-24ee-511e-ae39-c2893710049c",
+                "start_seconds": 2,
+                "end_seconds": 4,
+                "position": "top_right",
+                "width_ratio": 0.25
+              }
+            }
+          ],
+          "rate_card_usd": 0.0015282
+        },
+        {
+          "model_call_id": "18e89598-3e8c-4d3e-b451-ddd951709333",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:34:56.746702+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+              "content_digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒插入哪一张绿色产品图片？\nUser answer: 附件 2（亮绿 LAMP 12 卡片）\nSelected option description: 亮绿色圆角产品卡，绿色特征最明显，竖版 132×184",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_716f9b46127b52658dc82e8e1dd78304",
+                "object_id": "obj_overlay_716f9b46127b52658dc82e8e1dd78304",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0,
+                "preview_range": {
+                  "start_seconds": 2.0,
+                  "end_seconds": 4.0
+                }
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 9584,
+            "completion_tokens": 41,
+            "total_tokens": 9625
+          },
+          "cached_tokens": 186,
+          "calls": [
+            {
+              "id": "call_01a203e56f95760db25ff32b",
+              "name": "preview_range",
+              "args": {
+                "start_seconds": 2,
+                "end_seconds": 4
+              }
+            }
+          ],
+          "rate_card_usd": 0.0014622
+        },
+        {
+          "model_call_id": "840a6adf-2436-4869-896c-8d2eba740bff",
+          "turn_id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "provider": "minimax",
+          "model": "MiniMax-M3.1-Flash",
+          "started_at": "2026-11-22T15:35:04.353956+00:00",
+          "tool_inventory_sha256": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+          "context": {
+            "selected": {
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+              "content_digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260"
+            },
+            "opening_attachments": [
+              {
+                "position": 1,
+                "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+                "type": "image",
+                "name": "产品图.png"
+              },
+              {
+                "position": 2,
+                "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+                "type": "image",
+                "name": "产品图.png"
+              }
+            ],
+            "clarified_request": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。\n\nQuestion: 第 2–4 秒插入哪一张绿色产品图片？\nUser answer: 附件 2（亮绿 LAMP 12 卡片）\nSelected option description: 亮绿色圆角产品卡，绿色特征最明显，竖版 132×184",
+            "recently_edited_clips": [
+              {
+                "clip_id": "clp_overlay_716f9b46127b52658dc82e8e1dd78304",
+                "object_id": "obj_overlay_716f9b46127b52658dc82e8e1dd78304",
+                "kind": "image",
+                "start_seconds": 2.0,
+                "end_seconds": 4.0,
+                "preview_range": {
+                  "start_seconds": 2.0,
+                  "end_seconds": 4.0
+                }
+              }
+            ],
+            "delivery_scope": "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+          },
+          "response_received": true,
+          "tokens": {
+            "prompt_tokens": 13072,
+            "completion_tokens": 202,
+            "total_tokens": 13274
+          },
+          "cached_tokens": 5702,
+          "calls": [],
+          "rate_card_usd": 0.002082
+        }
+      ],
+      "tool_receipts": {
+        "call-0fe60344-d5a6-418d-8bd7-a8a9f7a3ee06": {
+          "name": "inspect_timeline",
+          "version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+        },
+        "call-55ebd284-77d2-4755-9bf9-ae1dcecc325e": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "0e13719c-ccd6-5187-9a92-446fb4f17e02",
+              "digest": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1",
+              "kind": "image",
+              "asset_id": "dfa50d04-89d0-4832-87a4-825493297ff4",
+              "width": 220,
+              "height": 120
+            },
+            {
+              "snapshot_id": "23a819e4-24ee-511e-ae39-c2893710049c",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e55fc3772da724d5c4": {
+          "name": "prepare_video_materials",
+          "resources": [
+            {
+              "snapshot_id": "23a819e4-24ee-511e-ae39-c2893710049c",
+              "digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+              "kind": "image",
+              "asset_id": "707e381f-178c-4cef-9220-21a99123b4e1",
+              "width": 132,
+              "height": 184
+            }
+          ]
+        },
+        "call_01a203e55fc475ef9986e1ba": {
+          "name": "inspect_timeline",
+          "version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "content_digest": "1460904e175ad7b3926bc691fc63ee3faa36ae5261ef4e7d97291aca74fc6d94"
+        },
+        "call_01a203e56b32704692169c5f": {
+          "name": "insert_visual",
+          "version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+          "version": 2,
+          "base_version_id": "b5756071-fbfc-4451-866c-8ccb6cd28e0d",
+          "content_digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260",
+          "changed_clips": [
+            {
+              "clip_id": "clp_overlay_716f9b46127b52658dc82e8e1dd78304",
+              "object_id": "obj_overlay_716f9b46127b52658dc82e8e1dd78304",
+              "kind": "image",
+              "track_id": "trk_overlay_716f9b46127b52658dc82e8e1dd78304",
+              "track_role": "effect",
+              "track_order": 2,
+              "scene_id": "demo",
+              "scene_number": 1,
+              "linked_group_id": null,
+              "start_seconds": 2.0,
+              "end_seconds": 4.0,
+              "source": {
+                "snapshot_id": "23a819e4-24ee-511e-ae39-c2893710049c",
+                "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+                "source_range": null
+              },
+              "layout": {
+                "x": 465.6,
+                "y": 14.4,
+                "width": 160.0,
+                "height": 223.03030303030303
+              },
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "fit": "contain",
+              "animated_properties": []
+            }
+          ],
+          "replayed": false
+        },
+        "call_01a203e56f95760db25ff32b": {
+          "name": "preview_range",
+          "version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+          "content_digest": "a2b10d9b5e11347826cdfd83e15f41dcd00906299872978901687e188757b260",
+          "scope": {
+            "target": {
+              "kind": "range",
+              "start_seconds": 2.0,
+              "end_seconds": 4.0
+            },
+            "source_range_seconds": {
+              "start": 2.0,
+              "end": 4.0
+            },
+            "isolated_object": false,
+            "clip_ids": [
+              "clip_caption",
+              "clip_main",
+              "clp_overlay_716f9b46127b52658dc82e8e1dd78304"
+            ]
+          },
+          "observed_mp4_sha256": "bb1a46b37e1de0a50845e1aeef124ca291764cc5175bec1ddc508c7d2a9dfc49"
+        }
+      },
+      "history": [
+        {
+          "seq": 1,
+          "id": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "role": "user",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "state": "settled",
+          "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。"
+        },
+        {
+          "seq": 2,
+          "id": "0fb0e014-9804-41ea-8294-0760533e2722",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.inspectingDone.asset",
+            "status": "completed",
+            "call_id": "call-a35b325b-c0d6-4ae1-ad12-35ace840c8bb",
+            "call_index": 0,
+            "activity_id": "call-a35b325b-c0d6-4ae1-ad12-35ace840c8bb"
+          }
+        },
+        {
+          "seq": 3,
+          "id": "8388ddee-8d78-473f-858a-c1e6f3edb674",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.inspectingDone.asset",
+            "status": "completed",
+            "call_id": "call-26510e62-2f1d-466a-9d0e-5f49549492eb",
+            "call_index": 1,
+            "activity_id": "call-26510e62-2f1d-466a-9d0e-5f49549492eb"
+          }
+        },
+        {
+          "seq": 4,
+          "id": "f45cdc70-e264-440b-8bb9-ff4167136bc7",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call-0fe60344-d5a6-418d-8bd7-a8a9f7a3ee06",
+            "call_index": 2,
+            "activity_id": "call-0fe60344-d5a6-418d-8bd7-a8a9f7a3ee06"
+          }
+        },
+        {
+          "seq": 6,
+          "id": "293c5898-c0b3-4b76-a2a9-d66f685a9930",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3"
+        },
+        {
+          "seq": 7,
+          "id": "12d5d58c-a3a0-407a-931a-389c45707f8b",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call-55ebd284-77d2-4755-9bf9-ae1dcecc325e",
+            "activity_id": "b88bc7692ac243ff872ee014dc983bb5"
+          }
+        },
+        {
+          "seq": 8,
+          "id": "e485fdda-c7be-4a01-9482-7e189598e119",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:707e381f-178c-4cef-9220-21a99123b4e1"
+          }
+        },
+        {
+          "seq": 9,
+          "id": "5ab56cf7-cba3-490c-8add-0a62727b244b",
+          "role": "assistant",
+          "opening": null,
+          "activity": {
+            "key": "chat.material.readingDoneProgress",
+            "status": "completed",
+            "activity_id": "asset-reading:dfa50d04-89d0-4832-87a4-825493297ff4"
+          }
+        },
+        {
+          "seq": 10,
+          "id": "c5a9d450-5df0-40de-ba63-42f9e6f3fcec",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "question": {
+            "kind": "question",
+            "slot": null,
+            "items": [],
+            "options": [
+              {
+                "id": "a",
+                "label": "附件 2（亮绿 LAMP 12 卡片）",
+                "description": "亮绿色圆角产品卡，绿色特征最明显，竖版 132×184"
+              },
+              {
+                "id": "b",
+                "label": "附件 1（深绿 LAMP 08 包装图）",
+                "description": "深墨绿色柱状包装，绿色偏暗，横版 220×120"
+              }
+            ],
+            "question": "第 2–4 秒插入哪一张绿色产品图片？",
+            "default_path": "",
+            "group_digest": null,
+            "allow_freeform": true,
+            "recommended_id": "a"
+          },
+          "answer": {
+            "kind": "option",
+            "text": "附件 2（亮绿 LAMP 12 卡片）",
+            "answers": [],
+            "option_id": "a",
+            "answered_at": "2026-11-22T15:34:52.246380Z",
+            "group_digest": null
+          }
+        },
+        {
+          "seq": 11,
+          "id": "0c8e2793-d98d-4b6f-9173-86be465d3d39",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.videoMaterialsDone",
+            "status": "completed",
+            "call_id": "call_01a203e55fc3772da724d5c4",
+            "call_index": 0,
+            "activity_id": "call_01a203e55fc3772da724d5c4"
+          }
+        },
+        {
+          "seq": 12,
+          "id": "d9ffd7cd-ba16-4d57-9848-18065c588e86",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.inspectClipsDone",
+            "status": "completed",
+            "call_id": "call_01a203e55fc475ef9986e1ba",
+            "call_index": 1,
+            "activity_id": "call_01a203e55fc475ef9986e1ba"
+          }
+        },
+        {
+          "seq": 13,
+          "id": "10c2d24d-42ac-4d76-853e-217f91647181",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3"
+        },
+        {
+          "seq": 14,
+          "id": "cfc82709-d198-4a77-8a8f-91b4fc071a9c",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.insertVisualDone",
+            "status": "completed",
+            "call_id": "call_01a203e56b32704692169c5f",
+            "activity_id": "ce844d1be7b745ec952f1d823713f700"
+          }
+        },
+        {
+          "seq": 15,
+          "id": "68adc99b-6a24-4df9-9fe0-5d8f97dcc1be",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "activity": {
+            "key": "chat.activity.previewRangeDone",
+            "status": "completed",
+            "call_id": "call_01a203e56f95760db25ff32b",
+            "activity_id": "2a5761bc7b8a48ad899a0e6c2fd545a8"
+          }
+        },
+        {
+          "seq": 16,
+          "id": "90a53675-c1e8-4e0c-bd04-5bf0118d7055",
+          "role": "assistant",
+          "opening": "746ca701-fe2e-4465-99e4-767d4d11a1f3",
+          "previews": [
+            {
+              "kind": "video_storyboard",
+              "composition_id": "64aead46-08df-49b1-8bf0-2bbe2dbe812c",
+              "composition_version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+              "scrub": {
+                "kind": "range",
+                "end_seconds": 4.0,
+                "start_seconds": 2.0
+              },
+              "presented_message_id": "90a53675-c1e8-4e0c-bd04-5bf0118d7055"
+            }
+          ]
+        }
+      ],
+      "counts": {
+        "media_jobs": 0,
+        "export_jobs": 0,
+        "outputs": 0
+      },
+      "wallet_transactions": [],
+      "app_usage": [
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 27361,
+          "output": 701,
+          "cached": 13883,
+          "usd": 0.004525
+        },
+        {
+          "model": "MiniMax-M3.1-Flash",
+          "input": 40278,
+          "output": 603,
+          "cached": 14342,
+          "usd": 0.006403
+        }
+      ],
+      "requested_playback_exact": true,
+      "retained": {
+        "original_tracks": 2,
+        "original_settings_scenes_sources_equal": true,
+        "range_ticks": {
+          "end": 360000,
+          "start": 180000
+        },
+        "source_snapshot": "23a819e4-24ee-511e-ae39-c2893710049c",
+        "source_asset": "707e381f-178c-4cef-9220-21a99123b4e1",
+        "source_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c",
+        "clip_id": "clp_overlay_716f9b46127b52658dc82e8e1dd78304",
+        "object_id": "obj_overlay_716f9b46127b52658dc82e8e1dd78304"
+      },
+      "same_call_replay": {
+        "id": "call_01a203e56b32704692169c5f",
+        "version_id": "86e6c4f2-8e9e-45c8-9f31-5b46ca2d5a27",
+        "replayed": true
+      },
+      "pixels_audio": {
+        "observed_preview_sha256": "bb1a46b37e1de0a50845e1aeef124ca291764cc5175bec1ddc508c7d2a9dfc49",
+        "baseline_sha256": "344923c97ed8982e9af79fdb8f820fb02b0c67d5a35dbe63d3045dbd0f6a4720",
+        "frames": 60,
+        "caption_band_mae": 0.3883479456018519,
+        "audio_correlation": 1.0,
+        "audio_samples": 98304
+      }
+    }
+  ],
+  "schema_catalog": {
+    "b98df2030a0422b550ea028962adedea73586a1f86ec1c3809e43b8099fb4873": {
+      "name": "ask_user",
+      "description": "询问一个确定目标所需的问题。",
+      "parameters": {
+        "$defs": {
+          "Option": {
+            "additionalProperties": false,
+            "description": "结构化问题中的一个选项。",
+            "properties": {
+              "id": {
+                "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                "title": "Id",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "description": {
+                "default": "",
+                "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                "title": "Description",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "title": "Option",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+        "properties": {
+          "question": {
+            "description": "仅用界面语言写问题或问题组标题，不附引言或默认路径说明。",
+            "title": "Question",
+            "type": "string"
+          },
+          "options": {
+            "description": "从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
+            "items": {
+              "$ref": "#/$defs/Option"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "allow_freeform": {
+            "default": true,
+            "title": "Allow Freeform",
+            "type": "boolean"
+          },
+          "recommended_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
+            "title": "Recommended Id"
+          },
+          "default_path": {
+            "default": "",
+            "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+            "title": "Default Path",
+            "type": "string"
+          },
+          "pending_disposition": {
+            "default": "none",
+            "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+            "enum": [
+              "answer",
+              "skip",
+              "none"
+            ],
+            "title": "Pending Disposition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "PlanAskArgs",
+        "type": "object"
+      }
+    },
+    "30b33364e929c997669ec84132fc27604a08136aaf6fc4a43defe2a9501295d7": {
+      "name": "prepare_video_materials",
+      "description": "准备所选网页，并导入选定素材、已交付视频或曲库音乐以供剪辑。等待 URL 采集完成。结果含当前所有者范围内的 SourceSnapshot 标识，可用作工具参数。视频默认提供有限的代表静帧，不能据此声称连续审片。仅用户明确要求连续检查源视频时用 video_observation=continuous。search_music 或 select_music 返回的 Music ID 传入 material_music_ids，不传 material_asset_ids。只返回已完成资源或明确失败，不返回待处理。复用已导入的媒体，后续设计被拒绝不影响已准备好的资源。只读现有媒体，不合成或渲染。",
+      "parameters": {
+        "$defs": {
+          "PrepareVideoMaterialTarget": {
+            "additionalProperties": false,
+            "description": "需要获取确切事实或媒体的一个已列出来源。",
+            "properties": {
+              "snapshot_id": {
+                "format": "uuid",
+                "title": "Snapshot Id",
+                "type": "string"
+              },
+              "view_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "View Id"
+              },
+              "element_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Element Id"
+              }
+            },
+            "required": [
+              "snapshot_id"
+            ],
+            "title": "PrepareVideoMaterialTarget",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "在分步编排 Composition 前，固定明确选定的素材。",
+        "properties": {
+          "material_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "逐字复制用户提供的新网页 URL，已固定的网页无需重新采集。",
+            "title": "Material Urls"
+          },
+          "material_asset_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "用户或当前作品明确选中的、归当前用户所有的素材。",
+            "title": "Material Asset Ids"
+          },
+          "material_output_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "明确用作新素材、归当前用户所有的已交付视频 Output。",
+            "title": "Material Output Ids"
+          },
+          "material_music_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "search_music 返回的曲库音乐 ID，不填 Asset ID。导入公开或用户自有曲库的已有音频，以供剪辑；返回确切的 SourceSnapshot 标识，不合成或渲染。",
+            "title": "Material Music Ids"
+          },
+          "material_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/PrepareVideoMaterialTarget"
+                },
+                "maxItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "附上并返回选定的现有快照、视图或元素的确切事实。普通图片或视频快照省略 view_id 和 element_id。",
+            "title": "Material Targets"
+          },
+          "video_observation": {
+            "default": "representative_frames",
+            "description": "默认 representative_frames 为每段视频附最多三张真实源帧。仅当用户明确要求连续检查符合条件的短源视频播放或运动时，才用 continuous。已交付的 Output 用 review_video。",
+            "enum": [
+              "representative_frames",
+              "continuous"
+            ],
+            "title": "Video Observation",
+            "type": "string"
+          }
+        },
+        "title": "PrepareVideoMaterialsArgs",
+        "type": "object"
+      }
+    },
+    "18745dd2269272517fd94009403d3a649b4a267f31123669651e0121a5d57de0": {
+      "name": "insert_visual",
+      "description": "Place a fixed project image above the existing footage for a timeline window. Use the returned object ID for later position or scale changes.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "source_id": {
+            "description": "Fixed image snapshot returned by prepare_video_materials.",
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "start_seconds": {
+            "description": "Inclusive composition time.",
+            "minimum": 0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "description": "Exclusive composition time.",
+            "exclusiveMinimum": 0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "position": {
+            "default": "top_right",
+            "enum": [
+              "top_left",
+              "top_right",
+              "bottom_left",
+              "bottom_right"
+            ],
+            "title": "Position",
+            "type": "string"
+          },
+          "width_ratio": {
+            "default": 0.25,
+            "description": "Fraction of canvas width; preserves image proportions.",
+            "exclusiveMinimum": 0.05,
+            "maximum": 1,
+            "title": "Width Ratio",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source_id",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "InsertVisualArgs",
+        "type": "object"
+      }
+    },
+    "0f2e2c9adc74f1321231da8e6edea249fc07f63b6ce05dacc9993bbc186e51c6": {
+      "name": "preview_range",
+      "description": "Play the current composition across all tracks and cuts. Specify start and end seconds from the beginning (up to 12 seconds).",
+      "parameters": {
+        "additionalProperties": false,
+        "description": "A bounded playback window in composition time.",
+        "properties": {
+          "kind": {
+            "const": "range",
+            "default": "range",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start_seconds": {
+            "minimum": 0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0,
+            "title": "End Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "VideoRangeScrubTarget",
+        "type": "object"
+      }
+    },
+    "dcdcdff232b1bd87bc995ff723afdae56479e55276fd1f52b1b2dfdcd73de16d": {
+      "name": "preview_range",
+      "description": "Play the requested window across all tracks. For a local edit, use the changed clip’s start and end unless the user requests another range. Times are absolute seconds (up to 12 seconds per preview).",
+      "parameters": {
+        "additionalProperties": false,
+        "description": "A bounded playback window in composition time.",
+        "properties": {
+          "kind": {
+            "const": "range",
+            "default": "range",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start_seconds": {
+            "minimum": 0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0,
+            "title": "End Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "VideoRangeScrubTarget",
+        "type": "object"
+      }
+    },
+    "e26ef91ad17172a93d92f9fbf2b03bcc341c6c895028c898bb7b24dd02582226": {
+      "name": "preview_range",
+      "description": "Publish this exact playback window in Chat, across all tracks. To play a local edit, copy its preview_range from recently_edited_clips. Include lead-in or tail only when the user wants a wider window. Times are absolute seconds (up to 12 seconds).",
+      "parameters": {
+        "additionalProperties": false,
+        "description": "A bounded playback window in composition time.",
+        "properties": {
+          "kind": {
+            "const": "range",
+            "default": "range",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start_seconds": {
+            "minimum": 0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0,
+            "title": "End Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "VideoRangeScrubTarget",
+        "type": "object"
+      }
+    }
+  },
+  "inventories": {
+    "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48": [
+      "ask_user",
+      "answer",
+      "get_asset",
+      "list_project_media",
+      "prepare_video_materials",
+      "deliver_video",
+      "extend_still",
+      "export_video",
+      "bind_clip_source",
+      "insert_visual",
+      "insert_audio",
+      "generate_image",
+      "generate_voice",
+      "generate_music",
+      "inspect_timeline",
+      "inspect_clip",
+      "remove_clip",
+      "split_clip",
+      "trim_clip",
+      "move_clip",
+      "set_keyframe",
+      "translate",
+      "scale",
+      "preview_range",
+      "review_video",
+      "align_recording",
+      "get_narration_alignment",
+      "annotate_narration",
+      "read_conversation_context"
+    ],
+    "df0d7577eb064e8eec1fa08bbb2082a0de92177a87aac40cb41218e07a1a4726": [
+      "ask_user",
+      "answer",
+      "get_asset",
+      "list_project_media",
+      "prepare_video_materials",
+      "deliver_video",
+      "extend_still",
+      "export_video",
+      "bind_clip_source",
+      "insert_visual",
+      "insert_audio",
+      "generate_image",
+      "generate_voice",
+      "generate_music",
+      "inspect_timeline",
+      "inspect_clip",
+      "remove_clip",
+      "split_clip",
+      "trim_clip",
+      "move_clip",
+      "set_keyframe",
+      "translate",
+      "scale",
+      "preview_range",
+      "review_video",
+      "align_recording",
+      "get_narration_alignment",
+      "annotate_narration",
+      "read_conversation_context"
+    ],
+    "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348": [
+      "ask_user",
+      "answer",
+      "get_asset",
+      "list_project_media",
+      "prepare_video_materials",
+      "deliver_video",
+      "extend_still",
+      "export_video",
+      "bind_clip_source",
+      "insert_visual",
+      "insert_audio",
+      "generate_image",
+      "generate_voice",
+      "generate_music",
+      "inspect_timeline",
+      "inspect_clip",
+      "remove_clip",
+      "split_clip",
+      "trim_clip",
+      "move_clip",
+      "set_keyframe",
+      "translate",
+      "scale",
+      "preview_range",
+      "review_video",
+      "align_recording",
+      "get_narration_alignment",
+      "annotate_narration",
+      "read_conversation_context"
+    ]
+  },
+  "prior_output_readback": {
+    "id": "4943e94e-37d9-5f00-96f0-4f828f0b4b47",
+    "sha256": "452e74b0705d680dc8238426100765c1a1aaaed7dec8c0ce015670e2a0adcec3"
+  },
+  "early_stop": {
+    "turn": "8c7af1a0-a337-4009-bba2-5aa2ec6fb827",
+    "state": "retracted",
+    "history_rows": 0,
+    "versions": 3,
+    "export_jobs": 0,
+    "events": {
+      "turn.started": 1,
+      "assistant.thinking": 5
+    },
+    "question": null,
+    "model_call": "4413dea6-3f8d-4cb1-86db-199fb863269c",
+    "provider": "minimax",
+    "model": "MiniMax-M3.1-Flash",
+    "input": 8086,
+    "output": 44,
+    "cached": 176,
+    "rate_card_usd": 0.0012392999999999998,
+    "app_usage": [],
+    "new_credit_entries": 0
+  },
+  "prior_crash_history_read_twice": {
+    "original_opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+    "recovery_row": "773957a1-3478-4264-ae88-8bb3b423b0a3",
+    "source": "acceptance.json",
+    "state": "failed",
+    "independent_crash_trial": false
+  }
+}

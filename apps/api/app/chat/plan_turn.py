@@ -1243,6 +1243,7 @@ async def run_plan_turn(
             "mode": "plan",
             "skill": turn.skill,
             "user_text": request.message,
+            "attachments": request.attachments,
             "asset_mentions": {m.id: m.label for m in request.mentions or [] if m.type == "asset"},
             "source_text": source_text,
             "video_confirmation": confirmation,

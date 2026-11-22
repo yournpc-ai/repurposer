@@ -699,7 +699,7 @@ def _composition_resource(*, suffix="one", provenance=None):
 def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=False,
                  package_sessions=None, user_text="review the draft", pending_question=None,
                  active_repair=None, mode="plan", iteration=None, interim_prose_count=0,
-                 new_result=False, version_saved=False, new_result_tool=None, asset_mentions=None):
+                 new_result=False, version_saved=False, new_result_tool=None, asset_mentions=None, attachments=()):
     from app.chat.prompts import assemble_video_round
 
     return assemble_video_round({
@@ -719,6 +719,7 @@ def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=Fal
         "new_result": new_result,
         "new_result_tool": new_result_tool,
         "asset_mentions": asset_mentions,
+        "attachments": attachments,
     })
 
 
@@ -896,6 +897,15 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
                           asset_mentions={"first": "product.png", "second": "product.png", "foreign": "other.png"})
     assert json.loads(edited.context)["mentioned_assets"] == [
         {"asset_id": asset_id, "type": "image", "label": "product.png"} for asset_id in ("first", "second")
+    ]
+    from app.models.schemas import ChatAttachment
+
+    attachments = [ChatAttachment(id=id_, type="image", name="product.png")
+                   for id_ in ("second", "foreign", "first")]
+    attached = _video_round(intent_router.tools, snapshot=snapshot, attachments=attachments)
+    assert json.loads(attached.context)["opening_attachments"] == [
+        {"position": pos, "asset_id": id_, "type": "image", "name": "product.png"}
+        for pos, id_ in [(1, "second"), (3, "first")]
     ]
     assert edited.caller_state["video_target"] == saved
     assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in edited.tools}
@@ -1176,9 +1186,13 @@ def test_revised_playback_request_keeps_prior_export_as_history():
         "snapshot": ContextSnapshot("head", resources=(("work", work),)),
         "preceding_delivery": previous,
         "recent_edit": {"composition_id": work["composition_id"], "version_id": work["version_id"],
-                        "clips": {}, "applied": [{"tool": "set_keyframe", "version": 2}]},
+                        "clips": {"title": {"start_seconds": 2, "end_seconds": 4},
+                                  "long": {"start_seconds": 0, "end_seconds": 20}}, "applied": [{"tool": "set_keyframe", "version": 2}]},
     })
     context = json.loads(result.context)
+    short, long = context["recently_edited_clips"]
+    assert short["preview_range"] == {"start_seconds": 2, "end_seconds": 4}
+    assert "preview_range" not in long
     assert context["preceding_reviewed_delivery"] == previous
     assert "revised_delivery" not in context
     assert "does not explicitly request formal export" in context["delivery_scope"]

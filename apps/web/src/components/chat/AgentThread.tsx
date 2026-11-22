@@ -2466,17 +2466,17 @@ export function AgentThread({
       }
       const pendingCandidates = pendingCandidateRowsRef.current
       pendingCandidateRowsRef.current = []
-      setMessages((prev) =>
-        ownsTurn()
-          ? spliceAnswerEnvelope(prev, {
-              optimisticId,
-              previewId,
-              answeredRow,
-              followUp,
-              pendingCandidates,
-            })
-          : prev,
-      )
+      // Validate ownership before queuing this terminal update. React may run
+      // the updater after finally releases the turn. The splice targets only
+      // the question and preview keys allocated for this answer.
+      if (!ownsTurn()) return
+      setMessages((prev) => spliceAnswerEnvelope(prev, {
+        optimisticId,
+        previewId,
+        answeredRow,
+        followUp,
+        pendingCandidates,
+      }))
       if (followUp) {
         // echoCarried ≡ the settled bubble carries streamed prose
         // (2026-09-09 单派生): a paced zero-delta follow-up rides the same

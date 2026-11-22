@@ -233,6 +233,8 @@ def canonical_resource(snapshot: SourceSnapshot, *, target: Any = None) -> dict[
         "captured_at": snapshot.captured_at.isoformat() if snapshot.captured_at else None,
         "state": "frozen",
     }
+    if snapshot.asset_id is not None:
+        resource["asset_id"] = str(snapshot.asset_id)
     if snapshot.kind == "web":
         resource.update({
             "consumption": "web_object",
