@@ -22,7 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.editing.edits import EditError
 from app.editing.revisions import (
     AddAudioEffectOp as RevisionAddAudioEffectOp,
-    AddMediaOverlayOp as RevisionAddMediaOverlayOp,
     AddNarrationOp as RevisionAddNarrationOp,
     expand_revision_op,
 )
@@ -144,7 +143,7 @@ async def revise_video(
         source_ids.update(
             operation.source_id
             for operation in args.ops
-            if isinstance(operation, (RevisionAddMediaOverlayOp, RevisionAddAudioEffectOp, RevisionAddNarrationOp))
+            if isinstance(operation, (RevisionAddAudioEffectOp, RevisionAddNarrationOp))
         )
         source_facts = await snapshot_facts(db, source_ids)
         if any(fact.get("owner_id") != owner_id for fact in source_facts.values()):

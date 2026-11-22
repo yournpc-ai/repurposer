@@ -16,9 +16,9 @@ from app.agents.candidate_correction import (
     CandidateScope,
     apply_correction,
 )
-from app.editing.revisions import RevisionTargetAmbiguityError, expand_revision_op
+from app.editing.revisions import RevisionTargetAmbiguityError, expand_revision_op, fixed_visual_ops
 from app.editing.schemas import CompositionContent
-from app.editing.service import revise_video
+from app.editing.service import compute_change_set, revise_video, video_version_read
 from app.editing.store import StaleBase, apply_composition_edits, content_of
 from app.models.schemas import ReviseVideoOpsArgs
 from app.models.tables import Composition, CompositionVersion, Project, SourceSnapshot, User
@@ -152,34 +152,22 @@ def test_native_create_and_high_level_revision_wires_stay_closed():
 
     assert CreateVideoArgs.model_json_schema()["additionalProperties"] is False
 
+    from app.chat.editor import InsertVisualArgs
+
     raw = {
-        "base_ref": {
-            "composition_id": str(uuid4()),
-            "composition_version_id": str(uuid4()),
-            "content_digest": "d" * 64,
-        },
-        "ops": [{
-            "op": "add_media_overlay",
-            "source_id": str(VIDEO_ID),
-            "scene_id": "proof",
-            "start_seconds": 4.0,
-            "end_seconds": 8.0,
-            "position": "lower-right",
-            "width_ratio": 0.28,
-            "margin_px": 48,
-            "motion": "fade_in",
-        }],
+        "source_id": str(VIDEO_ID), "start_seconds": 4, "end_seconds": 8,
+        "position": "lower-right", "width_ratio": 0.28,
     }
     with pytest.raises(ValidationError) as raised:
-        ReviseVideoOpsArgs.model_validate(raw)
+        InsertVisualArgs.model_validate(raw)
     import json
 
     errors = json.loads(raised.value.json(include_input=False, include_url=False))
     record = CandidateRecord.create(
-        tool_name="revise_video",
+        tool_name="insert_visual",
         arguments=raw,
         errors=errors,
-        schema=ReviseVideoOpsArgs.model_json_schema(),
+        schema=InsertVisualArgs.model_json_schema(),
         scope=CandidateScope(owner_id=str(uuid4()), conversation_id=str(uuid4())),
         base_keys=frozenset({f"snapshot:{VIDEO_ID}:{VIDEO_DIGEST}"}),
         call_id="call_overlay",
@@ -189,7 +177,7 @@ def test_native_create_and_high_level_revision_wires_stay_closed():
     assert diagnostic["candidate_id"] == record.candidate_id
     assert diagnostic["candidate_digest"] == record.candidate_digest
     assert diagnostic["errors"][0]["original_value"] == "lower-right"
-    assert record.arguments["ops"][0]["position"] == "lower-right"
+    assert record.arguments["position"] == "lower-right"
     request = CandidateCorrectionArgs.model_validate(
         {
             "candidate_id": record.candidate_id,
@@ -199,9 +187,9 @@ def test_native_create_and_high_level_revision_wires_stay_closed():
         }
     ).root
     merged = apply_correction(record, request)
-    corrected = ReviseVideoOpsArgs.model_validate(merged.arguments)
-    assert corrected.ops[0].position == "bottom_right"
-    assert corrected.ops[0].source_id == VIDEO_ID
+    corrected = InsertVisualArgs.model_validate(merged.arguments)
+    assert corrected.position == "bottom_right"
+    assert corrected.source_id == VIDEO_ID
     assert record.base_keys == frozenset({f"snapshot:{VIDEO_ID}:{VIDEO_DIGEST}"})
 
 
@@ -405,27 +393,18 @@ async def test_overlay_saves_change_set_and_stale_base_never_overwrites(database
             name="OxValue promo",
         )
     scene = next(scene for scene in base.scenes if scene["scene_id"] == "proof")
-    start = scene["range"]["start"] / 90000 + 0.5
+    start = scene["range"]["start"] + 45000
     async with database() as db:
-        read = await revise_video(
-            db,
-            owner_id=owner,
-            args=revision_args(
-                base,
-                {
-                    "op": "add_media_overlay",
-                    "source_id": str(VIDEO_ID),
-                    "scene_id": "proof",
-                    "start_seconds": start,
-                    "end_seconds": start + 2,
-                    "position": "bottom_right",
-                    "width_ratio": 0.28,
-                    "margin_px": 48,
-                    "motion": "fade_in",
-                },
-            ),
-            request_id="promo-overlay-v2",
+        ops = fixed_visual_ops(content_of(base), snapshot_facts(owner)[VIDEO_ID], source_id=VIDEO_ID,
+                               identity=uuid4().hex, scene_id="proof", start=start, end=start + 180000,
+                               position="bottom_right", width_ratio=0.28, margin_px=48, fade_in=True)
+        _, version, _ = await apply_composition_edits(
+            db, owner_id=owner, composition_id=composition.id, base_version_id=base.id,
+            base_digest=base.content_digest, ops=ops, request_id="promo-overlay-v2",
+            skill_provenance=provenance,
         )
+        read = await video_version_read(db, owner_id=owner, version_id=version.id)
+        read["change_set"] = compute_change_set(content_of(base), content_of(version))
     added = read["change_set"]["clips"]["added"]
     assert len(added) == 1
     overlay_id = added[0]["clip_id"]
@@ -474,76 +453,16 @@ async def test_overlay_saves_change_set_and_stale_base_never_overwrites(database
         assert current.current_version_id == UUID(read["composition_version_id"])
 
 
-def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
-    owner = uuid4()
+def test_video_overlay_checks_the_source_window_and_aspect_before_adding_any_ops():
     content = revision_content()
-    scene = next(item for item in content.scenes if item.scene_id == "proof")
-    version = SimpleNamespace(composition_id=uuid4(), id=uuid4(), content_digest="d" * 64)
-
-    whole = revision_args(version, {
-        "op": "add_media_overlay",
-        "source_id": str(VIDEO_ID),
-        "scene_id": "proof",
-        "scope": "whole_scene",
-        "position": "bottom_right",
-        "width_ratio": 0.28,
-        "margin_px": 48,
-        "motion": "none",
-    })
-    from app.editing.edits import AddClip
-
-    ops = expand_revision_op(whole.ops[0], content, facts=snapshot_facts(owner))
-    overlay = next(op.clip for op in ops if isinstance(op, AddClip))
-    assert overlay.range == scene.range
-    assert overlay.source.source_range.duration == scene.range.duration
-
-    start = scene.range.start / 90000 + 0.25
-    timed = revision_args(version, {
-        "op": "add_media_overlay",
-        "source_id": str(VIDEO_ID),
-        "scene_id": "proof",
-        "start_seconds": start,
-        "duration_seconds": 2,
-        "position": "bottom_right",
-        "width_ratio": 0.28,
-        "margin_px": 48,
-        "motion": "none",
-    })
-    ops = expand_revision_op(timed.ops[0], content, facts=snapshot_facts(owner))
-    overlay = next(op.clip for op in ops if isinstance(op, AddClip))
-    assert overlay.range.start == scene.range.start + 22500
-    assert overlay.range.end == overlay.range.start + 180000
-
-    for action in (
-        {
-            "op": "add_media_overlay",
-            "source_id": str(VIDEO_ID),
-            "scope": "whole_scene",
-            "position": "bottom_right",
-            "width_ratio": 0.28,
-            "margin_px": 48,
-            "motion": "none",
-        },
-        {
-            "op": "add_media_overlay",
-            "source_id": str(VIDEO_ID),
-            "scene_id": "proof",
-            "position": "bottom_right",
-            "width_ratio": 0.28,
-            "margin_px": 48,
-            "motion": "none",
-        },
-    ):
-        with pytest.raises(RevisionTargetAmbiguityError) as raised:
-            expand_revision_op(revision_args(version, action).ops[0], content, facts=snapshot_facts(owner))
-        assert len(raised.value.candidates) == len(content.scenes)
-
-    with pytest.raises(ValidationError):
-        revision_args(version, {
-            "op": "add_media_overlay", "source_id": str(VIDEO_ID), "scene_id": "proof",
-            "scope": "whole_scene", "start_seconds": 4, "position": "bottom_right",
-            "width_ratio": 0.28, "margin_px": 48, "motion": "none",
-        })
+    fact = snapshot_facts(uuid4())[VIDEO_ID]
+    args = dict(source_id=VIDEO_ID, identity=uuid4().hex, scene_id="proof", start=360000,
+                end=540000, position="bottom_right", width_ratio=0.28, margin_px=48)
+    with pytest.raises(ValueError, match="real duration"):
+        fixed_visual_ops(content, {**fact, "duration_ticks": 90000}, **args)
+    with pytest.raises(ValueError, match="aspect"):
+        fixed_visual_ops(content, fact, **{**args, "width_ratio": 0.95})
+    assert content == revision_content()
 
 
 @pytest.mark.asyncio

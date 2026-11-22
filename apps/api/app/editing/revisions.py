@@ -6,7 +6,7 @@ import hashlib
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.editing.edits import (
     AddClip,
@@ -75,40 +75,6 @@ class ApplyPresetOp(BaseModel):
     preset_id: str = Field(min_length=1, max_length=64)
 
 
-class AddMediaOverlayOp(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    op: Literal["add_media_overlay"]
-    source_id: UUID
-    scene_id: str | None = Field(default=None, min_length=1, max_length=64)
-    scope: Literal["window", "whole_scene"] = Field(
-        default="window",
-        description="whole_scene 采用已保存 Scene 的确切范围，无需填写秒数。",
-    )
-    start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    position: Literal["top_left", "top_right", "bottom_left", "bottom_right"]
-    width_ratio: float = Field(gt=0.05, le=1.0, allow_inf_nan=False)
-    margin_px: float = Field(ge=0, le=512, allow_inf_nan=False)
-    motion: Literal["none", "fade_in"]
-
-    @model_validator(mode="after")
-    def _window(self) -> AddMediaOverlayOp:
-        if self.scope == "whole_scene" and any(
-            value is not None
-            for value in (self.start_seconds, self.end_seconds, self.duration_seconds)
-        ):
-            raise ValueError("whole_scene does not accept start, end or duration seconds")
-        if (
-            self.end_seconds is not None
-            and self.start_seconds is not None
-            and self.end_seconds <= self.start_seconds
-        ):
-            raise ValueError("end_seconds must be after start_seconds")
-        return self
-
-
 class AddNarrationOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -171,7 +137,6 @@ class RemoveClipOp(BaseModel):
 RevisionOp = Annotated[
     SetTextOp
     | ApplyPresetOp
-    | AddMediaOverlayOp
     | AddNarrationOp
     | AddAudioEffectOp
     | SetNarrationOp
@@ -326,73 +291,6 @@ def set_narration_ops(content: CompositionContent, action: SetNarrationOp) -> li
         clip_id=clip.clip_id,
         object=clip.object.model_copy(update={"text": action.text}),
     )]
-
-
-def _add_overlay(
-    content: CompositionContent,
-    action: AddMediaOverlayOp,
-    fact: dict[str, Any] | None,
-) -> list[Op]:
-    if fact is None or not fact.get("storage_key"):
-        raise RevisionInputError(
-            "overlay source is missing or not prepared",
-            loc=["action", "source_id"],
-            kind="source_not_ready",
-        )
-    if fact.get("kind") not in {"video", "image"}:
-        raise RevisionInputError(
-            "overlay source must be a prepared image or video snapshot",
-            loc=["action", "source_id"],
-            kind="source_kind",
-        )
-    candidates = [
-        {
-            "scene_id": scene.scene_id,
-            "start_seconds": scene.range.start / content.settings.timebase,
-            "end_seconds": scene.range.end / content.settings.timebase,
-        }
-        for scene in sorted(content.scenes, key=lambda item: item.range.start)
-    ]
-    if action.scene_id is None:
-        raise RevisionTargetAmbiguityError(
-            "overlay Scene is not uniquely specified; ask the user which Scene to use",
-            candidates=candidates,
-        )
-    scene = next((item for item in content.scenes if item.scene_id == action.scene_id), None)
-    if scene is None:
-        raise RevisionInputError(
-            "overlay scene does not exist in the base version",
-            loc=["action", "scene_id"],
-            kind="target_not_found",
-        )
-    if action.scope == "whole_scene":
-        start, end = scene.range.start, scene.range.end
-    else:
-        has_end = action.end_seconds is not None
-        has_duration = action.duration_seconds is not None
-        if action.start_seconds is None or has_end == has_duration:
-            raise RevisionTargetAmbiguityError(
-                "overlay time window is not uniquely specified; ask for an absolute start/end, "
-                "an unambiguous start plus duration, or the whole Scene",
-                candidates=candidates,
-            )
-        start = seconds_to_ticks(action.start_seconds, content.settings.timebase)
-        end = (
-            seconds_to_ticks(action.end_seconds, content.settings.timebase)
-            if action.end_seconds is not None
-            else start + seconds_to_ticks(action.duration_seconds, content.settings.timebase)
-        )
-    if start < scene.range.start or end > scene.range.end:
-        raise RevisionInputError(
-            "overlay time window must stay inside its target Scene",
-            loc=["action", "start_seconds"],
-            kind="time_out_of_bounds",
-        )
-    identity = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
-    return fixed_visual_ops(content, fact, source_id=action.source_id, identity=identity,
-                            scene_id=scene.scene_id, start=start, end=end, position=action.position,
-                            width_ratio=action.width_ratio, margin_px=action.margin_px,
-                            fade_in=action.motion == "fade_in")
 
 
 def fixed_visual_ops(content: CompositionContent, fact: dict[str, Any], *, source_id: UUID,
@@ -688,8 +586,6 @@ def expand_revision_op(
         return expand_preset_at_target(
             operation.preset_id, content, EditTarget(kind="clip", id=operation.clip_id)
         )
-    if isinstance(operation, AddMediaOverlayOp):
-        return _add_overlay(content, operation, facts.get(operation.source_id))
     if isinstance(operation, AddNarrationOp):
         return _add_narration(content, operation, facts.get(operation.source_id), narration_alignment)
     if isinstance(operation, AddAudioEffectOp):
@@ -706,7 +602,6 @@ def expand_revision_op(
 
 __all__ = [
     "AddAudioEffectOp",
-    "AddMediaOverlayOp",
     "AddNarrationOp",
     "ApplyPresetOp",
     "RemoveClipOp",
