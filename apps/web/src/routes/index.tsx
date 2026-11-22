@@ -29,19 +29,18 @@ export const Route = createFileRoute("/")({
     const copy = zh ? zhLocale.landing.meta : en.landing.meta
     return {
       meta: [
-        { title: copy.title },
         { name: "description", content: copy.description },
         { property: "og:type", content: "website" },
-        { property: "og:site_name", content: "Rookie Cut" },
+        { property: "og:site_name", content: "RookieCut" },
         { property: "og:url", content: SITE_URL },
-        { property: "og:title", content: copy.title },
+        { property: "og:title", content: "RookieCut" },
         { property: "og:description", content: copy.description },
         { property: "og:image", content: `${SITE_URL}/og.png` },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         { property: "og:locale", content: zh ? "zh_CN" : "en_US" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: copy.title },
+        { name: "twitter:title", content: "RookieCut" },
         { name: "twitter:description", content: copy.description },
         { name: "twitter:image", content: `${SITE_URL}/og.png` },
       ],

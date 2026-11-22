@@ -209,7 +209,6 @@ const en = {
   landing: {
 
   meta: {
-    title: "Rookie Cut — Your AI video editor",
     description: "Share footage and ideas with Rookie Cut, your AI video editor. Preview the first cut and refine the same video in chat.",
   },
   "heroEyebrow": "Your AI video agent",

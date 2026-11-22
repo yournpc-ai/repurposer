@@ -196,7 +196,6 @@ const zh: Resources = {
   landing: {
 
   meta: {
-    title: "Rookie Cut — 你的 AI 视频剪辑师",
     description: "把素材和想法交给 Rookie Cut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
   },
   "heroEyebrow": "你的 AI 视频 Agent",
