@@ -15,8 +15,8 @@ export function LandingHero() {
         <h1 className="mx-auto mt-6 max-w-6xl font-hero text-[clamp(40px,6.3vw,72px)] leading-[1.06] font-normal tracking-tight text-balance">
           {t("landing.heroTitle1")}{t("landing.heroTitle2")}
         </h1>
-        <p className="mx-auto mt-7 max-w-lg text-base leading-7 text-balance whitespace-pre-line text-muted-foreground sm:text-lg">{t("landing.heroSubtitle")}</p>
-        <Button size="lg" className="mt-12 rounded-full px-8 text-sm font-normal sm:text-base" onClick={() => {
+        <p className="mx-auto mt-7 mb-12 max-w-lg text-base leading-7 text-balance whitespace-pre-line text-muted-foreground sm:text-lg">{t("landing.heroSubtitle")}</p>
+        <Button size="lg" className="rounded-full px-8 text-sm font-normal sm:text-base" onClick={() => {
           if (isAuthenticated) void navigate({ to: "/home" })
           else setLoginOpen(true)
         }}>{t("landing.heroCta")}</Button>
