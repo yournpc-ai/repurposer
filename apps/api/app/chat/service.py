@@ -1260,9 +1260,22 @@ async def _continue_chat_answer(
             opening.turn_state = "in_flight"
             await state_db.commit()
     try:
+        reply = say or "(The user skipped this question.)"
+        opening = next((m for m in recent if m.id == turn_id and m.role == "user"), None)
+        mentions = []
+        attachments = []
+        if opening is not None and data.kind in ("option", "freeform", "group"):
+            # A dock selection resolves a detail of the persisted request. The option
+            # label alone can look like an instruction to generate an entirely new asset.
+            choice = next((o for o in question.options if data.kind == "option" and o.id == data.option_id), None)
+            detail = f"\nSelected option description: {choice.description}" if choice and choice.description else ""
+            reply = f"{opening.content}\n\nQuestion: {question.question}\nUser answer: {reply}{detail}"
+            mentions = opening.mentions or []
+            attachments = opening.attachments or []
         follow_up, _ = await _plan_turn(
             db, user_id, conversation, project,
-            ChatRequest(project_id=project.id, message=say or "(The user skipped this question.)", suggestion_ref=suggestion_ref),
+            ChatRequest(project_id=project.id, message=reply, mentions=mentions,
+                        attachments=attachments, suggestion_ref=suggestion_ref),
             group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
             on_delta=on_delta, on_phase=on_phase, on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,

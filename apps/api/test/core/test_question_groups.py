@@ -193,7 +193,8 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
         db.add(conversation)
         await db.flush()
         db.add(Message(id=opening_id, conversation_id=conversation.id, role="user", turn_state="settled",
-                       content="给官网做一支宣传片", seq=0))
+                       content="给官网做一支宣传片", seq=0,
+                       mentions=[{"type": "asset", "id": "source", "label": "logo.png"}]))
         db.add(question)
         await db.commit()
         user_id, project_id, conversation_id, question_id = (
@@ -207,6 +208,10 @@ async def test_group_answer_settles_one_row_and_backfills_all_slots_atomically(
 
     async def no_model_follow_up(*args, **kwargs):
         assert kwargs["group_answer_submitted"]
+        continued_request = args[4]
+        assert continued_request.message.startswith("给官网做一支宣传片")
+        assert payload.question in continued_request.message
+        assert [m.label for m in continued_request.mentions] == ["logo.png"]
         from app.chat.service import _interim_prose_callback, _lock_turn_for_final_commit
         assert kwargs["turn_id"] == opening_id
         await _interim_prose_callback(args[0], conversation_id, turn_id=opening_id)("检查来源")

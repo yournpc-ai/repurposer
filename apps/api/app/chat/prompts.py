@@ -177,6 +177,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")}
                        for _, r in resources if r.get("kind") == "asset"][:24],
         }
+        if facts.get("answered_this_opening"):
+            context["clarified_request"] = user_text
         mentions = facts.get("asset_mentions") or {}
         if mentions:
             context["mentioned_assets"] = [

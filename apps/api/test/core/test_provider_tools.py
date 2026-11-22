@@ -993,12 +993,14 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
         from app.chat.prompts import assemble_video_round
 
         return assemble_video_round({
-            **facts, "mode": "plan", "user_text": "Use the answered title",
+            **facts, "mode": "plan", "user_text": "Split the selected clip at one second.",
+            "answered_this_opening": True,
             "pending_question": lambda: pending,
         })
 
     result = await agent.call_loop(
         execute, refresh_context=lambda: _immediate(snapshot), restore_context=restore,
+        dialogue=[{"role": "user", "content": "Second title"}],
         round_assembler=assemble, on_delta=(lambda _text: _immediate(None)) if streaming else None,
     )
     assert result.tool_name == "answer"
@@ -1006,6 +1008,11 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
     first, second = calls
     first_text = json.dumps(first["messages"], ensure_ascii=False)
     second_text = json.dumps(second["messages"], ensure_ascii=False)
+    for wire in (first, second):
+        assert any(m["content"] == "Second title" for m in wire["messages"])
+        assert any("clarified_request" in str(m["content"]) and
+                   "Split the selected clip at one second." in str(m["content"])
+                   for m in wire["messages"])
     assert "Which title?" in first_text
     assert "Which title?" not in second_text
     assert "old review" not in second_text and "Historical observation old" not in second_text
