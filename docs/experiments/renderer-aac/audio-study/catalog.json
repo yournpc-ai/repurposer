@@ -1,0 +1,139 @@
+{
+  "click": {
+    "avoid": "长转场、连续键盘写实录音",
+    "category": "interface",
+    "impression": "一粒短音，带温和的空腔共鸣。",
+    "mix": "重复点击保持低增益，检查密集操作时是否打断辅音。",
+    "name": "圆点",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "hardness": {
+          "default": 55,
+          "description": "增加短促泛音并加快起音；极软状态对弱扬声器不够清晰。",
+          "maximum": 90,
+          "minimum": 5,
+          "type": "integer",
+          "unit": "%"
+        },
+        "pitch": {
+          "default": 830,
+          "description": "调整短音的主体频率；高端重复播放易疲劳。",
+          "maximum": 1300,
+          "minimum": 380,
+          "type": "integer",
+          "unit": "Hz"
+        }
+      },
+      "type": "object"
+    },
+    "suggested_duration_ms": [
+      65,
+      65
+    ],
+    "version": 1,
+    "visual_action": "按下按钮、卡片确认"
+  },
+  "impact": {
+    "avoid": "连续按钮、爆炸拟音",
+    "category": "accent",
+    "impression": "短促触点后留下圆润的低音与稀疏反射。",
+    "mix": "已有鼓点时避开重复重拍，低音厚度须在小扬声器上复听。",
+    "name": "轻落",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": 115,
+          "description": "降低主体共振频率使落点低沉；最低端小扬声器可能听不清。",
+          "maximum": 180,
+          "minimum": 55,
+          "type": "integer",
+          "unit": "Hz"
+        },
+        "punch": {
+          "default": 48,
+          "description": "缩短起音并增加短促高次振动；太大会盖住字头。",
+          "maximum": 90,
+          "minimum": 5,
+          "type": "integer",
+          "unit": "%"
+        },
+        "space": {
+          "default": 24,
+          "description": "提高左右早期反射的比例；紧密落点易拖糊。",
+          "maximum": 80,
+          "minimum": 0,
+          "type": "integer",
+          "unit": "%"
+        },
+        "tail": {
+          "default": 370,
+          "description": "控制低音衰减及整个尾窗；过短减少重量。",
+          "maximum": 650,
+          "minimum": 120,
+          "type": "integer",
+          "unit": "ms"
+        }
+      },
+      "type": "object"
+    },
+    "suggested_duration_ms": [
+      180,
+      500
+    ],
+    "version": 1,
+    "visual_action": "Logo 或标题落定"
+  },
+  "whoosh": {
+    "avoid": "静止标题、写实风声",
+    "category": "motion",
+    "impression": "从窄到宽的一束气流，靠近时音色抬起，掠过后散去。",
+    "mix": "峰值跟随最快运动，旁白齿音上先降低明亮度，再调片段电平。",
+    "name": "掠入",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "default": 560,
+          "description": "改变气流展开时间；过短会失去运动过程。",
+          "maximum": 1000,
+          "minimum": 150,
+          "type": "integer",
+          "unit": "ms"
+        },
+        "pitch": {
+          "default": 410,
+          "description": "移动气流共振与微弱滑音的中心；高端易与女声争位。",
+          "maximum": 760,
+          "minimum": 180,
+          "type": "integer",
+          "unit": "Hz"
+        },
+        "tone": {
+          "default": 58,
+          "description": "提高高频气声带的中心和占比；密集旁白宜收暗。",
+          "maximum": 90,
+          "minimum": 10,
+          "type": "integer",
+          "unit": "%"
+        },
+        "travel": {
+          "default": 66,
+          "description": "同时增加扫频跨度与左右移动幅度；单声道折叠时方位减弱。",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer",
+          "unit": "%"
+        }
+      },
+      "type": "object"
+    },
+    "suggested_duration_ms": [
+      300,
+      650
+    ],
+    "version": 1,
+    "visual_action": "标题侧滑、产品卡飞入"
+  }
+}

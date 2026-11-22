@@ -1,0 +1,17 @@
+apps/api/app/chat/plan_turn.py
+apps/api/app/chat/prompts.py
+apps/api/test/core/test_provider_tools.py
+docs/COMPETITIVE_ANALYSIS.md
+docs/DECISIONS.md
+docs/DECISION_MATRIX.md
+docs/MUSIC_ARCHITECTURE.md
+docs/NAMING.md
+docs/POSITIONING.md
+docs/PROGRESS.md
+docs/STRATEGY.md
+docs/VIDEO_PROJECT.md
+docs/tasks/chat-turn-block-implementation.md
+docs/tasks/i8.md
+docs/tasks/minimax-tool-calls-and-editable-drafts.md
+docs/tasks/new-agent.md
+docs/tasks/synthetic-talk-video.md

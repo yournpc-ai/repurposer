@@ -1,0 +1,63 @@
+{
+  "family": "video",
+  "format": 1,
+  "fps": {
+    "num": 30,
+    "den": 1
+  },
+  "width": 1920,
+  "height": 1080,
+  "background": "#000000",
+  "sample_rate": 48000,
+  "duration_frames": 240,
+  "fonts": [],
+  "tracks": [
+    {
+      "track_id": "track-main",
+      "kind": "visual",
+      "role": "main",
+      "order": 0,
+      "clips": [
+        {
+          "clip_id": "main",
+          "start_frame": 0,
+          "end_frame": 240,
+          "scene_id": "survey",
+          "source": {
+            "url": "http://127.0.0.1:49873/main.mp4",
+            "digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+            "start_frame": 15,
+            "end_frame": 255
+          },
+          "object": {
+            "kind": "video",
+            "object_id": "main-film",
+            "layout": {
+              "x": 0.0,
+              "y": 0.0,
+              "width": 1920.0,
+              "height": 1080.0
+            },
+            "fit": "contain",
+            "transform": {
+              "x": 0.0,
+              "y": 0.0,
+              "scale": 1.0,
+              "rotation": 0.0,
+              "origin": "center"
+            },
+            "opacity": 1.0,
+            "gain_db": 0.0,
+            "muted": true
+          },
+          "animations": []
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+    "composition_version_id": "06e0f346-6940-5e8f-a41c-cbb741935533",
+    "content_digest": "a066f386685e40e582fb6185baf7518fa0711a3cf95a8d726543e0e1d7b042b1"
+  }
+}

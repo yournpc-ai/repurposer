@@ -1,0 +1,1076 @@
+{
+  "run/success/merged.wav": {
+    "sha": "ba84a97192c1bda5ca41873c5e614c2ceae3e85a1ba7d77cef4b97276b9e4d8d",
+    "format": "wav",
+    "audio": {
+      "codec_name": "pcm_s16le",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": null,
+      "duration_ts": 384000,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "5096e48e1130b290339bbc12df8ecb1df6830ffba1ea9c62d25c256aca0b45cb",
+      "decoded": 384000,
+      "peak": 0.42864990234375,
+      "clips": 0,
+      "present": 384000,
+      "lag": 0,
+      "corr": 0.9999999643985213,
+      "stemLag": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      }
+    }
+  },
+  "run/success/audio.aac": {
+    "sha": "fef8ef3ba601f5da309de793e7eac318150da80e4d28ad0fb8ea721a29ca842d",
+    "format": "aac",
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/28224000",
+      "sample_rate": "48000",
+      "start_pts": null,
+      "duration_ts": 226995754,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386047,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      }
+    }
+  },
+  "run/success/raw.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/success/video.mp4": {
+    "sha": "cc8a6414fb8b6491576d72384253b1cab6f647d8337d0d5933a54a145e0d66e9",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 388800,
+      "firstPTS": -1024,
+      "firstDTS": -1024,
+      "side": [
+        {
+          "side_data_type": "Skip Samples",
+          "skip_samples": 1024,
+          "discard_padding": 0,
+          "skip_reason": 0,
+          "discard_reason": 0
+        }
+      ],
+      "packetSHA": "4e7043babc1da76d86137f5b6873c2e718ed82634872ec2739f460c2a9171633",
+      "decoded": 386048,
+      "peak": 0.6773861050605774,
+      "clips": 0,
+      "present": 388800,
+      "lag": 2048,
+      "corr": 0.9888046057909894,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-16.31",
+        "input_tp": "-3.27",
+        "input_lra": "15.90",
+        "input_thresh": "-26.74",
+        "output_i": "-16.01",
+        "output_tp": "-3.11",
+        "output_lra": "3.80",
+        "output_thresh": "-26.33",
+        "normalization_type": "dynamic",
+        "target_offset": "0.01"
+      }
+    }
+  },
+  "run/measureFail/raw.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/measureFail/video.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/encodeFail/raw.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/encodeFail/video.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/renameFail/raw.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/renameFail/video.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/noaudio/raw.mp4": {
+    "sha": "29fe0ad53b5a47349845607404fac82144daf0e2c997c1240e0436acd8e991bf",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/noaudio/video.mp4": {
+    "sha": "29fe0ad53b5a47349845607404fac82144daf0e2c997c1240e0436acd8e991bf",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/silence/raw.mp4": {
+    "sha": "29fe0ad53b5a47349845607404fac82144daf0e2c997c1240e0436acd8e991bf",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/silence/video.mp4": {
+    "sha": "29fe0ad53b5a47349845607404fac82144daf0e2c997c1240e0436acd8e991bf",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/shape/raw.mp4": {
+    "sha": "01619c3604ed41b50b4624dbc4712e9eef94674c258124d529694ebaceb67494",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "d515adc0b3df15805fedf4481d3839f0eeb61ef790958aaa01e64fe9be8d5b50",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/shape/video.mp4": {
+    "sha": "01619c3604ed41b50b4624dbc4712e9eef94674c258124d529694ebaceb67494",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "d515adc0b3df15805fedf4481d3839f0eeb61ef790958aaa01e64fe9be8d5b50",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "9b3e517af77d729fa02ee65a67067af6520659fe5234f12e84f0478bb44d9347",
+      "decoded": 386048,
+      "peak": 0.0,
+      "clips": 0,
+      "present": 386048,
+      "measured": {
+        "input_i": "-inf",
+        "input_tp": "-inf",
+        "input_lra": "0.00",
+        "input_thresh": "-70.00",
+        "output_i": "-inf",
+        "output_tp": "-inf",
+        "output_lra": "0.00",
+        "output_thresh": "-70.00",
+        "normalization_type": "dynamic",
+        "target_offset": "inf"
+      }
+    }
+  },
+  "run/streamless/raw.mp4": {
+    "sha": "1cc785d3819fd3d5cacc3a7f49e7449242c01922e00f175e9785170f19d00ab0",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    }
+  },
+  "run/streamless/video.mp4": {
+    "sha": "1cc785d3819fd3d5cacc3a7f49e7449242c01922e00f175e9785170f19d00ab0",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    }
+  },
+  "run/hostDefault/raw.mp4": {
+    "sha": "ac59b7927be4eefd9f16ad7302589c77875797434f4aeea915c274b6c1446ced",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 386048,
+      "firstPTS": 0,
+      "firstDTS": 0,
+      "side": null,
+      "packetSHA": "f434c01c151da533a7240ebf43f2241b0c1d9764b5838e4db57ba6549a12d261",
+      "decoded": 386048,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 386048,
+      "lag": 2048,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-20.89",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-15.97",
+        "output_tp": "-3.21",
+        "output_lra": "3.90",
+        "output_thresh": "-26.29",
+        "normalization_type": "dynamic",
+        "target_offset": "-0.03"
+      }
+    }
+  },
+  "run/hostDefault/video.mp4": {
+    "sha": "cc8a6414fb8b6491576d72384253b1cab6f647d8337d0d5933a54a145e0d66e9",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 388800,
+      "firstPTS": -1024,
+      "firstDTS": -1024,
+      "side": [
+        {
+          "side_data_type": "Skip Samples",
+          "skip_samples": 1024,
+          "discard_padding": 0,
+          "skip_reason": 0,
+          "discard_reason": 0
+        }
+      ],
+      "packetSHA": "4e7043babc1da76d86137f5b6873c2e718ed82634872ec2739f460c2a9171633",
+      "decoded": 386048,
+      "peak": 0.6773861050605774,
+      "clips": 0,
+      "present": 388800,
+      "lag": 2048,
+      "corr": 0.9888046057909894,
+      "stemLag": {
+        "voice": 2048,
+        "whoosh": 2048,
+        "impact": 2048
+      },
+      "measured": {
+        "input_i": "-16.31",
+        "input_tp": "-3.27",
+        "input_lra": "15.90",
+        "input_thresh": "-26.74",
+        "output_i": "-16.01",
+        "output_tp": "-3.11",
+        "output_lra": "3.80",
+        "output_thresh": "-26.33",
+        "normalization_type": "dynamic",
+        "target_offset": "0.01"
+      }
+    }
+  },
+  "control.mp4": {
+    "sha": "0113d8692c4b423d8f6af5ddfabd5f86eca8870b1de917983281dd4274db4c77",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 384000,
+      "firstPTS": -2048,
+      "firstDTS": -2048,
+      "side": [
+        {
+          "side_data_type": "Skip Samples",
+          "skip_samples": 2048,
+          "discard_padding": 0,
+          "skip_reason": 0,
+          "discard_reason": 0
+        }
+      ],
+      "packetSHA": "e4d7a82bfee95dfcb78989d7af216953a125e21963231ab7827a4de7c95a6a31",
+      "decoded": 384000,
+      "peak": 0.41261473298072815,
+      "clips": 0,
+      "present": 384000,
+      "lag": 0,
+      "corr": 0.9892363996783471,
+      "stemLag": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "measured": {
+        "input_i": "-20.81",
+        "input_tp": "-7.69",
+        "input_lra": "15.90",
+        "input_thresh": "-31.18",
+        "output_i": "-16.03",
+        "output_tp": "-3.27",
+        "output_lra": "3.90",
+        "output_thresh": "-26.28",
+        "normalization_type": "dynamic",
+        "target_offset": "0.03"
+      }
+    }
+  },
+  "aligned-normalized.mp4": {
+    "sha": "33b1516e3f8163a402c14ea994abbb8814c58a71476b6bb07f0092f69ce2cb42",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 384000,
+      "firstPTS": -1024,
+      "firstDTS": -1024,
+      "side": [
+        {
+          "side_data_type": "Skip Samples",
+          "skip_samples": 1024,
+          "discard_padding": 0,
+          "skip_reason": 0,
+          "discard_reason": 0
+        }
+      ],
+      "packetSHA": "5a08b114a4d58d11f46913b01a603edbb060a2d1f956d30aa9f60cf527c8b1ad",
+      "decoded": 384000,
+      "peak": 0.6939544677734375,
+      "clips": 0,
+      "present": 384000,
+      "lag": 0,
+      "corr": 0.9887058443790805,
+      "stemLag": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "measured": {
+        "input_i": "-16.28",
+        "input_tp": "-3.17",
+        "input_lra": "15.90",
+        "input_thresh": "-26.65",
+        "output_i": "-16.06",
+        "output_tp": "-3.31",
+        "output_lra": "3.80",
+        "output_thresh": "-26.30",
+        "normalization_type": "dynamic",
+        "target_offset": "0.06"
+      }
+    }
+  },
+  "aligned-normalized-clock.mp4": {
+    "sha": "33b1516e3f8163a402c14ea994abbb8814c58a71476b6bb07f0092f69ce2cb42",
+    "format": "mov,mp4,m4a,3gp,3g2,mj2",
+    "video": {
+      "codec_name": "h264",
+      "time_base": "1/90000",
+      "sample_rate": null,
+      "start_pts": 0,
+      "duration_ts": 720000,
+      "firstPTS": 0,
+      "firstDTS": -6000,
+      "side": null,
+      "packetSHA": "da0db9784d8382a5d34427da90add8424e7231675e6887133b14f12936fe135c",
+      "frames": 240,
+      "ptsErrors": 0,
+      "idErrors": 0
+    },
+    "audio": {
+      "codec_name": "aac",
+      "time_base": "1/48000",
+      "sample_rate": "48000",
+      "start_pts": 0,
+      "duration_ts": 384000,
+      "firstPTS": -1024,
+      "firstDTS": -1024,
+      "side": [
+        {
+          "side_data_type": "Skip Samples",
+          "skip_samples": 1024,
+          "discard_padding": 0,
+          "skip_reason": 0,
+          "discard_reason": 0
+        }
+      ],
+      "packetSHA": "5a08b114a4d58d11f46913b01a603edbb060a2d1f956d30aa9f60cf527c8b1ad",
+      "decoded": 384000,
+      "peak": 0.6939544677734375,
+      "clips": 0,
+      "present": 384000,
+      "lag": 0,
+      "corr": 0.9887058443790805,
+      "stemLag": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "measured": {
+        "input_i": "-16.28",
+        "input_tp": "-3.17",
+        "input_lra": "15.90",
+        "input_thresh": "-26.65",
+        "output_i": "-16.06",
+        "output_tp": "-3.31",
+        "output_lra": "3.80",
+        "output_thresh": "-26.30",
+        "normalization_type": "dynamic",
+        "target_offset": "0.06"
+      }
+    }
+  }
+}

@@ -1,0 +1,107 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/tmp/i8-aac.FohV07/run/success/video.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.7.100
+    comment         : Made with Remotion 4.0.484
+  Duration: 00:00:08.04, start: 0.000000, bitrate: 4631 kb/s
+  Stream #0:0[0x1](und): Video: h264 (avc1 / 0x31637661), yuvj420p(pc, bt470bg/unknown/unknown, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 4325 kb/s, 30 fps, 30 tbr, 90k tbn (default)
+      Metadata:
+        handler_name    : VideoHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 libx264
+      Side data:
+        ICC Profile
+  Stream #0:1[0x2](und): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+      Metadata:
+        handler_name    : SoundHandler
+        vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:1 -> #0:0 (aac (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    comment         : Made with Remotion 4.0.484
+    encoder         : Lavf61.7.100
+  Stream #0:0(und): Audio: pcm_s16le, 192000 Hz, stereo, s16, 6144 kb/s (default)
+      Metadata:
+        handler_name    : SoundHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 pcm_s16le
+[Parsed_loudnorm_0 @ 0x894c28480] 
+{
+	"input_i" : "-20.89",
+	"input_tp" : "-7.69",
+	"input_lra" : "15.90",
+	"input_thresh" : "-31.18",
+	"output_i" : "-15.97",
+	"output_tp" : "-3.21",
+	"output_lra" : "3.90",
+	"output_thresh" : "-26.29",
+	"normalization_type" : "dynamic",
+	"target_offset" : "-0.03"
+}
+[out#0/null @ 0x894c28300] video:0KiB audio:6032KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:08.10 bitrate=N/A speed=33.7x    
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/tmp/i8-aac.FohV07/run/success/video.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.7.100
+    comment         : Made with Remotion 4.0.484
+  Duration: 00:00:08.04, start: 0.000000, bitrate: 4631 kb/s
+  Stream #0:0[0x1](und): Video: h264 (avc1 / 0x31637661), yuvj420p(pc, bt470bg/unknown/unknown, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 4325 kb/s, 30 fps, 30 tbr, 90k tbn (default)
+      Metadata:
+        handler_name    : VideoHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 libx264
+      Side data:
+        ICC Profile
+  Stream #0:1[0x2](und): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+      Metadata:
+        handler_name    : SoundHandler
+        vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+  Stream #0:1 -> #0:1 (aac (native) -> aac (native))
+Press [q] to stop, [?] for help
+Output #0, mp4, to '/tmp/i8-aac.FohV07/run/success/video.loudnorm.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    comment         : Made with Remotion 4.0.484
+    encoder         : Lavf61.7.100
+  Stream #0:0(und): Video: h264 (avc1 / 0x31637661), yuvj420p(pc, bt470bg/unknown/unknown, progressive), 1920x1080 [SAR 1:1 DAR 16:9], q=2-31, 4325 kb/s, 30 fps, 30 tbr, 90k tbn (default)
+      Metadata:
+        handler_name    : VideoHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 libx264
+      Side data:
+        ICC Profile
+  Stream #0:1(und): Audio: aac (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 192 kb/s (default)
+      Metadata:
+        handler_name    : SoundHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 aac
+[Parsed_loudnorm_0 @ 0x89cc28900] 
+Input Integrated:    -20.9 LUFS
+Input True Peak:      -7.7 dBTP
+Input LRA:            15.9 LU
+Input Threshold:     -31.2 LUFS
+
+Output Integrated:   -16.0 LUFS
+Output True Peak:     -3.2 dBTP
+Output LRA:            3.9 LU
+Output Threshold:    -26.3 LUFS
+
+Normalization Type:   Dynamic
+Target Offset:        +0.0 LU
+[out#0/mp4 @ 0x89cc28300] video:4225KiB audio:122KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.241521%
+frame=  240 fps=0.0 q=-1.0 Lsize=    4357KiB time=00:00:07.93 bitrate=4499.2kbits/s speed=19.9x    
+[aac @ 0x89d065500] Qavg: 28742.379

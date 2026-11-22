@@ -1,0 +1,160 @@
+{
+  "click-default": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "hardness": 55,
+        "pitch": 830
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "click",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "0cbe4d5c71676b9463ec40de24e98809305931a6ae431610053d450861e223ac",
+    "wav_sha256": "25bf544591e4ab1ed4380be7323de35b1de99a652a7b6d87531bb1dc4e2e9a0a"
+  },
+  "click-rev": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "hardness": 14,
+        "pitch": 830
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "click",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "ae51d44079549aa3ee796b590f001b0fd60f2427902d3783577de9411dea233a",
+    "wav_sha256": "0de17c1660590a98eb297232f657349ab0a477273978bad42c54d8274ed45a04"
+  },
+  "impact-default": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "body": 115,
+        "punch": 48,
+        "space": 24,
+        "tail": 370
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "impact",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "9022c0e5163e7814f86b4118938dbdc8d44398914f3d0a3a2edf2e7d25fa1f67",
+    "wav_sha256": "a3a659698a63161f4978209ac8f75cab371b2ac6a3dbb7130724287b59d85f52"
+  },
+  "impact-rev": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "body": 75,
+        "punch": 48,
+        "space": 24,
+        "tail": 370
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "impact",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "03ccdac9a9d368473139a292aa42254be9e1c2aff802f44bd5fbf669b2201e21",
+    "wav_sha256": "a7c4b60fe3fb49cc991ba621c3cbd06ba837b566efe49c9b882f7e06218e9e1d"
+  },
+  "whoosh-default": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "duration": 560,
+        "pitch": 410,
+        "tone": 58,
+        "travel": 66
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "whoosh",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "cadddbfbb202c624c1e3b8e2497325420d482491e15bc80f18a506d4f5c30c1d",
+    "wav_sha256": "a7da9d7898e049401f7bc8256e5c18896c5144636cd48450b9276f84a43e439c"
+  },
+  "whoosh-rev": {
+    "source": {
+      "channels": 2,
+      "dsp": "repurposer-research-1",
+      "format": "wav-pcm-s16le",
+      "machine": "arm64",
+      "numpy": "2.4.6",
+      "params": {
+        "duration": 560,
+        "pitch": 410,
+        "tone": 22,
+        "travel": 66
+      },
+      "python": "3.11.14",
+      "rate": 48000,
+      "recipe_id": "whoosh",
+      "recipe_version": 1,
+      "seed": 1248,
+      "source_files": {
+        "catalog.py": "cb332a826fda4befdb7bda8d7a950868bbbde25a970198e4a58df86f3aa4b2b3",
+        "render.py": "b2c6cf5de753b393ae441639af4ff99fcc2f04fc8053d41678af196b2bad3084"
+      },
+      "system": "Darwin"
+    },
+    "spec_sha256": "b0f045d96ec83f4a0dced3a27683944fddd7dcd0152dc3a480aac3075742b4e9",
+    "wav_sha256": "48de1dcb2a21e7ebe775f8a858929286eef11d8de8d5dc01749b575a38a943c8"
+  }
+}
