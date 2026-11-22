@@ -208,7 +208,11 @@ const en = {
   },
   landing: {
 
-  "heroEyebrow": "Your AI video agent",
+  meta: {
+    title: "Rookie Cut — Your AI video editor",
+    description: "Share footage and ideas with Rookie Cut, your AI video editor. Preview the first cut and refine the same video in chat.",
+  },
+  "heroEyebrow": "Your AI video editor",
   "showcase": {
     "label": "Video creation demonstration",
     "types": "Video types",
@@ -224,7 +228,7 @@ const en = {
       "text-animation": "Your wording is unchanged, with text beats and emphasis timed to the copy.\nPick any line to change its animation, pacing, or colors.",
       "knowledge-explainer": "The Moon footage sits beside a short explanation of what we see from Earth.\nYou can ask for a longer explanation or change the layout."
     },
-    "disclosure": "Sample edit · Stock footage",
+    "disclosure": "Sample edit · Illustrative chat",
     "disclosureShort": "Interaction illustration",
     "requests": {
       "product-promo": "Make a short promo for this serum. Open with the dropper in use.",
@@ -235,12 +239,12 @@ const en = {
     "steps": {
       "product-promo": {
         "understand": {
-          "active": "Clarifying the product story…",
-          "done": "Clarified the product story."
+          "active": "Finding the dropper shot…",
+          "done": "Found the dropper shot."
         },
         "storyboard": {
-          "active": "Planning the product scenes…",
-          "done": "Planned the product scenes."
+          "active": "Setting the opening shot…",
+          "done": "Set the opening shot."
         },
         "produce": {
           "active": "Adding the product title…",
@@ -292,38 +296,38 @@ const en = {
     }
   },
   "story": {
-    "demoLabel": "Conversational video creation demo",
+    "demoLabel": "Example editing conversation",
     "idea": {
-      "title": "Tell us about your video."
+      "title": "What should the viewer see?"
     },
-    "deliveryTitle": "From storyboard to video.",
-    "refineTitle": "Ask for a change in the same chat.",
-    "request": "Can you make a short video that shows what my product does?",
+    "deliveryTitle": "Watch the first cut.",
+    "refineTitle": "Give the editor a note.",
+    "request": "Cut a short AgentVeil demo for our launch. Show where someone approves a risky action.",
     "attachments": {
       "label": "Example attachments",
       "image": "product-image.png",
       "document": "product-brief.pdf"
     },
-    "storyboardSummary": "Let’s open with the problem, show the product in use, then end with what it helps people do.",
-    "rendering": "Making the video…",
-    "delivery": "Here’s the first cut.",
+    "storyboardSummary": "I’ll use the approval screen to show exactly where that decision happens.",
+    "rendering": "Cutting the demo…",
+    "delivery": "First cut in this example. Watch for the approval button.",
     "posterAlt": "Preview of the first cut",
-    "feedback": "Show the product in use right at the start.",
-    "revisionOpening": "I’ll move the demo to the opening and shorten the original intro to one line.",
+    "feedback": "Hold on the approval button for two more seconds. I need time to read it.",
+    "revisionOpening": "I’ll extend that shot in this cut by two seconds and keep the rest at the same pace.",
     "followup": "What would you like to change?",
-    "scroll": "Keep scrolling"
+    "scroll": "Example chat · Keep scrolling"
   },
   "skills": {
-    "label": "Skills",
-    "titleFirst": "One-click skills,",
-    "titleSecond": "ready for your next video",
+    "label": "Creative directions",
+    "titleFirst": "A product close-up.",
+    "titleSecond": "A story told in type.",
     "create": "Create with {{name}}",
   },
   "faqSection": {
     "title": "A few things you might be wondering.",
     "experience": {
-      "question": "How do I make my first video?",
-      "answer": "Tell Rookie Cut what you want to make and who it’s for. Try “Help me make a 30-second video introducing my new product.” You can review the storyboard before production starts."
+      "question": "How do I start an edit?",
+      "answer": "Add your material to the chat and say who the video is for. A note like “Open with the product close-up” gives your editor a place to start. Watch the first cut and leave your next note in the same chat."
     },
     "material": {
       "question": "Can I start with just an idea?",
@@ -356,21 +360,21 @@ const en = {
       earlyAccess: "Early access",
     },
     signIn: "Sign in",
-    openStudio: "Create a video",
-    headerCta: "Get started",
-    heroCta: "Create now",
+    openStudio: "Start a chat",
+    headerCta: "Start a chat",
+    heroCta: "Start a chat",
     entry: {
       navigation: "Main navigation",
       community: "Join the community",
     },
-    heroTitle1: "Rookies can make great videos too.",
+    heroTitle1: "You call the cut.",
     heroTitle2: "",
     heroSubtitle:
-      "No complex timelines or keyframes.\nCreate animated promos and explainer videos—just by chatting.",
+      "Share your footage and tell me what you have in mind.\nWatch the cut, then tell me where to make a change.",
     earlyAccess: {
-      title: "Make videos without waiting until everything is ready.",
-      description: "No tools to wrangle or techniques to learn. It all happens in a Rookie Cut chat.",
-      credits: "New accounts get 1,000 free credits. No card needed to sign up.",
+      title: "What are you working on?",
+      description: "Bring a clip, a brief, or a cut you want to revisit.",
+      credits: "No card needed to sign up.",
       estimate: "See the estimated credit cost before production.",
       note: "During beta, we're continuing to improve production reliability and detailed review.",
     },

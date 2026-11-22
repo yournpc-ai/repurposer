@@ -195,7 +195,11 @@ const zh: Resources = {
   },
   landing: {
 
-  "heroEyebrow": "你的 AI 视频 Agent",
+  meta: {
+    title: "Rookie Cut — 你的 AI 视频剪辑师",
+    description: "把素材和想法交给 Rookie Cut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
+  },
+  "heroEyebrow": "你的 AI 视频剪辑师",
   "showcase": {
     "label": "视频制作演示",
     "types": "视频类型",
@@ -211,7 +215,7 @@ const zh: Resources = {
       "text-animation": "文案没有改，已按语义安排文字节拍和重点动效。\n指定某一句，就能继续换动画、调速度或改配色。",
       "knowledge-explainer": "月球实拍旁放了简短解释，说明我们从地球上看到了什么。\n想多讲一点或调整排版，接着说就行。"
     },
-    "disclosure": "素材剪辑示例",
+    "disclosure": "素材剪辑示例 · 对话示意",
     "disclosureShort": "交互示意",
     "requests": {
       "product-promo": "给这款精华做个短宣传片，开头先展示滴管怎么用。",
@@ -222,12 +226,12 @@ const zh: Resources = {
     "steps": {
       "product-promo": {
         "understand": {
-          "active": "正在梳理产品卖点…",
-          "done": "已梳理产品卖点。"
+          "active": "正在查找滴管特写…",
+          "done": "已查找滴管特写。"
         },
         "storyboard": {
-          "active": "正在安排产品分镜…",
-          "done": "已安排产品分镜。"
+          "active": "正在把特写放在开头…",
+          "done": "已把特写放在开头。"
         },
         "produce": {
           "active": "正在加入产品标题…",
@@ -279,38 +283,38 @@ const zh: Resources = {
     }
   },
   "story": {
-    "demoLabel": "对话制作视频演示",
+    "demoLabel": "剪辑对话示例",
     "idea": {
-      "title": "说说你想做的视频"
+      "title": "想让观众看到什么？"
     },
-    "deliveryTitle": "从分镜到成片",
-    "refineTitle": "想改哪里，直接说",
-    "request": "帮我做个短视频，让大家看懂这个产品怎么用。",
+    "deliveryTitle": "看看第一版",
+    "refineTitle": "这一版，哪里再改改？",
+    "request": "用这些素材剪一支 AgentVeil 上线短片，让大家看到在哪里审批高风险操作。",
     "attachments": {
       "label": "示例附件",
       "image": "product-image.png",
       "document": "product-brief.pdf"
     },
-    "storyboardSummary": "先说清用户遇到的问题，再演示一次产品操作，最后交代它能帮用户做什么。",
-    "rendering": "正在制作视频…",
-    "delivery": "第一版做好了，你看看。",
+    "storyboardSummary": "我会把审批界面剪进去，让观众看到做决定的那一步。",
+    "rendering": "正在剪辑演示片段…",
+    "delivery": "这是示例里的第一版，留意画面里的审批按钮。",
     "posterAlt": "第一版成片的预览画面",
-    "feedback": "把产品怎么用放到开头。",
-    "revisionOpening": "可以。我会把操作演示移到开头，原来的介绍缩成一句。",
+    "feedback": "审批按钮那里多停两秒，我想看清上面的字。",
+    "revisionOpening": "好，我就在这一版里把这个镜头延长两秒，其他镜头照原来的节奏走。",
     "followup": "接着说说你的想法…",
-    "scroll": "继续滚动"
+    "scroll": "对话示例 · 继续滚动"
   },
   "skills": {
-    "label": "技能",
-    "titleFirst": "一键技能，",
-    "titleSecond": "胜任每一项视频创作",
+    "label": "创作方向",
+    "titleFirst": "从产品特写，",
+    "titleSecond": "到用文字讲故事。",
     "create": "使用「{{name}}」开始创作",
   },
   "faqSection": {
     "title": "你可能还想知道",
     "experience": {
-      "question": "第一次做视频，怎么开始？",
-      "answer": "在对话里说清楚想做什么、给谁看。比如「帮我做一支 30 秒的新品介绍」。Rookie Cut 会和你梳理内容和画面，你可以先看分镜，再开始制作。"
+      "question": "怎么开始剪一支片子？",
+      "answer": "把素材发到对话里，说说想剪给谁看。比如「这支新品短片，开头先放产品特写」。看完第一版，接着在这里提修改意见。"
     },
     "material": {
       "question": "手头只有一个想法，可以开始吗？",
@@ -343,21 +347,21 @@ const zh: Resources = {
       earlyAccess: "内测",
     },
     signIn: "登录",
-    openStudio: "开始制作视频",
-    headerCta: "开始体验",
-    heroCta: "立即制作",
+    openStudio: "开始对话",
+    headerCta: "开始对话",
+    heroCta: "开始对话",
     entry: {
       navigation: "主导航",
       community: "加入社群",
     },
-    heroTitle1: "新手也能做出好视频",
+    heroTitle1: "你说，我来剪。",
     heroTitle2: "",
     heroSubtitle:
-      "通过对话，轻松制作融合动态图形、\n丰富动画与精细剪辑的视频。",
+      "把素材发来，说说你想剪成什么样。\n看过第一版，想改哪一处，就在这里接着说。",
     earlyAccess: {
-      title: "做视频，并不用等准备好一切。",
-      description: "不用折腾工具，不用研究技巧，一切都在 Rookie Cut 对话中发生",
-      credits: "新账号赠送 1,000 积分，注册无需绑卡。",
+      title: "你手上有什么想剪的？",
+      description: "一段素材、一份想法，或是一支想再改改的片子，都可以发来。",
+      credits: "注册无需绑卡。",
       estimate: "制作前显示预估积分消耗。",
       note: "内测期间，我们仍在完善制作稳定性与细节检查。",
     },

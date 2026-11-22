@@ -1,23 +1,23 @@
 # LANDING — 落地页叙事与当前结构
 
-> Status: 活跃工作文档（2026-11-06）——落地页叙事、媒体与公开入口的唯一事实源；排期只引用 `PROGRESS.md`。
+> Status: 活跃工作文档（2026-11-23）——落地页叙事、媒体与公开入口的唯一事实源；排期只引用 `PROGRESS.md`。
 
 ## 1. 当前结构
 
-首页为长页：`LandingHeader → LandingHero → CreationShowcase → CreationStory → LandingFaq → EarlyAccess → Footer`。Hero 使用 `#f9f8f6` 暖纸色背景（只覆盖 Landing 的 `--landing-background`，不改全站背景）、定位小字/原主标题/说明三层文字和主按钮，移除 ASCII 波场与光晕；缩短高度以在首屏露出演示。Header 吸附顶部，桌面为 64px 高、独立 1360px 容器，品牌图标 24px，中央导航使用等宽左右轨道保持真正居中，Header CTA 为 14px；主题与语言入口只留在 Header。当「说说你想做的视频」section 顶部到达 80px sticky 起点、故事舞台真正接管页面后，桌面 Header 在原 64px 占位内以 500ms 收缩为带 8px 顶部间距的 56px 居中全圆角玻璃浮条；浅色玻璃为 `#F2F1EE` 93% + 4px blur，深色为 `#171612` 93% + 4px blur，背景与模糊共用同一 pill 边界并隐藏主题/语言按钮，滚回上方恢复通栏实色，移动端保持原形态。App 沿用既有登录及 `/home` 链路。
+首页为长页：`LandingHeader → LandingHero → CreationShowcase → CreationStory → LandingSkills → LandingFaq → EarlyAccess → Footer`。Hero 使用 `#f9f8f6` 暖纸色背景（只覆盖 Landing 的 `--landing-background`，不改全站背景）、定位小字/主标题/说明三层文字和主按钮，移除 ASCII 波场与光晕；缩短高度以在首屏露出演示。Header 吸附顶部，桌面为 64px 高、独立 1360px 容器，品牌图标 24px，中央导航使用等宽左右轨道保持真正居中，Header CTA 为 14px；主题与语言入口只留在 Header。当CreationStory 顶部到达 80px sticky 起点、故事舞台真正接管页面后，桌面 Header 在原 64px 占位内以 500ms 收缩为带 8px 顶部间距的 56px 居中全圆角玻璃浮条；浅色玻璃为 `#F2F1EE` 93% + 4px blur，深色为 `#171612` 93% + 4px blur，背景与模糊共用同一 pill 边界并隐藏主题/语言按钮，滚回上方恢复通栏实色，移动端保持原形态。App 沿用既有登录及 `/home` 链路。
 
 旧的 VideoShowcase、Manifesto、AppShowcase、Channels、订阅 Pricing、FAQ、FinalCta、Testimonials、旧文本 Gallery 与社群 mock 已移除，不保留一套等待恢复的旧营销叙事。
 
 ## 2. 叙事立场
 
-- 定位为对话式视频 Agent，服务有产品或知识表达需求、不会也不希望学习剪辑的人；无需安装软件或配置环境。Skill、制作方法与渲染是内部能力，不要求用户理解或安装。
+- Rookie Cut 是通过对话操作同一部作品的 AI 视频剪辑师。用户提供素材和目标，看片后指出要改的画面，继续打磨到交付。Skill、制作方法与渲染是内部能力，不要求用户理解或安装。
 - 单助手叙事：用户提出目标，通过对话完成创作与修订；内部工具与子 agent 不承担品牌主语。
 - 当前视频产品表达统一为**产品宣传、口播动效、文字动画、知识讲解**。多形态是能力，不是一次输入固定生成全套的承诺。
 - 不虚构发布、合规、渠道、社交链接、折扣或质量承诺。多语言文案只陈述当前真实规则。
 
 ## 3. Hero、导航与内测商业面
 
-- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie Cut**；公开域名继续读取当前实际配置，未确定新域名前不改 URL。Hero 小字为 `Your AI video agent / 你的 AI 视频 Agent`，主标题为 `Rookies can make great videos too. / 新手也能做出好视频。`；英文说明为 `No complex timelines or keyframes. Create animated promos and explainer videos—just by chatting.`，中文说明保持现有功能描述；Hero 主按钮为 `Create now / 立即制作`，Header 与移动导航主按钮为 `Get started / 开始体验`，均点击登录或进入应用。
+- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie Cut**。Hero 小字为 `Your AI video editor / 你的 AI 视频剪辑师`，主标题为 `You call the cut. / 你说，我来剪。`。说明邀请用户发素材、看第一版、在原对话提出修改。Header、Hero 与收尾按钮均使用 `Start a chat / 开始对话`。
 - 桌面 Hero 上/下间距为 32/48px；主标题沿用现有响应式 clamp，上限 72px、常规字重，使用自托管的 Cormorant Garamond + Noto Serif SC 高对比衬线字族。说明限宽 32rem，中英文按语义显式分为两行，不在词语中间断行；与主按钮间隔 48px，主按钮文字为 14/16px。`CreationShowcase` 桌面顶部间距为 40px，面板最大宽度仍保持 1200px。
 - 配置真实 Discord 地址后，Hero 显示「加入社群」外链；未配置时不显示第二入口。
 - Header 使用「定价 / 常见问题」两个正文锚点，撤掉悬浮的重复功能介绍。移动 Sheet 保留内测入口及相同两个锚点，另保留主题、语言和主按钮。
@@ -26,14 +26,14 @@
 
 ### 首屏动态演示与滚动叙事
 
-`CreationShowcase` 使用四个产品 Tab、左对话/右样片的展示界面和各自的通栏彩色背景。四个 Tab 共用 `#f8f7f5` 暖白基底与左下、右上、底部三层浅色径向光场，分别以粉蓝淡黄、薰衣草青浅杏、薄荷蓝粉、粉紫浅绿区分；外部背景还包含斜向柔光与静态 SVG 颗粒噪点，噪点沿左上至右下斜向渐显，内部对话面板、输入框和选中 Tab 使用 `bg-card`（浅色主题为纯白）与暖色页面底拉开层级，预览区保持实色媒体表面；噪点不动画，reduced-motion 不增加额外动态。桌面展示区为 160svh，面板 sticky，Tab 在该区域经过视口期间固定于视口底部，离开区域随区块退出。8 秒自动切换；四个类别分别使用符合自身制作链的工序名称，执行中使用进行时与省略号，完成后切换为完成时动词短语、去除省略号并将文字与图标降为 `text-meta-foreground`；当前工序状态行使用 `shimmer`，完成回复按类别给出交付摘要和可操作的修订示例。回复与视频在约 4 秒的交付节拍同步淡入，视频此时才开始静音播放；手动选择重置计时并继续轮播。后台、离屏与 reduced-motion 不自动播放，Tab 支持方向键/Home/End。左侧使用用户气泡、活动图标、Agent 回复和多行发送框；发送框入口进入真实应用，不在 Landing 调用制作接口。手机收起活动与辅助回复。移除独立播放按钮、创作按钮与 Tab 进度条。首屏四条样片以 Pexels 公开素材剪辑，媒体和封面位于 `apps/web/public/gallery/showcase/`。预览区标注素材剪辑示例。
+`CreationShowcase` 使用四个场景 Tab、左对话/右样片的展示界面和各自的通栏彩色背景。四个 Tab 共用 `#f8f7f5` 暖白基底与左下、右上、底部三层浅色径向光场，分别以粉蓝淡黄、薰衣草青浅杏、薄荷蓝粉、粉紫浅绿区分；外部背景还包含斜向柔光与静态 SVG 颗粒噪点，噪点沿左上至右下斜向渐显，内部对话面板、输入框和选中 Tab 使用 `bg-card`（浅色主题为纯白）与暖色页面底拉开层级，预览区保持实色媒体表面；噪点不动画，reduced-motion 不增加额外动态。桌面展示区为 160svh，面板 sticky，Tab 在该区域经过视口期间固定于视口底部，离开区域随区块退出。8 秒自动切换；四个类别分别演示与样片有关的编辑动作，执行中使用进行时与省略号，完成后切换为完成时动词短语、去除省略号并将文字与图标降为 `text-meta-foreground`；当前工序状态行使用 `shimmer`，完成回复按类别给出交付摘要和可操作的修订示例。回复与视频在约 4 秒的交付节拍同步淡入，视频此时才开始静音播放；手动选择重置计时并继续轮播。后台、离屏与 reduced-motion 不自动播放，Tab 支持方向键/Home/End。左侧使用用户气泡、活动图标、Agent 回复和多行发送框；发送框入口进入真实应用，不在 Landing 调用制作接口。手机收起活动与辅助回复。移除独立播放按钮、创作按钮与 Tab 进度条。首屏四条样片以 Pexels 公开素材剪辑，媒体和封面位于 `apps/web/public/gallery/showcase/`。预览区标注素材剪辑示例。
 
 - 产品宣传以滴管使用特写配产品片名。 [Los Muertos Crew](https://www.pexels.com/video/person-using-a-dropper-for-a-serum-7615790/)
 - 口播动效用竖屏录音室镜头配栏目标签和入场标题。 [cottonbro studio](https://www.pexels.com/video/a-woman-talking-over-the-microphone-7599377/)
 - 文字动画以霓虹灯镜头作为文字入场的背景。 [Maksim Goncharenok](https://www.pexels.com/video/a-neon-sign-turning-on-and-off-5820390/)
 - 知识讲解将满月延时与月相解释并排。 [Dr Photographer](https://www.pexels.com/video/full-moon-across-night-sky-timelapse-30785080/) · [NASA 月相说明](https://science.nasa.gov/moon/moon-phases/)
 
-`CreationStory` 在同一个吸附对话舞台展示提出需求、从分镜到成片和继续修改。桌面滚动区为 280svh，移动端为 240svh。首条消息带图片和 PDF 示例附件，随后显示一句分镜方向、一条制作状态和一条公开样片。用户提出修改后，助手说明会如何调整开头。消息区域跟随最新消息，页面滚动仍由浏览器处理，回滚可重新查看前面的步骤。离屏和切到后台时暂停视频，减少动态效果模式直接展示完整对话和样片封面。
+`CreationStory` 在同一个吸附对话舞台展示提出剪辑目标、观看第一版和提出局部修改。桌面滚动区为 280svh，移动端为 240svh。首条消息带图片和 PDF 示例附件，示例对话用 AgentVeil 的公开样片展示高风险操作的审批界面。看片后用户希望在审批按钮处多停两秒，助手说明要在当前剪辑中延长该镜头。页面只播放第一版示例。消息区域跟随最新消息，页面滚动仍由浏览器处理，回滚可重新查看前面的步骤。离屏和切到后台时暂停视频，减少动态效果模式直接展示完整对话和样片封面。
 
 ### 技能滚动展示
 
@@ -46,11 +46,7 @@
 
 ## 4. Final CTA（保留 Early access 锚点）
 
-FAQ 后的收尾标题为 `Make videos without waiting until everything is ready.` /「做视频，并不用等准备好一切。」。说明强调整个创作过程在 Rookie Cut 对话中进行。标题沿用 Hero 衬线，说明限宽居中，圆角主按钮和注册说明成组。移动端按钮全宽。收尾采用自然文档流，保留 `early-access` 锚点。
-
-- 主按钮为 `Create a video / 开始制作视频`，沿用登录与 `/home` 链路。
-- 按钮下说明新账号赠送 **1,000 credits**、注册无需绑卡。公开文案与运行时 `configs.wallet.signup_grant` 必须一致；修改代码默认值不会覆盖数据库已有配置。
-- 按钮下仅保留赠送积分和注册无需绑卡的一行说明。预估消耗见 FAQ，内测状态见顶部 Banner，不在收尾重复。
+收尾标题为 `What are you working on? / 你手上有什么想剪的？`，邀请用户带来素材、想法或已有剪辑。按钮沿用登录与 `/home` 路径，下方保留注册无需绑卡的说明。开户赠额由运行时 `configs.wallet.signup_grant` 决定，Landing 不展示固定数值。
 
 ## 5. 四产品 Gallery（当前不在首页挂载）
 
@@ -88,6 +84,6 @@ Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权
 
 ## 7. 当前验证边界
 
-当前公开页实现完整新版结构、中英文文案、自动/手动 Tab、滚动三阶段、静态 Gallery、FAQ 与三列 Footer。既有 TypeScript 与 landingCreate 定向检查通过，但最新 Landing 视觉与演示调整尚未复跑静态检查或浏览器验收。减少动态效果、其他尺寸、完整媒体播放、登录后 handoff、双主题仍需完整旅程验收；公开 1,000 积分文案前仍须核对数据库实际配置。媒体仍为公开视觉候选；真实制作与修改回放、类别锚片与公开授权验收未关闭。Footer 未配置栏目当前仅文字，无真实链接；上线前须逐项处理。
+2026-11-23 核对线上旧版首屏与 Story 后，在本地生产构建以 Chrome 实测英文浅色桌面（1440×900）、中文深色手机（390×844），以及减少动态效果的英文手机（375×812）与中文桌面（1280×800）。覆盖首屏和分享标题、Showcase 键盘切换、媒体播放及离屏暂停、Story 样片和续改、Skills 选择、FAQ 展开。上述视口未见页面横向溢出或 hydration 报错。登录弹窗与模拟登录态进入 `/home` 已实测。TypeScript、构建和两份 Landing 定向测试（5 项）通过。真实邮箱登录、后台制作、修改后成片与公开授权另行验收。
 
 FAQ 桌面保留约 60svh 的滚动停留距离，舞台 sticky 于导航下方，不拦截滚轮。FAQ 使用同名 `details` 互斥分组，展开一项会关闭其余项；展开后若内容超出可用视口，自动恢复自然文档流，保证答案可读；收起后恢复停留。手机与 reduced-motion 不固定。

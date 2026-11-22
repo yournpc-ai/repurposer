@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import en from "@/lib/i18n/locales/en"
+import zhLocale from "@/lib/i18n/locales/zh"
 import { CreationShowcase } from "@/components/landing/CreationShowcase"
 import { CreationStory } from "@/components/landing/CreationStory"
 import { LandingSkills } from "@/components/landing/LandingSkills"
@@ -24,7 +26,7 @@ export const Route = createFileRoute("/")({
     const rootLoaderData = matches.find((m) => m.routeId === "__root__")
       ?.loaderData
     const zh = rootLoaderData?.lang === "zh"
-    const copy = zh ? LANDING_META.zh : LANDING_META.en
+    const copy = zh ? zhLocale.landing.meta : en.landing.meta
     return {
       meta: [
         { title: copy.title },
@@ -33,14 +35,14 @@ export const Route = createFileRoute("/")({
         { property: "og:site_name", content: "Rookie Cut" },
         { property: "og:url", content: SITE_URL },
         { property: "og:title", content: copy.title },
-        { property: "og:description", content: copy.ogDescription },
+        { property: "og:description", content: copy.description },
         { property: "og:image", content: `${SITE_URL}/og.png` },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
         { property: "og:locale", content: zh ? "zh_CN" : "en_US" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: copy.title },
-        { name: "twitter:description", content: copy.ogDescription },
+        { name: "twitter:description", content: copy.description },
         { name: "twitter:image", content: `${SITE_URL}/og.png` },
       ],
       links: [
@@ -57,19 +59,6 @@ export const Route = createFileRoute("/")({
 })
 
 const SITE_URL = "https://repurposer.ai"
-
-const LANDING_META = {
-  en: {
-    title: "Rookie Cut — Your AI video agent",
-    description: "Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
-    ogDescription: "Your AI video agent. Create videos with motion graphics, rich animation, and precise editing—all through conversation.",
-  },
-  zh: {
-    title: "Rookie Cut — 你的 AI 视频 Agent",
-    description: "通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
-    ogDescription: "你的 AI 视频 Agent。通过对话，轻松制作融合动态图形、丰富动画与精细剪辑的视频。",
-  },
-}
 
 function LandingPage() {
   return (
