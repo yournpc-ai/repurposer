@@ -1,0 +1,110 @@
+{
+  "audio/baseline.mp4": {
+    "argv": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "audio/baseline.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "measure": {
+      "input_i": "-20.77",
+      "input_tp": "-7.87",
+      "input_lra": "13.80",
+      "input_thresh": "-31.20",
+      "output_i": "-16.02",
+      "output_tp": "-3.21",
+      "output_lra": "3.90",
+      "output_thresh": "-26.25",
+      "normalization_type": "dynamic",
+      "target_offset": "0.02"
+    }
+  },
+  "audio/failed.mp4": {
+    "argv": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "audio/failed.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "measure": {
+      "input_i": "-16.25",
+      "input_tp": "-3.21",
+      "input_lra": "13.80",
+      "input_thresh": "-26.68",
+      "output_i": "-16.04",
+      "output_tp": "-3.12",
+      "output_lra": "3.80",
+      "output_thresh": "-26.28",
+      "normalization_type": "dynamic",
+      "target_offset": "0.04"
+    }
+  },
+  "audio/bounded.mp4": {
+    "argv": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "audio/bounded.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "measure": {
+      "input_i": "-16.25",
+      "input_tp": "-3.21",
+      "input_lra": "13.80",
+      "input_thresh": "-26.68",
+      "output_i": "-16.04",
+      "output_tp": "-3.12",
+      "output_lra": "3.80",
+      "output_thresh": "-26.28",
+      "normalization_type": "dynamic",
+      "target_offset": "0.04"
+    }
+  },
+  "/tmp/i8-clock.2XGAg3/regression/run/success/video.mp4": {
+    "argv": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "/tmp/i8-clock.2XGAg3/regression/run/success/video.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "measure": {
+      "input_i": "-16.28",
+      "input_tp": "-3.17",
+      "input_lra": "15.90",
+      "input_thresh": "-26.65",
+      "output_i": "-16.06",
+      "output_tp": "-3.31",
+      "output_lra": "3.80",
+      "output_thresh": "-26.30",
+      "normalization_type": "dynamic",
+      "target_offset": "0.06"
+    }
+  }
+}

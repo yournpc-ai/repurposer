@@ -1,0 +1,12 @@
+--- a/apps/render/src/video/index.ts
++++ b/apps/render/src/video/index.ts
+@@ -89,6 +89,9 @@
+       serveUrl,
+       codec: "h264",
+       ...(hasSoundSource ? { audioCodec: "pcm-16" as const } : { muted: true }),
++      ffmpegOverride: ({type, args}) => type === "pre-stitcher" && hasSoundSource
++        ? [...args.slice(0, -1), "-f", "mp4", args[args.length - 1]]
++        : args,
+       outputLocation: hasSoundSource ? intermediate : baseline,
+       inputProps,
+       timeoutInMilliseconds: 180_000,

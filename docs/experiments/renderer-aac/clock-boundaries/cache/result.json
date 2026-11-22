@@ -1,0 +1,23 @@
+{
+  "oldKey": "d9cc994d5fc048281db366dca83ef8509f46d97d7ef782d4ad3c55e6f5bb3e8c",
+  "newKey": "03e9f770287bbd2c171cba410d84d6766239824df649f3619fab926ff5766ad1",
+  "oldStillPresent": "cc8a6414fb8b6491576d72384253b1cab6f647d8337d0d5933a54a145e0d66e9",
+  "newSha": "33b1516e3f8163a402c14ea994abbb8814c58a71476b6bb07f0092f69ce2cb42",
+  "first": {
+    "status": 409,
+    "body": {
+      "error": "Rendered files are no longer cached; render again before uploading",
+      "stage": "recovery",
+      "code": "ARTIFACT_CACHE_MISS"
+    },
+    "puts": 0
+  },
+  "second": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "video": "fixture.mp4"
+    },
+    "puts": 1
+  }
+}

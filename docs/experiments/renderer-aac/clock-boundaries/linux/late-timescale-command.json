@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "docker",
+    "exec",
+    "i8-clock-diag",
+    "/repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg",
+    "-i",
+    "/lab/pre-encode.mkv",
+    "-i",
+    "/lab/audio.wav",
+    "-c:a",
+    "copy",
+    "-c:v",
+    "copy",
+    "-movflags",
+    "faststart",
+    "-map_metadata",
+    "-1",
+    "-metadata",
+    "comment=Made with Remotion 4.0.484",
+    "-y",
+    "-video_track_timescale",
+    "90000",
+    "/lab/late-timescale.mov"
+  ],
+  "exit": 0
+}

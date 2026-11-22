@@ -1,0 +1,70 @@
+{"mode":"success","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/success/video.mp4"},"ms":47806}
+video loudnorm post-pass failed, keeping original audio: Error: Command failed: /Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -hide_banner -nostats -i /tmp/i8-clock.2XGAg3/regression/run/measureFail/.encode-NxEBTD/baseline.mp4 -vn -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -
+ffmpeg version n7.1 Copyright (c) 2000-2024 the FFmpeg developers
+  built with Apple clang version 17.0.0 (clang-1700.0.13.5)
+  configuration: --prefix=remotion --extra-cflags='-Iremotion/include -Iremotion/include/opus -Iremotion/include/lame -Iremotion/include/vpx' --extra-ldflags='-Lremotion/lib -Wl' --enable-small --enable-shared --enable-libdav1d --enable-libaom --enable-libzimg --enable-libfdk-aac --disable-static --disable-ffplay --disable-postproc --disable-filters --disable-libxcb --enable-filter=aformat --enable-filter=atrim --enable-filter=acopy --enable-filter=adelay --enable-filter=anullsrc --enable-filter=atempo --enable-filter=apad --enable-filter=amerge --enable-filter=amix --enable-filter=asetrate --enable-filter=asetpts --enable-filter=aresample --enable-filter=concat --enable-filter=loudnorm --enable-filter=colorspace --enable-filter=tinterlace --enable-filter=fieldorder --enable-filter=pan --enable-filter=volume --enable-filter=scale --enable-filter=sine --enable-filter=split --enable-filter=nullsrc --enable-filter=silencedetect --enable-filter=palettegen --enable-filter=paletteuse --enable-filter=zscale --enable-filter=tonemap --enable-filter=copy --disable-doc --disable-debug --enable-gpl --enable-nonfree --disable-encoders --enable-encoder=opus --enable-encoder=aac --enable-encoder=libfdk_aac --enable-encoder=png --enable-encoder=mjpeg --enable-encoder=pcm_s16le --enable-encoder=pcm_s24le --enable-encoder=libx264 --enable-encoder=libx265 --enable-encoder=libaom_av1 --enable-libvpx --enable-encoder=libvpx_vp8 --enable-encoder=libvpx_vp9 --enable-encoder=gif --enable-encoder=libmp3lame --enable-encoder=libopus --enable-encoder=prores_ks --enable-encoder=rawvideo --enable-videotoolbox --enable-encoder=h264_videotoolbox --enable-encoder=hevc_videotoolbox --enable-encoder=prores_videotoolbox --disable-muxers --enable-muxer='webm,opus,mp4,wav,mp3,mov,matroska,hevc,h264,gif,image2,image2pipe,adts,m4a,mpegts,null,avi' --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-zlib --enable-libopus --disable-demuxers --disable-sdl2 --disable-xlib --enable-demuxer='aac,av1,avi,caf,concat,flac,flv,h264,hevc,image2,image2pipe,matroska,mov,mp3,ogg,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,wav,gif,hls,m4a,mpeg2_videotoolbox,mpeg4_videotoolbox' --disable-decoders --enable-decoder='aac,ac3,flac,h264,hevc,libvpx_vp8,libvpx_vp9,vp8,vp9,mp3,mpeg4,opus,pcm_u8,pcm_f16le,pcm_f24le,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_s64be,pcm_s64le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,prores,theora,vorbis,vp9,mjpeg,gif,png,libdav1d,hls,m4a,rawvideo,h264_videotoolbox,hevc_videotoolbox'
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.100 / 61. 19.100
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+Unrecognized option 'i8-injected-invalid-option'.
+Error splitting the argument list: Option not found
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:414:12)
+    at ChildProcess.emit (node:events:530:35)
+    at maybeClose (node:internal/child_process:1101:16)
+    at Socket.<anonymous> (node:internal/child_process:456:11)
+    at Socket.emit (node:events:518:28)
+    at Pipe.<anonymous> (node:net:351:12) {
+  code: 8,
+  killed: false,
+  signal: null,
+  cmd: '/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -hide_banner -nostats -i /tmp/i8-clock.2XGAg3/regression/run/measureFail/.encode-NxEBTD/baseline.mp4 -vn -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -',
+  stdout: '',
+  stderr: 'ffmpeg version n7.1 Copyright (c) 2000-2024 the FFmpeg developers\n' +
+    '  built with Apple clang version 17.0.0 (clang-1700.0.13.5)\n' +
+    "  configuration: --prefix=remotion --extra-cflags='-Iremotion/include -Iremotion/include/opus -Iremotion/include/lame -Iremotion/include/vpx' --extra-ldflags='-Lremotion/lib -Wl' --enable-small --enable-shared --enable-libdav1d --enable-libaom --enable-libzimg --enable-libfdk-aac --disable-static --disable-ffplay --disable-postproc --disable-filters --disable-libxcb --enable-filter=aformat --enable-filter=atrim --enable-filter=acopy --enable-filter=adelay --enable-filter=anullsrc --enable-filter=atempo --enable-filter=apad --enable-filter=amerge --enable-filter=amix --enable-filter=asetrate --enable-filter=asetpts --enable-filter=aresample --enable-filter=concat --enable-filter=loudnorm --enable-filter=colorspace --enable-filter=tinterlace --enable-filter=fieldorder --enable-filter=pan --enable-filter=volume --enable-filter=scale --enable-filter=sine --enable-filter=split --enable-filter=nullsrc --enable-filter=silencedetect --enable-filter=palettegen --enable-filter=paletteuse --enable-filter=zscale --enable-filter=tonemap --enable-filter=copy --disable-doc --disable-debug --enable-gpl --enable-nonfree --disable-encoders --enable-encoder=opus --enable-encoder=aac --enable-encoder=libfdk_aac --enable-encoder=png --enable-encoder=mjpeg --enable-encoder=pcm_s16le --enable-encoder=pcm_s24le --enable-encoder=libx264 --enable-encoder=libx265 --enable-encoder=libaom_av1 --enable-libvpx --enable-encoder=libvpx_vp8 --enable-encoder=libvpx_vp9 --enable-encoder=gif --enable-encoder=libmp3lame --enable-encoder=libopus --enable-encoder=prores_ks --enable-encoder=rawvideo --enable-videotoolbox --enable-encoder=h264_videotoolbox --enable-encoder=hevc_videotoolbox --enable-encoder=prores_videotoolbox --disable-muxers --enable-muxer='webm,opus,mp4,wav,mp3,mov,matroska,hevc,h264,gif,image2,image2pipe,adts,m4a,mpegts,null,avi' --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-zlib --enable-libopus --disable-demuxers --disable-sdl2 --disable-xlib --enable-demuxer='aac,av1,avi,caf,concat,flac,flv,h264,hevc,image2,image2pipe,matroska,mov,mp3,ogg,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,wav,gif,hls,m4a,mpeg2_videotoolbox,mpeg4_videotoolbox' --disable-decoders --enable-decoder='aac,ac3,flac,h264,hevc,libvpx_vp8,libvpx_vp9,vp8,vp9,mp3,mpeg4,opus,pcm_u8,pcm_f16le,pcm_f24le,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_s64be,pcm_s64le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,prores,theora,vorbis,vp9,mjpeg,gif,png,libdav1d,hls,m4a,rawvideo,h264_videotoolbox,hevc_videotoolbox'\n" +
+    '  libavutil      59. 39.100 / 59. 39.100\n' +
+    '  libavcodec     61. 19.100 / 61. 19.100\n' +
+    '  libavformat    61.  7.100 / 61.  7.100\n' +
+    '  libavdevice    61.  3.100 / 61.  3.100\n' +
+    '  libavfilter    10.  4.100 / 10.  4.100\n' +
+    '  libswscale      8.  3.100 /  8.  3.100\n' +
+    '  libswresample   5.  3.100 /  5.  3.100\n' +
+    "Unrecognized option 'i8-injected-invalid-option'.\n" +
+    'Error splitting the argument list: Option not found\n'
+}
+{"mode":"measureFail","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/measureFail/video.mp4"},"ms":17692}
+video loudnorm post-pass failed, keeping original audio: Error: Command failed: /Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -y -hide_banner -nostats -i /tmp/i8-clock.2XGAg3/regression/run/encodeFail/.encode-7KpX8n/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k /tmp/i8-clock.2XGAg3/regression/run/encodeFail/.encode-7KpX8n/baseline.loudnorm.mp4
+Unrecognized option 'i8-injected-invalid-option'.
+Error splitting the argument list: Option not found
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:414:12)
+    at ChildProcess.emit (node:events:530:35)
+    at maybeClose (node:internal/child_process:1101:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:304:5) {
+  code: 8,
+  killed: false,
+  signal: null,
+  cmd: '/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg -y -hide_banner -nostats -i /tmp/i8-clock.2XGAg3/regression/run/encodeFail/.encode-7KpX8n/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k /tmp/i8-clock.2XGAg3/regression/run/encodeFail/.encode-7KpX8n/baseline.loudnorm.mp4',
+  stdout: '',
+  stderr: "Unrecognized option 'i8-injected-invalid-option'.\n" +
+    'Error splitting the argument list: Option not found\n'
+}
+{"mode":"encodeFail","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/encodeFail/video.mp4"},"ms":13754}
+video loudnorm post-pass failed, keeping original audio: Error: injected pre-rename failure
+    at fs.promises.rename (/private/tmp/i8-clock.2XGAg3/regression/observe.cjs:18:160)
+    at normalizeLoudness (/private/tmp/i8-clock.2XGAg3/regression/repo/apps/render/src/audio.ts:100:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async renderVideo (/private/tmp/i8-clock.2XGAg3/regression/repo/apps/render/src/video/index.ts:102:7)
+    at async <anonymous> (/private/tmp/i8-clock.2XGAg3/regression/repo/apps/render/drive.ts:12:15)
+{"mode":"renameFail","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/renameFail/video.mp4"},"ms":14068}
+{"mode":"silence","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/silence/video.mp4"},"ms":11534}
+{"mode":"shape","result":{"videoPath":"/tmp/i8-clock.2XGAg3/regression/run/shape/video.mp4"},"ms":5329}

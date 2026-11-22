@@ -1,0 +1,25 @@
+--- a/apps/render/src/audio.ts
++++ b/apps/render/src/audio.ts
+@@ -76,11 +76,20 @@
+   if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("loudnorm measure: no JSON block in ffmpeg output");
+   const m = JSON.parse(measure.stderr.slice(jsonStart, jsonEnd + 1)) as LoudnormMeasure;
+   if (m.input_i === "-inf") return;
++  // Isolated proof: read the valid length from the already-verified 48 kHz MP4 baseline.
++  const { stdout: timing } = await execFileAsync(ffprobe, [
++    "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=time_base,duration_ts,sample_rate",
++    "-of", "json", videoPath,
++  ], ffSpawnOpts(ffprobe));
++  const [track] = JSON.parse(timing).streams;
++  if (track.time_base !== "1/48000" || track.sample_rate !== "48000" || !Number.isSafeInteger(track.duration_ts) || track.duration_ts <= 0)
++    throw new Error("unexpected baseline clock");
++  const trim = `atrim=end_sample=${track.duration_ts}`;
+   const filter =
+-    `loudnorm=${LOUDNORM_TARGET}` +
++    `${trim},apad,loudnorm=${LOUDNORM_TARGET}` +
+     `:measured_I=${m.input_i}:measured_TP=${m.input_tp}` +
+     `:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}` +
+-    `:offset=${m.target_offset}:linear=true:print_format=summary`;
++    `:offset=${m.target_offset}:linear=true:print_format=summary,aresample=48000,${trim}`;
+   const tmpPath = videoPath.replace(/\.mp4$/, "") + ".loudnorm.mp4";
+   await execFileAsync(
+     ffmpeg,

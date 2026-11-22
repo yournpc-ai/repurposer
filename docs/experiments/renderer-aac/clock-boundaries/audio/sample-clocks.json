@@ -1,0 +1,72 @@
+{
+  "bounded": {
+    "time_base": "1/48000",
+    "frames": 374,
+    "samples": 382080,
+    "gaps": []
+  },
+  "decoded": {
+    "time_base": "1/48000",
+    "frames": 374,
+    "samples": 382976,
+    "gaps": []
+  },
+  "downsampled": {
+    "time_base": "1/48000",
+    "frames": 53,
+    "samples": 382976,
+    "gaps": [
+      {
+        "previous_frame": 50,
+        "expected": 243760,
+        "actual": 244784,
+        "gap": 1024
+      }
+    ]
+  },
+  "failed": {
+    "time_base": "1/48000",
+    "frames": 374,
+    "samples": 382976,
+    "gaps": [
+      {
+        "previous_frame": 238,
+        "expected": 244736,
+        "actual": 245760,
+        "gap": 1024
+      }
+    ]
+  },
+  "filtered": {
+    "time_base": "1/192000",
+    "frames": 52,
+    "samples": 1531904,
+    "gaps": [
+      {
+        "previous_frame": 50,
+        "expected": 975104,
+        "actual": 979200,
+        "gap": 4096
+      }
+    ]
+  },
+  "trim-input": {
+    "time_base": "1/48000",
+    "frames": 374,
+    "samples": 382080,
+    "gaps": [
+      {
+        "previous_frame": 237,
+        "expected": 243712,
+        "actual": 245632,
+        "gap": 1920
+      }
+    ]
+  },
+  "upsampled": {
+    "time_base": "1/192000",
+    "frames": 375,
+    "samples": 1531904,
+    "gaps": []
+  }
+}

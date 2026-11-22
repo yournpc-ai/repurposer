@@ -1,0 +1,101 @@
+diff --git a/apps/render/src/artifacts.ts b/apps/render/src/artifacts.ts
+index 29cf301c..1f524aa6 100644
+--- a/apps/render/src/artifacts.ts
++++ b/apps/render/src/artifacts.ts
+@@ -24,7 +24,7 @@ function canonical(value: unknown): string {
+ }
+ 
+ function artifactDirectory(identity: unknown, cacheRoot: string): string {
+-  const key = createHash("sha256").update(canonical({ version: 1, identity })).digest("hex");
++  const key = createHash("sha256").update(canonical({ version: 2, identity })).digest("hex");
+   return path.join(cacheRoot, key);
+ }
+ 
+diff --git a/apps/render/src/audio.ts b/apps/render/src/audio.ts
+index 90dc276d..c30ecbe1 100644
+--- a/apps/render/src/audio.ts
++++ b/apps/render/src/audio.ts
+@@ -38,6 +38,17 @@ function ffSpawnOpts(binPath: string): { cwd: string; env: NodeJS.ProcessEnv } {
+   return { cwd, env };
+ }
+ 
++export async function encodeBaselineMp4(input: string, output: string): Promise<void> {
++  const ffmpeg = resolveFfBinary("ffmpeg");
++  await execFileAsync(
++    ffmpeg,
++    ["-v", "error", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
++      "-c:a", "libfdk_aac", "-b:a", "320k", "-cutoff", "18000",
++      "-movie_timescale", "48000", "-movflags", "+faststart", output],
++    ffSpawnOpts(ffmpeg),
++  );
++}
++
+ interface LoudnormMeasure {
+   input_i: string;
+   input_tp: string;
+diff --git a/apps/render/src/video/index.ts b/apps/render/src/video/index.ts
+index c57c5c0f..c6ec9ce1 100644
+--- a/apps/render/src/video/index.ts
++++ b/apps/render/src/video/index.ts
+@@ -8,7 +8,7 @@ import { bundle } from "@remotion/bundler";
+ import { renderMedia, selectComposition } from "@remotion/renderer";
+ import type { VideoSpec } from "@repurposer/video-spec";
+ 
+-import { normalizeLoudness } from "../audio";
++import { encodeBaselineMp4, normalizeLoudness } from "../audio";
+ import { stageRemoteSource } from "../stage";
+ import { assertVideoSupported } from "./capabilities";
+ 
+@@ -74,21 +74,38 @@ export async function renderVideo(
+   const composition = await selectComposition({ serveUrl, id: "Video", inputProps });
+ 
+   const videoPath = path.join(outDir, `${basename}.mp4`);
+-  await renderMedia({
+-    composition,
+-    serveUrl,
+-    codec: "h264",
+-    outputLocation: videoPath,
+-    inputProps,
+-    timeoutInMilliseconds: 180_000,
+-  });
+-
+-  // Loudness is an enhancement, not correctness — never fail a finished
+-  // render over the post-pass (the shared audio policy).
++  const hasSoundSource = stagedSpec.tracks.some((track) =>
++    track.clips.some(({ object }) =>
++      object.kind === "audio" || (object.kind === "video" && !object.muted),
++    ),
++  );
++  const work = await fs.mkdtemp(path.join(outDir, ".encode-"));
++  const baseline = path.join(work, "baseline.mp4");
++  const intermediate = path.join(work, "mix.mov");
+   try {
+-    await normalizeLoudness(videoPath);
+-  } catch (err) {
+-    console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    // Keep Remotion's PCM mix intact until the MP4 muxer can record AAC priming.
++    await renderMedia({
++      composition,
++      serveUrl,
++      codec: "h264",
++      ...(hasSoundSource ? { audioCodec: "pcm-16" as const } : { muted: true }),
++      outputLocation: hasSoundSource ? intermediate : baseline,
++      inputProps,
++      timeoutInMilliseconds: 180_000,
++    });
++    if (hasSoundSource) {
++      await encodeBaselineMp4(intermediate, baseline);
++      await fs.unlink(intermediate);
++    }
++    // Optional loudness processing may fall back only to a completed MP4.
++    try {
++      await normalizeLoudness(baseline);
++    } catch (err) {
++      console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    }
++    await fs.rename(baseline, videoPath);
++  } finally {
++    await fs.rm(work, { recursive: true, force: true });
+   }
+ 
+   return { videoPath };
