@@ -1,10 +1,15 @@
 # Repurposer
 
-Repurposer is a chat-first AI video editor. Give it footage and a goal. The agent inspects the material, edits a persistent composition, plays the affected range and uses what it observed to revise the work. A subsequent message can refer to the same clip, frame or delivered version.
+Repurposer is a professional AI video editor operated through natural language. Its long-term ambition is to compete with ChatCut, OpenMotion and Agent Opus. You give the agent footage and a goal. It inspects the material and the saved composition, arranges clips on tracks, adjusts object properties and animation, plays the affected range, revises and delivers. A later request can refer to the same object or an earlier delivery.
 
-Native Tools operate on tracks, clips, objects and animations. Each edit goes through `apply_composition_edits` and saves an immutable CompositionVersion. Skills provide optional creative methods. A Motion Block can use the existing Generator implementation for complex visuals. Its declared inputs and outer clip remain addressable; individual pixels in baked media have no independent object identity.
+Complex edits should grow from a few composable actions. Four capabilities serve this editing loop:
 
-Chat shows actual tool activity, questions, previews and deliveries. Ask for clarification when a decision blocks progress. Media generation and formal export use the account's permissions and quote. A worker returns the result to the original opening. Delivery points to the reviewed Output; older versions remain playable.
+- **Native Tools** inspect sources, edit tracks, clips, objects and audio, preview a version and deliver it. Composition edits use `apply_composition_edits` to save an immutable CompositionVersion.
+- **Motion Blocks** provide reusable, parameterized visuals. A suitable component or agent-authored program can use the existing Generator. Its source and declared inputs determine what can be revised.
+- **Sound Recipes** are a development direction for producing repeatable sound effects from adjustable parameters. The resulting audio belongs on an ordinary clip in the composition.
+- **Skills** guide creative choices such as framing, movement, pacing, sound and review. The agent chooses the actions that fit the user's goal.
+
+Chat shows actual tool activity, questions, previews and deliveries. The agent asks when a decision blocks progress. Paid generation and export follow account permissions and authorization. Workers return results to the originating message. Each delivery points to its reviewed Output so earlier versions remain playable.
 
 The API and worker live in `apps/api`, the web client in `apps/web`, and the renderer in `apps/render`. The player and renderer share `packages/video-spec` and `packages/video-remotion`.
 

@@ -1,130 +1,45 @@
-# Repurposer Music Architecture
+# 作品中的声音 · BGM、Voice 与 SFX
 
-> Status: 当前规范（2026-11-09）。音乐库、默认选曲、persona 面板自定义生成与 clip 换曲是当前能力；Video Project 的本地库五首候选、下一轮序号选曲与原生 music 修订已有一次真实 Chat 证据，完整 S15、制作和主观混音验收仍未完成。上传、配额/缓存、Chat 自定义生成和高级音频编辑仍未完成。
-> Related: ADR-023；字段级事实源为当前 models、routes 与 `app/tools/music/`。
+声音可以来自用户素材、曲库、录制或合成。来源决定如何制作和授权。Agent 将固定音频放入同一 Composition 的 Clip，调整入点和增益，随画面预览与导出。轨道角色表达剪辑用途。作品模型和唯一写口见 [Video Project](VIDEO_PROJECT.md)。
 
-## 1. 范围与命名
+## 现役来源与操作
 
-音乐系统由 **`Music` 表 + 对象存储 `music/` 前缀 + clip-spec 音乐块**组成。一条 Music 是库中的一首背景乐，不是视频时间线上的一条自由音轨。
+后台已实现下列来源。当前普通原生编辑轮会投影生成和落轨工具，但其工具名单没有曲库搜索、候选选择、Freesound 搜索或导入。旧候选回执可供追溯，仍缺当前 Provider 到用户试听、选用的实测。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py)
 
-默认使用平台生成/策展音乐，减少静态磁盘 mood 文件与不明版权素材的依赖。AI 生成并不自动等于可商用，provider 条款仍是独立上线条件（§10）。
-
-## 2. 当前能力与非目标
-
-当前能力：
-
-1. 平台默认曲目、用户生成曲目和公开/自有库查询；
-2. persona 皮肤的音乐默认与启用开关；
-3. clip 生成时从现有库选曲，不在每次 clip 生成中自动创作新音乐；
-4. persona 皮肤 Music 面板试听、选默认和从 prompt 生成新曲；
-5. `set_music` 换曲/开关/增益并重渲染；旧 Clip Chat `add_music` 确定性选择现有库曲目；
-6. Video Project 普通 Chat 通过 `show_music_candidates` 展示本地真实可播放候选，后续消息用 `select_music` 解算序号选择，再经 `prepare_video_materials` 冻结字节并由 `revise_video.add_audio(role="music")` 保存新版本；
-7. `POST /api/v1/music/generate` 直接生成一条新 Music。
-
-当前不做：
-
-- 用户上传音乐；
-- 通用自由多轨音频编辑器；Video Project 只通过受控 Clip/source window、增益与既有动画能力修订音轨；
-- 在 Chat 或 result editor 中“Generate new”自定义音乐；
-- prompt 去重缓存、生成配额或该路由的 credits 收费；
-- 未经明确授权把私有用户音乐公开。
-
-## 3. 当前架构
-
-```text
-Music Library（music 表 + music/ 对象）
-  ├─ 平台默认：启动 reconcile 只补记录，不在启动时调用模型
-  └─ 用户显式生成：persona Music 面板 → POST /music/generate（inline）
-                         │
-                         ▼
-persona.brand 默认（musicEnabled / musicId / musicMood / musicGainDb）
-                         │
-                         ▼
-clip 计划 / add_music 从现有库选曲
-                         │
-                         ▼
-outputs.render_spec.music（url / enabled / gain_db / music_id）
-                         │
-                         ▼
-renderer 只消费 spec；换曲通过 set_music → render PENDING → worker
-```
-
-`add_music` 是旧 Clip 链的库选择技能，不是音乐生成技能。 Film 的音乐与旁白有其自身 spec/版本合同，不得借本模块把 Film 变成自由多轨音频编辑器。
-
-Video Project 不复用旧 `render_spec.music` 块：Music 先冻结为内容寻址的音频 `SourceSnapshot`，再形成 `AudioObject + ClipSource + Clip`；BGM 位于 `role="music"` 轨，SFX 位于独立 `role="effect"` 轨。`show_music_candidates` 只发候选，持久化到 `candidates_log` 后才可在后续普通消息中由 `select_music` 解算；工具调用方不能自行提供 URL、媒体身份或 digest 替代持久化候选。选曲本身不写版本、不启动 Run，落轨后的新版本仍需完整呈现与普通制作授权。
-
-## 4. 数据归属
-
-| 数据 | 事实源 | 规则 |
+| 内容 | 如何取得来源 | 如何进入作品 |
 |---|---|---|
-| 音频字节 | 对象存储 `music/{music_id}.{ext}` | DB 只存 key；reset 保留 `music/` 前缀 |
-| Music 元数据 | `music` 表 | mood、prompt、license、duration、attribution、visibility 等按当前 schema；策展曲的 `meta` 另存 `content_sha256`、作者、风格、参考 BPM 与实际 BeatGrid 分析结果 |
-| 默认音乐 | `persona.brand` + 系统默认皮肤 | `musicId` 为显式选择，`musicMood` 为回退；`musicEnabled` 是总开关 |
-| 单个 clip 选择 | `outputs.render_spec.music` | 旧 Clip 渲染运行时事实；renderer 不读 Music 表 |
-| Video Project 选曲 | `SourceSnapshot.meta.music` + 版本内 music Clip | 冻结时校验已有 `content_sha256` 与实际字节；`SourceSnapshot.digest` 是版本权威内容身份 |
+| BGM 配乐 | 从可访问的 Music 库搜索，或用 `show_music_candidates` 试听、`select_music` 解析持久化的候选。需要原创配乐时，`generate_music` 经 MediaJob 将受控乐谱合成为 WAV | 库曲经 `prepare_video_materials(material_music_ids=…)` 固定音频。程序化配乐保存乐谱引用、版本、音频摘要和项目快照。Agent 再用 `insert_audio` 指定入点、时长和增益 |
+| Voice 旁白 | `generate_voice` 经 MediaJob 合成语音，回执含固定音频、台词和对齐身份 | 独立录音可用 `insert_audio`。已有待配音 Clip 可用 `bind_clip_source` 绑定匹配来源，SpeechObject 保留台词和对齐语义 |
+| SFX 音效 | 用户可提供已有音频。Freesound 是一个外部搜索来源，`search_sfx` 返回可试听候选，`import_sfx` 解析已保存的选项并重新校验来源、CC0 许可与实际音频 | 导入得到项目内的固定音频。需要应用时才经编辑写口放入 Audio Clip，使用同一预览和导出 |
 
-三种数据形态：
+`insert_audio` 校验快照的 owner、项目、种类、来源时长和作品时间窗。现有映射只把 `programmatic_score` 放入 music 轨、带旁白来源哈希的音频放入 dialogue 轨，其余进入 effect 轨。按这个入口插入普通库曲，也会使用回退角色。曲库的内容分类与实际落轨角色需分别核对。[编辑工具](../apps/api/app/chat/editor.py) · [素材工具](../apps/api/app/chat/turn_tools.py) · [音效导入](../apps/api/app/tools/video/sfx.py)
 
-- **平台默认**：`generated_by_user_id=NULL`、`is_public=TRUE`。
-- **用户生成**：`generated_by_user_id=<user>`；当前新建行默认 `is_public=TRUE`，进入共享库。
-- **未来上传**：必须默认私有；显式分享、权利证明和审核未完成前不得沿用用户生成曲的公开默认。
+## Sound Recipes 的目标与边界
 
-当前“用户生成即公开”是数据行为，不等于已经具备完整的公开库审核与告知体验。公开库 moderation、撤下与用户可见告知仍是开放事项。
+Sound Recipe 描述一种声音适合什么场景，以及可以改什么。例如标题入场需要一次短促、较柔和的冲击声，Agent 可按需要调音高、时长、音色、空间或冲击感。配方内部可使用合成层、包络、滤波和混响。目标是用确定的来源与参数重复产出固定音频。用户要求缩短这声冲击时，只重制受影响的音效，在同一作品修订对应 Clip，保留配乐、旁白和旧版本。
 
-## 5. 默认库与启动对账
+ReactBits Sound Lab 仅作交互和参数设计参考。商业集成与正式参数化音效生产均未验证。采用外部声音或合成实现前须确认复制、再分发及托管权利，受限内容不得直接移植。Freesound 继续作为可选来源。已有乐谱合成、快照、播放器和导出可按需复用，音效沿用同一音轨模型与 ToolLoop。[现有配乐合成](../apps/api/app/tools/music/score.py) · [固定音频及乐谱来源](../apps/api/app/tools/video/music_preparation.py)
+
+## 数据、权限与历史消费者
+
+- 平台策展曲使用公开的 Music 行和 `music/` 对象。Agent 的程序化配乐按 owner 和项目准备，新曲默认私有。版本引用 SourceSnapshot 与实际音频摘要，Renderer 按编译后的 video-spec 播放。
+- 历史 Persona 深链仍能试听曲库、保存皮肤默认值和显式调用 `POST /api/v1/music/generate`。该路由在请求内生成并上传，创建默认公开的 Music 行，尚无项目报价、配额或 prompt 去重。此行为仅适用于该曲库入口。项目内的 `generate_music` 走 MediaJob 和现役授权机制。[曲库路由](../apps/api/app/pipeline/routes/music.py) · [项目媒体作业](../apps/api/app/pipeline/media_jobs.py)
+- 曲库删除保护仍检查历史 Output 中的 `render_spec.music` 引用。保存版本中的快照、用户曲目、Persona、历史 Output 与许可记录均须保护；新作品使用 Composition 写口。[曲库与引用检查](../apps/api/app/pipeline/music.py)
+
+## 策展曲库与启动对账
 
 默认 catalog 由 `CURATED_MUSIC_CATALOG` 的五首 Shotcraft BGM 组成：Tech House、Cat Walk、G Eazy NBA type、House Vibez、Tonight。平台不再自动补入 Calm Academic、Inspiring Vision、Corporate Drive；启动时会删除未被历史 Output 引用的旧平台行及其对象，仍被引用的行转为私有以保留历史而不进入候选库。用户自己生成的音乐不受影响。
 
 - `app/pipeline/music.py:seed_default_music` 在应用启动时 reconcile：按 mood 查缺，对象存在而记录缺失时补记录。
 - 启动 reconcile **不调用 MiniMax、不生成音频、不花配额**；对象不存在时保持缺失并诚实跳过。
-- 五首都来自 Shotcraft 的 `assets/audio/bgm`。前四首有逐曲作者和 URL；`bgm-tech-house.mp3` 的原曲名、作者与逐曲 URL 无法反查，库中明确标记“商用前复核”。代码与音乐的许可分别记录，不把 Shotcraft 的 Apache-2.0 当成音乐许可。
+- 五首都来自 Shotcraft 的 `assets/audio/bgm`。除 Tech House 外的四首有逐曲作者和 URL；`bgm-tech-house.mp3` 的原曲名、作者与逐曲 URL 无法反查，库中明确标记“商用前复核”。代码与音乐的许可分别记录，不把 Shotcraft 的 Apache-2.0 当成音乐许可。
 - 策展字节由 `apps/api/scripts/import_library_music.py <Shotcraft/assets/audio/bgm>` 显式导入。脚本只读五首白名单本地 MP3，解码探测真实时长、计算 SHA-256 并上传缺失对象；已有对象仅字节完全相同才复用，绝不覆盖。它不写 DB、不调用模型。
 - 启动 reconcile 保存来源、许可、作者、风格、参考 BPM 和实际时长/digest，并尽力补齐 BeatGrid；参考 BPM 不冒充新分析结果，BeatGrid 缺失时保持为空。
 - reset_db 保留 `music/` 对象前缀，清库后重启只重建可对应记录。
 
-## 6. 选曲与 spec
+## 向共享曲库上传音乐（待实施）
 
-1. persona 的 `brand` 合并系统默认后得到音乐默认。
-2. clip 计划可依据品牌默认与内容 mood 选择现有 Music；Chat `add_music` 确定性选择已有曲目，不隐式调用生成端点。
-3. `app/memory/brand.py` 与当前烘焙链把 Music 解析为 `ClipMusic`，写入 `render_spec.music`。
-4. renderer 只消费 `url / enabled / gain_db / music_id` 等 spec 字段，不知道 Music、mood 或 persona 的存在。
-
-Video Project 的新链选曲分四种情况：用户直接点名库内曲目/mood 时，`search_music` 只提供元数据 id；用户要求试听或比较时，`show_music_candidates` 发至多五首真实对象仍存在、时长有效的本地候选；后续序号选择由 `select_music` 重查当前权限、标题、时长与 digest；用户同时要求应用时才继续 prepare + revise。无 BGM 只删除或省略 music Clip，不恢复默认 bed；没有真实 BeatGrid/BPM 时不伪造卡点。
-
-```ts
-interface ClipMusic {
-  music_id: string | null
-  url: string | null
-  enabled: boolean
-  gain_db: number
-}
-```
-
-trim/start/end、自动增益与多曲混音不在当前契约中；新增前必须同时评审 clip-spec、libass/FFmpeg 替身成本和 L3 边界。
-
-## 7. 自定义生成
-
-`POST /api/v1/music/generate` 的当前行为：
-
-- 唯一已核实的 Web 调用面是 persona 皮肤编辑器的 Music 面板；
-- 请求处理器直接 await provider 生成并上传，随后插入一个新 UUID 的 Music 行；不经过 worker；
-- 每次请求走当前生成路径，**没有 prompt 去重/cache 命中承诺**；
-- 当前路由没有项目级生成配额或 credits 守卫，不能在 UI/文档中称其已按套餐收费或限量；
-- 新行默认公开，权限、条款和公开告知必须与该行为一起验收。
-
-它是 `MODULE_ARCHITECTURE.md` §5 已登记的 request-inline 例外，不是新重活绕开队列的通用先例。若生成时长、重试或成本控制要求改变，应先迁入队列并设计配额/授权，而不是增加隐藏轮询。
-
-## 8. 精修与 UI
-
-- `set_music` 负责换曲、开关和增益；journal/undo 与重渲染按 Operation Model 和 render fencing 执行。
-- Chat `add_music` 只选择现有库；用户要求创作新曲时，应导向当前 persona Music 面板或明确回答能力边界，不能假装 Chat 已生成。
-- persona Music 面板提供公开 + 自己曲目的列表、试听、默认选择与 prompt 生成。
-- Video Project 候选卡复用 `AudioCandidateSurface` 与真实 `WaveformPlayer`，实时 SSE 与 `candidates_log` 刷新回放都保留 `music_set` 身份、选择高亮和工作回执；选曲卡不提供执行按钮，应用仍走普通 Chat 修订。
-- result editor 的当前换曲能力不等于有“Generate new”按钮；独立 `/library/music` 全库管理页仍属后续。
-
-## 9. 用户上传（PLANNED）
-
-重启上传前必须具备：
+开放曲库上传前必须具备：
 
 1. 明确权利声明并持久化到上传记录；
 2. ToS 中用户责任、平台撤下权与投诉流程；
@@ -135,9 +50,9 @@ trim/start/end、自动增益与多曲混音不在当前契约中；新增前必
 
 未满足这些条件时，不得仅复用普通 Asset 上传就开放音乐库。
 
-## 10. 版权与公开库
+## 版权与公开库
 
-**仍需核实 provider 当前条款**：商业使用、再分发/平台托管、输出权属、终端用户视频分发、是否要求署名。文档中的“AI 生成默认更安全”不是法律结论。
+**仍需核实 provider 当前条款**：商业使用、再分发/平台托管、输出权属、终端用户视频分发、是否要求署名。
 
 条款不足时的回退顺序：换有明确商业许可的 provider、委托并取得原创音乐权利，或关闭音乐能力。不得用技术生成事实替代授权。
 
@@ -148,18 +63,8 @@ trim/start/end、自动增益与多曲混音不在当前契约中；新增前必
 - 自定义生成的配额、付费和公平使用模型；
 - 是否做 prompt/内容缓存，以及缓存键、跨用户共享和隐私边界。
 
-## 11. 质量与验收
+## 真实证据与开放项
 
-- 默认库 reconcile 必须离线可启动，缺失对象不触发隐式生成。
-- 当前 Music 候选/序号选择、music/effect 分轨、digest 防错与 S15 配乐扩展的测试和真实播放、版本落轨、钉版制作、混音验收状态以当前任务合同为准；代码与静态覆盖不等于这些旅程已经通过。
-- 选曲、换曲、开关与增益在 preview/export 一致；离屏播放与全局声音互斥遵守 UI 合同。
-- 自定义生成分别验证 provider 成功、上传、DB 行、权限、公开默认、失败与重复点击；当前没有缓存/配额时不得写对应通过结论。
-- 音乐特定的感知质量、响度、循环自然度和与旁白/人声的动态混音仍需真实试听；通用 verify 或文件存在不等于音乐质量通过。
-- 高级音频编辑、用户上传和公开库运营在各自合同完成前保持 PLANNED。
-
-## 12. 相关文档
-
-- `DECISIONS.md` ADR-023：音乐库决策。
-- `RENDERING.md` / `VIDEO_EDITOR.md`：spec 与编辑边界。
-- `MODULE_ARCHITECTURE.md`：表归属、inline 例外与队列规则。
-- `BILLING.md`：若未来给自定义生成计费，必须接入同一报价、授权与台账体系。
+- I6 中 Agent 生成过固定旁白和四秒程序化配乐，再分别插入同一作品。Chrome 刷新前后均播放了两条音频。样本中的配乐为零积分，旁白首次生成两积分，同文复用零积分。它覆盖该样本的生产、落轨与回放。[I6 媒体记录](tasks/agent-editor-evidence/iteration-6/media.md)
+- 旧 S15 留有本地五首候选、下一轮按序号选曲及 music 修订的一次真实 Chat 记录。完整制作与主观混音仍待验。后续验收须对照同一版本实际试听音画时序、响度、循环接缝及旁白可懂度。
+- Sound Recipes 仍缺真实的“描述音效 → 固定音频 → 落轨 → 试听 → 只改这一声”的往返证据，重放还须核对版本、音频与费用。正式导出和费用遵循 [现役 Agent 合同](tasks/new-agent.md) 与 [账本](BILLING.md)。

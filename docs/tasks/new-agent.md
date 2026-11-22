@@ -75,9 +75,11 @@ Observed Results
 
 ---
 
-### 基础操作、视觉实现与创作方法
+### 新能力如何进入现有剪辑循环
 
-Native Tools 定位、插入和编辑对象，经唯一写口保存版本。Skills 提供可选的方法与参考。Motion Blocks 是可复用视觉实现的产品概念。现有 `GeneratorObject` 保存受限参数、固定资源与程序；`remotion-project` 通过现有 Component Runtime 隔离烘焙，`editing/video_spec.py` 将固定产物作为媒体编译。能改实例参数或重新烘焙的效果应说明可改字段。内部文字需独立修改时应保留为原生文字对象。三者均服务同一个 Agent 循环。
+Skills 按需提供构图、运动、节奏、声音与审片方法。Agent 自主选择 Native Tools 检查素材、操作作品、预览和交付。Motion Blocks 提供可复用或自主编写的受控视觉实现。Sound Recipes 是可复现的参数化音效来源方向，产物作为固定音频落轨。采用哪种来源都沿用同一 ToolLoop、CompositionVersion 写口、权限、费用与恢复合同。每项扩展须用真实任务核对 Tool、Prompt/Context、Chat、Execution 和 Recovery。
+
+视觉来源与可编辑边界见 [作品模型 §4.3.2](../VIDEO_PROJECT.md)，声音的现状与目标见 [声音合同](../MUSIC_ARCHITECTURE.md)。
 
 ## 0.2 为什么必须彻底退役旧 Workflow
 

@@ -10,7 +10,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ### 0.1 里程碑状态
 
-- **I8 首个专业编辑切片有条件通过。** 已有视频的固定图片插入、同对象续改、局部回放、授权交付和保存后强杀恢复已有真实记录。原 Dev 库保留，默认入口改用独立库。横图首次、竖图首次、歧义首次失败及原素材回归分别计数。[当前范围](tasks/i8.md) · [五面证据与费用](tasks/agent-editor-evidence/iteration-8/README.md)
+- **I8 首个专业编辑切片有条件通过。** 已有视频的固定图片插入、同对象续改、局部回放、授权交付和保存后强杀恢复已有真实记录。原 Dev 库保留，默认入口改用独立库。横图、竖图、歧义首错及原素材回归分别计数。双图 QuestionDock 两次浏览器续行未通过，末次修正只验证了 Provider 载荷。下一步在新工程点选绿图，核对原请求的插图、局部播放、刷新与零扣费。[当前范围](tasks/i8.md) · [五面证据与费用](tasks/agent-editor-evidence/iteration-8/README.md)
 
 - 6A 已在原验收库核对回归记录，并以真实认领函数复现跨时钟误回收。历史首个 token 与供应商最终账单未留证。详见 [执行审计](tasks/agent-editor-evidence/iteration-6/README.md)。6B 已在真实隔离栈完成原接缝、片尾卡、强杀恢复和十用户私有播放。TOS 建桶返回 403，云端上线待验。[6B 验收](tasks/agent-editor-evidence/iteration-6/export.md)。
 
@@ -41,7 +41,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 | 历史项目 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) |
 | 开放 | Agent Working Loop 持续闭环 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
 | 历史项目 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟；chat `retry_upload` 已改为当前回合的独立上传工具与状态行，走 /upload 并保留原 Run/失败步骤；缓存 miss 不重渲染。定向 API 121 项、历史回放 44 项及 Web/render tsc 通过，新上传 UI 真实浏览器旅程尚未复验；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
-| 开放 | Agent 交互与画布确认迁移 | DeferredFrames 现行规则已归 CHAT；仍需真实 rejected-turn 浏览器证据：零客户端散文/预览、零服务端 commit/dock 残片，并保留有序原始事件。ADR-111 仍欠等待态节点面原型与 live 走查；相机 fit 缩放夹、capture 前估价面和刷新重建面须在同一份新合同中定清；跨轮防复读需可复现证据后再升级 | CHAT §8；现行决策 ADR-099/111 |
+| 历史项目 | 旧画布确认迁移的未验项 | 当时缺少 rejected-turn 无残留、等待节点、相机 fit、采集前估价、刷新重建和跨轮防复读的完整浏览器证据。现役 Chat 的问题、报价和刷新按消息回执验证。 | CHAT §8；历史 ADR-099/111 |
 | 开放 | 消息回放与素材检视 | seq/首回合事务、interim_prose 五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
 | 开放 | 素材理解与对话面验收 | 素材/咨询真实旅程和 live 场景仍待完成：消息回放不丢且不重复叙事；不得创建独立转写节点/卡，资产卡只在真实处理状态出现后显示处理中；休眠期状态诚实；in-flight beat 不重复落；法条词汇不被复读。ASR GPU/云加速是独立运营项，不属于本验收 | [验证登记 §4.3](VERIFICATION.md#43-素材理解与对话回放) |
 | 开放 | Credits / permissions（ADR-117） | 代码层已收口；仪式链、conversation_usage 真实行检查和配置清理仍待用户验证 | [验证登记 §4.2](VERIFICATION.md#42-授权会话计量与配置) |
@@ -79,7 +79,7 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 [ ] 完成后更新当前快照、剩余风险与下一步；不追加会话编年史
 ```
 
-**Non-negotiable constraints**：LLM 面不直接写 DB；tool schema 是 action 边界；`apply_composition_edits` 是作品编辑写口；`_mutate` 双层 dedupe 不得破坏；video-spec 是唯一在线渲染协议且不得混入 renderer 私有概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；`craft_scan` 零 LLM；终态写携带执行身份；project `{PENDING,RUNNING}` 至多一个 owner。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
+**Non-negotiable constraints**：LLM 面不直接写 DB；tool schema 是 action 边界；`apply_composition_edits` 是作品编辑写口；`_mutate` 双层 dedupe 不得破坏；video-spec 是唯一在线渲染协议且不得混入 renderer 私有概念；打字机律不得破坏；perception 只读（明确批准的 world-seat 例外归对应 ADR）；终态写携带执行身份；MediaJob 与 ExportJob 按各自认领身份提交，同项目可继续编辑。详细约束按任务读 [North Star](ARCHITECTURE_NORTH_STAR.md) 对应章节，不要求所有任务通读。
 
 ## 1. 后续能力、延期事项与上线条件
 

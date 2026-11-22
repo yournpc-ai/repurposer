@@ -1,7 +1,7 @@
 # Repurposer — Claude Collaboration Guidelines
 
-> 协作规范与高频硬律。两个设计系统的**全文**各有其家：视觉/交互形态 = `docs/UI_GUIDELINES.md`；chat/画布行为 = `docs/CHAT_ARCHITECTURE.md`。本文只载最高频违规的硬律与指针——动一个子系统时读其**相关章节**，不要求通读全部规范或历史。
->
+> 通用视觉与交互使用 affectUI Clean，组件使用见 `docs/UI_GUIDELINES.md`，消息与回放行为见 `docs/CHAT_ARCHITECTURE.md`。
+
 > 文档卫生：本文与 docs 只承载**现行法**（现在时直陈）。只保留一个更新日期、当前规则、必要理由与开放事项；不记录拍板过程、翻案链、退役史或逐轮交付报告。**不创建或维护文档归档，不复制旧版本留底**。被替代内容直接删除，规则就地更新；仍有效的需求、未验证项与阻塞必须留在当前文档。
 
 ## 默认阅读与收尾协议
@@ -52,13 +52,13 @@ Use lucide-react for application icons. Third-party logos and the existing brand
 
 ## Studio 界面约定
 
-共享 Composer、预览与媒体查看控件使用 Clean 的尺寸、边界、交互和焦点样式。媒体选区坐标、帧时间、字幕字号草稿与缩放值由各自的领域组件提供。Studio 页面沿用现有 Shell 的内容区和滚动容器。新增导航入口同步 `nav.*` 翻译。通知入口继续使用当前 Studio chrome 的位置。Dot grid 仅用于既有 FlowView。
+共享 Composer、预览与媒体查看控件使用 Clean 的尺寸、边界、交互和焦点样式。媒体选区坐标、帧时间、字幕字号草稿与缩放值由各自的领域组件提供。Studio 页面沿用现有 Shell 的内容区和滚动容器。新增导航入口同步 `nav.*` 翻译。通知入口继续使用当前 Studio chrome 的位置。
 
 ## Composer、Chat 与产品定位
 
 Repurposer 是通过自然语言操作持久视频工程的专业 AI 剪辑师。用户提供目标与素材，Agent 定位对象、执行编辑、观察并续改。保留 MentionEditor、附件、显式 Skill、原问题、费用授权、Stop 和按版本回放。仅在必要决定阻塞时提问。分镜按需展示，历史交付始终钉住原 Output。通用 UI 用 Clean，布局用 Tailwind，过渡用 Motion。
 
-架构与权限归 `docs/tasks/new-agent.md`，本阶段的操作、消费者及五面出口归 `docs/tasks/i8.md`。Skills 指导选择，Native Tools 修改作品，Motion Blocks 通过已有 Generator 表达复杂视觉。对外承诺以实际验收的可编辑范围为准。
+施工先按 [Agent 总合同](docs/tasks/new-agent.md) 扩展现有 ToolLoop。视觉来源与音频来源的编辑边界分别见 [作品模型](docs/VIDEO_PROJECT.md) 和 [声音合同](docs/MUSIC_ARCHITECTURE.md)，阶段验收与首错见 [I8](docs/tasks/i8.md)。禁止恢复 Plan、DAG 或 Graph 创作协议，也不为动效和音效另建执行、播放或交付链。
 
 ## Internationalization (i18n)
 
@@ -114,7 +114,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Persona Skin Block (brand)
 
-**ADR-038**：皮肤 = 人设 `brand` JSONB 块（caption 字号/字体/颜色/位置 + style-preset + 标题 + intro/outro + 音乐 `musicId`/`musicMood`/`musicEnabled`）；无独立 brand template 模块，`/brand-template` 307 → `/personas`。**`brand: null` = 系统默认皮肤**。编辑 = 人设页第三 tab「皮肤」（左设置 + 右 Remotion `<Player>` 实时预览，与产物像素级一致，`components/persona/skin-editor.tsx`）；存 = PUT 只更 `brand` 块，「恢复默认」写 `null`。片头尾媒体 = `POST /personas/{id}/media(/upload-url)`（随人设删）。**`logo` 键无渲染消费路径，不入 UI**。**Craft/format 字段非人设列**：`aspect` / `fillMode` / `captionEnabled` / filler removal / 音乐默认 = 配方注册表 + 计划默认；写作风格不在人设表列，住 风格六件 + `guidelines`。烘焙路径见 `MODULE_ARCHITECTURE.md §7` / `brand.py`（`brand_ref` = persona id）。**`brand_template_id` 不出现在任何请求载荷**——composer 单身份控件，`persona_id` 经首条 Chat 消息送达，当前人设选择保存在项目 Brief。
+历史 Persona 深链仍可编辑 `brand`、预览皮肤并保存，`brand: null` 使用系统默认。保留片头尾素材、曲库选择、归属与删除保护。Home 的普通剪辑示例仅预填文字，首条消息使用用户实际提交的素材及显式 Skill。Persona、Publication 和旧作品的处置见 [I8 §15](docs/tasks/i8.md#15-现行处置与交付)。
 
 ## Persona Voice Block (voice)
 
