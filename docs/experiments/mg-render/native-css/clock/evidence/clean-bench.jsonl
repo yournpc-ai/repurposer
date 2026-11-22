@@ -1,0 +1,4 @@
+{"tag": "prepare", "wall_s": 3.297921875000611, "peak_tree_rss_mib": 155.890625, "rss_samples": 15, "exit": 0}
+{"tag": "sequence", "wall_s": 67.35534408300009, "peak_tree_rss_mib": 1384.78125, "rss_samples": 298, "exit": 0}
+{"tag": "seek", "wall_s": 11.693257749997429, "peak_tree_rss_mib": 717.234375, "rss_samples": 52, "exit": 0}
+{"tag": "replay", "wall_s": 18.809998499997164, "peak_tree_rss_mib": 1188.375, "rss_samples": 85, "exit": 0}

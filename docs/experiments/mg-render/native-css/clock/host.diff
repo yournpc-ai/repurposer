@@ -1,0 +1,27 @@
+--- a/src/Scene.tsx
++++ b/src/Scene.tsx
+@@ -2 +2,2 @@
+-import {Readout,Sweep} from './Blocks';
++import {Readout} from './Readout';
++import {Sweep} from './Blocks';
+@@ -15 +16 @@
+-          {o.kind==='video' ? media(c,frame) : <Block {...o.props} frame={frame}/>}
++          {o.kind==='video' ? media(c,frame) : <Block {...o.props} frame={frame} fps={data.fps} length={c.end_frame-c.start_frame}/>}
+--- a/src/C.tsx
++++ b/src/C.tsx
+@@ -8,4 +8,15 @@
+   flushSync(()=>root.render(<Scene data={data} k={k} media={c=>
+     <img src={urls[c.object.object_id]} style={{display:'block',width:'100%',height:'100%'}}/>}/>));
++  const clips = data.tracks.flatMap(track => track.clips);
++  const animations = document.getAnimations();
++  for (const a of animations) {
++    const node = (a.effect as KeyframeEffect).target as HTMLElement;
++    const id = node.closest<HTMLElement>('[data-object]')?.dataset.object;
++    const clip = clips.find(c => c.object.object_id === id && c.start_frame <= k && k < c.end_frame);
++    if (!clip || a.playState !== 'paused') throw Error('unbound or running animation');
++    a.currentTime = (k - clip.start_frame) * 1000 * data.fps.den / data.fps.num;
++  }
++  await Promise.all(animations.map(a => a.ready));
++  document.body.getBoundingClientRect();
+   await Promise.all(Array.from(document.images,i=>i.decode()));
+   await document.fonts.ready;

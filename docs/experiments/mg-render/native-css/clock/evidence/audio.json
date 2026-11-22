@@ -1,0 +1,9 @@
+{
+  "samples_per_channel": 384000,
+  "channels": 2,
+  "pcm_s16le": [
+    "707f4f5b3a4e863ddc38fba61b6f4da86d65a5efac83e9064afbbae050d0ea0a",
+    "707f4f5b3a4e863ddc38fba61b6f4da86d65a5efac83e9064afbbae050d0ea0a",
+    "707f4f5b3a4e863ddc38fba61b6f4da86d65a5efac83e9064afbbae050d0ea0a"
+  ]
+}

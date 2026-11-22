@@ -1,0 +1,447 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "width": 1920,
+    "height": 1080,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "timebase": 90000,
+    "sample_rate": 48000,
+    "channels": 2,
+    "background": "#000000"
+  },
+  "creative_state": null,
+  "sources": [
+    {
+      "snapshot_id": "02b8041b-47ae-56c4-bd04-b940fd3995e1",
+      "snapshot_digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75"
+    },
+    {
+      "snapshot_id": "e2776416-1039-5bcb-a33c-451b5e5b1762",
+      "snapshot_digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5"
+    },
+    {
+      "snapshot_id": "f5562d4e-1eeb-586c-9ce0-7a5c6149bb36",
+      "snapshot_digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a"
+    },
+    {
+      "snapshot_id": "803abc16-7039-5e0b-b7d6-650b8b225e3e",
+      "snapshot_digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566"
+    },
+    {
+      "snapshot_id": "99aae2ee-d291-5ef3-b4ac-99fabab307ce",
+      "snapshot_digest": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_id": "survey",
+      "range": {
+        "start": 0,
+        "end": 720000
+      },
+      "intent": "",
+      "visual_description": null,
+      "speech_clip_ids": []
+    }
+  ],
+  "timeline": {
+    "tracks": [
+      {
+        "track_id": "track-main",
+        "kind": "visual",
+        "role": "main",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "main",
+            "range": {
+              "start": 0,
+              "end": 720000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "02b8041b-47ae-56c4-bd04-b940fd3995e1",
+              "snapshot_digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+              "source_range": {
+                "start": 45000,
+                "end": 765000
+              }
+            },
+            "object": {
+              "kind": "video",
+              "object_id": "main-film",
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 1920.0,
+                "height": 1080.0
+              },
+              "fit": "contain",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0,
+              "gain_db": 0.0,
+              "muted": true
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-pip",
+        "kind": "visual",
+        "role": "main",
+        "order": 4,
+        "clips": [
+          {
+            "clip_id": "pip",
+            "range": {
+              "start": 45000,
+              "end": 630000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "e2776416-1039-5bcb-a33c-451b5e5b1762",
+              "snapshot_digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+              "source_range": {
+                "start": 36000,
+                "end": 621000
+              }
+            },
+            "object": {
+              "kind": "video",
+              "object_id": "sensor-film",
+              "layout": {
+                "x": 1330.0,
+                "y": 88.0,
+                "width": 480.0,
+                "height": 270.0
+              },
+              "fit": "contain",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0,
+              "gain_db": 0.0,
+              "muted": true
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-title",
+        "kind": "visual",
+        "role": "title",
+        "order": 3,
+        "clips": [
+          {
+            "clip_id": "title",
+            "range": {
+              "start": 90000,
+              "end": 540000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": null,
+            "object": {
+              "kind": "generator",
+              "object_id": "signal-title",
+              "producer": "remotion-project",
+              "code": null,
+              "project": {
+                "schema_version": 1,
+                "entry": "Readout.tsx",
+                "composition_id": "Readout",
+                "files": [
+                  {
+                    "path": "Readout.tsx",
+                    "content": "import React, {useLayoutEffect, useRef} from 'react';\n\n// Chromium interpolates the clip frame as a number. CSS evaluates V7's curve.\nCSS.registerProperty({name:'--title-frame', syntax:'<number>', inherits:false, initialValue:'0'});\n\ntype Props = {\n  length:number, fps:{num:number, den:number}, headline:string, ink:string\n};\n\nexport function Readout({length, fps, headline, ink}:Props) {\n  const node = useRef<HTMLDivElement>(null);\n  const ms = 1000 * fps.den / fps.num;\n  useLayoutEffect(() => {\n    const effect = new KeyframeEffect(node.current, [\n      {'--title-frame':'0'}, {'--title-frame':String(length)}\n    ], {duration:length * ms, fill:'both', easing:'linear'});\n    const a = new Animation(effect, document.timeline);\n    a.pause();\n    a.currentTime = 0;\n    return () => a.cancel();\n  }, [length, ms]);\n  return <div ref={node} style={{position:'absolute', top:157, left:14, padding:'12px 28px',\n    backdropFilter:'blur(9px) saturate(2)', background:'rgba(12,36,43,.54)',\n    borderLeft:`6px solid ${ink}`, color:ink, font:'bold 38px Arial',\n    transform:'translateY(calc(10px * cos(calc(var(--title-frame) * 1rad / 16))))'}}>{headline}</div>;\n}\n",
+                    "digest": "288bb77977b0d184291884942c821eeffc4b19d309724ae437b186a60decaf3c"
+                  },
+                  {
+                    "path": "aperture.ts",
+                    "content": "// Keep the source timecode visible while the right edge breathes.\nexport function aperture(frame:number) {\n  const edge=79+16*Math.sin(frame/13);\n  return {clipPath:`polygon(0 0,100% 0,${edge}% 100%,0 100%)`,\n    maskImage:`linear-gradient(105deg, black 48%, rgba(0,0,0,.25) ${edge}%, transparent)`};\n}\n",
+                    "digest": "a470b26f82d6c0e3bf5a65f1f245ac555bc16e333ef5df903bcde73b450138eb"
+                  }
+                ],
+                "props": {
+                  "headline": "Signals in sync",
+                  "ink": "#8acdf5",
+                  "rate": 0.72,
+                  "targetObjectId": "sensor-film"
+                },
+                "props_schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "headline": {
+                      "type": "string"
+                    },
+                    "ink": {
+                      "type": "string"
+                    },
+                    "rate": {
+                      "type": "number"
+                    },
+                    "targetObjectId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "resources": [],
+                "dependencies": {
+                  "react": "19.2.7",
+                  "react-dom": "19.2.7",
+                  "remotion": "4.0.484",
+                  "@remotion/bundler": "4.0.484",
+                  "@remotion/renderer": "4.0.484"
+                }
+              },
+              "prompt": null,
+              "provider": null,
+              "model": null,
+              "parameters": {},
+              "output": {
+                "width": 580,
+                "height": 310,
+                "fps": 30,
+                "duration_frames": 150,
+                "background": "#142b30"
+              },
+              "layout": {
+                "x": 1250.0,
+                "y": 68.0,
+                "width": 580.0,
+                "height": 310.0
+              },
+              "fit": "cover",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-voice",
+        "kind": "audio",
+        "role": "dialogue",
+        "order": 3,
+        "clips": [
+          {
+            "clip_id": "voice",
+            "range": {
+              "start": 27000,
+              "end": 477000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "f5562d4e-1eeb-586c-9ce0-7a5c6149bb36",
+              "snapshot_digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+              "source_range": {
+                "start": 0,
+                "end": 450000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "voice-audio",
+              "gain_db": -4.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-whoosh",
+        "kind": "audio",
+        "role": "effect",
+        "order": 4,
+        "clips": [
+          {
+            "clip_id": "whoosh",
+            "range": {
+              "start": 126000,
+              "end": 234000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "803abc16-7039-5e0b-b7d6-650b8b225e3e",
+              "snapshot_digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+              "source_range": {
+                "start": 0,
+                "end": 108000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "whoosh-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-impact",
+        "kind": "audio",
+        "role": "effect",
+        "order": 5,
+        "clips": [
+          {
+            "clip_id": "impact",
+            "range": {
+              "start": 180000,
+              "end": 252000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "99aae2ee-d291-5ef3-b4ac-99fabab307ce",
+              "snapshot_digest": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0",
+              "source_range": {
+                "start": 0,
+                "end": 72000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "impact-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-sweep",
+        "kind": "visual",
+        "role": "title",
+        "order": 1,
+        "clips": [
+          {
+            "clip_id": "sweep",
+            "range": {
+              "start": 90000,
+              "end": 540000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": null,
+            "object": {
+              "kind": "generator",
+              "object_id": "signal-sweep",
+              "producer": "remotion-project",
+              "code": null,
+              "project": {
+                "schema_version": 1,
+                "entry": "Blocks.tsx",
+                "composition_id": "Sweep",
+                "files": [
+                  {
+                    "path": "Blocks.tsx",
+                    "content": "import React from 'react';\n\ntype Props = {frame:number, headline:string, ink:string, rate:number};\n\nexport function Sweep({frame, rate, ink}:Props) {\n  return <div style={{position:'absolute', left:12, top:65, width:465, height:88,\n    background:ink, opacity:.88,\n    transform:`translateX(${32*Math.sin(frame*rate/13)}px) rotate(-7deg)`}}/>;\n}\n\nexport function Readout({frame, headline, ink}:Props) {\n  return <div style={{position:'absolute', top:157, left:14, padding:'12px 28px',\n    backdropFilter:'blur(9px) saturate(2)', background:'rgba(12,36,43,.54)',\n    borderLeft:`6px solid ${ink}`, color:ink, font:'bold 38px Arial',\n    transform:`translateY(${10*Math.cos(frame/16)}px)`}}>{headline}</div>;\n}\n",
+                    "digest": "736ccdca3987da18fc35bc91e60affceede07acaddb1ec1f29fec5d2efea93bc"
+                  },
+                  {
+                    "path": "aperture.ts",
+                    "content": "// Keep the source timecode visible while the right edge breathes.\nexport function aperture(frame:number) {\n  const edge=79+16*Math.sin(frame/13);\n  return {clipPath:`polygon(0 0,100% 0,${edge}% 100%,0 100%)`,\n    maskImage:`linear-gradient(105deg, black 48%, rgba(0,0,0,.25) ${edge}%, transparent)`};\n}\n",
+                    "digest": "a470b26f82d6c0e3bf5a65f1f245ac555bc16e333ef5df903bcde73b450138eb"
+                  }
+                ],
+                "props": {
+                  "headline": "Signals in sync",
+                  "ink": "#8acdf5",
+                  "rate": 0.72,
+                  "targetObjectId": "sensor-film"
+                },
+                "props_schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "headline": {
+                      "type": "string"
+                    },
+                    "ink": {
+                      "type": "string"
+                    },
+                    "rate": {
+                      "type": "number"
+                    },
+                    "targetObjectId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "resources": [],
+                "dependencies": {
+                  "react": "19.2.7",
+                  "react-dom": "19.2.7",
+                  "remotion": "4.0.484",
+                  "@remotion/bundler": "4.0.484",
+                  "@remotion/renderer": "4.0.484"
+                }
+              },
+              "prompt": null,
+              "provider": null,
+              "model": null,
+              "parameters": {},
+              "output": {
+                "width": 580,
+                "height": 310,
+                "fps": 30,
+                "duration_frames": 150,
+                "background": "#142b30"
+              },
+              "layout": {
+                "x": 1250.0,
+                "y": 68.0,
+                "width": 580.0,
+                "height": 310.0
+              },
+              "fit": "cover",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0
+            },
+            "animations": []
+          }
+        ]
+      }
+    ],
+    "transitions": []
+  },
+  "version": 9,
+  "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+  "base_version_id": "75b50863-8d88-51b1-a2c7-ea9e84260d5d",
+  "id": "cc93976e-a4e7-51c4-bed0-efb6adda0e6d",
+  "content_digest": "cc95d02633405225970c5adeb03fdc6628408f23b66d770d7ed39949e3813fcd"
+}
