@@ -8,7 +8,7 @@
 
 ## 2. 启动范围
 
-1. **agent_calls 台账**：记录每次 provider 调用，包括空内容、max-tokens 和校验失败首试；保存 agent/run/step/attempt/outcome/tokens/error/prompt 模板与 usage，可重建调用 envelope，大 prompt 走对象存储。动工时补 ADR。
+1. **agent_calls 台账**：记录每次 provider 调用，包括空内容、max-tokens 和校验失败首试；按 opening、模型调用和实际关联的 MediaJob / ExportJob 追溯 attempt、outcome、tokens、error 与 usage，可重建调用 envelope，大 prompt 走对象存储。动工时补 ADR。
 2. **订阅**：支付商沙盒、订阅 webhook、续费/升级/取消、周期额度与订阅权益；一次性积分充值不在本文件重复登记。
 3. **权益执行**：额度检查、超限提示、周期重置；用户余额不足与 provider 402 严格分开。
 4. **用户计费中心**：用量、明细、套餐与余额的同一事实投影。
@@ -19,8 +19,8 @@
 ## 3. 外部依赖与不变边界
 
 - 支付商入驻、公司主体、LinkedIn/TikTok 开发者权限是外部前置，不得伪称已完成。
-- `_mutate` 双层 dedupe、idempotency key、fencing 与 run authority 不变。
-- 机构审核、metrics 回流、定时发布 UI、newsletter 仍按 DISTRIBUTION 的延期边界，不随本批自动扩入。
+- `_mutate` 双层 dedupe、idempotency key、fencing 与 Job 归属 不变。
+- 渠道联调仅为现存账户与发布单的维护事项。旧平台扩张提议已撤销。
 - ExecutionAttempt 仍由证据门决定；agent_calls 不自动等于新执行模型。
 
 ## 4. 验收

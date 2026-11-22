@@ -39,7 +39,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 | **当前** | **Stripe 一次性积分充值** | €10/€20/€50 输入预设、自由金额 input、服务端统一 `price_data` 下单（无 Stripe Price 配置）、payment_orders/migration、Checkout/webhook/purchase、Settings 购买面与返回确认已落码；既有 €10 订单已验证本地 Checkout → webhook → paid/purchase → UI 且仅有一条 purchase 台账，migration 已由 dev 执行；`payment_webhook_events` 持久审计与 worker Resend 告警已落码，但新 migration、真实 DB 重放/并发/故障恢复与邮件投递未运行；统一金额链改动后的真实联调、€20/€50、取消/过期、pytest/web 检查、公网 test 仍未运行 | [支付架构](PAYMENTS.md) / [施工与验收](tasks/stripe-credit-topup.md) |
 | **当前** | **Landing 对话式视频叙事与内测商业面** | 暖白底三层 Hero（Rookie Cut 品牌与新主标题）、四类 Tab 自动演示/独立背景、340svh 固定滚动叙事、静态 Gallery（当前不挂载）、正文 FAQ、简洁 CTA 与参考三列 Footer 已落码。演示使用公开候选样片与交互投影，未验证为真实 Chat 回放或修改后成片；真实类别样片与多轮交付仍按 P6+P7 验收。既有 TypeScript 与 landingCreate 定向检查通过；最新 Header/Hero 视觉调整尚未复跑静态检查或浏览器验收，桌面首屏/Tab/FAQ/Footer、其余尺寸、双主题、reduced-motion、媒体播放与登录预填完整旅程均待复验。Footer 未配置项目仅保留文字座位，发布前需真实链接或移除；公开 1,000 开户赠额前核对数据库配置；支付与公开授权门未关闭 | [当前合同](LANDING.md) |
 | 历史项目 | Agent Tools 修复批验收尾项 | 代码批已完成并落 main；需活 API + dev worker 运行当前注册旅程矩阵，覆盖长程序经 `get_node` 修订、distilled `specific_instruction`、pending-plan/run-history 读面；另需抓真实 SSE 验证 reasoning/think 永不进入用户 wire。完成证据出现前不关闭 | [验证登记](VERIFICATION.md) |
-| 开放 | Agent Working Loop 持续闭环 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
+| 历史依赖核对 | 早期 Agent Working Loop 开放记录 | 当前真实 Chat 旅程、SSE、CJK 长素材检索及仍支持的候选和恢复路径待验收。旧探索存储的验收改为验证退役 migration、保留数据及回退条件 | [合同与验收](tasks/agent-working-loop-iter-3.md) |
 | 历史项目 | 积分与视频交付修复验收 | 并发/幂等结算、失败交付判定已有定向回归；单次上传 10 分钟；chat `retry_upload` 已改为当前回合的独立上传工具与状态行，走 /upload 并保留原 Run/失败步骤；缓存 miss 不重渲染。定向 API 121 项、历史回放 44 项及 Web/render tsc 通过，新上传 UI 真实浏览器旅程尚未复验；历史预扣补偿尚未执行，Surge 大文件真实重传、upload-only 与浏览器端完整旅程仍待验收 | [账本](BILLING.md) / [渲染](RENDERING.md) |
 | 历史项目 | 旧画布确认迁移的未验项 | 当时缺少 rejected-turn 无残留、等待节点、相机 fit、采集前估价、刷新重建和跨轮防复读的完整浏览器证据。现役 Chat 的问题、报价和刷新按消息回执验证。 | CHAT §8；历史 ADR-099/111 |
 | 开放 | 消息回放与素材检视 | seq/首回合事务、interim_prose 五路、Candidate聚合例外裁决及live/replay，素材overlay/StageSkin/NLE轴和双主题仍待验证。新鲜数据重建不要求旧行回填，保留数据环境另守读容忍与迁移条件；re-cut等后续需求未取消 | [消息与UI验收](VERIFICATION.md#54-素材卡transcript-与精确编辑边界) |
@@ -58,7 +58,7 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 
 ### 0.4 新会话执行规则与启动 Checklist
 
-**事实源分工**：current code / DB constraints / migrations 说明“现在如何实现”；PROGRESS、现行 ADR 与任务合同说明“已决定做什么、做到哪一层”。二者冲突时先标记 discrepancy 并查证，不得以旧计划推翻代码，也不得以代码暂未实现推翻已拍板需求。
+**事实源分工**：current code / DB constraints / migrations 说明“现在如何实现”；new-agent 总合同确定架构边界，当前任务合同和本节记录已授权范围与验收状态；旧 ADR 仅用于追溯。二者冲突时先标记 discrepancy 并查证，不得以旧计划推翻代码，也不得以代码暂未实现推翻已拍板需求。
 
 **执行规则**：
 1. 开工先看 `git status`、current HEAD 与并行归属；工作树可以有未提交成果，禁止用 reset / checkout / stash 制造“干净基线”。
@@ -83,20 +83,11 @@ Stripe 一次性积分充值首批已落码，migration 已由 dev 执行，既�
 
 ## 1. 后续能力、延期事项与上线条件
 
-本节只登记仍未完成的产品范围与验收，不复述已完成批次。`PLANNED` 表示已拍板但未实施或未闭环，不代表已经授权插入当前 Film 主线；排期变化就更新本节。
+当前编辑能力和开放验收归 §0 与 I8。
 
-### 1.1 运营端与定位根（PLANNED）
+### 1.1 已撤销的运营规划
 
-目标架构见 [POSITIONING.md](POSITIONING.md)，代码层落地前仍使用 `persona`。启动前提是当前生产层闭环收口；具体窗口由 §0 更新。
-
-| 范围 | 已拍板需求 | 完成验收 |
-|---|---|---|
-| 选题与内容生产中台 | `topics` 及生命周期、选题 agent、选题卡 prompt 预填；分镜/脚本/预设/文章等内容形态与渠道适配进入 tool registry；发射复用 `POST /chat`，不新增意图入口或直接 run | 选题 → 计划与授权 → 产物 → 精修全链可走通 |
-| Memory 与身份显化 | 风格学习与校准回路使用用户选用行为和 operations 编辑痕迹；人设页说明学到了什么、来源与纠偏入口；现有声纹与皮肤机制不因重构回退 | 用户能检查并纠正人设，校准输入有真实记录 |
-| 定位根与渠道归属 | `personas` → `positionings` 全栈迁移；内容定位字段、三分区、`channel_accounts.positioning_id` 与公共渠道档案；定位可通过对话共建；素材档案上提到定位根 | 数据迁移后既有功能不回归；每个渠道明确定位归属；定位 → 素材 → 产物关系可查 |
-| 回访型 home 与运营闭环 | 回访态呈现选题管道、最近产物和渠道状态；首次态仍由配方卡接住；home 不新增第二创作意图面 | 定位 → 选题 → 生成 → 精修 → 发布全链联调；多定位 × 多选题 × 多渠道 × 多语言组合完成质量验收 |
-
-R5 虚拟视频仍是已拍板的 AI 生成能力，先作为平台 tool 落位；画廊座位须按 `RECIPES.md` 的真实场景与真实成对示例闸门重新取得。R5 未实现不等于需求取消。
+旧选题中台、定位根迁移及多渠道内容输出已退出路线。冻结历史 Persona、Publication、凭证和素材外键，处理存量依赖时须保留权限、历史作品和账本。
 
 ### 1.2 商业化与分发（支付首批 ACTIVE，其余排期挂起）
 
@@ -107,118 +98,28 @@ Stripe 一次性积分充值已落码并通过本地真实付款主旅程，剩�
 - 法务页面、用户协议、隐私政策、Cookie 同意；律师人选、文书与预算仍是外部依赖。
 - AI 内容标识：导出文件携带机器可读标识，合成轨道与纯剪辑按 `DECISIONS.md` ADR-026 分级；披露随发布携带。
 - SEO、验证码邮件域名认证（SPF/DKIM）、数据生命周期说明、错误/可用性/API 成本监控。
-- 性能压测必须覆盖多定位/多选题并发与失败不扣费；上线回归覆盖 chat、plan、generation、editor、persona、topics 与全部已开放配方通路。
+- 上线回归须覆盖多用户权限、并发编辑、生成或导出失败后的计量与恢复。
 - go/no-go 前需端到端上线演练和 2–3 名真实用户走查；已知阻塞、未验证项和回退条件必须进入评估材料。已落码不等于真实旅程通过，更不等于正式上线。
 
 ### 1.4 当前排期决策
 
 当前 go/no-go 目标日与最迟回退位存在冲突，需总监确认目标日期和范围压缩方式；具体决策与外部依赖见 §3。未拍板前，目标日期不作为完成承诺。
 
-## 2. 需求池（未排期，常驻）
+## 2. 待核对的现役依赖
 
-> 未进入当前主线的已登记需求。已完成项直接移除；触发条件驱动的需求见“可选需求”，明确后置的见“明确不在本周期”。优先级和依赖变化时就地更新，不保留需求拍板过程。
+下列问题仍能指向具体消费者，保留触发条件与验收边界。实际优先级归 §0。原需求池中的旧 Run、渠道内容和选题运营优先级已撤销。 [原需求池](https://github.com/yournpc-ai/repurposer/blob/b01823d614ddff4972e26fc1a56987f5f5f30336/docs/PROGRESS.md#2-需求池未排期常驻)
 
-| 需求 | 优先级 | 依赖 | 来源 / 备注 |
-|---|---|---|---|
-| 首发推荐分：维度明细 | P1（待重定范围） | 在现行视频流程中确认产品入口后启动 | 完整度、开头、代表性、表达各 1–100，理由指出真实驱动项，禁止预测播放量或补造旧版轴值。同一版本的总分、四轴和理由一起更新，旧行仅显示已有总分；双主题、en/zh 与真实旅程验收。规格来源 = DECISION_MATRIX §B、STRATEGY §2.1 |
-| 媒体展示一致性 | 未排期 | 项目缩略图已下发 `thumbnail_aspect`，核对前端实际消费；复用现行媒体组件 | 视频/图片处理时保存尺寸并透出，旧素材使用共享探测；9:16 产物与竖屏项目缩略图按真实画幅完整展示。Chat、composer 和上传 chip 共享媒体类型/图标，Home 卡片保持仅预填 prompt；覆盖双主题及旧数据。 |
-| persona 校准打分 | P1 | 内部源 = 用户选用行为 + operations 编辑痕迹；外部发布回流不在当前周期 | 定位根落地后校准对象为定位的人设分区；规格来源 = DECISION_MATRIX §G、STRATEGY §2.1/§2.2 |
-| LLM 滚动摘要（超长会话历史） | P2 | 先用 `apps/api/scripts/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
-| 结构化节拍图 + video-spec 原生动画覆盖 | P2 | 覆盖问责能力；仅限 video 源 crop 动态预设 | 实施前新增 ADR，划清与 stills Ken-Burns 拒绝边界；规格来源 = STRATEGY §2.5 |
-| 去静默 / 去口头禅 | P2 | 词级时间戳；随 editor 一键操作方向评估 | 保持专业知识表达密度，避免跳剪损害自然感；取舍来源 = DECISION_MATRIX §E |
-| LLM provider 抽象 | P1 | ADR-025 边界；第二 provider 的触发可为代码/视觉能力、成本或 EU 驻留，按实际消费者接入 | 用户面是“优先 EU 托管模型”等策略开关，不是模型 SKU 货架；provider 失败在边界归一，消费方不猜异常来源（`research/deepseek-harness.md` §3） |
-| 字幕翻译 + 校对视图（side-by-side） | P1 | 多语言输出能力 | 对照校对交互来源 = DECISION_MATRIX §G |
-| 多语言文案质量（跨语言风格保真） | P1 | 术语表（见可选需求） | 保留用户写作风格，不把音频 voice 概念混入文风；规格来源 = DECISION_MATRIX §G、STRATEGY 牌 4 |
-| 产品度量地基 | P1 | 无 | 建立上传 → 生成 → 精修 → 发布 → 回流漏斗埋点；指标契约归规划中的 `METRICS.md` |
-| 真实 Gallery（公开项目流入 + remix） | P2 | `projects/outputs` 公开性字段先登记 MODULE_ARCH §4 并通过 ADR | 公开项目可序列化为 RECIPES §7.1 数据包并进入 remix；启动条件与权限边界 = STRATEGY §5「当前边界与 deferred」 |
-| 虚拟视频卡（画廊候选） | P2 | §1.1 的 R5 能力 + 真实成对示例 + RECIPES §4.8 闸门重过 | 出列不等于否决；只有真实知识专家场景与产物证据成立才恢复画廊座位 |
-| 使用示例跑一遍（demo 素材试跑） | P2 | 试跑限次或免费额度；复用 `demo/uploads/demo_talk.mp4` | 用户显式点击示例后才进入同一 chat 主线；自动 Start 仍须制作意图与费用守卫，不建独立通道 |
-| 模型 EU-hosted 选项（Mistral 等） | P2 | LLM provider 抽象 | 与 EU 客户驻留要求联动 |
-| 渲染服务源站限速韧性 | P2 | 无 | 当前缓解 = 渲染进程 `HTTPS_PROXY`；长期方案 = 源下载落盘再渲染或 renderer 显式 proxy dispatcher，避免直连 TOS 限速导致取帧超时 |
-| persona 精修 chat 化 | P1 | 定位根落地后入口挂到定位的人设分区 | per-field 再提炼必须有 merge 语义，保留手改；对话微调只有 persona 级一个入口，不给每模块各加气泡；不得让 `generate` 全量覆盖用户修改 |
-| persona AI 印象摘要字段 | P2 | 现有 persona 提炼链；摘要进入 `PersonaContext` 与表列 | 概览卡顶部增加一句 AI 生成画像；现有字段拼装视图不因此回退 |
-| insert_broll 技能 | P1 | ADR-044 layers 契约；排在 reframe spike 结论之后 | 面向用户自己的幻灯片/截图；LLM 只做语义定位，机械工序选页与取窗后生成 layer 条目；不扩成 stock B-roll 库 |
-| run 收官散文兑现核对 | P2 | 先核对 `run_completed` 触发回合是否已兑现 | 目标行为 = 按 ADR-135/141 的当前分支只陈述确定性 delivered/partial/failed、真实产物与费用事实；不强制默认建议 pills 或唯一下一步，不伪造主观质量判断，不新增第二进度面。已兑现则关闭本行，未兑现则保留缺口 |
-| reframe per-clip 检测缓存 | P2 | `speaker_map` 素材级事实作缓存源 | 同素材多 clip 复用检测，避免每 clip 重复探测与计费 |
-| speaker_map 本人含量门禁 v2 | P2 | 多人话轮归属可靠性经过真实素材验证 | 只从用户本人话轮学风格；未实装，来源 = ADR-045 |
-| morph 罕见拓扑双渲染 | P2 | 无 | non-fork → fork → non-fork 且无 producer 的链形中，抑制与 rescue 可能重复支付一次渲染；需消除重复执行 |
-| pre-fail rescue 步骤标签纠偏 | P2 | 无 | rescue 重挂的 render 步骤不能误标 `skipped: upstream failed`；只修展示真值，不改变产物语义 |
-| reframe 检测窗残毫秒竞态 | P2 | 无 | 增量重放已覆盖主要并发编辑窗口，仍需关闭检测窗内残余竞态 |
-| undo 重挂的陈旧 MP4 处置 | P2 | 产品拍板“清理还是保留” | undo 触发重渲染后旧 MP4 仍挂产物行；决定产物身份与清理行为，并移除对应死代码 |
-| 编辑器 staleness 模型统一 | P2 | 无 | 统一编辑器对 run 中途变更的感知与刷新语义 |
-| 定点 reframe 报价虚高 | P2 | 无 | `reframe_clip` estimate 应按 `target_output_id` 目标集求和，不按全项目 clip；当前属于展示偏差 |
-| 字幕简繁归一跟 `target_language` | P2 | 先拍板 ASR 逐字保真与展示一致性的边界 | 避免同一帧简繁混排；字幕层按目标语言归一，不静默改变需要保真的源文 |
-| agent 调用台账（`agent_calls`） | P1 | 会话层已有 `conversation_usage`；本项补 run 层调用事实与取证 envelope | 每次 provider 调用（含空内容、max-tokens、校验失败首试）记录 agent/run/step/attempt/outcome/tokens/error/prompt 模板与 usage；可重建渲染后 prompt/schema/上下文哈希，大 prompt 走对象存储；同时支撑 repair、质检违规与 edit-ops 归因。作为 R1.1 成本校准前置，动工时补 ADR |
-| 闸门编目（invariants 登记表） | P2 | 无 | 登记出生地校验、启动自检与运行时数据闸的名字/位置/统一拒绝形态；无闸模块显式说明理由；闸只断言自有数据关系，不断言服务或方法存在 |
-| LLM 录制回放层 | P2 | agent 调用台账，共用 MiniMaxClient 边界 | 在适配器 seam 录真实 provider 流并无密钥回放，供确定性回归与 transcript diff；真实剧本矩阵继续承担行为探测 |
-| 执行中自适应重规划 | P1 | interrupt、计划 refine、素材理解与 agent 调用台账 | 节点事实与当前计划假设冲突时自动 interrupt，模型重 authoring，展示 diff 并经确认后续跑；信息超出理解 schema/单节点参数域或 retry 不中时升级，素材不足诚实降级。不是开放式 tool-loop，模型驱动拓扑编排仍禁止 |
-| “AI Generated”标识偏好与合规边界 | P2 | 合规包；先与 ADR-026 对账 | 可选视觉标识可采用默认开、设置可关并说明修改位置；自动分级、机器可读 C2PA 与法定披露不能被偏好关闭，也不依赖发布通道 |
-| TRANSCRIPT 资产生产侧语言印记 | P2 | 消费侧已读 `meta.language` | transcript/docx/pdf 等文本 processor 完工时写入语言探测或上传者声明，给纯文稿项目提供源语言锚 |
-| verify judge QuoteReadability schema 兼容 | P2 | agent 调用台账可提供 outcome 取证 | 兼容 MiniMax 可能返回的 per-quote 裸数组与 pydantic object：对齐 prompt/schema 或在边界归一 wrapper；judge 失败不得伪称质检完成 |
-| `media_text_fallback` × repair 组合漂移 | P2 | agent 调用台账提供 funnel 取证 | 媒体降级应在 attempt 内发生；schema 拒收不能既消耗 repair 轮又保留未降级的 parts payload。修正后核对 clips 与 registry 两处 `media_text_fallback=True` |
-| 步骤级 LLM 命名（per-task `name`） | P2 | ADR-058；排期窗口待指认 | `name` 进入 TaskItem 与 builder 写口，RunTaskList/打勾流读取；`taskLabel` 推导只作回退，手改仍撤名 |
-| stub 塌缩（“No source material”行） | P2 | 无 | 无素材 writer-only run 的 stub 行不渲染 |
-| mobile OutputDeliveryCard 核对 | P2 | 无 | 核对移动端产物卡在 `runTitle` 章名与当前锚卡机制下的读法一致性 |
-| MG 与代码画面创作 | P2 | 已归 Video Project B-I～IV | 原生对象动画与 Generator 程序画面沿 design_video/revise_video/produce_video 共链；范围与出口见施工合同，不另建 generate_motion_graphics 产品链 |
-| 刀 A overlay 词汇扩展 | P2 | 现有 ASR / speaker_map / beat_map 与 overlay 契约；逐项验收后上架 | 按“一行扩展配方类型”增加词汇，不把 film-spec 的全幅生成链复制成第二套 overlay 系统 |
-| Film 帧级精细估价 | P2 | 当前秒级简式估价与确定性帧分配 | 报价使用实际帧/复用范围，保留 NULL 不可报价与守卫线；不得为精确总价伪报未出生的渲染 fanout |
-| 个人创作 Skill | P2 | Video Project 阶段 C，依赖已声明内容能力 | 保存/调用/导入创作方法，可包含已支持的 Generator 来源和参数；外部脚本不自动执行，受控视觉程序按 VIDEO_PROJECT §8.1.1 生产，业务引擎与权限仍由系统掌握 |
-| 对话剪辑工具族（cut / stitch / reorder） | P2 | 两站机制；复核 L3 边界 | 以 video×editor + chat 修订提供对话剪辑；只扩 agent 工具，不建设多轨 NLE，专业需求仍导出剪映/Premiere |
-| 能力画廊 generate/edit 分组徽标 | P2 | 节点 prototype 属性 | 从注册表与媒体入边派生 generator/editor 展示分组；不把该轴变成节点 type |
-| 样式覆写 UI | P2 | `style_overrides` JSONB 地基 | 支持皮肤六件之外的 run 级覆写；卡面控制形态与数据层同批设计 |
-| 分镜表表格档节点 | P2 | 表格档节点与编辑映射 op 设计 | 持久化槽位与覆盖理由；删行 = 弃选、改时间窗 = 重切、改论点 = 重选，均为确定性 op；保留用户原话 |
-| 画布存在证据走查 | P2 | 运营端上线后的真实用户池 | 邀 3–5 名目标用户完成多产物、隔天修订、来源核对；观察是否借画布理解产物关系，证据不足则收敛纯 chat；审美偏好不触发结构翻案 |
-| 超出有界子页发现的自动 discover | P2 | 当前仅承诺同 host + BAD_LINK 过滤 + 最多 3 个子页；扩展需显式多 URL 高频使用，且每页独立清单/来源标注方案就绪 | 当前有界子页验收归 Film execution §1.1 D；只有真实需求证明不足时才扩根页抽链，避免无关页稀释 grounding |
-| 能力缺口喂给（decompiler gaps → 需求池候选） | P2 | 积累 CraftGap 观测后按价值排期 | `unsupported` 永不承诺；`not_yet` 是契约已有座位但写手未到，可作为需求候选；旅程二负责带理由纠偏 |
-| Turn budget = iteration cap + wall-clock deadline | P1 | 现有 turn_state 与准入门 | `max_iterations` 还需墙钟 deadline，避免多轮 quiet read 拉长 abort/超时与 trigger 竞速窗；到期采用诚实降级，不借机引入新的 AgentBudget 架构 |
-| turn 级事件可观测性落库 | P2 | agent 调用台账 | 将拒绝轨迹、异常类与耗时剖面落 DB，使回合中途死亡可诊断；不是另存一份 stdout 日志文件 |
-| 画布可读性（同族链分组 + 长边路由 + 居中） | P1 | Product Flow Alignment Batch C | 剩余 = 项目页 groups、asset→asm 跨列长边路由、settled 路径居中；不得为排线创造语义节点，验收用 5 秒三问；若合同已完整吸收则关闭本行 |
-| 常驻自主拨盘（standing autonomy dial） | P2 | R1.1 商业形态明确后评估 | 可设常驻额度信封并在设定时披露费用语义；不恢复 review 档，不创造制作意图，也不绕过 `always_confirm_above` / NULL 不可报价守卫 |
-| 选项唯一座位（消息流零选项，ADR-100） | P1 | 现行规则 = CHAT_ARCHITECTURE §8.5/§8.8；验收 = 验证登记 §4.1，排期窗口待指认 | 固定选项全部归 dock，trigger 建议 dock 机器保留；收窄 ADR-099 的 suggestions/answer 面，probe I 改测新目标，路由安全零容忍与 substrate 排查方法随合同迁移 |
-| Canvas 密度组织学（journey 分组 / 折叠 / 归档） | P2 | `journey_id` 身份前提（ADR-088 §10） | 多旅程候选、精选、方案与产物累积后提供呈现层分组/折叠/归档；不得为组织创造语义节点 |
-| FRAMING 默认参化 | P2 | 先验证 caption_mode 默认参化的同构性 | 访谈/单讲的镜头选择可改为推导默认 + 卡面事实 + 手改通道，减少 blocking ask；需保留用户显式选择 |
-| operations 用户级 undo/restore UI | P1 | 现有 REST undo/journal/restore 与归档 409 | 不新增 `undo_edit` chat 动词，不做完整 version UI；只在卡面 factsbar 或产物档案提供最小回滚入口 |
-| `set_caption_visibility`（edit_output 第五件） | P1 | 前四种编辑形态经过野外观察 | 与 `caption_enabled` 计划默认对账后再定参数形状（ADR-090 §1） |
-| 失败渲染触发 reaper 重跑的副作用 | P2 | 图生命周期与重试语义 | 核对“节点滞留 running → reaper 重跑 select_clips → 整链 wipe 再生”是否仍可复现；目标 = 渲染失败落 failed 并可重试，而非全链重跑；重试不得绕过授权与计费守卫 |
-| 未复现异常留观 | P2 | 下次 live 验收窗口 | 曾登记“run TIMEOUT 但渲染 completed”与“多义问题待决时带 pin 编辑 /chat 500”；后者本机一次性探针未复现。只有在新证据中重现后才升级为已确认缺陷并取证 |
-| 归档 version 存储成本观察 | P2 | 归档写门持续产生真实版本后观察增量 | 归档文件是回滚物理基础，当前仅随项目删除 GC；有存储曲线证据后再评压缩/清理，不预设删除版本 |
-| R1 残留（remix e2e + fixture 地基） | P2 | 真实 Gallery 的 remix 通道 | 补 remix 全链 e2e（矩阵 S10 座位）并复位剧本 fixture 地基；不重复登记已由其他合同覆盖的触发/出生机制 |
-| 工作请求的非空 bare answer 代码 floor | P1 | 当前 ToolLoop/propose_turn；空 bare-answer 已有修复 | 非空无工具回复仍会作为 answer 持久化。需裁决何时工作请求必须有代码侧“未执行”兜底，同时保留合法信息回答与 Film 方向讨论；这是待取证/裁决项，不作为已证实 release blocker |
-| @output pin 强制覆盖的自然分歧验收 | P2 | 当前纯件已覆盖 pin≠模型目标 | live 已验证钉非焦点目标，但“模型自选与 pin 不一致”的分歧分支尚未自然复现；补 live 证据或明确接受纯件验证层级，不把未自然触发写成缺陷 |
-| bare-answer 的 mention pin 持久化核对 | P1 | 当前 mentions 注册表与消息持久化路径 | 旧记录显示 pin 只随 PendingPlan 写入时 bare answer 可能丢失；先复现，若仍存在则让 pin 随用户消息独立持久化，刷新不得蒸发 |
-| fenced 残留清理（孤儿媒体 + 孤儿问题） | P2 | 存储 GC 与问题生命周期设计 | 只清理可证明孤儿的直传媒体与 fenced Suspend 问题；不得误删用户内容或审计证据，保持 fenced 零副作用 |
-| 跨项目 decompile 首见通知 | P2 | 产品拍板“复用命中是否按本项目首见发声” | 当前按 conversation/trigger/ref 去重；跨项目复用时不得重复打扰，也不能让本项目理解状态被误称已呈现 |
-| 结构级 remix 产品承诺 | P2 | 先评审参数级 remix 的真实用户证据 | 决定是否承诺骨架时序结构复用；未拍板前只保证当前确定性参数消费，不把 CraftSkeleton 内部结构当上屏方案 |
-| `select_clips` 整族删除范围复核 | P1 | 产品语义评审 + 当前图/产物生命周期 | run authority 只阻止并发误毁，不等于删除范围合理；核对重跑会删除哪些既有产物、发布与操作历史，未拍板前保持现有限制 |
-| 多活跃 run 产品终局 | P2 | 删除范围与跨 run 修订语义先明确 | 当前仍为 project `{PENDING,RUNNING}` 至多一个 owner；是否放宽是独立产品决策，不得由技术重构静默改变 |
-| 素材理解复用身份 | P2 | 启动前先确认现役 producer 和重复处理成本 | 若需持久复用，以 owner、素材哈希、处理版本和判断 prompt 身份判定命中；同一有效输入并发复用须有唯一赢家且不重复收费，身份变化应 miss。旧素材读容忍，迁移需有回退或前滚路径。 |
-| 纯 pytest 基线复核 | P1 | 纯函数套件全绿承诺 | 上次未销号范围 = decompile / graph_wiring / import_direction / wire_tiers；旧数量与归因不作当前事实，需在当前 HEAD 重新运行并按真实结果归位 |
-| trigger beat ③ 引号例句（prompt 卫生） | P2 | `event_mode.j2` beat ③ | 引号例句可能被照抄，需改成风格/原则约束；不新增禁词补丁 |
-| 能力菜单欠卖（dub_clip / remove_filler） | P2 | `_MENU_PHRASES` | dub_clip 应说明声纹克隆，remove_filler 应覆盖 repeated takes；措辞先从完整 procedure 核对真实能力 |
-| 建议发射率与 substrate 排查 | P1 | 随 ADR-100 改靶；gate 仪表与 stub execute | probe I 不为放行降阈；路由劫持零容忍，探索问缺少下一步才计失败。固定模型/参数/场景重复采样并保留原始输出 → 工具调用 → 应用处理，区分模型未提、未调用与被丢弃；补 `answer-args-invalid`，语义失败先人工标注 |
-| 发射层 / provider 方差受控复测（S5 族） | P2 | 与建议发射率共用取证面 | 固定模型/provider/温度/工具/输入/初始状态重复采样，按失败签名记频率；区分采样波动、prompt 不足、应用处理不稳与评测器过敏，不用单次绿红直接归因 |
-| 评测系统语义三修 | P2 | `reply_quality_probe` 当前基线 | ① 未确认却暗示开工需独立语义断言；② 被拒绝备选作上下文说明为合法，误述为可选才失败；③ S-adv 增加 `deferred/awaiting-prerequisite` 合法座：说清缺口、不伪装结论、不虚构执行、前置满足可续做。禁固定禁词表 |
-| fill-keys 读面口径（research facet 折叠 × S1） | P2 | ADR-097 §3 读面行为 | 先拍板 research 节点 stamp 为 facet 后并入 deliverable 卡组是否正确，再决定修 read model 或 S1“同节点原地填充”断言；不得为放绿直接改断言 |
-| 分镜发布座接线（`on_row_append`） | P1 | 先与 Film 当前实现对账 | 若仍无调用点，需让分镜独立消息行在长设计回合内直播落地；row.append 与信封 finalizePreview 要有双渲染去重，reconcile 覆盖断流窗口，文档行仍遵守打字机律 |
-| film birth prompt 冻结义 | P2 | 先与 Film 当前实现对账 | 无前置挂单时，`PendingPlan.prompt` 应回溯最近的生产意图句，而不是把“ok”等当回合确认文本冻结为求片 prompt；指纹与 Start 兜底语义不得回退 |
-
-### 可选需求
-
-| 需求 | 可以考虑开发的情况 |
-|---|---|
-| 术语表（固定译法 + 配音发音，约 2 天） | 机构客户对多语言译法一致性、配音发音提出明确要求时 |
-| 管理后台最小版（用户 / 用量 / 手动补偿，约 3–5 天） | 上线后运营与客服开始需要后台工具时 |
-| 帮助中心内容（约 2–3 天） | 用户自助咨询增多，或机构评估需要产品文档时 |
-| 邀请 / 分享回流（约 3–4 天） | 需要启动口碑增长时 |
-| 链接导入（Zoom / Drive 持续摄入素材） | 机构客户要求从他们的会议和网盘直接拉素材、不愿手动上传时 |
-| YouTube 导入 | 目标用户素材大量在 YouTube 上、且反爬成本评估可控时 |
-| 团队协作空间（多成员 / 多人设） | 出现团队型客户、多人协作成为成交条件时 |
-
-### 明确不在本周期（取舍有据）
-
-被外部 agent 调用（MCP）、专业剪辑交接格式、定时发布 / 团队审核 / 发布数据回流、newsletter 集成、欧盟数据驻留。均为已登记项，本周期结束后统一重排。
-
----
+| 问题 | 依赖 | 核对范围 |
+|---|---|---|
+| 媒体展示一致性 | 项目缩略图已下发 `thumbnail_aspect`，核对前端实际消费；复用现行媒体组件 | 视频/图片处理时保存尺寸并透出，旧素材使用共享探测；9:16 产物与竖屏项目缩略图按真实画幅完整展示。Chat、composer 和上传 chip 共享媒体类型/图标，Home 卡片保持仅预填 prompt；覆盖双主题及旧数据。 |
+| LLM 滚动摘要（超长会话历史） | 先用 `apps/api/scripts/context_budget_audit.py` 观察窗口折叠真实溢出率 | 当前仅滑动窗口折叠（`chat.context_budget_tokens`）；没有早期引用丢失的真实发生率证据前，不新增摘要生成 |
+| 渲染服务源站限速韧性 | 无 | 当前缓解 = 渲染进程 `HTTPS_PROXY`；长期方案 = 源下载落盘再渲染或 renderer 显式 proxy dispatcher，避免直连 TOS 限速导致取帧超时 |
+| 字幕简繁归一跟 `target_language` | 先拍板 ASR 逐字保真与展示一致性的边界 | 避免同一帧简繁混排；字幕层按目标语言归一，不静默改变需要保真的源文 |
+| TRANSCRIPT 资产生产侧语言印记 | 消费侧已读 `meta.language` | transcript/docx/pdf 等文本 processor 完工时写入语言探测或上传者声明，给纯文稿项目提供源语言锚 |
+| 归档 version 存储成本观察 | 归档写门持续产生真实版本后观察增量 | 归档文件是回滚物理基础，当前仅随项目删除 GC；有存储曲线证据后再评压缩/清理，不预设删除版本 |
+| fenced 残留清理（孤儿媒体 + 孤儿问题） | 存储 GC 与问题生命周期设计 | 只清理可证明孤儿的直传媒体与 fenced Suspend 问题；不得误删用户内容或审计证据，保持 fenced 零副作用 |
+| 素材理解复用身份 | 启动前先确认现役 producer 和重复处理成本 | 若需持久复用，以 owner、素材哈希、处理版本和判断 prompt 身份判定命中；同一有效输入并发复用须有唯一赢家且不重复收费，身份变化应 miss。旧素材读容忍，迁移需有回退或前滚路径。 |
+| 发射层 / provider 方差受控复测（S5 族） | 与建议发射率共用取证面 | 固定模型/provider/温度/工具/输入/初始状态重复采样，按失败签名记频率；区分采样波动、prompt 不足、应用处理不稳与评测器过敏，不用单次绿红直接归因 |
 
 ## 3. 外部依赖与决策点
 

@@ -1,6 +1,6 @@
 # R1.1 Hold GC——PLANNED 合同
 
-> Status: PLANNED，随 Commercial / Distribution 排期；不阻塞当前 Film 主线。计费语义归 BILLING.md，优先级只读 PROGRESS §0.3。
+> Status: PLANNED，随 Commercial / Distribution 排期；不阻塞当前 Agent 剪辑主线。计费语义归 BILLING.md，优先级只读 PROGRESS §0.3。
 
 ## 1. 目标与边界
 

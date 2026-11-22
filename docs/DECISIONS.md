@@ -1,27 +1,10 @@
 # Architecture Decision Records (ADR)
 
-> Status: Active（滚动维护现行决策；编号不连续属正常）。本文是决策与必要理由的事实源，不是另一份完整架构规范；字段级与行为契约归对应子系统文档。按下方主题和编号定点阅读，不要求通读全文。
+> ADR 按编号保存决策发生时的依据。涉及旧 Clip/Film、Plan、Graph、工作流、选题与渠道运营的条款仅供历史追溯。技术决策仍适用于实际消费者，当前归属见[领域索引](README.md)。现行创作与权限合同见 [Agent Editor](tasks/new-agent.md)。
 
 ## 阅读与维护
 
-- 同一决策的措辞补正、实现接线和普通 bug 修复更新现行条款或对应规范，**不默认新增 ADR**。
-- 只有架构边界、产品语义或关键取舍发生真实变化时才新增独立编号；稳定编号不随意重排。
-- 被取代的规则不作为现行法并列保留；失效叙述直接删除，不保存归档或专题历史副本。仍被引用的编号在下表保留替代去向。
-- 实施状态与未验证项归 `PROGRESS.md` / 局部 progress；ADR 的 Decided 不等于已实现或已验收。
-- 视频施工以 ADR-145/146 与 VIDEO_PROJECT 为准；旧 FilmStoryboard/pending 信封/固定骨架/legacy 指纹的具体实现条款不再构成兼容义务，仍有效的创作/授权/视听语义归 VIDEO_PROJECT §15，共享守卫与剩余验收归 VERIFICATION。旧编号不用于恢复已退役任务或实现锁。
-
-## 主题索引
-
-| 主题 | 主要 ADR | 详细契约座位 |
-|---|---|---|
-| 仓库、后端、前端、数据与基础设施 | 001–026 | `MODULE_ARCHITECTURE.md` / `DATABASE_MIGRATIONS.md` |
-| RunPlan、执行内核、队列、工具与模块边界 | 017、028–033、039、043、050、077、079、086–089、096–098 | `AGENT_ARCHITECTURE.md` / `MODULE_ARCHITECTURE.md` / `ARCHITECTURE_NORTH_STAR.md` |
-| Chat、交互、言语、活动与授权 | 034、040–043、051–054、058–095、099–104、108–110、116–117、133–135、139 | `CHAT_ARCHITECTURE.md` / `DIALOG_WORKFLOW.md` / `BILLING.md` |
-| UI、画布、工作区与卡面 | 035–038、041–042、046、048、051、056–058、061–063、067–076、082、098、111–115、118、122、143 | `UI_GUIDELINES.md` / `CHAT_ARCHITECTURE.md` |
-| 身份、定位与国际化 | 013、037–038、042 | `POSITIONING.md` / `PRD.md` |
-| 渲染、clip-spec、媒体与音乐 | 016、018、020、023–024、044–045、096、113、115、130、136、140、145 | `RENDERING.md` / `MUSIC_ARCHITECTURE.md`；视频目标归 `VIDEO_PROJECT.md` |
-| Film/MG | 119、121、123、127、129–132、134–148 | 新目标与施工归 `VIDEO_PROJECT.md` / `tasks/skill-package-promo-video.md`；旧运行事实查代码/RENDERING，有效需求归 VIDEO_PROJECT §15，旧任务/结构锁退出 |
-| 测试与验证治理 | 114 | `VERIFICATION.md` / `PROGRESS.md` |
+查具体编号可核对当时的实现、失败及取舍。涉及当前任务时须交叉核对源码、领域合同与对应版本的真实验收。新增决策只记录架构边界或产品语义的实质变化。
 
 ## 退役编号与别名解析
 
@@ -93,7 +76,7 @@ repurposer/
 
 ## ADR-004: Hand-rolled agent workflow
 
-**Status**: Decided
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**: Do not introduce Pydantic AI / LangGraph / CrewAI for P0. Build a custom agent orchestrator.
 
@@ -175,7 +158,7 @@ repurposer/
 
 ## ADR-012: P0 is an internal validation tool; future target is SaaS
 
-**Status**: Decided
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**: Run P0 first as an internal tool to validate the core workflow, but choose technologies that prepare for future SaaS.
 
@@ -187,7 +170,7 @@ repurposer/
 
 ---
 
-## ADR-013: Internationalization, theme switching, and European market positioning
+## ADR-013: Internationalization and theme switching
 
 **Status**: Decided；SSR/i18n 的现行实现约束与 `CLAUDE.md` 一致。
 
@@ -197,11 +180,8 @@ repurposer/
 3. 默认主题为 dark；`system` 首次也按 dark 处理。手动选择写入 `repurposer-theme`；`__root.tsx` 的 anti-FOUC 内联脚本不得删除。
 4. 主题切换使用 View Transition API 圆形揭示；不支持或 reduced-motion 时直接切换。
 5. 图标统一 `lucide-react`；base-ui trigger 使用 `render`，不使用 Radix `asChild`。
-6. 产品服务有素材但无暇经营社媒的欧洲知识专家；输入不限于演讲，输出与渠道由用户点名，不默认承诺“一次生成全套”。
-7. 多语言输出是欧洲市场入场券，内容生成需覆盖 FR/DE/ES/IT/EN 等目标语言。
-8. GDPR / EU 驻留是已拍板的产品方向，不代表现有部署已完成合规。对外文案在实装与验收前只保持 ready 角度，不宣称已经提供 EU 驻留或机构合规。
 
-**Rationale**: 同语言 SSR/首帧可避免 hydration 漂移；per-request 实例避免并发请求串语言。主题首帧脚本避免闪烁。欧洲知识专家、多语言与合规方向必须和真实交付能力分开陈述。
+**Rationale**: 同语言 SSR/首帧可避免 hydration 漂移；per-request 实例避免并发请求串语言。主题首帧脚本避免闪烁。
 
 **Constraints**: 新用户文案先加 `en.ts` 再镜像 `zh.ts`；浏览器 API 只能出现在 effect、事件处理器或 anti-FOUC 脚本。营销与 UI 示例避免 TikTok/viral/爆款定位。
 
@@ -252,7 +232,7 @@ uv run alembic downgrade -1
 
 ## ADR-016: Structured media specs——clip-spec / film-spec 平级，renderer 是可替换黑盒
 
-**Status**: Decided；clip 编辑器交互 = `VIDEO_EDITOR.md`，字段与 family dispatch = `RENDERING.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **声明式 spec 是渲染契约，renderer 是可替换实现**。`clip-spec` 服务既有素材剪辑；`film-spec` 服务网页/文字/通用组合影片。二者是平级 spec families，不存在“clip-spec 覆盖一切渲染”或第三套隐式 spec。
@@ -299,7 +279,7 @@ uv run alembic downgrade -1
 
 ## ADR-020: clip stills——图片与可选音频的 audiogram 源形态
 
-**Status**: Decided；本条只定义 **clip-spec** 的 `stills` 源，不是 Film composite 或 R5 合成主片的契约。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. `ClipSource.kind = video | stills`，缺省读作 `video`，保持旧 clip 兼容。
@@ -400,7 +380,7 @@ uv run alembic downgrade -1
 
 ## ADR-027: 发布审核分级——个人免审秒发，机构强制人工确认（P2）
 
-**Status**: Decided (2026-07-22)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **个人账号（P1）**：无审核态，发布流 `draft → scheduled → publishing → published`，秒发；确认点 = 发布对话框（payload 预填可编辑 + `ai_disclosure` 徽标可见）。
@@ -415,7 +395,7 @@ uv run alembic downgrade -1
 
 ## ADR-028: RunPlan 持久化——计划图作为一等对象（内化 flow，不做 Flow 产品）
 
-**Status**: Decided (2026-07-22)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **内化 flow，不做 Flow 产品**：DAG 是内部表征——agent 当编排者，用户看步骤清单（每步状态/成本/重跑入口）；不做可操作节点画布、不向用户暴露模型名、不做自由 DAG 编辑（用户面图形态的后继裁决见 ADR-035 / ADR-036）。
@@ -450,7 +430,7 @@ uv run alembic downgrade -1
 
 ## ADR-030: 产物统一为 outputs——clip 降级为类型，payload schema 注册表守门
 
-**Status**: Decided (2026-07-22)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **统一 `outputs` 表**（取代 `clips`/`derivatives`）。通用列：`id / project_id / plan_node_id（血统）/ type / language / status / provenance(real|generated) / payload JSONB / files JSONB / source_ref JSONB? / render_spec JSONB? / render_status? / score JSONB? / publishing JSONB`。
@@ -492,7 +472,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-032: Operation Model——operations 表 + 快照式 undo + op 集边界
 
-**Status**: Decided (2026-07-26)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **`operations` 表**（Owner: Operation Model）：`output_id / project_id / seq / op / params JSONB / spec_after JSONB / spec_hash / source / user_id? / message_id? / undone_at? / created_at`，`UniqueConstraint(output_id, seq)`。append-only，`undone_at` 可空时间戳是唯一可写字段（NAMING §1 宪法第 4 条）。
@@ -511,7 +491,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-033: 编辑面分层——能力层唯一（ops+tools 双海拔），适配层多前端并存
 
-**Status**: Decided；当前注册表与受控编辑边界见 ADR-039/044/090。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **能力层唯一，双注册表双海拔**：`OP_REGISTRY`（产物级受控微操作，带 operation journal、并发校验与 undo）∪ `TOOL_REGISTRY`（任务级能力，编译为图节点并经受权 run）。参数级精确修改走 operations；需要新任务链的请求走当前计划/提案工具，不能把 precomputed ops 偷渡成 run，也不能把重制伪装成版本内编辑。
@@ -544,7 +524,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-035: DAG 用户化边界——只读产品图可用，可操作工作流画布永拒
 
-**Status**: Decided；当前图行为 = `CHAT_ARCHITECTURE.md` / `MODULE_ARCHITECTURE.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. DAG 是内部执行表征。当前用户面图是由 FlowView 渲染的**只读 Product Graph**，帮助理解素材、产品、来源和修订关系；配方卡不再以额外静态流程图或 overlay 作为必经步骤。
@@ -558,7 +538,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-036: FlowView——共享只读图基座与确定性空间规则
 
-**Status**: Decided；rank 现行法 = ADR-098，transcript 边界 = ADR-113。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. `FlowView` 是共享只读图基座；消费面只把领域数据适配成节点/边，不自绘第二套边、布局或节点 chrome。
@@ -573,7 +553,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-037: 身份模块正名——Speaker 退役、人设（Persona）扶正，IP 留在承诺层
 
-**Status**: Decided (2026-08-08)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **身份模块正名 = 人设（en `Persona`）**：多实例扁平（工作号/生活号 = 两个人设）；用户面 zh「人设」/ en「Persona」，代码层 `persona`（表 `personas`、`PersonaContext`、路由 `/personas`；节点 `persona_bootstrap` 名零改动）——三层同词族，无需双轨。人设 = **任务完成后沉淀的记忆**（语气/风格/禁忌词/声纹等稳定特征），行为规则：per-user 隔离（`user_id` 在表）；composer 可选选择、**未选则任务分析后 auto-create** 并挂到当前项目；多实例不强制单例；两层分工不变——人设 = 稳定风格记忆，项目 = 当次主题/意图 + 素材。
@@ -619,7 +599,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-039: 工具能力层与四层工程地图——节点对象化、Agent 归一、outputs 派生与估价
 
-**Status**: Decided；当前工具与 SKILL.md 边界按 N-42 和 `CHAT_ARCHITECTURE.md` §4 执行。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **可派发能力住工具包**：`app/tools/` 是节点类、params、私有工序、估价与可选 agent 声明的家，`TOOL_REGISTRY` 是唯一可派发能力注册表。`app/skills/*/SKILL.md` 只是 prompt 装配期指令包，不做运行时发现，不替代工具。`app/agents/` 持有决策单元与 harness，`app/providers/` 持有外部服务与 LLM client 边界。
@@ -656,7 +636,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-041: 项目工作区——结果画布、ChatDock 与 chat 自足
 
-**Status**: Decided；布局偏好由 ADR-143 更新，移动端由 ADR-122 决定。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. `/projects/$id` 是同一项目工作区，不维护 `?overlay=chat/run`、fullscreen 第二聊天壳或另一套路由状态。ChatDock 只有 full / panel 两形态，MentionEditor 跨形态不得 remount。
@@ -673,7 +653,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-042: 身份根升格——定位（Positioning）为根、人设收窄为表达分区、选题库升一等公民
 
-**Status**: Decided (2026-08-13)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **身份根 = 定位（`positioning`）**，多实例（工作号/生活号 = 两个定位）。表 `personas`→`positionings`、FK 网 `persona_id`→`positioning_id` 全栈平移（speakers→personas 改名先例同构，纯机械刀）。
@@ -693,7 +673,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-043: 计划语法收敛——outputs 概念退役为派生（derive），plan path 并入工具链
 
-**Status**: Decided (2026-08-15)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **请求层无 outputs 语法——产物 = 编译图的派生投影（derive）**：产物类型词汇由节点 `output_type` 声明派生（N-32 不变；Output 表 / 产物行不动）。意图面唯一语法 = 工具链（task list）：plan path 与 chat loop 的 task-list 臂使用同一词汇。
@@ -716,7 +696,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-044: clip-spec 轨道模型——锚定存储 + 泳道编译产物 + TRACK_REGISTRY（12 操作闭包）
 
-**Status**: Decided (2026-08-17)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -809,7 +789,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-048: 配方与 Home 货架——用户任务组织、提示词发射与样片证据分级
 
-**Status**: Decided；当前卡片与样片状态 = `RECIPES.md` / `tasks/home-creation-entry-refresh.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **货架以用户任务组织**，不再把“产物介质”设为唯一分卡轴。输入路径与工艺决定真实可行性；渠道是下游适配，不默认按 LinkedIn/TikTok 等渠道复制卡片，也不得在 prompt 中发明用户未点名的平台。
@@ -825,7 +805,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-049: 渲染前评审边界——无 hook 预览闸，Film 分镜审阅独立
 
-**Status**: Decided；仅裁决 clip hook 预览闸，不取消 Film 的创作物审阅。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. clip 链不设置 `hook_gate` / `release_renders`、preview-seconds 外部参数、HookPreview/HookTrim 或 `swap_hook_shot`；报价与方案在 chat 中呈现，渲染按既有执行与质量链继续。
@@ -838,7 +818,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-050: 会话不跨长等待——计量内存累积 + 渲染会话收窄 + runner 禁污 Session-2 节点 + DEFERRABLE FK（D9 死锁族）
 
-**Status**: Decided (2026-08-28)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -866,7 +846,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-051: ChatDock 与工作叙事——单一路由、两形态与统一提问面
 
-**Status**: Decided；行为全文 = `CHAT_ARCHITECTURE.md`，视觉细则 = `UI_GUIDELINES.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 项目页只保留画布 + ChatDock 工作区，无 overlay 路由、fullscreen 第二壳或多 chat。composer 发送只负责建项目/上传/导航，首个意图仍由 `POST /chat` 处理。
@@ -883,7 +863,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-052: 对话工作流母蓝图——厚 agent + 双引擎分离 + brief 账本 + ask 一等动作 + 当前计划呈现 + 有界 loop 节点
 
-**Status**: Decided；概念母文档 = `DIALOG_WORKFLOW.md`；当前实施状态与排期归 `PROGRESS.md`
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -941,7 +921,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-054: 计划呈现密度——当前累计方案、真实草稿与统一 Start
 
-**Status**: Decided；当前呈现与授权见 ADR-111/117/139，Film 首稿见 ADR-144。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 不维护两套计划卡、两种 Start 语义或按任务数切换确认机器。计划内容必须去重呈现，真实草稿图/当前累计方案与世界状态是范围事实。
@@ -999,7 +979,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-057: 持久 Product Graph——唯一图事实、受控写门与确定性修订
 
-**Status**: Decided；product visibility/rank 由 ADR-086/098 补充，transcript 由 ADR-113 重基线。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 项目拥有持久 `graph_nodes` / `graph_edges`。chat 建/改图，授权后 run 在同一批节点上执行与填充；修订继续作用于同一产品世界，不为每次 run 复制第二套展示 DAG。
@@ -1017,7 +997,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-058: 展示命名、确定性修订、mentions 与消息秩序
 
-**Status**: Decided；活动/相位现行法 = ADR-110/133，数组秩序 = ADR-108。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **展示命名二源律**：用户可见命名只能来自 LLM 建图时的 `name`（null/空读容忍）或世界自证（产物徽标、节点状态、真实数字）。冻参模板永禁；手改计划后清空旧 name，回退到当前参数的诚实标签。
@@ -1033,7 +1013,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-059: 图持久化分裂 flush 律——SQLAlchemy 无 relationship 不排序裸 FK 混插
 
-**Status**: Decided (2026-09-10)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **写口分阶段 flush**：`graph_store.persist`（图唯一写口）分两段 flush——nodes strictly 先于 edges，代码带「永不合并回去」注释。不是"这次顺序碰巧对"，是把排序从 ORM 骰子收归写口纪律。
@@ -1043,7 +1023,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-060: echo 防编造律 + post 渠道中立——agent 永不发明用户没说过的平台
 
-**Status**: Decided (2026-09-10)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **echo 防编造律入 prompt**：回声解剖增一条——只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**（"LinkedIn" / "X" / "newsletter"）；a post is just a post until the user names where it lives。
@@ -1054,7 +1034,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-061: 变体并行律——修饰节点是变体不是工序，caption 扇出恒并行
 
-**Status**: Decided (2026-09-10)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1066,7 +1046,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-062: 图边对账——同一编译拥有其成员边，撤回也走唯一写门
 
-**Status**: Decided；settled freeze 与 rank 边集 = ADR-098。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. draft stamp / run fill 对本次编译拥有的成员集合做边对账：本次不再声明、且属于该集合的旧语义边必须撤回；不得只 `have_edge` 去重新增而留下陈旧拓扑。
@@ -1143,7 +1123,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-068: 画布走查三修——引用 glyph 可读性 + draft 卡无 factsbar + clip 帧 aspect 精确预留
 
-**Status**: Decided (2026-09-11)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1170,7 +1150,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-070: Start 与固定选择回座 dock——同一授权机器，不按任务数换 UI
 
-**Status**: Decided；当前授权 = ADR-117/139，Film 首稿 = ADR-144。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 执行确认与费用确认的唯一控件座位是 dock；canvas 不放计划 Start/Confirm。选项问也复用同一 OptionDock 机器，不新增第三确认面。
@@ -1206,7 +1186,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-072: 产品节点解剖——媒介与程序分轴，执行概念不上图
 
-**Status**: Decided；词表由 ADR-076 补充，transcript 由 ADR-113 更新。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 节点身份分轴：媒介类型决定媒体/文本/表格等卡面基础，prototype/产品角色决定程序与编辑面，业务名由 label/tool 与二源律表达；不得用一个不断膨胀的 kind 同时承担三件事。
@@ -1224,7 +1204,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-073: run 期消息流时序律 + 清单活态默认展开 + 起始 banner 退役
 
-**Status**: Decided (2026-09-13)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1239,7 +1219,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-074: Run 判决、交付真实性与画布几何
 
-**Status**: Decided；交付分支现行法另见 ADR-135/141，渲染身份见 ADR-079/096。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **同语言变换双重拒绝**：chat 草案校验与 run 出生地都按实际源语言拒绝无意义目标；语言未知时不猜，运行时护栏仍兜底。修法必须给用户可行方向。
@@ -1254,7 +1234,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-075: 画布媒体跟源比例 + 分档加宽——真实像素是形状真值
 
-**Status**: Decided (2026-09-13)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1271,7 +1251,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-076: 节点词表——媒介、prototype 与业务身份分轴
 
-**Status**: Decided；具体 wire 字段以当前 schema 为准，探索产物边界 = ADR-088。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **媒介轴**只表达 text/table/image/video/audio 等内容形态，驱动卡面解剖、画幅与端口；不把 select_clips、translate、task_book 等业务/执行词塞进媒介枚举。
@@ -1286,7 +1266,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-077: 会话层工具 loop 化——常备否决收窄终裁：生产封闭 / 服务收编 / 执行永拒
 
-**Status**: Decided (2026-09-14)；详细契约 `CHAT_ARCHITECTURE.md`；旅程母文档 = `docs/JOURNEYS.md`
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1307,7 +1287,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-078: decompiler 反向编译器——视频 = 可编程时序结构，remix = 换内容留风格
 
-**Status**: Decided (2026-09-14)；旅程全文 = `docs/JOURNEYS.md` §2
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1378,7 +1358,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-082: 画布呈现纪律——可读性永不反噬语义
 
-**Status**: Decided；effective rank 与剩余可读性需求 = ADR-098 / `VERIFICATION.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. 永不为了排线新增语义节点、改变执行拓扑或补假边；特别不得恢复虚构 transcript 中继。合法工具只有呈现层的 rank 投影、frame 预留、分组、edge routing、锚点与视口。
@@ -1437,7 +1417,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-086: 拓扑空间权威三律 + Product Canvas ≠ Execution Graph——Product Flow Alignment 的架构地基
 
-**Status**: Decided (2026-09-18)；施工合同 = `docs/VERIFICATION.md`
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1458,7 +1438,7 @@ render 认领谓词带**身份维度**（ADR-079）——`render_claim_token UUI
 
 ## ADR-087: Agent Interaction & Product Lifecycle Architecture——三条语义层 + Lifecycle / Activity / Confirmation 三合同 + 依赖方向冻结
 
-**Status**: Decided；当前剩余验收与 hygiene 前置 = `docs/VERIFICATION.md`，全局状态 = PROGRESS §0.2。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1630,7 +1610,7 @@ Lifecycle Projection       Execution Runtime
 
 ## ADR-088: Exploration Artifacts & Project Working Loop——探索产物族与 Agent 工作循环
 
-**Status**: Decided, **目标架构 / 渐进实施，未整体落地**；当前工具与节点以 registry 为准。母文档 = `docs/JOURNEYS.md` 旅程四；与 ADR-089 双生——本条答「Agent 在 Project World 里生产什么、这些东西如何持续工作」，ADR-089 答「这些产物如何确定性进入执行世界」
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1703,7 +1683,7 @@ run 完成触发回合的 reviewer = **确定性执行验证 + 已批准 plan �
 
 ## ADR-089: Capability Compilation & Execution Boundary——能力编译层与执行边界
 
-**Status**: Decided, **目标架构 / 渐进实施，未整体落地**；当前主链工具未被本决策预先退役。母文档 = `docs/JOURNEYS.md` 旅程四拍 6/9
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1911,7 +1891,7 @@ trigger beat ① 的引号示例判句整删，替换为 §1 护栏的抽象表�
 
 ## ADR-096: 渲染所有权与就绪语义——运行期仲裁废止，编译静态所有权 + 就绪对账
 
-**Status**: Decided (2026-09-30)；§1 终态律（编译静态所有权 + 屏障 + defer 律整条删除）、§4 就绪双职责、§5 track 原子写已落地；§6 恢复流程（批次 B）挂账
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -1947,7 +1927,7 @@ in-place morph 的 spec 写 = output 行锁内 **track 级局部更新**（track
 
 ## ADR-097: Product Artifact Ontology——Artifact-first 持久产品图（编译期身份分组，零第二套 DAG）
 
-**Status**: Decided (2026-09-30)；目标架构——Phase 1（canonical JSONB stamp + 读面投影）已拍板，Phase 2（schema 身份表）随 Phase 1 验证后启动
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2022,7 +2002,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-098: 画布拓扑时间一致性——单一 effective rank 与 settled freeze
 
-**Status**: Decided；当前验收 = `VERIFICATION.md`，transcript 边界 = ADR-113。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **一个 effective Product Graph / rank authority**：写时岛/帧分配与读时 `display_ranks` 使用同一纯拓扑层；服务端与客户端 settled projection 对同一 fixture 得同数。前端不得另算第二套 depth/rank。
@@ -2195,7 +2175,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-111: 画布 reveal 与计划呈现——PLAN_READY、当前 Start 门与等待态欠账
 
-**Status**: Decided；W3 等待态节点面、相机夹、capture 前估价面与刷新重建仍欠统一 live 验收。当前授权 = ADR-117/139，Film 首稿 = ADR-144。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **PLAN_READY 是桌面画布 reveal 的必要产品状态**，不再以 hasRuns/confirmed run 作为唯一前提；`workspace_layout=chat` 或移动端仍保持纯 chat。reveal 不得绕过 material/plan readiness。
@@ -2212,7 +2192,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-112: 画布卡面显示律——cue 行时间刻度 / facet strip 失败-only / factsbar 分面 / Top pick 抉择闸门
 
-**Status**: Decided（2026-10-09 用户拍板，同批落地）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2263,7 +2243,7 @@ Artifact ≠ 第二套 DAG：分组不产新边、不改 rank、不改依赖；�
 
 ## ADR-115: 卡面解剖 v4——素材卡阅读型 + 成片卡 NLE 检视轴 + 信息秩三分
 
-**Status**: Decided（2026-10-09 用户拍板；形态原型 = `scratch/media-card-anatomy.html` 信息秩三分定稿，基于项目 1aeb9787 真实数据）；施工合同 = `docs/VERIFICATION.md`
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2323,7 +2303,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-118: 画布宪法——解耦、chat 自足、存在理由与环境感知
 
-**Status**: Decided；工作区用户布局由 ADR-143 补充，移动端由 ADR-122 决定。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **解耦律**：图模型是世界事实源，画布只是一种投影；画布不得反写呈现推断为执行事实。
@@ -2339,7 +2319,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-119: film-spec 第二家族——storyboard 编排 + grounding validator + skill 接入装配线
 
-**Status**: Decided；新视频目标/有效需求 = `docs/VIDEO_PROJECT.md`，施工验收 = `docs/tasks/skill-package-promo-video.md`；旧实现事实查代码/RENDERING。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2362,7 +2342,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-121: film 采集升档——playwright 引擎 / 逐 section 截图 / 元素点名相机 / 节拍预计算 / 子页发现
 
-**Status**: Decided；有界子页发现是当前契约，实施与验收状态归 Film progress / execution。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2395,7 +2375,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-123: film 分镜丰富度——支柱迭代弧线 / plate 数字幕 / ui 全出血变体 / 时长窗升档
 
-**Status**: Decided（2026-10-15——对标原 skill 90 秒成片逐帧取证后拍板）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **网页源范围**：scene count 8–20、默认总时长 70–118s；ui 每幕 1–3 focuses。文字源的范围独立，120s 是全家族技术帽，不把创作默认当技术上限。
@@ -2415,7 +2395,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 **Identifier alias**: 本决策曾以重复编号 ADR-123 落档；现编号为 ADR-143。旧代码注释中指向 `workspace_layout` / `canvasCapableFor` 的 ADR-123 均解析到本条；Film 分镜丰富度继续使用 ADR-123。
 
-**Status**: Decided (2026-10-15)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 1. **两档设置**：`users.settings.workspace_layout ∈ {auto, chat}`（默认 chat）。chat = 任何屏幕恒驻 full 纯 chat；auto = 视口跟随（宽屏画布 + panel，窄屏纯 chat）。**不设「强制画布」档**——<iPad 无画布是架构禁令（prohibition #13），强制档在移动端是虚假承诺（虚构 SKU 禁令同族）。
@@ -2445,7 +2425,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-127: 分镜骨架收归代码——固定结构 + 创作槽 + 固定分镜兜底 + 流式传输
 
-**Status**: Decided (2026-10-16；2026-10-27 用户拍板修订相机目标分工；适用范围 = 网页源 film 骨架；文字源与组合编排见 ADR-138/140)
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2460,7 +2440,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-129: film 分镜 = 设计拍普通工具调用——版本化呈现 / 全局生产授权 / 禁静默换稿
 
-**Status**: Decided（2026-10-16 用户拍板；2026-10-17 用户拍板修订；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段与 `docs/VIDEO_PROJECT.md`，施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2475,7 +2455,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-130: film 时序执行契约——beat-locked frames / 配音字幕 / camera walk / split reveal
 
-**Status**: Decided（2026-10-17 用户拍板；字段级正文 = `docs/RENDERING.md` film-spec 段）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2490,7 +2470,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-131: film 分镜呈现位移与生成预算——LLM 唯一表达 / 程序 markdown 退役 / 1800s 上限 / 设计旅程无固定兜底
 
-**Status**: Decided（2026-10-18 用户拍板）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2505,7 +2485,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-132: film 批准语义与配音承诺——批准 = 消费呈现版 / 守卫分腿 / voiceover 直达设计层 / 全静默即违规
 
-**Status**: Decided（2026-10-18 用户拍板；后续制作意图与修订呈现修订见 ADR-139；现行对话行为 = `docs/CHAT_ARCHITECTURE.md` Film 段）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2535,7 +2515,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-134: film 首稿分镜默认 hold——用户没见过的稿永不开工
 
-**Status**: Decided；首稿强制审阅 = ADR-144，普通修订授权 = ADR-139。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2550,7 +2530,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-135: 全败 run 必须开口——run_failed 入触发白名单
 
-**Status**: Decided；失败分支的当前交付职责见 ADR-141。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2565,7 +2545,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-136: film 旁白窗口弹性——有界零和借帧 + 披露，永不静默改写分镜
 
-**Status**: Decided；字段级旧渲染事实 = RENDERING/代码；新内容合同 = VIDEO_PROJECT。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2581,7 +2561,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-137: film 编辑拍（patch path）——结构化 ops / 版本信封 / base 引用协议 / 报价分叉
 
-**Status**: Decided（2026-10-20；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2600,7 +2580,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-138: film 双链范围——文字视频为本期正式能力 / 音频三态与试听 / 完整知识视频移出本期
 
-**Status**: Decided（2026-10-21 用户拍板；施工组织 = `docs/VIDEO_PROJECT.md`，设计契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2617,7 +2597,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-139: auto 只免批准、不创造制作意图——生产意图入 dock 出生事实 + 确认前呈现累计方案
 
-**Status**: Decided（2026-10-22 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §11；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2632,7 +2612,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-140: film 组合幕（composite）——视频/图片素材元素 + 独立文字元素的最小组合结构
 
-**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15；剩余实施、验收与实际状态 = `docs/tasks/skill-package-promo-video.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2650,7 +2630,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-141: Film 逐字子句粒度 / 同回合纠正道 / 带条件授权守卫 / 交付收敛
 
-**Status**: Decided；现行契约 = `docs/VIDEO_PROJECT.md` §2/§6/§15、§11；剩余验收与实际状态 = `docs/tasks/skill-package-promo-video.md`。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2667,7 +2647,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-142: 回答续聊输入耐久缝 + Film begin 拒绝锁存
 
-**Status**: Decided；当前实现与验证状态 = `docs/VIDEO_PROJECT.md`，诊断工具留在 scratch 供复测。
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2682,7 +2662,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-144: 作品首稿强制审阅——呈现持久化前任何 Start 均失败闭
 
-**Status**: Decided（2026-10-25 用户拍板；现行契约 = `docs/VIDEO_PROJECT.md` §2/§8/§15；施工与验证状态 = `docs/tasks/skill-package-promo-video.md`）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 
@@ -2717,7 +2697,7 @@ configs `billing.always_confirm_above`（默认 5000）：方案 fold high 端�
 
 ## ADR-146: 视频创作工作草稿与条件工具——生成增量、保存原子
 
-**Status**: Decided（2026-11-17 修订直接 Op 协议；目标法 = `docs/VIDEO_PROJECT.md` §2.2/§8.1.2，实施与剩余验收 = 当前视频合同；真实通用成功率仍未测量）
+**Status**: 历史决策。以下记录保留当时的语境，现行创作与执行边界见 [Agent 总合同](tasks/new-agent.md)。
 
 **Decision**:
 

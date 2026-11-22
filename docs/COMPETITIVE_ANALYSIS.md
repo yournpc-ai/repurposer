@@ -1,6 +1,6 @@
 # Competitive Analysis — 竞品能力全景与分类（Round 1.2）
 
-> **状态**: Round 1.2 — 能力普查 + 分类框架（经两轮交叉评审与独立事实核查，为后续"单竞品卡片 + 横向决策矩阵"打底）
+> **状态**：历史竞品研究。以下比较与产品推论属于采样时点，供追溯设计依据。当前产品方向归 [Agent 总合同](tasks/new-agent.md)。
 > **日期**: 2026-07-19
 > **覆盖**: Opus.pro (OpusClip) / Descript / Submagic / Repurpose.io / Revid.ai / Crayo.ai / ChatCut
 > **数据说明**: 竞品官网 + 定价页 + 官方 changelog/帮助文档 + 第三方评测交叉验证；未能验证的条目在行内标注 ⚠️
@@ -221,7 +221,7 @@
 1. **单竞品分析卡 × 7**（基础信息 / 核心流程逐步还原 / 功能逐项打分），存放 `research/`：
    - 深拆：[opusclip.md](research/opusclip.md)（含 Video Dubbing 与 OpusSearch 专节）、[chatcut.md](research/chatcut.md)（对话式编辑模型与 MCP 接入面专节）、[descript.md](research/descript.md)（Underlord 模型选择器与多语言栈专节）、[submagic.md](research/submagic.md)（字幕引擎死角与欧洲身份虚实专节）
    - 简版：[repurpose.md](research/repurpose.md)、[crayo.md](research/crayo.md)、[revid.md](research/revid.md)
-2. **横向决策矩阵**（核心交付物）：[DECISION_MATRIX.md](DECISION_MATRIX.md) — 40 个功能点 × 七家有无 × 对我们的价值 × 决策（采纳 22 / 改造 9 / 放弃 9）× 优先级 × 现状（对齐 ADR）× 依据
+2. [历史横向对照](DECISION_MATRIX.md) 保留当时的七家竞品观察；旧采纳清单和优先级仅在固定版本中追溯。
 3. **渲染技术栈专项**：[research/RENDERING_TECH.md](research/RENDERING_TECH.md) — 七家渲染/预览/字幕实现取证（Submagic 与 ChatCut 确认全栈 Remotion；OpusClip 自研 GPU + EditingScript 与 clip-spec 同构；Descript 客户端 WebCodecs 派）
 3. **文档治理**：本文件为竞品事实唯一入口；PRD §3.4 链接至此；`research/opusclip-deep-dive.md` 保留为 Opus 单家流程深拆的引用源。竞品能力变化时先改本文件事实层，再同步决策矩阵
 

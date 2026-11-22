@@ -2,7 +2,7 @@
 
 > Status: 当前规范（2026-11-10）。本文是测试运行纪律、核心合同↔测试映射与跨模块验收的唯一母文档；排期仍归 PROGRESS。测试/文档退役不是产品验收通过，绿色历史标记不等于当前 HEAD 或真实旅程已通过。
 >
-> 视频验收见 [统一视频合同](tasks/skill-package-promo-video.md)。覆盖 Composition 版本、时间与 video-spec，以及共享权限、授权、计费、执行身份与消息回放。保留开放项及其验收条件。
+> 视频验收见 [Agent 总合同](tasks/new-agent.md) 与[当前 I8 证据](tasks/agent-editor-evidence/iteration-8/README.md)。覆盖 Composition 版本、时间与 video-spec，以及共享权限、授权、计费、执行身份与消息回放。保留开放项及其验收条件。
 
 关键帧编辑验收分别核对版本写入、完整受影响运动和真实模型判断。恢复验收从导出成功的持久边界中断进程，核对同 opening 的实际调用、版本、Job、账本与交付卡。I7 以真实 MiniMax 断点恢复、Chrome 刷新和下载、270 帧图像配准、五处文字识别及旧新版本差异完成两条验收。模型审片的采样时点单独记录。[I7 已验证范围](tasks/agent-editor-evidence/iteration-7/README.md)
 

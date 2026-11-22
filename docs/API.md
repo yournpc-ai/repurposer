@@ -67,7 +67,7 @@ Clients must handle string, validation-array and object forms. Do not stringify 
 
 Every request is logged as `http_request` with method, path, query, status, duration, client IP, and — for JSON payloads — the request and response bodies (credentials like `token`/`code` are redacted, bodies truncated; multipart and file streams are never buffered). Errors additionally log `http_error` / `http_validation_error` / `http_unhandled_error` with the reason at raise time.
 
-## 5. Persona Management
+## 5. Persona Management（存量资料与深链）
 
 > The identity module is `personas` (ADR-037/038). Personas are isolated per user; `persona_id` is optional at project creation; the default-persona resolution chain is: project selection → project mount → persona with `auto_created_at` set → earliest created. A persona's `voice` field is the **voiceprint block** (`{"kind":"cloned","voice_id","sample_asset_id"}` | `{"kind":"stock","stock_id"}` | `null` = Auto) — writing style lives in the style fields + `guidelines`. `brand` is the visual-skin block (`null` = system default skin), merged over the default at bake time.
 
@@ -558,17 +558,11 @@ POST /api/v1/publications/{pub_id}/cancel
 POST /api/v1/publications/{pub_id}/retry
 ```
 
-Create body: `{ "output_id", "channel_account_id", "overrides": {...} | null, "client_key": "..." | null }` — one publication per channel; `overrides` merge the dialog's edits over the prefilled snapshot (title / caption / hashtags / cover_image_url), and `client_key` dedupes a publish intent (retries reuse the same row). A new publication is born `scheduled` (publish now); the worker picks it up on the next tick.
+Create body: `{ "output_id", "channel_account_id", "overrides": {...} | null, "client_key": "..." | null }` — one publication per channel; `overrides` merge explicit client edits over the prefilled snapshot (title / caption / hashtags / cover_image_url), and `client_key` dedupes a publish intent (retries reuse the same row). A new publication is born `scheduled` (publish now); the worker picks it up on the next tick.
 
-## 18. Recipes
+## 18. 历史 Recipe 目录
 
-### List Recipe Cards
-
-```http
-GET /api/v1/recipes
-```
-
-The public card catalogue: each recipe's public projection (base structure / flow / example_* / input_slots, RECIPES §7.1). No auth — the landing audience is anonymous and reads the same cards. Pin substance (the `tasks` compile shape) never leaves the server.
+旧的公开配方货架已退役。Home 示例只预填用户可编辑的文本。历史结构见 [Recipes](RECIPES.md)。
 
 ## 19. Payments (Stripe credit packages)
 

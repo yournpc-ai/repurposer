@@ -1,6 +1,8 @@
 # Chat TurnBlock 四阶段施工与验收
 
-> Status: 回复容器结构收口已落码。`TurnBlock` 明确分离用户边界与 `AssistantResponse` 内部槽位；纯投影输出完整回复容器及带 opening/deliveries 的 Run 槽位，不再把孤立 runAnchor 交给渲染层。明确关联且连续的 Run 开场、工作面、交付正文和各消息自己的成片在同一容器内演进；中间用户/QA/独立事实与后续跨回合交付保持真实位置。`ChatConversation` 不再判断前后工作块来补间距。`RunCard` 统一 attached/detached 数据入口，attached 不建立重复订阅，交接连接期保留最后真实读数，RunBlock 和工作组件不因数据入口切换而重挂载。
+> 历史提案与当时验收边界。以下批次及开工条件已撤销，现行任务见 [I8](i8.md)。
+
+> 当时状态：回复容器结构收口已落码。`TurnBlock` 明确分离用户边界与 `AssistantResponse` 内部槽位；纯投影输出完整回复容器及带 opening/deliveries 的 Run 槽位，不再把孤立 runAnchor 交给渲染层。明确关联且连续的 Run 开场、工作面、交付正文和各消息自己的成片在同一容器内演进；中间用户/QA/独立事实与后续跨回合交付保持真实位置。`ChatConversation` 不再判断前后工作块来补间距。`RunCard` 统一 attached/detached 数据入口，attached 不建立重复订阅，交接连接期保留最后真实读数，RunBlock 和工作组件不因数据入口切换而重挂载。
 >
 > 当前定向 Chat/stream 22 files / 269 tests 与 diff 检查通过；Web tsc 初次通过，最新全量检查被范围外 MentionChip.tsx 的 formatMediaTimeMs / t 两项未使用声明阻断，包含普通多段回复、Run 开场/交付、terminal SSE 迟到、跨回合交付、独立上传、历史同源与组件挂载身份回归。API/上传工具、Stop visible frontier、计费/授权与首稿 ACK 未修改；既有上传 API/数据库 86 项证据不代表本轮重跑。全量 Web 425 passed / 2 failed；两项失败为范围外的首页旧英文文案断言与媒体选区浮点精度断言，未改动对应实现或断言。本轮不运行真实浏览器或付费旅程，真实呈现由用户验收。
 >

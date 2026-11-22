@@ -52,14 +52,16 @@ ssh volc-ide "docker exec repurposer-worker-1 sh -c 'command -v chromium; python
 
 通过 SSH 传命令时，远端变量要写成 `\$VAR` 或放进单引号脚本；否则本地 shell 会先把 `${VAR}` 展开成空字符串。
 
-## 5. 网页截图 / Film 排障签名
+## 5. 网页截图及历史 Film 日志
+
+下表的 Film 门槛与分镜错误只适用于旧部署的诊断记录。现役创作检查原 opening 的原生调用、版本、媒体任务与导出回执。
 
 | 日志签名 | 结论 | 下一步 |
 |---|---|---|
 | `web_capture_chrome_missing` | worker 找不到浏览器 | 查镜像是否有 Chromium、`CHROME_PATH`、`CHROME_NO_SANDBOX` |
 | `web_capture_processed ... screenshot=False warnings=['chrome_missing']` | 文本采集成功、视觉采集缺失 | 修容器浏览器运行态，再重发链接触发重抓 |
 | `film_direction_preflight_failed need=4 views=0` | Film 前置校验没有可用页面视图 | 回查该项目的 `web_capture_processed` 和资产 `meta.shots` |
-| `web_capture_visuals shots=N` | 浏览器采集成功 | `N >= 4` 才满足当前 Film 视图门槛 |
+| `web_capture_visuals shots=N` | 浏览器采集成功 | `N >= 4` 才满足当时 Film 的视图门槛 |
 | `agent_call_started` 后暂无 `agent_call_completed` | 模型仍在调用中 | 看耗时和预算，不先判死锁 |
 | `film_plan_draft_failed reason=...` | 分镜草稿失败的结构化原因 | 按 `reason` 中的 code 归因，不只引用用户可见文案 |
 
