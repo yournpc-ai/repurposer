@@ -16,7 +16,7 @@ SQLAlchemy's `Base.metadata.create_all()` can only create tables when the databa
 
 ## Environment Setup
 
-Make sure PostgreSQL is running (local development usually starts it automatically via `docker compose up -d db` or `./scripts/dev.sh`), and that `DATABASE_URL` in `apps/api/.env` is configured correctly.
+Make sure PostgreSQL is running (local development usually starts it automatically via `docker compose up -d db` or `./scripts/dev.sh`), and that `DATABASE_URL` in the repository-root `.env` (or the process environment) is configured correctly.
 
 ## Common Commands
 
@@ -64,27 +64,9 @@ uv run alembic downgrade base
 uv run alembic history
 ```
 
-## Automatic Migrations (on Application Startup)
+## Development startup
 
-`init_db()` in `app/models/database.py` is called during the FastAPI lifespan:
-
-```python
-command.upgrade(alembic_cfg, "head")
-```
-
-In addition, `./scripts/dev.sh` explicitly runs the following before starting the API:
-
-```bash
-uv run alembic upgrade head
-```
-
-This means that during daily local development, the database is automatically synchronized to the latest version when `./scripts/dev.sh` starts.
-
-However, explicit migration is recommended in the following scenarios:
-
-- First run on a new machine or new database
-- CI/CD deployment pipelines
-- Production environments (avoid relying on implicit migrations during application startup)
+API and Worker both call `require_current_schema` before reconciliation or job claims. The launcher runs this same read-only check before replacing services. Compare `uv run alembic current` and `uv run alembic heads` from apps/api. Inspect all intervening upgrades before choosing a target. The j6d migrations remove legacy canvas and workflow records and cannot restore them on downgrade. For acceptance use a separate database; upgrading a populated database requires an inventory, a restorable backup and the owner's approval.
 
 ## Important Conventions
 
@@ -102,16 +84,7 @@ However, explicit migration is recommended in the following scenarios:
 
 ### "Can't locate revision identified by xxxx" on startup
 
-This usually happens because the version recorded in the local `alembic_version` table does not match the `migrations/versions/` directory. Solutions:
-
-```bash
-# If the database is empty or can be rebuilt
-uv run alembic downgrade base
-uv run alembic upgrade head
-
-# If only the version record is out of sync, you can fix it manually
-uv run alembic stamp head
-```
+Check the configured database, installed revision and migration history. Stamping over a mismatch can leave required tables or columns missing. Restore the matching migrations or migrate a verified copy.
 
 ### autogenerate does not detect changes
 

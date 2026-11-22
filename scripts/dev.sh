@@ -129,17 +129,6 @@ kill_service_families() {
   done
 }
 
-stop_stale_supervisors
-kill_service_families -TERM
-sleep 2
-# TERM 幸存者 + tsx watch 复活竞态，一律 KILL 收尾。
-kill_service_families -9
-
-# 端口杀殿后（uvicorn reload 的 spawn 子进程只有端口认得它）。
-kill_port 8000 "backend"
-kill_port 3000 "frontend"
-kill_port 3001 "render"
-
 # --- PostgreSQL ------------------------------------------------------------
 if port_in_use 5432; then
   echo "PostgreSQL already running on 5432, skipping Docker."
@@ -159,6 +148,21 @@ else
   echo "Docker is unavailable or unresponsive — skipping Postgres startup."
   echo "  (Make sure Postgres is reachable on 5432 yourself.)"
 fi
+
+# Check the same configured database as the API and Worker before replacing
+# services or truncating their logs. An upgrade may retire persistent data.
+( cd "$ROOT/apps/api" && uv run python -c 'import asyncio; from app.models.database import require_current_schema; asyncio.run(require_current_schema())' ) || exit 1
+
+stop_stale_supervisors
+kill_service_families -TERM
+sleep 2
+# TERM 幸存者 + tsx watch 复活竞态，一律 KILL 收尾。
+kill_service_families -9
+
+# 端口杀殿后（uvicorn reload 的 spawn 子进程只有端口认得它）。
+kill_port 8000 "backend"
+kill_port 3000 "frontend"
+kill_port 3001 "render"
 
 # --- per-service log files --------------------------------------------------
 # 2026-10-16 取证教训: 终端 scrollback 不是台账——一次 37 分钟的链上失败
