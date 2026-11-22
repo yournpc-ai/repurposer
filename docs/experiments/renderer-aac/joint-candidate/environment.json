@@ -1,0 +1,11 @@
+{
+  "local_source_sha256": {
+    "apps/render/src/audio.ts": "e711d93ba35a22d41d8b0d09470c45cf8367b75ec6ae7ff1f6e9ee5e9e5bdbd7",
+    "apps/render/src/video/index.ts": "27b7d2b366ba2c6961e61998f09c5b142c82871b58e9fa4120340b7ca1695704",
+    "apps/render/src/artifacts.ts": "49fbd1fa5cf3ed9b22eb5c03eab58f45764c612e879d8ff0ad890eb1d26f889e"
+  },
+  "linux_driver_source_identical": true,
+  "linux_image_id": "sha256:2690f95bdf32c950df2ecea68a26a82b1a46025527b1049fe8a3718d932469ee",
+  "local_unified_diff_sha256": "189565a5d29729a168fa8f6f3c63577afc6c0befab233fa4761e48d3898f4712",
+  "checked_archived_files": 57
+}

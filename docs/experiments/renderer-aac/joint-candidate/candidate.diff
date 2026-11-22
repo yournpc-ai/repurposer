@@ -1,0 +1,151 @@
+diff --git a/apps/render/src/artifacts.ts b/apps/render/src/artifacts.ts
+index 29cf301c..1f524aa6 100644
+--- a/apps/render/src/artifacts.ts
++++ b/apps/render/src/artifacts.ts
+@@ -24,7 +24,7 @@ function canonical(value: unknown): string {
+ }
+ 
+ function artifactDirectory(identity: unknown, cacheRoot: string): string {
+-  const key = createHash("sha256").update(canonical({ version: 1, identity })).digest("hex");
++  const key = createHash("sha256").update(canonical({ version: 2, identity })).digest("hex");
+   return path.join(cacheRoot, key);
+ }
+ 
+diff --git a/apps/render/src/audio.ts b/apps/render/src/audio.ts
+index 90dc276d..4f8e6c94 100644
+--- a/apps/render/src/audio.ts
++++ b/apps/render/src/audio.ts
+@@ -38,6 +38,17 @@ function ffSpawnOpts(binPath: string): { cwd: string; env: NodeJS.ProcessEnv } {
+   return { cwd, env };
+ }
+ 
++export async function encodeBaselineMp4(input: string, output: string): Promise<void> {
++  const ffmpeg = resolveFfBinary("ffmpeg");
++  await execFileAsync(
++    ffmpeg,
++    ["-v", "error", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
++      "-c:a", "libfdk_aac", "-b:a", "320k", "-cutoff", "18000",
++      "-movie_timescale", "48000", "-movflags", "+faststart", output],
++    ffSpawnOpts(ffmpeg),
++  );
++}
++
+ interface LoudnormMeasure {
+   input_i: string;
+   input_tp: string;
+@@ -46,15 +57,23 @@ interface LoudnormMeasure {
+   target_offset: string;
+ }
+ 
+-export async function normalizeLoudness(videoPath: string): Promise<void> {
++export class InvalidAudioClock extends Error {}
++
++export async function normalizeLoudness(videoPath: string, expectedSamples: number): Promise<void> {
+   const ffmpeg = resolveFfBinary("ffmpeg");
+   const ffprobe = resolveFfBinary("ffprobe");
+-  const { stdout: streamType } = await execFileAsync(
++  const { stdout: timing } = await execFileAsync(
+     ffprobe,
+-    ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", videoPath],
++    ["-v", "error", "-select_streams", "a:0", "-show_entries",
++      "stream=sample_rate,time_base,start_pts,duration_ts", "-of", "json", videoPath],
+     ffSpawnOpts(ffprobe),
+   );
+-  if (streamType.trim() !== "audio") return;
++  const [track] = JSON.parse(timing).streams;
++  if (!track) return;
++  if (track.sample_rate !== "48000" || track.time_base !== "1/48000" || track.start_pts !== 0 ||
++      !Number.isSafeInteger(track.duration_ts) || track.duration_ts <= 0 || track.duration_ts !== expectedSamples) {
++    throw new InvalidAudioClock(`Expected a zero-based 48 kHz track of ${expectedSamples} samples; got ${timing.trim()}`);
++  }
+   const measure = await execFileAsync(
+     ffmpeg,
+     ["-hide_banner", "-nostats", "-i", videoPath, "-vn", "-af", `loudnorm=${LOUDNORM_TARGET}:print_format=json`, "-f", "null", "-"],
+@@ -65,11 +84,13 @@ export async function normalizeLoudness(videoPath: string): Promise<void> {
+   if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("loudnorm measure: no JSON block in ffmpeg output");
+   const m = JSON.parse(measure.stderr.slice(jsonStart, jsonEnd + 1)) as LoudnormMeasure;
+   if (m.input_i === "-inf") return;
++  // Give dynamic loudnorm lookahead past the cut, then keep only the presentation window.
++  const trim = `atrim=end_sample=${track.duration_ts}`;
+   const filter =
+-    `loudnorm=${LOUDNORM_TARGET}` +
++    `${trim},apad,loudnorm=${LOUDNORM_TARGET}` +
+     `:measured_I=${m.input_i}:measured_TP=${m.input_tp}` +
+     `:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}` +
+-    `:offset=${m.target_offset}:linear=true:print_format=summary`;
++    `:offset=${m.target_offset}:linear=true:print_format=summary,aresample=48000,${trim}`;
+   const tmpPath = videoPath.replace(/\.mp4$/, "") + ".loudnorm.mp4";
+   await execFileAsync(
+     ffmpeg,
+diff --git a/apps/render/src/video/index.ts b/apps/render/src/video/index.ts
+index c57c5c0f..3a21eb05 100644
+--- a/apps/render/src/video/index.ts
++++ b/apps/render/src/video/index.ts
+@@ -8,7 +8,7 @@ import { bundle } from "@remotion/bundler";
+ import { renderMedia, selectComposition } from "@remotion/renderer";
+ import type { VideoSpec } from "@repurposer/video-spec";
+ 
+-import { normalizeLoudness } from "../audio";
++import { encodeBaselineMp4, InvalidAudioClock, normalizeLoudness } from "../audio";
+ import { stageRemoteSource } from "../stage";
+ import { assertVideoSupported } from "./capabilities";
+ 
+@@ -74,21 +74,44 @@ export async function renderVideo(
+   const composition = await selectComposition({ serveUrl, id: "Video", inputProps });
+ 
+   const videoPath = path.join(outDir, `${basename}.mp4`);
+-  await renderMedia({
+-    composition,
+-    serveUrl,
+-    codec: "h264",
+-    outputLocation: videoPath,
+-    inputProps,
+-    timeoutInMilliseconds: 180_000,
+-  });
+-
+-  // Loudness is an enhancement, not correctness — never fail a finished
+-  // render over the post-pass (the shared audio policy).
++  const hasSoundSource = stagedSpec.tracks.some((track) =>
++    track.clips.some(({ object }) =>
++      object.kind === "audio" || (object.kind === "video" && !object.muted),
++    ),
++  );
++  const work = await fs.mkdtemp(path.join(outDir, ".encode-"));
++  const baseline = path.join(work, "baseline.mp4");
++  const intermediate = path.join(work, "mix.mov");
+   try {
+-    await normalizeLoudness(videoPath);
+-  } catch (err) {
+-    console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    // Keep Remotion's PCM mix intact until the MP4 muxer can record AAC priming.
++    await renderMedia({
++      composition,
++      serveUrl,
++      codec: "h264",
++      ...(hasSoundSource ? { audioCodec: "pcm-16" as const } : { muted: true }),
++      // The parallel pre-stitcher writes video only. Preserve its frame clock until MOV stitching.
++      ffmpegOverride: ({ type, args }) => type === "pre-stitcher" && hasSoundSource
++        ? [...args.slice(0, -1), "-f", "mp4", args[args.length - 1]]
++        : args,
++      outputLocation: hasSoundSource ? intermediate : baseline,
++      inputProps,
++      timeoutInMilliseconds: 180_000,
++    });
++    if (hasSoundSource) {
++      await encodeBaselineMp4(intermediate, baseline);
++      await fs.unlink(intermediate);
++    }
++    // Optional loudness processing may fall back only to a completed MP4.
++    try {
++      const expectedSamples = Math.round(composition.durationInFrames * 48000 / composition.fps);
++      await normalizeLoudness(baseline, expectedSamples);
++    } catch (err) {
++      if (err instanceof InvalidAudioClock) throw err;
++      console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    }
++    await fs.rename(baseline, videoPath);
++  } finally {
++    await fs.rm(work, { recursive: true, force: true });
+   }
+ 
+   return { videoPath };

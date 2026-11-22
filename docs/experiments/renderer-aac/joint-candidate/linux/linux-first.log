@@ -1,0 +1,47 @@
+Downloading Chrome Headless Shell https://www.remotion.dev/chrome-headless-shell
+Customize this behavior by adding a onBrowserDownload function to selectComposition().
+Downloading from: https://remotion.media/chromium-headless-shell-linux-arm64-149.0.7790.0.zip?clear
+Downloading Chrome Headless Shell - 9.5 Mb/88 Mb
+Downloading Chrome Headless Shell - 19.1 Mb/88 Mb
+Downloading Chrome Headless Shell - 28.6 Mb/88 Mb
+Downloading Chrome Headless Shell - 38.2 Mb/88 Mb
+Downloading Chrome Headless Shell - 47.7 Mb/88 Mb
+Downloading Chrome Headless Shell - 57.3 Mb/88 Mb
+Downloading Chrome Headless Shell - 66.8 Mb/88 Mb
+Downloading Chrome Headless Shell - 76.4 Mb/88 Mb
+Downloading Chrome Headless Shell - 85.9 Mb/88 Mb
+Downloading Chrome Headless Shell - 88 Mb/88 Mb
+/lab/observe.cjs:18
+ if(media&&this.stderr && args.some(x=>x.includes('loudnorm=')))this.stderr.on('data',x=>fs.appendFileSync(dir+'/loudnorm.log',x));
+                                         ^
+
+TypeError: Command failed: /repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg -r 30 -f image2pipe -s 1920x1080 -vcodec mjpeg -i - -c:v libx264 -pix_fmt yuv420p -video_track_timescale 90000 -crf 18 -y -f mp4 /lab/tmp/react-motion-renderTBrptW/pre-encode.mkv
+x.includes is not a function
+    at /lab/observe.cjs:18:42
+    at Array.some (<anonymous>)
+    at cp.ChildProcess.spawn (/lab/observe.cjs:18:32)
+    at Object.spawn (node:child_process:787:9)
+    at execa (/repo/node_modules/.pnpm/execa@5.1.1/node_modules/execa/index.js:83:26)
+    at callFf (file:///repo/node_modules/.pnpm/@remotion+renderer@4.0.484_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/@remotion/renderer/dist/esm/index.mjs:4710:16)
+    at prespawnFfmpeg (file:///repo/node_modules/.pnpm/@remotion+renderer@4.0.484_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/@remotion/renderer/dist/esm/index.mjs:21954:16)
+    at createPrestitcherIfNecessary (file:///repo/node_modules/.pnpm/@remotion+renderer@4.0.484_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/@remotion/renderer/dist/esm/index.mjs:23719:21)
+    at file:///repo/node_modules/.pnpm/@remotion+renderer@4.0.484_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/@remotion/renderer/dist/esm/index.mjs:23785:21
+    at new Promise (<anonymous>) {
+  originalMessage: 'x.includes is not a function',
+  shortMessage: 'Command failed: /repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg -r 30 -f image2pipe -s 1920x1080 -vcodec mjpeg -i - -c:v libx264 -pix_fmt yuv420p -video_track_timescale 90000 -crf 18 -y -f mp4 /lab/tmp/react-motion-renderTBrptW/pre-encode.mkv\n' +
+    'x.includes is not a function',
+  command: '/repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg -r 30 -f image2pipe -s 1920x1080 -vcodec mjpeg -i - -c:v libx264 -pix_fmt yuv420p -video_track_timescale 90000 -crf 18 -y -f mp4 /lab/tmp/react-motion-renderTBrptW/pre-encode.mkv',
+  escapedCommand: '"/repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg" -r 30 -f image2pipe -s 1920x1080 -vcodec mjpeg -i - "-c:v" libx264 -pix_fmt yuv420p -video_track_timescale 90000 -crf 18 -y -f mp4 "/lab/tmp/react-motion-renderTBrptW/pre-encode.mkv"',
+  exitCode: undefined,
+  signal: undefined,
+  signalDescription: undefined,
+  stdout: '',
+  stderr: '',
+  all: '',
+  failed: true,
+  timedOut: false,
+  isCanceled: false,
+  killed: false
+}
+
+Node.js v22.23.1

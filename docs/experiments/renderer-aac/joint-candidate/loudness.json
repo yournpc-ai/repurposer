@@ -1,0 +1,70 @@
+{
+  "mac/edge": {
+    "cmd": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-nostats",
+      "-hide_banner",
+      "-i",
+      "/tmp/i8-joint.Gzy3dF/mac/run/edge/video.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "integrated_lufs": "-16.25",
+    "true_peak_dbtp": "-3.21"
+  },
+  "mac/success": {
+    "cmd": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-nostats",
+      "-hide_banner",
+      "-i",
+      "/tmp/i8-joint.Gzy3dF/mac/run/success/video.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "integrated_lufs": "-16.28",
+    "true_peak_dbtp": "-3.17"
+  },
+  "linux/edge": {
+    "cmd": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-nostats",
+      "-hide_banner",
+      "-i",
+      "/tmp/i8-joint.Gzy3dF/linux/run/edge/video.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "integrated_lufs": "-16.24",
+    "true_peak_dbtp": "-3.16"
+  },
+  "linux/success": {
+    "cmd": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-nostats",
+      "-hide_banner",
+      "-i",
+      "/tmp/i8-joint.Gzy3dF/linux/run/success/video.mp4",
+      "-vn",
+      "-af",
+      "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+      "-f",
+      "null",
+      "-"
+    ],
+    "integrated_lufs": "-16.29",
+    "true_peak_dbtp": "-3.28"
+  }
+}

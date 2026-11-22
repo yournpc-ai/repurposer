@@ -1,0 +1,19 @@
+FAILED boundary InvalidAudioClock [Error]: Expected a zero-based 48 kHz track of 382000 samples; got {
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "sample_rate": "48000",
+            "time_base": "1/48000",
+            "start_pts": 0,
+            "duration_ts": 382016
+        }
+    ]
+}
+    at normalizeLoudness (/Users/sylas/repurposer/apps/render/src/audio.ts:75:11)
+    at async renderVideo (/Users/sylas/repurposer/apps/render/src/video/index.ts:107:7)
+    at async <anonymous> (/private/tmp/i8-joint.Gzy3dF/drive.mts:17:19)

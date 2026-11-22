@@ -1,0 +1,1 @@
+[0:a]adelay=292|292,apad=pad_len=128000,acopy[padded0];[1:a]adelay=1417|1417,apad=pad_len=258000,acopy[padded1];[2:a]adelay=2000|2000,apad=pad_len=248000,acopy[padded2];[padded0][padded1][padded2]amix=inputs=3:dropout_transition=0:normalize=0[outputaudio]

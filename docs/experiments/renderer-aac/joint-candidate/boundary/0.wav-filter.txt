@@ -1,0 +1,1 @@
+[0:a]aformat=sample_fmts=s16:sample_rates=48000,atrim=0us:5000000us,volume=0.6309573444801932:eval=once[a0]

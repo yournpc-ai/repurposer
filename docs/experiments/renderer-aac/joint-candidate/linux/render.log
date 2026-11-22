@@ -1,0 +1,43 @@
+{"mode":"success","result":{"videoPath":"/lab/run/success/video.mp4"},"ms":134504,"files":["loudnorm.log","mix.mov","pre-encode.mkv","raw.mp4","video.mp4"]}
+{"mode":"edge","result":{"videoPath":"/lab/run/edge/video.mp4"},"ms":132978,"files":["loudnorm.log","mix.mov","pre-encode.mkv","raw.mp4","video.mp4"]}
+video loudnorm post-pass failed, keeping original audio: Error: Command failed: /repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg -y -hide_banner -nostats -i /lab/run/encodeFail/.encode-ZTkgEf/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k /lab/run/encodeFail/.encode-ZTkgEf/baseline.loudnorm.mp4
+Unrecognized option 'i8-injected-invalid-option'.
+Error splitting the argument list: Option not found
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:417:12)
+    at ChildProcess.emit (node:events:531:35)
+    at maybeClose (node:internal/child_process:1101:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:304:5) {
+  code: 8,
+  killed: false,
+  signal: null,
+  cmd: '/repo/node_modules/.pnpm/@remotion+compositor-linux-arm64-gnu@4.0.484/node_modules/@remotion/compositor-linux-arm64-gnu/ffmpeg -y -hide_banner -nostats -i /lab/run/encodeFail/.encode-ZTkgEf/baseline.mp4 -c:v copy -af atrim=end_sample=384000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.81:measured_TP=-7.69:measured_LRA=15.90:measured_thresh=-31.18:offset=0.03:linear=true:print_format=summary,aresample=48000,atrim=end_sample=384000 -ar 48000 -c:a aac -b:a 192k /lab/run/encodeFail/.encode-ZTkgEf/baseline.loudnorm.mp4',
+  stdout: '',
+  stderr: "Unrecognized option 'i8-injected-invalid-option'.\n" +
+    'Error splitting the argument list: Option not found\n'
+}
+{"mode":"encodeFail","result":{"videoPath":"/lab/run/encodeFail/video.mp4"},"ms":130839,"files":["loudnorm.log","mix.mov","pre-encode.mkv","raw.mp4","video.mp4"]}
+{"mode":"silence","result":{"videoPath":"/lab/run/silence/video.mp4"},"ms":90534,"files":["loudnorm.log","mix.mov","pre-encode.mkv","raw.mp4","video.mp4"]}
+{"mode":"shape","result":{"videoPath":"/lab/run/shape/video.mp4"},"ms":44880,"files":["raw.mp4","video.mp4"]}
+FAILED boundary InvalidAudioClock [Error]: Expected a zero-based 48 kHz track of 382000 samples; got {
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "sample_rate": "48000",
+            "time_base": "1/48000",
+            "start_pts": 0,
+            "duration_ts": 382016
+        }
+    ]
+}
+    at normalizeLoudness (/repo/apps/render/src/audio.ts:75:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async renderVideo (/repo/apps/render/src/video/index.ts:107:7)
+    at async <anonymous> (/lab/drive.mts:17:19)
