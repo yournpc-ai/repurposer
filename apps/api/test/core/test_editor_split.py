@@ -206,7 +206,8 @@ async def test_edit_sequence_replay_and_safe_boundaries(database, monkeypatch):
     with pytest.raises(ValueError, match="already has"):
         await execute("translate", "no-change", id=image["object_id"], x=-18, y=0)
     # Distinguish the identity of a user's request from the placement arguments.
-    from app.models.tables import SourceSnapshot
+    from app.models.schemas import AssetType
+    from app.models.tables import Asset, SourceSnapshot
     from test.core.test_compositions import IMG_SNAPSHOT
 
     placement = dict(source_id=IMG_SNAPSHOT, start_seconds=1, end_seconds=3)
@@ -214,7 +215,10 @@ async def test_edit_sequence_replay_and_safe_boundaries(database, monkeypatch):
         await execute("insert_visual", "unbound", **placement)
     async with database() as db:
         source = await db.get(SourceSnapshot, IMG_SNAPSHOT)
-        source.origin_project_id = pid
+        asset = Asset(user_id=owner, project_id=pid, type=AssetType.IMAGE, title="product.png")
+        db.add(asset)
+        await db.flush()
+        source.asset_id = asset.id
         source.meta = {"width": 220, "height": 120}
         await db.commit()
     pictures = [await save("insert_visual", **placement) for _ in range(2)]

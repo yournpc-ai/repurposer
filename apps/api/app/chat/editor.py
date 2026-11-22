@@ -418,11 +418,18 @@ async def edit_clip(
         ops = await bind_clip_source_ops(db, project, content, target, args.source_id)
     elif isinstance(args, InsertVisualArgs):
         from app.editing.revisions import fixed_visual_ops
-        from app.models.tables import SourceSnapshot
+        from app.models.tables import Asset, SourceSnapshot
 
-        source = await db.get(SourceSnapshot, args.source_id)
-        if (source is None or source.owner_id != project.user_id or source.origin_project_id != project.id
-                or source.kind != "image" or not source.storage_key):
+        # Older upload snapshots record the owning Asset but have no birth-project field.
+        legacy_asset = select(Asset.id).where(Asset.user_id == project.user_id, Asset.project_id == project.id)
+        source = await db.scalar(select(SourceSnapshot).where(
+            SourceSnapshot.id == args.source_id,
+            SourceSnapshot.owner_id == project.user_id,
+            SourceSnapshot.kind == "image",
+            (SourceSnapshot.origin_project_id == project.id)
+            | (SourceSnapshot.origin_project_id.is_(None) & SourceSnapshot.asset_id.in_(legacy_asset)),
+        ))
+        if source is None or not source.storage_key:
             raise ValueError("Select a fixed image from this project.")
         start = _ticks(args.start_seconds, rate)
         end = _ticks(args.end_seconds, rate)
