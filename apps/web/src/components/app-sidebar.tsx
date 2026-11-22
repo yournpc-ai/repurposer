@@ -108,7 +108,7 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
       <Dialog
         open={mobileOpen}
         onOpenChange={setMobileOpen}
-        title="Rookie Cut"
+        title="RookieCut"
         closeLabel={t("common.close")}
       >
         {nav}
@@ -121,7 +121,7 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         {expanded && (
           <>
             <LogoMark className="size-6" />
-            <span className="flex-1 text-sm font-medium">Rookie Cut</span>
+            <span className="flex-1 text-sm font-medium">RookieCut</span>
           </>
         )}
         <IconButton

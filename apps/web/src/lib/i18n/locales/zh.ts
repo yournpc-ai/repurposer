@@ -196,7 +196,7 @@ const zh: Resources = {
   landing: {
 
   meta: {
-    description: "把素材和想法交给 Rookie Cut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
+    description: "把素材和想法交给 RookieCut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
   },
   "heroEyebrow": "你的 AI 视频 Agent",
   "showcase": {
@@ -317,7 +317,7 @@ const zh: Resources = {
     },
     "material": {
       "question": "手头只有一个想法，可以开始吗？",
-      "answer": "可以先聊你想表达什么，Rookie Cut 会告诉你还缺哪些素材。有现成的文稿、图片或视频，可以直接发到对话里。做产品介绍时，也可以贴上网站链接。"
+      "answer": "可以先聊你想表达什么，RookieCut 会告诉你还缺哪些素材。有现成的文稿、图片或视频，可以直接发到对话里。做产品介绍时，也可以贴上网站链接。"
     },
     "revision": {
       "question": "成片里只有一处不满意，可以单独改吗？",
@@ -411,14 +411,14 @@ const zh: Resources = {
       wechat: {
         title: "加入微信群",
         description: "使用微信扫码，加入产品交流与内测反馈群。",
-        qrAlt: "Rookie Cut 微信群二维码",
+        qrAlt: "RookieCut 微信群二维码",
       },
       legal: {
         terms: "服务条款",
         privacy: "隐私政策",
         refund: "退款政策",
       },
-      copyright: "© {{year}} Rookie Cut。保留所有权利。",
+      copyright: "© {{year}} RookieCut。保留所有权利。",
       backToTop: "回到顶部",
     },
   },
@@ -1012,7 +1012,7 @@ const zh: Resources = {
       floatPanel: "浮动面板",
       // dock 常驻免责行（ADR-051）——指向真实风险点：即将发布的内容，而非
       // 事实问答。基础形态钉在输入区上方，提问形态随输入行隐藏。
-      honesty: "Rookie Cut 可能出错，发布前请检查。",
+      honesty: "RookieCut 可能出错，发布前请检查。",
     },
     // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
     // 播，hover 放大开大屏；2026-08-16 走查拍板。）
@@ -1182,7 +1182,7 @@ const zh: Resources = {
   chat: {
     scrollToStart: "滚动到开头",
     scrollToEnd: "滚动到末尾",
-    assistantLabel: "Rookie Cut",
+    assistantLabel: "RookieCut",
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
@@ -1773,7 +1773,7 @@ const zh: Resources = {
     shareCopied: "链接已复制",
   },
   login: {
-    title: "登录 Rookie Cut",
+    title: "登录 RookieCut",
     subtitle: "输入邮箱接收登录验证码，无需密码；首次登录会自动创建账号。",
     emailLabel: "邮箱地址",
     emailPlaceholder: "you@company.com",

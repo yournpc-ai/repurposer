@@ -27,7 +27,7 @@ export function MobileNavigation(): ReactNode {
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="Rookie Cut"
+        title="RookieCut"
         closeLabel={t("common.close")}
         trigger={<IconButton label={t("landing.entry.navigation")} icon={<Menu />} />}
       >

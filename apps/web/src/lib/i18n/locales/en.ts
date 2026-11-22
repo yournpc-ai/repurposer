@@ -209,7 +209,7 @@ const en = {
   landing: {
 
   meta: {
-    description: "Share footage and ideas with Rookie Cut, your AI video editor. Preview the first cut and refine the same video in chat.",
+    description: "Share footage and ideas with RookieCut, your AI video editor. Preview the first cut and refine the same video in chat.",
   },
   "heroEyebrow": "Your AI video agent",
   "showcase": {
@@ -330,7 +330,7 @@ const en = {
     },
     "material": {
       "question": "Can I start with just an idea?",
-      "answer": "Yes. Describe your idea and Rookie Cut will ask for any material it needs. If you already have a script, images, or footage, add them to the chat. For a product video, you can also share a website link."
+      "answer": "Yes. Describe your idea and RookieCut will ask for any material it needs. If you already have a script, images, or footage, add them to the chat. For a product video, you can also share a website link."
     },
     "revision": {
       "question": "Can I change just one part of the video?",
@@ -424,14 +424,14 @@ const en = {
       wechat: {
         title: "Join the WeChat group",
         description: "Scan the QR code with WeChat to join the conversation.",
-        qrAlt: "Rookie Cut WeChat group QR code",
+        qrAlt: "RookieCut WeChat group QR code",
       },
       legal: {
         terms: "Terms of Service",
         privacy: "Privacy Policy",
         refund: "Refund Policy",
       },
-      copyright: "© {{year}} Rookie Cut. All rights reserved.",
+      copyright: "© {{year}} RookieCut. All rights reserved.",
       backToTop: "Back to top",
     },
   },
@@ -1043,7 +1043,7 @@ const en = {
       // point: content about to go out, not factual Q&A. ABOVE the input
       // container since the 2026-09-06 FAUNA-parity ruling, hidden with
       // the input on the question morph.
-      honesty: "Rookie Cut can make mistakes — review before you publish.",
+      honesty: "RookieCut can make mistakes — review before you publish.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens
@@ -1229,7 +1229,7 @@ const en = {
   chat: {
     scrollToStart: "Scroll to start",
     scrollToEnd: "Scroll to end",
-    assistantLabel: "Rookie Cut",
+    assistantLabel: "RookieCut",
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
@@ -1862,7 +1862,7 @@ const en = {
     shareCopied: "Link copied",
   },
   login: {
-    title: "Sign in to Rookie Cut",
+    title: "Sign in to RookieCut",
     subtitle:
       "Enter your email and we'll send you a sign-in code — no password, and new accounts are created automatically.",
     emailLabel: "Email address",

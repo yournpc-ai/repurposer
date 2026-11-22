@@ -38,7 +38,7 @@ export function LandingHeader() {
       "pointer-events-auto grid h-16 grid-cols-[1fr_auto] items-center gap-5 bg-background transition-all duration-500 ease-in-out motion-reduce:transition-none md:grid-cols-[1fr_auto_1fr]",
       condensed && "md:h-14 md:w-[calc(100%_-_2rem)] md:max-w-[1100px] md:rounded-full md:px-4 md:pr-1.5 md:landing-header-glass lg:px-4 lg:pr-1.5",
     )}>
-      <a href="#top" className="flex items-center justify-self-start gap-2 text-lg font-semibold tracking-tight"><LogoMark className="size-6" />Rookie Cut</a>
+      <a href="#top" className="flex items-center justify-self-start gap-2 text-lg font-semibold tracking-tight"><LogoMark className="size-6" />RookieCut</a>
       <nav aria-label={t("landing.entry.navigation")} className="hidden items-center justify-self-center gap-8 md:flex">
         {[["#pricing", "pricing"], ["#faq", "faq"]].map(([href, key]) => <a key={href} href={href} className="text-sm transition-colors hover:text-muted-foreground">{t(`landing.nav.${key}`)}</a>)}
       </nav>
