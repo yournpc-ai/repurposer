@@ -1,0 +1,340 @@
+diff --git a/apps/render/Dockerfile b/apps/render/Dockerfile
+index 3196f51a..d958b1f2 100644
+--- a/apps/render/Dockerfile
++++ b/apps/render/Dockerfile
+@@ -26,6 +26,7 @@ WORKDIR /repo
+ # Every workspace member's manifest must be present for pnpm to resolve the
+ # graph, even though --filter only installs the render branch.
+ COPY pnpm-workspace.yaml pnpm-lock.yaml ./
++COPY patches/ patches/
+ COPY packages/video-spec/package.json packages/video-spec/package.json
+ COPY packages/video-remotion/package.json packages/video-remotion/package.json
+ COPY apps/render/package.json apps/render/package.json
+diff --git a/apps/render/src/artifacts.test.ts b/apps/render/src/artifacts.test.ts
+index f4fe5628..ef5ef9f5 100644
+--- a/apps/render/src/artifacts.test.ts
++++ b/apps/render/src/artifacts.test.ts
+@@ -3,7 +3,13 @@ import fs from "node:fs/promises";
+ import os from "node:os";
+ import path from "node:path";
+ import test from "node:test";
+-import { cachedArtifacts, renderArtifacts } from "./artifacts";
++import { cachedArtifacts, renderArtifacts, rendererAudioPatch } from "./artifacts";
++
++test("the artifact cache identifies the locked Remotion audio patch", async () => {
++  const lock = await fs.readFile(new URL("../../../pnpm-lock.yaml", import.meta.url), "utf8");
++  const snapshot = lock.match(/^  '@remotion\/renderer@4\.0\.484\(patch_hash=([a-f0-9]{64})\)/m);
++  assert.equal(snapshot?.[1], rendererAudioPatch);
++});
+ 
+ test("upload recovery reuses finished bytes; changes and users cannot reuse them", async () => {
+   const root = await fs.mkdtemp(path.join(os.tmpdir(), "render-recovery-test-"));
+diff --git a/apps/render/src/artifacts.ts b/apps/render/src/artifacts.ts
+index 29cf301c..09423182 100644
+--- a/apps/render/src/artifacts.ts
++++ b/apps/render/src/artifacts.ts
+@@ -7,6 +7,8 @@ export type Artifacts = { videoPath: string; srtPath?: string | null };
+ const root = path.join(os.tmpdir(), "repurposer-render-artifacts");
+ const active = new Map<string, Promise<Artifacts>>();
+ const retentionMs = 24 * 60 * 60 * 1000;
++// pnpm-lock.yaml patch_hash for @remotion/renderer@4.0.484.
++export const rendererAudioPatch = "2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713";
+ 
+ export class ArtifactCacheMiss extends Error {
+   constructor() { super("Rendered artifact cache miss"); }
+@@ -24,7 +26,7 @@ function canonical(value: unknown): string {
+ }
+ 
+ function artifactDirectory(identity: unknown, cacheRoot: string): string {
+-  const key = createHash("sha256").update(canonical({ version: 1, identity })).digest("hex");
++  const key = createHash("sha256").update(canonical({ version: 2, rendererAudioPatch, identity })).digest("hex");
+   return path.join(cacheRoot, key);
+ }
+ 
+diff --git a/apps/render/src/audio.ts b/apps/render/src/audio.ts
+index 90dc276d..01d905ee 100644
+--- a/apps/render/src/audio.ts
++++ b/apps/render/src/audio.ts
+@@ -38,6 +38,17 @@ function ffSpawnOpts(binPath: string): { cwd: string; env: NodeJS.ProcessEnv } {
+   return { cwd, env };
+ }
+ 
++export async function encodeBaselineMp4(input: string, output: string): Promise<void> {
++  const ffmpeg = resolveFfBinary("ffmpeg");
++  await execFileAsync(
++    ffmpeg,
++    ["-v", "error", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
++      "-c:a", "libfdk_aac", "-b:a", "320k", "-cutoff", "18000",
++      "-movie_timescale", "48000", "-movflags", "+faststart", output],
++    ffSpawnOpts(ffmpeg),
++  );
++}
++
+ interface LoudnormMeasure {
+   input_i: string;
+   input_tp: string;
+@@ -46,15 +57,30 @@ interface LoudnormMeasure {
+   target_offset: string;
+ }
+ 
+-export async function normalizeLoudness(videoPath: string): Promise<void> {
+-  const ffmpeg = resolveFfBinary("ffmpeg");
++export class InvalidAudioClock extends Error {}
++
++async function verifyAudioWindow(videoPath: string, expectedSamples: number, stage: "baseline" | "loudnorm"): Promise<boolean> {
+   const ffprobe = resolveFfBinary("ffprobe");
+-  const { stdout: streamType } = await execFileAsync(
++  const { stdout: timing } = await execFileAsync(
+     ffprobe,
+-    ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", videoPath],
++    ["-v", "error", "-select_streams", "a:0", "-show_entries",
++      "stream=sample_rate,time_base,start_pts,duration_ts", "-of", "json", videoPath],
+     ffSpawnOpts(ffprobe),
+   );
+-  if (streamType.trim() !== "audio") return;
++  const [track] = JSON.parse(timing).streams;
++  if (!track && stage === "baseline") return false;
++  if (track?.sample_rate !== "48000" || track.time_base !== "1/48000" || track.start_pts !== 0 ||
++      !Number.isSafeInteger(track.duration_ts) || track.duration_ts <= 0 || track.duration_ts !== expectedSamples) {
++    const message = `${stage}: expected a zero-based 48 kHz track of ${expectedSamples} samples; got ${timing.trim()}`;
++    if (stage === "baseline") throw new InvalidAudioClock(message);
++    throw new Error(message);
++  }
++  return true;
++}
++
++export async function normalizeLoudness(videoPath: string, expectedSamples: number): Promise<void> {
++  if (!await verifyAudioWindow(videoPath, expectedSamples, "baseline")) return;
++  const ffmpeg = resolveFfBinary("ffmpeg");
+   const measure = await execFileAsync(
+     ffmpeg,
+     ["-hide_banner", "-nostats", "-i", videoPath, "-vn", "-af", `loudnorm=${LOUDNORM_TARGET}:print_format=json`, "-f", "null", "-"],
+@@ -65,17 +91,20 @@ export async function normalizeLoudness(videoPath: string): Promise<void> {
+   if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("loudnorm measure: no JSON block in ffmpeg output");
+   const m = JSON.parse(measure.stderr.slice(jsonStart, jsonEnd + 1)) as LoudnormMeasure;
+   if (m.input_i === "-inf") return;
++  // Give dynamic loudnorm lookahead past the cut, then keep only the presentation window.
++  const trim = `atrim=end_sample=${expectedSamples}`;
+   const filter =
+-    `loudnorm=${LOUDNORM_TARGET}` +
++    `${trim},apad,loudnorm=${LOUDNORM_TARGET}` +
+     `:measured_I=${m.input_i}:measured_TP=${m.input_tp}` +
+     `:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}` +
+-    `:offset=${m.target_offset}:linear=true:print_format=summary`;
++    `:offset=${m.target_offset}:linear=true:print_format=summary,aresample=48000,${trim}`;
+   const tmpPath = videoPath.replace(/\.mp4$/, "") + ".loudnorm.mp4";
+   await execFileAsync(
+     ffmpeg,
+     ["-y", "-hide_banner", "-nostats", "-i", videoPath, "-c:v", "copy", "-af", filter,
+-      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", tmpPath],
++      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movie_timescale", "48000", tmpPath],
+     ffSpawnOpts(ffmpeg),
+   );
++  await verifyAudioWindow(tmpPath, expectedSamples, "loudnorm");
+   await fs.rename(tmpPath, videoPath);
+ }
+diff --git a/apps/render/src/video/index.ts b/apps/render/src/video/index.ts
+index c57c5c0f..3a21eb05 100644
+--- a/apps/render/src/video/index.ts
++++ b/apps/render/src/video/index.ts
+@@ -8,7 +8,7 @@ import { bundle } from "@remotion/bundler";
+ import { renderMedia, selectComposition } from "@remotion/renderer";
+ import type { VideoSpec } from "@repurposer/video-spec";
+ 
+-import { normalizeLoudness } from "../audio";
++import { encodeBaselineMp4, InvalidAudioClock, normalizeLoudness } from "../audio";
+ import { stageRemoteSource } from "../stage";
+ import { assertVideoSupported } from "./capabilities";
+ 
+@@ -74,21 +74,44 @@ export async function renderVideo(
+   const composition = await selectComposition({ serveUrl, id: "Video", inputProps });
+ 
+   const videoPath = path.join(outDir, `${basename}.mp4`);
+-  await renderMedia({
+-    composition,
+-    serveUrl,
+-    codec: "h264",
+-    outputLocation: videoPath,
+-    inputProps,
+-    timeoutInMilliseconds: 180_000,
+-  });
+-
+-  // Loudness is an enhancement, not correctness — never fail a finished
+-  // render over the post-pass (the shared audio policy).
++  const hasSoundSource = stagedSpec.tracks.some((track) =>
++    track.clips.some(({ object }) =>
++      object.kind === "audio" || (object.kind === "video" && !object.muted),
++    ),
++  );
++  const work = await fs.mkdtemp(path.join(outDir, ".encode-"));
++  const baseline = path.join(work, "baseline.mp4");
++  const intermediate = path.join(work, "mix.mov");
+   try {
+-    await normalizeLoudness(videoPath);
+-  } catch (err) {
+-    console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    // Keep Remotion's PCM mix intact until the MP4 muxer can record AAC priming.
++    await renderMedia({
++      composition,
++      serveUrl,
++      codec: "h264",
++      ...(hasSoundSource ? { audioCodec: "pcm-16" as const } : { muted: true }),
++      // The parallel pre-stitcher writes video only. Preserve its frame clock until MOV stitching.
++      ffmpegOverride: ({ type, args }) => type === "pre-stitcher" && hasSoundSource
++        ? [...args.slice(0, -1), "-f", "mp4", args[args.length - 1]]
++        : args,
++      outputLocation: hasSoundSource ? intermediate : baseline,
++      inputProps,
++      timeoutInMilliseconds: 180_000,
++    });
++    if (hasSoundSource) {
++      await encodeBaselineMp4(intermediate, baseline);
++      await fs.unlink(intermediate);
++    }
++    // Optional loudness processing may fall back only to a completed MP4.
++    try {
++      const expectedSamples = Math.round(composition.durationInFrames * 48000 / composition.fps);
++      await normalizeLoudness(baseline, expectedSamples);
++    } catch (err) {
++      if (err instanceof InvalidAudioClock) throw err;
++      console.error("video loudnorm post-pass failed, keeping original audio:", err);
++    }
++    await fs.rename(baseline, videoPath);
++  } finally {
++    await fs.rm(work, { recursive: true, force: true });
+   }
+ 
+   return { videoPath };
+diff --git a/apps/web/Dockerfile b/apps/web/Dockerfile
+index aebc6ba9..537757b3 100644
+--- a/apps/web/Dockerfile
++++ b/apps/web/Dockerfile
+@@ -15,6 +15,7 @@ WORKDIR /repo
+ 
+ # Workspace descriptors first for a cached install layer.
+ COPY pnpm-workspace.yaml pnpm-lock.yaml ./
++COPY patches/ patches/
+ COPY packages/video-spec/package.json packages/video-spec/package.json
+ COPY packages/video-remotion/package.json packages/video-remotion/package.json
+ COPY apps/render/package.json apps/render/package.json
+diff --git a/docs/PROGRESS.md b/docs/PROGRESS.md
+index 086d6cc4..86f94eb3 100644
+--- a/docs/PROGRESS.md
++++ b/docs/PROGRESS.md
+@@ -12,7 +12,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均
+ 
+ - **I8 首个专业编辑切片有条件通过。** 已有视频的固定图片插入、同对象续改、局部回放、授权交付和保存后强杀恢复已有真实记录。原 Dev 库保留，默认入口改用独立库。横图、竖图、歧义首错及原素材回归分别计数。双图 QuestionDock 指定续行通过。最终新项目中同名图片问前零写入，点击亮绿竖图只保存 v2，硬刷新前后均实际播放第 2–4 秒。首错与各次修后样本分开计量，跨素材稳定性、双浏览器并发与全栈冷启动仍未验证。[当前范围](tasks/i8.md) · [五面证据与费用](tasks/agent-editor-evidence/iteration-8/README.md)
+ 
+-- **当前阻塞是 I8 Renderer 的音画时钟。** PCM MOV 修正指定样本的 AAC 前导 2,048 个采样。25 fps 动态响度尾部 PTS 与 Linux 30 fps 预编码量化各有隔离反例和修正。I8 工作区的 `docs/experiments/renderer-aac/joint-candidate/REPORT.md` 记录了联合候选的 24 fps / 191 帧首错：两个声部入点各晚 16 个采样，守卫中止输出。下一步仅评审该样本的混音入点取整边界。候选、生产缓存切换及真实 Chat 五面仍未签收。[基线](experiments/renderer-aac/REPORT.md) · [首轮候选](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
++- **I8 Renderer 音画时钟候选待 Linux 与镜像验收。** 4.0.484 的版本限定采样延时补丁和两次 48 kHz MP4 封装已接入工作区候选。macOS 固定 24/25/30 fps 作品的声部、尾段和 630 个历史源帧对齐。候选的 macOS frozen 安装与 Web 构建已验，Linux 三件作品和 Docker 镜像安装层因环境不可用仍未验证。缓存排空仅做本机演练，生产合并、切换和 Chat-Origin 五面仍待签收。[采样与容器证据](experiments/renderer-aac/backport-4.0.484/REPORT.md)
+ 
+ - **两个独立研究的边界。** 自有薄渲染核心 C 的技术可行性研究已阶段收官：同场景跨视频 CSS 合成通过，指定受控 WAAPI 按作品帧定位通过 240 帧逐像素、乱序、重复、独立进程与局部修改检查。正式 Chat-Origin Motion Block 集成尚未实施，生产继续使用现役 Renderer。原创 Whoosh、Impact、Click 的复产与用户最终听评已收官，单个 Audio Clip 的 Chat 续改与恢复尚待集成。[视觉与时钟](RENDERING.md) · [声音来源与听评](MUSIC_ARCHITECTURE.md)
+ 
+diff --git a/docs/RENDERING.md b/docs/RENDERING.md
+index 92e9db80..16859e2f 100644
+--- a/docs/RENDERING.md
++++ b/docs/RENDERING.md
+@@ -36,7 +36,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
+ ## 5. 传输与缓存
+ 
+ - **上传与恢复**：源下载的响应头/空闲等待为 300 秒；上传的响应头、空闲等待与单次尝试上限均为 600 秒，每个文件最多尝试 4 次，共享 720 秒总预算（包含退避）。连接重置/断管/临时网络错误/超时及 HTTP 5xx/408/429 可重试；每次重建连接池，指数退避带抖动并遵守 `Retry-After`，等待超出剩余预算则结束。鉴权、证书及未知错误不盲重试；错误日志不含预签名 URL。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成、上传与恢复错误分别返回 `stage=render|upload|recovery`；上传失败提示已生成但未交付，缓存失效只要求重新渲染，不伪装成重传。
+-- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
++- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。候选的 v2 键包含锁定 Renderer 的音频补丁 SHA-256。切换前由原 Renderer 和原缓存卷排空已 prepare 的上传。上传结果未知时先按原上传身份核对对象并保留预占。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
+ - **代理**：`dev.sh` 按显式 `RENDER_PROXY` → 已导出 HTTP(S) 代理 → macOS 系统 HTTPS 代理 → 本地 6152 默认值选择；`RENDER_PROXY=off` 明确关闭。探测失败保留配置并提示，不自动回退直连；选择结果写 render 日志。
+ 
+ ## 6. 渲染与交付约束
+@@ -53,7 +53,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
+ 
+ 实时播放、第三方 TSX 安全、长片资源、高并发与缓存成本、相对 Remotion 的总维护成本仍待验证。正式 Chat-Origin Motion Block 纵向集成尚未实施，生产 Renderer 替换尚未获准。video-spec 保持渲染器中立，不扩成逐效果滤镜语言。
+ 
+-原 AAC/ADTS 中间路径在指定样本增加 2,048 个前导采样。PCM MOV 修正了该样本；25 fps 动态 loudnorm 的尾部 PTS 间隙与 Linux 30 fps Matroska 毫秒量化各有隔离修正。生产正确性、缓存切换和真实 Chat 五面仍未签收。当前联合候选首错见 [进度 §0](PROGRESS.md)。[基线](experiments/renderer-aac/REPORT.md) · [候选评审](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟与缓存边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
++原 AAC/ADTS 中间路径在指定样本增加 2,048 个前导采样。PCM MOV 修正了该样本；25 fps 动态 loudnorm 的尾部 PTS 间隙与 Linux 30 fps Matroska 毫秒量化各有隔离修正。生产正确性、缓存切换和真实 Chat 五面仍未签收。当前候选及平台验收状态见 [进度 §0](PROGRESS.md)。[基线](experiments/renderer-aac/REPORT.md) · [候选评审](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟与缓存边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
+ 
+ 替换画笔时保持 video-spec、时间与动画求值合同。以同版预览/成片帧、音频、失败恢复、许可和成本验收替代实现。
+ 
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 5b4fffe5..89cefb56 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -4,6 +4,11 @@ settings:
+   autoInstallPeers: true
+   excludeLinksFromLockfile: false
+ 
++patchedDependencies:
++  '@remotion/renderer@4.0.484':
++    hash: 2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713
++    path: patches/@remotion__renderer@4.0.484.patch
++
+ importers:
+ 
+   apps/render:
+@@ -13,7 +18,7 @@ importers:
+         version: 4.0.484(postcss@8.5.15)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@remotion/renderer':
+         specifier: ^4.0.0
+-        version: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
++        version: 4.0.484(patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@repurposer/video-remotion':
+         specifier: workspace:*
+         version: link:../../packages/video-remotion
+@@ -5517,7 +5522,7 @@ snapshots:
+       react-dom: 19.2.7(react@19.2.7)
+       remotion: 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+ 
+-  '@remotion/renderer@4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
++  '@remotion/renderer@4.0.484(patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+     dependencies:
+       '@remotion/licensing': 4.0.484
+       '@remotion/streaming': 4.0.484
+@@ -5554,7 +5559,7 @@ snapshots:
+       '@remotion/canvas-capture': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@remotion/media-utils': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@remotion/player': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+-      '@remotion/renderer': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
++      '@remotion/renderer': 4.0.484(patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@remotion/studio-shared': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+       '@remotion/timeline-utils': 4.0.484
+       '@remotion/web-renderer': 4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index 3848393c..8b6f64ea 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -12,3 +12,6 @@ allowBuilds:
+ onlyBuiltDependencies:
+   - esbuild
+   - lightningcss
++
++patchedDependencies:
++  '@remotion/renderer@4.0.484': patches/@remotion__renderer@4.0.484.patch
+diff --git a/patches/@remotion__renderer@4.0.484.patch b/patches/@remotion__renderer@4.0.484.patch
+new file mode 100644
+index 00000000..85c62176
+--- /dev/null
++++ b/patches/@remotion__renderer@4.0.484.patch
+@@ -0,0 +1,26 @@
++diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
++index afdd467918a7070b6548a5096fe6185b1d1b5b73..efee7eee6ef83361719a1457461fc371dae3a720 100644
++--- a/dist/esm/index.mjs
+++++ b/dist/esm/index.mjs
++@@ -22737,7 +22737,7 @@ var stringifyFfmpegFilter = ({
++       toneFrequency && toneFrequency !== 1 ? `asetrate=${sampleRate}*${toneFrequency},aresample=${sampleRate},atempo=1/${toneFrequency}` : null
++     ].filter(truthy).join(",") + `[a0]`,
++     pad_end: padAtEnd > 0.0000001 ? "apad=pad_len=" + Math.round(padAtEnd * sampleRate) : null,
++-    pad_start: padStart === 0 ? null : `adelay=${new Array(channels + 1).fill((padStart * 1000).toFixed(0)).join("|")}`,
+++    pad_start: padStart === 0 ? null : `adelay=${new Array(channels + 1).fill(`${Math.round(padStart * sampleRate)}S`).join("|")}`,
++     actualTrimLeft
++   };
++ };
++diff --git a/dist/stringify-ffmpeg-filter.js b/dist/stringify-ffmpeg-filter.js
++index c28e70b72a1b4113df49790301510852986fc8e4..e24cd125dc160eb6cf86cb84fe54662fff808b75 100644
++--- a/dist/stringify-ffmpeg-filter.js
+++++ b/dist/stringify-ffmpeg-filter.js
++@@ -131,7 +131,7 @@ const stringifyFfmpegFilter = ({ channels, volume, fps, assetDuration, chunkLeng
++         padStart === 0
++             ? null
++             : `adelay=${new Array(channels + 1)
++-                .fill((padStart * 1000).toFixed(0))
+++                .fill(`${Math.round(padStart * sampleRate)}S`)
++                 .join('|')}`,
++         actualTrimLeft,
++     };

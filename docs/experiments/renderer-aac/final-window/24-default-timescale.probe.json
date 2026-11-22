@@ -1,0 +1,16 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "sample_rate": "48000",
+            "time_base": "1/48000",
+            "start_pts": 0,
+            "duration_ts": 381984
+        }
+    ]
+}

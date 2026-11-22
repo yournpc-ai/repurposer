@@ -1,0 +1,22 @@
+video loudnorm post-pass failed, keeping original audio: Error: loudnorm: expected a zero-based 48 kHz track of 382000 samples; got {
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "sample_rate": "48000",
+            "time_base": "1/48000",
+            "start_pts": 0,
+            "duration_ts": 381984
+        }
+    ]
+}
+    at verifyAudioWindow (/private/tmp/i8-final-window.lZ5CaG/candidate/apps/render/src/audio.ts:76:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async normalizeLoudness (/private/tmp/i8-final-window.lZ5CaG/candidate/apps/render/src/audio.ts:108:3)
+    at async renderVideo (/private/tmp/i8-final-window.lZ5CaG/candidate/apps/render/src/video/index.ts:107:7)
+    at async <anonymous> (/Users/sylas/repurposer/docs/experiments/renderer-aac/joint-candidate/tools/drive.mts:17:19)
+{"mode":"boundary","result":{"videoPath":"/tmp/i8-final-window.lZ5CaG/negative/run/boundary/video.mp4"},"ms":9512,"files":["video.mp4"]}
