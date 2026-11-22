@@ -1,0 +1,12 @@
+{
+  "route": "A",
+  "version_id": "7d66a0ce-9a80-5547-8cdc-d1a4082bfa62",
+  "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+  "content_digest": "bc7785b4f4e49d45227a8fc7f7b24a6a8e39bbb8c9d78b164a8aa252d2744759",
+  "program_digest": "97e4bead4eca8876b805edd8e821bc13267c1d9cec1c97d691f0adb7cbe5abbf",
+  "run": 1,
+  "sha256": "268813d0e49df17c8a666e6e7d2449b5a65c8055de4a5e2c779c09a52f415d37",
+  "stages": {
+    "final_s": 15.539580124997883
+  }
+}

@@ -1,0 +1,55 @@
+npm warn deprecated source-map@0.8.0-beta.0: The work that was done in this beta branch won't be included in future versions
+
+added 182 packages, and audited 183 packages in 13s
+
+30 packages are looking for funding
+  run `npm fund` for details
+
+5 high severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+/System/Library/Fonts/Supplemental/Arial Bold.ttf: OK
+Isolated run: /tmp/repurposer-boundary.WVvJPJ
+{'tag': 'B-adts', 'wall_s': 19.474025499999698, 'peak_tree_rss_mib': 2050.875, 'rss_samples': 87, 'exit': 0}
+{'tag': 'B-m4a', 'wall_s': 16.231988249997812, 'peak_tree_rss_mib': 2248.328125, 'rss_samples': 73, 'exit': 0}
+{'tag': 'C', 'wall_s': 7.201987332999124, 'peak_tree_rss_mib': 849.4375, 'rss_samples': 32, 'exit': 0}
+{'tag': 'equal-B', 'wall_s': 16.363043208999443, 'peak_tree_rss_mib': 2240.53125, 'rss_samples': 73, 'exit': 0}
+{'tag': 'equal-C', 'wall_s': 7.302465000000666, 'peak_tree_rss_mib': 849.75, 'rss_samples': 32, 'exit': 0}
+
+  cache/player.js  1.3mb ⚠️
+
+⚡ Done in 33ms
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55256)
+Traceback (most recent call last):
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/http/server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/socketserver.py", line 755, in __init__
+    self.handle()
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/http/server.py", line 424, in handle_one_request
+    method()
+  File "/private/tmp/repurposer-boundary.WVvJPJ/src/serve.py", line 6, in do_GET
+    if self.path not in ('/','/B','/C'):return super().do_GET()
+                                               ^^^^^^^^^^^^^^^^
+  File "/private/tmp/repurposer-boundary.WVvJPJ/src/preview.py", line 28, in do_GET
+    super().do_GET()
+  File "/private/tmp/repurposer-boundary.WVvJPJ/src/seek_server.py", line 21, in do_GET
+    chunk=f.read(min(remaining,65536));self.wfile.write(chunk);remaining-=len(chunk)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sylas/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+Evidence: /tmp/repurposer-boundary.WVvJPJ/evidence

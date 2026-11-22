@@ -1,0 +1,4 @@
+COMMAND /Users/sylas/repurposer/apps/render/node_modules/.bin/tsx src/bake.ts 1
+COMMAND /Users/sylas/repurposer/apps/api/.venv/bin/python src/fixture.py
+COMMAND node src/remotion.cjs A 1 results/A-v1-r1.partial.mp4
+bundle_ms 2061

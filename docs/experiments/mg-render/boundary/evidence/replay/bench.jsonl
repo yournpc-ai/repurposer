@@ -1,0 +1,5 @@
+{"tag": "B-adts", "wall_s": 19.474025499999698, "peak_tree_rss_mib": 2050.875, "rss_samples": 87, "exit": 0}
+{"tag": "B-m4a", "wall_s": 16.231988249997812, "peak_tree_rss_mib": 2248.328125, "rss_samples": 73, "exit": 0}
+{"tag": "C", "wall_s": 7.201987332999124, "peak_tree_rss_mib": 849.4375, "rss_samples": 32, "exit": 0}
+{"tag": "equal-B", "wall_s": 16.363043208999443, "peak_tree_rss_mib": 2240.53125, "rss_samples": 73, "exit": 0}
+{"tag": "equal-C", "wall_s": 7.302465000000666, "peak_tree_rss_mib": 849.75, "rss_samples": 32, "exit": 0}

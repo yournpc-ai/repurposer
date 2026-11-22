@@ -1,0 +1,134 @@
+{
+  "adts/merged.wav": {
+    "container": "wav",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 384000,
+    "first_packet_pts": 0,
+    "first_side_data": [],
+    "packet_count": 94,
+    "packet_payload_sha256": "5096e48e1130b290339bbc12df8ecb1df6830ffba1ea9c62d25c256aca0b45cb",
+    "decoded_samples": 384000,
+    "lag_samples": 0,
+    "correlation": 0.9999999643985213,
+    "sample_peak": 0.42864990234375,
+    "clipped_samples": 0
+  },
+  "m4a/merged.wav": {
+    "container": "wav",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 384000,
+    "first_packet_pts": 0,
+    "first_side_data": [],
+    "packet_count": 94,
+    "packet_payload_sha256": "5096e48e1130b290339bbc12df8ecb1df6830ffba1ea9c62d25c256aca0b45cb",
+    "decoded_samples": 384000,
+    "lag_samples": 0,
+    "correlation": 0.9999999643985213,
+    "sample_peak": 0.42864990234375,
+    "clipped_samples": 0
+  },
+  "adts/audio.aac": {
+    "container": "aac",
+    "stream_timebase": "1/28224000",
+    "presentation_samples": 386050,
+    "first_packet_pts": 0,
+    "first_side_data": [],
+    "packet_count": 377,
+    "packet_payload_sha256": "1e345c09583919ce6bd22531a7419a0e883a58b41f7d5e094b269d0c0b95b69e",
+    "decoded_samples": 386048,
+    "lag_samples": 2048,
+    "correlation": 0.9892032057521439,
+    "sample_peak": 0.4127240478992462,
+    "clipped_samples": 0
+  },
+  "m4a/audio.aac": {
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 384000,
+    "first_packet_pts": -2048,
+    "first_side_data": [
+      {
+        "kind": "skip_samples",
+        "first_ten_bytes": "00080000000000000000"
+      }
+    ],
+    "packet_count": 377,
+    "packet_payload_sha256": "ff8f403cb95c717cb808f92f3d6fe4cbc1e422b5cb859cdbe6362a9907679903",
+    "decoded_samples": 384000,
+    "lag_samples": 0,
+    "correlation": 0.9892062747853193,
+    "sample_peak": 0.41219189763069153,
+    "clipped_samples": 0
+  },
+  "B-adts.mp4": {
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 386048,
+    "first_packet_pts": 0,
+    "first_side_data": [],
+    "packet_count": 377,
+    "packet_payload_sha256": "1e345c09583919ce6bd22531a7419a0e883a58b41f7d5e094b269d0c0b95b69e",
+    "decoded_samples": 386048,
+    "lag_samples": 2048,
+    "correlation": 0.9892032057521439,
+    "sample_peak": 0.4127240478992462,
+    "clipped_samples": 0
+  },
+  "B-m4a.mp4": {
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 384000,
+    "first_packet_pts": -2048,
+    "first_side_data": [
+      {
+        "kind": "skip_samples",
+        "first_ten_bytes": "00080000000000000000"
+      }
+    ],
+    "packet_count": 377,
+    "packet_payload_sha256": "ff8f403cb95c717cb808f92f3d6fe4cbc1e422b5cb859cdbe6362a9907679903",
+    "decoded_samples": 384000,
+    "lag_samples": 0,
+    "correlation": 0.9892062747853193,
+    "sample_peak": 0.41219189763069153,
+    "clipped_samples": 0
+  },
+  "C.mp4": {
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 384000,
+    "first_packet_pts": -1024,
+    "first_side_data": [
+      {
+        "kind": "skip_samples",
+        "first_ten_bytes": "00040000000000000000"
+      }
+    ],
+    "packet_count": 376,
+    "packet_payload_sha256": "7388759becd6d8623e03ae77c78fffbed12e5d76ea42de38c176603c523ea838",
+    "decoded_samples": 384000,
+    "lag_samples": 0,
+    "correlation": 0.9914644464085552,
+    "sample_peak": 0.410498708486557,
+    "clipped_samples": 0
+  },
+  "../cache/segment.mp4": {
+    "container": "mov,mp4,m4a,3gp,3g2,mj2",
+    "stream_timebase": "1/48000",
+    "presentation_samples": 48000,
+    "first_packet_pts": -1024,
+    "first_side_data": [
+      {
+        "kind": "skip_samples",
+        "first_ten_bytes": "00040000000000000000"
+      }
+    ],
+    "packet_count": 48,
+    "packet_payload_sha256": "d25f0938934c10b0acc22d56238df274df4700722b8f67e4eb6564acbc001453",
+    "decoded_samples": 48128,
+    "lag_samples": 0,
+    "correlation": 0.969353651911859,
+    "sample_peak": 0.40876859426498413,
+    "clipped_samples": 0
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "spec": {
+    "family": "video",
+    "format": 1,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "width": 1920,
+    "height": 1080,
+    "background": "#000000",
+    "sample_rate": 48000,
+    "duration_frames": 240,
+    "fonts": [],
+    "tracks": [
+      {
+        "track_id": "track-main",
+        "kind": "visual",
+        "role": "main",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "main",
+            "start_frame": 0,
+            "end_frame": 240,
+            "scene_id": "survey",
+            "source": {
+              "url": "main.mp4",
+              "digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+              "start_frame": 15,
+              "end_frame": 255
+            },
+            "object": {
+              "kind": "video",
+              "object_id": "main-film",
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 1920.0,
+                "height": 1080.0
+              },
+              "fit": "contain",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0,
+              "gain_db": 0.0,
+              "muted": true
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-voice",
+        "kind": "audio",
+        "role": "dialogue",
+        "order": 3,
+        "clips": [
+          {
+            "clip_id": "voice",
+            "start_frame": 9,
+            "end_frame": 159,
+            "scene_id": "survey",
+            "source": {
+              "url": "voice.wav",
+              "digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+              "start_frame": 0,
+              "end_frame": 150
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "voice-audio",
+              "gain_db": -4.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-whoosh",
+        "kind": "audio",
+        "role": "effect",
+        "order": 4,
+        "clips": [
+          {
+            "clip_id": "whoosh",
+            "start_frame": 42,
+            "end_frame": 78,
+            "scene_id": "survey",
+            "source": {
+              "url": "whoosh.wav",
+              "digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+              "start_frame": 0,
+              "end_frame": 36
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "whoosh-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-impact",
+        "kind": "audio",
+        "role": "effect",
+        "order": 5,
+        "clips": [
+          {
+            "clip_id": "impact",
+            "start_frame": 60,
+            "end_frame": 84,
+            "scene_id": "survey",
+            "source": {
+              "url": "impact2.wav",
+              "digest": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0",
+              "start_frame": 0,
+              "end_frame": 24
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "impact-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      }
+    ],
+    "provenance": {
+      "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+      "composition_version_id": "56bade44-115e-5b3d-b318-2919c29c5f10",
+      "content_digest": "97f92dbea094c3351554409e6d8de3d0716086f8556948f822b325a6d753d39d"
+    }
+  },
+  "pip": {
+    "clip_id": "pip",
+    "start_frame": 15,
+    "end_frame": 210,
+    "scene_id": "survey",
+    "source": {
+      "url": "pip.mp4",
+      "digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+      "start_frame": 12,
+      "end_frame": 207
+    },
+    "object": {
+      "kind": "video",
+      "object_id": "sensor-film",
+      "layout": {
+        "x": 1330.0,
+        "y": 88.0,
+        "width": 480.0,
+        "height": 270.0
+      },
+      "fit": "contain",
+      "transform": {
+        "x": 0.0,
+        "y": 0.0,
+        "scale": 1.0,
+        "rotation": 0.0,
+        "origin": "center"
+      },
+      "opacity": 1.0,
+      "gain_db": 0.0,
+      "muted": true
+    },
+    "animations": []
+  },
+  "mg": {
+    "start": 30,
+    "end": 180,
+    "layout": {
+      "x": 1250,
+      "y": 68,
+      "width": 580,
+      "height": 310
+    },
+    "props": {
+      "headline": "Signals in sync",
+      "ink": "#8acdf5",
+      "rate": 0.72,
+      "targetObjectId": "sensor-film"
+    }
+  }
+}

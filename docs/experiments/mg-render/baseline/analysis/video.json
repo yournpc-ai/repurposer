@@ -1,0 +1,128 @@
+{
+  "A-v1": {
+    "rgb24_sha256": "04436259590df233ff123cc4b39caf9322d7722b2b2925a942db2ceb39f97fea",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "B-v1": {
+    "rgb24_sha256": "81702e83830a0c39ade9bd5d26bc963b5ca805c69d6369f274d58314c1298c98",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "C-v1": {
+    "rgb24_sha256": "9dd43a0ffc1d5f67dcbd631e7955d2c1be08426a7f437d7c8acb5f48a82070a2",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "A-v2": {
+    "rgb24_sha256": "667e0e769bf5e744c3ec5ed34acf766ba54c644f83652c954134ebf75e003969",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "B-v2": {
+    "rgb24_sha256": "9d02465d773a18c463af28ae0a03356cd97c3528158bc404919afa504f881d77",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "C-v2": {
+    "rgb24_sha256": "33e307c013d4cfd4067f3dbf1aac2561e5666db3b316c5bc8f8b1f98e58a6501",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "A-v3": {
+    "rgb24_sha256": "667e0e769bf5e744c3ec5ed34acf766ba54c644f83652c954134ebf75e003969",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "B-v3": {
+    "rgb24_sha256": "9d02465d773a18c463af28ae0a03356cd97c3528158bc404919afa504f881d77",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  },
+  "C-v3": {
+    "rgb24_sha256": "33e307c013d4cfd4067f3dbf1aac2561e5666db3b316c5bc8f8b1f98e58a6501",
+    "flash_frames": [
+      60,
+      61,
+      62
+    ],
+    "size": [
+      1920,
+      1080
+    ],
+    "frames": 240,
+    "duration_s": 8
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "whoosh": {
+    "seed": 241,
+    "seconds": 1.2,
+    "file": "whoosh.wav"
+  },
+  "impact1": {
+    "seed": 71,
+    "hz": 100,
+    "decay": 0.12,
+    "seconds": 0.8,
+    "file": "impact1.wav"
+  },
+  "impact2": {
+    "seed": 71,
+    "hz": 64,
+    "decay": 0.22,
+    "seconds": 0.8,
+    "file": "impact2.wav"
+  }
+}

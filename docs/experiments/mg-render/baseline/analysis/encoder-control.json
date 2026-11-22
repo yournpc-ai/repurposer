@@ -1,0 +1,44 @@
+{
+  "control-B-1": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "fab5f676b15e6e331a06c316f59808d7d3adde14beab5e0b6d0db431bd4e85fc"
+  },
+  "control-B-2": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "fab5f676b15e6e331a06c316f59808d7d3adde14beab5e0b6d0db431bd4e85fc"
+  },
+  "control-B-3": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "fab5f676b15e6e331a06c316f59808d7d3adde14beab5e0b6d0db431bd4e85fc"
+  },
+  "control-C-1": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "2bab6c853045699ae6f5e4c2d4e1ee4b9f710352c2120e73441705551476e6c9"
+  },
+  "control-C-2": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "2bab6c853045699ae6f5e4c2d4e1ee4b9f710352c2120e73441705551476e6c9"
+  },
+  "control-C-3": {
+    "x264": "x264 - core 164 r3190 7ed753b",
+    "threads": "threads=2",
+    "video_frames": 240,
+    "muxer": "Lavf63.1.100",
+    "sha256": "2bab6c853045699ae6f5e4c2d4e1ee4b9f710352c2120e73441705551476e6c9"
+  }
+}

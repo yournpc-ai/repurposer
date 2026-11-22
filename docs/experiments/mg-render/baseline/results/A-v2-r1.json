@@ -1,0 +1,14 @@
+{
+  "route": "A",
+  "version_id": "763dd565-f02f-55cb-a274-49699a1ab19b",
+  "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+  "content_digest": "6ab273a9cb70b23d4a8831877985f6c82f47fc8c237ad952b9671b3858b39c19",
+  "program_digest": "97e4bead4eca8876b805edd8e821bc13267c1d9cec1c97d691f0adb7cbe5abbf",
+  "run": 1,
+  "sha256": "f86fae5c5cf6fb3b9a84e582f8866fd3f2823ce408b0b35463bc0cbcc80f6f69",
+  "stages": {
+    "source_bake_s": 8.1669617080006,
+    "compile_baked_spec_s": 0.6734722500004864,
+    "final_s": 15.656919332999678
+  }
+}

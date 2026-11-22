@@ -1,0 +1,32 @@
+{
+  "02b8041b-47ae-56c4-bd04-b940fd3995e1": {
+    "kind": "video",
+    "digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+    "storage_key": "main.mp4",
+    "duration_ticks": 799548
+  },
+  "e2776416-1039-5bcb-a33c-451b5e5b1762": {
+    "kind": "video",
+    "digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+    "storage_key": "pip.mp4",
+    "duration_ticks": 662400
+  },
+  "f5562d4e-1eeb-586c-9ce0-7a5c6149bb36": {
+    "kind": "audio",
+    "digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+    "storage_key": "voice.wav",
+    "duration_ticks": 460790
+  },
+  "803abc16-7039-5e0b-b7d6-650b8b225e3e": {
+    "kind": "audio",
+    "digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+    "storage_key": "whoosh.wav",
+    "duration_ticks": 108000
+  },
+  "6ac14623-f5a4-5fa9-b928-2bdab47ee318": {
+    "kind": "audio",
+    "digest": "b11af6dbf876118c9ad7e2996d526bbad96691d7c20e0d8c9ec509f83523c46d",
+    "storage_key": "impact1.wav",
+    "duration_ticks": 72000
+  }
+}

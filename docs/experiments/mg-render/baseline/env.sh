@@ -1,0 +1,9 @@
+export LAB="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+export REP="${REP:-$(git -C "$LAB" rev-parse --show-toplevel)}"
+export PY="$REP/apps/api/.venv/bin/python"
+export PYTHONPATH="$REP/apps/api"
+export PYTHONDONTWRITEBYTECODE=1
+export FFBIN="$REP/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64"
+export DYLD_LIBRARY_PATH="$FFBIN"
+export CHROME="$REP/apps/render/node_modules/.remotion/chrome-headless-shell/mac-arm64/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+export FONT="/System/Library/Fonts/Supplemental/Arial Bold.ttf"

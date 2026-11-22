@@ -1,0 +1,72 @@
+{
+  "B-adts.mp4": {
+    "original": "1d12dd0bdcc3e31a6f9dd6ff6c629b1539093b78cf99da853ec867cca3aa6ff0",
+    "replay": "1d12dd0bdcc3e31a6f9dd6ff6c629b1539093b78cf99da853ec867cca3aa6ff0",
+    "identical": true
+  },
+  "B-m4a.mp4": {
+    "original": "068cd69cd8af265a44355d7e81b982a3671a1134e495358db9d35993917ea019",
+    "replay": "068cd69cd8af265a44355d7e81b982a3671a1134e495358db9d35993917ea019",
+    "identical": true
+  },
+  "C.mp4": {
+    "original": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+    "replay": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+    "identical": true
+  },
+  "B-equal.mp4": {
+    "original": "bf095067d51b000fdd42b9c41b2069ded360374d33850e8c4869c6876316dcec",
+    "replay": "bf095067d51b000fdd42b9c41b2069ded360374d33850e8c4869c6876316dcec",
+    "identical": true
+  },
+  "C-equal.mp4": {
+    "original": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+    "replay": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+    "identical": true
+  },
+  "version.json": {
+    "original": "7e22939c29fdf591208f7f14963ee28280b8ce339d83e01f9996c288a9567e36",
+    "replay": "7e22939c29fdf591208f7f14963ee28280b8ce339d83e01f9996c288a9567e36",
+    "identical": true
+  },
+  "data.json": {
+    "original": "0214ea453445cf10eee793c4df8a832f3c0f846d580e1f0fb758301907904988",
+    "replay": "0214ea453445cf10eee793c4df8a832f3c0f846d580e1f0fb758301907904988",
+    "identical": true
+  },
+  "audio-stages.json": {
+    "original": "a79256f9f8a97f84c02d6387e713383dbaee8ddac65d408325d0984e1e466394",
+    "replay": "a79256f9f8a97f84c02d6387e713383dbaee8ddac65d408325d0984e1e466394",
+    "identical": true
+  },
+  "quality.json": {
+    "original": "952658ec2c7f41e19fc7430b36d80d82ab1b5259e6cb50acfa161eab862f683a",
+    "replay": "952658ec2c7f41e19fc7430b36d80d82ab1b5259e6cb50acfa161eab862f683a",
+    "identical": true
+  },
+  "pip-source-ids.csv": {
+    "original": "7bb19a9d2c60175553f991025a6dc492cea0665a494ad76fbd7fa0aa19c98c40",
+    "replay": "7bb19a9d2c60175553f991025a6dc492cea0665a494ad76fbd7fa0aa19c98c40",
+    "identical": true
+  },
+  "frame-regions.csv": {
+    "original": "1903732f855899f3ab3e1f7f43d9e1c90ff765d259895a6cb7fa783855e4d5e7",
+    "replay": "1903732f855899f3ab3e1f7f43d9e1c90ff765d259895a6cb7fa783855e4d5e7",
+    "identical": true
+  },
+  "preview-comparison.json": {
+    "original": "9429f90347796161b0254aea863f1a6b19e10a51ed534f76c094131a7ac39f95",
+    "replay": "9429f90347796161b0254aea863f1a6b19e10a51ed534f76c094131a7ac39f95",
+    "identical": true
+  },
+  "baseline-crosscheck.json": {
+    "original": "60f5a0a18379f3b07bc53171b678995ce044235332b2009ea57abacc03a3debd",
+    "replay": "60f5a0a18379f3b07bc53171b678995ce044235332b2009ea57abacc03a3debd",
+    "identical": true
+  },
+  "comparison-072.png": {
+    "original": "e307567e48db769179390c191ef8b2db3f1e21ff4bede74aee07d7e1f22749d9",
+    "replay": "e307567e48db769179390c191ef8b2db3f1e21ff4bede74aee07d7e1f22749d9",
+    "identical": true
+  }
+}

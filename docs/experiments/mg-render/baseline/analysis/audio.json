@@ -1,0 +1,182 @@
+{
+  "A-v1-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.9,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9884684152720105,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9977542518290311,
+      "effecttrack-whoosh": 0.4981517414619493,
+      "effecttrack-impact": 0.9972959796953678
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "73da3987d7a0a5523461207bba11a729c3582e07254f2371a5d3998eda0f73d3"
+  },
+  "B-v1-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.9,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9884684152720105,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9977542518290311,
+      "effecttrack-whoosh": 0.4981517414619493,
+      "effecttrack-impact": 0.9972959796953678
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "73da3987d7a0a5523461207bba11a729c3582e07254f2371a5d3998eda0f73d3"
+  },
+  "C-v1-r1": {
+    "raw_lag_samples": 0,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.8,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9909049968223054,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9964587778231927,
+      "effecttrack-whoosh": 0.5939655700232549,
+      "effecttrack-impact": 0.9979941166167186
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "f6ab2d0a8639f6563552b8ba2cfa64ea10adf760d36f6856a878e55372e3b1ec"
+  },
+  "A-v2-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.9,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9884684152720105,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9977542518290311,
+      "effecttrack-whoosh": 0.4981517414619493,
+      "effecttrack-impact": 0.9972959796953678
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "73da3987d7a0a5523461207bba11a729c3582e07254f2371a5d3998eda0f73d3"
+  },
+  "B-v2-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.9,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9884684152720105,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9977542518290311,
+      "effecttrack-whoosh": 0.4981517414619493,
+      "effecttrack-impact": 0.9972959796953678
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "73da3987d7a0a5523461207bba11a729c3582e07254f2371a5d3998eda0f73d3"
+  },
+  "C-v2-r1": {
+    "raw_lag_samples": 0,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.8,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9909049968223054,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9964587778231927,
+      "effecttrack-whoosh": 0.5939655700232549,
+      "effecttrack-impact": 0.9979941166167186
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.058325349578456184
+    },
+    "audio_sha256": "f6ab2d0a8639f6563552b8ba2cfa64ea10adf760d36f6856a878e55372e3b1ec"
+  },
+  "A-v3-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.7,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9892032057521439,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9984024076174655,
+      "effecttrack-whoosh": 0.49776811172638546,
+      "effecttrack-impact": 0.9976404321931219
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.07887581523467924
+    },
+    "audio_sha256": "3dcc60eb00a22410016774934f1e86e0e5d607158a700698614cb5239831993c"
+  },
+  "B-v3-r1": {
+    "raw_lag_samples": 2048,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.7,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9892032057521439,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9984024076174655,
+      "effecttrack-whoosh": 0.49776811172638546,
+      "effecttrack-impact": 0.9976404321931219
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.07887581523467924
+    },
+    "audio_sha256": "3dcc60eb00a22410016774934f1e86e0e5d607158a700698614cb5239831993c"
+  },
+  "C-v3-r1": {
+    "raw_lag_samples": 0,
+    "final_lag_samples": 0,
+    "impact_lag_samples": 0,
+    "true_peak_dbtp": -7.7,
+    "clipped_samples": 0,
+    "decoded_samples": 384000,
+    "correlation": 0.9914644464085552,
+    "overlap_coefficients": {
+      "dialoguetrack-voice": 0.9988511766385104,
+      "effecttrack-whoosh": 0.5930247538129587,
+      "effecttrack-impact": 0.9980260660077016
+    },
+    "stems_overlap_rms": {
+      "dialoguetrack-voice": 0.05508093240702971,
+      "effecttrack-whoosh": 0.03165594142402168,
+      "effecttrack-impact": 0.07887581523467924
+    },
+    "audio_sha256": "b065fb3a680f97d4ddca63204f717cce24a9392e653ca095636c9908d286cda5"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "producer": "remotion-project",
+  "program_digest": "97e4bead4eca8876b805edd8e821bc13267c1d9cec1c97d691f0adb7cbe5abbf",
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "remotion": "4.0.484",
+    "@remotion/bundler": "4.0.484",
+    "@remotion/renderer": "4.0.484"
+  },
+  "project": {
+    "schema_version": 1,
+    "entry": "Generator.tsx",
+    "composition_id": "SignalTitle",
+    "files": [
+      {
+        "path": "Generator.tsx",
+        "content": "import React from 'react';\nimport {Composition, registerRoot, useCurrentFrame} from 'remotion';\nimport {Title, type Ink} from './Title';\nfunction TimedTitle(props:Ink) {return <Title {...props} frame={useCurrentFrame()}/>;}\nregisterRoot(()=> <Composition id=\"SignalTitle\" component={TimedTitle} width={900} height={210} durationInFrames={150} fps={30} defaultProps={{headline:'Parallel signals',ink:'#e5d392',rate:1}}/>);\n",
+        "digest": "fdd164f7b7c3640afd4b8ed614a2fb9b4e8c9954baff8ae3b77f9cfcc93a0273"
+      },
+      {
+        "path": "Title.tsx",
+        "content": "import React from 'react';\n\nexport type Ink = {headline:string, ink:string, rate:number};\nexport function Title({frame, headline, ink, rate}: Ink & {frame:number}) {\n  const t = Math.min(1, frame * rate / 30);\n  const rise = (1 - t) ** 3;\n  const pulse = frame >= 30 && frame < 33;\n  return <div style={{position:'relative',width:900,height:210,overflow:'hidden',background:'#142b30',color:'#f5f0da',fontFamily:'Arial',fontWeight:700}}>\n    <div style={{position:'absolute',left:28,top:23,color:'#9cc7bd',fontSize:18,letterSpacing:3}}>FIELD NOTES\u3000/\u3000SIGNAL STUDY</div>\n    <div style={{position:'absolute',left:28,top:59,width:840,height:91,clipPath:'inset(0 '+((1-t)*100)+'% 0 0)'}}>\n      <div style={{fontSize:76,lineHeight:'91px',color:ink,transform:'translateY('+(rise*38)+'px)'}}>{headline}</div>\n    </div>\n    <div style={{position:'absolute',left:28,top:172,width:844,height:4,background:'#345458'}}>\n      <div style={{width:(100*t)+'%',height:'100%',background:ink}}/>\n    </div>\n    <div style={{position:'absolute',right:30,top:24,width:22,height:22,background:pulse?'#ffffff':'#72928a'}}/>\n  </div>;\n}\n",
+        "digest": "ea9360671009e844797c1b33f2cdf70319e7152fcb1208f3115d89bda09e69a4"
+      }
+    ],
+    "props": {
+      "headline": "Signals in sync",
+      "ink": "#8acdf5",
+      "rate": 0.72
+    },
+    "props_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string"
+        },
+        "ink": {
+          "type": "string"
+        },
+        "rate": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "parameters": {},
+  "resources": [],
+  "output": {
+    "width": 900,
+    "height": 210,
+    "fps": 30,
+    "duration_frames": 150,
+    "background": "#142b30"
+  }
+}

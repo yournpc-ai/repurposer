@@ -1,0 +1,343 @@
+{
+  "id": "5f4e3619-c312-5e71-a1a3-43ccb86c3650",
+  "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+  "base_version_id": null,
+  "version": 1,
+  "content_digest": "74c8d76604ae1c36f6dc2912059056093400ce42c96bf41c0daffa1f9b62b6c0",
+  "schema_version": 1,
+  "settings": {
+    "width": 1920,
+    "height": 1080,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "timebase": 90000,
+    "sample_rate": 48000,
+    "channels": 2,
+    "background": "#000000"
+  },
+  "creative_state": null,
+  "sources": [
+    {
+      "snapshot_id": "02b8041b-47ae-56c4-bd04-b940fd3995e1",
+      "snapshot_digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75"
+    },
+    {
+      "snapshot_id": "e2776416-1039-5bcb-a33c-451b5e5b1762",
+      "snapshot_digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5"
+    },
+    {
+      "snapshot_id": "f5562d4e-1eeb-586c-9ce0-7a5c6149bb36",
+      "snapshot_digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a"
+    },
+    {
+      "snapshot_id": "803abc16-7039-5e0b-b7d6-650b8b225e3e",
+      "snapshot_digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566"
+    },
+    {
+      "snapshot_id": "6ac14623-f5a4-5fa9-b928-2bdab47ee318",
+      "snapshot_digest": "b11af6dbf876118c9ad7e2996d526bbad96691d7c20e0d8c9ec509f83523c46d"
+    }
+  ],
+  "scenes": [
+    {
+      "scene_id": "survey",
+      "range": {
+        "start": 0,
+        "end": 720000
+      },
+      "intent": "",
+      "visual_description": null,
+      "speech_clip_ids": []
+    }
+  ],
+  "timeline": {
+    "tracks": [
+      {
+        "track_id": "track-main",
+        "kind": "visual",
+        "role": "main",
+        "order": 0,
+        "clips": [
+          {
+            "clip_id": "main",
+            "range": {
+              "start": 0,
+              "end": 720000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "02b8041b-47ae-56c4-bd04-b940fd3995e1",
+              "snapshot_digest": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+              "source_range": {
+                "start": 45000,
+                "end": 765000
+              }
+            },
+            "object": {
+              "kind": "video",
+              "object_id": "main-film",
+              "layout": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 1920.0,
+                "height": 1080.0
+              },
+              "fit": "contain",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0,
+              "gain_db": 0.0,
+              "muted": true
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-pip",
+        "kind": "visual",
+        "role": "main",
+        "order": 1,
+        "clips": [
+          {
+            "clip_id": "pip",
+            "range": {
+              "start": 45000,
+              "end": 630000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "e2776416-1039-5bcb-a33c-451b5e5b1762",
+              "snapshot_digest": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+              "source_range": {
+                "start": 36000,
+                "end": 621000
+              }
+            },
+            "object": {
+              "kind": "video",
+              "object_id": "sensor-film",
+              "layout": {
+                "x": 1330.0,
+                "y": 88.0,
+                "width": 480.0,
+                "height": 270.0
+              },
+              "fit": "contain",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0,
+              "gain_db": 0.0,
+              "muted": true
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-title",
+        "kind": "visual",
+        "role": "title",
+        "order": 2,
+        "clips": [
+          {
+            "clip_id": "title",
+            "range": {
+              "start": 90000,
+              "end": 540000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": null,
+            "object": {
+              "kind": "generator",
+              "object_id": "signal-title",
+              "producer": "remotion-project",
+              "code": null,
+              "project": {
+                "schema_version": 1,
+                "entry": "Generator.tsx",
+                "composition_id": "SignalTitle",
+                "files": [
+                  {
+                    "path": "Generator.tsx",
+                    "content": "import React from 'react';\nimport {Composition, registerRoot, useCurrentFrame} from 'remotion';\nimport {Title, type Ink} from './Title';\nfunction TimedTitle(props:Ink) {return <Title {...props} frame={useCurrentFrame()}/>;}\nregisterRoot(()=> <Composition id=\"SignalTitle\" component={TimedTitle} width={900} height={210} durationInFrames={150} fps={30} defaultProps={{headline:'Parallel signals',ink:'#e5d392',rate:1}}/>);\n",
+                    "digest": "fdd164f7b7c3640afd4b8ed614a2fb9b4e8c9954baff8ae3b77f9cfcc93a0273"
+                  },
+                  {
+                    "path": "Title.tsx",
+                    "content": "import React from 'react';\n\nexport type Ink = {headline:string, ink:string, rate:number};\nexport function Title({frame, headline, ink, rate}: Ink & {frame:number}) {\n  const t = Math.min(1, frame * rate / 30);\n  const rise = (1 - t) ** 3;\n  const pulse = frame >= 30 && frame < 33;\n  return <div style={{position:'relative',width:900,height:210,overflow:'hidden',background:'#142b30',color:'#f5f0da',fontFamily:'Arial',fontWeight:700}}>\n    <div style={{position:'absolute',left:28,top:23,color:'#9cc7bd',fontSize:18,letterSpacing:3}}>FIELD NOTES\u3000/\u3000SIGNAL STUDY</div>\n    <div style={{position:'absolute',left:28,top:59,width:840,height:91,clipPath:'inset(0 '+((1-t)*100)+'% 0 0)'}}>\n      <div style={{fontSize:76,lineHeight:'91px',color:ink,transform:'translateY('+(rise*75)+'px)'}}>{headline}</div>\n    </div>\n    <div style={{position:'absolute',left:28,top:172,width:844,height:4,background:'#345458'}}>\n      <div style={{width:(100*t)+'%',height:'100%',background:ink}}/>\n    </div>\n    <div style={{position:'absolute',right:30,top:24,width:22,height:22,background:pulse?'#ffffff':'#72928a'}}/>\n  </div>;\n}\n",
+                    "digest": "e12d8f99dfff4c4472ee708674eeba199615eb9f40075b0f305d8051d3cb1d4e"
+                  }
+                ],
+                "props": {
+                  "headline": "Parallel signals",
+                  "ink": "#e5d392",
+                  "rate": 1
+                },
+                "props_schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "headline": {
+                      "type": "string"
+                    },
+                    "ink": {
+                      "type": "string"
+                    },
+                    "rate": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "resources": [],
+                "dependencies": {
+                  "react": "19.2.7",
+                  "react-dom": "19.2.7",
+                  "remotion": "4.0.484",
+                  "@remotion/bundler": "4.0.484",
+                  "@remotion/renderer": "4.0.484"
+                }
+              },
+              "prompt": null,
+              "provider": null,
+              "model": null,
+              "parameters": {},
+              "output": {
+                "width": 900,
+                "height": 210,
+                "fps": 30,
+                "duration_frames": 150,
+                "background": "#142b30"
+              },
+              "layout": {
+                "x": 112.0,
+                "y": 720.0,
+                "width": 900.0,
+                "height": 210.0
+              },
+              "fit": "cover",
+              "transform": {
+                "x": 0.0,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0,
+                "origin": "center"
+              },
+              "opacity": 1.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-voice",
+        "kind": "audio",
+        "role": "dialogue",
+        "order": 3,
+        "clips": [
+          {
+            "clip_id": "voice",
+            "range": {
+              "start": 27000,
+              "end": 477000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "f5562d4e-1eeb-586c-9ce0-7a5c6149bb36",
+              "snapshot_digest": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+              "source_range": {
+                "start": 0,
+                "end": 450000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "voice-audio",
+              "gain_db": -4.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-whoosh",
+        "kind": "audio",
+        "role": "effect",
+        "order": 4,
+        "clips": [
+          {
+            "clip_id": "whoosh",
+            "range": {
+              "start": 126000,
+              "end": 234000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "803abc16-7039-5e0b-b7d6-650b8b225e3e",
+              "snapshot_digest": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+              "source_range": {
+                "start": 0,
+                "end": 108000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "whoosh-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-impact",
+        "kind": "audio",
+        "role": "effect",
+        "order": 5,
+        "clips": [
+          {
+            "clip_id": "impact",
+            "range": {
+              "start": 180000,
+              "end": 252000
+            },
+            "scene_id": "survey",
+            "linked_group_id": null,
+            "source": {
+              "snapshot_id": "6ac14623-f5a4-5fa9-b928-2bdab47ee318",
+              "snapshot_digest": "b11af6dbf876118c9ad7e2996d526bbad96691d7c20e0d8c9ec509f83523c46d",
+              "source_range": {
+                "start": 0,
+                "end": 72000
+              }
+            },
+            "object": {
+              "kind": "audio",
+              "object_id": "impact-audio",
+              "gain_db": -3.0
+            },
+            "animations": []
+          }
+        ]
+      }
+    ],
+    "transitions": []
+  }
+}

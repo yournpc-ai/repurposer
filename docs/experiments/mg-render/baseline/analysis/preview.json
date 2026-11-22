@@ -1,0 +1,101 @@
+{
+  "player-A-45": {
+    "mae": 5.443645511831276,
+    "source_codes": [
+      47,
+      35
+    ],
+    "output_codes": [
+      48,
+      35
+    ]
+  },
+  "player-B-45": {
+    "mae": 4.38652745627572,
+    "source_codes": [
+      47,
+      35
+    ],
+    "output_codes": [
+      48,
+      35
+    ]
+  },
+  "renderer-A-60": {
+    "mae": 1.1383088991769548,
+    "source_codes": [
+      60,
+      48
+    ],
+    "output_codes": [
+      60,
+      48
+    ]
+  },
+  "player-A-60": {
+    "mae": 5.419883455504115,
+    "source_codes": [
+      59,
+      47
+    ],
+    "output_codes": [
+      60,
+      48
+    ]
+  },
+  "renderer-B-60": {
+    "mae": 1.1774545074588478,
+    "source_codes": [
+      60,
+      48
+    ],
+    "output_codes": [
+      60,
+      48
+    ]
+  },
+  "player-B-60": {
+    "mae": 4.393776363168724,
+    "source_codes": [
+      59,
+      47
+    ],
+    "output_codes": [
+      60,
+      48
+    ]
+  },
+  "renderer-C-60": {
+    "mae": 0.8055076517489712,
+    "source_codes": [
+      60,
+      48
+    ],
+    "output_codes": [
+      60,
+      48
+    ]
+  },
+  "player-A-100": {
+    "mae": 5.378332851080247,
+    "source_codes": [
+      91,
+      80
+    ],
+    "output_codes": [
+      92,
+      81
+    ]
+  },
+  "player-B-100": {
+    "mae": 4.359343171296296,
+    "source_codes": [
+      91,
+      80
+    ],
+    "output_codes": [
+      92,
+      81
+    ]
+  }
+}

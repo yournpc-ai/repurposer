@@ -1,0 +1,240 @@
+[
+  {
+    "route": "B",
+    "frame": 72,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 2.9
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 2.3
+      }
+    ],
+    "settle_seconds": 0.29337916700023925
+  },
+  {
+    "route": "B",
+    "frame": 179,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 6.466666
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 5.866666
+      }
+    ],
+    "settle_seconds": 0.33928075000221725
+  },
+  {
+    "route": "B",
+    "frame": 0,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 0.5
+      }
+    ],
+    "settle_seconds": 0.2383045829992625
+  },
+  {
+    "route": "B",
+    "frame": 30,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 1.5
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 0.9
+      }
+    ],
+    "settle_seconds": 0.2514736660014023
+  },
+  {
+    "route": "B",
+    "frame": 156,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 5.7
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 5.1
+      }
+    ],
+    "settle_seconds": 0.3222923749999609
+  },
+  {
+    "route": "B",
+    "frame": 180,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 6.5
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 5.9
+      }
+    ],
+    "settle_seconds": 0.33376154199868324
+  },
+  {
+    "route": "B",
+    "frame": 239,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 8.466666
+      }
+    ],
+    "settle_seconds": 0.3602190840028925
+  },
+  {
+    "route": "B",
+    "frame": 45,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 2
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 1.4
+      }
+    ],
+    "settle_seconds": 0.2623908749992552
+  },
+  {
+    "route": "B",
+    "frame": 60,
+    "source_media": [
+      {
+        "name": "main.mp4#t=0.5,8.5",
+        "time": 2.5
+      },
+      {
+        "name": "pip.mp4#t=0.4,6.9",
+        "time": 1.9
+      }
+    ],
+    "settle_seconds": 0.27134266599750845
+  },
+  {
+    "route": "C",
+    "segment": [
+      54,
+      84
+    ],
+    "native_play": {
+      "time": 0.340808,
+      "duration": 1,
+      "frames": 15
+    }
+  },
+  {
+    "route": "C",
+    "frame": 72,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.25959133300057147
+  },
+  {
+    "route": "C",
+    "frame": 179,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.2809795419998409
+  },
+  {
+    "route": "C",
+    "frame": 0,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.16823120800108882
+  },
+  {
+    "route": "C",
+    "frame": 30,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.19310549999863724
+  },
+  {
+    "route": "C",
+    "frame": 156,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.25228458299898193
+  },
+  {
+    "route": "C",
+    "frame": 180,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.2993584579999151
+  },
+  {
+    "route": "C",
+    "frame": 239,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.2854293750024226
+  },
+  {
+    "route": "C",
+    "frame": 45,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.19355054200059385
+  },
+  {
+    "route": "C",
+    "frame": 60,
+    "source_media": [
+      {
+        "name": "segment.mp4",
+        "time": 0.340808
+      }
+    ],
+    "settle_seconds": 0.20231449999846518
+  }
+]

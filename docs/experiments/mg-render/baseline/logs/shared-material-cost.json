@@ -1,0 +1,30 @@
+{
+  "narration.aiff": {
+    "seconds": 0.8493033750019094,
+    "identical_to_fixture": true
+  },
+  "voice.wav": {
+    "seconds": 0.02631904199733981,
+    "identical_to_fixture": true
+  },
+  "main.mp4": {
+    "seconds": 1.4572318339996855,
+    "identical_to_fixture": true
+  },
+  "pip.mp4": {
+    "seconds": 0.25086979100160534,
+    "identical_to_fixture": true
+  },
+  "whoosh.wav": {
+    "seconds": 0.04234541699770489,
+    "identical_to_fixture": true
+  },
+  "impact1.wav": {
+    "seconds": 0.0014043750015844125,
+    "identical_to_fixture": true
+  },
+  "impact2.wav": {
+    "seconds": 0.0010169169981963933,
+    "identical_to_fixture": true
+  }
+}

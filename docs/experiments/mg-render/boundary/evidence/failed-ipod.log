@@ -1,0 +1,39 @@
+Error: Command failed with exit code 234: /private/tmp/repurposer-boundary.t2NDtx/cache/m4a/ffmpeg -hide_banner -i /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav -c:a libfdk_aac -f adts -b:a 192k -cutoff 18000 -y /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac
+[aist#0:0/pcm_s16le @ 0x73cc0c180] Guessed Channel Layout: stereo
+Input #0, wav, from '/var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav':
+  Metadata:
+    encoder         : Lavf61.7.100
+  Duration: 00:00:08.00, bitrate: 1536 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, stereo, s16, 1536 kb/s
+[AVFormatContext @ 0x73d01c280] Requested output format 'ipod' is not known.
+[out#0 @ 0x73cc24180] Error initializing the muxer for /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac: Invalid argument
+Error opening output file /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac.
+Error opening output files: Invalid argument
+    at makeError (/private/tmp/repurposer-mg.fsvSm8/render484/node_modules/execa/lib/error.js:60:11)
+    at handlePromise (/private/tmp/repurposer-mg.fsvSm8/render484/node_modules/execa/index.js:118:26)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async compressAudio (/private/tmp/repurposer-mg.fsvSm8/render484/node_modules/@remotion/renderer/dist/compress-audio.js:42:5)
+    at async createAudio (/private/tmp/repurposer-mg.fsvSm8/render484/node_modules/@remotion/renderer/dist/create-audio.js:107:5)
+    at async innerStitchFramesToVideo (/private/tmp/repurposer-mg.fsvSm8/render484/node_modules/@remotion/renderer/dist/stitch-frames-to-video.js:124:11) {
+  shortMessage: 'Command failed with exit code 234: /private/tmp/repurposer-boundary.t2NDtx/cache/m4a/ffmpeg -hide_banner -i /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav -c:a libfdk_aac -f adts -b:a 192k -cutoff 18000 -y /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac',
+  command: '/private/tmp/repurposer-boundary.t2NDtx/cache/m4a/ffmpeg -hide_banner -i /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav -c:a libfdk_aac -f adts -b:a 192k -cutoff 18000 -y /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac',
+  escapedCommand: '"/private/tmp/repurposer-boundary.t2NDtx/cache/m4a/ffmpeg" -hide_banner -i "/var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav" "-c:a" libfdk_aac -f adts "-b:a" 192k -cutoff 18000 -y "/var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac"',
+  exitCode: 234,
+  signal: undefined,
+  signalDescription: undefined,
+  stdout: '',
+  stderr: '[aist#0:0/pcm_s16le @ 0x73cc0c180] Guessed Channel Layout: stereo\n' +
+    "Input #0, wav, from '/var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/merged.wav':\n" +
+    '  Metadata:\n' +
+    '    encoder         : Lavf61.7.100\n' +
+    '  Duration: 00:00:08.00, bitrate: 1536 kb/s\n' +
+    '  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, stereo, s16, 1536 kb/s\n' +
+    "[AVFormatContext @ 0x73d01c280] Requested output format 'ipod' is not known.\n" +
+    '[out#0 @ 0x73cc24180] Error initializing the muxer for /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac: Invalid argument\n' +
+    'Error opening output file /var/folders/0w/b9nh2fbn6ndftmxr43vhr45c0000gn/T/remotion-v4.0.484-assetsma77mflt8i/remotion-audio-preprocessing/audio.aac.\n' +
+    'Error opening output files: Invalid argument',
+  failed: true,
+  timedOut: false,
+  isCanceled: false,
+  killed: false
+}

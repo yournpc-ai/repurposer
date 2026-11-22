@@ -1,0 +1,143 @@
+{
+  "commit": "4d0113474101b65c9a8d9e53d47879c6e8010c91",
+  "composition_id": "cef118bc-be7c-5578-83ab-1bd49300b60e",
+  "version_id": "56bade44-115e-5b3d-b318-2919c29c5f10",
+  "parent_id": "7d66a0ce-9a80-5547-8cdc-d1a4082bfa62",
+  "content_digest": "97f92dbea094c3351554409e6d8de3d0716086f8556948f822b325a6d753d39d",
+  "system": "macOS-26.5.2-arm64-arm-64bit",
+  "python": "3.11.14 (main, Feb 12 2026, 00:41:29) [Clang 21.1.4 ]",
+  "node": "v22.15.0",
+  "python_packages": {
+    "av": "17.1.0",
+    "numpy": "2.4.6",
+    "pillow": "12.3.0",
+    "playwright": "1.64.0",
+    "imageio-ffmpeg": "0.8.1"
+  },
+  "binary_sha256": {
+    "chromium": "b469d05c698ccf9f4ae3dc43fb194fbdcf56f9da1fc46dcc19f2bf9fe2aa20b8",
+    "remotion_ffmpeg": "54cc1e811f2ea1b313f64e29d60d060b93dde30f219617fe319f834cdcec5c94",
+    "ffmpeg9": "591260c945d0eef150e3bf82b0ef988bd36a9cecc18ff05d6679617159f0a95e",
+    "font": "d72db21f9242aedd6b917d8549ad5921766b24d5f8d0becfda2ff4c620b3c2e0"
+  },
+  "font_use": {
+    "C": [
+      {
+        "familyName": "Arial",
+        "postScriptName": "Arial-BoldMT",
+        "isCustomFont": false,
+        "glyphCount": 15
+      }
+    ],
+    "B": [
+      {
+        "familyName": "Arial",
+        "postScriptName": "Arial-BoldMT",
+        "isCustomFont": false,
+        "glyphCount": 15
+      }
+    ]
+  },
+  "assets": {
+    "impact2.wav": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0",
+    "main.mp4": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+    "pip.mp4": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+    "voice.wav": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+    "whoosh.wav": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566"
+  },
+  "source_and_inputs": {
+    "src/Boundary.tsx": "30c20aea3c748ca50d4b58ebbee1f485d40705bcfe20ff915623e29d3c440c38",
+    "src/Video.tsx": "d2252fc1a6c5a99cb8ece4796833e1a05453557466c0c81afc9ce5197b8f296f",
+    "src/analyze.py": "19548361facdb49b9ea593c1dd0c0602be38fb7348b03f6130e46414d24a3761",
+    "src/audio_oracle.py": "39ad87ae72fb087339d02469fbabdea87ee0f463fe2ad1e04401fbe1b58a989b",
+    "src/audio_wrapper.py": "4e649b6cf4418500813786d1d5dbdfdfccc69c61d7cdea8d4ec40ba409d7b557",
+    "src/b.cjs": "42257ceb63e78380812141c5590df074eaacee05f89d1e5a470fe9f71858e9cd",
+    "src/bench.py": "73b1db82b152acb3c2cb3a8db735278d0f2124ec998fc9da1b417ce1efaed64d",
+    "src/c.py": "fa1e0e4c83cf87421466727a27ad25ac8817944d17b2af3e0d8035f401ced259",
+    "src/controlled.py": "d4e66e42426807db60e5fd0c2040b0b976e5a4de930931f161096bd9d073e181",
+    "src/frame_worker.py": "c867e46ecab67f8e903d460f9a38e3b5aaaf9117fb768a95cbe296ffc4f984bb",
+    "src/history.py": "9e849c609b8a78ce9709f6c5dd90c58e1fa887adae4063b0c0f62a74ce72af82",
+    "src/planes.tsx": "208e5923691c7c33f1f9ccdd590472f2e66f7964eb4585d069db1c7ad2e7b04a",
+    "src/player.tsx": "026260e3ea2e22d359a793a7ac8b0c1a8c161cc26162e0a4115d8645e76e9799",
+    "src/prepare.py": "05843bf63a2d5786710b27dbd15912729487b5d9b0ac64e65ea8fb8945bfe55c",
+    "src/preview.py": "1168e45c0bd7e033bea6b1b12595aa9d861ffea2abaabf47c9e4209eff788bf1",
+    "src/provenance.py": "8bd2bd1a67fc543eb20ae8f5ce05e20414f5fada83e9e00857a89ac59619d40e",
+    "src/root.tsx": "0871e87e7dd071ec72fbccfd99afdb8c85cb88e6b14fb24f4ca1d115cc72b6b6",
+    "src/run-b.py": "11743afe1bece483c42210794d3e26f66b54f408b03f595c6406d77a9d7f3748",
+    "src/scene.tsx": "57c295e0e3745b76c43e2aa205192c3d6c739441de47a4598ee2a8b57d0d8ec6",
+    "src/seek_server.py": "cff255a414c07af77a25ac0c412c2e51897c0b8f5e5c8850a957d41ea14ca772",
+    "src/serve.py": "cfc196c298679384a6ea3fe8847dbdb9039091e051e26c78ee6bed00f398bbb8",
+    "src/setup-probe.py": "969bac559055e972579c974c6529c974b19dd7fdb8d8fa69b2692d7dfc9455a2",
+    "src/source_ids.py": "686d385fe4e8e3eff10de4fe2bc2041a11ca0b706e6808e761cb4a245baa8086",
+    "package-lock.json": "780b685537ca8830095e0417a845c77e3f7d3f605a6f243304a455b476cc44af",
+    "evidence/version.json": "7e22939c29fdf591208f7f14963ee28280b8ce339d83e01f9996c288a9567e36",
+    "evidence/data.json": "0214ea453445cf10eee793c4df8a832f3c0f846d580e1f0fb758301907904988"
+  },
+  "outputs": {
+    "B-adts.mp4": {
+      "bytes": 2978651,
+      "sha256": "1d12dd0bdcc3e31a6f9dd6ff6c629b1539093b78cf99da853ec867cca3aa6ff0",
+      "frames": 240,
+      "rate": "30",
+      "size": [
+        1920,
+        1080
+      ],
+      "duration_microseconds": 8042667,
+      "video_payload_sha256": "5f6f89c90b8bb71e92df424ff956d696f7ac1dc136b9d15e1a4d9afafb4c5b1f",
+      "audio_presented_samples": 386048
+    },
+    "B-equal.mp4": {
+      "bytes": 2887471,
+      "sha256": "bf095067d51b000fdd42b9c41b2069ded360374d33850e8c4869c6876316dcec",
+      "frames": 240,
+      "rate": "30",
+      "size": [
+        1920,
+        1080
+      ],
+      "duration_microseconds": 8000000,
+      "video_payload_sha256": "01d13e537579e576aa5c31a1b96863bd546211d2b5ce771a8e191643226366f6",
+      "audio_presented_samples": 384000
+    },
+    "B-m4a.mp4": {
+      "bytes": 2981306,
+      "sha256": "068cd69cd8af265a44355d7e81b982a3671a1134e495358db9d35993917ea019",
+      "frames": 240,
+      "rate": "30",
+      "size": [
+        1920,
+        1080
+      ],
+      "duration_microseconds": 8000000,
+      "video_payload_sha256": "5f6f89c90b8bb71e92df424ff956d696f7ac1dc136b9d15e1a4d9afafb4c5b1f",
+      "audio_presented_samples": 384000
+    },
+    "C-equal.mp4": {
+      "bytes": 2954140,
+      "sha256": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+      "frames": 240,
+      "rate": "30",
+      "size": [
+        1920,
+        1080
+      ],
+      "duration_microseconds": 8000000,
+      "video_payload_sha256": "6e09c587ce383acaf55b4f8592ba2929d891a8dcce1ef32a7d02ceefb1941e32",
+      "audio_presented_samples": 384000
+    },
+    "C.mp4": {
+      "bytes": 2954140,
+      "sha256": "923d4cb419388ed5892af8dcb46b74bb25f582f78eef89bb41662496a8d129e4",
+      "frames": 240,
+      "rate": "30",
+      "size": [
+        1920,
+        1080
+      ],
+      "duration_microseconds": 8000000,
+      "video_payload_sha256": "6e09c587ce383acaf55b4f8592ba2929d891a8dcce1ef32a7d02ceefb1941e32",
+      "audio_presented_samples": 384000
+    }
+  }
+}

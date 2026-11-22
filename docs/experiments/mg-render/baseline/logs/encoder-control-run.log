@@ -1,0 +1,6 @@
+{'tag': 'control-B-1', 'wall_s': 15.468569042001036, 'peak_tree_rss_mib': 2228.5, 'rss_samples': 69, 'exit': 0}
+{'tag': 'control-C-1', 'wall_s': 7.5951409170011175, 'peak_tree_rss_mib': 786.71875, 'rss_samples': 33, 'exit': 0}
+{'tag': 'control-C-2', 'wall_s': 4.778675041998213, 'peak_tree_rss_mib': 784.53125, 'rss_samples': 21, 'exit': 0}
+{'tag': 'control-B-2', 'wall_s': 15.699669458001154, 'peak_tree_rss_mib': 2237.890625, 'rss_samples': 70, 'exit': 0}
+{'tag': 'control-B-3', 'wall_s': 15.503877625000314, 'peak_tree_rss_mib': 2233.0, 'rss_samples': 69, 'exit': 0}
+{'tag': 'control-C-3', 'wall_s': 7.5995912500002305, 'peak_tree_rss_mib': 786.421875, 'rss_samples': 33, 'exit': 0}

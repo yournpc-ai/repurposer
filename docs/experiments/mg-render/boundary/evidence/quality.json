@@ -1,0 +1,33 @@
+{
+  "frames": 240,
+  "duration_seconds": 8,
+  "full_mae": 2.4711435051225994,
+  "psnr_db": 38.456201154616124,
+  "region_mae": {
+    "main_outside": 2.4870782953960906,
+    "main_flat": 2.319655236725027,
+    "main_detail": 3.612577228903439,
+    "pip_hidden": 2.34851275152822,
+    "pip_soft": 2.2469004845827865,
+    "pip_opaque": 1.525377878282058,
+    "caption_ink": 2.503787318246521,
+    "glyph_bright": 4.833507610666106
+  },
+  "single_frame_controls": [
+    {
+      "control": "baseline",
+      "B_still_vs_C_png_main_MAE": 1.6733063271604938,
+      "B_still_vs_C_png_effect_MAE": 1.8211735261401558
+    },
+    {
+      "control": "source709",
+      "B_still_vs_C_png_main_MAE": 1.940202160493827,
+      "B_still_vs_C_png_effect_MAE": 2.1171171672228404
+    },
+    {
+      "control": "bicubic",
+      "B_still_vs_C_png_main_MAE": 2.764800925925926,
+      "B_still_vs_C_png_effect_MAE": 2.119885057471264
+    }
+  ]
+}

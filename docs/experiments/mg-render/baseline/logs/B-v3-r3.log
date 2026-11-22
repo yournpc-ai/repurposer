@@ -1,0 +1,1 @@
+COMMAND node src/remotion.cjs B 3 results/B-v3-r3.partial.mp4

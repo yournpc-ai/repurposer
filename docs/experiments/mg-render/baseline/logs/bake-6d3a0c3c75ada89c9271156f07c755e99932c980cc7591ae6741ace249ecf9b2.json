@@ -1,0 +1,58 @@
+{
+  "producer": "remotion-project",
+  "program_digest": "6d3a0c3c75ada89c9271156f07c755e99932c980cc7591ae6741ace249ecf9b2",
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "remotion": "4.0.484",
+    "@remotion/bundler": "4.0.484",
+    "@remotion/renderer": "4.0.484"
+  },
+  "output": {
+    "width": 900,
+    "height": 210,
+    "fps": 30,
+    "duration_frames": 150,
+    "background": "#142b30"
+  },
+  "diagnostics": {
+    "frames": 150,
+    "preview_frame": 75,
+    "dynamic_sample_frames": [
+      0,
+      75,
+      149
+    ],
+    "dependency_lock": {
+      "react": "19.2.7",
+      "react-dom": "19.2.7",
+      "remotion": "4.0.484",
+      "@remotion/bundler": "4.0.484",
+      "@remotion/renderer": "4.0.484"
+    },
+    "entry": "Generator.tsx",
+    "composition_id": "SignalTitle",
+    "files": [
+      {
+        "path": "Generator.tsx",
+        "digest": "fdd164f7b7c3640afd4b8ed614a2fb9b4e8c9954baff8ae3b77f9cfcc93a0273"
+      },
+      {
+        "path": "Title.tsx",
+        "digest": "e12d8f99dfff4c4472ee708674eeba199615eb9f40075b0f305d8051d3cb1d4e"
+      }
+    ],
+    "resources": [],
+    "process_budget_seconds": 240,
+    "network": "loopback-only-macos-seatbelt; postgres/mysql/redis-denied",
+    "filesystem": "declared-dependencies-and-workdir-only-macos-seatbelt",
+    "resource_limits": {
+      "max_active_bakes": 1,
+      "cpu_seconds": 220,
+      "memory_group_kb": 8388608,
+      "temporary_storage_kb": 524288,
+      "max_open_files": 256
+    },
+    "cleanup": "descendant-process-groups-sigkill-and-temp-tree-removal"
+  }
+}

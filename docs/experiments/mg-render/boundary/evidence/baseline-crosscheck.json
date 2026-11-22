@@ -1,0 +1,26 @@
+{
+  "raw_audio_packet_digest": {
+    "A": "1e345c09583919ce6bd22531a7419a0e883a58b41f7d5e094b269d0c0b95b69e",
+    "B": "1e345c09583919ce6bd22531a7419a0e883a58b41f7d5e094b269d0c0b95b69e",
+    "new_B_adts": "1e345c09583919ce6bd22531a7419a0e883a58b41f7d5e094b269d0c0b95b69e"
+  },
+  "frames": 240,
+  "old_global_mae": 2.323191921323088,
+  "old_regions": {
+    "outside_active_title_and_pip": {
+      "mae": 2.504205170531917,
+      "pixel_share": 0.8922526041666666,
+      "fraction_of_total_absolute_error": 0.961773138184048
+    },
+    "active_title": {
+      "mae": 0.5393728395061729,
+      "pixel_share": 0.056966145833333336,
+      "fraction_of_total_absolute_error": 0.013225765616621499
+    },
+    "active_pip": {
+      "mae": 1.1437754036087369,
+      "pixel_share": 0.05078125,
+      "fraction_of_total_absolute_error": 0.025001096199330584
+    }
+  }
+}
