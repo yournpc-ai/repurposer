@@ -9,6 +9,7 @@
 .git
 data
 **/.env
+apps/web/.env.local
 **/.pytest_cache
 **/.mypy_cache
 **/.ruff_cache
