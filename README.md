@@ -1,67 +1,12 @@
 # Repurposer
 
-An AI agent for knowledge experts: it turns existing material — talks, meetings, podcasts, transcripts, slides, photos — into the content the user names: LinkedIn posts, articles, quote cards, carousels, vertical clips, and multi-language versions, in the expert's own voice and style.
+Repurposer is a chat-first AI video editor. Give it footage and a goal. The agent inspects the material, edits a persistent composition, plays the affected range and uses what it observed to revise the work. A subsequent message can refer to the same clip, frame or delivered version.
 
-Core channels are LinkedIn, institutional websites, and email newsletters; multi-language output (EN / FR / DE / ES / IT / ZH) is the entry ticket.
+Native Tools operate on tracks, clips, objects and animations. Each edit goes through `apply_composition_edits` and saves an immutable CompositionVersion. Skills provide optional creative methods. A Motion Block can use the existing Generator implementation for complex visuals. Its declared inputs and outer clip remain addressable; individual pixels in baked media have no independent object identity.
 
-## Core Capabilities
+Chat shows actual tool activity, questions, previews and deliveries. Ask for clarification when a decision blocks progress. Media generation and formal export use the account's permissions and quote. A worker returns the result to the original opening. Delivery points to the reviewed Output; older versions remain playable.
 
-- **Named outputs, not a fixed bundle** — the plan is built per request from the tool registry: vertical clips, films, LinkedIn posts, articles, quote cards, carousels, and multi-language versions. The user names it, the agent makes it.
-- **Vertical clips with or without footage** — speaker footage → cropped, subtitled segments; pure audio / images / slides → still-frame videos.
-- **Multilingual** — subtitle translation plus voice-cloned dubbing (the speaker's own voice via MiniMax voice_clone + T2A).
-- **Persona = persisted identity memory** — tone, style, taboos, voice binding, and visual skin (caption style / title / intro-outro / music) in one object; user-isolated, multi-instance, auto-created from task material when not explicitly selected (ADR-037/038). The persona page edits the skin with a live Remotion `<Player>` preview, pixel-identical to the rendered output.
-- **AI understanding** — M3 vision reads slides and charts; self-hosted ASR produces word-level timestamps.
-- **Chat is the single intent surface** — every request (generation, refinement, revision) goes through `POST /chat`. The agent presents a plan; the default auto setting can waive ordinary approval only when production intent exists, while ask mode and fee guards still confirm. A Film's first storyboard version is always fully presented before production.
-
-## Core Usage Flow
-
-The main entry point is the home composer, not the project list:
-
-1. The user drops files (video / audio / transcript / slides / images) or pastes text into the home composer and writes what they want. Optional Assets / Persona controls ride the composer; neither is mandatory. Clicking a recipe/demo card only prefills an editable prompt.
-2. Send shows progress, creates the project, uploads and attaches any selected assets, then navigates directly to `/projects/$id` and sends the first `POST /chat` message. Prompt-only sends create no asset; selecting a file alone never sends it.
-3. The agent reads/explores as needed and presents a plan. Production intent, auto/ask settings, confirmed scope and fee guards share the same Start machine; no separate `/intent` endpoint or automatic run is created by a recipe card.
-4. The worker processes requested assets asynchronously (ASR / text extraction / vision reading), then executes the compiled tool DAG. Upload alone leaves media dormant until a read intent or run needs it.
-5. Clip/film outputs use the render queue and the Remotion service; terminal writes carry render claim tokens. Text and image outputs use their own registered production paths.
-6. Outputs land in the project workspace; the user reviews them through output cards/canvas, refines through ChatDock and deterministic edit gestures, and exports the actual delivered files.
-
-## Tech Stack
-
-- **Backend**: FastAPI + Python, plus a standalone queue worker process
-- **Core Model**: MiniMax M3 (multimodal: text + vision reading + voice clone / T2A)
-- **Frontend**: TanStack Start + TypeScript
-- **Video Rendering**: Remotion (`apps/render`, Node service; clip-spec / film-spec → rendered media)
-- **Speech Recognition**: faster-whisper (self-hosted, word-level timestamps)
-- **Task Queue**: Postgres (`FOR UPDATE SKIP LOCKED`) + standalone worker, no Redis
-- **Package Management**: backend uses `uv`; frontend / render / shared components use a `pnpm` workspace (`web` / `render` / `clip`)
-- **Database**: PostgreSQL
-- **File Storage**: S3-compatible object storage (Volcengine TOS) for all persistent files — uploads and rendered outputs are object keys; reads are public, uploads use backend-issued presigned PUT URLs (ADR-024). No local media directories.
-- **Local Orchestration**: `scripts/dev.sh`
-- **Deployment**: Docker Compose
-
-## Directory Structure
-
-```
-repurposer/
-├── apps/
-│   ├── api/                 # FastAPI backend (agents / tools / skills / chat / pipeline / queue worker / ASR)
-│   │   └── migrations/      # Alembic database migrations
-│   ├── web/                 # TanStack Start frontend (includes vertical video editor)
-│   └── render/              # Remotion rendering service (clip-spec / film-spec → media, Node)
-├── packages/
-│   └── clip/                # Shared Remotion <Clip> component (web preview + render output, parity guaranteed)
-├── docs/                    # Project documentation — governed index in docs/README.md
-│   ├── PRD.md               # Product positioning & requirements
-│   ├── PROGRESS.md          # Progress snapshot + schedule + backlog (sole source of truth for priorities)
-│   ├── MODULE_ARCHITECTURE.md  # Module map, table ownership, current architecture
-│   ├── DECISIONS.md         # Current ADRs
-│   ├── RENDERING.md         # clip-spec / film-spec field contracts + render chain
-│   └── tasks/               # Current implementation / acceptance contracts
-├── scripts/
-│   └── dev.sh               # One-command local startup
-├── pnpm-workspace.yaml      # web/render/clip workspace (api uses uv independently, not in workspace)
-├── docker-compose.yml
-└── README.md
-```
+The API and worker live in `apps/api`, the web client in `apps/web`, and the renderer in `apps/render`. The player and renderer share `packages/video-spec` and `packages/video-remotion`.
 
 ## Quick Start
 
@@ -101,13 +46,13 @@ uv sync
 pnpm install
 ```
 
-> `pnpm install` run from the root installs all three workspace packages (`apps/web`, `apps/render`, `packages/clip`) in one go.
+> `pnpm install` run from the root installs the web and render apps and shared video packages in one go.
 > On first startup, the render service will download a headless Chromium (a few hundred MB); this is normal.
 
 ### 2. Configure Environment Variables
 
 ```bash
-cp .env.example .env
+test -e .env || cp .env.example .env
 ```
 
 Fill in the two required groups in `.env`:
@@ -139,27 +84,7 @@ docker compose stop db     # Stop
 
 ### 4. Run Database Migrations
 
-The backend uses [Alembic](https://alembic.sqlalchemy.org/) to manage database schema changes. Before first startup or after pulling new code, apply migrations to the latest version:
-
-```bash
-cd apps/api
-uv run alembic upgrade head
-```
-
-Common commands:
-
-```bash
-# Check current migration version
-uv run alembic current
-
-# Generate a new auto-migration (run after modifying models)
-uv run alembic revision --autogenerate -m "describe your change"
-
-# Rollback one level
-uv run alembic downgrade -1
-```
-
-> **Note**: `./scripts/dev.sh` automatically runs `uv run alembic upgrade head` before starting the API, so manual migrations are not required for daily local development. However, explicit execution is recommended for first-time deployment or in CI.
+From `apps/api`, run `uv run alembic current` and `uv run alembic heads`. Select the intended database before running `uv run alembic upgrade head`. Review intervening migrations and back up a populated database first. The launcher, API and worker check the installed revision. See the [migration guide](docs/DATABASE_MIGRATIONS.md).
 
 ### 5. One-Command Startup, then visit :3000
 
@@ -177,7 +102,7 @@ Once started, open **http://localhost:3000** in your browser.
 | API Docs (Swagger) | http://localhost:8000/docs |
 | Render Service (Remotion) | http://localhost:3001 |
 
-> The render service (`apps/render`) is a black box called by the API worker (clip-spec / film-spec → media); pure text output flows do not need it.
+> The render service (`apps/render`) is a black box called by the API worker (video-spec → media); formal export uses the saved version and its fixed sources.
 
 ### 6. (Optional) Full-Stack Docker One-Command Run
 
@@ -201,7 +126,7 @@ Service orchestration details:
 
 Notes:
 
-- Both `render` and `web` depend on the workspace package `@repurposer/clip`; the build context is the **repo root** (not their individual subdirectories).
+- Both `render` and `web` depend on the workspace package `@repurposer/video-remotion`; the build context is the **repo root** (not their individual subdirectories).
 - Inter-container hostnames: `API_PUBLIC_URL=http://api:8000`, `RENDER_URL=http://render:3001/render`. All media flows through object storage: render pulls source video over HTTP and uploads MP4/SRT results via presigned PUT URLs — there are no shared file volumes between containers.
 - The `render` image includes system libraries for headless Chromium; the Chromium binary (~90MB) is downloaded **lazily on first render** (no external network dependency at build time, better for CI / restricted networks).
 - `web` currently uses `vite preview` for SSR, suitable for MVP / staging; for high-traffic deployments, switch to a lightweight Node adapter around the exported fetch handler (see ADR-018).
@@ -234,20 +159,4 @@ Journey assertions lock user-visible results and server/database facts, not LLM 
 
 ## Documentation
 
-The governed doc index — which doc owns which truth — lives in [docs/README.md](./docs/README.md). Key docs:
-
-- [Product Requirements](./docs/PRD.md)
-- [Progress & Schedule](./docs/PROGRESS.md) — sole source of truth for priorities and the backlog
-- [Module Architecture](./docs/MODULE_ARCHITECTURE.md) — module map, table ownership, current system architecture
-- [Architecture Decision Records](./docs/DECISIONS.md) — current ADRs only
-- [Rendering & spec families](./docs/RENDERING.md) — clip-spec / film-spec contracts and the render chain
-- [API Specification](./docs/API.md)
-
-## Development Conventions
-
-- Backend code lives in `apps/api/`
-- Frontend code lives in `apps/web/` (TanStack Start)
-- Video render service lives in `apps/render/` (Remotion, Node); shared `<Clip>` component lives in `packages/clip/`
-- Documentation lives in `docs/`
-- Use a lightweight **pnpm workspace** to wire together `web` / `render` / `clip` (shared Remotion components guarantee "preview = rendered output"); **do not introduce heavy monorepo tools like Turborepo / Nx**. `apps/api` uses `uv` independently and is not in the workspace
-- Frontend and backend communicate via REST API; types are generated from the backend OpenAPI spec
+Start with the [agent architecture contract](docs/tasks/new-agent.md), [current milestones](docs/PROGRESS.md), [I8 implementation and evidence](docs/tasks/i8.md) and [domain index](docs/README.md).

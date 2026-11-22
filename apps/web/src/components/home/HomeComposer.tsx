@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { Plus, Upload, User } from "lucide-react"
+import { Plus, Upload } from "lucide-react"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { useStagingUploads } from "@/lib/stagingUploads"
@@ -23,10 +23,6 @@ import { AssetChips } from "@/components/home/AssetChips"
 import { ComposerPanelButton } from "@/components/composer/ComposerPanelButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
 import { AssetsPanel } from "@/components/composer/AssetsPanel"
-import {
-  PersonaPanel,
-  type PersonaPickerEntry,
-} from "@/components/composer/PersonaPanel"
 import { Tour, type TourStep } from "@/components/ui/tour"
 import {
   canOpenTour,
@@ -36,10 +32,8 @@ import {
   type TourStepDef,
 } from "@/lib/tour"
 
-type Persona = PersonaPickerEntry
 
 interface HomeComposerProps {
-  personas: Persona[]
   onGenerateStart?: () => void
   /** The draft (prompt + mentions) is the editor's reported mirror — the DOM
    * owns the text (MentionEditor); Home keeps it only as the send payload. */
@@ -52,7 +46,6 @@ interface HomeComposerProps {
   editorRef: RefObject<MentionEditorHandle | null>
 }
 
-const AUTO_GENERATE = "__auto_generate__"
 
 /** First-visit composer tour: the seen flag stores the tour's content hash
  * (version = a pure function of content, lib/tour.ts) — any step or copy
@@ -91,7 +84,6 @@ const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
 const PLACEHOLDER_ROTATE_MS = 3500
 
 export function HomeComposer({
-  personas,
   onGenerateStart,
   prompt,
   onPromptChange,
@@ -107,14 +99,12 @@ export function HomeComposer({
   const { modalOpen } = useSettingsDialog()
   const tourAllowed = !modalOpen && canOpenTour(isAuthenticated, loginOpen)
 
-  const [personaId, setPersonaId] = useState(AUTO_GENERATE)
   // Batch A (2026-09-18): picked files upload IMMEDIATELY into a pre-project
   // staging session (useStagingUploads) — Generate never waits on the wire;
   // the chips carry the upload lifecycle (spinner+% / retry / ×).
   const { staged, addFiles, removeStaged, retryStaged, clearStaged } =
     useStagingUploads()
   const [assetsOpen, setAssetsOpen] = useState(false)
-  const [personaOpen, setPersonaOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
   // Drag-drop upload (2026-09-24, user ruling — MiniMax/Lovart parity): the
@@ -217,7 +207,6 @@ export function HomeComposer({
       skill: selectedSkill?.reference,
       skillOption: selectedSkill ?? undefined,
       staged,
-      personaId: personaId === AUTO_GENERATE ? undefined : personaId || undefined,
       onStart: onGenerateStart,
       onSent: () => {
         editorRef.current?.clear()
@@ -375,25 +364,7 @@ export function HomeComposer({
                 />
               </ComposerPanelButton>
 
-              <ComposerPanelButton
-                icon={User}
-                label={t("composer.persona")}
-                open={personaOpen}
-                onOpenChange={setPersonaOpen}
-                popoverSide="bottom"
-                align="start"
-                data-tour="composer-persona"
-              >
-                <PersonaPanel
-                  personas={personas}
-                  value={personaId}
-                  autoValue={AUTO_GENERATE}
-                  onSelect={(id) => {
-                    setPersonaId(id)
-                    setPersonaOpen(false)
-                  }}
-                />
-              </ComposerPanelButton>
+
             </div>
 
           </div>

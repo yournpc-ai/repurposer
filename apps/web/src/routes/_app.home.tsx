@@ -2,17 +2,14 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { apiFetch } from "@/lib/api"
 import type { ChatMention } from "@/lib/mentions"
-import { BUILTIN_SKILL_VERSIONS, fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
+import { fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { consumeLandingCreate } from "@/lib/landingCreate"
 
 import { Button } from "@/components/ui/button-clean"
 import { HomeComposer } from "@/components/home/HomeComposer"
-import type { PersonaPickerEntry } from "@/components/composer/PersonaPanel"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
 
-type Persona = PersonaPickerEntry
 
 export const Route = createFileRoute("/_app/home")({
   component: Home,
@@ -20,7 +17,6 @@ export const Route = createFileRoute("/_app/home")({
 
 function Home() {
   const { t } = useTranslation()
-  const [personas, setPersonas] = useState<Persona[]>([])
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
   // through `editorRef`.
@@ -30,13 +26,7 @@ function Home() {
   const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null)
   const editorRef = useRef<MentionEditorHandle>(null)
   useEffect(() => {
-    Promise.all([
-      apiFetch("/api/v1/personas").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetchChatSkills().catch(() => ({ items: [] })),
-    ]).then(([personaRows, skills]) => {
-      setPersonas((personaRows as Persona[]) || [])
-      setSkillOptions(skills.items)
-    })
+    fetchChatSkills().then(({ items }) => setSkillOptions(items)).catch(() => {})
   }, [])
 
   const lastPrefillRef = useRef<string | null>(null)
@@ -78,17 +68,15 @@ function Home() {
     <section className="ui-as-start">
       <h1 className="ui-as-start__title">{t("home.heroQuestion")}</h1>
       <div className="ui-as-start__composer">
-        <HomeComposer personas={personas} prompt={prompt} mentions={mentions}
+        <HomeComposer prompt={prompt} mentions={mentions}
           onPromptChange={setPrompt} onMentionsChange={setMentions}
           selectedSkill={selectedSkill} onSkillChange={setSelectedSkill} editorRef={editorRef} />
       </div>
       <div className="mt-5 flex flex-wrap justify-center gap-2" data-tour="home-recipes">
-        {examples.map(({ skillId, label, demo }) => (
-          <Button key={demo} variant="secondary"
-            onClick={() => handlePrefill(`recipes.shelf.demos.${demo}.prompt`,
-              skillId ? skillOptionForReference({ kind: "builtin", skill_id: skillId, version: BUILTIN_SKILL_VERSIONS[skillId] }, skillOptions) : null,
-              { replaceDraft: true })}>
-            {t(`recipes.shelf.subs.${label}`)}
+        {examples.map((example) => (
+          <Button key={example} variant="secondary"
+            onClick={() => handlePrefill(`home.examples.${example}.prompt`, selectedSkill)}>
+            {t(`home.examples.${example}.label`)}
           </Button>
         ))}
       </div>
@@ -96,8 +84,4 @@ function Home() {
   )
 }
 
-const examples = [
-  { skillId: "promo-video", label: "website-product", demo: "product-promo-oxvalue-product-evidence" },
-  { skillId: null, label: "opinion-text", demo: "text-short-clear-rhythm" },
-  { skillId: "knowledge-explainer", label: "concept-explainer", demo: "knowledge-explainer-clear-expression" },
-] as const
+const examples = ["overlay", "framing", "trim"] as const

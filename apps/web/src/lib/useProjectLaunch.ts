@@ -47,7 +47,6 @@ export interface LaunchInput {
    * the wire and never silently drops a file. */
   staged: StagingUpload[]
   /** undefined = auto persona. */
-  personaId?: string
   /** Fires when the send begins (spinner on). */
   onStart?: () => void
   /** Fires right before navigating — the sender consumes its own draft
@@ -100,7 +99,6 @@ export function useProjectLaunch() {
             body: {
               title,
               event_name: "",
-              persona_id: input.personaId || undefined,
             },
           })
           if (!projectRes.ok) throw new Error("Failed to create project")
@@ -154,7 +152,6 @@ export function useProjectLaunch() {
                 mentions: input.mentions,
                 skill: input.skill,
                 skillOption: input.skillOption,
-                personaId: input.personaId || undefined,
                 attachments,
               },
             } as Record<string, unknown>,

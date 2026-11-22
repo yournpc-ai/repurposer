@@ -2,7 +2,7 @@
 
 文字动画由 Agent 直接用原生文字、预设与动画制作。新建和局部修改分别由 create_video 和具体编辑工具写入版本。
 
-> Status: Chat 修订现行，精确编辑验收开放（2026-11-16）。作品模型见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，渲染见 [RENDERING](RENDERING.md)，实施与剩余验收见 [统一视频合同](tasks/skill-package-promo-video.md)。
+> Status: Chat 修订现行，精确编辑验收开放（2026-11-16）。作品模型见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，渲染见 [RENDERING](RENDERING.md)，实施与剩余验收见 [统一视频合同](tasks/i8.md)。
 
 ## 1. 编辑入口
 
@@ -12,7 +12,7 @@
 
 ## 2. 分镜、Scrub 与 Inspector
 
-默认呈现分镜。显式动态检查按确切版本、digest 与目标窗口读取局部 spec。最小 Inspector 使用明确的 Text Clip 和 TextObject 调整字号。拖动、试听和 seek 使用本地草稿，Apply 才提交带 base_ref 的直接 Op 批；相关修改一批原子落一个新版本。Output 的 region mention 提供帧时间、源像素和归一化选区，服务端据此投影当前候选目标；选区本身不证明内部对象可编辑。保留取消、失败回滚、键盘操作与刷新恢复。
+分镜按需呈现。显式动态检查按确切版本、digest 与目标窗口读取局部 spec。最小 Inspector 使用明确的 Text Clip 和 TextObject 调整字号。拖动、试听和 seek 使用本地草稿，Apply 才提交带 base_ref 的直接 Op 批；相关修改一批原子落一个新版本。Output 的 region mention 提供帧时间、源像素和归一化选区，服务端据此投影当前候选目标；选区本身不证明内部对象可编辑。保留取消、失败回滚、键盘操作与刷新恢复。
 
 编辑能力保持有界。自由多轨时间线、自由层合成、自由转场编辑、stock B-roll 库、通用人脸或物体追踪和离线客户端渲染仍在产品范围之外。现行交付按视频卡的下载能力提供。
 

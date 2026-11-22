@@ -184,6 +184,11 @@ const en = {
     myProjects: "My projects",
   },
   home: {
+    examples: {
+      overlay: { label: "Add a product image", prompt: "Place the attached product image over the video from 2 to 4 seconds. Keep the subtitles and original audio, then play this part." },
+      framing: { label: "Adjust framing", prompt: "Adjust the framing to keep the speaker and captions visible. Play the changed section." },
+      trim: { label: "Trim the opening", prompt: "Trim the pause at the beginning and play the new opening." },
+    },
     newChat: "New chat",
     // Studio hero: one question line above the composer — the rotating
     // placeholder below answers it with three example prompts.

@@ -75,6 +75,10 @@ Observed Results
 
 ---
 
+### 基础操作、视觉实现与创作方法
+
+Native Tools 定位、插入和编辑对象，经唯一写口保存版本。Skills 提供可选的方法与参考。Motion Blocks 是可复用视觉实现的产品概念。现有 `GeneratorObject` 保存受限参数、固定资源与程序；`remotion-project` 通过现有 Component Runtime 隔离烘焙，`editing/video_spec.py` 将固定产物作为媒体编译。能改实例参数或重新烘焙的效果应说明可改字段。内部文字需独立修改时应保留为原生文字对象。三者均服务同一个 Agent 循环。
+
 ## 0.2 为什么必须彻底退役旧 Workflow
 
 ### 旧系统的问题

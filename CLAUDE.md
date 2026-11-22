@@ -20,16 +20,14 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。直接 Op、当前工作面与剩余验收读 `docs/tasks/skill-package-promo-video.md`。当前优先级见 PROGRESS §0。
+- **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。当前工作面与剩余验收读 `docs/tasks/i8.md`。当前优先级见 PROGRESS §0。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
-- **Chat / dock / 画布**：`docs/CHAT_ARCHITECTURE.md` 按改动面选读——工具与 plan path §3、SSE/活动/打字机 §8、修订 §9、禁令 §12。活动行与 WorkSegment 改动脉冲 §8.6～§8.7 的现行规则。
 - **Chat、多轮与用户约束**：读 `docs/CHAT_ARCHITECTURE.md` 和 `docs/tasks/new-agent.md`。
 - **Agent、原生工具与后台作业**：读 `docs/AGENT_ARCHITECTURE.md`，费用与结算另读 `docs/BILLING.md`。
 - **Rendering**：`docs/RENDERING.md` 管 video-spec、渲染、上传、围栏与交付。作品结构见 VIDEO_PROJECT，编辑器交互见 VIDEO_EDITOR。
 - **Billing / credits / configs**：`docs/BILLING.md` 对应扣费、报价或钱包章节；守卫线任何档都不能被 auto 绕过。
 - **Payments / Stripe / 充值**：长期架构、凭据/部署、订单字段与 webhook 规则读 `docs/PAYMENTS.md`；首批一次性积分充值施工与验收读 `docs/tasks/stripe-credit-topup.md`。
-- **定位 / 人设 / 渠道 / 选题 / home**：`docs/POSITIONING.md`（已拍板未实施）与当前任务合同；代码层落地前仍只使用 `persona`。
 - **音乐 / UI 文案以外的专门子系统**：按 `docs/README.md` 索引进入对应文档，不从 CLAUDE.md 复制第二份规范。
 - **ADR**：在 `docs/DECISIONS.md` 按主题索引和编号定点阅读。普通 bug 修复、字段接线、测试结果和会话汇报不新增 ADR；只有架构边界、产品语义或关键取舍变化才新增独立决策。
 - **任务合同**：`docs/tasks/` 只保留仍有实施或验收欠账的当前合同；已完成的长期约束并入对应母文档，剩余验收归当前状态，其余过程内容删除，不留跳转墓碑。
@@ -56,35 +54,11 @@ Use lucide-react for application icons. Third-party logos and the existing brand
 
 共享 Composer、预览与媒体查看控件使用 Clean 的尺寸、边界、交互和焦点样式。媒体选区坐标、帧时间、字幕字号草稿与缩放值由各自的领域组件提供。Studio 页面沿用现有 Shell 的内容区和滚动容器。新增导航入口同步 `nav.*` 翻译。通知入口继续使用当前 Studio chrome 的位置。Dot grid 仅用于既有 FlowView。
 
-## Composer / Chat 行为硬律（全文 → `docs/CHAT_ARCHITECTURE.md`）
+## Composer、Chat 与产品定位
 
-- **Agent 北极星（ADR-088/089/117）**：Agent 持续生产与修订用户可理解的项目产物；不编译、不直接执行 workflow 内部语言；付费执行只从已呈现且已授权的范围开始（授权 = 制作意图在场 +（常驻 auto 档默认或明示确认），守卫线以上恒问——ADR-139）。**确认只有两种**：执行确认（`confirm_execution`）与费用确认（`confirm_credits`），users.settings 两键默认全 auto，唯一座位 = SettingsDialog「助手」section——composer/dock 控制条永不出现确认偏好控件。
-- **composer 零意图识别**：send = spinner（建项目 + 上传素材）→ 直达 `/projects/$id`（项目 Studio）。**`POST /chat` 是唯一意图面**——永不新增第二意图入口（如专用 `/intent` 端点）。
-- **Prompt 必填**：空提交本地 toast 拦截。纯 prompt 发送不建资产；intent router 判定消息是「用户自己的内容」还是「请求」（LLM 判定，**禁长度启发式**），是内容则提升为 transcript 资产（`create_transcript_asset_from_text`）；无资产无贴文的生成请求得到要素材的回答，永不无中生有计划。
-- **中途上传走 dock attach 钮**：选中文件暂存为输入组内生命周期 chips（uploading → done/error，× 删且删资产）；**只有 send 钮消费它们**，骑回合作消息 `attachments`（持久化，刷新重渲染）。选文件自身永不发送；附件单发合法；空消息永不自动作答 docked checkpoint。
-- **打字机律（绝对规范，任何改动不得违背）**：agent 一切言语以打字机节奏出现，**整段瞬移永禁**。两条结构牙：① 散文字段入 schema 必带读容忍（null 读为空默认值——一次 schema 拒收 = 被拒迭代 = 永不流式 = 瞬移）；② 零 delta 路径的最后闸门 = 信封到达后散文照样走 typewriter 节拍释放（`paceSettledProse`），dock 等释放排干才落。新增散文通道 / 改散文字段 / 加提案工具时两牙同批检查（规格 = CHAT_ARCH §8.6）。
-- **interim_prose / Stop 可见律**：中段言语只叫 `interim_prose`（SSE / DB / hooks 同名，无 checkpoint 别名）；interim 与 trailing partial 都以服务端 `message_id` 为稳定身份。Chat Stop 只认打字机已释放的 Unicode 前缀和已可见 Activity/结构事实（结构仅由开放 renderer 在 DOM commit 后注册，字段存在/hidden/历史水合不算），committed/emitted/received 缓冲不算看见；控制口原子返回 `retracted`（零可见，整 Turn 删除、恢复 prompt/mentions/既有 chips 并清除首条 handoff）或 `cancelled`（只留可见前缀/事实）后才 abort，未显示尾部 `halt/discard` 永不补播。final commit 与独立 transcript 写口同锁防迟到写，锁读必须 `populate_existing`。Stop 与已受理 Job 按同一身份串行。先提交的 Output 保持有效，Stop 先提交且上传结果未知时保留预占至核清；quiet close 等待 Stop 响应。
-- **Chat 交付** 使用 deliver_video 消息自己的 output_refs。review_video 读取固定 Output。刷新从同一 opening 的持久消息恢复。
-- **echo 防编造律（ADR-060）**：回声只回述用户说过的（作品 / 语言 / 数量），**永不发明平台或场所**——a post is just a post until the user names where it lives；渠道合法来源 = 用户点名或渠道授权，永不是默认值。
-- **工具过程** 由原生调用身份、顺序和真实回执投影。多调用分别呈现结果，Stop 按原 opening 的可见前沿提交。
-- **Mentions**：@-entity chips 随消息 `mentions` 字段送达；注册表架构（前端 `MENTION_REGISTRY` + 服务端解算），已注册 = `asset`（请求族）/ `output`（指认族，钉 id 服务端确定性解出修订目标）。**配方永不是 mention**（配方 = 提示词，卡面预填模板即全部发射载荷）。视频 Skill 也不混入 @ registry：经专用 Skill picker 形成 Skill chip，随统一 Skill 引用走唯一 `POST /chat`；内置与外部 SkillVersion 同链。**Chip 三律**：可见（inline，无 ×）/ 发送消费 / 文本删除净化（Backspace / Delete / 选区删除，无状态跨发送残留）。方针全文 = `docs/MENTIONS.md`。
-- **修订** 经 apply_composition_edits 保存不可变版本。原生媒体与正式导出各自使用 MediaJob 和 ExportJob，保留授权、资金上限、fencing 与有界恢复。
-- **chat 修复禁补丁式加禁令（先取证后归因）**：chat bug 的修法 = 先取证再归因到源头，**永不用新增禁令压症状**——上下文盲的禁令（「禁应答粒子」「禁指导用户」式）在合法场景必然拆东墙补西墙。取证 = 回放真实 payload 与机制链：payload 是「代码 × 当时世界状态」的纯函数，无 LLM 台账也能用真实 assemble + 内存拨回世界状态字节级重建。源头只有四类：装配 / 工具观察文本 / 法条座位冲突（两部法打架或适用范围未声明）/ 一法多说（同一部法在多个座位各说一遍）。两条结构律：**一部法只在一个座位说**；**工具观察文本只携带世界事实 + 指回法条座位，永不携带可转述的言语草稿**（被复述的法 = 模型的言语草稿，必被 paraphrase 进回复）。
+Repurposer 是通过自然语言操作持久视频工程的专业 AI 剪辑师。用户提供目标与素材，Agent 定位对象、执行编辑、观察并续改。保留 MentionEditor、附件、显式 Skill、原问题、费用授权、Stop 和按版本回放。仅在必要决定阻塞时提问。分镜按需展示，历史交付始终钉住原 Output。通用 UI 用 Clean，布局用 Tailwind，过渡用 Motion。
 
-## Product Positioning
-
-Repurposer serves **people who want to make product or knowledge videos without learning to edit**. Core positioning = **a conversational video agent** that wraps creative methods, Skills, production and rendering into a browser experience. Users provide material, describe a goal, review the storyboard and result, request revisions through conversation, and download the video. No installation, development environment or Skill setup is required of the user.
-
-- **Target & input**: 产品或知识表达需求；网站、产品素材、文稿、图片或录像。不以欧洲知识专家、个人 IP 或特定分发渠道限定用户。
-- **Promise boundary**: 对话制作与持续修订；不承诺一输入全套内容、自动发布、爆款、变现或完整专业 NLE。未实现与未验收能力不作已完成承诺。
-- **Skills**: 内部创作能力，不是 Skill 商店或面向开发者的安装工具；公开文案先说明用户能做什么，不要求理解模型、节点、轨道或工作流。
-- **Naming**: 产品可称 video agent / 视频 Agent；当前 Landing Hero = `Your AI video agent` + `Rookies can make great videos too.`，说明保持现有功能描述。单助手叙事，不使用团队或代运营角色隐喻。
-- **Copy doctrine**（论证 → STRATEGY §5）：plain & factual。禁资产话术（"knowledge assets" 否）/ 膨胀隐喻（"bigger stage" 否）/ 审批机械化（"You review. It publishes" 否）；围绕用户的产品或知识表达目标，不为用户强加职业身份；承诺限于视频制作与对话修订；**禁 MCN / 代运营 / 变现话术**（我们是 agent 不是 agency，不做变现承诺）；**CTA / 控件 = 直给动词 + 具体名词**（"上传你的原视频"/"生成"），禁产品黑话与造词；写作风格 = 风格/style，"voice" = 音频本义（声纹/dub）；Sparkles icon 禁，assistant 视觉 = `LogoMark`；studio home hero = **一行问句**（`home.heroQuestion`）指向 composer——页面唯一目的地是输入框，问句与轮换 placeholder 形成一问一答；品牌名不在 hero 重复，由侧栏锁up / MobileHeader 承载（剩定位归 landing）。配方卡点击唯一归宿 = composer 预填 `promptTemplate`（配方 = 提示词），永不是模板编辑器；视频 Skill 卡则形成与 `/任务名` 相同的 Skill chip + 可编辑 prompt，不另走 Recipe 发射载荷。
-- **用户到来即彷徨**（行为规格 → CHAT_ARCH §3.3）：每步都答「下一步是什么」——开始前配方卡接住 / 计划中确认 dock 接住 / 完成后结果画布闭环接住（ADR-041）。agent 顾问姿态四律：① **每轮一问、每问可一词答、默认路径恒带（散文零宣告）**（ADR-052 判词 5 + ADR-103；只问用户能答的——听众/目的，参数由配方与默认值吸收）② 带理由纠偏（给替代方案，禁静默拒绝）③ 成功定义随计划 ④ 始终给出当前可执行的下一步；全败 run 给确定性原因与至多两个可行选项，成功交付不强制建议 pills 或虚构唯一建议；不做职业/变现咨询（诊断是为了更快给出对方案，不是把生产工具变顾问）。
-- **闭环优先于卡片数量**：卡点亮（能力真 + 预览真）≠ 通路；「Remix → 对话定计划 → 生成 → 结果 → 下一步 → 再生产」全通才算；对外叙事单位 = "完全通路"。
-- **闭环叙事与身份命名**（ADR-037 / NAMING N-27）：当前用户侧闭环 = **提供素材 → 描述目标 → 查看分镜和视频 → 对话修订 → 下载**；个人品牌与分发不是 Landing 的默认承诺；产品内身份模块 = **人设**（多实例扁平：工作号/生活号）。**身份根升格为「定位（Positioning）」已拍板**（ADR-042，目标架构 → `docs/POSITIONING.md`，生产层闭环后动工）——人设收窄为定位的表达分区，渠道/选题/素材挂定位根，品牌/IP 留营销承诺层；落地前代码层只 `persona`。
-
-前端文案与示例围绕 **视频任务 / 对话制作与修订 / 无需剪辑经验**，不承诺爆款、变现或未经实现的分发能力。
+架构与权限归 `docs/tasks/new-agent.md`，本阶段的操作、消费者及五面出口归 `docs/tasks/i8.md`。Skills 指导选择，Native Tools 修改作品，Motion Blocks 通过已有 Generator 表达复杂视觉。对外承诺以实际验收的可编辑范围为准。
 
 ## Internationalization (i18n)
 
@@ -150,7 +124,6 @@ t("home.allProjects", { count: projects.length })
 
 `video-spec` 是渲染服务入口。受控 Generator 程序与资源固定在 CompositionVersion，经独立隔离 runner 产出固定媒体；React 和 Remotion 概念留在画笔或 runner 内。原生文字、字幕和音频保留可编辑身份。详见 `docs/RENDERING.md` 与 `docs/VIDEO_PROJECT.md`。
 
-**视频编辑器 L3 铁律（每项否决不变）**：禁多轨自由时间线 / 自由层合成 / 转场画廊与自由转场编辑 / stock B-roll 库 / 通用自动人脸或物体追踪 / 客户端引擎——专业需求明确导出剪映 / Premiere。字幕样式按现行原生文字对象合同。硬前提：**多语言 ASR 词级时间戳 + 对象存储流式 / 寻址**（ADR-024）。
 
 ## Error Handling & Toasts
 

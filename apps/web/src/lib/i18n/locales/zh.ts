@@ -172,6 +172,11 @@ const zh: Resources = {
     myProjects: "我的项目",
   },
   home: {
+    examples: {
+      overlay: { label: "叠加产品图", prompt: "把附件里的产品图放在视频第 2 到 4 秒，保留字幕和原声，播放这一段。" },
+      framing: { label: "调整构图", prompt: "调整这段的构图，让讲者和字幕都清楚可见，然后播放改动的部分。" },
+      trim: { label: "剪短片头", prompt: "剪掉开头的停顿，播放新的片头。" },
+    },
     newChat: "新对话",
     // Studio hero：composer 上方的一行问句——下方轮换 placeholder 用三条
     // 示例 prompt 作答。
