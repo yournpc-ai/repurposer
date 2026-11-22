@@ -1,0 +1,70 @@
+{
+  "/tmp/i8-candidate-build.aGVAt8/confirm24/run/boundary/raw.mp4": {
+    "movie_scale_duration": [
+      48000,
+      382000
+    ],
+    "vide": {
+      "media_scale_duration": [
+        90000,
+        716250
+      ],
+      "edits": [
+        [
+          382000,
+          7500,
+          1,
+          0
+        ]
+      ]
+    },
+    "soun": {
+      "media_scale_duration": [
+        48000,
+        384048
+      ],
+      "edits": [
+        [
+          382000,
+          2048,
+          1,
+          0
+        ]
+      ]
+    }
+  },
+  "/tmp/i8-candidate-build.aGVAt8/confirm24/run/boundary/video.mp4": {
+    "movie_scale_duration": [
+      48000,
+      382000
+    ],
+    "vide": {
+      "media_scale_duration": [
+        90000,
+        716250
+      ],
+      "edits": [
+        [
+          382000,
+          7500,
+          1,
+          0
+        ]
+      ]
+    },
+    "soun": {
+      "media_scale_duration": [
+        48000,
+        383024
+      ],
+      "edits": [
+        [
+          382000,
+          1024,
+          1,
+          0
+        ]
+      ]
+    }
+  }
+}

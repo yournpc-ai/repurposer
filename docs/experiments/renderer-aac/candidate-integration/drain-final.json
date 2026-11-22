@@ -1,0 +1,49 @@
+{
+  "events": [
+    {
+      "id": "old-prepared",
+      "version": 2,
+      "status": 409,
+      "response": {
+        "error": "Rendered files are no longer cached; render again before uploading",
+        "stage": "recovery",
+        "code": "ARTIFACT_CACHE_MISS"
+      },
+      "puts": 0
+    },
+    {
+      "id": "old-prepared",
+      "version": 1,
+      "status": 200,
+      "response": {
+        "ok": true,
+        "video": "old-prepared"
+      },
+      "puts": 1
+    },
+    {
+      "id": "new-after-drain",
+      "version": 2,
+      "status": 200,
+      "response": {
+        "ok": true,
+        "video": "new-after-drain"
+      },
+      "puts": 2
+    }
+  ],
+  "puts": [
+    {
+      "method": "PUT",
+      "key": "/old-prepared",
+      "sha": "cc8a6414fb8b6491576d72384253b1cab6f647d8337d0d5933a54a145e0d66e9"
+    },
+    {
+      "method": "PUT",
+      "key": "/new-after-drain",
+      "sha": "04bab1b4b27e1edd306bbf86f580942eb0605ce223433701c65d820f0aeca595"
+    }
+  ],
+  "oldSha": "cc8a6414fb8b6491576d72384253b1cab6f647d8337d0d5933a54a145e0d66e9",
+  "newSha": "04bab1b4b27e1edd306bbf86f580942eb0605ce223433701c65d820f0aeca595"
+}

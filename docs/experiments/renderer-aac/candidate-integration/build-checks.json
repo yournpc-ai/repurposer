@@ -1,0 +1,18 @@
+{
+  "host": "darwin-arm64",
+  "pnpm": "10.20.0",
+  "patch_sha256": "2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713",
+  "remotion_lock_versions": [
+    "4.0.484"
+  ],
+  "render_typecheck_exit": 0,
+  "web_packages": {
+    "remotion": "4.0.484",
+    "@remotion/player": "4.0.484"
+  },
+  "web_installs_renderer": false,
+  "web_bundle_exit": 0,
+  "client_js_chunks": 34,
+  "ssr_bytes": 275035,
+  "docker_image_builds": "BLOCKED before RUN pnpm install; see docker-render.log and docker-web.log"
+}

@@ -1,0 +1,7 @@
+Scope: 3 of 4 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+.                                        | +248 +++++++++++++++++++++++++
+Progress: resolved 248, reused 246, downloaded 0, added 138
+Progress: resolved 248, reused 246, downloaded 0, added 248, done
+Done in 2.8s using pnpm v10.20.0

@@ -1,0 +1,13 @@
+FAILED boundary Error: ENOSPC: no space left on device, write
+    at async write (node:internal/fs/promises:738:8)
+    at async writeFileHandle (node:internal/fs/promises:495:7)
+    at async screenshotTask (file:///private/tmp/i8-candidate-build.aGVAt8/node_modules/.pnpm/@remotion+renderer@4.0.484_patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e_0837f1820e21665952eba9300f6807e9/node_modules/@remotion/renderer/dist/esm/index.mjs:20189:7) {
+  errno: -28,
+  code: 'ENOSPC',
+  syscall: 'write'
+}
+Could not extract frame from compositor Error: Request closed
+    at file:///private/tmp/i8-candidate-build.aGVAt8/node_modules/.pnpm/@remotion+renderer@4.0.484_patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e_0837f1820e21665952eba9300f6807e9/node_modules/@remotion/renderer/dist/esm/index.mjs:16844:20
+    at new Promise (<anonymous>)
+    at file:///private/tmp/i8-candidate-build.aGVAt8/node_modules/.pnpm/@remotion+renderer@4.0.484_patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e_0837f1820e21665952eba9300f6807e9/node_modules/@remotion/renderer/dist/esm/index.mjs:16842:16
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
