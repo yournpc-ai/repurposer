@@ -252,7 +252,7 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID, skill_re
         text = asset_text_content(asset)
         resources.append((f"asset:{asset.id}", {
             "kind": "asset", "asset_id": str(asset.id), "type": getattr(asset.type, "value", asset.type),
-            "name": asset.title, "status": getattr(asset.processing_status, "value", asset.processing_status),
+            "name": asset.title or asset.display_name, "status": getattr(asset.processing_status, "value", asset.processing_status),
             "text": text if asset.processing_status == AssetStatus.COMPLETED else "",
             "edited_text": asset.edited_transcript,
             "url": (asset.meta or {}).get("capture_url"),

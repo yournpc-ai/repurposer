@@ -13,30 +13,7 @@ import type { ChatMention } from "@/lib/mentions"
 import type { SkillOption, SkillReference } from "@/lib/skills"
 import type { StagingUpload } from "@/lib/stagingUploads"
 
-/**
- * useProjectLaunch — the composer's send mechanism, shared (2026-08-08, D6
- * 二次修订): **one launchpad, two parking spots**. HomeComposer and the recipe
- * inspect overlay's launch zone ride the SAME path.
- *
- * Product Flow Alignment Batch A (2026-09-18, contract
- * docs/tasks/product-flow-alignment.md §5): the upload LEFT this hook.
- * Files upload the moment they're picked (useStagingUploads →
- * /uploads/staging/*), so launch is now the LIGHT beat it should be:
- * create an empty project → attach the already-uploaded staging keys
- * (`assets/from-staging`, zero re-upload) → navigate straight to
- * `/projects/$id` (canvas + chat dock, ADR-051 — the ?overlay= route params
- * are retired) with the draft handed over via router state — the dock sends
- * it as the first `/chat` message (mentions and the persona choice ride
- * along — the single identity payload, ADR-038).
- *
- * Boundaries (unchanged doctrine): the launcher never infers intent, never
- * builds a prior, never runs generation — intent recognition lives in the
- * chat plan path. A recipe launch is just its prompt template (2026-08-11
- * ruling — 配方 = 提示词): the card's identity stays in the frontend.
- * An overlay hosting this mechanism is NOT the rejected A-form;
- * the A-form is a modal that runs generation itself.
- */
-
+/** Create the project, attach completed uploads and hand the opening to AgentThread. */
 export interface LaunchInput {
   prompt: string
   mentions: ChatMention[]
@@ -46,7 +23,6 @@ export interface LaunchInput {
    * fire while any item is mid-flight or failed — Generate never waits on
    * the wire and never silently drops a file. */
   staged: StagingUpload[]
-  /** undefined = auto persona. */
   /** Fires when the send begins (spinner on). */
   onStart?: () => void
   /** Fires right before navigating — the sender consumes its own draft
@@ -68,8 +44,6 @@ export function useProjectLaunch() {
   const launch = useCallback(
     async (input: LaunchInput) => {
       await requireAuth(async () => {
-        // Prompt is required — the pipeline's intent step derives the task
-        // plan (outputs / language / clip count) from it server-side.
         const text = input.prompt.trim()
         if (!text) {
           toast.error(t("home.noPromptError"))

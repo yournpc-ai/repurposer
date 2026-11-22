@@ -198,9 +198,9 @@ const en = {
     // own voice, answering the hero question above. Keep each short enough
     // to stay one line in the docked bar.
     placeholderPrompts: [
-      "Make a promo video for my website",
-      "Cut my talk into highlight clips",
-      "Make a promo video for my restaurant",
+      "Put the product photo over this shot",
+      "Trim the pause at the beginning",
+      "Move the title left and play this part",
     ],
     selectPersona: "Persona",
     noPromptError: "Say what you want to make first",
@@ -1416,7 +1416,9 @@ const en = {
       recordVoiceDone: "Recorded narration",
       bindClipSource: "Binding fixed media",
       bindClipSourceDone: "Bound fixed media",
+      insertVisual: "Adding image…",
       insertAudio: "Adding audio…",
+      insertVisualDone: "Added image",
       insertAudioDone: "Added audio",
       visualAssets: "Preparing storyboard images…",
       checkFixedImages: "Checking existing storyboard images…",
@@ -1585,6 +1587,7 @@ const en = {
       generate_voice: "Generate narration",
       generate_music: "Generate music",
       generate_image: "Generate image",
+      insert_visual: "Insert image",
       insert_audio: "Insert audio",
       split_clip: "Split clip",
       remove_clip: "Remove clip",
@@ -1890,9 +1893,9 @@ const en = {
       promptTitle: "Say what to make",
       promptDesc:
         "Write the result you want. Use @ to point to an uploaded asset, then send it.",
-      recipesTitle: "Start from a card",
+      recipesTitle: "Try an editing request",
       recipesDesc:
-        "Choose Start creating on a card to fill the composer, then adjust the prompt for your material.",
+        "Choose an example to fill the composer, then edit it for your footage.",
     },
   },
   notifications: {

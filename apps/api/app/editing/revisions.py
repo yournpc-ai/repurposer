@@ -328,86 +328,10 @@ def set_narration_ops(content: CompositionContent, action: SetNarrationOp) -> li
     )]
 
 
-def _confirmed_overlay_scenes(content: CompositionContent, user_text: str) -> list[Any]:
-    text = user_text.lower()
-    ordinals = [
-        ("first", "opening", "开场", "第一镜", "第一幕", "第一段"),
-        ("second", "第二镜", "第二幕", "第二段"),
-        ("third", "第三镜", "第三幕", "第三段"),
-        ("fourth", "第四镜", "第四幕", "第四段"),
-        ("fifth", "第五镜", "第五幕", "第五段"),
-        ("sixth", "第六镜", "第六幕", "第六段"),
-    ]
-    confirmed = []
-    for index, scene in enumerate(sorted(content.scenes, key=lambda item: item.range.start)):
-        terms = ordinals[index] if index < len(ordinals) else ()
-        if scene.scene_id.lower() in text or any(
-            term in text
-            if term.startswith(("第", "开"))
-            else f"{term} scene" in text or f"{term} shot" in text
-            or term == "opening" and term in text
-            for term in terms
-        ):
-            confirmed.append(scene)
-    return confirmed
-
-
-def _bind_overlay_request(
-    content: CompositionContent,
-    action: AddMediaOverlayOp,
-    request_context: dict[str, Any] | None,
-) -> AddMediaOverlayOp:
-    if request_context is None:
-        return action
-    text = str(request_context.get("user_text") or "")
-    confirmed = _confirmed_overlay_scenes(content, text)
-    update = {}
-    if action.scene_id is None and len(confirmed) == 1:
-        update["scene_id"] = confirmed[0].scene_id
-    if (
-        action.scope == "window"
-        and all(value is None for value in (action.start_seconds, action.end_seconds, action.duration_seconds))
-        and any(term in text.lower() for term in ("整个", "整幕", "全幕", "whole", "entire"))
-    ):
-        update["scope"] = "whole_scene"
-    return action.model_copy(update=update) if update else action
-
-
-def _assert_overlay_scope_confirmed(
-    content: CompositionContent,
-    action: AddMediaOverlayOp,
-    scene: Any,
-    candidates: list[dict[str, Any]],
-    request_context: dict[str, Any] | None,
-) -> None:
-    if request_context is None:
-        return
-    text = str(request_context.get("user_text") or "")
-    if scene not in _confirmed_overlay_scenes(content, text):
-        raise RevisionTargetAmbiguityError(
-            "overlay Scene is not confirmed by the user's request or earlier explicit answer",
-            candidates=candidates,
-        )
-    if action.scope == "whole_scene" and not any(
-        term in text.lower() for term in ("整个", "整幕", "全幕", "whole", "entire")
-    ):
-        raise RevisionTargetAmbiguityError(
-            "whole_scene needs the user's explicit whole-Scene choice or a numeric window",
-            candidates=candidates,
-        )
-    if action.scope == "window" and not any(character.isdigit() for character in text):
-        raise RevisionTargetAmbiguityError(
-            "overlay time window is not uniquely specified; ask for an absolute start/end, "
-            "an unambiguous start plus duration, or the whole Scene",
-            candidates=candidates,
-        )
-
-
 def _add_overlay(
     content: CompositionContent,
     action: AddMediaOverlayOp,
     fact: dict[str, Any] | None,
-    request_context: dict[str, Any] | None = None,
 ) -> list[Op]:
     if fact is None or not fact.get("storage_key"):
         raise RevisionInputError(
@@ -421,7 +345,6 @@ def _add_overlay(
             loc=["action", "source_id"],
             kind="source_kind",
         )
-    action = _bind_overlay_request(content, action, request_context)
     candidates = [
         {
             "scene_id": scene.scene_id,
@@ -442,7 +365,6 @@ def _add_overlay(
             loc=["action", "scene_id"],
             kind="target_not_found",
         )
-    _assert_overlay_scope_confirmed(content, action, scene, candidates, request_context)
     if action.scope == "whole_scene":
         start, end = scene.range.start, scene.range.end
     else:
@@ -466,7 +388,19 @@ def _add_overlay(
             loc=["action", "start_seconds"],
             kind="time_out_of_bounds",
         )
-    track_id, clip_id, object_id = _stable_overlay_ids(action)
+    identity = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
+    return fixed_visual_ops(content, fact, source_id=action.source_id, identity=identity,
+                            scene_id=scene.scene_id, start=start, end=end, position=action.position,
+                            width_ratio=action.width_ratio, margin_px=action.margin_px,
+                            fade_in=action.motion == "fade_in")
+
+
+def fixed_visual_ops(content: CompositionContent, fact: dict[str, Any], *, source_id: UUID,
+                     identity: str, scene_id: str | None, start: int, end: int, position: str,
+                     width_ratio: float, margin_px: float, fade_in: bool = False) -> list[Op]:
+    track_id = f"trk_overlay_{identity}"
+    clip_id = f"clp_overlay_{identity}"
+    object_id = f"obj_overlay_{identity}"
     existing_track = next(
         (track for track in content.timeline.tracks if track.track_id == track_id), None
     )
@@ -484,7 +418,7 @@ def _add_overlay(
                 kind="source_too_short",
             )
         source_range = TimeRange(start=0, end=source_duration)
-    layout = _overlay_layout(content, action, fact)
+    layout = _overlay_layout(content, fact, position, width_ratio, margin_px)
     obj = (
         VideoObject(kind="video", object_id=object_id, layout=layout, fit="contain")
         if fact["kind"] == "video"
@@ -492,7 +426,7 @@ def _add_overlay(
     )
     animations = (
         [_opacity(f"anm_{clip_id}_fade", object_id, end - start)]
-        if action.motion == "fade_in"
+        if fade_in
         else []
     )
     order = (
@@ -507,8 +441,8 @@ def _add_overlay(
         )
     )
     ops: list[Op] = []
-    if action.source_id not in {binding.snapshot_id for binding in content.sources}:
-        ops.append(BindSource(op="bind_source", snapshot_id=action.source_id))
+    if source_id not in {binding.snapshot_id for binding in content.sources}:
+        ops.append(BindSource(op="bind_source", snapshot_id=source_id))
     if existing_track is None:
         ops.append(
             AddTrack.model_validate(
@@ -532,9 +466,9 @@ def _add_overlay(
                 "clip": {
                     "clip_id": clip_id,
                     "range": {"start": start, "end": end},
-                    "scene_id": scene.scene_id,
+                    "scene_id": scene_id,
                     "source": {
-                        "snapshot_id": str(action.source_id),
+                        "snapshot_id": str(source_id),
                         "snapshot_digest": fact["digest"],
                         "source_range": source_range.model_dump(mode="json")
                         if source_range
@@ -703,7 +637,7 @@ def _add_narration(
 
 
 def _overlay_layout(
-    content: CompositionContent, action: AddMediaOverlayOp, fact: dict[str, Any]
+    content: CompositionContent, fact: dict[str, Any], position: str, width_ratio: float, margin_px: float
 ) -> LayoutBox:
     media = fact.get("meta") or {}
     dimensions = media.get("media") or media
@@ -714,31 +648,26 @@ def _overlay_layout(
             loc=["action", "source_id"],
             kind="source_not_ready",
         )
-    box_width = content.settings.width * action.width_ratio
+    box_width = content.settings.width * width_ratio
     box_height = box_width * height / width
-    available_height = content.settings.height - 2 * action.margin_px
-    if box_height > available_height:
+    available_height = content.settings.height - 2 * margin_px
+    if box_height > available_height or box_width > content.settings.width - 2 * margin_px:
         raise RevisionInputError(
             "width_ratio and source aspect do not fit inside the canvas margins",
             loc=["action", "width_ratio"],
             kind="layout_out_of_bounds",
         )
     x = (
-        action.margin_px
-        if action.position.endswith("left")
-        else content.settings.width - action.margin_px - box_width
+        margin_px
+        if position.endswith("left")
+        else content.settings.width - margin_px - box_width
     )
     y = (
-        action.margin_px
-        if action.position.startswith("top")
-        else content.settings.height - action.margin_px - box_height
+        margin_px
+        if position.startswith("top")
+        else content.settings.height - margin_px - box_height
     )
     return LayoutBox(x=x, y=y, width=box_width, height=box_height)
-
-
-def _stable_overlay_ids(action: AddMediaOverlayOp) -> tuple[str, str, str]:
-    digest = hashlib.sha256(action.model_dump_json().encode("utf-8")).hexdigest()[:12]
-    return f"trk_overlay_{digest}", f"clp_overlay_{digest}", f"obj_overlay_{digest}"
 
 
 def expand_revision_op(
@@ -746,7 +675,6 @@ def expand_revision_op(
     content: CompositionContent,
     *,
     facts: dict[UUID, dict[str, Any]],
-    request_context: dict[str, Any] | None = None,
     narration_alignment: Any = None,
 ) -> list[Op]:
     from app.editing.presets import expand_preset_at_target
@@ -761,7 +689,7 @@ def expand_revision_op(
             operation.preset_id, content, EditTarget(kind="clip", id=operation.clip_id)
         )
     if isinstance(operation, AddMediaOverlayOp):
-        return _add_overlay(content, operation, facts.get(operation.source_id), request_context)
+        return _add_overlay(content, operation, facts.get(operation.source_id))
     if isinstance(operation, AddNarrationOp):
         return _add_narration(content, operation, facts.get(operation.source_id), narration_alignment)
     if isinstance(operation, AddAudioEffectOp):

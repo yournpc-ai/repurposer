@@ -38,9 +38,8 @@ npm install -g pnpm
 **Install project dependencies:**
 
 ```bash
-# Backend
-cd apps/api
-uv sync
+# Backend (from the repository root)
+(cd apps/api && uv sync)
 
 # Frontend + render service + shared components (pnpm workspace; run once from repo root)
 pnpm install

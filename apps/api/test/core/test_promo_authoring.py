@@ -538,46 +538,6 @@ def test_overlay_resolves_saved_scene_ranges_and_keeps_ambiguity_write_free():
             expand_revision_op(revision_args(version, action).ops[0], content, facts=snapshot_facts(owner))
         assert len(raised.value.candidates) == len(content.scenes)
 
-    with pytest.raises(RevisionTargetAmbiguityError):
-        expand_revision_op(
-            whole.ops[0],
-            content,
-            facts=snapshot_facts(owner),
-            request_context={"user_text": "把本人视频放到右下角，不制作。"},
-        )
-    wrong_scene = revision_args(version, {
-        "op": "add_media_overlay",
-        "source_id": str(VIDEO_ID),
-        "scene_id": "open",
-        "scope": "whole_scene",
-        "position": "bottom_right",
-        "width_ratio": 0.28,
-        "margin_px": 48,
-        "motion": "none",
-    })
-    with pytest.raises(RevisionTargetAmbiguityError):
-        expand_revision_op(
-            wrong_scene.ops[0],
-            content,
-            facts=snapshot_facts(owner),
-            request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
-        )
-    confirmed = expand_revision_op(
-        whole.ops[0],
-        content,
-        facts=snapshot_facts(owner),
-        request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
-    )
-    assert next(op.clip for op in confirmed if isinstance(op, AddClip)).range == scene.range
-    inferred = revision_args(version, {
-        "op": "add_media_overlay", "source_id": str(VIDEO_ID),
-        "position": "bottom_right", "width_ratio": 0.28, "margin_px": 48, "motion": "none",
-    })
-    bound = expand_revision_op(
-        inferred.ops[0], content, facts=snapshot_facts(owner),
-        request_context={"user_text": "整个第二镜，不需要我再给秒数。"},
-    )
-    assert next(op.clip for op in bound if isinstance(op, AddClip)).range == scene.range
     with pytest.raises(ValidationError):
         revision_args(version, {
             "op": "add_media_overlay", "source_id": str(VIDEO_ID), "scene_id": "proof",

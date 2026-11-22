@@ -42,6 +42,16 @@ class InsertAudioArgs(BaseModel):
     gain_db: float = Field(default=0, ge=-60, le=12, description="Clip gain in decibels.")
 
 
+class InsertVisualArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: UUID = Field(description="Fixed image snapshot returned by prepare_video_materials.")
+    start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive composition time.")
+    end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive composition time.")
+    position: Literal["top_left", "top_right", "bottom_left", "bottom_right"] = "top_right"
+    width_ratio: float = Field(default=0.25, gt=0.05, le=1, allow_inf_nan=False,
+                               description="Fraction of canvas width; preserves image proportions.")
+
+
 class GenerateImageArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     prompt: str = Field(min_length=1, max_length=2000, description="Describe the image and its narrative purpose.")
@@ -187,6 +197,10 @@ EDITOR_TOOLS = (
     _editor_tool("bind_clip_source", "Bind a fixed project snapshot to a pending voice or image clip. Preserve timing and layout; inspect the saved version before export.",
                  BindClipSourceArgs, "bindClipSource"),
     _editor_tool(
+        "insert_visual", "Place a fixed project image above the existing footage for a timeline window. "
+        "Use the returned object ID for later position or scale changes.", InsertVisualArgs, "insertVisual",
+    ),
+    _editor_tool(
         "insert_audio", "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
         InsertAudioArgs, "insertAudio",
     ),
@@ -274,7 +288,7 @@ WRITE_TOOLS = {
     for t in EDITOR_TOOLS
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
-        InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs,
+        InsertVisualArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -304,6 +318,7 @@ def _clip_facts(track, clip, content):
         "kind": obj.kind,
         "track_id": track.track_id,
         "track_role": track.role,
+        "track_order": track.order,
         "scene_id": clip.scene_id,
         "scene_number": scene_number,
         "linked_group_id": clip.linked_group_id,
@@ -401,6 +416,24 @@ async def edit_clip(
 
         target = clips.get(args.clip_id)
         ops = await bind_clip_source_ops(db, project, content, target, args.source_id)
+    elif isinstance(args, InsertVisualArgs):
+        from app.editing.revisions import fixed_visual_ops
+        from app.models.tables import SourceSnapshot
+
+        source = await db.get(SourceSnapshot, args.source_id)
+        if (source is None or source.owner_id != project.user_id or source.origin_project_id != project.id
+                or source.kind != "image" or not source.storage_key):
+            raise ValueError("Select a fixed image from this project.")
+        start = _ticks(args.start_seconds, rate)
+        end = _ticks(args.end_seconds, rate)
+        if not start < end <= timeline_duration(content):
+            raise ValueError("The visual window must fit inside the composition.")
+        scene = next((s for s in content.scenes if s.range.start <= start and end <= s.range.end), None)
+        fact = {"kind": source.kind, "digest": source.digest, "meta": source.meta or {}}
+        margin = min(content.settings.height * 0.04, content.settings.width * (1 - args.width_ratio) / 2)
+        ops = fixed_visual_ops(content, fact, source_id=source.id, identity=identity.hex,
+                               scene_id=scene.scene_id if scene else None, start=start, end=end,
+                               position=args.position, width_ratio=args.width_ratio, margin_px=margin)
     elif isinstance(args, InsertAudioArgs):
         from app.editing.revisions import fixed_audio_ops
         from app.editing.timing import output_ticks_to_source_ticks, source_ticks_to_output_ticks
@@ -655,7 +688,7 @@ async def execute_editor(turn, name, args):
         try:
             if name in WRITE_TOOLS:
                 group = current_group_id()
-                if (group and isinstance(args, (InsertAudioArgs, BindClipSourceArgs)) and
+                if (group and isinstance(args, (InsertAudioArgs, InsertVisualArgs, BindClipSourceArgs)) and
                         getattr(turn, "_generated_in_response", {}).get(str(args.source_id)) == group):
                     raise ValueError("Use the fixed source returned by generation in the next response.")
                 previous_write = getattr(turn, "_batch_commit", None)

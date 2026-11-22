@@ -155,9 +155,6 @@ class PlanTurn:
         self.outcome: PlanTurnOutcome | None = None
         self.saw_rootless_rejection = False
         self.echo_override: str | None = None
-        # 资产角色 (ADR-078 判词④): this turn's mention-settled exemplar pin
-        # (None = no asset mention this turn — the stored plan's pins ride).
-        self.mention_exemplar_id: str | None = None
         self.deferred: DeferredFrames | None = None
         # 建议点选 provenance (ADR-099 §4): this turn's message IS a
         # suggestion pick → the resolution note rides into the router's
@@ -267,20 +264,6 @@ class PlanTurn:
                     kind_bits.append(str(lang))
                 lines.append(f"- {name} ({' · '.join(kind_bits)})")
             asset_lines = lines
-        # 资产角色 mention 结算 (判词④ — code settles, the LLM never pins):
-        # an @asset mention on the PLAN path names the EXEMPLAR ("做成
-        # @这个 那样" — the mentioned video is the reference whose craft the
-        # run mirrors). The latest mention wins a re-pin; mentioning the
-        # stored SOURCE re-points the roles (the old source seat clears —
-        # one asset never holds both roles).
-        for mention in request.mentions or []:
-            if mention.type != "asset":
-                continue
-            mentioned = next(
-                (a for a in assets if str(a.id) == mention.id), None
-            )
-            if mentioned is not None and mentioned.type == AssetType.VIDEO:
-                self.mention_exemplar_id = str(mentioned.id)
         # The plan layer reads the material's opening, not just its filename
         # (track-model §7.4 折中版 — mechanical slice, zero extra LLM): the first
         # asset carrying text, capped — the ONE text seat (ADR-113) picks
@@ -454,17 +437,11 @@ class PlanTurn:
         )
 
     def _role_pins(self) -> dict[str, str | None]:
-        """The role pins to persist on a ProjectBrief write (判词④ — the same
-        preserve law as persona_id: a turn that never touched the roles must
-        not clobber an earlier settle). Mention this turn > stored."""
-        stored = self.stored
-        source = stored.source_asset_id if stored else None
-        exemplar = stored.exemplar_asset_id if stored else None
-        if self.mention_exemplar_id is not None:
-            exemplar = self.mention_exemplar_id
-            if source == exemplar:
-                source = None  # one asset never holds both roles
-        return {"source_asset_id": source, "exemplar_asset_id": exemplar}
+        """Preserve previously settled roles when serializing an existing brief."""
+        return {
+            "source_asset_id": self.stored.source_asset_id if self.stored else None,
+            "exemplar_asset_id": self.stored.exemplar_asset_id if self.stored else None,
+        }
 
     # ---- the envelope absorb (once per turn, idempotent) -------------------
 
@@ -1258,6 +1235,7 @@ async def run_plan_turn(
             "mode": "plan",
             "skill": turn.skill,
             "user_text": request.message,
+            "asset_mentions": {m.id: m.label for m in request.mentions or [] if m.type == "asset"},
             "source_text": source_text,
             "video_confirmation": confirmation,
             "preceding_delivery": turn.preceding_delivery,

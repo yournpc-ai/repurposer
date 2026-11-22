@@ -162,7 +162,6 @@ async def revise_video(
                 operation,
                 base_content,
                 facts=source_facts,
-                request_context=args._request_context,
                 narration_alignment=narration_alignment,
             ))
         if not ops:

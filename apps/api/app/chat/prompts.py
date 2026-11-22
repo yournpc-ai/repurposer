@@ -148,12 +148,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     if confirmation and confirmation["action"] == "produce" and not hint:
         ref = confirmation["base_ref"]
         hint = {"composition_id": ref["composition_id"], "version_id": ref["composition_version_id"]}
-    readiness = compute_source_readiness(
-        user_text=user_text, source_text=facts.get("source_text"),
-        assets=[r for _, r in resources if r.get("kind") == "asset"],
-        snapshots=[r for _, r in resources if r.get("kind") == "web"],
-        creative_state=creative_state,
-    )
     native_creation = (
         not works and not hint and not facts.get("active_repair")
         and not facts.get("version_saved") and (not pending or facts.get("group_answer_submitted"))
@@ -183,6 +177,12 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")}
                        for _, r in resources if r.get("kind") == "asset"][:24],
         }
+        mentions = facts.get("asset_mentions") or {}
+        if mentions:
+            context["mentioned_assets"] = [
+                {"asset_id": r["asset_id"], "type": r["type"], "label": mentions[r["asset_id"]]}
+                for _, r in resources if r.get("kind") == "asset" and r["asset_id"] in mentions
+            ]
         context["fixed_media"] = [
             {k: r[k] for k in ("snapshot_id", "kind", "duration_ticks", "title", "alignment") if r.get(k) is not None}
             for _, r in resources if r.get("snapshot_id") and r.get("kind") in ("audio", "image")
@@ -217,10 +217,18 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if not native_creation:
             names.discard("create_video")
         completed_delivery = facts.get("delivered") or {}
-        if selected and (recent or facts.get("version_saved") or context.get("observed_preview")
-                         or completed_delivery.get("composition_version_id") == selected["version_id"]):
-            names.discard("ask_user")
+        if selected:
+            names.update({"prepare_video_materials", "get_asset"})
+            if completed_delivery.get("composition_version_id") == selected["version_id"]:
+                names.discard("ask_user")
+        website_evidence_rule = ""
         if native_creation:
+            readiness = compute_source_readiness(
+                user_text=user_text, source_text=facts.get("source_text"),
+                assets=[r for _, r in resources if r.get("kind") == "asset"],
+                snapshots=[r for _, r in resources if r.get("kind") == "web"],
+                creative_state=creative_state,
+            )
             names.update({"prepare_video_materials", "get_asset", "get_understanding", "search_transcript"})
             # A project without a saved work can generate media, but has no timeline to inspect or edit.
             from app.chat.editor import WRITE_TOOLS
@@ -268,6 +276,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             if readiness.task_kind == "website_promo":
                 names.update({"analyze_brand", "capture_web"})
                 context["source_readiness"] = readiness.model_dump()
+                website_evidence_rule = "网站产品主张和画面取自当前来源。采集失败时说明实际错误。"
                 if not (readiness.text_ready and readiness.required_views_ready):
                     names.discard("create_video")
         from app.chat.video_turn_seats import asks_for_export, draft_only_request
@@ -302,7 +311,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             if (facts.get("authorized_media") or {}).get("role") == "export":
                 # Continuation of the authorized job owns review and delivery of
                 # this fixed file, including the decision after review.
-                names.intersection_update({"review_video", "deliver_video", "answer", "ask_user"})
+                names.intersection_update({"review_video", "deliver_video", "answer"})
                 if facts.get("reviewed_output_id") != exported["output_id"]:
                     names.discard("deliver_video")
                 elif (facts.get("delivered") or {}).get("output_id") == exported["output_id"]:
@@ -358,19 +367,22 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
-        website_evidence_rule = (
-            "官网宣传片的产品主张和画面须来自这个网站的实际取证。采集失败时说明实际错误。"
-            if readiness.task_kind == "website_promo" else ""
-        )
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {"generate_voice", "generate_music", "generate_image"}
         return RoundAssembly(
             tools=tools,
-            system="你是视频剪辑师。用本轮用户提问的语言回答。修改片段前，按需读取时间线定位目标。制作影片时，空项目按用户要求用 create_video 将镜头直接保存为可编辑作品。已有待配音片段时，核对原稿，对齐 READY 后用 bind_clip_source 绑定录音。独立新增的声音用 insert_audio。只有同时创建与旁白对齐的字幕时才填写镜头的两个 narration 引用，且对齐必须 READY。若用户只要求生成素材，已交付的素材回执即完成该项请求，直接说明可从对话中查看或播放。颜色、运动、时长、交付范围以用户原话为准。只要求调整和复看时，复看后答复；正式导出需要交付意图。目标不明确时询问。"
-                   "可在同一响应提交独立的读取、素材生成或已知对象的修改。写入按声明次序保存。需要前项新标识时先看回执，再在下次决策引用。完成各项后再单独答复。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。同窗对照按 earlier 与 current 的标记读图。构图以用户点名的主体与取景要求为准。局部取景修订也应保留原本完整可读的前景文字；新出现的露底和裁字要在同窗前后画面中核对。edges_matching_canvas_color_px 是采样图像与画布同色的边缘宽度，须结合画面确认是否露底。当前预览满足要求就结束，不追加未请求的构图、画幅或配音选择；素材取景限制改善时说明已看到的局限。采样范围限制用于如实陈述证据，不是继续寻找假设问题的理由；用户点名的内容已在当前版本得到观察且没有待修发现时，停止追加观察并完成用户要求的后续交付或答复。以当前版本已观察窗口和用户要求为依据，说明发现的问题及未检查范围。调整前后的几何与时间以版本数据为准。描述源取景时，source_clipped_px 是源画面被画布裁掉的像素，canvas_borders_px 是画布留边像素；source_clipped_px 大于 0 时不能声称完整源画面，canvas_borders_px 大于 0 时不能声称留边已消除，主体或文字是否被裁切仍以实际帧为准。face_evidence.face_fully_visible=false 时不能声称检测到的人脸完整或有安全边距；expanded_face_fully_visible=false 时不能声称头肩完整。人脸框和扩边区域不证明头发、肩膀完整或构图自然，未检测到时明确未知。几何坐标数组逐字段直接引用，不要重算成不同边界。静态图片来源不等于输出静止；sample_frames 中的像素差异只证明所列采样时点的变化，不证明未观察时段的运动，描述输出前先核对这些帧。只有实际收到可感知声音才能评价听感。播放范围取自 window_seconds；描述抽样帧时只引用 sample_seconds 中实际解码的时点。混合波形只说明整体电平，声部重叠时间以各轨片段为准。"
-                   "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。preceding_reviewed_delivery 与 referenced_output 指认此前的成片。本轮要求播放修订片段时，交付该版本的局部预览。只有交付回执才表示正式成片已发到对话。费用按原 opening 归属：交付已有 MP4 时按回执中的本轮导出扣费答复。用户点名导出已预览的固定版本时，审阅并交付该版本，报告实际问题；另行修改素材或版本需用户提出。助手写的旁白、作品名称和分镜不能升级为用户硬要求。审阅发现问题时根据用户目标决定是否继续修改；涉及用户硬要求的发现若仍未解决，交付和最终回复必须明确报告该未满足项，不能把有 Output 或有交付卡等同于目标完成。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。" + website_evidence_rule,
+            system=("你是视频剪辑师，用用户的语言交流。检查本轮目标、所选作品、素材与已有回执。"
+                    "信息足够就直接编辑；用户指代的单个对象仍有多个可能时，先请用户指明。分镜按需表达。"
+                    "保留未要求改变的画面、字幕、动画和声音。依赖新增对象或素材时先读取上一步返回的标识。"
+                    "按用户要求播放受影响窗口，在真实画面上核对效果，再决定是否继续修改。"
+                    "采样帧、几何、波形与可感知声音分别限定了能报告的观察。"
+                    "不得擅改目标或追加未经许可的生成与导出。只预览的任务以播放为止。"
+                    "正式交付须审阅固定 Output，按原 opening 的回执报告费用与尚未满足的要求。"
+                    + website_evidence_rule),
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
-            stream_prose=native_creation and not media_ready,
+            stream_prose=not media_ready and (
+                native_creation or bool(selected and not facts.get("editor_labels") and not facts.get("authorized_media"))
+            ),
             project_reply=(None if native_creation and not media_ready else
                            lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text)),
             caller_state={"video_target": selected},

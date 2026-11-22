@@ -33,6 +33,7 @@ async def report_committed_edits(db, opening):
     versions = {v.request_id: v for v in rows}
     labels = {
         "create_video": ("创建初稿", "create draft"),
+        "insert_visual": ("插入图片", "insert image"),
         "insert_audio": ("插入音频", "insert audio"),
         "bind_clip_source": ("绑定固定素材", "bind fixed source"),
         "split_clip": ("分割", "split"),

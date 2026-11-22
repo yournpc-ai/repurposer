@@ -185,9 +185,9 @@ const zh: Resources = {
     // 无前缀——每条都是用户口吻的完整请求，即上方 hero 问句的答句。
     // 每条保持简短，钉底条里不超一行。
     placeholderPrompts: [
-      "给我的网站做一支宣传视频",
-      "把我的演讲剪成几条高光短视频",
-      "帮我的餐厅制作一部宣传片",
+      "把产品图片叠在这个镜头上",
+      "剪掉片头的停顿",
+      "把标题往左移，再播放这一段",
     ],
     selectPersona: "人设",
     noPromptError: "先说说想做什么",
@@ -1344,7 +1344,9 @@ const zh: Resources = {
       recordVoiceDone: "旁白已生成",
       bindClipSource: "正在绑定素材",
       bindClipSourceDone: "已绑定素材",
+      insertVisual: "正在插入图片",
       insertAudio: "正在加入音频",
+      insertVisualDone: "已插入图片",
       insertAudioDone: "已加入音频",
       visualAssets: "正在准备分镜画面…",
       checkFixedImages: "正在核对已有的分镜画面…",
@@ -1510,6 +1512,7 @@ const zh: Resources = {
       generate_voice: "生成旁白",
       generate_music: "生成配乐",
       generate_image: "生成图片",
+      insert_visual: "插入图片",
       insert_audio: "插入音频",
       split_clip: "分割片段",
       remove_clip: "移除片段",
@@ -1798,8 +1801,8 @@ const zh: Resources = {
         "视频、音频、幻灯片、照片或文字稿都行，有什么放什么。也可以先不上传，直接在下面写想法。",
       promptTitle: "说明要做什么",
       promptDesc: "写下想要的结果。用 @ 点名已上传的素材，然后发送。",
-      recipesTitle: "从卡片开始",
-      recipesDesc: "点卡片上的「开始创作」，填入示例需求，再按你的想法和素材调整。",
+      recipesTitle: "试试剪辑示例",
+      recipesDesc: "点一个示例填入输入框，再按你的素材修改要求。",
     },
   },
   notifications: {

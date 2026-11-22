@@ -53,9 +53,6 @@ interface HomeComposerProps {
  * Read/write inside effects only — localStorage is never touched during SSR. */
 const TOUR_SEEN_KEY = "repurposer-tour-seen"
 
-/** Composer teaching tour (3 steps while the persona entry is hidden):
- * assets → prompt (send folded in) → the recipe gallery's Use-prompt entry
- * (lands last; Tour skips the step if the cards haven't loaded yet). */
 const COMPOSER_TOUR_STEPS: TourStepDef[] = [
   {
     target: "[data-tour='composer-assets']",
@@ -186,14 +183,7 @@ export function HomeComposer({
   // navigating), × purifies (removing the chip removes every trace — no
   // residual pin).
   //
-  // The send mechanism is the shared `useProjectLaunch`: picked files are
-  // already uploaded (staging), so send = create project → attach → navigate
-  // → first /chat message. A recipe launch is just its prompt template
-  // (配方 = 提示词, 2026-08-11) — the composer never builds a prior
-  // (MENTIONS §3).
-  // The recipe prefill's visible blank is a launch gate in the same family
-  // as the empty-prompt toast: the prompt stays the entire payload (no hidden
-  // URL field), but an unresolved placeholder must never burn a chat turn.
+  // Landing templates can leave an editable URL placeholder in the draft.
   const urlPlaceholder = t("recipes.shelf.urlPlaceholder")
   const handleGenerate = () => {
     if (urlPlaceholder && prompt.includes(urlPlaceholder)) {

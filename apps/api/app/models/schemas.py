@@ -13,7 +13,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    PrivateAttr,
     ValidationInfo,
     computed_field,
     field_validator,
@@ -1084,15 +1083,6 @@ class ReviseVideoOpsArgs(BaseModel):
         default="none",
         description="有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
     )
-    _request_context: dict[str, Any] | None = PrivateAttr(default=None)
-
-    def bind_request_context(
-        self, *, user_text: str, pending_question: dict[str, Any] | None,
-    ) -> None:
-        self._request_context = {
-            "user_text": user_text,
-            "pending_question": pending_question,
-        }
 
 
 class ReviseVideoArgs(BaseModel):

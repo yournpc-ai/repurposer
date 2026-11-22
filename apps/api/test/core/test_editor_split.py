@@ -205,18 +205,37 @@ async def test_edit_sequence_replay_and_safe_boundaries(database, monkeypatch):
         await execute("scale", "not-visual", id=audio["object_id"], value=0.7)
     with pytest.raises(ValueError, match="already has"):
         await execute("translate", "no-change", id=image["object_id"], x=-18, y=0)
+    # Distinguish the identity of a user's request from the placement arguments.
+    from app.models.tables import SourceSnapshot
+    from test.core.test_compositions import IMG_SNAPSHOT
+
+    placement = dict(source_id=IMG_SNAPSHOT, start_seconds=1, end_seconds=3)
+    with pytest.raises(ValueError, match="from this project"):
+        await execute("insert_visual", "unbound", **placement)
+    async with database() as db:
+        source = await db.get(SourceSnapshot, IMG_SNAPSHOT)
+        source.origin_project_id = pid
+        source.meta = {"width": 220, "height": 120}
+        await db.commit()
+    pictures = [await save("insert_visual", **placement) for _ in range(2)]
+    targets = [picture["changed_clips"][0] for picture in pictures]
+    assert targets[0]["clip_id"] != targets[1]["clip_id"]
+    assert targets[0]["object_id"] != targets[1]["object_id"]
+    assert targets[0]["source"] == targets[1]["source"]
+    with pytest.raises(ValueError, match="window"):
+        await execute("insert_visual", "outside-window", **{**placement, "end_seconds": 10})
     for name, native, args, saved in calls:
         replay = await execute(name, native, **args)
         assert replay["replayed"] and replay["version_id"] == saved
         changed = dict(args)
-        field = next(k for k in ("time", "end", "x", "value") if k in changed)
+        field = next(k for k in ("time", "end", "x", "value", "start_seconds") if k in changed)
         changed[field] += 0.2
         with pytest.raises(RequestMismatch):
             await execute(name, native, **changed)
 
     async with database() as db:
         _, head = await get_video_version(db, owner_id=owner, composition_id=comp.id)
-        assert head.version == initial.version + 5
+        assert head.version == initial.version + len(calls)
         assert head.timeline["tracks"][1] == initial.timeline["tracks"][1]
         assert head.sources == initial.sources and head.settings == initial.settings
         assert await db.scalar(select(func.count()).select_from(CompositionVersion)) == head.version

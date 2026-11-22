@@ -699,7 +699,7 @@ def _composition_resource(*, suffix="one", provenance=None):
 def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=False,
                  package_sessions=None, user_text="review the draft", pending_question=None,
                  active_repair=None, mode="plan", iteration=None, interim_prose_count=0,
-                 new_result=False, version_saved=False, new_result_tool=None):
+                 new_result=False, version_saved=False, new_result_tool=None, asset_mentions=None):
     from app.chat.prompts import assemble_video_round
 
     return assemble_video_round({
@@ -718,6 +718,7 @@ def _video_round(tools, *, drafts=(), snapshot, skill=None, material_pending=Fal
         "interim_prose_count": interim_prose_count,
         "new_result": new_result,
         "new_result_tool": new_result_tool,
+        "asset_mentions": asset_mentions,
     })
 
 
@@ -877,7 +878,7 @@ def test_missing_package_session_uses_native_create_protocol(installed_promo):
     create = next(tool for tool in projected.tools if tool.name == "create_video")
     properties = tool_spec(create)["function"]["parameters"]["properties"]
     assert "shots" in properties and "scene_plan" not in properties
-    assert "create_video" in projected.system
+    assert "create_video" in {tool.name for tool in projected.tools}
 
 
 def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
@@ -887,9 +888,15 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
     saved = _composition_resource()
     snapshot = ContextSnapshot(
         "complete project and an unrelated asset", frozenset({"composition:ver-one:digest"}),
-        resources=(("composition:ver-one:digest", saved),),
+        resources=(("composition:ver-one:digest", saved),
+                   ("asset:first", {"kind": "asset", "asset_id": "first", "type": "image"}),
+                   ("asset:second", {"kind": "asset", "asset_id": "second", "type": "image"})),
     )
-    edited = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the second Scene title")
+    edited = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the second Scene title",
+                          asset_mentions={"first": "product.png", "second": "product.png", "foreign": "other.png"})
+    assert json.loads(edited.context)["mentioned_assets"] == [
+        {"asset_id": asset_id, "type": "image", "label": "product.png"} for asset_id in ("first", "second")
+    ]
     assert edited.caller_state["video_target"] == saved
     assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in edited.tools}
     assert not {"design_video", "review_working_draft"} & {tool.name for tool in edited.tools}
@@ -1054,7 +1061,7 @@ def test_video_rounds_allow_service_text_for_reads_and_edits():
         user_text="Change the title", iteration=0, new_result=True,
     )
     assert edit.caller_state["video_target"] == saved
-    assert not edit.stream_prose and edit.project_reply is not None
+    assert edit.stream_prose and edit.project_reply is not None
 
 
 def test_existing_media_only_offer_keeps_creation_and_excludes_generation():
@@ -1234,7 +1241,7 @@ def test_create_rejection_stops_repeated_or_unproductive_attempts():
     assert video_rejection_stop(changed, (pending, animated)) is False
 
 
-def test_saved_version_does_not_reopen_creation_or_optional_questionnaire():
+def test_saved_version_offers_materials_and_blocking_clarification():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
 
@@ -1243,7 +1250,7 @@ def test_saved_version_does_not_reopen_creation_or_optional_questionnaire():
     assembly = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True)
     names = {tool.name for tool in assembly.tools}
     assert "create_video" not in names
-    assert "ask_user" not in names
+    assert {"ask_user", "prepare_video_materials", "insert_visual"} <= names
     assert "translate" in names
 
 
@@ -1263,7 +1270,7 @@ def test_completed_delivery_does_not_reopen_optional_questionnaire():
 
 
 @pytest.mark.asyncio
-async def test_observed_version_wire_has_no_optional_creation_or_questionnaire():
+async def test_observed_version_wire_allows_clarification_without_recreating_work():
     from copy import copy
     from types import SimpleNamespace
     from app.agents.tool_loop import ContextSnapshot
@@ -1302,7 +1309,7 @@ async def test_observed_version_wire_has_no_optional_creation_or_questionnaire()
     assert result.calls == ["answer"]
     assert len(client.wires) == 1
     names = {tool["function"]["name"] for tool in client.wires[0]}
-    assert "ask_user" not in names and "create_video" not in names
+    assert "ask_user" in names and "create_video" not in names
 
 
 @pytest.mark.asyncio
