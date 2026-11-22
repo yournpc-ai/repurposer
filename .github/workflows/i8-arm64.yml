@@ -1,0 +1,179 @@
+name: I8 frozen candidate on Linux ARM64
+"on": workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARCHIVE: 11a733fe507dcac023b70d36f28ca2d5f407bc50
+      BASE: ec02b02d421d2fb6cfe237c2d94966fa7f3cc7c8
+      DIFF_SHA: 41961bef82ce3049847dfae2ab97bf16a55c598bc48dc068076ac81dc65b68c5
+      PATCH_SHA: 2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713
+      RESEARCH: docs/experiments/renderer-aac
+    steps:
+      - name: Identify runner and available resources
+        run: |
+          uname -a
+          cat /etc/os-release
+          test "$RUNNER_OS/$RUNNER_ARCH/$(uname -m)" = Linux/ARM64/aarch64
+          nproc
+          free -h
+          df -h "$RUNNER_TEMP" /var/lib/docker
+          docker version
+          echo "LAB=$RUNNER_TEMP/i8" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 11a733fe507dcac023b70d36f28ca2d5f407bc50
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify and apply the final-window archive
+        run: |
+          echo "dispatch=$GITHUB_SHA archive=$(git rev-parse HEAD) baseline=$(git rev-parse HEAD^)"
+          test "$(git rev-parse HEAD)" = "$ARCHIVE"
+          test "$(git rev-parse HEAD^)" = "$BASE"
+          git diff --exit-code "$BASE" HEAD -- . ":(exclude)$RESEARCH/final-window"
+          diff_file=$RESEARCH/final-window/candidate.diff
+          echo "$DIFF_SHA  $diff_file" | sha256sum -c
+          git apply --index "$diff_file"
+          git diff --cached --stat
+          echo "$PATCH_SHA  patches/@remotion__renderer@4.0.484.patch" | sha256sum -c
+          echo "candidate_diff=$DIFF_SHA pnpm_patch_hash=$PATCH_SHA"
+
+      - name: Build Renderer image and verify installed patch
+        run: |
+          docker build --progress=plain -f apps/render/Dockerfile -t i8-render .
+          docker image inspect -f '{{.Id}} {{.Os}}/{{.Architecture}} {{.Size}} bytes' i8-render
+          docker run --rm -e PATCH_SHA -i i8-render bash -eu <<'SH'
+          test "$(node -p 'process.arch')" = arm64
+          test "$(node -p "require('./node_modules/@remotion/renderer/package.json').version")" = 4.0.484
+          echo "$PATCH_SHA  /repo/patches/@remotion__renderer@4.0.484.patch" | sha256sum -c
+          pnpm exec tsx --test --test-name-pattern='locked Remotion audio patch' src/artifacts.test.ts
+          cd node_modules/@remotion/renderer
+          sha256sum -c <<'SUMS'
+          149686a78f0b646f9feeae2ebc063da30610c5b7b1dd3ca769a77f2f28d1c945  dist/esm/index.mjs
+          7214406bbf7fecdd95d7b1fc5a4ef9ac96aaee3a153a4ebd9318f0b417be54bd  dist/stringify-ffmpeg-filter.js
+          SUMS
+          SH
+
+      - name: Render the three fixed works and the short-window control
+        run: |
+          mkdir -p "$LAB"/{assets,tmp,controls,negative}
+          cp docs/experiments/mg-render/baseline/assets/{main.mp4,voice.wav,whoosh.wav,impact2.wav} "$LAB/assets/"
+          cp "$RESEARCH/joint-candidate/boundary/boundary.json" "$LAB/"
+          cp "$RESEARCH/clock-boundaries/audio/spec.json" "$LAB/edge.json"
+          cp "$RESEARCH/clock-boundaries/regression/mix.json" "$LAB/mix.json"
+          cp "$RESEARCH/joint-candidate/tools/drive.mts" "$LAB/"
+          # The old observer sees two probes with the new guard. Keep only the baseline as raw.mp4.
+          sed "s/\&\&fs.existsSync(target)/\&\&target.endsWith('\/baseline.mp4')\&\&fs.existsSync(target)/" \
+            "$RESEARCH/joint-candidate/tools/observe-linux.cjs" > "$LAB/observe.cjs"
+          cp "$RESEARCH/final-window/observe.cjs" "$LAB/negative/"
+          cp "$RESEARCH/backport-4.0.484/media/24-default-timescale.mp4" "$LAB/controls/"
+          docker run --rm --shm-size=1g -i -v "$LAB:/lab" -e RENDER_PORT=49873 \
+            -e TMPDIR=/lab/tmp i8-render bash -eu <<'SH'
+          export LAB=/lab
+          for mode in boundary edge success; do
+            NODE_OPTIONS=--require=/lab/observe.cjs ./node_modules/.bin/tsx /lab/drive.mts "$mode"
+          done
+          ln /lab/run/boundary/video.mp4 /lab/controls/24-loudnorm.mp4
+          export LAB=/lab/negative CONTROLS=/lab/controls CONTROL=negative
+          ln -s /lab/assets /lab/boundary.json "$LAB/"
+          NODE_OPTIONS=--require=/lab/negative/observe.cjs ./node_modules/.bin/tsx /lab/drive.mts boundary
+          SH
+
+      - name: Measure Linux media against original frames and PCM references
+        run: |
+          python3 -m venv "$RUNNER_TEMP/measure"
+          py=$RUNNER_TEMP/measure/bin/python
+          "$py" -m pip install --only-binary=:all: --retries 0 av==17.1.0 numpy==2.4.6
+          "$py" "$RESEARCH/joint-candidate/tools/collect.py" "$LAB" \
+            "$RESEARCH/clock-boundaries/measure.py" "$LAB/metrics.json"
+          PYTHONPATH="$RESEARCH/backport-4.0.484/tools" "$py" - <<'PY'
+          import hashlib, json, os, re
+          from fractions import Fraction
+          from pathlib import Path
+          from boxes import inspect
+          lab = Path(os.environ["LAB"])
+          metrics = json.loads((lab/"metrics.json").read_text())
+          old = json.loads((Path(os.environ["RESEARCH"])/"joint-candidate/mac/mac.json").read_text())
+          for mode, fps, frames, samples in (("boundary",24,191,382000), ("edge",25,199,382080), ("success",30,240,384000)):
+              row = metrics["cases"][mode]
+              stage = lab/"run"/mode
+              assert not row["temporary_encode_dirs"]
+              historical = old["media"][old["cases"][mode]["files"]["raw.mp4"]]["video"]
+              files = ["mix.mov", "raw.mp4", "video.mp4"]
+              if fps == 30:
+                  files.append("pre-encode.mkv")
+              for name in files:
+                  media = metrics["media"][row["files"][name]]
+                  v = media["video"]
+                  print(f"{fps}fps {name} frames={len(v['frames'])} ptsErrors={v['ptsErrors']} idErrors={v['idErrors']}", flush=True)
+                  assert len(v["frames"]) == len(historical["frames"]) == frames
+                  assert v["ptsErrors"] == v["idErrors"] == 0
+                  for (i,p,a,e), (j,q,b,f) in zip(v["frames"], historical["frames"]):
+                      assert (i,a,e) == (j,b,f) and p*Fraction(v["timebase"]) == q*Fraction(historical["timebase"])
+                  if name == "pre-encode.mkv":
+                      assert v["timebase"] == "1/90000" and "mp4" in media["container"]
+                      continue
+                  audio = media["audio"]
+                  print({k:audio[k] for k in ("valid","decoded","gaps","stems","lag","tail")}, flush=True)
+                  assert audio["valid"] == samples and audio["gaps"] == []
+                  assert len(audio["stems"]) == 3 and not any(audio["stems"].values())
+                  assert audio["lag"] == audio["tail"] == 0
+                  if name.endswith(".mp4"):
+                      skip = 2048 if name == "raw.mp4" else 1024
+                      info = inspect(stage/name)
+                      priming = int.from_bytes(bytes.fromhex(dict(audio["side"])["skip_samples"])[:4], "little")
+                      print(info, "skip_samples", priming, "pts/dts", audio["pts"], audio["dts"], flush=True)
+                      assert audio["timebase"] == "1/48000" and priming == skip
+                      assert audio["pts"] == audio["dts"] == -skip
+                      assert info["movie_scale_duration"] == [48000,samples]
+                      assert info["soun"]["edits"] == [[samples,skip,1,0]]
+              if fps == 25:
+                  assert re.search(r"Normalization Type:\s+Dynamic", (stage/"loudnorm.log").read_text())
+                  print("25 fps Dynamic loudnorm verified")
+          events = [json.loads(x) for x in (lab/"negative/events.jsonl").read_text().splitlines()]
+          assert [e["stage"] for e in events] == ["baseline-probe","final-probe","renamed"]
+          baseline, final, rename = events
+          assert final["before"] == metrics["cases"]["boundary"]["files"]["video.mp4"]
+          assert final["presented"] == "20635324d260a87dd8f98730dd697df39d3a84d5b993089445adc1aa33aa9d06"
+          output = lab/"negative/run/boundary/video.mp4"
+          assert list(output.parent.iterdir()) == [output]
+          assert hashlib.sha256(output.read_bytes()).hexdigest() == rename["sha"] == baseline["before"]
+          assert inspect(output)["soun"]["edits"] == [[382000,2048,1,0]]
+          print("24 fps short-window rejected, delivered baseline", rename["sha"])
+          PY
+
+      - name: Release Renderer storage and build Web image
+        run: |
+          docker image rm i8-render
+          docker builder prune --all --force
+          sudo rm -rf -- "$LAB"
+          df -h /var/lib/docker
+          docker build --progress=plain -f apps/web/Dockerfile -t i8-web .
+          docker image inspect -f '{{.Id}} {{.Os}}/{{.Architecture}} {{.Size}} bytes' i8-web
+          docker run --rm -i i8-web bash -eu <<'SH'
+          test "$(node -p 'process.arch')" = arm64
+          for pkg in node_modules/{remotion,@remotion/player} /repo/packages/video-remotion/node_modules/remotion; do
+            version=$(node -p "require(require('node:path').resolve('$pkg/package.json')).version")
+            echo "$pkg $version"
+            test "$version" = 4.0.484
+          done
+          test ! -e node_modules/@remotion/renderer
+          test -s dist/server/server.js
+          find dist/client/assets -name '*.js' -size +0c -print -quit | grep .
+          SH
+
+      - name: Record final resource usage
+        if: always()
+        run: |
+          df -h "$RUNNER_TEMP" /var/lib/docker
+          docker system df
