@@ -142,7 +142,12 @@ elif with_timeout 5 docker ps >/dev/null 2>&1; then
       -p 5432:5432 \
       postgres:18-alpine 2>/dev/null \
       || docker start repurposer-db 2>/dev/null \
-      || echo "Could not start Postgres container (continuing anyway)."
+      || { echo "Could not start the development Postgres container."; exit 1; }
+    # A published port can precede database readiness on a cold start.
+    for ((attempt=0; attempt<30; attempt++)); do
+      docker exec repurposer-db pg_isready -q -U postgres && break
+      sleep 1
+    done
   fi
 else
   echo "Docker is unavailable or unresponsive — skipping Postgres startup."
