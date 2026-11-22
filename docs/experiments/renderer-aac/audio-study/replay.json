@@ -1,0 +1,103 @@
+{
+  "ffmpeg_libraries": {
+    "libavcodec": [
+      62,
+      28,
+      101
+    ],
+    "libavdevice": [
+      62,
+      3,
+      101
+    ],
+    "libavfilter": [
+      11,
+      14,
+      101
+    ],
+    "libavformat": [
+      62,
+      12,
+      101
+    ],
+    "libavutil": [
+      60,
+      26,
+      101
+    ],
+    "libswresample": [
+      6,
+      3,
+      101
+    ],
+    "libswscale": [
+      9,
+      5,
+      101
+    ]
+  },
+  "overlap_error_increase_db_if_omitted": {
+    "impact-default": 42.96941624813057,
+    "sample-generate_music": 22.455878006325868,
+    "sample-generate_voice": 28.055355675126062,
+    "whoosh-default": 4.90406705729133
+  },
+  "overlap_samples": [
+    67200,
+    70080
+  ],
+  "pillow": "12.3.0",
+  "pyav": "17.1.0",
+  "reference_wav_sha256": "be42513c20629d4c34184355d460ef4bfce639040a2d374fb7f42fe53db5d562",
+  "sync_sha256": "b0b2a89363a228e771373060034b2180b2f9d3828d8c0c2f8f563054496a434d",
+  "wavs": {
+    "click-default": {
+      "dc_fs": [
+        2.856132311698718e-06,
+        2.856132311698718e-06
+      ],
+      "max_step_fs": 0.0313720703125,
+      "pcm_sha256": "3f2bbdc5cbd5347e2be582f79c69f2cd3648e6cdda9f4b32b6f08f9aca9914ee"
+    },
+    "click-rev": {
+      "dc_fs": [
+        1.5063163561698717e-06,
+        1.5063163561698717e-06
+      ],
+      "max_step_fs": 0.01849365234375,
+      "pcm_sha256": "2c70c49a8ce6ac58cb149ca17ba9c2a82a1441da1b603a8590f064986987d01f"
+    },
+    "impact-default": {
+      "dc_fs": [
+        1.3213973861556869e-05,
+        1.2899519086958052e-05
+      ],
+      "max_step_fs": 0.006500244140625,
+      "pcm_sha256": "e6ff041dd87ad63280135f7622e874c6bcea23cadeb2c841b0a9994717a6603d"
+    },
+    "impact-rev": {
+      "dc_fs": [
+        1.5217549092060811e-05,
+        1.499072925464527e-05
+      ],
+      "max_step_fs": 0.00537109375,
+      "pcm_sha256": "478cf9844c330f6dedf8162e2e88a02438c9fc86c36cfd1f02e0a80f4cb562cf"
+    },
+    "whoosh-default": {
+      "dc_fs": [
+        -6.813775925409226e-05,
+        -4.574003673735119e-05
+      ],
+      "max_step_fs": 0.076995849609375,
+      "pcm_sha256": "0b2dae78ee7e023178de1b014064c56f72d83adcc4b61485595eb9fe44c7030f"
+    },
+    "whoosh-rev": {
+      "dc_fs": [
+        -6.914025261288598e-05,
+        -4.6183949425106955e-05
+      ],
+      "max_step_fs": 0.0172119140625,
+      "pcm_sha256": "65e27ba0dd70dfcd9a5b8bf769e75f9a172b0a0364a0b167f551870ab988ee60"
+    }
+  }
+}
