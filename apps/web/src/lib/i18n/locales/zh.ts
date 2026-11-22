@@ -354,7 +354,7 @@ const zh: Resources = {
       navigation: "主导航",
       community: "加入社群",
     },
-    heroTitle1: "新手也能做出好视频",
+    heroTitle1: "人人都能剪出好视频",
     heroTitle2: "",
     heroSubtitle:
       "通过对话，轻松制作融合动态图形、\n丰富动画与精细剪辑的视频。",
