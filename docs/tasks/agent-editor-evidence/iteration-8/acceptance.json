@@ -1,0 +1,1619 @@
+{
+  "横图首测": {
+    "project": "514b6cc8-1dd3-44ec-a7d6-216cfc8df7a5",
+    "composition": "adf6290d-d4a7-4b2b-b26c-7efbe6d932f9",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "9ba72212-05ef-4500-8af1-9bc4885220f5",
+        "base": null,
+        "digest": "8398c66bf3d7cb5c043ecbf868da7ba72d2d3710a4c63c49740a444a45d279c4",
+        "request": null
+      },
+      {
+        "version": 2,
+        "id": "1f27490b-934d-4a63-ad14-cb5dc04fe6f8",
+        "base": "9ba72212-05ef-4500-8af1-9bc4885220f5",
+        "digest": "d447a0483bbf13c3203c49004648324f5ed756258b720ae22f4178c5a9641046",
+        "request": "64ca0f82-ff9e-5f77-82c8-2a2fd35695d5"
+      },
+      {
+        "version": 3,
+        "id": "ffad79dd-d7aa-462b-b8f4-00cad6ab186b",
+        "base": "1f27490b-934d-4a63-ad14-cb5dc04fe6f8",
+        "digest": "f81bc84f1b6e51ac69954ef48293b71cff2923bf496877d2adb8c830ab0db2b5",
+        "request": "f5c27e58-056f-5100-a4b7-bbb10a377114"
+      }
+    ],
+    "exports": [
+      {
+        "job": "4943e94e-37d9-5f00-96f0-4f828f0b4b47",
+        "version": "ffad79dd-d7aa-462b-b8f4-00cad6ab186b",
+        "credits_authorized": 12,
+        "attempt": 1,
+        "status": "succeeded",
+        "output": "4943e94e-37d9-5f00-96f0-4f828f0b4b47"
+      }
+    ],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 13:46:21.590103+00:00",
+        "input": 48389,
+        "output": 809,
+        "cached": 8413,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.007744
+      },
+      {
+        "at": "2026-11-22 13:49:02.244296+00:00",
+        "input": 38539,
+        "output": 386,
+        "cached": 14995,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.006012
+      }
+    ],
+    "credits": [
+      {
+        "id": "41994b24-a82a-4554-b8ee-6297a8762dfc",
+        "kind": "grant",
+        "amount": 1000,
+        "balance": 1000
+      },
+      {
+        "id": "d866f2c9-be42-4dde-bc3c-9ef8eee13091",
+        "kind": "hold",
+        "amount": -12,
+        "balance": 988
+      },
+      {
+        "id": "2e12b4d2-7bbc-4d91-8d6b-08dd896ee768",
+        "kind": "release",
+        "amount": 12,
+        "balance": 1000
+      },
+      {
+        "id": "32ca82b4-a1fc-40a1-a5ae-8c665d6e327e",
+        "kind": "capture",
+        "amount": -12,
+        "balance": 988
+      }
+    ],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.projectMedia",
+        "status": "completed"
+      },
+      {
+        "seq": 4,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 6,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "4281af5a-2d78-4c80-b183-b73086fee08b",
+        "role": "assistant",
+        "previews": [
+          {
+            "composition_version_id": "1f27490b-934d-4a63-ad14-cb5dc04fe6f8",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      },
+      {
+        "seq": 9,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 10,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 11,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.translateDone",
+        "status": "completed"
+      },
+      {
+        "seq": 12,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 13,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.mediaPermission",
+        "status": "completed"
+      },
+      {
+        "seq": 14,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "question": "允许导出这个版本的 MP4 吗？最多使用 12 积分。",
+        "answered": true,
+        "previews": [
+          {
+            "composition_version_id": "ffad79dd-d7aa-462b-b8f4-00cad6ab186b",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      },
+      {
+        "seq": 15,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant"
+      },
+      {
+        "seq": 16,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.videoReviewDone",
+        "status": "completed"
+      },
+      {
+        "seq": 17,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "activity": "chat.activity.deliverVideoDone",
+        "status": "completed"
+      },
+      {
+        "seq": 18,
+        "opening": "fdac8e58-573b-4001-918b-01663ba54d98",
+        "role": "assistant",
+        "delivered_output_refs": [
+          "4943e94e-37d9-5f00-96f0-4f828f0b4b47"
+        ]
+      }
+    ],
+    "media": {
+      "job": "4943e94e-37d9-5f00-96f0-4f828f0b4b47",
+      "versions": [
+        "9ba72212-05ef-4500-8af1-9bc4885220f5",
+        "1f27490b-934d-4a63-ad14-cb5dc04fe6f8",
+        "ffad79dd-d7aa-462b-b8f4-00cad6ab186b"
+      ],
+      "object": "obj_overlay_64ca0f82ff9e5f7782c82a2fd35695d5",
+      "source": "d4b18dea-ded5-546d-8efd-0a7aeac9c8e4",
+      "dx": -40.0,
+      "frames": 180,
+      "sha256": "452e74b0705d680dc8238426100765c1a1aaaed7dec8c0ce015670e2a0adcec3",
+      "window_mae_max": 0.0,
+      "outside_mae": 0.4236307740211487,
+      "caption_band_mae": 0.2868121266365051,
+      "audio_correlation": 1.0,
+      "overlay_min_visible": 0.8201149425287356,
+      "overlay_max_outside": 0.0033764367816091954,
+      "size": [
+        360,
+        640
+      ]
+    },
+    "chrome": {
+      "api": {
+        "/projects": 200,
+        "/projects/514b6cc8-1dd3-44ec-a7d6-216cfc8df7a5": 200,
+        "/projects/514b6cc8-1dd3-44ec-a7d6-216cfc8df7a5/chat/outputs": 200,
+        "/chat/video/versions/9ba72212-05ef-4500-8af1-9bc4885220f5/storyboard": 200
+      },
+      "playback_seconds": [
+        [
+          1.514268,
+          1.706543
+        ],
+        [
+          1.519327,
+          1.706311
+        ]
+      ],
+      "output": "4943e94e-37d9-5f00-96f0-4f828f0b4b47",
+      "output_playback_seconds": 0.274988,
+      "page_errors": []
+    }
+  },
+  "独立竖图首测": {
+    "project": "ab9d0b3b-3956-4690-95e4-0873e144e2f2",
+    "composition": "498c29c9-a52d-4eb6-a89f-5762296011e8",
+    "files_sha256": {
+      "panel.png": "630634a12b737b5867f41e98954049a6ea86c8eae887bf6309666e1a1da8d0b7",
+      "product-panel.mp4": "3e7467e2c0f7e41f3ea8aa38ac0a859641a8e0589b52df028ca67d369a377821"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "b5106b55-71e8-44e9-906c-b4021f71ecd5",
+        "base": null,
+        "digest": "6da3acfb9ed9c391757ff5d56c7af2e7423ddc3ac94a0133b2ba4303f9c02cb5",
+        "request": null
+      },
+      {
+        "version": 2,
+        "id": "be92a89c-a85a-4f30-a6d3-c9e076de142e",
+        "base": "b5106b55-71e8-44e9-906c-b4021f71ecd5",
+        "digest": "81b77a8169b09e3d8540429606f35796458124f0dfae908b951607ab2b5adadf",
+        "request": "a7323d0f-6f4a-5ea9-8ea6-fcdc96fddc4f"
+      },
+      {
+        "version": 3,
+        "id": "d07f3017-1b43-47ad-a766-d8b911b9ef8a",
+        "base": "be92a89c-a85a-4f30-a6d3-c9e076de142e",
+        "digest": "6f9613fdc414d2d10fc442c04aeae1d15d9e042f900a0231d59ea25b7b9ae3d7",
+        "request": "4b12e80b-4583-52e5-9ab5-fed9f00c484f"
+      }
+    ],
+    "exports": [
+      {
+        "job": "19575e9c-aaf2-5e4e-b5ea-fa7ecee35003",
+        "version": "d07f3017-1b43-47ad-a766-d8b911b9ef8a",
+        "credits_authorized": 12,
+        "attempt": 1,
+        "status": "succeeded",
+        "output": "19575e9c-aaf2-5e4e-b5ea-fa7ecee35003"
+      }
+    ],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 13:51:41.170669+00:00",
+        "input": 48393,
+        "output": 575,
+        "cached": 15842,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.007604
+      },
+      {
+        "at": "2026-11-22 13:55:32.174796+00:00",
+        "input": 38191,
+        "output": 323,
+        "cached": 15729,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.005922
+      }
+    ],
+    "credits": [
+      {
+        "id": "60bab212-df8b-4cd0-86ef-9869bbb6429f",
+        "kind": "grant",
+        "amount": 1000,
+        "balance": 1000
+      },
+      {
+        "id": "fbe39f22-6796-4fb6-a9b5-9742abce71f6",
+        "kind": "hold",
+        "amount": -12,
+        "balance": 988
+      },
+      {
+        "id": "cf7741d6-e293-42af-8e80-501e7e19778a",
+        "kind": "release",
+        "amount": 12,
+        "balance": 1000
+      },
+      {
+        "id": "871011e5-b7f1-4330-9668-68049064fab3",
+        "kind": "capture",
+        "amount": -12,
+        "balance": 988
+      }
+    ],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.projectMedia",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 4,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 6,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "02451bf3-4b9a-469f-8218-da2eb6471aea",
+        "role": "assistant",
+        "previews": [
+          {
+            "composition_version_id": "be92a89c-a85a-4f30-a6d3-c9e076de142e",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      },
+      {
+        "seq": 9,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 10,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 11,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.translateDone",
+        "status": "completed"
+      },
+      {
+        "seq": 12,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 13,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.mediaPermission",
+        "status": "completed"
+      },
+      {
+        "seq": 14,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "question": "允许导出这个版本的 MP4 吗？最多使用 12 积分。",
+        "answered": true,
+        "previews": [
+          {
+            "composition_version_id": "d07f3017-1b43-47ad-a766-d8b911b9ef8a",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.2,
+              "start_seconds": 1.8
+            }
+          }
+        ]
+      },
+      {
+        "seq": 15,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant"
+      },
+      {
+        "seq": 16,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.videoReviewDone",
+        "status": "completed"
+      },
+      {
+        "seq": 17,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "activity": "chat.activity.deliverVideoDone",
+        "status": "completed"
+      },
+      {
+        "seq": 18,
+        "opening": "a7f49dd0-0ff4-47fa-a8a6-e18ed6f6767c",
+        "role": "assistant",
+        "delivered_output_refs": [
+          "19575e9c-aaf2-5e4e-b5ea-fa7ecee35003"
+        ]
+      }
+    ],
+    "media": {
+      "job": "19575e9c-aaf2-5e4e-b5ea-fa7ecee35003",
+      "versions": [
+        "b5106b55-71e8-44e9-906c-b4021f71ecd5",
+        "be92a89c-a85a-4f30-a6d3-c9e076de142e",
+        "d07f3017-1b43-47ad-a766-d8b911b9ef8a"
+      ],
+      "object": "obj_overlay_a7323d0f6f4a5ea98ea6fcdc96fddc4f",
+      "source": "a37fda51-2f15-52c6-987f-ca12da77e761",
+      "dx": -40.0,
+      "frames": 180,
+      "sha256": "df09e44c60cdba9c1c66890975ad995daa660bb1699c37d7240336b4ec115a92",
+      "window_mae_max": 0.0,
+      "outside_mae": 0.4421848952770233,
+      "caption_band_mae": 0.3005319833755493,
+      "audio_correlation": 1.0,
+      "overlay_min_visible": 0.8289517937219731,
+      "overlay_max_outside": 0.0005325112107623318,
+      "size": [
+        360,
+        640
+      ]
+    }
+  },
+  "强杀、Stop 和同名图歧义": {
+    "project": "0168d4f7-0777-408c-8d8f-310c38238414",
+    "composition": "6423ac7c-cfd3-46e5-91e2-891069796e3b",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "6637d6e9-c60f-4ca9-936e-a249cbab9cc6",
+        "base": null,
+        "digest": "841d45a646ddc8c6626778706f4e094dd85be1f3149fb5c51139dba0e407fda1",
+        "request": null
+      },
+      {
+        "version": 2,
+        "id": "9c4ffcf6-5132-4745-8b50-239cd373ad51",
+        "base": "6637d6e9-c60f-4ca9-936e-a249cbab9cc6",
+        "digest": "fbe2d4a97418767549f57d535c1f332c868ddd5cbb8a521e878ae7ed748d51bd",
+        "request": "3068e4d4-33a4-51c9-949f-05c955f30917"
+      },
+      {
+        "version": 3,
+        "id": "efe65913-b380-45f5-a586-ada5f7727262",
+        "base": "9c4ffcf6-5132-4745-8b50-239cd373ad51",
+        "digest": "02c84acaf9d54e1b321d23af1457eceeb4ac8a2389efaa4b8e662a3fc6dcded4",
+        "request": "77c995b4-afef-5c68-aac8-7302b33e5e19"
+      },
+      {
+        "version": 4,
+        "id": "c77be96e-8434-4c6f-a8e0-fdc6e8a863cc",
+        "base": "efe65913-b380-45f5-a586-ada5f7727262",
+        "digest": "b31314248227bb31857e0a7a2116d3d86210ec26511d9885e166bd7bd9a1b495",
+        "request": "75a4a3da-c9e2-5588-a349-769542047bac"
+      }
+    ],
+    "exports": [],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 13:58:09.537519+00:00",
+        "input": 100026,
+        "output": 2665,
+        "cached": 50118,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.016603
+      },
+      {
+        "at": "2026-11-22 14:00:00.535573+00:00",
+        "input": 27540,
+        "output": 742,
+        "cached": 17536,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.004576
+      }
+    ],
+    "credits": [],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "user",
+        "state": "failed"
+      },
+      {
+        "seq": 2,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant"
+      },
+      {
+        "seq": 6,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 9,
+        "opening": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+        "role": "assistant"
+      },
+      {
+        "seq": 11,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 12,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 13,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 14,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 15,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 16,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 17,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.projectMedia",
+        "status": "completed"
+      },
+      {
+        "seq": 18,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 19,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 20,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 21,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 22,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.removeClipDone",
+        "status": "completed"
+      },
+      {
+        "seq": 23,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 24,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 25,
+        "opening": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+        "role": "assistant",
+        "previews": [
+          {
+            "composition_version_id": "c77be96e-8434-4c6f-a8e0-fdc6e8a863cc",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      },
+      {
+        "seq": 27,
+        "opening": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 29,
+        "opening": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+        "role": "assistant"
+      },
+      {
+        "seq": 30,
+        "opening": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 31,
+        "opening": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 32,
+        "opening": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+        "role": "assistant",
+        "question": "2–4 秒要放哪一张产品图？",
+        "answered": false
+      }
+    ],
+    "recovery": {
+      "versions": [
+        "6637d6e9-c60f-4ca9-936e-a249cbab9cc6",
+        "9c4ffcf6-5132-4745-8b50-239cd373ad51"
+      ],
+      "turn": "fb316771-7286-46e3-89b8-6ac2a08ffff4",
+      "recovery": "本轮已中断。已保存的修改有插入图片（版本 2）。可以从当前作品继续。",
+      "state": "failed",
+      "activity": "completed",
+      "replayed": true,
+      "export_jobs": 0
+    },
+    "ambiguity": {
+      "turn": "0907105c-b4c9-4bcd-8a2b-fc584348ee65",
+      "state": "settled",
+      "history_rows": 13,
+      "versions": 4,
+      "export_jobs": 0,
+      "events": {
+        "assistant.thinking": 39,
+        "assistant.activity": 22,
+        "assistant.row.append": 11,
+        "turn.completed": 1,
+        "turn.started": 1,
+        "assistant.row.update": 16
+      },
+      "question": null
+    },
+    "ambiguity-retest": {
+      "turn": "3058e585-5fcf-4d5d-889c-ea0847bc7167",
+      "state": "settled",
+      "history_rows": 5,
+      "versions": 4,
+      "export_jobs": 0,
+      "events": {
+        "turn.started": 1,
+        "assistant.row.append": 2,
+        "turn.completed": 1,
+        "assistant.row.update": 2,
+        "assistant.delta": 2,
+        "assistant.activity": 4,
+        "assistant.thinking": 7,
+        "assistant.interim_prose": 1
+      },
+      "question": "2–4 秒要放哪一张产品图？"
+    },
+    "stop-retest": {
+      "turn": "6c615cfe-30d1-4453-aaf4-ad2f06c2c086",
+      "state": "retracted",
+      "history_rows": 0,
+      "versions": 4,
+      "export_jobs": 0,
+      "events": {
+        "assistant.thinking": 4,
+        "turn.started": 1
+      },
+      "question": null
+    }
+  },
+  "原素材修复后回归": {
+    "project": "33b793ca-ee94-44bf-b40a-20bb901afce6",
+    "composition": "c508d58d-a09b-4355-9523-1e32df0999ef",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "521d8cc4-04de-463a-8c38-066672ec270e",
+        "base": null,
+        "digest": "db6ad48f2a73a406f3997f782af0aa818424057b3aafc78f0f8b6d80491a735c",
+        "request": null
+      },
+      {
+        "version": 2,
+        "id": "33f9daac-512c-4972-a37b-936477464c70",
+        "base": "521d8cc4-04de-463a-8c38-066672ec270e",
+        "digest": "25523e22865d76ebca63c3a6f7e7df312999e55395df8e703ee999ca20e7b048",
+        "request": "86d37b81-8945-5ad3-9a42-8a1f55bec890"
+      },
+      {
+        "version": 3,
+        "id": "7d133e17-04e4-44d6-a4b9-f23dc5222aef",
+        "base": "33f9daac-512c-4972-a37b-936477464c70",
+        "digest": "58c5a0a680ab4e56361b75e2fddfd0ad9efb2303aeb7246885ff42932537ddb3",
+        "request": "fe9bf7cd-e7fe-5c23-87fb-7a099498fef5"
+      }
+    ],
+    "exports": [
+      {
+        "job": "7187c00e-151b-5cb1-9855-f2b57ee99106",
+        "version": "7d133e17-04e4-44d6-a4b9-f23dc5222aef",
+        "credits_authorized": 12,
+        "attempt": 1,
+        "status": "succeeded",
+        "output": "7187c00e-151b-5cb1-9855-f2b57ee99106"
+      }
+    ],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 14:01:50.251365+00:00",
+        "input": 39361,
+        "output": 820,
+        "cached": 725,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.006396
+      },
+      {
+        "at": "2026-11-22 14:02:34.126771+00:00",
+        "input": 38643,
+        "output": 370,
+        "cached": 15976,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.006018
+      }
+    ],
+    "credits": [
+      {
+        "id": "07d64180-a8d6-458c-88c8-b0567abe29c3",
+        "kind": "grant",
+        "amount": 1000,
+        "balance": 1000
+      },
+      {
+        "id": "0f404843-c784-4462-8eb8-e8729011d173",
+        "kind": "hold",
+        "amount": -12,
+        "balance": 988
+      },
+      {
+        "id": "d174f51b-1718-463b-bb85-fef903c3e483",
+        "kind": "release",
+        "amount": 12,
+        "balance": 1000
+      },
+      {
+        "id": "f1731c6d-0574-4ea9-901f-4aa06a883b1e",
+        "kind": "capture",
+        "amount": -12,
+        "balance": 988
+      }
+    ],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant"
+      },
+      {
+        "seq": 6,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 9,
+        "opening": "c400f29b-3592-49ca-bf10-3702cc5db599",
+        "role": "assistant",
+        "previews": [
+          {
+            "composition_version_id": "33f9daac-512c-4972-a37b-936477464c70",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.2,
+              "start_seconds": 1.8
+            }
+          }
+        ]
+      },
+      {
+        "seq": 10,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 12,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant"
+      },
+      {
+        "seq": 13,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 14,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.translateDone",
+        "status": "completed"
+      },
+      {
+        "seq": 15,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 16,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.mediaPermission",
+        "status": "completed"
+      },
+      {
+        "seq": 17,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "question": "允许导出这个版本的 MP4 吗？最多使用 12 积分。",
+        "answered": true,
+        "previews": [
+          {
+            "composition_version_id": "7d133e17-04e4-44d6-a4b9-f23dc5222aef",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      },
+      {
+        "seq": 18,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant"
+      },
+      {
+        "seq": 19,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.videoReviewDone",
+        "status": "completed"
+      },
+      {
+        "seq": 20,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "activity": "chat.activity.deliverVideoDone",
+        "status": "completed"
+      },
+      {
+        "seq": 21,
+        "opening": "d8e53772-2bf4-4df1-9f41-c34e56f06989",
+        "role": "assistant",
+        "delivered_output_refs": [
+          "7187c00e-151b-5cb1-9855-f2b57ee99106"
+        ]
+      }
+    ],
+    "media": {
+      "job": "7187c00e-151b-5cb1-9855-f2b57ee99106",
+      "versions": [
+        "521d8cc4-04de-463a-8c38-066672ec270e",
+        "33f9daac-512c-4972-a37b-936477464c70",
+        "7d133e17-04e4-44d6-a4b9-f23dc5222aef"
+      ],
+      "object": "obj_overlay_86d37b8189455ad39a428a1f55bec890",
+      "source": "b2e2f5dd-3740-52db-8042-7166c23c4867",
+      "dx": -60.0,
+      "frames": 180,
+      "sha256": "213a498d3f362818a2ce64a5cd3d184c268500f471105f38cf11effac34a579a",
+      "window_mae_max": 0.0,
+      "outside_mae": 0.44433361291885376,
+      "caption_band_mae": 0.31041988730430603,
+      "audio_correlation": 1.0,
+      "overlay_min_visible": 0.8373617603465967,
+      "overlay_max_outside": 0.0023942537909018356,
+      "size": [
+        360,
+        640
+      ]
+    }
+  },
+  "双图新 opening": {
+    "project": "03b61f9f-c39a-45eb-bf73-c6e88596c349",
+    "composition": "e0ef7122-a508-44ad-83f5-85d955b2f5d3",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "3eea104d-f3af-4801-b083-e6080d726f90",
+        "base": null,
+        "digest": "c5391e144fb8a48560bddaaa94601a07deb827bfb46ffe11353675e09bcde0bc",
+        "request": null
+      },
+      {
+        "version": 2,
+        "id": "d8c157f4-9ccb-4f3e-947d-a7980187ad83",
+        "base": "3eea104d-f3af-4801-b083-e6080d726f90",
+        "digest": "9e49cc4f9f2970ff32714f23d028d7ffba5981d88f8237eb6328da427a11ae89",
+        "request": "be8a90a5-5a61-5b1a-a324-91f857a215c3"
+      }
+    ],
+    "exports": [],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 14:13:30.958282+00:00",
+        "input": 27247,
+        "output": 575,
+        "cached": 15872,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.004432
+      },
+      {
+        "at": "2026-11-22 14:14:06.317831+00:00",
+        "input": 40886,
+        "output": 675,
+        "cached": 23477,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.006538
+      }
+    ],
+    "credits": [],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "58ce0dd0-25e8-4721-ae83-a2dfdb3f7a1d",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "58ce0dd0-25e8-4721-ae83-a2dfdb3f7a1d",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "58ce0dd0-25e8-4721-ae83-a2dfdb3f7a1d",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.projectMedia",
+        "status": "completed"
+      },
+      {
+        "seq": 4,
+        "opening": "58ce0dd0-25e8-4721-ae83-a2dfdb3f7a1d",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 6,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": "58ce0dd0-25e8-4721-ae83-a2dfdb3f7a1d",
+        "role": "assistant",
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "answered": false
+      },
+      {
+        "seq": 8,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 9,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 10,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 11,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "assistant",
+        "activity": "chat.activity.insertVisualDone",
+        "status": "completed"
+      },
+      {
+        "seq": 12,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "assistant",
+        "activity": "chat.activity.previewRangeDone",
+        "status": "completed"
+      },
+      {
+        "seq": 13,
+        "opening": "b6880a99-dc3e-4d03-8b9f-da1ac9dd0330",
+        "role": "assistant",
+        "previews": [
+          {
+            "composition_version_id": "d8c157f4-9ccb-4f3e-947d-a7980187ad83",
+            "scrub": {
+              "kind": "range",
+              "end_seconds": 4.5,
+              "start_seconds": 1.5
+            }
+          }
+        ]
+      }
+    ],
+    "choice": {
+      "project": "03b61f9f-c39a-45eb-bf73-c6e88596c349",
+      "mentioned_assets": [
+        "dc17ca8e-21c7-4c32-936d-3d6b072fa1b9",
+        "8cada0b1-fd16-4b10-ae20-651f092909b0"
+      ],
+      "after_ask": [
+        "3eea104d-f3af-4801-b083-e6080d726f90"
+      ],
+      "question": {
+        "kind": "question",
+        "slot": null,
+        "items": [],
+        "options": [
+          {
+            "id": "dc17",
+            "label": "LAMP 08（粉色横版）",
+            "description": "产品图-1795356783-HwCXXw.png，220×120 横版"
+          },
+          {
+            "id": "8cada",
+            "label": "LAMP 12（绿色竖版）",
+            "description": "产品图-1795356788-KBtL0w.png，132×184 竖版"
+          }
+        ],
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "default_path": "若不选择，将使用第一张（LAMP 08）放入第 2–4 秒并播放预览。",
+        "group_digest": null,
+        "allow_freeform": true,
+        "recommended_id": "dc17"
+      },
+      "after_answer": [
+        "3eea104d-f3af-4801-b083-e6080d726f90",
+        "d8c157f4-9ccb-4f3e-947d-a7980187ad83"
+      ],
+      "export_jobs": 0,
+      "answered_original_question": false,
+      "chosen_asset": "8cada0b1-fd16-4b10-ae20-651f092909b0",
+      "snapshot": "475de7a8-3438-5f68-a6a9-f798e20d8b30",
+      "object": "obj_overlay_be8a90a55a615b1aa32491f857a215c3",
+      "range": {
+        "end": 360000,
+        "start": 180000
+      }
+    }
+  },
+  "QuestionDock 首次": {
+    "project": "5e0f4dfa-5dca-4690-b8d2-55ff971e46e3",
+    "composition": "0ad4cff4-0597-4575-9b69-105c855a367e",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "47948c1b-38b0-4b69-bf54-e15abbc81f3a",
+        "base": null,
+        "digest": "b4810812cfd0bbc6d2c7fb4e6a639342789a3b6114d7fc603eca456f3f158e24",
+        "request": null
+      }
+    ],
+    "exports": [],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 14:15:32.124051+00:00",
+        "input": 18225,
+        "output": 593,
+        "cached": 256,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.00309
+      },
+      {
+        "at": "2026-11-22 14:16:22.778843+00:00",
+        "input": 28358,
+        "output": 1955,
+        "cached": 14592,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.005427
+      }
+    ],
+    "credits": [
+      {
+        "id": "04eab211-0d52-4711-861c-5ceda6619316",
+        "kind": "grant",
+        "amount": 1000,
+        "balance": 1000
+      }
+    ],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant"
+      },
+      {
+        "seq": 6,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "answered": true
+      },
+      {
+        "seq": 9,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 10,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.projectMedia",
+        "status": "completed"
+      },
+      {
+        "seq": 11,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant"
+      },
+      {
+        "seq": 12,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 13,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 14,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "activity": "chat.activity.mediaPermission",
+        "status": "completed"
+      },
+      {
+        "seq": 15,
+        "opening": "f8fc5e1b-cc7c-44e2-bad3-6d6f56ebcdb6",
+        "role": "assistant",
+        "question": "允许为「粉色调的品牌封面卡片：满版洋红粉背景，中间白色细边框，内居中白色无衬线大写文字 LAMPO，下方小号白字 STUDIO LAMP。干净、极简、产品感，无任何其他元素。」生成图片吗？最多使用 2 积分。",
+        "answered": false
+      }
+    ],
+    "choice": {
+      "project": "5e0f4dfa-5dca-4690-b8d2-55ff971e46e3",
+      "mentioned_assets": [
+        "8abca9ea-d99e-44e5-a6a6-c737e3c95276",
+        "80b19592-92af-4b1b-a020-3f5c3940cffc"
+      ],
+      "after_ask": [
+        "47948c1b-38b0-4b69-bf54-e15abbc81f3a"
+      ],
+      "question": {
+        "kind": "question",
+        "slot": null,
+        "items": [],
+        "options": [
+          {
+            "id": "a",
+            "label": "粉色 LAMPO 封面",
+            "description": "8abca9ea，粉色底 LAMPO 字样竖版图"
+          },
+          {
+            "id": "b",
+            "label": "绿色 LAMP 12",
+            "description": "80b19592，绿色底 LAMP 12 产品图"
+          }
+        ],
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "default_path": "",
+        "group_digest": null,
+        "allow_freeform": true,
+        "recommended_id": "b"
+      }
+    }
+  },
+  "QuestionDock 第一次修后复测": {
+    "project": "ae943978-9715-442c-83bc-a664d8858c33",
+    "composition": "b3a58413-f36f-4c11-9b90-e0e641915781",
+    "files_sha256": {
+      "lamp.png": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+      "product-demo.mp4": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+    },
+    "versions": [
+      {
+        "version": 1,
+        "id": "4af79df2-893d-4944-8c58-4d55dde1d6eb",
+        "base": null,
+        "digest": "99ba6dad3db4db0b8990dbbee99d2757cb7d4fa62e624bd1c200168840dc24aa",
+        "request": null
+      }
+    ],
+    "exports": [],
+    "conversation_usage": [
+      {
+        "at": "2026-11-22 14:19:19.894030+00:00",
+        "input": 27167,
+        "output": 658,
+        "cached": 22912,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.00447
+      },
+      {
+        "at": "2026-11-22 14:19:27.963348+00:00",
+        "input": 17277,
+        "output": 603,
+        "cached": 8381,
+        "model": "MiniMax-M3.1-Flash",
+        "usd": 0.002953
+      }
+    ],
+    "credits": [
+      {
+        "id": "85d12082-dab9-4ae3-9abd-6ce181ccb4d9",
+        "kind": "grant",
+        "amount": 1000,
+        "balance": 1000
+      }
+    ],
+    "media_jobs": [],
+    "history": [
+      {
+        "seq": 1,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "user",
+        "state": "settled"
+      },
+      {
+        "seq": 2,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 3,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 4,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 5,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.activity.videoMaterialsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 6,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 7,
+        "opening": null,
+        "role": "assistant",
+        "activity": "chat.material.readingDoneProgress",
+        "status": "completed"
+      },
+      {
+        "seq": 8,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "answered": true
+      },
+      {
+        "seq": 9,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 10,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.inspectingDone.asset",
+        "status": "completed"
+      },
+      {
+        "seq": 11,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "activity": "chat.activity.inspectClipsDone",
+        "status": "completed"
+      },
+      {
+        "seq": 12,
+        "opening": "680ff43f-dba1-49e7-9fca-9d76652e4943",
+        "role": "assistant",
+        "question": "「绿色 LAMP 12」具体想要什么效果？",
+        "answered": false
+      }
+    ],
+    "choice": {
+      "project": "ae943978-9715-442c-83bc-a664d8858c33",
+      "mentioned_assets": [
+        "e8320441-62e3-407e-b2f6-a1a3903bdd67",
+        "1d2992b4-94f9-4dc6-8001-a4ee8dd69383"
+      ],
+      "after_ask": [
+        "4af79df2-893d-4944-8c58-4d55dde1d6eb"
+      ],
+      "question": {
+        "kind": "question",
+        "slot": null,
+        "items": [],
+        "options": [
+          {
+            "id": "pink",
+            "label": "粉色 LAMP 08",
+            "description": "横版 220×120，粉色底，贴到画面上方不遮挡字幕"
+          },
+          {
+            "id": "green",
+            "label": "绿色 LAMP 12",
+            "description": "竖版 132×184，绿色底，画面偏窄"
+          }
+        ],
+        "question": "第 2–4 秒要放哪一张产品图？",
+        "default_path": "",
+        "group_digest": null,
+        "allow_freeform": true,
+        "recommended_id": "pink"
+      }
+    }
+  }
+}

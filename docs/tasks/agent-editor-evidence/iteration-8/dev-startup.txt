@@ -1,0 +1,110 @@
+api
+Traceback (most recent call last):
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 232, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "<python>/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/app/main.py", line 47, in lifespan
+    await require_current_schema()
+  File "<repo>/apps/api/app/models/database.py", line 41, in require_current_schema
+    raise RuntimeError(
+RuntimeError: Database revision 'j6b01_export_jobs' differs from 'j6d05_project_brief'. Verify the target database, then run alembic upgrade head explicitly.
+
+worker
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "<repo>/apps/api/app/worker.py", line 184, in <module>
+    main()
+  File "<repo>/apps/api/app/worker.py", line 178, in main
+    asyncio.run(run_worker())
+  File "<python>/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "<python>/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<python>/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "<repo>/apps/api/app/worker.py", line 146, in run_worker
+    await require_current_schema()
+  File "<repo>/apps/api/app/models/database.py", line 41, in require_current_schema
+    raise RuntimeError(
+RuntimeError: Database revision 'j6b01_export_jobs' differs from 'j6d05_project_brief'. Verify the target database, then run alembic upgrade head explicitly.

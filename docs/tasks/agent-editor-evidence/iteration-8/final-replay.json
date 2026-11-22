@@ -1,0 +1,44 @@
+{
+  "514b6cc8-1dd3-44ec-a7d6-216cfc8df7a5": [
+    {
+      "action": "insert_visual",
+      "call": "chatcmpl-tool-9b8a264a8553ab71",
+      "version_id": "1f27490b-934d-4a63-ad14-cb5dc04fe6f8",
+      "replayed": true
+    },
+    {
+      "action": "translate",
+      "call": "chatcmpl-tool-8a778929a7c085c9",
+      "version_id": "ffad79dd-d7aa-462b-b8f4-00cad6ab186b",
+      "replayed": true
+    }
+  ],
+  "ab9d0b3b-3956-4690-95e4-0873e144e2f2": [
+    {
+      "action": "insert_visual",
+      "call": "call_01a20386736276438f4bb5af",
+      "version_id": "be92a89c-a85a-4f30-a6d3-c9e076de142e",
+      "replayed": true
+    },
+    {
+      "action": "translate",
+      "call": "call_01a20389fc56728a92ac4a50",
+      "version_id": "d07f3017-1b43-47ad-a766-d8b911b9ef8a",
+      "replayed": true
+    }
+  ],
+  "33b793ca-ee94-44bf-b40a-20bb901afce6": [
+    {
+      "action": "insert_visual",
+      "call": "call_01a2038f9ad874449ce454ca",
+      "version_id": "33f9daac-512c-4972-a37b-936477464c70",
+      "replayed": true
+    },
+    {
+      "action": "translate",
+      "call": "call_01a203905058718fb6e56de2",
+      "version_id": "7d133e17-04e4-44d6-a4b9-f23dc5222aef",
+      "replayed": true
+    }
+  ]
+}

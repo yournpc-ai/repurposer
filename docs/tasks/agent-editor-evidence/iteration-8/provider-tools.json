@@ -1,0 +1,112 @@
+{
+  "insert_visual": {
+    "name": "insert_visual",
+    "description": "Place a fixed project image above the existing footage for a timeline window. Use the returned object ID for later position or scale changes.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "description": "Fixed image snapshot returned by prepare_video_materials.",
+          "format": "uuid",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "start_seconds": {
+          "description": "Inclusive composition time.",
+          "minimum": 0,
+          "title": "Start Seconds",
+          "type": "number"
+        },
+        "end_seconds": {
+          "description": "Exclusive composition time.",
+          "exclusiveMinimum": 0,
+          "title": "End Seconds",
+          "type": "number"
+        },
+        "position": {
+          "default": "top_right",
+          "enum": [
+            "top_left",
+            "top_right",
+            "bottom_left",
+            "bottom_right"
+          ],
+          "title": "Position",
+          "type": "string"
+        },
+        "width_ratio": {
+          "default": 0.25,
+          "description": "Fraction of canvas width; preserves image proportions.",
+          "exclusiveMinimum": 0.05,
+          "maximum": 1,
+          "title": "Width Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source_id",
+        "start_seconds",
+        "end_seconds"
+      ],
+      "title": "InsertVisualArgs",
+      "type": "object"
+    }
+  },
+  "inventories": {
+    "b99a6e0ba7cbd518ed4ef490dcd86438bc2dfeb9bb87eb76541ca3af40a60c48": [
+      "ask_user",
+      "answer",
+      "get_asset",
+      "list_project_media",
+      "prepare_video_materials",
+      "deliver_video",
+      "extend_still",
+      "export_video",
+      "bind_clip_source",
+      "insert_visual",
+      "insert_audio",
+      "generate_image",
+      "generate_voice",
+      "generate_music",
+      "inspect_timeline",
+      "inspect_clip",
+      "remove_clip",
+      "split_clip",
+      "trim_clip",
+      "move_clip",
+      "set_keyframe",
+      "translate",
+      "scale",
+      "preview_range",
+      "review_video",
+      "align_recording",
+      "get_narration_alignment",
+      "annotate_narration",
+      "read_conversation_context"
+    ],
+    "898ecf032d82c1641c4d268686acf9052f6c3aa52d25090d7bb8c41735451121": [
+      "ask_user",
+      "answer",
+      "review_video"
+    ],
+    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": [],
+    "7e0bac470d49e4620698b2ac82a8a1fee78d873c5dbd98050cb1da50083b049b": [
+      "ask_user",
+      "answer",
+      "deliver_video",
+      "review_video"
+    ],
+    "59687ed2af713e21a04e46cf0be452b6925074f48e55d068e089d247873d1f39": [
+      "answer"
+    ],
+    "6ce13b892c39b275d8b90eb43737ed06363dc2738c1c1ae3024ab30831ee6728": [
+      "answer",
+      "review_video"
+    ],
+    "7a6491681735df0d6f869da2497b41af529367c69afa9753021e2e376a4232bc": [
+      "answer",
+      "deliver_video",
+      "review_video"
+    ]
+  }
+}

@@ -10,6 +10,8 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ### 0.1 里程碑状态
 
+- **I8 首个专业编辑切片有条件通过。** 已有视频的固定图片插入、同对象续改、局部回放、授权交付和保存后强杀恢复已有真实记录。原 Dev 库保留，默认入口改用独立库。横图首次、竖图首次、歧义首次失败及原素材回归分别计数。[当前范围](tasks/i8.md) · [五面证据与费用](tasks/agent-editor-evidence/iteration-8/README.md)
+
 - 6A 已在原验收库核对回归记录，并以真实认领函数复现跨时钟误回收。历史首个 token 与供应商最终账单未留证。详见 [执行审计](tasks/agent-editor-evidence/iteration-6/README.md)。6B 已在真实隔离栈完成原接缝、片尾卡、强杀恢复和十用户私有播放。TOS 建桶返回 403，云端上线待验。[6B 验收](tasks/agent-editor-evidence/iteration-6/export.md)。
 
 - 6C 隔离验收使用 PostgreSQL 5966。合成文字卡经原生导出处理函数、ExportJob 和 Renderer 写入现有 TOS；按不可变版本配置公开测试许可。对象匿名 GET 为 200，其他用户访问应用的 Output、签发与下载入口均为 403。事故旁白历史回放和原库删除盘点等待只读实例或一致性备份。[真实 TOS 导出记录](tasks/agent-editor-evidence/iteration-6/public-test-export.json)
