@@ -212,7 +212,7 @@ const en = {
     title: "Rookie Cut — Your AI video editor",
     description: "Share footage and ideas with Rookie Cut, your AI video editor. Preview the first cut and refine the same video in chat.",
   },
-  "heroEyebrow": "Your AI video editor",
+  "heroEyebrow": "Your AI video agent",
   "showcase": {
     "label": "Video creation demonstration",
     "types": "Video types",
@@ -362,15 +362,15 @@ const en = {
     signIn: "Sign in",
     openStudio: "Start a chat",
     headerCta: "Start a chat",
-    heroCta: "Start a chat",
+    heroCta: "Create now",
     entry: {
       navigation: "Main navigation",
       community: "Join the community",
     },
-    heroTitle1: "You call the cut.",
+    heroTitle1: "Rookies can make great videos too.",
     heroTitle2: "",
     heroSubtitle:
-      "Share your footage and tell me what you have in mind.\nWatch the cut, then tell me where to make a change.",
+      "No complex timelines or keyframes.\nCreate animated promos and explainer videos—just by chatting.",
     earlyAccess: {
       title: "What are you working on?",
       description: "Bring a clip, a brief, or a cut you want to revisit.",
@@ -406,6 +406,7 @@ const en = {
       },
     },
     footer: {
+      tagline: "You call the cut.",
       autoTheme: "Auto",
       columns: {
         company: "Company",

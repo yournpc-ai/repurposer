@@ -23,7 +23,7 @@ export function Footer() {
       <div className="grid gap-14 md:grid-cols-[1fr_1fr] md:gap-10">
         <div className="self-start">
           <a href="#top" className="inline-flex w-fit items-center gap-2 text-xl font-semibold tracking-tight"><LogoMark className="size-6" />Rookie Cut</a>
-          <p className="mt-6 max-w-xs text-sm leading-6 text-muted-foreground sm:text-base">{t("landing.heroTitle1")}</p>
+          <p className="mt-6 max-w-xs text-sm leading-6 text-muted-foreground sm:text-base">{t("landing.footer.tagline")}</p>
         </div>
         <div className="grid grid-cols-2 gap-5 sm:gap-10">
           {([['company', company], ['social', social]] as const).map(([key, entries]) => <div key={key}>

@@ -17,7 +17,7 @@
 
 ## 3. Hero、导航与内测商业面
 
-- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie Cut**。Hero 小字为 `Your AI video editor / 你的 AI 视频剪辑师`，主标题为 `You call the cut. / 你说，我来剪。`。说明邀请用户发素材、看第一版、在原对话提出修改。Header、Hero 与收尾按钮均使用 `Start a chat / 开始对话`。
+- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie Cut**。Hero 小字为 `Your AI video agent / 你的 AI 视频 Agent`，主标题为 `Rookies can make great videos too. / 新手也能做出好视频`，主按钮为 `Create now / 立即制作`。Header 与收尾按钮使用 `Start a chat / 开始对话`。
 - 桌面 Hero 上/下间距为 32/48px；主标题沿用现有响应式 clamp，上限 72px、常规字重，使用自托管的 Cormorant Garamond + Noto Serif SC 高对比衬线字族。说明限宽 32rem，中英文按语义显式分为两行，不在词语中间断行；与主按钮间隔 48px，主按钮文字为 14/16px。`CreationShowcase` 桌面顶部间距为 40px，面板最大宽度仍保持 1200px。
 - 配置真实 Discord 地址后，Hero 显示「加入社群」外链；未配置时不显示第二入口。
 - Header 使用「定价 / 常见问题」两个正文锚点，撤掉悬浮的重复功能介绍。移动 Sheet 保留内测入口及相同两个锚点，另保留主题、语言和主按钮。
@@ -67,7 +67,7 @@
 
 ## 6. Footer 与真实公开入口
 
-Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权的布局。品牌下方使用 Hero 主标题作为一句话说明，不另写第二套品牌文案。Company 只保留 Pricing、Changelog、Terms of Service、Privacy Policy；Social media 只保留 X、Discord、TikTok；Resources 整栏与 Docs、News、YouTube、LinkedIn、Instagram 入口均不渲染。移除主题/语言控件、大字 wordmark、图标排和分隔线。当前未有真实目的地的栏目只渲染不可点击文字，不用空 href、平台首页或弹窗冒充链接；发布前须接入真实目的地或移除这些文字。桌面品牌与导航各占一半，手机品牌在上、导航两列。
+Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权的布局。品牌下方使用 `You call the cut. / 你说，我来剪。`。Company 只保留 Pricing、Changelog、Terms of Service、Privacy Policy；Social media 只保留 X、Discord、TikTok；Resources 整栏与 Docs、News、YouTube、LinkedIn、Instagram 入口均不渲染。移除主题/语言控件、大字 wordmark、图标排和分隔线。当前未有真实目的地的栏目只渲染不可点击文字，不用空 href、平台首页或弹窗冒充链接；发布前须接入真实目的地或移除这些文字。桌面品牌与导航各占一半，手机品牌在上、导航两列。
 
 公开配置统一位于 `components/landing/content.ts`，经 Vite 环境变量注入；`apps/web/Dockerfile` 与根 `docker-compose.yml` 同步传递这些 build args，避免本地与线上曝光不一致：
 

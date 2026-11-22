@@ -199,7 +199,7 @@ const zh: Resources = {
     title: "Rookie Cut — 你的 AI 视频剪辑师",
     description: "把素材和想法交给 Rookie Cut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
   },
-  "heroEyebrow": "你的 AI 视频剪辑师",
+  "heroEyebrow": "你的 AI 视频 Agent",
   "showcase": {
     "label": "视频制作演示",
     "types": "视频类型",
@@ -349,15 +349,15 @@ const zh: Resources = {
     signIn: "登录",
     openStudio: "开始对话",
     headerCta: "开始对话",
-    heroCta: "开始对话",
+    heroCta: "立即制作",
     entry: {
       navigation: "主导航",
       community: "加入社群",
     },
-    heroTitle1: "你说，我来剪。",
+    heroTitle1: "新手也能做出好视频",
     heroTitle2: "",
     heroSubtitle:
-      "把素材发来，说说你想剪成什么样。\n看过第一版，想改哪一处，就在这里接着说。",
+      "通过对话，轻松制作融合动态图形、\n丰富动画与精细剪辑的视频。",
     earlyAccess: {
       title: "你手上有什么想剪的？",
       description: "一段素材、一份想法，或是一支想再改改的片子，都可以发来。",
@@ -393,6 +393,7 @@ const zh: Resources = {
       },
     },
     footer: {
+      tagline: "你说，我来剪。",
       autoTheme: "自动",
       columns: {
         company: "公司",
