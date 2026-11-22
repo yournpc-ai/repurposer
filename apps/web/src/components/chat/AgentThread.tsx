@@ -1514,9 +1514,11 @@ export function AgentThread({
         // Rows whose content IS the bare question (code-composed, legacy)
         // carry no echo — the pill's title already says it.
         const echo = questionEcho(message)
-        if (echo || deliveryOutputRefs(message.intent).length > 0) {
+        if (echo || message.blocks?.length || deliveryOutputRefs(message.intent).length > 0) {
           pushMessage({
             role: "assistant",
+            serverMessageId: message.id,
+            blocks: message.blocks?.length ? message.blocks : undefined,
             outputRefs: deliveryOutputRefs(message.intent),
             proseDrainedAtMs: Date.now(),
             content: echo ?? "",

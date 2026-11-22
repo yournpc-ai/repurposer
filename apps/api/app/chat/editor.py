@@ -148,7 +148,8 @@ class SetKeyframeArgs(ClipArgs):
     animation_id: str = Field(min_length=1, max_length=64)
     at: int = Field(ge=0, strict=True, description="Existing clip-local tick from inspect_clip.")
     value: KeyframeNumber | tuple[KeyframeNumber, KeyframeNumber] = Field(
-        description="Scale multiplier or [x, y] position offset in canvas pixels."
+        description="Absolute scale multiplier or animated [x, y] offset added to the static transform. "
+                    "In canvas pixels, positive x moves the object right and positive y moves it down."
     )
 
 
@@ -285,6 +286,11 @@ def _ticks(seconds, timebase):
     return int(ticks)
 
 
+def _transform_animations(animations):
+    return [a.model_dump(mode="json") for a in animations
+            if a.text_part is None and a.property in {"transform.scale", "transform.position"}]
+
+
 def _clip_facts(track, clip, content):
     rate = content.settings.timebase
     obj = clip.object
@@ -319,6 +325,7 @@ def _clip_facts(track, clip, content):
 def requests_observation_first(text: str) -> bool:
     """Honor an explicit watch-then-decide request before its first edit."""
     return bool(re.search(
+        r"先(?:检查(?:并|后)|实际)?(?:预览|播放|试听)|"
         r"(?:实际|先).{0,8}(?:看片|看一下|预览|播放|试听).{0,65}(?:问题|不合适|发现|再).{0,20}(?:改|调|移除|删除)|"
         r"\b(?:watch|listen|preview|review)\b.{0,100}\b(?:if|before|then)\b.{0,65}\b(?:fix|edit|adjust|change|remove|delete)\w*",
         text, re.I | re.S,
@@ -463,6 +470,7 @@ async def edit_clip(
             op = UpdateClip(op="update_clip", clip_id=target.clip_id, animations=animations)
             extra["keyframe"] = {"animation_id": animation.animation_id, "property": animation.property,
                                  "at": frame.at, "before": frame.value, "after": args.value}
+            extra["transform_animations"] = _transform_animations(animations)
         elif isinstance(args, ExtendStillArgs):
             if (target.object.kind not in {"text", "image", "shape"} or target.animations
                     or target.linked_group_id or getattr(target.object, "caption", None)
@@ -696,6 +704,8 @@ async def execute_editor(turn, name, args):
                         k: clip[k]
                         for k in ("clip_id", "object_id", "kind", "start_seconds", "end_seconds")
                     }
+                if name == "set_keyframe":
+                    focused[args.clip_id]["transform_animations"] = result["transform_animations"]
                 applied = (
                     list(recent.get("applied", []))
                     if recent.get("composition_id") == result["composition_id"]
@@ -770,10 +780,7 @@ async def execute_editor(turn, name, args):
                     page = neighbors[max(0, index - 1) : index + 2]
                     scope = {
                         "target_clip_id": args.clip_id,
-                        "transform_animations": [
-                            a.model_dump(mode="json") for a in target[1].animations
-                            if a.text_part is None and a.property in {"transform.scale", "transform.position"}
-                        ],
+                        "transform_animations": _transform_animations(target[1].animations),
                     }
                 else:
                     page = clips[args.offset : args.offset + 24]

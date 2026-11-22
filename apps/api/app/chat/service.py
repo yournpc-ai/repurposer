@@ -1065,7 +1065,8 @@ def _video_no_progress_text(text: str, read: dict) -> str:
 
 
 def _design_no_progress_text(
-    text: str, *, version_saved: bool, video_read: dict | None = None
+    text: str, *, version_saved: bool, video_read: dict | None = None,
+    exported: bool = False, delivered: bool = False,
 ) -> str:
     """Honest close after the loop's Film rejection policy stops a retry.
 
@@ -1073,6 +1074,11 @@ def _design_no_progress_text(
     erase the fact that an earlier version was saved this turn, while a
     failed first design must not claim that any new storyboard exists.
     """
+    if delivered:
+        return "已审阅的 MP4 已交付到本次对话。" if _prefers_zh(text) else "The reviewed MP4 is attached to this chat."
+    if exported:
+        return ("MP4 已导出，本轮未完成交付。" if _prefers_zh(text)
+                else "The MP4 was exported. Delivery did not finish in this turn.")
     if video_read is not None:
         return _video_no_progress_text(text, video_read)
     if _prefers_zh(text):

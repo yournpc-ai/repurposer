@@ -117,6 +117,8 @@ async def test_no_progress_without_saved_version_does_not_claim_saved_history():
     assert "did not save a new storyboard" in english
     assert "此前保存" not in chinese
     assert "没有保存新的分镜" in chinese
+    exported = _design_no_progress_text("导出", version_saved=False, exported=True)
+    assert "MP4 已导出" in exported and "未完成交付" in exported
 
 
 @pytest.mark.asyncio

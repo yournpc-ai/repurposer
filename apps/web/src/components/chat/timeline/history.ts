@@ -661,12 +661,13 @@ export function mapHistoryRows(
           // block quotes the BARE question — a refresh reads like the
           // live flow did.
           const echo = questionEcho(m)
-          if (echo || deliveryOutputRefs(m.intent).length > 0) {
+          if (echo || m.blocks?.length || deliveryOutputRefs(m.intent).length > 0) {
             pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
               content: echo ?? "",
               outputRefs: deliveryOutputRefs(m.intent),
+              blocks: m.blocks?.length ? m.blocks : undefined,
               at: m.created_at,
             })
           }
@@ -698,6 +699,7 @@ export function mapHistoryRows(
             role: "assistant",
             content: m.content ?? "",
             outputRefs: deliveryOutputRefs(m.intent),
+            blocks: m.blocks?.length ? m.blocks : undefined,
             at: m.created_at,
           })
         }
@@ -710,6 +712,7 @@ export function mapHistoryRows(
           role: "assistant",
           content: m.content ?? "",
           outputRefs: deliveryOutputRefs(m.intent),
+          blocks: m.blocks?.length ? m.blocks : undefined,
           at: m.created_at,
         })
       } else if (m.question.kind === "question") {
@@ -717,12 +720,13 @@ export function mapHistoryRows(
         // pending_question fetch) — its framing prose replays as a
         // flow message so the refresh reads like the live flow did.
         const echo = questionEcho(m)
-        if (echo || deliveryOutputRefs(m.intent).length > 0) {
+        if (echo || m.blocks?.length || deliveryOutputRefs(m.intent).length > 0) {
           pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
             content: echo ?? "",
             outputRefs: deliveryOutputRefs(m.intent),
+            blocks: m.blocks?.length ? m.blocks : undefined,
             at: m.created_at,
           })
         }

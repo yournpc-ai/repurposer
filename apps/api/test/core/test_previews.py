@@ -353,7 +353,9 @@ def test_sampled_frame_facts_distinguish_static_source_from_rendered_movement():
         image.paste((0, 0, 0), (x, 0, x + 8, 18))
         image.save(encoded, format="JPEG")
         frames.append((encoded.getvalue(), seconds))
-    facts = sampled_frame_facts(frames)
+    facts = sampled_frame_facts(frames, background="#000000")
+    assert facts[0]["edges_matching_canvas_color_px"]["left"] == 8
+    assert facts[2]["edges_matching_canvas_color_px"]["left"] == 0
     assert facts[0]["pixel_difference_from_previous_bbox_px"] is None
     assert facts[1]["pixel_difference_from_previous_bbox_px"] == []
     assert facts[2]["pixel_difference_from_previous_bbox_px"] == [0, 0, 16, 18]

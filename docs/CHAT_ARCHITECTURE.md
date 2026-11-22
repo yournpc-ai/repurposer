@@ -12,9 +12,9 @@ chat/plan_turn.py 组装当前消息、项目素材、已知 Brief 及其来源�
 
 检查旁白时，`inspect_clip` 返回原文、声音、源快照、时间窗及已绑定的对齐标识。已有待配音对象用 `bind_clip_source` 绑定录音，独立声音用 `insert_audio` 放置。Agent 可在检查和预览后以 `remove_clip(clip_id)` 移除单个重复片段。它复用既有 RemoveClip 和写入事务，校验所属项目、基础版本及摘要，同一原生调用可重放。需要一并删除关联片段或派生字幕时，单项删除会被拒绝。其他片段保留原位置。
 
-chat/editor_media.py 在生成前校验 opening、项目、原生 call ID、参数指纹和报价。需要授权时持久化带 approve/decline 选项的问题。服务端在回答原问题时使用原参数和上限。报价问题、授权接受、供应商实际返回以及钱包结算分别有自己的事实。
+chat/editor_media.py 在生成前校验 opening、项目、原生 call ID、参数指纹和报价。需要授权时持久化带 approve/decline 选项的问题。服务端在回答原问题时使用原参数和上限。报价问题、授权接受、供应商实际返回以及钱包结算分别有自己的事实。同一消息附带的局部预览显示在授权问题上方，回答问题或刷新历史后仍可播放对应版本。
 
-MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快照、摘要、时长或尺寸、计费与可用状态。插入时间线产生新的 CompositionVersion。ExportJob 固定确切版本与渲染规格；成功的 Output 可以审阅。review_video 读取真实 MP4，deliver_video 核对审片摘要、版本及字节后写入持久交付消息。后续修改保存新版本，之前的卡继续指向当时的 Output。 导出授权续行按 opening 的提交标记和不可变版本恢复已执行的编辑。Agent 先审阅该次导出的 Output，再决定是否需要进一步修订。用户点选历史 Output 时可审阅并交付原文件，交付校验该 Output 的版本和 SHA-256。
+MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快照、摘要、时长或尺寸、计费与可用状态。插入时间线产生新的 CompositionVersion。ExportJob 固定确切版本与渲染规格；成功的 Output 可以审阅。review_video 读取真实 MP4，deliver_video 核对审片摘要、版本及字节后写入持久交付消息。后续修改保存新版本，之前的卡继续指向当时的 Output。 导出授权续行按 opening 的提交标记和不可变版本恢复已执行的编辑。续行的工具投影在审阅前后都限定于已授权文件的审阅、交付和答复。若审阅发现尚存缺陷，在回执中说明；新的修订由后续用户请求发起。用户点选历史 Output 时可审阅并交付原文件，交付校验该 Output 的版本和 SHA-256。
 
 ## 消息、Stop 与恢复
 

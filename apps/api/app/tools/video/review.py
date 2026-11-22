@@ -647,7 +647,21 @@ async def _user_review_requirements(db, *, opening_id: UUID, output: Output, own
         Message.conversation_id == opening.conversation_id, Message.role == "user",
         Message.seq < opening.seq, made_version,
     ).order_by(Message.seq.desc()).limit(4)))
+    comparison = {}
+    if pinned.base_version_id:
+        from app.editing.store import content_of
+        from app.editing.temporal import timeline_duration
+
+        parent = await db.get(CompositionVersion, pinned.base_version_id)
+        if parent and parent.composition_id == pinned.composition_id:
+            durations = {}
+            for label, version in (("parent", parent), ("exported", pinned)):
+                content = content_of(version)
+                durations[label] = {"version": version.version,
+                                    "seconds": timeline_duration(content) / content.settings.timebase}
+            comparison["immutable_version_durations"] = durations
     return json.dumps({
+        **comparison,
         "current_user_request": opening.content,
         "prior_user_requests_for_this_work": list(reversed(prior)),
     }, ensure_ascii=False)

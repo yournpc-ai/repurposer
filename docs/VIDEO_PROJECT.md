@@ -367,7 +367,7 @@ Animation 存在所属 Clip 内并随 Clip 移动、复制和删除；target 必
 - 现有 spring 行为可先作为受支持 easing 或确定性烘焙输入保留，不在首批强行重写；
 - AnimationPreset 只在实例化时展开为属性和关键帧，Renderer 不查 Preset 注册表。
 
-Chat 的 set_keyframe 从所选版本按 Clip、Animation 和局部整数 tick 定位，仅写整对象已有缩放或位移点的值。服务端保留其余点、easing 与其他动画，通过 UpdateClip 和版本 CAS 提交。
+Chat 的 set_keyframe 从所选版本按 Clip、Animation 和局部整数 tick 定位，仅写整对象已有缩放或位移点的值。服务端保留其余点、easing 与其他动画，通过 UpdateClip 和版本 CAS 提交。OxValue 验收中两次调用顺序保存为 v16、v17，实际内容差异限于同一对象的两个水平位移值，六段旁白及固定源引用逐项相同。[版本差异与来源](tasks/agent-editor-evidence/iteration-7/journeys.json)
 
 插值求值还须冻结首关键帧之前、末关键帧之后与 Clip 边界的行为，重复时间键与非法目标/属性明确拒绝；按 §6.5 的共享 fixtures 对照 Preview/Render。首批只提供实际使用的属性与 easing，不预建通用动画编辑器。
 

@@ -555,7 +555,7 @@ def preview_sample_frames(intervals):
              + intervals[i * (len(intervals) - 1) // 5][1] - 1) // 2 for i in range(6)]
 
 
-def sampled_frame_facts(frames):
+def sampled_frame_facts(frames, *, background):
     from PIL import Image, ImageChops
 
     facts = []
@@ -563,7 +563,16 @@ def sampled_frame_facts(frames):
     for jpeg, seconds in frames:
         with Image.open(io.BytesIO(jpeg)) as source:
             current = source.convert("RGB")
+        # Measure only the decoded pixels. A matching strip can also be
+        # intentional artwork; its width is evidence for visual comparison.
+        delta = ImageChops.difference(current, Image.new("RGB", current.size, background))
+        bounds = delta.point(lambda channel: 255 if channel > 8 else 0).getbbox()
         facts.append({
+            "sample_size_px": list(current.size),
+            "edges_matching_canvas_color_px": ({
+                "left": bounds[0], "top": bounds[1],
+                "right": current.width - bounds[2], "bottom": current.height - bounds[3],
+            } if bounds else None),
             "seconds": seconds,
             "jpeg_sha256": hashlib.sha256(jpeg).hexdigest(),
             "pixel_difference_from_previous_bbox_px": (
@@ -620,7 +629,7 @@ async def saved_preview_media(preview: dict, version_id: UUID):
         from PIL import Image, ImageDraw
         # The timestamps travel inside the pixels as well as in the wire.
         # A provider may sample the MP4 at a different cadence or resize it.
-        width, height = 320, 200
+        width, height = (640, 382) if len(frames) <= 3 else (320, 200)
         columns = min(len(frames), 2)
         sheet = Image.new("RGB", (width * columns, height * ((len(frames) + 1) // 2)))
         draw = ImageDraw.Draw(sheet)
@@ -641,7 +650,7 @@ async def saved_preview_media(preview: dict, version_id: UUID):
         "version_id": str(version_id), "scope": preview["scope"],
         "mp4_sha256": hashlib.sha256(video).hexdigest(),
         "sample_seconds": [time for _, time in frames],
-        "sample_frames": sampled_frame_facts(frames),
+        "sample_frames": sampled_frame_facts(frames, background=spec["background"]),
         "visual_windows": [
             {"from": round(bounds["start"] + float(start / fps), 6),
              "to": round(bounds["start"] + float(end / fps), 6),

@@ -1150,6 +1150,26 @@ def test_concurrent_head_keeps_confirmed_actions_but_expires_old_targets_and_pre
 
 
 
+def test_revised_playback_request_keeps_prior_export_as_history():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    work = _composition_resource()
+    previous = {"composition_id": work["composition_id"], "output_id": "previous"}
+    result = assemble_video_round({
+        "tools": intent_router.tools, "user_text": "调整构图，然后播放这一段给我看。",
+        "snapshot": ContextSnapshot("head", resources=(("work", work),)),
+        "preceding_delivery": previous,
+        "recent_edit": {"composition_id": work["composition_id"], "version_id": work["version_id"],
+                        "clips": {}, "applied": [{"tool": "set_keyframe", "version": 2}]},
+    })
+    context = json.loads(result.context)
+    assert context["preceding_reviewed_delivery"] == previous
+    assert "revised_delivery" not in context
+    assert "does not explicitly request formal export" in context["delivery_scope"]
+
+
 def test_export_opening_reviews_its_own_output_after_another_edit():
     from app.agents.tool_loop import ContextSnapshot
     from app.chat.intent import intent_router
@@ -1170,16 +1190,20 @@ def test_export_opening_reviews_its_own_output_after_another_edit():
     # A completed export can resume with the original edit request even when
     # no other opening advanced the head. The edit is already in the MP4.
     exported = {**work["base_ref"], "role": "export", "status": "available", "output_id": "the-export"}
-    resumed = assemble_video_round({
+    recovery_facts = {
         "tools": intent_router.tools, "user_text": "Extend the closing still by one second and export",
         "snapshot": ContextSnapshot("head", resources=(("work", work),)), "exported": exported,
         "authorized_media": exported,
         "recent_edit": {"composition_id": work["composition_id"], "version_id": work["version_id"],
                         "clips": {}, "applied": [{"tool": "extend_still", "version": 14}]},
-    })
+    }
+    resumed = assemble_video_round(recovery_facts)
     names = {tool.name for tool in resumed.tools}
     assert "review_video" in names and not {"extend_still", "export_video"} & names
     assert json.loads(resumed.context)["already_saved_this_turn"] == [{"tool": "extend_still", "version": 14}]
+    reviewed = assemble_video_round({**recovery_facts, "reviewed_output_id": exported["output_id"]})
+    assert {tool.name for tool in reviewed.tools} == {"answer", "deliver_video", "review_video"}
+
 
 
 def test_create_rejection_stops_repeated_or_unproductive_attempts():

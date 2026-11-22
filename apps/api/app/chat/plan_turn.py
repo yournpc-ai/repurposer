@@ -996,6 +996,8 @@ class PlanTurn:
                 "assistant",
                 _design_no_progress_text(
                     self.text,
+                    exported=(getattr(self, "_editor_export", None) or {}).get("status") == "available",
+                    delivered=bool(getattr(self, "_editor_delivery", None)),
                     version_saved=bool(video_read or result.version_saved),
                     video_read=video_read,
                 ),

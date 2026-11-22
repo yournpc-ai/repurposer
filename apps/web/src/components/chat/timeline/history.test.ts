@@ -134,6 +134,20 @@ describe("answered OPTIONS questions — echo first, then the QA archive", () =>
   })
 
 
+  it("keeps a question's preview blocks above the dock and its answered archive", () => {
+    const preview = row({
+      content: "Approve export?",
+      question: { kind: "question", question: "Approve export?", options: [{ id: "ok", label: "Yes" }] },
+      blocks: [{ kind: "system_notice", text: "Preview is ready" }],
+    })
+    for (const answer of [null, { kind: "option" as const, option_id: "ok" }]) {
+      const history = mapHistoryRows([{ ...preview, answer }], ctx)
+      expect(history.filter((message) => message.blocks?.length)).toMatchObject([
+        { id: "m1-echo", serverMessageId: "m1", blocks: preview.blocks },
+      ])
+    }
+  })
+
   it("replays partial and recovery Outputs at their own delivery array positions", () => {
     const out = mapHistoryRows(
       [

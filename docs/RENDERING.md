@@ -10,7 +10,7 @@
 
 export_video 在事务内固定版本、digest、授权上限与原生回执。Worker 按 token 和租约执行，编译后的 video-spec 只引用已固定的来源。上传后验证真实字节与流信息，成功时同事务提交成片与账本。
 
-预览窗口和正式导出共用 compile_video_spec。作品关键帧使用片段局部 tick，Renderer 在局部帧上读取量化后的值。OxValue 第二镜头已逐帧比对历史正式文件与同镜头数据的 270 帧预览。[基线实测](tasks/agent-editor-evidence/iteration-7/README.md)
+导出续行的审片输入包含固定版本及其直接父版的实际时长，逐个与解码文件核对。预览窗口和正式导出共用 compile_video_spec。作品关键帧使用片段局部 tick，Renderer 在局部帧上读取量化后的值。OxValue 第二镜头共 270 帧。v15 基线与 v14 已交付镜头对应；修复后的 v17 局部预览与同版正式 MP4 的第 105–374 帧分别解码对齐。按 384×216 RGB 比较，修复版平均绝对像素误差为 0.165/255。[双版本比对与画面](tasks/agent-editor-evidence/iteration-7/README.md)
 
 ## 2. 代码地图
 

@@ -274,7 +274,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         delivery = facts.get("preceding_delivery") or {}
         if selected and delivery.get("composition_id") == selected["composition_id"]:
             context["preceding_reviewed_delivery"] = delivery
-            if recent.get("version_id") == selected["version_id"]:
+            if recent.get("version_id") == selected["version_id"] and asks_for_export(user_text):
                 delivered = facts.get("delivered") or {}
                 exported = facts.get("exported") or {}
                 context["revised_delivery"] = {
@@ -283,7 +283,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                     "output": exported if exported.get("composition_version_id") == selected["version_id"] else None,
                     "chat_delivery": delivered if delivered.get("composition_version_id") == selected["version_id"] else None,
                 }
-        elif not asks_for_export(user_text) and not hint.get("output_id") and not confirmation:
+        if not asks_for_export(user_text) and not hint.get("output_id") and not confirmation:
             context["delivery_scope"] = "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
         if draft_only_request(user_text):
             context["delivery_scope"] = "Save the requested work and report any requested preview. Formal export is outside this request."
@@ -299,11 +299,14 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         exported = facts.get("exported") or {}
         if exported.get("status") == "available" and exported.get("output_id"):
             context["exported_this_opening"] = exported
-            if ((facts.get("authorized_media") or {}).get("role") == "export"
-                    and facts.get("reviewed_output_id") != exported["output_id"]):
-                names.intersection_update({"answer", "ask_user", "inspect_timeline", "inspect_clip", "preview_range",
-                                           "review_video", "read_conversation_context", "list_project_media",
-                                           "get_narration_alignment"})
+            if (facts.get("authorized_media") or {}).get("role") == "export":
+                # Continuation of the authorized job owns review and delivery of
+                # this fixed file, including the decision after review.
+                names.intersection_update({"review_video", "deliver_video", "answer", "ask_user"})
+                if facts.get("reviewed_output_id") != exported["output_id"]:
+                    names.discard("deliver_video")
+                elif (facts.get("delivered") or {}).get("output_id") == exported["output_id"]:
+                    names.intersection_update({"answer"})
             current = next((work for work in works if work["composition_id"] == exported["composition_id"]), None)
             if facts.get("review_pinned_export") or (
                 current and current["version_id"] != exported["composition_version_id"]
@@ -344,7 +347,13 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if (facts.get("authorized_media") or {}).get("status") == "declined":
             context["declined_operation"] = "The user declined this additional operation. Continue the original request using available media. Do not repropose the declined generation."
         if (facts.get("authorized_media") or {}).get("status") == "available":
-            context["completed_media_this_turn"] = {**facts["authorized_media"], "delivered_to_chat": facts["authorized_media"].get("status") == "available" and facts["authorized_media"].get("role") != "export"}
+            completed = facts["authorized_media"]
+            delivered = facts.get("delivered") or {}
+            delivered_output = delivered.get("output_id")
+            attached = delivered_output is not None and delivered_output == completed.get("output_id")
+            context["completed_media_this_turn"] = {
+                **completed, "delivered_to_chat": completed.get("role") != "export" or attached,
+            }
             if facts["authorized_media"].get("role") == "export":
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending:
@@ -357,8 +366,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         return RoundAssembly(
             tools=tools,
             system="你是视频剪辑师。用本轮用户提问的语言回答。修改片段前，按需读取时间线定位目标。制作影片时，空项目按用户要求用 create_video 将镜头直接保存为可编辑作品。已有待配音片段时，核对原稿，对齐 READY 后用 bind_clip_source 绑定录音。独立新增的声音用 insert_audio。只有同时创建与旁白对齐的字幕时才填写镜头的两个 narration 引用，且对齐必须 READY。若用户只要求生成素材，已交付的素材回执即完成该项请求，直接说明可从对话中查看或播放。颜色、运动、时长、交付范围以用户原话为准。只要求调整和复看时，复看后答复；正式导出需要交付意图。目标不明确时询问。"
-                   "可在同一响应提交独立的读取、素材生成或已知对象的修改。写入按声明次序保存。需要前项新标识时先看回执，再在下次决策引用。完成各项后再单独答复。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。同窗对照按 earlier 与 current 的标记读图。构图以用户点名的主体与取景要求为准，留边与是否填满画布是不同选择。当前预览满足要求就结束，不追加未请求的构图、画幅或配音选择；素材取景限制改善时说明已看到的局限。采样范围限制用于如实陈述证据，不是继续寻找假设问题的理由；用户点名的内容已在当前版本得到观察且没有待修发现时，停止追加观察并完成用户要求的后续交付或答复。以当前版本已观察窗口和用户要求为依据，说明发现的问题及未检查范围。调整前后的几何与时间以版本数据为准。描述源取景时，source_clipped_px 是源画面被画布裁掉的像素，canvas_borders_px 是画布留边像素；source_clipped_px 大于 0 时不能声称完整源画面，canvas_borders_px 大于 0 时不能声称留边已消除，主体或文字是否被裁切仍以实际帧为准。face_evidence.face_fully_visible=false 时不能声称检测到的人脸完整或有安全边距；expanded_face_fully_visible=false 时不能声称头肩完整。人脸框和扩边区域不证明头发、肩膀完整或构图自然，未检测到时明确未知。几何坐标数组逐字段直接引用，不要重算成不同边界。静态图片来源不等于输出静止；sample_frames 中的像素差异只证明所列采样时点的变化，不证明未观察时段的运动，描述输出前先核对这些帧。只有实际收到可感知声音才能评价听感。播放范围取自 window_seconds；描述抽样帧时只引用 sample_seconds 中实际解码的时点。混合波形只说明整体电平，声部重叠时间以各轨片段为准。"
-                   "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。如果 preceding_reviewed_delivery 或 referenced_output 表明用户针对已交付的成片提出修改，仍需交付修订后的成片，除非用户只要预览。只有交付回执才表示正式成片已发到对话。费用按原 opening 归属：交付已有 MP4 时按回执中的本轮导出扣费答复。用户点名导出已预览的固定版本时，审阅并交付该版本，报告实际问题；另行修改素材或版本需用户提出。助手写的旁白、作品名称和分镜不能升级为用户硬要求。审阅发现问题时根据用户目标决定是否继续修改；涉及用户硬要求的发现若仍未解决，交付和最终回复必须明确报告该未满足项，不能把有 Output 或有交付卡等同于目标完成。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。" + website_evidence_rule,
+                   "可在同一响应提交独立的读取、素材生成或已知对象的修改。写入按声明次序保存。需要前项新标识时先看回执，再在下次决策引用。完成各项后再单独答复。根据已生成的素材、已保存动作和预览继续，已完成的要求只在观察到具体问题时再次修改。同窗对照按 earlier 与 current 的标记读图。构图以用户点名的主体与取景要求为准。局部取景修订也应保留原本完整可读的前景文字；新出现的露底和裁字要在同窗前后画面中核对。edges_matching_canvas_color_px 是采样图像与画布同色的边缘宽度，须结合画面确认是否露底。当前预览满足要求就结束，不追加未请求的构图、画幅或配音选择；素材取景限制改善时说明已看到的局限。采样范围限制用于如实陈述证据，不是继续寻找假设问题的理由；用户点名的内容已在当前版本得到观察且没有待修发现时，停止追加观察并完成用户要求的后续交付或答复。以当前版本已观察窗口和用户要求为依据，说明发现的问题及未检查范围。调整前后的几何与时间以版本数据为准。描述源取景时，source_clipped_px 是源画面被画布裁掉的像素，canvas_borders_px 是画布留边像素；source_clipped_px 大于 0 时不能声称完整源画面，canvas_borders_px 大于 0 时不能声称留边已消除，主体或文字是否被裁切仍以实际帧为准。face_evidence.face_fully_visible=false 时不能声称检测到的人脸完整或有安全边距；expanded_face_fully_visible=false 时不能声称头肩完整。人脸框和扩边区域不证明头发、肩膀完整或构图自然，未检测到时明确未知。几何坐标数组逐字段直接引用，不要重算成不同边界。静态图片来源不等于输出静止；sample_frames 中的像素差异只证明所列采样时点的变化，不证明未观察时段的运动，描述输出前先核对这些帧。只有实际收到可感知声音才能评价听感。播放范围取自 window_seconds；描述抽样帧时只引用 sample_seconds 中实际解码的时点。混合波形只说明整体电平，声部重叠时间以各轨片段为准。"
+                   "如果用户只要初稿，draft_saved_this_turn 已满足保存要求，展示已保存作品。只在用户要求或已观察问题需要时生成额外素材。生成工具会按账户设置出具真实费用确认。用户要求生成时直接调用。preceding_reviewed_delivery 与 referenced_output 指认此前的成片。本轮要求播放修订片段时，交付该版本的局部预览。只有交付回执才表示正式成片已发到对话。费用按原 opening 归属：交付已有 MP4 时按回执中的本轮导出扣费答复。用户点名导出已预览的固定版本时，审阅并交付该版本，报告实际问题；另行修改素材或版本需用户提出。助手写的旁白、作品名称和分镜不能升级为用户硬要求。审阅发现问题时根据用户目标决定是否继续修改；涉及用户硬要求的发现若仍未解决，交付和最终回复必须明确报告该未满足项，不能把有 Output 或有交付卡等同于目标完成。delivered_to_chat 表示卡片已交付。completed_media_this_turn 中的素材已经完成，直接使用其固定引用，只补未完成的要求。按请求决定是否插入；单独试听无需预览影片。答复使用版本号、素材名称、位置和实测结果。技术标识仅用于工具参数。" + website_evidence_rule,
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
             stream_prose=native_creation and not media_ready,
