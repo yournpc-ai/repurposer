@@ -1,0 +1,28 @@
+{
+  "system": "macOS-26.5.2-arm64-arm-64bit",
+  "node": "v22.15.0",
+  "python": "3.11.14",
+  "packages": {
+    "numpy": "2.4.6",
+    "pillow": "12.3.0",
+    "av": "17.1.0",
+    "opencv-python-headless": "5.0.0.93",
+    "playwright": "1.64.0",
+    "imageio-ffmpeg": "0.8.1"
+  },
+  "binary_sha256": {
+    "chromium": "b469d05c698ccf9f4ae3dc43fb194fbdcf56f9da1fc46dcc19f2bf9fe2aa20b8",
+    "ffmpeg_C": "591260c945d0eef150e3bf82b0ef988bd36a9cecc18ff05d6679617159f0a95e",
+    "ffmpeg_B": "54cc1e811f2ea1b313f64e29d60d060b93dde30f219617fe319f834cdcec5c94",
+    "font": "d72db21f9242aedd6b917d8549ad5921766b24d5f8d0becfda2ff4c620b3c2e0"
+  },
+  "node_lock_sha256": "780b685537ca8830095e0417a845c77e3f7d3f605a6f243304a455b476cc44af",
+  "input_sha256": {
+    "main.mp4": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+    "pip.mp4": "25c6a66ab12e08f4e7eb7fd6850d5144eb893ede7cc354691578fb53fdb86dd5",
+    "voice.wav": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+    "whoosh.wav": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+    "impact2.wav": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0"
+  },
+  "chromium_version": "Google Chrome for Testing 149.0.7790.0"
+}

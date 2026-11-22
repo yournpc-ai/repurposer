@@ -1,0 +1,16 @@
+Run directory /tmp/mg-css-run.qNjZyR
+/System/Library/Fonts/Supplemental/Arial Bold.ttf: OK
+Traceback (most recent call last):
+  File "/private/tmp/mg-css-run.qNjZyR/src/prepare.py", line 38, in <module>
+    c=CompositionContent.model_validate(base)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sylas/repurposer/apps/api/.venv/lib/python3.11/site-packages/pydantic/main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 2 validation errors for CompositionContent
+timeline.tracks.2.clips.0.object.generator.project.files
+  List should have at least 2 items after validation, not 1 [type=too_short, input_value=[{'path': 'Blocks.tsx', '...37976b311554f1510cdc5'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/too_short
+timeline.tracks.6.clips.0.object.generator.project.files
+  List should have at least 2 items after validation, not 1 [type=too_short, input_value=[{'path': 'Blocks.tsx', '...37976b311554f1510cdc5'}], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/too_short

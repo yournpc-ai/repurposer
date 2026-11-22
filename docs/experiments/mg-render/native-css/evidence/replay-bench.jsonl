@@ -1,0 +1,10 @@
+{"tag": "B5-cold", "wall_s": 33.38010970799951, "peak_tree_rss_mib": 1319.6875, "rss_samples": 133, "exit": 0}
+{"tag": "C5-cold", "wall_s": 44.39804987499883, "peak_tree_rss_mib": 1094.359375, "rss_samples": 169, "exit": 0}
+{"tag": "B5-warm", "wall_s": 25.373684667003545, "peak_tree_rss_mib": 1428.453125, "rss_samples": 101, "exit": 0}
+{"tag": "C5-warm", "wall_s": 19.512463709001167, "peak_tree_rss_mib": 1353.5, "rss_samples": 84, "exit": 0}
+{"tag": "B5-still", "wall_s": 6.697574292000354, "peak_tree_rss_mib": 738.3125, "rss_samples": 29, "exit": 0}
+{"tag": "C5-still", "wall_s": 1.5390596670004015, "peak_tree_rss_mib": 687.8125, "rss_samples": 7, "exit": 0}
+{"tag": "B6-edit", "wall_s": 17.956339167001715, "peak_tree_rss_mib": 2289.328125, "rss_samples": 80, "exit": 0}
+{"tag": "C6-edit", "wall_s": 15.050538082999992, "peak_tree_rss_mib": 1567.734375, "rss_samples": 67, "exit": 0}
+{"tag": "B7-edit", "wall_s": 18.151658958999178, "peak_tree_rss_mib": 2187.8125, "rss_samples": 80, "exit": 0}
+{"tag": "C7-edit", "wall_s": 14.521780167000543, "peak_tree_rss_mib": 1579.296875, "rss_samples": 66, "exit": 0}

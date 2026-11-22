@@ -1,0 +1,739 @@
+{
+  "outputs": {
+    "B5": {
+      "sha256": "ece2cc74eb0b4d1e2d41a5fd8815d4705cebbb2fd8922c53a4aae90e4e5424bb",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    },
+    "C5": {
+      "sha256": "2c2c1ca9ab3eb116fd8034358442ff7e3bdc65a3b0e98c1e17a53b0da20edf08",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    },
+    "B6": {
+      "sha256": "bf6741b83717677147a0a9a550c0892d82a7588f9cdedef52e2468891aaeebda",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    },
+    "C6": {
+      "sha256": "24011868bc504efabb21a140b7e7c37f839ff3b3ad2954f9f8bc42cb8d6a0fb1",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    },
+    "B7": {
+      "sha256": "ac1c56f9104dc75e7748a77784b34c7a3fe4500485fdc0adbdade025800f0238",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    },
+    "C7": {
+      "sha256": "3b7d5273ec96b7a241caddc54d4635ff38ea5f3d35abee1ff3351766743ba275",
+      "pcm_digest": "b2d20ce83f7ee0be493d3ddfa2f58e0654b00d34c993f458eaee9030c74576e6",
+      "lag_samples": 0,
+      "presented_samples": 384000
+    }
+  },
+  "repeat": {
+    "B": {
+      "cold": "ece2cc74eb0b4d1e2d41a5fd8815d4705cebbb2fd8922c53a4aae90e4e5424bb",
+      "warm": "ece2cc74eb0b4d1e2d41a5fd8815d4705cebbb2fd8922c53a4aae90e4e5424bb",
+      "byte_equal": true
+    },
+    "C": {
+      "cold": "2c2c1ca9ab3eb116fd8034358442ff7e3bdc65a3b0e98c1e17a53b0da20edf08",
+      "warm": "2c2c1ca9ab3eb116fd8034358442ff7e3bdc65a3b0e98c1e17a53b0da20edf08",
+      "byte_equal": true
+    }
+  },
+  "edits": {
+    "6": {
+      "changes": [
+        [
+          "/tracks/2/clips/0/object/project/props/ink",
+          "#8acdf5",
+          "#ffc152"
+        ]
+      ],
+      "changed_pixel_bounds": {
+        "72": [
+          1264,
+          216,
+          1573,
+          283
+        ],
+        "239": null,
+        "30": [
+          1264,
+          235,
+          1573,
+          301
+        ],
+        "179": [
+          1264,
+          215,
+          1573,
+          282
+        ],
+        "0": null,
+        "45": [
+          1264,
+          230,
+          1573,
+          297
+        ],
+        "180": null,
+        "15": null,
+        "209": null
+      }
+    },
+    "7": {
+      "changes": [
+        [
+          "/tracks/1/order",
+          2,
+          4
+        ]
+      ],
+      "changed_pixel_bounds": {
+        "72": [
+          1306,
+          88,
+          1809,
+          357
+        ],
+        "239": null,
+        "30": [
+          1306,
+          89,
+          1809,
+          357
+        ],
+        "179": [
+          1306,
+          88,
+          1809,
+          357
+        ],
+        "0": null,
+        "45": [
+          1307,
+          89,
+          1809,
+          356
+        ],
+        "180": null,
+        "15": null,
+        "209": null
+      }
+    }
+  },
+  "ablations": {
+    "blend": {
+      "changed_pixels": 21336,
+      "changed_pixel_mae": 22.4161
+    },
+    "glass": {
+      "changed_pixels": 19886,
+      "changed_pixel_mae": 9.4253
+    }
+  },
+  "checkpoints": [
+    {
+      "v": 5,
+      "k": 0,
+      "expected": [
+        12,
+        null
+      ],
+      "B": [
+        12,
+        null
+      ],
+      "C": [
+        12,
+        null
+      ],
+      "BC_mae": 2.1934,
+      "BC_roi_mae": 2.2154,
+      "B_seek_mae": 1.0045,
+      "B_seek_ids": [
+        12,
+        null
+      ],
+      "C_seek_mae": 1.0503,
+      "C_seek_ids": [
+        12,
+        null
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 15,
+      "expected": [
+        24,
+        10
+      ],
+      "B": [
+        24,
+        10
+      ],
+      "C": [
+        24,
+        10
+      ],
+      "BC_mae": 2.2496,
+      "BC_roi_mae": 1.8705,
+      "B_seek_mae": 1.0815,
+      "B_seek_ids": [
+        24,
+        10
+      ],
+      "C_seek_mae": 1.1289,
+      "C_seek_ids": [
+        24,
+        10
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 30,
+      "expected": [
+        36,
+        23
+      ],
+      "B": [
+        36,
+        23
+      ],
+      "C": [
+        36,
+        23
+      ],
+      "BC_mae": 2.2806,
+      "BC_roi_mae": 1.936,
+      "B_seek_mae": 1.1482,
+      "B_seek_ids": [
+        36,
+        23
+      ],
+      "C_seek_mae": 1.2002,
+      "C_seek_ids": [
+        36,
+        23
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 45,
+      "expected": [
+        48,
+        35
+      ],
+      "B": [
+        48,
+        35
+      ],
+      "C": [
+        48,
+        35
+      ],
+      "BC_mae": 2.2713,
+      "BC_roi_mae": 1.9108,
+      "B_seek_mae": 1.1311,
+      "B_seek_ids": [
+        48,
+        35
+      ],
+      "C_seek_mae": 1.1796,
+      "C_seek_ids": [
+        48,
+        35
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 72,
+      "expected": [
+        70,
+        58
+      ],
+      "B": [
+        70,
+        57
+      ],
+      "C": [
+        70,
+        58
+      ],
+      "BC_mae": 2.3285,
+      "BC_roi_mae": 2.5164,
+      "B_seek_mae": 1.1152,
+      "B_seek_ids": [
+        70,
+        57
+      ],
+      "C_seek_mae": 1.1619,
+      "C_seek_ids": [
+        70,
+        58
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 179,
+      "expected": [
+        155,
+        147
+      ],
+      "B": [
+        155,
+        147
+      ],
+      "C": [
+        155,
+        147
+      ],
+      "BC_mae": 2.291,
+      "BC_roi_mae": 1.9654,
+      "B_seek_mae": 1.1651,
+      "B_seek_ids": [
+        155,
+        147
+      ],
+      "C_seek_mae": 1.2121,
+      "C_seek_ids": [
+        155,
+        147
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 180,
+      "expected": [
+        156,
+        148
+      ],
+      "B": [
+        156,
+        148
+      ],
+      "C": [
+        156,
+        148
+      ],
+      "BC_mae": 2.2821,
+      "BC_roi_mae": 1.9013,
+      "B_seek_mae": 1.1369,
+      "B_seek_ids": [
+        156,
+        148
+      ],
+      "C_seek_mae": 1.1827,
+      "C_seek_ids": [
+        156,
+        148
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 209,
+      "expected": [
+        179,
+        172
+      ],
+      "B": [
+        179,
+        172
+      ],
+      "C": [
+        179,
+        172
+      ],
+      "BC_mae": 2.2852,
+      "BC_roi_mae": 1.9426,
+      "B_seek_mae": 1.1536,
+      "B_seek_ids": [
+        179,
+        172
+      ],
+      "C_seek_mae": 1.1956,
+      "C_seek_ids": [
+        179,
+        172
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 5,
+      "k": 239,
+      "expected": [
+        203,
+        null
+      ],
+      "B": [
+        203,
+        null
+      ],
+      "C": [
+        203,
+        null
+      ],
+      "BC_mae": 2.4069,
+      "BC_roi_mae": 2.2443,
+      "B_seek_mae": 1.1427,
+      "B_seek_ids": [
+        203,
+        null
+      ],
+      "C_seek_mae": 1.1875,
+      "C_seek_ids": [
+        203,
+        null
+      ],
+      "C_seek_exact": true
+    },
+    {
+      "v": 6,
+      "k": 0,
+      "expected": [
+        12,
+        null
+      ],
+      "B": [
+        12,
+        null
+      ],
+      "C": [
+        12,
+        null
+      ],
+      "BC_mae": 2.1934,
+      "BC_roi_mae": 2.2154
+    },
+    {
+      "v": 6,
+      "k": 15,
+      "expected": [
+        24,
+        10
+      ],
+      "B": [
+        24,
+        10
+      ],
+      "C": [
+        24,
+        10
+      ],
+      "BC_mae": 2.2496,
+      "BC_roi_mae": 1.8705
+    },
+    {
+      "v": 6,
+      "k": 30,
+      "expected": [
+        36,
+        23
+      ],
+      "B": [
+        36,
+        23
+      ],
+      "C": [
+        36,
+        23
+      ],
+      "BC_mae": 2.2901,
+      "BC_roi_mae": 2.0453
+    },
+    {
+      "v": 6,
+      "k": 45,
+      "expected": [
+        48,
+        35
+      ],
+      "B": [
+        48,
+        35
+      ],
+      "C": [
+        48,
+        35
+      ],
+      "BC_mae": 2.2799,
+      "BC_roi_mae": 2.0106
+    },
+    {
+      "v": 6,
+      "k": 72,
+      "expected": [
+        70,
+        58
+      ],
+      "B": [
+        70,
+        57
+      ],
+      "C": [
+        70,
+        58
+      ],
+      "BC_mae": 2.3375,
+      "BC_roi_mae": 2.6238
+    },
+    {
+      "v": 6,
+      "k": 179,
+      "expected": [
+        155,
+        147
+      ],
+      "B": [
+        155,
+        147
+      ],
+      "C": [
+        155,
+        147
+      ],
+      "BC_mae": 2.3034,
+      "BC_roi_mae": 2.0695
+    },
+    {
+      "v": 6,
+      "k": 180,
+      "expected": [
+        156,
+        148
+      ],
+      "B": [
+        156,
+        148
+      ],
+      "C": [
+        156,
+        148
+      ],
+      "BC_mae": 2.2833,
+      "BC_roi_mae": 1.9157
+    },
+    {
+      "v": 6,
+      "k": 209,
+      "expected": [
+        179,
+        172
+      ],
+      "B": [
+        179,
+        172
+      ],
+      "C": [
+        179,
+        172
+      ],
+      "BC_mae": 2.2891,
+      "BC_roi_mae": 1.935
+    },
+    {
+      "v": 6,
+      "k": 239,
+      "expected": [
+        203,
+        null
+      ],
+      "B": [
+        203,
+        null
+      ],
+      "C": [
+        203,
+        null
+      ],
+      "BC_mae": 2.4054,
+      "BC_roi_mae": 2.2414
+    },
+    {
+      "v": 7,
+      "k": 0,
+      "expected": [
+        12,
+        null
+      ],
+      "B": [
+        12,
+        null
+      ],
+      "C": [
+        12,
+        null
+      ],
+      "BC_mae": 2.1934,
+      "BC_roi_mae": 2.2154
+    },
+    {
+      "v": 7,
+      "k": 15,
+      "expected": [
+        24,
+        10
+      ],
+      "B": [
+        24,
+        10
+      ],
+      "C": [
+        24,
+        10
+      ],
+      "BC_mae": 2.2496,
+      "BC_roi_mae": 1.8705
+    },
+    {
+      "v": 7,
+      "k": 30,
+      "expected": [
+        36,
+        23
+      ],
+      "B": [
+        36,
+        23
+      ],
+      "C": [
+        36,
+        23
+      ],
+      "BC_mae": 2.2783,
+      "BC_roi_mae": 1.9085
+    },
+    {
+      "v": 7,
+      "k": 45,
+      "expected": [
+        48,
+        35
+      ],
+      "B": [
+        48,
+        35
+      ],
+      "C": [
+        48,
+        35
+      ],
+      "BC_mae": 2.2715,
+      "BC_roi_mae": 1.9168
+    },
+    {
+      "v": 7,
+      "k": 72,
+      "expected": [
+        70,
+        58
+      ],
+      "B": [
+        70,
+        57
+      ],
+      "C": [
+        70,
+        58
+      ],
+      "BC_mae": 2.3404,
+      "BC_roi_mae": 2.6693
+    },
+    {
+      "v": 7,
+      "k": 179,
+      "expected": [
+        155,
+        147
+      ],
+      "B": [
+        155,
+        147
+      ],
+      "C": [
+        155,
+        147
+      ],
+      "BC_mae": 2.289,
+      "BC_roi_mae": 1.9483
+    },
+    {
+      "v": 7,
+      "k": 180,
+      "expected": [
+        156,
+        148
+      ],
+      "B": [
+        156,
+        148
+      ],
+      "C": [
+        156,
+        148
+      ],
+      "BC_mae": 2.2829,
+      "BC_roi_mae": 1.9145
+    },
+    {
+      "v": 7,
+      "k": 209,
+      "expected": [
+        179,
+        172
+      ],
+      "B": [
+        179,
+        172
+      ],
+      "C": [
+        179,
+        172
+      ],
+      "BC_mae": 2.2925,
+      "BC_roi_mae": 1.9451
+    },
+    {
+      "v": 7,
+      "k": 239,
+      "expected": [
+        203,
+        null
+      ],
+      "B": [
+        203,
+        null
+      ],
+      "C": [
+        203,
+        null
+      ],
+      "BC_mae": 2.4076,
+      "BC_roi_mae": 2.244
+    }
+  ],
+  "temp_bytes": {
+    "bundle": 20288485,
+    "frames": 68018811,
+    "page.js": 610583,
+    "audio.m4a": 123922,
+    "ref.wav": 1536044,
+    "silent.mp4": 2890154
+  }
+}
