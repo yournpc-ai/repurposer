@@ -2,7 +2,7 @@
 
 正式成片上传至当前公开 TOS 桶的 exports/ 路径。交付消息绑定已审阅的 Output 和不可变版本。
 
-> Status: 现行契约（2026-11-16）。作品与预览见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，发布和视听验收见 [统一视频合同](tasks/skill-package-promo-video.md)。
+> Status: 现役契约与候选研究边界。作品与预览见 [VIDEO_PROJECT](VIDEO_PROJECT.md)，现行施工与视听验收见 [I8](tasks/i8.md) 和 [进度 §0](PROGRESS.md)。
 
 ## 1. 一条链
 
@@ -46,6 +46,14 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 - 商业发布前需核对实际运行方式下的 Remotion 许可，覆盖最终 Renderer 与上游 Generator runner，同时完成部署环境的隔离、能力、成本与动态视听验收。
 
 ## 7. 渲染器替换
+
+现役 Remotion Renderer 消费固定媒体。专业视觉创作采用受控 React/TSX/CSS 的方向已确定。自有薄渲染核心 C 的技术可行性研究已阶段收官，C 继续作为生产候选。它让 Chromium 处理 DOM、CSS、遮罩、混合、背景模糊和视频合成，FFmpeg 负责编码，必要处适配媒体。八秒样本在一棵 React 树中合成两路真实视频与两个 Motion Blocks，并对同一作品的参数和层序作了定向修改。[合成实验](experiments/mg-render/native-css/REPORT.md)
+
+浏览器自走动画曾在同一作品帧输出不同像素。对指定标题块，宿主暂停 Web Animations API（WAAPI）动画，每次取帧都按 Composition 帧时间显式设置 `currentTime`。固定 Chromium 的 30 fps 样本中，全部 240 帧与显式帧函数逐像素相同；乱序、重复取帧和独立进程逆序均匹配。只改标题颜色后，150 个活动帧的变化限于标题包围盒，其余 90 帧无差异。其他动画类型仍需各自验证。[时钟与局部修订复核](experiments/mg-render/native-css/clock/REPORT.md)
+
+实时播放、第三方 TSX 安全、长片资源、高并发与缓存成本、相对 Remotion 的总维护成本仍待验证。正式 Chat-Origin Motion Block 纵向集成尚未实施，生产 Renderer 替换尚未获准。video-spec 保持渲染器中立，不扩成逐效果滤镜语言。
+
+原 AAC/ADTS 中间路径在指定样本增加 2,048 个前导采样。PCM MOV 修正了该样本；25 fps 动态 loudnorm 的尾部 PTS 间隙与 Linux 30 fps Matroska 毫秒量化各有隔离修正。生产正确性、缓存切换和真实 Chat 五面仍未签收。当前联合候选首错见 [进度 §0](PROGRESS.md)。[基线](experiments/renderer-aac/REPORT.md) · [候选评审](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟与缓存边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
 
 替换画笔时保持 video-spec、时间与动画求值合同。以同版预览/成片帧、音频、失败恢复、许可和成本验收替代实现。
 

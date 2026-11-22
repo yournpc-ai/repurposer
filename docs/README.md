@@ -2,6 +2,8 @@
 
 | 决策或事实 | 入口 |
 |---|---|
+| 产品定义与使用 | [README](../README.md) |
+| 官网营销叙事与页面表现 | [Landing](LANDING.md) |
 | 产品目标、用户如何创作与修订 | [产品要求](PRD.md)、[用户旅程](JOURNEYS.md) |
 | Agent 与 Native Tools 唯一架构、五面验收 | [总合同](tasks/new-agent.md) |
 | 当前排期、I8 施工范围与开放项 | [进度 §0](PROGRESS.md)、[I8](tasks/i8.md) |

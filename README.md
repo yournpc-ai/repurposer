@@ -5,13 +5,15 @@ Repurposer is a professional AI video editor operated through natural language. 
 Complex edits should grow from a few composable actions. Four capabilities serve this editing loop:
 
 - **Native Tools** inspect sources, edit tracks, clips, objects and audio, preview a version and deliver it. Composition edits use `apply_composition_edits` to save an immutable CompositionVersion.
-- **Motion Blocks** provide reusable, parameterized visuals. A suitable component or agent-authored program can use the existing Generator. Its source and declared inputs determine what can be revised.
-- **Sound Recipes** are a development direction for producing repeatable sound effects from adjustable parameters. The resulting audio belongs on an ordinary clip in the composition.
+- **Motion Blocks** provide reusable, parameterized visuals. The current controlled Generator bakes a component or agent-authored program into fixed media. Its source and declared inputs determine what can be revised. Controlled React/TSX/CSS is the direction for professional visuals. A Chromium-based renderer has passed an offline feasibility study. Motion Block editing through Chat and a production renderer replacement remain open. [Rendering evidence](docs/RENDERING.md)
+- **Sound Recipes** have passed an independent synthesis and listening study for Whoosh, Impact and Click. Editing one use of a recipe through Chat remains a product integration goal. [Sound sources and evidence](docs/MUSIC_ARCHITECTURE.md)
 - **Skills** guide creative choices such as framing, movement, pacing, sound and review. The agent chooses the actions that fit the user's goal.
 
 Chat shows actual tool activity, questions, previews and deliveries. The agent asks when a decision blocks progress. Paid generation and export follow account permissions and authorization. Workers return results to the originating message. Each delivery points to its reviewed Output so earlier versions remain playable.
 
 The API and worker live in `apps/api`, the web client in `apps/web`, and the renderer in `apps/render`. The player and renderer share `packages/video-spec` and `packages/video-remotion`.
+
+In a project Chat, attach a video and a photo and ask, “Show this photo from seconds 2 to 4 and play that part.” After watching, ask to move the same photo. When ready, request an export and review the quote in Chat. The earlier preview stays attached to its version. [Tested journey and limits](docs/tasks/i8.md)
 
 ## Quick Start
 
@@ -163,4 +165,4 @@ Journey assertions lock user-visible results and server/database facts, not LLM 
 
 ## Documentation
 
-Start with the [agent architecture contract](docs/tasks/new-agent.md), [current milestones](docs/PROGRESS.md), [I8 implementation and evidence](docs/tasks/i8.md) and [domain index](docs/README.md).
+Read the [product requirements](docs/PRD.md) and [Chat journeys](docs/JOURNEYS.md) for user goals. For implementation, start at [current milestones](docs/PROGRESS.md) and follow the [Agent Editor contract](docs/tasks/new-agent.md) and [domain index](docs/README.md).

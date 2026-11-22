@@ -562,7 +562,7 @@ Create body: `{ "output_id", "channel_account_id", "overrides": {...} | null, "c
 
 ## 18. 历史 Recipe 目录
 
-旧的公开配方货架已退役。Home 示例只预填用户可编辑的文本。历史结构见 [Recipes](RECIPES.md)。
+旧的公开配方货架已退役。Home 示例只预填用户可编辑的文本。示例与素材权限见 [Home 入口](RECIPES.md)。
 
 ## 19. Payments (Stripe credit packages)
 

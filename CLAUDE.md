@@ -58,7 +58,7 @@ Use lucide-react for application icons. Third-party logos and the existing brand
 
 Repurposer 是通过自然语言操作持久视频工程的专业 AI 剪辑师。用户提供目标与素材，Agent 定位对象、执行编辑、观察并续改。保留 MentionEditor、附件、显式 Skill、原问题、费用授权、Stop 和按版本回放。仅在必要决定阻塞时提问。分镜按需展示，历史交付始终钉住原 Output。通用 UI 用 Clean，布局用 Tailwind，过渡用 Motion。
 
-施工先按 [Agent 总合同](docs/tasks/new-agent.md) 扩展现有 ToolLoop。视觉来源与音频来源的编辑边界分别见 [作品模型](docs/VIDEO_PROJECT.md) 和 [声音合同](docs/MUSIC_ARCHITECTURE.md)，阶段验收与首错见 [I8](docs/tasks/i8.md)。禁止恢复 Plan、DAG 或 Graph 创作协议，也不为动效和音效另建执行、播放或交付链。
+正式产品能力按 Chat-Origin End-to-End 验收：同一真实 Chat 从 Provider 工具调用追到不可变版本、实际播放或交付，再验证续改与恢复。隔离测试只证明测到的边界。施工先按 [Agent 总合同](docs/tasks/new-agent.md) 扩展现有 ToolLoop。视觉来源与音频来源的编辑边界分别见 [作品模型](docs/VIDEO_PROJECT.md) 和 [声音合同](docs/MUSIC_ARCHITECTURE.md)，阶段验收与首错见 [I8](docs/tasks/i8.md)。禁止恢复 Plan、DAG 或 Graph 创作协议，也不为动效和音效另建执行、播放或交付链。
 
 ## Internationalization (i18n)
 
@@ -122,7 +122,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Video Editor & Rendering
 
-`video-spec` 是渲染服务入口。受控 Generator 程序与资源固定在 CompositionVersion，经独立隔离 runner 产出固定媒体；React 和 Remotion 概念留在画笔或 runner 内。原生文字、字幕和音频保留可编辑身份。详见 `docs/RENDERING.md` 与 `docs/VIDEO_PROJECT.md`。
+`video-spec` 是渲染服务入口。受控 Generator 程序与资源固定在 CompositionVersion，经独立隔离 runner 产出固定媒体；React 和 Remotion 概念留在画笔或 runner 内。此为现役路径。受控 React/TSX/CSS 是已确定的专业视觉创作方向。薄渲染核心 C 的可行性研究已阶段收官，生产替换与 Chat 接入待验。原生文字、字幕和音频保留可编辑身份。详见 `docs/RENDERING.md` 与 `docs/VIDEO_PROJECT.md`。
 
 
 ## Error Handling & Toasts

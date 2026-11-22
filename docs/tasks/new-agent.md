@@ -77,7 +77,7 @@ Observed Results
 
 ### 新能力如何进入现有剪辑循环
 
-Skills 按需提供构图、运动、节奏、声音与审片方法。Agent 自主选择 Native Tools 检查素材、操作作品、预览和交付。Motion Blocks 提供可复用或自主编写的受控视觉实现。Sound Recipes 是可复现的参数化音效来源方向，产物作为固定音频落轨。采用哪种来源都沿用同一 ToolLoop、CompositionVersion 写口、权限、费用与恢复合同。每项扩展须用真实任务核对 Tool、Prompt/Context、Chat、Execution 和 Recovery。
+Skills 按需提供构图、运动、节奏、声音与审片方法。Agent 自主选择 Native Tools 检查素材、操作作品、预览和交付。Agent 可组合 Motion Blocks，或按需要创作、修改受控 React/TSX/CSS。自有薄渲染核心 C 是候选实现，正式 Chat-Origin Motion Block 集成尚未完成。Sound Recipes 的独立合成与用户听评已通过；产品接入时，固定音频作为普通 Audio Clip 使用。采用哪种来源都沿用同一 ToolLoop、CompositionVersion 写口、权限、费用与恢复合同。每项扩展须用真实任务核对 Tool、Prompt/Context、Chat、Execution 和 Recovery。
 
 视觉来源与可编辑边界见 [作品模型 §4.3.2](../VIDEO_PROJECT.md)，声音的现状与目标见 [声音合同](../MUSIC_ARCHITECTURE.md)。
 
@@ -193,7 +193,7 @@ Agent 继续决策
 
 ### A. Tool 就是操作
 
-模型使用原生 Tool Calling。
+模型使用原生 Tool Calling。工具选择、上下文装配和审片复用现有模型可见 ToolLoop；禁止为这些职责新增 Agent Framework、Review Agent、Context Manager、第二套路由或平行 Workflow。
 
 Tool 只接受执行操作所需的最少参数。
 
@@ -1422,7 +1422,7 @@ Agent 通过 Tool 获取：
 
 # 10. Iteration 6：彻底退役 Agent Editor Workflow
 
-**这是当前唯一优先施工主线。**
+**本节保留 I6 的切片范围与验收条件。当期状态见 [PROGRESS §0](../PROGRESS.md)。**
 
 不是另起产品架构研究。
 
@@ -1867,6 +1867,8 @@ Iteration 6 关闭可靠执行之后，再按真实产品需求扩展：
 
 # 12. 每批五面验收
 
+**首要验收律：Chat-Origin End-to-End。** 从真实用户 Chat 提交素材与要求开始，记录同一旅程的实际 Provider 请求、模型可见的唯一 Native ToolLoop、版本写入及真实预览或 Output，再回到原 Chat 续改与恢复。用 opening、call、版本、作业及交付身份串起下列五面。绕过 Chat 的单测与研究只签收各自测到的边界。
+
 每一批报告必须包含以下七部分。
 
 ## 一、Git 与现场
@@ -2108,24 +2110,9 @@ Iteration 6 关闭条件：
 
 ---
 
-# 16. 下一批开工入口
+# 16. 施工入口
 
-当前批次为 I6 收官。6A–6D 的实施与当时验收见各切片记录。
-
-施工 Agent 首先阅读本合同全文，尤其是：
-
-- §0 为什么彻底退役 Workflow；
-- §3 Tool 与 Worker 边界；
-- §4 Job 的最小持久执行契约；
-- §5 十用户并发；
-- §6 独立后台业务裁决；
-- §7 Chat Activity 与可靠续行；
-- §9 破坏性删除；
-- §10 各切片真实出口；
-- §12 五面验收；
-- §14 停止条件。
-
-然后核对当前代码。
+开工先读 [PROGRESS §0](../PROGRESS.md)，再读 [I8 范围与首错](i8.md) 及本合同命中的章节。6A–6D 的结果保存在各切片记录。
 
 不因旧函数名称存在就认为它必须保留。
 
@@ -2151,4 +2138,4 @@ Iteration 6 关闭条件：
 
 **施工总原则：尽可能删除旧架构，而不是在旧架构外再包一层新架构。**
 
-本批按原生工具、显式 Skill、真实来源、不可变版本和 Job 回执验收。官网取证完成后由 Agent 决定创作方法。收官状态见[本批记录](agent-editor-evidence/iteration-6/final-closure.md)。
+I6 按原生工具、显式 Skill、真实来源、不可变版本和 Job 回执验收。官网取证完成后由 Agent 决定创作方法。收官状态见[本批记录](agent-editor-evidence/iteration-6/final-closure.md)。
