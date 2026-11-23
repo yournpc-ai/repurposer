@@ -277,7 +277,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "preview_range",
-        "Publish this exact playback window in Chat, across all tracks. To play a local edit, copy its preview_range from recently_edited_clips. Include lead-in or tail only when the user wants a wider window. Times are absolute seconds (up to 12 seconds).",
+        "Play the current draft across all tracks and publish the selected window in Chat. Choose a local edit, a join, or the whole short film as needed. Recently edited clip windows are suggestions. Honor an explicitly requested range exactly. Use absolute seconds (up to 12 seconds per window).",
         VideoRangeScrubTarget,
         "previewRange",
     ),

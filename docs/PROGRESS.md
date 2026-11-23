@@ -8,7 +8,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ## 0. 当前里程碑与施工序列
 
-**I8 P0 已完成，P1 待审批。** 第四轮保存字幕后重复裁剪被拒，Chat 现可交代字幕延长半秒、主画面保持六秒和旧成片的去处。原轮次记录与本轮真实供应商过载分别回放，核对终帧、刷新历史和原交付卡片。普通 Finish 和 Renderer 合并仍待独立审批。[P0 验收与费用](tasks/agent-editor-evidence/iteration-8/final-acceptance/p0-partial-settlement.md) · [施工范围](tasks/i8.md#15-现行处置与交付)
+**I8 P0 回归通过，P1 有条件通过，待架构签收。** 三个真实 Chrome opening 覆盖了连续编辑、主动局部或整片播放、无预览直接结束。片尾原句首次复测只延长字幕半秒，Agent 自选完整 6.5 秒并识别黑底字幕，但没有修订或说明保留主画面的能力缺口，片尾作品未通过。Renderer 合并与生产验收仍开放。[P1 实测](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md#p1-普通编辑与结束--2026-11-23) · [P0 验收](tasks/agent-editor-evidence/iteration-8/final-acceptance/p0-partial-settlement.md)
 
 ### 0.1 里程碑状态
 
