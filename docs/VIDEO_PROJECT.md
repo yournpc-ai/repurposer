@@ -6,8 +6,8 @@
 
 ## 0. 核心决策
 
-1. **Project 是 Chat 与执行上下文，Composition 是一部持续编辑的视听作品身份**。同一 Chat 可创建多部 Composition 并通过 @ 分别持续修订；不引入 Work / WorkDocument、Sequence 或独立 Timeline 作品根。
-2. **CompositionVersion 是不可变编辑版本**，自身直接承载设置、素材引用、Scenes 与 Timeline；Timeline 只是版本内部的时间结构。
+1. **Working Draft 是所选 Composition 的当前内容。** Project 承载 Chat 和执行上下文。同一 Chat 可通过 @ 指定不同影片，每部影片都有一份持续编辑的当前稿。Working Draft 沿用 Composition 与当前内容指针，无需独立实体、JSON 或同步状态。
+2. **CompositionVersion 在后台自动保存不可变修改历史。** 每次成功编辑经唯一写口推进当前指针，为 CAS、幂等重放、恢复与导出固定内容。设置、素材引用、Scenes 与 Timeline 均由版本承载。
 3. **Track 上是 Clip，Clip 内是 Object**；Animation 统一作用于 Object 属性，Transition 表达 Clip 之间的衔接。
 4. **Storyboard 是 CompositionVersion 的分镜读面**，不是第二份可独立修改的作品数据。
 5. 只有用户的显式 Skill 选择会产生 `request.skill`，普通视频分类词直接进入 Agent 创作。**`/promo-video` 绑定部署方固定的 Shotcraft 版本**。技能方法通过 Chat 读取，共用作品版本与原生编辑工具。
@@ -17,7 +17,7 @@
 9. **同一作品允许混合画面来源**：原生文字/图形动画、已有实拍/图片、模型生成媒体及程序化画面可共同参与合成。内容类型与生产方式分开；支持范围以当前能力声明为准，文字动画不冒充自由 2D/3D 创作。
 10. **所有创作来源共用同一个可精修作品**。固定 Skill、外部 Skill、自由设计和 Generator 均落到 Tracks / Clips / Objects / Animations / Audio / Speech / SourceSnapshots。Agent 可组合原生编辑，播放相关画面、核对声音后继续修订。后续编辑与 Worker 使用作品和固定来源。
 
-**核心产品原则**　用户通过 Chat 交给剪辑师素材与目标，查看效果、提出修改并接收正式文件。Agent 自主决定连续操作多少次、何时观察和如何改。每次合法提交都留下真实版本，包括暂时遮挡或留有黑场的草稿。代码维护引用、时序、权限与唯一写口。完成声明所需证据及停止条件见 [Agent Editor 主合同 §8](tasks/new-agent.md#84-停止条件)。
+**核心产品原则**　用户在 Chat 中说“左移一点”“再小一点”“播这一段”，Agent 都在同一份影片上操作。工具只提交指定的领域修改，保留无关对象、来源引用和动画。Agent 可以保留暂时不理想的构图，按需看片、继续修改或如实收尾。[Agent Editor 停止条件](tasks/new-agent.md#84-停止条件)
 
 原生编辑、局部预览与正式成片的实际范围见 [I6 收官记录](tasks/agent-editor-evidence/iteration-6/final-closure.md)。
 
@@ -28,8 +28,8 @@
 1. **少量能力组合出丰富作品**：优先建设素材、时间、叠放、文字/图形、动画、声音与可再生产媒体等可复用能力。代表样片是阶段验收，不是永久模板上限；不为单条参考片预建完整 NLE、3D 引擎、特效库或通用插件平台。
 2. **原生内容与媒体生产互补**：需要精确独立修改的文字、图形等保留原生身份；复杂、特殊、变化快的画面可通过程序或模型生产为媒体，并保留可再次生产的来源。创作层统一用 `GeneratorObject` 表达后者，具体边界见 §4.3.2。
 3. **代码也是创作材料**：受控程序路线须允许 Agent 根据需求编写、修改视觉程序，经预览反馈改善结果，不能只调用开发者预置效果。`draw-2d` 承载受控 2D 绘制；`remotion-project` 允许 Agent 按讲稿、文案和素材编写完整 Remotion 工程，包括多文件、多组件、共享 helper、Composition 注册与内部时间线。现役工程在上游隔离烘焙为固定媒体，最终 video-spec 仍无 React/Remotion。程序的执行权限和资源上限由宿主校验，不能通过创作代码调度业务、计费、访问数据库或任意网络与文件。
-4. **保存与制作固定到版本**。create_video 创建作品。Agent 通过原生编辑工具修改当前作品，通过 preview_range 观察具体版本与时间窗。正式导出使用独立费用授权和版本固定的 ExportJob。
-   首稿校验并保存，分镜按需展示。Agent 可自行选取局部、接缝或相邻动作观察，按用户指定区间提供播放；用户选择按幕审片时沿播放顺序推进。观察与陈述保留实际版本、范围和媒介，后续可复用有效证据。
+4. **当前稿自动保存，正式文件在导出时固定。** create_video 创建影片。原生编辑 Tool 持续修改 Working Draft，用户无需在操作间选版。明确授权后，ExportJob 钉住此刻内容与渲染规格；旧 Output 继续指向原文件。
+   Agent 自主选取局部或接缝观察；用户指定范围时准确播放，要求按幕审片时依次推进。每次预览保留实际来源与时间窗。
 5. **模型独立是领域边界，不是全模型已支持的声明**：作品、Skill、编辑操作不绑定某个模型品牌；文本/代码创作模型与媒体生产模型可不同，provider 能力、私有参数和用量留在适配边界。按真实消费者接入和验证，不先搭全供应商框架，也不承诺任意模型都有相同能力与质量。
 6. **分开验收表达、执行、创作、编辑**：能保存不等于能渲染，能渲染不等于 Chat 能稳定创作，媒体可播放不等于内部元素可编辑。每批说明四层的实际出口、证据与未支持项；通过动态预览和必要试听判断结果，静帧/结构检查不代替视听验收。
 7. **Skill 保存方法，扩展由真实需求驱动**：内置与外置 Skill 共用 `SKILL.md`、shot cards、sequences、静态 library index、demos 与可选 template 六类逻辑资源；Agent 经有界只读工具渐进读取选中的卡片、arc、预览和参考源码，不一次注入全包，也不建立 ShotRecipe 或运行期镜头注册表。外部能力按形态内化：instructions → 创作方法，结构 → VideoTemplate，局部参数 → Preset，媒体 → Asset/SourceSnapshot，动作 → 注册工具/provider，视觉程序 → 受控 Generator。声明式能力可校验后加载。外部脚本与普通 TSX 读取均为只读参考。包显式声明的 TSX 入口、源文件和固定资源经宿主校验及依赖锁定后，可组成不可变 Generator，按需交给现有隔离 runner 执行。字段、函数和执行能力随首个真实消费者增补；现有能力按统一合同分批交付，不因作品复杂便预设新的大阶段。

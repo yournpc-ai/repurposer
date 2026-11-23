@@ -8,13 +8,13 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ## 0. 当前里程碑与施工序列
 
-**2026-11-23 最终验收。I8 暂缓合并。** 冻结候选的 Linux ARM64 和两镜像已验，v3 正式 Output、单次收费与恢复有实证。片尾续改只保存了字幕延长的 v4，Agent 未复看片尾，停止正文遗漏该写入。创作循环已写入主合同；按完成声明补观察和按持久回执结算待审批施工。[最终证据](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) · [架构评审](tasks/i8.md#15-现行处置与交付)
+**I8 暂缓合并。** Agent 在“结尾再留半秒”一轮只延长了字幕，重复裁剪被拒后，Chat 遗漏已经保存的修改。旧正式成片、一次收费与恢复均有实证。Working Draft 合同已定稿，先修部分成功的持久事实结算，再校准普通结束的陈述；产品施工待审批。[最终验收](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) · [施工范围](tasks/i8.md#15-现行处置与交付)
 
-### 0.1 各切片与冻结候选记录（平台最终状态见上）
+### 0.1 里程碑状态
 
 - **I8 首个专业编辑切片有条件通过。** 已有视频的固定图片插入、同对象续改、局部回放、授权交付和保存后强杀恢复已有真实记录。原 Dev 库保留，默认入口改用独立库。横图、竖图、歧义首错及原素材回归分别计数。双图 QuestionDock 指定续行通过。最终新项目中同名图片问前零写入，点击亮绿竖图只保存 v2，硬刷新前后均实际播放第 2–4 秒。首错与各次修后样本分开计量，跨素材稳定性、双浏览器并发与全栈冷启动仍未验证。[当前范围](tasks/i8.md) · [五面证据与费用](tasks/agent-editor-evidence/iteration-8/README.md)
 
-- **当前阻塞是 I8 Renderer 的音画时钟。** PCM MOV 修正指定样本的 AAC 前导 2,048 个采样。25 fps 动态响度尾部 PTS 与 Linux 30 fps 预编码量化各有隔离反例和修正。I8 工作区的 `docs/experiments/renderer-aac/joint-candidate/REPORT.md` 记录了联合候选的 24 fps / 191 帧首错：两个声部入点各晚 16 个采样，守卫中止输出。下一步仅评审该样本的混音入点取整边界。候选、生产缓存切换及真实 Chat 五面仍未签收。[基线](experiments/renderer-aac/REPORT.md) · [首轮候选](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
+- **I8 Renderer 候选已通过 Linux ARM64、Renderer 与 Web Docker 构建。** Remotion 4.0.484 候选在 macOS 和 Linux ARM64 完成 24/25/30 fps 样本验证，覆盖 630 帧与相应音频采样窗口。生产 Linux x86_64 仅核对过原安装，候选验收、缓存排空及真实切换仍待完成。[采样与容器证据](experiments/renderer-aac/backport-4.0.484/REPORT.md) · [ARM64 日志](tasks/agent-editor-evidence/iteration-8/final-acceptance/arm64.txt) · [生产只读回执](tasks/agent-editor-evidence/iteration-8/final-acceptance/production.txt)
 
 - **两个独立研究的边界。** 自有薄渲染核心 C 的技术可行性研究已阶段收官：同场景跨视频 CSS 合成通过，指定受控 WAAPI 按作品帧定位通过 240 帧逐像素、乱序、重复、独立进程与局部修改检查。正式 Chat-Origin Motion Block 集成尚未实施，生产继续使用现役 Renderer。原创 Whoosh、Impact、Click 的复产与用户最终听评已收官，单个 Audio Clip 的 Chat 续改与恢复尚待集成。[视觉与时钟](RENDERING.md) · [声音来源与听评](MUSIC_ARCHITECTURE.md)
 
