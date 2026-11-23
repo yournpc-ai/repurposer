@@ -1,0 +1,70 @@
+{
+  "/tmp/i8-upstream.yiNwAb/locked-normalizer.mp4": {
+    "movie_scale_duration": [
+      1000,
+      7959
+    ],
+    "vide": {
+      "media_scale_duration": [
+        90000,
+        716250
+      ],
+      "edits": [
+        [
+          7959,
+          7500,
+          1,
+          0
+        ]
+      ]
+    },
+    "soun": {
+      "media_scale_duration": [
+        48000,
+        383024
+      ],
+      "edits": [
+        [
+          7958,
+          1024,
+          1,
+          0
+        ]
+      ]
+    }
+  },
+  "/tmp/i8-upstream.yiNwAb/mux-control.mp4": {
+    "movie_scale_duration": [
+      48000,
+      382000
+    ],
+    "vide": {
+      "media_scale_duration": [
+        90000,
+        716250
+      ],
+      "edits": [
+        [
+          382000,
+          7500,
+          1,
+          0
+        ]
+      ]
+    },
+    "soun": {
+      "media_scale_duration": [
+        48000,
+        383024
+      ],
+      "edits": [
+        [
+          382000,
+          1024,
+          1,
+          0
+        ]
+      ]
+    }
+  }
+}

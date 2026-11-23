@@ -36,7 +36,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 ## 5. 传输与缓存
 
 - **上传与恢复**：源下载的响应头/空闲等待为 300 秒；上传的响应头、空闲等待与单次尝试上限均为 600 秒，每个文件最多尝试 4 次，共享 720 秒总预算（包含退避）。连接重置/断管/临时网络错误/超时及 HTTP 5xx/408/429 可重试；每次重建连接池，指数退避带抖动并遵守 `Retry-After`，等待超出剩余预算则结束。鉴权、证书及未知错误不盲重试；错误日志不含预签名 URL。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成、上传与恢复错误分别返回 `stage=render|upload|recovery`；上传失败提示已生成但未交付，缓存失效只要求重新渲染，不伪装成重传。
-- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
+- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。候选的 v2 键包含锁定 Renderer 的音频补丁 SHA-256。切换前由原 Renderer 和原缓存卷排空已 prepare 的上传。上传结果未知时先按原上传身份核对对象并保留预占。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
 - **代理**：`dev.sh` 按显式 `RENDER_PROXY` → 已导出 HTTP(S) 代理 → macOS 系统 HTTPS 代理 → 本地 6152 默认值选择；`RENDER_PROXY=off` 明确关闭。探测失败保留配置并提示，不自动回退直连；选择结果写 render 日志。
 
 ## 6. 渲染与交付约束
@@ -53,7 +53,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 
 实时播放、第三方 TSX 安全、长片资源、高并发与缓存成本、相对 Remotion 的总维护成本仍待验证。正式 Chat-Origin Motion Block 纵向集成尚未实施，生产 Renderer 替换尚未获准。video-spec 保持渲染器中立，不扩成逐效果滤镜语言。
 
-原 AAC/ADTS 中间路径在指定样本增加 2,048 个前导采样。PCM MOV 修正了该样本；25 fps 动态 loudnorm 的尾部 PTS 间隙与 Linux 30 fps Matroska 毫秒量化各有隔离修正。生产正确性、缓存切换和真实 Chat 五面仍未签收。当前联合候选首错见 [进度 §0](PROGRESS.md)。[基线](experiments/renderer-aac/REPORT.md) · [候选评审](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟与缓存边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
+原 AAC/ADTS 中间路径在指定样本增加 2,048 个前导采样。PCM MOV 修正了该样本；25 fps 动态 loudnorm 的尾部 PTS 间隙与 Linux 30 fps Matroska 毫秒量化各有隔离修正。生产正确性、缓存切换和真实 Chat 五面仍未签收。当前候选及平台验收状态见 [进度 §0](PROGRESS.md)。[基线](experiments/renderer-aac/REPORT.md) · [候选评审](experiments/renderer-aac/CANDIDATE-REVIEW.md) · [时钟与缓存边界](experiments/renderer-aac/clock-boundaries/REPORT.md)
 
 替换画笔时保持 video-spec、时间与动画求值合同。以同版预览/成片帧、音频、失败恢复、许可和成本验收替代实现。
 

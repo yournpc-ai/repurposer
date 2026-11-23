@@ -1,6 +1,8 @@
 # Sound Recipes 独立复核 · 2026-11-23
 
-**验收：三种配方的确定性、参数修订与研究样片同步通过。主观听评、跨平台逐字节复现及正式产品集成未验证。** 从仓库根目录运行以下命令。脚本在临时目录中合成、测量、制作并重新解码视频，标准输出可与签入结果比较。
+**Sound Recipes 研究阶段通过，二次声音校准已取消。** 用户确认 Whoosh、Impact、Click 三组 A/B 均有明显可辨的差异，每组两个版本都可接受。此前反馈中的“差异不明显”指用户未选出偏好的版本。用户确认三秒样片声画同步自然，旁白清晰可闻，没有被遮盖。
+
+从仓库根目录运行以下命令。脚本在临时目录中合成、测量、制作并重新解码视频，标准输出可与签入结果比较。
 
 ```sh
 study=docs/experiments/renderer-aac/audio-study
@@ -31,7 +33,7 @@ apps/api/.venv/bin/python -B "$study/replay.py" > /tmp/sound-recipe-replay.json 
 |Impact 更低沉|body 115 → 75 Hz|370 ms，主谱峰 116.2 → 75.7 Hz，RMS 变化 +0.19 dB|
 |Click 触感更柔和|hardness 55 → 14%|65 ms，起始步进 21 → 9 LSB，质心 915.1 → 878.9 Hz|
 
-两个独立 Python 进程合成，逐一核验完整 WAV 摘要，再通过 PyAV 全量解码，与归档 WAV 的原始 PCM 双声道数组逐样本比较。随后复算 catalog、sources、measurements、同步片及逐帧记录，全部字节相同。六声为 48 kHz、立体声 PCM16；零满幅样本，首尾均为零，末端相邻差为零。末 5 ms RMS 为 −92.79 至 −64.76 dBFS。绝对 DC 最大 0.00006915 FS，内部相邻步进最大 0.0770 FS，见逐声道和逐文件读数。这些检查可揭示截尾、越幅或异常跳变，听感杂音、掩蔽和是否符合“柔和”仍需听者判断。[声学指标](measurements.json) · [PCM 哈希与新增读数](replay.json) · [试听对照](comparison.wav)
+两个独立 Python 进程合成，逐一核验完整 WAV 摘要，再通过 PyAV 全量解码，与归档 WAV 的原始 PCM 双声道数组逐样本比较。随后复算 catalog、sources、measurements、同步片及逐帧记录，全部字节相同。六声为 48 kHz、立体声 PCM16；零满幅样本，首尾均为零，末端相邻差为零。末 5 ms RMS 为 −92.79 至 −64.76 dBFS。绝对 DC 最大 0.00006915 FS，内部相邻步进最大 0.0770 FS，见逐声道和逐文件读数。这些读数用于检查截尾、越幅或异常跳变。[声学指标](measurements.json) · [PCM 哈希与新增读数](replay.json) · [试听对照](comparison.wav)
 
 已验证环境为 macOS 26.5.2 arm64、CPython 3.11.14、NumPy 2.4.6、PyAV 17.1.0、Pillow 12.3.0；各 libav 版本见 replay.json。单独合成只需前两项软件。运行完整复核需要仓库内上述两份媒体夹具。其他 FFT、CPU、编码器或字体环境的 WAV/MP4 字节一致性未验证。
 
@@ -59,4 +61,4 @@ MIT + Commons Clause 对随产品使用导出成果、单独分发工具或声�
 |Execution|editing/revisions.py 的 fixed_audio_ops 按需绑定源、建轨并加 Clip。schemas.py 的 Clip.range 是作品 ticks，ClipSource 带 snapshot_id、snapshot_digest、source_range，AudioObject 保存 object_id、gain_db。建议复用现有来源准备与 MediaJob 授权/费用边界；替换第二个 Impact 时，经 editing/store.py 的 apply_composition_edits 校验 base_version，仅重绑该 clip 的来源并校验源窗，保留 clip/object ID、入点和 gain。另两处和旧版继续引用旧快照。editing/video_spec.py 编译并核对摘要；packages/video-remotion/src/Video.tsx 让各轨同时播放，线性增益乘局部动画。整片经 apps/render/src/video/index.ts、audio.ts 及现有 ExportJob 处理、授权交付。|
 |Recovery|沿用 editor_recovery.py、媒体回执、执行 token/lease、Stop、预占与结算。明确区分源已保存和编辑已提交。相同任务恢复时校验 owner/project、字节、配方与版本；对已提交写入重放，对过时基线重新定位，对外部结果未知保留核对。旧 Output 固定原版本。|
 
-设计增量限于来源元数据、既有工具的选轨/单实例操作和相应消费者。没有产品 Schema、运行时、时间线或作业改动。本轮仅在本机制作研究证据，未测试正式报价、结算、并发写入或恢复。**唯一下一步**是听者用三组原声与带旁白样片完成一次听评，记录是否达到柔和、低沉、触感三个目标以及旁白是否被遮盖。
+设计增量限于来源元数据、既有工具的选轨/单实例操作和相应消费者。没有产品 Schema、运行时、时间线或作业改动。本轮仅在本机制作研究证据，未测试正式报价、结算、并发写入或恢复。Sound Recipes 的正式 Chat → Native Tools → Audio Clip → 单实例续改与恢复链路尚未实施，留待后续 I8 集成任务。

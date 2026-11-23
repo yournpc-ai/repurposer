@@ -7,6 +7,8 @@ export type Artifacts = { videoPath: string; srtPath?: string | null };
 const root = path.join(os.tmpdir(), "repurposer-render-artifacts");
 const active = new Map<string, Promise<Artifacts>>();
 const retentionMs = 24 * 60 * 60 * 1000;
+// pnpm-lock.yaml patch_hash for @remotion/renderer@4.0.484.
+export const rendererAudioPatch = "2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713";
 
 export class ArtifactCacheMiss extends Error {
   constructor() { super("Rendered artifact cache miss"); }
@@ -24,7 +26,7 @@ function canonical(value: unknown): string {
 }
 
 function artifactDirectory(identity: unknown, cacheRoot: string): string {
-  const key = createHash("sha256").update(canonical({ version: 1, identity })).digest("hex");
+  const key = createHash("sha256").update(canonical({ version: 2, rendererAudioPatch, identity })).digest("hex");
   return path.join(cacheRoot, key);
 }
 

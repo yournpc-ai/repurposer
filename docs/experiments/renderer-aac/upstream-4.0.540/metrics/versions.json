@@ -1,0 +1,90 @@
+{
+  "484": {
+    "remotion_packages": [
+      "@remotion/bundler@4.0.484",
+      "@remotion/canvas-capture@4.0.484",
+      "@remotion/compositor-darwin-arm64@4.0.484",
+      "@remotion/compositor-darwin-x64@4.0.484",
+      "@remotion/compositor-linux-arm64-gnu@4.0.484",
+      "@remotion/compositor-linux-arm64-musl@4.0.484",
+      "@remotion/compositor-linux-x64-gnu@4.0.484",
+      "@remotion/compositor-linux-x64-musl@4.0.484",
+      "@remotion/compositor-win32-x64-msvc@4.0.484",
+      "@remotion/licensing@4.0.484",
+      "@remotion/media-parser@4.0.484",
+      "@remotion/media-utils@4.0.484",
+      "@remotion/player@4.0.484",
+      "@remotion/renderer@4.0.484",
+      "@remotion/streaming@4.0.484",
+      "@remotion/studio-shared@4.0.484",
+      "@remotion/studio@4.0.484",
+      "@remotion/timeline-utils@4.0.484",
+      "@remotion/web-renderer@4.0.484",
+      "@remotion/zod-types@4.0.484",
+      "remotion@4.0.484"
+    ],
+    "sha": "f22f8e7e06c6fcde826ee7bab0339b9f244f849cc37aa47eae62e010074e274d",
+    "direct": {
+      "apps/render": {
+        "@remotion/bundler": "4.0.484(postcss@8.5.15)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "@remotion/renderer": "4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "remotion": "4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "apps/web": {
+        "@remotion/player": "4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "remotion": "4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "packages/video-remotion": {
+        "remotion": "4.0.484(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "packages/video-spec": {}
+    }
+  },
+  "540": {
+    "remotion_packages": [
+      "@remotion/bundler@4.0.540",
+      "@remotion/captions@4.0.540",
+      "@remotion/codemods@4.0.540",
+      "@remotion/compositor-darwin-arm64@4.0.540",
+      "@remotion/compositor-darwin-x64@4.0.540",
+      "@remotion/compositor-linux-arm64-gnu@4.0.540",
+      "@remotion/compositor-linux-arm64-musl@4.0.540",
+      "@remotion/compositor-linux-x64-gnu@4.0.540",
+      "@remotion/compositor-linux-x64-musl@4.0.540",
+      "@remotion/compositor-win32-x64-msvc@4.0.540",
+      "@remotion/elevenlabs@4.0.540",
+      "@remotion/licensing@4.0.540",
+      "@remotion/media-utils@4.0.540",
+      "@remotion/media@4.0.540",
+      "@remotion/openai-whisper@4.0.540",
+      "@remotion/paths@4.0.540",
+      "@remotion/player@4.0.540",
+      "@remotion/renderer@4.0.540",
+      "@remotion/sdk@4.0.540",
+      "@remotion/streaming@4.0.540",
+      "@remotion/studio-protocol@4.0.540",
+      "@remotion/studio-shared@4.0.540",
+      "@remotion/studio@4.0.540",
+      "@remotion/timeline-utils@4.0.540",
+      "@remotion/web-renderer@4.0.540",
+      "@remotion/zod-types@4.0.540",
+      "remotion@4.0.540"
+    ],
+    "sha": "f71f940e43ea427d535b1c3c3777824d244e99283e6c3dd03612dcb274890939",
+    "direct": {
+      "apps/render": {
+        "@remotion/bundler": "4.0.540(postcss@8.5.15)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "@remotion/renderer": "4.0.540(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "remotion": "4.0.540(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "apps/web": {
+        "@remotion/player": "4.0.540(react-dom@19.2.7(react@19.2.7))(react@19.2.7)",
+        "remotion": "4.0.540(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "packages/video-remotion": {
+        "remotion": "4.0.540(react-dom@19.2.7(react@19.2.7))(react@19.2.7)"
+      },
+      "packages/video-spec": {}
+    }
+  }
+}

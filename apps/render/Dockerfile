@@ -26,6 +26,7 @@ WORKDIR /repo
 # Every workspace member's manifest must be present for pnpm to resolve the
 # graph, even though --filter only installs the render branch.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches/ patches/
 COPY packages/video-spec/package.json packages/video-spec/package.json
 COPY packages/video-remotion/package.json packages/video-remotion/package.json
 COPY apps/render/package.json apps/render/package.json

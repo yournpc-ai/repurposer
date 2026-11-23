@@ -1,0 +1,42 @@
+{
+  "start_local": "0f914f0d39744e0dc6b8ce5e061b3576fe2727d9",
+  "start_remote": "bac35a83f0231a76cc9a7adae90858737a191b00",
+  "unchanged_source_sha256": {
+    "apps/render/src/video/index.ts": "27b7d2b366ba2c6961e61998f09c5b142c82871b58e9fa4120340b7ca1695704",
+    "apps/render/src/audio.ts": "e711d93ba35a22d41d8b0d09470c45cf8367b75ec6ae7ff1f6e9ee5e9e5bdbd7",
+    "apps/render/src/artifacts.ts": "49fbd1fa5cf3ed9b22eb5c03eab58f45764c612e879d8ff0ad890eb1d26f889e",
+    "packages/video-remotion/src/Video.tsx": "292b186a8979741d4ace4da74e742b121efd179eb5064203a7b63b3a49d7efcf"
+  },
+  "fixture_sha256": {
+    "voice.wav": "76a8236a92a558dd3fc26fc4709f4c1301b608cdb1cbc78821d800107a70d17a",
+    "whoosh.wav": "11e4a61c2e7ea8ee7397722b28941d3536842786e39580a9ba630854878f8566",
+    "silence.wav": "27cb785df0cedf3e8136cf6893ae9a93a7220efc0420bd3e03dfc1c367f29638",
+    "main.mp4": "6753d983ff929f20238e9cb459f692d379e5df9fe6ff10341b86d1cee5d6de75",
+    "impact2.wav": "8b05e5675fcaab738b42805909fa40b909d33d052385e85d3ecb02937f4367a0"
+  },
+  "release": {
+    "tag_name": "v4.0.540",
+    "published_at": "2026-11-02T08:54:15Z",
+    "html_url": "https://github.com/remotion-dev/remotion/releases/tag/v4.0.540"
+  },
+  "official_source": {
+    "filter-484.ts": "08c910897c2bf84dfe57c9b0206c8b734e64b6792847dc8a92e101a33a965895",
+    "filter-540.ts": "304f151cffe08e3b1b22f12c175755f688212de589c11bff32b6cc2c2487ba5a",
+    "cache-484.rs": "9382152ec45d1ada5577731b73b7f18bb10d9a319997a92bc0c0848b7a28819c",
+    "cache-540.rs": "32c69f753338a30e060481c37bf60c237809c496089b705b05510071602aa219",
+    "requirements.mdx": "64132af66dbe08bc184476defa8a4b50f96149e2ea2a33ccb12e53c1dddb4653"
+  },
+  "renderer_typecheck": {
+    "status": 0,
+    "cmd": "apps/render/node_modules/.bin/tsc --noEmit (cwd: isolated apps/render)"
+  },
+  "mac_node": "22.15.0",
+  "linux_node": "22.23.1",
+  "linux_glibc": "2.36",
+  "platforms": [
+    "macOS 26.5.2 arm64",
+    "Debian bookworm arm64"
+  ],
+  "archive_prior_entries_verified": 39,
+  "pnpm": "10.20.0"
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "case": "locked-normalizer",
+    "cmd": [
+      "/Users/sylas/repurposer/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.484/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-y",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "/tmp/i8-upstream.yiNwAb/mac/run/boundary/raw.mp4",
+      "-c:v",
+      "copy",
+      "-af",
+      "atrim=end_sample=382000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.80:measured_TP=-7.55:measured_LRA=15.30:measured_thresh=-31.09:offset=0.04:linear=true:print_format=summary,aresample=48000,atrim=end_sample=382000",
+      "-ar",
+      "48000",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "/tmp/i8-upstream.yiNwAb/locked-normalizer.mp4"
+    ],
+    "rc": 0,
+    "binary": "ffmpeg version n7.1 Copyright (c) 2000-2024 the FFmpeg developers"
+  },
+  {
+    "case": "mux-control",
+    "cmd": [
+      "/private/tmp/i8-upstream.yiNwAb/repo/node_modules/.pnpm/@remotion+compositor-darwin-arm64@4.0.540/node_modules/@remotion/compositor-darwin-arm64/ffmpeg",
+      "-y",
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      "/tmp/i8-upstream.yiNwAb/mac/run/boundary/raw.mp4",
+      "-c:v",
+      "copy",
+      "-af",
+      "atrim=end_sample=382000,apad,loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-20.80:measured_TP=-7.55:measured_LRA=15.30:measured_thresh=-31.09:offset=0.04:linear=true:print_format=summary,aresample=48000,atrim=end_sample=382000",
+      "-ar",
+      "48000",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-movie_timescale",
+      "48000",
+      "/tmp/i8-upstream.yiNwAb/mux-control.mp4"
+    ],
+    "rc": 0,
+    "binary": "ffmpeg version n7.1 Copyright (c) 2000-2024 the FFmpeg developers"
+  }
+]

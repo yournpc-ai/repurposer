@@ -8,7 +8,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import type { VideoSpec } from "@repurposer/video-spec";
 
-import { normalizeLoudness } from "../audio";
+import { encodeBaselineMp4, InvalidAudioClock, normalizeLoudness } from "../audio";
 import { stageRemoteSource } from "../stage";
 import { assertVideoSupported } from "./capabilities";
 
@@ -74,21 +74,44 @@ export async function renderVideo(
   const composition = await selectComposition({ serveUrl, id: "Video", inputProps });
 
   const videoPath = path.join(outDir, `${basename}.mp4`);
-  await renderMedia({
-    composition,
-    serveUrl,
-    codec: "h264",
-    outputLocation: videoPath,
-    inputProps,
-    timeoutInMilliseconds: 180_000,
-  });
-
-  // Loudness is an enhancement, not correctness — never fail a finished
-  // render over the post-pass (the shared audio policy).
+  const hasSoundSource = stagedSpec.tracks.some((track) =>
+    track.clips.some(({ object }) =>
+      object.kind === "audio" || (object.kind === "video" && !object.muted),
+    ),
+  );
+  const work = await fs.mkdtemp(path.join(outDir, ".encode-"));
+  const baseline = path.join(work, "baseline.mp4");
+  const intermediate = path.join(work, "mix.mov");
   try {
-    await normalizeLoudness(videoPath);
-  } catch (err) {
-    console.error("video loudnorm post-pass failed, keeping original audio:", err);
+    // Keep Remotion's PCM mix intact until the MP4 muxer can record AAC priming.
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: "h264",
+      ...(hasSoundSource ? { audioCodec: "pcm-16" as const } : { muted: true }),
+      // The parallel pre-stitcher writes video only. Preserve its frame clock until MOV stitching.
+      ffmpegOverride: ({ type, args }) => type === "pre-stitcher" && hasSoundSource
+        ? [...args.slice(0, -1), "-f", "mp4", args[args.length - 1]]
+        : args,
+      outputLocation: hasSoundSource ? intermediate : baseline,
+      inputProps,
+      timeoutInMilliseconds: 180_000,
+    });
+    if (hasSoundSource) {
+      await encodeBaselineMp4(intermediate, baseline);
+      await fs.unlink(intermediate);
+    }
+    // Optional loudness processing may fall back only to a completed MP4.
+    try {
+      const expectedSamples = Math.round(composition.durationInFrames * 48000 / composition.fps);
+      await normalizeLoudness(baseline, expectedSamples, { requireAudio: hasSoundSource });
+    } catch (err) {
+      if (err instanceof InvalidAudioClock) throw err;
+      console.error("video loudnorm post-pass failed, keeping original audio:", err);
+    }
+    await fs.rename(baseline, videoPath);
+  } finally {
+    await fs.rm(work, { recursive: true, force: true });
   }
 
   return { videoPath };

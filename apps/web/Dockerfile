@@ -15,6 +15,7 @@ WORKDIR /repo
 
 # Workspace descriptors first for a cached install layer.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches/ patches/
 COPY packages/video-spec/package.json packages/video-spec/package.json
 COPY packages/video-remotion/package.json packages/video-remotion/package.json
 COPY apps/render/package.json apps/render/package.json

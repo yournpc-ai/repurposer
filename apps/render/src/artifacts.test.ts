@@ -3,7 +3,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cachedArtifacts, renderArtifacts } from "./artifacts";
+import { cachedArtifacts, renderArtifacts, rendererAudioPatch } from "./artifacts";
+
+test("the artifact cache identifies the locked Remotion audio patch", async () => {
+  const lock = await fs.readFile(new URL("../../../pnpm-lock.yaml", import.meta.url), "utf8");
+  const snapshot = lock.match(/^  '@remotion\/renderer@4\.0\.484\(patch_hash=([a-f0-9]{64})\)/m);
+  assert.equal(snapshot?.[1], rendererAudioPatch);
+});
 
 test("upload recovery reuses finished bytes; changes and users cannot reuse them", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "render-recovery-test-"));

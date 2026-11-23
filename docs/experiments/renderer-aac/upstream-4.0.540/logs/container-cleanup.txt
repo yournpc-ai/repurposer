@@ -1,0 +1,1 @@
+Error response from daemon: cannot remove container "i8-upstream-540": write /var/lib/desktop-containerd/daemon/io.containerd.metadata.v1.bolt/meta.db: input/output error

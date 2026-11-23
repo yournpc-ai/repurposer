@@ -38,6 +38,17 @@ function ffSpawnOpts(binPath: string): { cwd: string; env: NodeJS.ProcessEnv } {
   return { cwd, env };
 }
 
+export async function encodeBaselineMp4(input: string, output: string): Promise<void> {
+  const ffmpeg = resolveFfBinary("ffmpeg");
+  await execFileAsync(
+    ffmpeg,
+    ["-v", "error", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+      "-c:a", "libfdk_aac", "-b:a", "320k", "-cutoff", "18000",
+      "-movie_timescale", "48000", "-movflags", "+faststart", output],
+    ffSpawnOpts(ffmpeg),
+  );
+}
+
 interface LoudnormMeasure {
   input_i: string;
   input_tp: string;
@@ -46,15 +57,71 @@ interface LoudnormMeasure {
   target_offset: string;
 }
 
-export async function normalizeLoudness(videoPath: string): Promise<void> {
-  const ffmpeg = resolveFfBinary("ffmpeg");
+export class InvalidAudioClock extends Error {}
+
+export interface VerifyAudioOptions {
+  requireAudio?: boolean;
+  probe?: (videoPath: string) => Promise<string>;
+}
+
+async function defaultProbeAudio(videoPath: string): Promise<string> {
   const ffprobe = resolveFfBinary("ffprobe");
-  const { stdout: streamType } = await execFileAsync(
+  const { stdout } = await execFileAsync(
     ffprobe,
-    ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", videoPath],
+    ["-v", "error", "-select_streams", "a:0", "-show_entries",
+      "stream=sample_rate,time_base,start_pts,duration_ts", "-of", "json", videoPath],
     ffSpawnOpts(ffprobe),
   );
-  if (streamType.trim() !== "audio") return;
+  return stdout;
+}
+
+export async function verifyAudioWindow(
+  videoPath: string,
+  expectedSamples: number,
+  stage: "baseline" | "loudnorm",
+  options: VerifyAudioOptions = {},
+): Promise<boolean> {
+  const clockError = (message: string, cause?: unknown): Error =>
+    stage === "baseline"
+      ? new InvalidAudioClock(message, cause ? { cause } : undefined)
+      : new Error(message, cause ? { cause } : undefined);
+  const probe = options.probe ?? defaultProbeAudio;
+  let timing: string;
+  try {
+    timing = await probe(videoPath);
+  } catch (err) {
+    throw clockError(`${stage}: ffprobe failed while verifying audio clock: ${err instanceof Error ? err.message : String(err)}`, err);
+  }
+  let parsed: { streams?: unknown };
+  try {
+    parsed = JSON.parse(timing) as { streams?: unknown };
+  } catch (err) {
+    throw clockError(`${stage}: malformed ffprobe JSON while verifying audio clock`, err);
+  }
+  if (!parsed || !Array.isArray(parsed.streams)) {
+    throw clockError(`${stage}: ffprobe output missing streams array: ${timing.trim()}`);
+  }
+  const [track] = parsed.streams as Array<Record<string, unknown> | undefined>;
+  if (!track && stage === "baseline") {
+    if (options.requireAudio) {
+      throw clockError(`baseline: expected a zero-based 48 kHz track of ${expectedSamples} samples; got no audio stream`);
+    }
+    return false;
+  }
+  if (track?.sample_rate !== "48000" || track.time_base !== "1/48000" || track.start_pts !== 0 ||
+      !Number.isSafeInteger(track.duration_ts) || (track.duration_ts as number) <= 0 || track.duration_ts !== expectedSamples) {
+    throw clockError(`${stage}: expected a zero-based 48 kHz track of ${expectedSamples} samples; got ${timing.trim()}`);
+  }
+  return true;
+}
+
+export async function normalizeLoudness(
+  videoPath: string,
+  expectedSamples: number,
+  options: { requireAudio?: boolean } = {},
+): Promise<void> {
+  if (!await verifyAudioWindow(videoPath, expectedSamples, "baseline", options)) return;
+  const ffmpeg = resolveFfBinary("ffmpeg");
   const measure = await execFileAsync(
     ffmpeg,
     ["-hide_banner", "-nostats", "-i", videoPath, "-vn", "-af", `loudnorm=${LOUDNORM_TARGET}:print_format=json`, "-f", "null", "-"],
@@ -65,17 +132,20 @@ export async function normalizeLoudness(videoPath: string): Promise<void> {
   if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("loudnorm measure: no JSON block in ffmpeg output");
   const m = JSON.parse(measure.stderr.slice(jsonStart, jsonEnd + 1)) as LoudnormMeasure;
   if (m.input_i === "-inf") return;
+  // Give dynamic loudnorm lookahead past the cut, then keep only the presentation window.
+  const trim = `atrim=end_sample=${expectedSamples}`;
   const filter =
-    `loudnorm=${LOUDNORM_TARGET}` +
+    `${trim},apad,loudnorm=${LOUDNORM_TARGET}` +
     `:measured_I=${m.input_i}:measured_TP=${m.input_tp}` +
     `:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}` +
-    `:offset=${m.target_offset}:linear=true:print_format=summary`;
+    `:offset=${m.target_offset}:linear=true:print_format=summary,aresample=48000,${trim}`;
   const tmpPath = videoPath.replace(/\.mp4$/, "") + ".loudnorm.mp4";
   await execFileAsync(
     ffmpeg,
     ["-y", "-hide_banner", "-nostats", "-i", videoPath, "-c:v", "copy", "-af", filter,
-      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", tmpPath],
+      "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movie_timescale", "48000", tmpPath],
     ffSpawnOpts(ffmpeg),
   );
+  await verifyAudioWindow(tmpPath, expectedSamples, "loudnorm");
   await fs.rename(tmpPath, videoPath);
 }

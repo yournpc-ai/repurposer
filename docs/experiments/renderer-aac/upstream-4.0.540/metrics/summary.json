@@ -1,0 +1,877 @@
+{
+  "mac": {
+    "boundary": {
+      "mix.mov": {
+        "sha": "bc54858b8d45ad1371bb65d1fd097d2a2c0f4e084a0bd879619ca980ec774b3c",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 382000,
+          "decoded": 382000,
+          "gaps": [],
+          "peak": 0.426971435546875,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "7fa8bf3ac6d034335d2ab6cd6aad71830008770a2d008c27e3600ad8fa08d312",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "6773bbb3c2531cdb1dcb5236e11dc6625fe0da6bdc01836500ae4934e3cf6080",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 382000,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.417514830827713,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "1281632841809c40d0e748395dfa4a859c2491d9e5013660e0c0df912dcfed83",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -1024,
+          "dts": -1024,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00040000000000000000"
+            ]
+          ],
+          "valid": 381984,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.6898313760757446,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "edge": {
+      "mix.mov": {
+        "sha": "d04a25ca31c736a9cfbe6143a8ab7e2cf5023898d77ddc1fe9997fe46ec8ed0d",
+        "packetSHA": "f685c919f6df5cb3a1c7b7181824e3d3ff34e72b8b131bfefb738a2a1924319a",
+        "video_pts_errors": 0,
+        "identity_errors": 98,
+        "floor_matches": 199,
+        "first_frame": [
+          0,
+          0,
+          12,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 382080,
+          "decoded": 382080,
+          "gaps": [],
+          "peak": 0.428619384765625,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "cfc237f310341958c05af8f544262527ca18ba69324c2024e6ef38ca4446bd98",
+        "packetSHA": "f685c919f6df5cb3a1c7b7181824e3d3ff34e72b8b131bfefb738a2a1924319a",
+        "video_pts_errors": 0,
+        "identity_errors": 98,
+        "floor_matches": 199,
+        "first_frame": [
+          0,
+          0,
+          12,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "3d5e886a29daa48c0a9aca21c92149c1d5b3d2efb4a05c810c99cfe3fc9af13d",
+        "packetSHA": "f685c919f6df5cb3a1c7b7181824e3d3ff34e72b8b131bfefb738a2a1924319a",
+        "video_pts_errors": 0,
+        "identity_errors": 98,
+        "floor_matches": 199,
+        "first_frame": [
+          0,
+          0,
+          12,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 382080,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.40394338965415955,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "a5f1fbfe89201f7ac43bda91e6a310c9f782fea874a8b4db3b1d720dbddba6de",
+        "packetSHA": "f685c919f6df5cb3a1c7b7181824e3d3ff34e72b8b131bfefb738a2a1924319a",
+        "video_pts_errors": 0,
+        "identity_errors": 98,
+        "floor_matches": 199,
+        "first_frame": [
+          0,
+          0,
+          12,
+          12
+        ],
+        "audio": {
+          "pts": -1024,
+          "dts": -1024,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00040000000000000000"
+            ]
+          ],
+          "valid": 382080,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.6907068490982056,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "encodeFail": {
+      "mix.mov": {
+        "sha": "9c9b39cdd7b74057e12f5081fe6abfcab547ca6465588213aa33e732fdf2c31b",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.42864990234375,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "02fd36403e21cc98494102caee77cf7cba444ea405220d9d9c7909d7f14b2b56",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "d0f1b8a4f69d0f006571d2982655d328f358cc4f8ebfb846c4d4529f01d46663",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.41261473298072815,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "d0f1b8a4f69d0f006571d2982655d328f358cc4f8ebfb846c4d4529f01d46663",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.41261473298072815,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "shape": {
+      "raw.mp4": {
+        "sha": "ee6743083c9d5ab363454eb0b807434cd0cc47e168099d7f2d646fdccdbeca18",
+        "packetSHA": "8a89b0bc367b0bf3184c03769ff1107f3c5ba56694cf857d32e9a012a45202a4",
+        "video_pts_errors": 0,
+        "identity_errors": 0,
+        "floor_matches": null,
+        "first_frame": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "ee6743083c9d5ab363454eb0b807434cd0cc47e168099d7f2d646fdccdbeca18",
+        "packetSHA": "8a89b0bc367b0bf3184c03769ff1107f3c5ba56694cf857d32e9a012a45202a4",
+        "video_pts_errors": 0,
+        "identity_errors": 0,
+        "floor_matches": null,
+        "first_frame": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      }
+    },
+    "silence": {
+      "mix.mov": {
+        "sha": "5ff9683251a4609b513762755b1b1c93500395288831a2dcd46cb8432a124363",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "02fd36403e21cc98494102caee77cf7cba444ea405220d9d9c7909d7f14b2b56",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "35c8feec3533de2e6a77e600bf98b9211cca02f9d1d593fcdb1637f22a04dfd5",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "35c8feec3533de2e6a77e600bf98b9211cca02f9d1d593fcdb1637f22a04dfd5",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "success": {
+      "mix.mov": {
+        "sha": "9c9b39cdd7b74057e12f5081fe6abfcab547ca6465588213aa33e732fdf2c31b",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.42864990234375,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "02fd36403e21cc98494102caee77cf7cba444ea405220d9d9c7909d7f14b2b56",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "d0f1b8a4f69d0f006571d2982655d328f358cc4f8ebfb846c4d4529f01d46663",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.41261473298072815,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "8b72c7506b9d35f0f2fa859c7d47cfaf4070fbc5ef4dee01e341f9586e7df2de",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -1024,
+          "dts": -1024,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00040000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.693562388420105,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "pcm24": {
+      "samples": 382000,
+      "stem_lags": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "filter": "[0:a]adelay=14000S|14000S,apad=pad_len=128000,acopy[padded0];[1:a]adelay=68000S|68000S,apad=pad_len=258000,acopy[padded1];[2:a]adelay=96000S|96000S,apad=pad_len=248000,acopy[padded2];[padded0][padded1][padded2]amix=inputs=3:dropout_transition=0:normalize=0[outputaudio]",
+      "sha": "97a387734dae8dd6654e7094c24473ea5f7eecd7843b97f831828604663183e5"
+    }
+  },
+  "linux": {
+    "boundary": {
+      "mix.mov": {
+        "sha": "bc54858b8d45ad1371bb65d1fd097d2a2c0f4e084a0bd879619ca980ec774b3c",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 382000,
+          "decoded": 382000,
+          "gaps": [],
+          "peak": 0.426971435546875,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "7fa8bf3ac6d034335d2ab6cd6aad71830008770a2d008c27e3600ad8fa08d312",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "6773bbb3c2531cdb1dcb5236e11dc6625fe0da6bdc01836500ae4934e3cf6080",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 382000,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.417514830827713,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "8c688ab8b94efcec6482b41f9a2234dadd33bad2e2f57e0318846318c89629c7",
+        "packetSHA": "7e1c6d90e7d6f1aebd36bf9f978fd698f1cd799f04694053a3dc6a0571f5c414",
+        "video_pts_errors": 0,
+        "identity_errors": 191,
+        "floor_matches": 191,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -1024,
+          "dts": -1024,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00040000000000000000"
+            ]
+          ],
+          "valid": 381984,
+          "decoded": 382976,
+          "gaps": [],
+          "peak": 0.6860812902450562,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "success": {
+      "mix.mov": {
+        "sha": "9c9b39cdd7b74057e12f5081fe6abfcab547ca6465588213aa33e732fdf2c31b",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": 0,
+          "dts": 0,
+          "timebase": "1/48000",
+          "side": [],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.42864990234375,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "pre-encode.mkv": {
+        "sha": "02fd36403e21cc98494102caee77cf7cba444ea405220d9d9c7909d7f14b2b56",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": null,
+        "video_timebase": "1/90000"
+      },
+      "raw.mp4": {
+        "sha": "d0f1b8a4f69d0f006571d2982655d328f358cc4f8ebfb846c4d4529f01d46663",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -2048,
+          "dts": -2048,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00080000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.41261473298072815,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      },
+      "video.mp4": {
+        "sha": "c929b52f8a41338c17ad6e5c4ff0b4b6176baff8c75b8e1e959835d918b24a2a",
+        "packetSHA": "dee4dd94460432e0be53385e56a20ae0e152800c36031a1f1fe7558800c6fc53",
+        "video_pts_errors": 0,
+        "identity_errors": 119,
+        "floor_matches": 240,
+        "first_frame": [
+          0,
+          0,
+          11,
+          12
+        ],
+        "audio": {
+          "pts": -1024,
+          "dts": -1024,
+          "timebase": "1/48000",
+          "side": [
+            [
+              "skip_samples",
+              "00040000000000000000"
+            ]
+          ],
+          "valid": 384000,
+          "decoded": 384000,
+          "gaps": [],
+          "peak": 0.6803454756736755,
+          "lag": 0,
+          "stems": {
+            "voice": 0,
+            "whoosh": 0,
+            "impact": 0
+          },
+          "tail": 0
+        },
+        "video_timebase": "1/90000"
+      }
+    },
+    "pcm24": {
+      "samples": 382000,
+      "stem_lags": {
+        "voice": 0,
+        "whoosh": 0,
+        "impact": 0
+      },
+      "filter": "[0:a]adelay=14000S|14000S,apad=pad_len=128000,acopy[padded0];[1:a]adelay=68000S|68000S,apad=pad_len=258000,acopy[padded1];[2:a]adelay=96000S|96000S,apad=pad_len=248000,acopy[padded2];[padded0][padded1][padded2]amix=inputs=3:dropout_transition=0:normalize=0[outputaudio]",
+      "sha": "97a387734dae8dd6654e7094c24473ea5f7eecd7843b97f831828604663183e5"
+    }
+  }
+}
