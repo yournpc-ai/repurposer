@@ -202,6 +202,13 @@ const ProductShowcaseBlock: React.FC<{
   const urlText = isDark ? "rgba(226, 232, 240, 0.72)" : "rgba(30, 41, 59, 0.72)";
   const dotColor = isDark ? "rgba(255, 255, 255, 0.22)" : "rgba(15, 23, 42, 0.18)";
 
+  const cropX = Math.round(focusX * 100);
+  const cropY = Math.round(clamp01((focusY - 0.35) / 0.55) * 100);
+  const sizeCapture = React.useCallback((image: HTMLImageElement) => {
+    // Remotion calls this after decode, before releasing the frame for capture.
+    image.parentElement!.style.setProperty("--capture-ratio", String(image.naturalWidth / image.naturalHeight));
+  }, []);
+
   const callout = props.callout ?? null;
   const calloutT = callout ? springOut(Math.max(0, tSec - entranceDur * 0.68), 11.5, 0.84) : 0;
   const calloutAlpha = callout ? easeOutCubic((tSec - entranceDur * 0.68) / 0.42) : 0;
@@ -353,72 +360,83 @@ const ProductShowcaseBlock: React.FC<{
               background: isDark ? "#0B0E14" : "#FFFFFF",
             }}
           >
-            {imageUrl ? (
-              <Img
-                src={imageUrl}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  objectPosition: `${Math.round(focusX * 100)}% ${Math.round(clamp01((focusY - 0.35) / 0.55) * 100)}%`,
-                  transformOrigin: `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`,
-                  transform: `translate(${driftX}px, ${driftY}px) scale(${innerZoom})`,
-                }}
-              />
-            ) : null}
-
-            {callout && calloutAlpha > 0.005 ? (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                containerType: "size",
+                transformOrigin: `${cropX}% ${Math.round(focusY * 100)}%`,
+                transform: `translate(${driftX}px, ${driftY}px) scale(${innerZoom})`,
+              }}
+            >
+              {/* Crop one source-sized plane so the image and its normalized box travel together. */}
               <div
                 style={{
                   position: "absolute",
-                  left: `${callout.x * 100}%`,
-                  top: `${callout.y * 100}%`,
-                  width: `${callout.width * 100}%`,
-                  height: `${callout.height * 100}%`,
-                  borderRadius: Math.round(12 * scaleUnit),
-                  border: `1.5px solid ${hexToRgba(accent, 0.85)}`,
-                  boxShadow: `0 0 0 9999px rgba(7, 11, 17, ${0.26 * calloutAlpha}), 0 0 ${Math.round(28 * scaleUnit)}px ${hexToRgba(accent, 0.32)}`,
-                  opacity: calloutAlpha,
-                  transform: `scale(${0.96 + 0.04 * calloutT})`,
-                  pointerEvents: "none",
-                  zIndex: 3,
+                  left: `${cropX}%`,
+                  top: `${cropY}%`,
+                  transform: `translate(-${cropX}%, -${cropY}%)`,
+                  width: "max(100%, calc(100cqh * var(--capture-ratio)))",
                 }}
               >
-                {/* Precision corner L-brackets */}
-                <span style={{ position: "absolute", top: -1, left: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderTopLeftRadius: Math.round(10 * scaleUnit) }} />
-                <span style={{ position: "absolute", top: -1, right: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderTopRightRadius: Math.round(10 * scaleUnit) }} />
-                <span style={{ position: "absolute", bottom: -1, left: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderBottomLeftRadius: Math.round(10 * scaleUnit) }} />
-                <span style={{ position: "absolute", bottom: -1, right: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderBottomRightRadius: Math.round(10 * scaleUnit) }} />
+                {imageUrl ? (
+                  <Img src={imageUrl} onImageFrame={sizeCapture} style={{ display: "block", width: "100%" }} />
+                ) : null}
 
-                {callout.label ? (
+                {callout && calloutAlpha > 0.005 ? (
                   <div
                     style={{
                       position: "absolute",
-                      left: 0,
-                      ...(callout.y > 0.14
-                        ? { bottom: "100%", marginBottom: Math.round(10 * scaleUnit) }
-                        : { top: "100%", marginTop: Math.round(10 * scaleUnit) }),
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: Math.round(8 * scaleUnit),
-                      padding: `${Math.round(7 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px`,
-                      borderRadius: 999,
-                      background: "rgba(9, 17, 24, 0.92)",
-                      border: `1px solid ${hexToRgba(accent, 0.55)}`,
-                      color: "#F8FAFC",
-                      fontSize: Math.max(12, Math.round(14 * scaleUnit)),
-                      fontWeight: 600,
-                      letterSpacing: "0.02em",
-                      whiteSpace: "nowrap",
-                      boxShadow: `0 ${Math.round(10 * scaleUnit)}px ${Math.round(28 * scaleUnit)}px rgba(0, 0, 0, 0.38)`,
+                      left: `${callout.x * 100}%`,
+                      top: `${callout.y * 100}%`,
+                      width: `${callout.width * 100}%`,
+                      height: `${callout.height * 100}%`,
+                      borderRadius: Math.round(12 * scaleUnit),
+                      border: `1.5px solid ${hexToRgba(accent, 0.85)}`,
+                      boxShadow: `0 0 0 9999px rgba(7, 11, 17, ${0.26 * calloutAlpha}), 0 0 ${Math.round(28 * scaleUnit)}px ${hexToRgba(accent, 0.32)}`,
+                      opacity: calloutAlpha,
+                      transform: `scale(${0.96 + 0.04 * calloutT})`,
+                      pointerEvents: "none",
+                      zIndex: 3,
                     }}
                   >
-                    <span style={{ width: Math.max(6, Math.round(7 * scaleUnit)), height: Math.max(6, Math.round(7 * scaleUnit)), borderRadius: "50%", background: accent }} />
-                    {callout.label}
+                    {/* Precision corner L-brackets */}
+                    <span style={{ position: "absolute", top: -1, left: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderTopLeftRadius: Math.round(10 * scaleUnit) }} />
+                    <span style={{ position: "absolute", top: -1, right: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderTopRightRadius: Math.round(10 * scaleUnit) }} />
+                    <span style={{ position: "absolute", bottom: -1, left: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderBottomLeftRadius: Math.round(10 * scaleUnit) }} />
+                    <span style={{ position: "absolute", bottom: -1, right: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderBottomRightRadius: Math.round(10 * scaleUnit) }} />
+
+                    {callout.label ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          ...(callout.y > 0.14
+                            ? { bottom: "100%", marginBottom: Math.round(10 * scaleUnit) }
+                            : { top: "100%", marginTop: Math.round(10 * scaleUnit) }),
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: Math.round(8 * scaleUnit),
+                          padding: `${Math.round(7 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px`,
+                          borderRadius: 999,
+                          background: "rgba(9, 17, 24, 0.92)",
+                          border: `1px solid ${hexToRgba(accent, 0.55)}`,
+                          color: "#F8FAFC",
+                          fontSize: Math.max(12, Math.round(14 * scaleUnit)),
+                          fontWeight: 600,
+                          letterSpacing: "0.02em",
+                          whiteSpace: "nowrap",
+                          boxShadow: `0 ${Math.round(10 * scaleUnit)}px ${Math.round(28 * scaleUnit)}px rgba(0, 0, 0, 0.38)`,
+                        }}
+                      >
+                        <span style={{ width: Math.max(6, Math.round(7 * scaleUnit)), height: Math.max(6, Math.round(7 * scaleUnit)), borderRadius: "50%", background: accent }} />
+                        {callout.label}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
         </div>
       </div>
