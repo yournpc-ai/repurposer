@@ -179,8 +179,10 @@ async def test_stream_done_finishes_without_waiting_for_connection_close(monkeyp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model", ["minimax-m3", "MiniMax-M3.1-Flash"])
-async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch, model):
+@pytest.mark.parametrize(("model", "effort"), [
+    ("minimax-m3", "xhigh"), ("MiniMax-M3.1-Flash", "xhigh"), ("MiniMax-M3.1-Flash", "max"),
+])
+async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch, model, effort):
     import json
     from contextlib import asynccontextmanager
 
@@ -208,6 +210,7 @@ async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch, mode
         async def pool():
             yield client
 
+        monkeypatch.setattr(minimax.settings, "minimax_reasoning_effort", effort)
         monkeypatch.setattr(minimax, "_pooled_client", pool)
         monkeypatch.setattr(minimax.settings, "minimax_model", model)
         monkeypatch.setattr(minimax.settings, "llm_trace_path", "")
@@ -215,22 +218,22 @@ async def test_tool_call_thinking_opt_out_uses_provider_config(monkeypatch, mode
         await llm.generate_with_tools(messages=[], tools=[], thinking=False)
         await llm.generate_with_tools(messages=[], tools=[])
         await llm.generate_stream_with_tools(messages=[], tools=[], thinking=False)
-        await llm.generate_stream_with_tools(messages=[], tools=[])
+        await llm.generate_stream_with_tools(messages=[], tools=[], thinking=True)
 
     if model == "MiniMax-M3.1-Flash":
-        assert all(payload["model"] == model and "temperature" not in payload for payload in payloads)
+        assert all(payload["model"] == model and {"temperature", "top_p"}.isdisjoint(payload) and payload["reasoning_split"] for payload in payloads)
         assert all(payload["thinking"] == {"type": "adaptive"} for payload in payloads)
-        assert [payload.get("reasoning_effort") for payload in payloads] == ["low", None, "low", None]
+        assert [payload.get("reasoning_effort") for payload in payloads] == ["low", effort, "low", effort]
         return
     assert payloads[0]["thinking"] == {"type": "disabled"}
     assert "thinking" not in payloads[1]
     assert payloads[2]["thinking"] == {"type": "disabled"}
-    assert "thinking" not in payloads[3]
+    assert payloads[3]["thinking"] == {"type": "adaptive"}
 
 
 @pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.asyncio
-async def test_chat_tool_loop_always_disables_provider_thinking(monkeypatch, streaming):
+async def test_simple_tool_loop_uses_low_latency_thinking(monkeypatch, streaming):
     from app.agents import tool_loop
     from app.providers.llm.base import ProviderCapabilities, ToolGeneration
 

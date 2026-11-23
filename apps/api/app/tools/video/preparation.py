@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.editing.fonts import FONT_FILES, font_storage_key
+from app.editing.schemas import captured_element_box
 from app.editing.sources import register_snapshot
 from app.editing.timing import SOURCE_TIMEBASE
 from app.models.schemas import AssetStatus, AssetType
@@ -236,6 +237,13 @@ def canonical_resource(snapshot: SourceSnapshot, *, target: Any = None) -> dict[
     if snapshot.asset_id is not None:
         resource["asset_id"] = str(snapshot.asset_id)
     if snapshot.kind == "web":
+        def web_target(element: dict) -> dict:
+            target = {key: element[key] for key in ("id", "kind", "text", "label") if element.get(key) is not None}
+            box = captured_element_box(element)
+            if box is not None:
+                target["box"] = box
+            return target
+
         resource.update({
             "consumption": "web_object",
             "canonical_url": meta.get("canonical_url"),
@@ -263,14 +271,7 @@ def canonical_resource(snapshot: SourceSnapshot, *, target: Any = None) -> dict[
                         "target_element_id": view.get("target_element_id"),
                         "member_id": view.get("member_id"),
                         "transparent": view.get("transparent"),
-                        "targets": [
-                            {
-                                key: element.get(key)
-                                for key in ("id", "kind", "text", "label")
-                                if element.get(key) is not None
-                            }
-                            for element in view.get("elements") or []
-                        ],
+                        "targets": [web_target(element) for element in view.get("elements") or []],
                     }.items() if value is not None
                 }
                 for view in meta.get("views") or []

@@ -40,6 +40,7 @@ from app.editing.schemas import (
     CompositionContent,
     LayoutBox,
     MotionBlockObject,
+    ProductShowcaseCallout,
     RemotionResource,
     Scene,
     SourceBinding,
@@ -61,6 +62,7 @@ from app.editing.timing import (
     output_ticks_to_source_ticks,
     seconds_to_ticks,
     source_ticks_to_output_ticks,
+    ticks_to_frames,
 )
 from app.models.schemas import canonical_json_hash
 from app.models.tables import (
@@ -193,6 +195,43 @@ def _extract_bgm_fades(clip: Clip, timebase: int) -> tuple[float | None, float |
     return fade_in, fade_out
 
 
+def music_clips_for_window(
+    *, settings: VersionSettings, start: int, end: int, source_id: UUID, digest: str,
+    source_ticks: int, id_stem: str, gain_db: float,
+    fade_in_seconds: float | None, fade_out_seconds: float | None,
+) -> list[Clip]:
+    rate = settings.timebase
+    loop_ticks = source_ticks_to_output_ticks(source_ticks, rate)
+    frame_clock = (rate, settings.fps.num, settings.fps.den)
+    frame_ticks = frames_to_ticks(1, *frame_clock)
+    if loop_ticks < max(1, frame_ticks):
+        raise ValueError("Music duration must span at least one output frame.")
+    cuts = [*range(start, end, loop_ticks), end]
+    # Leave the tail a visible frame if an almost-exact multiple collapses its last cut.
+    if len(cuts) > 2 and ticks_to_frames(cuts[-2], *frame_clock) == ticks_to_frames(end, *frame_clock):
+        cuts[-2] = max(end - loop_ticks, cuts[-2] - frame_ticks)
+    clips = []
+    for index, (left, right) in enumerate(zip(cuts, cuts[1:])):
+        if ticks_to_frames(left, *frame_clock) >= ticks_to_frames(right, *frame_clock):
+            raise ValueError("Each music slice must span an output frame.")
+        used_src = source_ticks if right - left == loop_ticks else output_ticks_to_source_ticks(right - left, rate)
+        stem = id_stem if index == 0 else f"{id_stem}_{index + 1}"
+        gain = build_audio_gain_animation(
+            object_id=f"obj_{stem}", clip_start_ticks=left, clip_end_ticks=right,
+            timebase=rate, fps_num=settings.fps.num, fps_den=settings.fps.den,
+            fade_in_seconds=fade_in_seconds if left == start else None,
+            fade_out_seconds=fade_out_seconds if right == end else None,
+        )
+        clips.append(Clip(
+            clip_id=f"clp_{stem}", range=TimeRange(start=left, end=right),
+            source=ClipSource(snapshot_id=source_id, snapshot_digest=digest,
+                              source_range=TimeRange(start=0, end=used_src)),
+            object=AudioObject(kind="audio", object_id=f"obj_{stem}", gain_db=gain_db),
+            animations=[Animation.model_validate(gain)] if gain else [],
+        ))
+    return clips
+
+
 def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
     lines = [
         "---",
@@ -210,8 +249,8 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         "BGM envelope, and sound-effect cues of the saved master composition while keeping "
         "all copy, metrics, screenshots, language, and narration as replaceable slots.",
         "",
-        "| Act | `act_id` | Block | Role | Baseline | Required Slots | Optional Slots |",
-        "|---|---|---|---|---|---|---|",
+        "| Act | `act_id` | Block | Role | Baseline | Suggested narration | Required Slots | Optional Slots |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for idx, act in enumerate(bp.acts, 1):
         req = ", ".join(act.required_slots) or "—"
@@ -222,7 +261,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         overlay_note = f" (+{len(act.overlays)} overlay)" if act.overlays else ""
         lines.append(
             f"| {idx} | `{act.act_id}` | `{act.block_id}`{overlay_note} | {act.role} | "
-            f"{act.target_duration_s:g}s | {req} | {opt} |"
+            f"{act.target_duration_s:g}s | Keep dialogue within {1.5 * act.target_duration_s:g}s | {req} | {opt} |"
         )
     lines.extend([
         "",
@@ -598,7 +637,7 @@ class BlueprintActSlotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     act_id: str | None = Field(default=None, max_length=64, description="Optional act_id matching blueprint order.")
-    props: dict[str, Any] = Field(description="Replacement content props (merged on top of blueprint style_defaults).")
+    props: dict[str, Any] = Field(description="Replacement content props. For a captured product_showcase view, callout can use {element_id, label?} from its targets.")
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
         description="Pinned image or captured webpage snapshot IDs (required for product_showcase acts).",
@@ -629,7 +668,7 @@ class InstantiateSkillBlueprintArgs(BaseModel):
     acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=12, description="Ordered slot values matching blueprint acts.")
     bgm_snapshot_id: UUID | None = Field(
         default=None,
-        description="Optional fixed music snapshot; trimmed to the adapted total duration with blueprint fade-in/out.",
+        description="Optional fixed music snapshot; looped or trimmed to the adapted total duration with blueprint fade-in/out.",
     )
     bgm_gain_db: float | None = Field(default=None, ge=-60.0, le=0.0, allow_inf_nan=False)
     breathing_seconds: float | None = Field(
@@ -778,6 +817,8 @@ async def instantiate_skill_blueprint(
                     chosen_view = slot.view_id or (views[0].get("view_id") if views else None)
                     if not chosen_view:
                         raise ValueError(f"Act {bp_act.act_id}: captured webpage has no rendered views.")
+                    if r_idx == 0 and bp_act.block_id == "product_showcase":
+                        merged_props = ProductShowcaseCallout.resolve_props(merged_props, views, chosen_view)
                     snap = await register_web_view_snapshot(
                         db, owner_id=owner, web_snapshot=snap, view_id=chosen_view,
                     )
@@ -1024,44 +1065,15 @@ async def instantiate_skill_blueprint(
         audio_order += 1
 
     if bgm_info is not None:
-        bgm_out_max = source_ticks_to_output_ticks(bgm_info["duration_ticks"], tb)
-        bgm_end = min(total_ticks, bgm_out_max)
-        used_bgm_src = min(bgm_info["duration_ticks"], output_ticks_to_source_ticks(bgm_end, tb))
-        bgm_obj_id = "obj_bp_bgm"
-        gain_anim_dict = build_audio_gain_animation(
-            object_id=bgm_obj_id,
-            clip_start_ticks=0,
-            clip_end_ticks=bgm_end,
-            timebase=tb,
-            fps_num=fps_num,
-            fps_den=fps_den,
+        music = music_clips_for_window(
+            settings=settings_obj, start=0, end=total_ticks,
+            source_id=bgm_info["snapshot_id"], digest=bgm_info["digest"],
+            source_ticks=bgm_info["duration_ticks"], id_stem="bp_bgm",
+            gain_db=args.bgm_gain_db if args.bgm_gain_db is not None else bp.audio_profile.bgm_gain_db,
             fade_in_seconds=bp.audio_profile.bgm_fade_in_s,
             fade_out_seconds=bp.audio_profile.bgm_fade_out_s,
         )
-        tracks.append(Track(
-            track_id="trk_editor_music",
-            kind="audio",
-            role="music",
-            order=audio_order,
-            clips=[
-                Clip(
-                    clip_id="clp_bp_bgm",
-                    range=TimeRange(start=0, end=bgm_end),
-                    scene_id=None,
-                    source=ClipSource(
-                        snapshot_id=bgm_info["snapshot_id"],
-                        snapshot_digest=bgm_info["digest"],
-                        source_range=TimeRange(start=0, end=used_bgm_src),
-                    ),
-                    object=AudioObject(
-                        kind="audio",
-                        object_id=bgm_obj_id,
-                        gain_db=args.bgm_gain_db if args.bgm_gain_db is not None else bp.audio_profile.bgm_gain_db,
-                    ),
-                    animations=[Animation.model_validate(gain_anim_dict)] if gain_anim_dict else [],
-                )
-            ],
-        ))
+        tracks.append(Track(track_id="trk_editor_music", kind="audio", role="music", order=audio_order, clips=music))
         audio_order += 1
 
     # Place re-anchored SFX cues on collision-free effect tracks

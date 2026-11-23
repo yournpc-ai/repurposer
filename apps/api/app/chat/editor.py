@@ -12,10 +12,10 @@ from sqlalchemy import func, select
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.editor_create import CreateVideoArgs
-from app.skills.blueprint import InstantiateSkillBlueprintArgs
+from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_window
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
-from app.editing.edits import BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
-from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, TimeRange, Transition
+from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
+from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseCallout, TimeRange, Transition
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -40,8 +40,10 @@ class InsertAudioArgs(BaseModel):
     source_id: UUID = Field(description="Owned fixed audio snapshot from the project or a generation result.")
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Start on the composition timeline.")
     duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
-                                           description="Use the full recording when omitted.")
+                                           description="Use the full recording when omitted. Music loops to cover a longer requested duration.")
     gain_db: float = Field(default=0, ge=-60, le=12, description="Clip gain in decibels.")
+    fade_in_seconds: float | None = Field(default=None, ge=0, le=10, description="Music entrance fade.")
+    fade_out_seconds: float | None = Field(default=None, ge=0, le=10, description="Music ending fade.")
 
 
 class InsertVisualArgs(BaseModel):
@@ -155,7 +157,10 @@ class InsertMotionBlockArgs(BaseModel):
     )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
-    props: dict[str, Any] = Field(description="Declarative JSON props for the chosen motion block.")
+    props: dict[str, Any] = Field(description=(
+        "Declarative props for the chosen motion block. A captured product_showcase view accepts "
+        "callout {element_id, label?} from its targets or {x, y, width, height, label?}."
+    ))
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
         description="Pinned image or captured webpage snapshot IDs (required for product_showcase; optional logo for closing_cta).",
@@ -630,7 +635,13 @@ async def edit_clip(
             if not any(w["start"] < span.end / rate and w["end"] > span.start / rate for w in preview.get("windows", [])):
                 raise ValueError("Preview the affected window containing this clip before removing it.")
     prior = next((c for c in commits if c["request"] == str(identity)), None)
-    fingerprint = canonical_json_hash({"tool": name, "args": args.model_dump(mode="json")})
+    wire_args = args.model_dump(mode="json")
+    if isinstance(args, InsertAudioArgs):
+        # Preserve fingerprints of inserts committed before music fades were accepted.
+        for field in ("fade_in_seconds", "fade_out_seconds"):
+            if wire_args[field] is None:
+                del wire_args[field]
+    fingerprint = canonical_json_hash({"tool": name, "args": wire_args})
     if prior and prior["fingerprint"] != fingerprint:
         raise RequestMismatch("This native call already committed different parameters.")
     rate = content.settings.timebase
@@ -681,7 +692,7 @@ async def edit_clip(
                       output_ticks_to_source_ticks(_ticks(args.duration_seconds, rate), rate))
         end = start + source_ticks_to_output_ticks(source_end, rate)
         limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
-        if not 0 < source_end <= snapshot.duration_ticks or end > limit or end <= start:
+        if not start < end <= limit:
             raise ValueError("The audio must fit the source and the current composition duration.")
         meta = snapshot.meta or {}
         origin = meta.get("origin") or {}
@@ -692,6 +703,9 @@ async def edit_clip(
         role = "music" if is_music else (
             "dialogue" if origin.get("video_narration_hash") else "effect"
         )
+        if role != "music" and (source_end > snapshot.duration_ticks or args.fade_in_seconds is not None
+                                or args.fade_out_seconds is not None):
+            raise ValueError("Only music can loop or use insertion fades.")
         if role == "effect":
             def _overlaps(t):
                 return any(c.range.start < end and start < c.range.end for c in t.clips)
@@ -715,10 +729,25 @@ async def edit_clip(
             track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
             if track and (track.kind != "audio" or track.role != role):
                 raise ValueError("The destination track has a different role.")
-        ops = fixed_audio_ops(content, source_id=snapshot.id, source_digest=snapshot.digest,
-                              track_id=track_id, role=role, clip_id=f"clp_{identity.hex}",
-                              object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
-                              source_start=0, source_end=source_end, gain_db=args.gain_db)
+        if role == "music":
+            music = music_clips_for_window(
+                settings=content.settings, start=start, end=end, source_id=snapshot.id, digest=snapshot.digest,
+                source_ticks=snapshot.duration_ticks, id_stem=identity.hex, gain_db=args.gain_db,
+                fade_in_seconds=args.fade_in_seconds, fade_out_seconds=args.fade_out_seconds,
+            )
+            if snapshot.id not in {source.snapshot_id for source in content.sources}:
+                ops.append(BindSource(op="bind_source", snapshot_id=snapshot.id))
+            if track is None:
+                order = max((t.order for t in content.timeline.tracks if t.kind == "audio"), default=-1) + 1
+                ops.append(AddTrack(op="add_track", track={
+                    "track_id": track_id, "kind": "audio", "role": role, "order": order, "clips": [],
+                }))
+            ops.extend(AddClip(op="add_clip", track_id=track_id, clip=clip) for clip in music)
+        else:
+            ops = fixed_audio_ops(content, source_id=snapshot.id, source_digest=snapshot.digest,
+                                  track_id=track_id, role=role, clip_id=f"clp_{identity.hex}",
+                                  object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
+                                  source_start=0, source_end=source_end, gain_db=args.gain_db)
     elif isinstance(args, EditAudioClipArgs):
         from app.editing.revisions import build_audio_gain_animation
         from app.editing.timing import source_ticks_to_output_ticks
@@ -841,6 +870,7 @@ async def edit_clip(
         if not 0 <= start < end <= limit:
             raise ValueError("The motion block window must fit inside the composition duration.")
         legacy_asset = select(Asset.id).where(Asset.user_id == project.user_id, Asset.project_id == project.id)
+        props = args.props
         resolved_resources: list[dict[str, Any]] = []
         ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
         for idx, res_id in enumerate(args.resources or []):
@@ -857,6 +887,8 @@ async def edit_clip(
                 chosen_view = args.view_id or (views[0].get("view_id") if views else None)
                 if not chosen_view:
                     raise ValueError("The captured webpage has no rendered views.")
+                if idx == 0 and args.block_id == "product_showcase":
+                    props = ProductShowcaseCallout.resolve_props(props, views, chosen_view)
                 snap = await register_web_view_snapshot(
                     db, owner_id=project.user_id, web_snapshot=snap, view_id=chosen_view,
                 )
@@ -880,7 +912,7 @@ async def edit_clip(
         ops = motion_block_ops(
             content,
             block_id=args.block_id,
-            props=args.props,
+            props=props,
             resources=resolved_resources,
             clip_id=f"clp_mg_{identity.hex}",
             object_id=f"obj_mg_{identity.hex}",

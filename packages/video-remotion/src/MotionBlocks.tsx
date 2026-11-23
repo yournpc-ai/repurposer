@@ -1042,7 +1042,7 @@ interface MetricGridItem {
 /**
  * 2. MetricGridBlock — 2-4 elevated institutional metric/capability cards with
  * staggered damped spring settle, deterministic numeric count-up, top specular
- * sheen sweep, and frame-driven SVG micro-curve accent.
+ * sheen sweep across each card.
  */
 const MetricGridBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
@@ -1085,12 +1085,7 @@ const MetricGridBlock: React.FC<{
 
   const headerT = springOut(tSec, 13.0, 0.84);
   const headerOp = easeOutCubic(tSec / 0.35);
-  const microPaths = [
-    "M 0 26 C 35 24, 52 10, 92 14 C 132 18, 155 4, 200 6",
-    "M 0 22 C 30 28, 68 18, 104 12 C 142 6, 170 8, 200 3",
-    "M 0 28 C 44 26, 72 16, 118 11 C 154 7, 178 4, 200 2",
-    "M 0 24 C 38 18, 76 22, 116 10 C 156 2, 180 6, 200 4",
-  ];
+  const hasDetail = items.some((item) => item.detail);
 
   return (
     <div
@@ -1181,7 +1176,6 @@ const MetricGridBlock: React.FC<{
             const countProgress = countUp ? clamp01((localT - 0.06) / 0.92) : 1;
             const shownValue = countUp ? formatCountUp(item.value, countProgress) : item.value;
             const sheenX = -40 + easeOutQuart((localT - 0.18) / 0.9) * 180;
-            const curveReveal = easeOutQuart((localT - 0.15) / 0.95);
             const valueSize = item.value.length > 8 ? 50 : 66;
 
             return (
@@ -1193,12 +1187,10 @@ const MetricGridBlock: React.FC<{
                   borderRadius: Math.round(20 * scaleUnit),
                   background: cardBg,
                   border: `1px solid ${cardBorder}`,
-                  padding: `${Math.round(34 * scaleUnit)}px ${Math.round(34 * scaleUnit)}px ${Math.round(30 * scaleUnit)}px`,
+                  padding: `${Math.round((hasDetail ? 34 : 24) * scaleUnit)}px ${Math.round(34 * scaleUnit)}px`,
                   display: "flex",
                   flexDirection: "column",
-                  justifyContent: "space-between",
-                  gap: Math.round(18 * scaleUnit),
-                  minHeight: Math.round((items.length === 4 ? 255 : 320) * scaleUnit),
+                  justifyContent: "center",
                   opacity: alpha,
                   transform: `translateY(${(1 - settle) * 34 * scaleUnit}px) scale(${0.955 + 0.045 * settle})`,
                   boxShadow: isDark
@@ -1276,33 +1268,6 @@ const MetricGridBlock: React.FC<{
                     </div>
                   ) : null}
                 </div>
-
-                {/* Deterministic SVG micro-curve accent */}
-                <svg
-                  width="100%"
-                  height={Math.round(32 * scaleUnit)}
-                  viewBox="0 0 200 32"
-                  preserveAspectRatio="none"
-                  role="presentation"
-                  style={{ display: "block", marginTop: Math.round(4 * scaleUnit) }}
-                >
-                  <path
-                    d={microPaths[idx % microPaths.length]}
-                    fill="none"
-                    stroke={hexToRgba(accent, isDark ? 0.20 : 0.16)}
-                    strokeWidth="2"
-                  />
-                  <path
-                    d={microPaths[idx % microPaths.length]}
-                    fill="none"
-                    stroke={accent}
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    pathLength={1}
-                    strokeDasharray={1}
-                    strokeDashoffset={1 - curveReveal}
-                  />
-                </svg>
               </div>
             );
           })}

@@ -1017,6 +1017,8 @@ class ToolLoopAgent:
             else:
                 assembled = RoundAssembly(tools=restricted_tools, system=effective_system)
             round_tools = assembled.tools
+            # The editor owns video_target even while creating the first draft.
+            thinking = "video_target" in (assembled.caller_state or {})
             effective_system = assembled.system
             wire_system = "\n".join([effective_system, *system_supplements])
             base_messages[0] = {"role": "system", "content": wire_system}
@@ -1176,7 +1178,7 @@ class ToolLoopAgent:
                             messages=messages,
                             tools=round_specs,
                             temperature=self.temperature,
-                            thinking=False,
+                            thinking=thinking,
                             on_delta=on_delta if assembled.stream_prose else None,
                             on_reasoning=on_reasoning,
                             on_tool_call=None if self.service_per_call else on_tool_call,
@@ -1186,7 +1188,7 @@ class ToolLoopAgent:
                             messages=messages,
                             tools=round_specs,
                             temperature=self.temperature,
-                            thinking=False,
+                            thinking=thinking,
                         )
                         for tool_call in (() if self.service_per_call else result.tool_calls):
                             await _emit(on_tool_call, tool_call.name)

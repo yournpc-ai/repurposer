@@ -562,7 +562,7 @@ async def test_instantiate_skill_blueprint_sfx_outside_write_lock_and_adaptive_t
             kind="audio",
             digest=_dig("new_bgm"),
             storage_key="remake/bgm.mp3",
-            duration_ticks=seconds_to_ticks(45.0, SOURCE_TIMEBASE),
+            duration_ticks=seconds_to_ticks(8.0, SOURCE_TIMEBASE),
         )
         conv = Conversation(id=uuid4(), user_id=owner.id, project_id=p_remake.id, title="Remake")
         opening = Message(
@@ -715,6 +715,12 @@ async def test_instantiate_skill_blueprint_sfx_outside_write_lock_and_adaptive_t
             content_digest=saved_ver.content_digest,
         )
         assert len(spec["tracks"]) >= 4
+        music = next(t["clips"] for t in spec["tracks"] if t["track_id"] == "trk_editor_music")
+        assert [(c["start_frame"], c["end_frame"]) for c in music] == [
+            (0, 240), (240, 480), (480, spec["duration_frames"]),
+        ]
+        assert [len(c["animations"]) for c in music] == [1, 0, 1]
+
 
     # Replay short-circuit: same (turn_id, call_id, args) returns saved version WITHOUT calling SFX or apply
     events.clear()

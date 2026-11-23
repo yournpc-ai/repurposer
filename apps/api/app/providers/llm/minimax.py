@@ -272,10 +272,10 @@ class _MiniMaxToolMarkupStripper:
 def _generation_options(temperature: float, thinking: bool | None) -> dict:
     if settings.minimax_model.casefold() == MINIMAX_FLASH_MODEL.casefold():
         # Flash always thinks. Fast routing requests use its lowest supported effort.
-        options = {"thinking": {"type": "adaptive"}}
-        if thinking is False:
-            options["reasoning_effort"] = "low"
-        return options
+        return {
+            "thinking": {"type": "adaptive"},
+            "reasoning_effort": "low" if thinking is False else settings.minimax_reasoning_effort,
+        }
     options = {"temperature": temperature}
     if thinking is not None:
         options["thinking"] = {"type": "adaptive" if thinking else "disabled"}

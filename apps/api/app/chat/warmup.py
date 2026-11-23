@@ -51,6 +51,7 @@ async def warm_chat_prefixes() -> None:
                 ],
                 tools=[tool_spec(t) for t in agent.tools],
                 temperature=agent.temperature,
+                thinking=False,
             )
             logger.info("minimax_warmup_done", agent=agent.name)
         except Exception as exc:  # noqa: BLE001 — warmup never fails startup

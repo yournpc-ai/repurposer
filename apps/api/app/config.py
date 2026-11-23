@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Minimax
     minimax_api_key: str = ""
     minimax_model: str = MINIMAX_FLASH_MODEL
+    minimax_reasoning_effort: Literal["low", "medium", "high", "xhigh", "max"] = "xhigh"
     minimax_base_url: str = "https://api.minimax.io/v1"
     # Startup prefix-cache warmup (批3): one throwaway call per chat agent at
     # API boot seeds the passive prefix cache on one backend pod (forensics

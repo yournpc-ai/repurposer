@@ -316,7 +316,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "visuals",
         "category": "charts_and_numbers",
         "name": "Metric Grid",
-        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas.",
+        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas. Prefer a short supporting detail for each metric.",
         "use_for": [
             "quantified proof points, valuation metrics, or core platform pillars",
             "mid-promo credibility section breaking up UI showcases",

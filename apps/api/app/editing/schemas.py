@@ -619,16 +619,45 @@ class KineticTitleProps(BaseModel):
         return data
 
 
+def captured_element_box(element: dict) -> list[float] | None:
+    if any(element.get(key) is None for key in ("x", "y", "w", "h")):
+        return None
+    w, h = element["w"], element["h"]
+    box = (element["x"] - w / 2, element["y"] - h / 2, w, h)
+    return [round(min(1.0, max(0.0, coordinate)), 3) for coordinate in box]
+
+
 class ProductShowcaseCallout(BaseModel):
     """Normalized [0..1] viewport highlight region for `product_showcase`."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    x: float = Field(ge=0.0, le=0.95, allow_inf_nan=False)
-    y: float = Field(ge=0.0, le=0.95, allow_inf_nan=False)
-    width: float = Field(gt=0.04, le=1.0, allow_inf_nan=False)
-    height: float = Field(gt=0.04, le=1.0, allow_inf_nan=False)
+    x: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    y: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    width: float = Field(gt=0.0, le=1.0, allow_inf_nan=False)
+    height: float = Field(gt=0.0, le=1.0, allow_inf_nan=False)
     label: str | None = Field(default=None, max_length=64)
+
+    @classmethod
+    def resolve_props(cls, props: dict, views: list[dict], view_id: str) -> dict:
+        callout = props.get("callout")
+        if not isinstance(callout, dict) or "element_id" not in callout:
+            return props
+        element_id = callout["element_id"]
+        if set(callout) - {"element_id", "label"}:
+            raise ValueError("An element_id callout accepts only element_id and label.")
+        view = next((v for v in views if v["view_id"] == view_id), None)
+        if view is None:
+            raise ValueError(f"No captured view {view_id!r}.")
+        element = next((e for e in view.get("elements", []) if e["id"] == element_id), None)
+        if element is None:
+            raise ValueError(f"No element {element_id!r} in view {view_id!r}.")
+        box = captured_element_box(element)
+        if box is None:
+            raise ValueError(f"Element {element_id!r} in view {view_id!r} has no captured box.")
+        x, y, width, height = box
+        resolved = cls(x=x, y=y, width=width, height=height, label=callout.get("label"))
+        return {**props, "callout": resolved.model_dump(exclude_none=True)}
 
     @model_validator(mode="after")
     def _in_viewport(self) -> ProductShowcaseCallout:
