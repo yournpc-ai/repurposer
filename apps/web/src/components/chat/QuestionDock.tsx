@@ -112,7 +112,7 @@ function OptionForm({
     setFreeform("")
   }
   return (
-    <div className={plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"}>
+    <div className={mediaApproval ? undefined : plain ? "p-4 sm:p-5" : "mb-2 rounded-lg bg-muted p-4 sm:p-5"}>
       {/* Question line — no ✓ (ADR-051); the × on the right IS the bail
           channel. */}
       <div className="flex items-start gap-3 text-sm leading-6">
@@ -132,7 +132,7 @@ function OptionForm({
           />
         ) : null}
       </div>
-      {options.length > 0 ? (
+      {options.length > 0 && (!mediaApproval || onFreeform) ? (
         // Full-width options keep long labels within the dock.
         <div className="mt-4 flex flex-col gap-1.5">
           {!mediaApproval && options.map((option, index) => (

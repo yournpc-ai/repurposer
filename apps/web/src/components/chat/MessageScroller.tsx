@@ -137,14 +137,49 @@ export function useMessageScrollerViewportAnchor(
     return recordReadingEdge
   }, [live, recordReadingEdge])
 
+  const stopTracking = React.useRef<(() => void) | null>(null)
+  React.useLayoutEffect(() => () => stopTracking.current?.(), [])
+
   React.useLayoutEffect(() => {
     const anchor = pendingRef.current
     pendingRef.current = null
     const el = viewport.current
-    if (!anchor?.element.isConnected || !el) return
-    el.scrollTop += anchor.element.getBoundingClientRect().top - anchor.top
-    following.current = el.scrollHeight - el.clientHeight - el.scrollTop <= 8
-    measure()
+    const row = rowRef.current
+    if (!anchor?.element.isConnected || !el || !row) return
+    stopTracking.current?.()
+    const align = () => {
+      if (anchor.element.isConnected) el.scrollTop += anchor.element.getBoundingClientRect().top - anchor.top
+    }
+    align()
+    // A grid disclosure keeps changing height after the React commit.
+    // Hold the same edge for that transition, yielding immediately to a gesture.
+    const resize = row.getAnimations?.({ subtree: true }).find(animation =>
+      "transitionProperty" in animation && animation.transitionProperty === "grid-template-rows")
+    const finish = () => {
+      following.current = el.scrollHeight - el.clientHeight - el.scrollTop <= 8
+      measure()
+    }
+    if (!resize) {
+      finish()
+      return
+    }
+    following.current = false
+    const observer = new ResizeObserver(align)
+    observer.observe(row)
+    const intents = ["wheel", "pointerdown", "touchmove", "keydown"]
+    const stop = () => {
+      observer.disconnect()
+      for (const event of intents) el.removeEventListener(event, stop)
+      resize.removeEventListener("finish", settled)
+      resize.removeEventListener("cancel", settled)
+      stopTracking.current = null
+      finish()
+    }
+    const settled = () => { align(); stop() }
+    stopTracking.current = stop
+    for (const event of intents) el.addEventListener(event, stop, { passive: true })
+    resize.addEventListener("finish", settled)
+    resize.addEventListener("cancel", settled)
   })
   return record
 }

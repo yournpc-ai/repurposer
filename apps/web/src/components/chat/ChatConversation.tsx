@@ -6,7 +6,7 @@ import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { Download } from "lucide-react"
 
-import { ActivityRow, activityText, JobReceiptCard, NativeToolReceipts, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, activityText, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { ComponentSlot } from "./blocks/ComponentSlot"
@@ -161,7 +161,6 @@ export function ChatConversation({
     if (
       m.role === "assistant" &&
       !m.qa &&
-      !m.jobReceipt &&
       m.meta == null &&
       !m.content &&
       deliveryOutputSlot == null &&
@@ -181,7 +180,6 @@ export function ChatConversation({
           m.role === "assistant" && m.content ? "" : undefined
         }
       >
-        {m.jobReceipt && <JobReceiptCard job={m.jobReceipt} onOpen={openOutputViewer} />}
         {m.qa ? (
           <>
             <AnsweredQuestion
@@ -304,16 +302,7 @@ export function ChatConversation({
     if (unit.kind === "activity") {
       return (
         <MessageScrollerItem key={unit.rowKey}>
-          {unit.activity.call_id
-            ? <NativeToolReceipts onOpen={openOutputViewer} rows={[unit.activity]} />
-            : <ActivityRow activity={unit.activity} />}
-        </MessageScrollerItem>
-      )
-    }
-    if (unit.rows[0]?.group_id) {
-      return (
-        <MessageScrollerItem key={unit.rowKey}>
-          <NativeToolReceipts onOpen={openOutputViewer} rows={unit.rows} grouped />
+          <ActivityRow activity={unit.activity} />
         </MessageScrollerItem>
       )
     }
@@ -326,11 +315,13 @@ export function ChatConversation({
     // An active-only host is a live seat, never an empty settled receipt.
     // Once that attempt is cancelled its visible row retires; a later retry
     // births its own host instead of leaving a struck-through failure row.
-    if (unit.rows.length === 0 && !live) return null
+    if (unit.rows.length === 0 && !unit.failure && !live) return null
     return (
       <MessageScrollerItem key={unit.rowKey}>
         <WorkSegmentRow
-          rows={unit.rows}
+          trail={unit.trail}
+          startedAtMs={unit.startedAtMs}
+          onOpen={openOutputViewer}
           elapsedMs={unit.elapsedMs}
           liveLabel={live ? chatStatusLabel : null}
           failure={unit.failure}

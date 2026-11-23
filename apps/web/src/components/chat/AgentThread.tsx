@@ -529,6 +529,8 @@ export function AgentThread({
           seq: row.seq ?? undefined,
           at: row.created_at ?? undefined,
           activity: frame,
+          blocks: row.blocks?.length ? row.blocks : undefined,
+          outputRefs: deliveryOutputRefs(row.intent),
           activityDisplayHeld: interimActivityGatesRef.current.size > 0 || undefined,
         },
       ]
@@ -2816,9 +2818,10 @@ export function AgentThread({
   // The NON-run timeline (ADR-108): every transcript row renders at its array
   // position. Run anchors join this same unit stream in ChatConversation's
   // block projection; no timestamp-based insertion lives here.
+  const liveTurnId = chatBusy ? adoptCurrentTurnId() : recoveredJobTurn
   const conversationUnits = useMemo(
-    () => foldActivityUnits(buildConversationUnits(messages)),
-    [messages],
+    () => foldActivityUnits(buildConversationUnits(messages), undefined, liveTurnId),
+    [messages, liveTurnId],
   )
 
   const openFold = conversationUnits.slice().reverse().find((unit) =>
@@ -2864,6 +2867,10 @@ export function AgentThread({
       count,
     })
     if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn && workFold.liveActivity) return workFold.liveActivity
+    if (chatBusy && !thinkingPhase && workFold?.liveActivity &&
+      currentActivityRowKeysRef.current.has(workFold.rowKey)) {
+      return workFold.liveActivity
+    }
     if (chatBusy) {
       return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
     }

@@ -526,19 +526,12 @@ export interface ProjectAsset {
   created_at?: string | null
 }
 
-/** One unit of the conversation timeline. An unsealed trailing fold is a
- * WORK SEGMENT, not a finished receipt: the dock lets its last current-turn
- * fold carry the live now label in place. Tool settlement alone never seals
- * that segment; the first visible prose fragment or the turn's real terminal
- * state does.
- *
- * rowKey law (行身份): the React identity is the HOST MESSAGE ROW's stable
- * id (`birthKey ?? id`, not an activity counter or a render-time alias —
- * the OverlayMessage render-key law), stamped here at projection time. A
- * settle merges into the same host row, so the identity survives updates; a
- * fold keys by its FIRST MEMBER's rowKey (the segment's head never changes
- * when later members join or settle). The same host carries the client-only
- * frozen work-segment clock; tool duration_ms remains the tool's own fact. */
+/** Source row identities survive streaming updates and history hydration. */
+export type WorkTrailEntry =
+  | { kind: "activity"; rowKey: string; activity: ActivityRowFrame }
+  | { kind: "note"; rowKey: string; text: string }
+
+/** A trail keeps the first activity host as its React key in both poses. */
 export type ConversationUnit =
   | { kind: "message"; message: OverlayMessage }
   | {
@@ -553,6 +546,10 @@ export type ConversationUnit =
   | {
       kind: "activityFold"
       liveActivity?: ActivityRowFrame
+      trail: WorkTrailEntry[]
+      /** The first host after the most recent interim speech owns the final
+       * display edge. Earlier speech seals stay attached to their own hosts. */
+      clockRowKey: string
       rows: ActivityRowFrame[]
       /** A contiguous failure settles this same segment; isolated failures
        * remain standalone activity units instead. */

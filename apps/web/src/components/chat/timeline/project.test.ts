@@ -1,18 +1,12 @@
-/** The conversation timeline layer's contract (ADR-108 数组位置律): the
- * persisted array's order IS the render order — buildConversationUnits MAPS
- * rows to units in place and never re-sorts; foldActivityUnits is the
- * display-layer folding projection (呈现层纯函数, ADR-110 段聚合), and
- * foldCategories / activityCategoryKey are the aggregate's expanded
- * decomposition (归档归类目 — settled surfaces speak categories, instance
- * names belong to the live phase). */
+/** Transcript position, turn ownership, evidence and display-clock contracts. */
 
+import { mapHistoryRows } from "./history"
 import { describe, expect, it } from "vitest"
 
 import {
   activityCategoryKey,
   activityFailureKey,
   foldActivityUnits,
-  foldCategories,
 } from "./activity"
 import {
   buildConversationBlocks,
@@ -253,10 +247,10 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
       ]),
     )
     expect(units.map(unitId)).toEqual(["user", "fold:r1+r2+r3", "reply"])
-    expect(foldCategories(foldOf(units[1]).rows)).toEqual([
-      { kind: "read", key: "chat.inspectingDone.understanding", repeat: 1, count: undefined },
-      { kind: "read", key: "chat.explore.searchingDone", repeat: 1, count: undefined },
-      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 12 },
+    expect(foldOf(units[1]).rows.map(r => [r.key, r.count])).toEqual([
+      ["chat.inspectingDone.understanding", undefined],
+      ["chat.explore.searchingDone", undefined],
+      ["chat.explore.candidatesReady", 12],
     ])
   })
 
@@ -280,81 +274,14 @@ describe("foldActivityUnits — the segment aggregate (ADR-110)", () => {
     expect(units.map(unitId)).toEqual(["fold:a1+a2", "mid", "fold:b1+b2"])
   })
 
-  it("same-key rows merge into ONE ×N category across the WHOLE segment — adjacency not required", () => {
-    const units = foldActivityUnits(
-      buildConversationUnits([
-        read("r1", { duration_ms: 400 }),
-        read("r2", { key: "chat.explore.searchingDone" }),
-        read("r3", { duration_ms: 600 }),
-        assistantMsg("reply"),
-      ]),
-    )
-    expect(units.map(unitId)).toEqual(["fold:r1+r2+r3", "reply"])
-    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
-      { kind: "read", key: "chat.inspectingDone.transcript", repeat: 2, count: undefined },
-      { kind: "read", key: "chat.explore.searchingDone", repeat: 1, count: undefined },
-    ])
-  })
-
-  it("beats merge into ONE category regardless of instance names (归档归类目 — 名字是 live 期的言语)", () => {
-    const units = foldActivityUnits(
-      buildConversationUnits([
-        activityMsg("f1", { key: "chat.material.readingDone", name: "a.mp4" }),
-        activityMsg("f2", { key: "chat.material.readingDone", name: "b.mp4" }),
-      ]),
-    )
-    expect(units.map(unitId)).toEqual(["fold:f1+f2"])
-    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
-      { kind: "read", key: "chat.material.readingDone", repeat: 2, count: undefined },
-    ])
-  })
-
-  it("progress beats merge and drop the N/M numbering; milestone counts stay individual (two rows can't speak one honest count)", () => {
-    const units = foldActivityUnits(
-      buildConversationUnits([
-        activityMsg("p1", {
-          key: "chat.material.readingDoneProgress",
-          name: "www.zymix.ai/en/",
-          count: 1,
-          total: 3,
-        }),
-        activityMsg("p2", {
-          key: "chat.material.readingDoneProgress",
-          name: "www.zymix.ai/en/about",
-          count: 3,
-          total: 3,
-        }),
-        activityMsg("m1", { key: "chat.explore.candidatesReady", count: 12 }),
-        activityMsg("m2", { key: "chat.explore.candidatesReady", count: 4 }),
-      ]),
-    )
-    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
-      { kind: "read", key: "chat.material.readingDoneProgress", repeat: 2, count: undefined },
-      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 12 },
-      { kind: "read", key: "chat.explore.candidatesReady", repeat: 1, count: 4 },
-    ])
-  })
-
-  it("same key but different asset types stay separate categories (web_page beats share the base reading key with file beats)", () => {
-    const units = foldActivityUnits(
-      buildConversationUnits([
-        activityMsg("f1", { key: "chat.material.readingDone", name: "a.pdf" }),
-        activityMsg("w1", {
-          key: "chat.material.readingDone",
-          name: "www.zymix.ai/en/",
-          assetType: "web_page",
-        }),
-        activityMsg("w2", {
-          key: "chat.material.readingDone",
-          name: "www.zymix.ai/en/about",
-          assetType: "web_page",
-        }),
-      ]),
-    )
-    expect(foldCategories(foldOf(units[0]).rows)).toEqual([
-      { kind: "read", key: "chat.material.readingDone", assetType: undefined, repeat: 1, count: undefined },
-      { kind: "read", key: "chat.material.readingDone", assetType: "web_page", repeat: 2, count: undefined },
-    ])
+  it("retains each material name, category, count and duration in its original position", () => {
+    const materials = [
+      read("r1", { name: "a.pdf", duration_ms: 400 }),
+      read("r2", { assetType: "web_page", name: "b.test", count: 2, total: 3 }),
+      read("r3", { name: "a.pdf", count: 4 }),
+    ]
+    const [fold] = foldActivityUnits(buildConversationUnits(materials))
+    expect(foldOf(fold).rows).toEqual(materials.map(m => m.activity))
   })
 
   it("a contiguous failure settles the current segment without a second top-level status", () => {
@@ -831,7 +758,7 @@ describe("activityCategoryKey — the settled surface's category form (归档归
 })
 
 describe("buildConversationBlocks — explicit turn ownership, stable block identity", () => {
-  it("groups one turn's prose and work without reordering its multi-segment history", () => {
+  it("folds interim prose between tools and keeps the final reply in its opening", () => {
     const rows = [
       { ...msg("u1"), turnId: "t1" },
       { ...assistantMsg("opening"), turnId: "t1" },
@@ -850,11 +777,13 @@ describe("buildConversationBlocks — explicit turn ownership, stable block iden
     expect(blockUnits(blocks[0]).map(unitId)).toEqual([
       "u1",
       "opening",
-      "fold:a1",
-      "middle",
-      "fold:a2",
+      "fold:a1+a2",
       "final",
     ])
+    expect(blockUnits(blocks[0])[2]).toMatchObject({ trail: [
+      { kind: "activity", rowKey: "row-a1" }, { kind: "note", text: "middle" },
+      { kind: "activity", rowKey: "row-a2" },
+    ] })
     expect(blockUnits(blocks[1]).map(unitId)).toEqual(["u2", "next"])
   })
 
@@ -1026,5 +955,100 @@ it("keeps every native group member when Stop or an approval interrupts a batch"
     activityMsg("four", { group_id: "media", call_state: "not_executed", status: "cancelled" }),
   ]
   const units = foldActivityUnits(buildConversationUnits(rows))
-  expect(units.map(unitId)).toEqual(["fold:one+two", "fold:three+four"])
+  expect(units.map(unitId)).toEqual(["fold:one+two+three+four"])
+})
+
+describe("turn work trails", () => {
+  const turn = (m: OverlayMessage) => ({ ...m, turnId: "opening" })
+  const activity = (id: string, frame: Partial<ActivityRowFrame> = {}) =>
+    turn(activityMsg(id, frame))
+  const speech = (id: string) => turn(assistantMsg(id))
+
+  it("merges single calls and separate batches, sorting only within each declaration", () => {
+    const rows = [
+      activity("single", { call_id: "s" }),
+      activity("second", { group_id: "g1", call_index: 1 }),
+      activity("first", { group_id: "g1", call_index: 0 }),
+      speech("checking"),
+      activity("third", { group_id: "g2", call_index: 0 }),
+      speech("reply"),
+    ]
+    const project = (messages: OverlayMessage[]) => foldActivityUnits(buildConversationUnits(messages))
+    const live = project(rows)
+    expect(live).toHaveLength(2)
+    expect(live[0]).toMatchObject({ rowKey: "row-single", trail: [
+      { rowKey: "row-single" }, { rowKey: "row-first" }, { rowKey: "row-second" },
+      { kind: "note", text: "checking" }, { rowKey: "row-third" },
+    ] })
+    const replay = mapHistoryRows(rows.map((m, seq) => ({
+      id: m.id, seq, role: m.role, content: m.content, turn_id: m.turnId, question: null, answer: null,
+      intent: m.activity ? { type: "activity", frame: m.activity } : undefined,
+    })), { t: key => key })
+    expect(project(replay)[0]).toEqual(live[0])
+    expect(project(replay).map(unitId)).toEqual(live.map(unitId))
+  })
+
+  it.each([
+    { qa: { question: "Proceed?", answer: "Yes", muted: false }, independentKind: "qa" as const },
+    { outputRefs: ["fixed-output"] },
+    { blocks: [{ kind: "audio_playback" as const, project_id: "p", items: [] }] },
+  ])("preserves the entity at its position and starts a new trail below it", entity => {
+    const boundary = { ...speech("decision"), ...entity }
+    const rows = [activity("before"), boundary, activity("after"), speech("reply")]
+    const units = foldActivityUnits(buildConversationUnits(rows))
+    expect(units.map(unitId)).toEqual(["fold:before", "decision", "fold:after", "reply"])
+    expect(units[1]).toMatchObject({ message: entity })
+  })
+
+  it("keeps the last released prose outside on Stop, even if more work followed it", () => {
+    const units = buildConversationUnits([
+      activity("first"), speech("earlier"), activity("second"), speech("latest"), activity("third"),
+    ])
+    const live = foldActivityUnits(units, undefined, "opening")
+    expect(live).toHaveLength(1)
+    expect(live[0]).toMatchObject({ openTail: true, trail: [
+      {}, { kind: "note", text: "earlier" }, {}, { kind: "note", text: "latest" }, {},
+    ] })
+    const stopped = foldActivityUnits(units)
+    expect(stopped.map(unitId)).toEqual(["fold:first+second+third", "latest"])
+    expect(stopped[0]).toMatchObject({ trail: [{}, { kind: "note", text: "earlier" }, {}, {}] })
+  })
+
+  it("freezes the combined span at the final reply, even after an earlier interim seal", () => {
+    const keys = new Set(["row-a", "row-b"])
+    const initial = [turn(msg("opening", "1970-01-01T00:00:01Z")), activity("a")]
+    const first = closeWorkSegment([...initial, { ...speech("interim"), content: "" }], keys, 4000, undefined, "interim")
+    const rows = [first[0], first[1], speech("interim"), activity("b")]
+    const current = foldActivityUnits(buildConversationUnits(rows), undefined, "opening")
+    expect(current[1]).toMatchObject({ startedAtMs: 1000, endedAtMs: null, openTail: true })
+    const sealed = closeWorkSegment([...rows, { ...speech("reply"), content: "" }], keys, 17000, undefined, "reply")
+    const final = [...sealed.slice(0, -1), speech("reply")]
+    expect(foldActivityUnits(buildConversationUnits(final))[1]).toMatchObject({
+      startedAtMs: 1000, endedAtMs: 17000, elapsedMs: 16000, openTail: false,
+    })
+    expect(closeWorkSegment(final, keys, 25000)).toBe(final)
+  })
+
+  it("keeps a worker receipt after authorization and uses overlapping wall time on replay", () => {
+    const rows = [
+      activity("long", { call_id: "export", group_id: "g", at: "1970-01-01T00:00:01Z", duration_ms: 9000 }),
+      activity("short", { group_id: "g", at: "1970-01-01T00:00:02Z", duration_ms: 200 }),
+      { ...speech("approve"), qa: { question: "Export?", answer: "Yes", muted: false } },
+      { ...speech("worker"), content: "", jobReceipt: { callId: "export", role: "export", status: "available",
+        chargedCredits: 3, outputId: "fixed-output" } },
+    ]
+    const units = foldActivityUnits(buildConversationUnits(rows))
+    expect(units.map(unitId)).toEqual(["fold:long+short", "approve", "fold:export"])
+    expect(foldOf(units[0]).elapsedMs).toBe(9000)
+    expect(foldOf(units[0]).rows[0].jobReceipt).toBeUndefined()
+    expect(foldOf(units[2]).rows[0].jobReceipt).toMatchObject({ chargedCredits: 3, outputId: "fixed-output" })
+  })
+})
+
+it("preserves an output and its independently mounted block when its activity retires", () => {
+  const row = { ...activityMsg("abandoned", { status: "cancelled" }), turnId: "turn",
+    outputRefs: ["fixed"], blocks: [{ kind: "system_notice" as const, text: "Output available" }] }
+  expect(foldActivityUnits(buildConversationUnits([row]))).toMatchObject([{
+    kind: "message", message: { id: row.id, outputRefs: ["fixed"], blocks: row.blocks },
+  }])
 })

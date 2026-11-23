@@ -6,9 +6,11 @@
 
 import {
   foldActivityUnits,
+  isConversationBoundary,
   isDraftSpanRow,
   isRunSpanRow,
 } from "./activity"
+import { parseActivityReceipt } from "./history"
 import type {
   NativeJobReceipt,
   ConversationBlock,
@@ -16,7 +18,7 @@ import type {
   OverlayMessage,
 } from "./types"
 
-/** Array map (ADR-108): each message row maps to ONE unit in place —
+/** Array map (ADR-108): messages and their contents keep their positions —
  * activity-carrying rows become activity units at their array position.
  * An ACTIVE activity enters the walk immediately: its host is the live work
  * segment's seat, so a short first activity never depends on the bottom
@@ -28,42 +30,77 @@ export function buildConversationUnits(
   messages: OverlayMessage[],
 ): ConversationUnit[] {
   const units: ConversationUnit[] = []
+  // Join a worker update to its declaration only within the same uninterrupted
+  // opening. A receipt after approval belongs below the user's decision.
+  let start = 0
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.turnId !== messages[i + 1]?.turnId || !m.turnId ||
+      isConversationBoundary(m) || i === messages.length - 1) {
+      appendUnits(messages.slice(start, i + 1), units)
+      start = i + 1
+    }
+  }
+  return units
+}
+
+function appendUnits(messages: OverlayMessage[], units: ConversationUnit[]) {
   const jobs = new Map<string, NativeJobReceipt>()
   const activityCalls = new Set<string>()
   for (const message of messages) {
     if (!message.turnId) continue
-    if (message.jobReceipt) jobs.set(JSON.stringify([message.turnId, message.jobReceipt.callId]), message.jobReceipt)
+    if (message.jobReceipt) jobs.set(message.jobReceipt.callId, message.jobReceipt)
     if (message.activity?.call_id && !message.activityDisplayHeld) {
-      activityCalls.add(JSON.stringify([message.turnId, message.activity.call_id]))
+      activityCalls.add(message.activity.call_id)
     }
   }
   for (const m of messages) {
     if (m.activityDisplayHeld) continue
     const a = m.activity
     if (a === undefined) {
-      if (m.jobReceipt && activityCalls.has(JSON.stringify([m.turnId, m.jobReceipt.callId]))) {
-        // The call card owns the receipt. Its execution message still owns prose and fixed media.
-        if (!m.content && !m.blocks?.length && !m.qa && !m.outputRefs?.length) continue
-        units.push({ kind: "message", message: { ...m, jobReceipt: undefined } })
-      } else {
+      const job = m.jobReceipt
+      if (!job) {
         units.push({ kind: "message", message: m })
+        continue
+      }
+      // Some historical jobs have only an execution message. Keep its own
+      // receipt at this position and its independently consumable content below.
+      if (!activityCalls.has(job.callId)) {
+        const pending = ["accepted", "queued", "active", "running"].includes(job.status)
+        const failed = job.status === "failed" || job.status === "provider_unknown"
+        units.push({
+          kind: "activity", rowKey: `job:${m.birthKey ?? m.id}`, turnId: m.turnId,
+          activity: {
+            activity_id: job.callId, call_id: job.callId, tool_name: job.operation,
+            kind: "run", key: null, jobReceipt: job,
+            status: pending ? "active" : failed ? "failed" : "completed",
+          },
+        })
+      }
+      if (m.content || m.blocks?.length || m.qa || m.outputRefs?.length || m.candidates || m.suggestions?.length || m.meta) {
+        units.push({ kind: "message", message: { ...m, jobReceipt: undefined } })
       }
       continue
     }
-    if (!a.call_id && !a.group_id && a.status === "cancelled") continue // abandoned attempt, not a work receipt
-    if (!a.call_id && (isDraftSpanRow(a) || isRunSpanRow(a))) continue // 落定即退役
-    const jobReceipt = a.call_id && jobs.get(JSON.stringify([m.turnId, a.call_id]))
-    units.push({
-      kind: "activity",
-      activity: jobReceipt ? { ...a, jobReceipt } : a,
-      rowKey: m.birthKey ?? m.id,
-      turnId: m.turnId,
-      independentKind: m.independentKind,
-      workStartedAtMs: m.workStartedAtMs,
-      workEndedAtMs: m.workEndedAtMs,
-    })
+    const retired = !a.call_id && ((!a.group_id && a.status === "cancelled") || isDraftSpanRow(a) || isRunSpanRow(a))
+    if (!retired) {
+      const jobReceipt = a.call_id && jobs.get(a.call_id)
+      units.push({
+        kind: "activity",
+        activity: { ...a, receipt: parseActivityReceipt(a.receipt), ...(jobReceipt && { jobReceipt }) },
+        rowKey: m.birthKey ?? m.id,
+        turnId: m.turnId,
+        independentKind: m.independentKind,
+        workStartedAtMs: m.workStartedAtMs,
+        workEndedAtMs: m.workEndedAtMs,
+      })
+    }
+    if (m.qa || m.outputRefs?.length || m.blocks?.length || m.candidates) {
+      units.push({ kind: "message", message: {
+        ...m, birthKey: `${m.birthKey ?? m.id}:content`, activity: undefined, jobReceipt: undefined,
+      } })
+    }
   }
-  return units
 }
 
 type SourceBlock =
@@ -167,28 +204,19 @@ export function closeWorkSegment(
   beforeRowId?: string,
 ): OverlayMessage[] {
   if (currentRowKeys.size === 0 || !Number.isFinite(endedAtMs)) return messages
-  if (beforeRowId != null && !messages.some((m) => m.id === beforeRowId)) {
-    return messages
-  }
-  const units = foldActivityUnits(
-    buildConversationUnits(messages),
-    defaultWorkStartedAtMs,
-  )
+  const edge = beforeRowId == null ? messages.length : messages.findIndex(m => m.id === beforeRowId)
+  if (edge < 0) return messages
+  const visible = buildConversationUnits(messages.slice(0, edge))
+  const lastHost = visible.slice().reverse().find(u => u.kind === "activity")
+  const units = foldActivityUnits(visible, defaultWorkStartedAtMs, lastHost?.turnId)
   let fold: Extract<ConversationUnit, { kind: "activityFold" }> | undefined
-  let crossedBoundary = beforeRowId == null
   for (let i = units.length - 1; i >= 0; i -= 1) {
     const unit = units[i]
-    if (!crossedBoundary) {
-      if (unit.kind === "message" && unit.message.id === beforeRowId) {
-        crossedBoundary = true
-      }
-      continue
-    }
     if (
       unit.kind === "activityFold" &&
       unit.rows.length > 0 && // an active-only attempt is not completed work
       unit.openTail &&
-      currentRowKeys.has(unit.rowKey)
+      currentRowKeys.has(unit.clockRowKey)
     ) {
       fold = unit
       break
@@ -197,12 +225,12 @@ export function closeWorkSegment(
   if (!fold) return messages
   let changed = false
   const next = messages.map((m) => {
-    if ((m.birthKey ?? m.id) !== fold.rowKey || !m.activity) return m
+    if ((m.birthKey ?? m.id) !== fold.clockRowKey || !m.activity) return m
     if (m.workEndedAtMs != null) return m
     changed = true
     return {
       ...m,
-      ...(m.workStartedAtMs == null && fold.startedAtMs != null
+      ...(fold.clockRowKey === fold.rowKey && m.workStartedAtMs == null && fold.startedAtMs != null
         ? { workStartedAtMs: fold.startedAtMs }
         : {}),
       workEndedAtMs: endedAtMs,

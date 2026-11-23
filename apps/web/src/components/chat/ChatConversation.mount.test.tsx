@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react"
-import { act, cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen, within } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 import { ChatConversation } from "./ChatConversation"
 import { buildConversationUnits } from "./timeline/project"
@@ -12,11 +12,6 @@ vi.mock("@/components/settings/settings-dialog-context", () => ({ useSettingsDia
 vi.mock("./AnchorCards", () => ({ AnchorCards: () => null }))
 vi.mock("./rows/AssistantText", () => ({ AssistantText: ({ text }: { text: string }) => <p>{text}</p> }))
 vi.mock("./rows/UserMessage", () => ({ UserBubble: ({ text }: { text: string }) => <p>{text}</p> }))
-vi.mock("./ActivityStream", async (importOriginal) => ({
-  ...await importOriginal<typeof import("./ActivityStream")>(),
-  WorkSegmentRow: ({ liveLabel }: { liveLabel?: ReactNode }) => <div>{liveLabel ?? "Chat work"}</div>,
-  ActivityRow: () => <div>Activity</div>,
-}))
 vi.mock("./blocks/ComponentSlot", () => ({
   ComponentSlot: ({ slot }: { slot: { kind: string; block?: { text: string } } }) => (
     <div>{slot.kind === "systemNotice" ? slot.block?.text : "Delivered video"}</div>
@@ -59,7 +54,7 @@ it("keeps user outside one assistant container with prose and work inside", () =
   }, { id: "result", role: "assistant", content: "Done", turnId: "turn" }]
   render(<ChatConversation {...props(rows)} />)
   const response = screen.getByText("Starting").closest('[data-slot="assistant-response"]')!
-  expect(response.contains(screen.getByText("Chat work"))).toBe(true)
+  expect(response.contains(screen.getByRole("button", { name: "chat.activityFold.workedWithoutTime" }))).toBe(true)
   expect(response.contains(screen.getByText("Done"))).toBe(true)
   expect(response.contains(screen.getByText("Make a video"))).toBe(false)
 })
@@ -81,9 +76,11 @@ it("does not give an empty streaming speech row its own flex gap", () => {
   })} />)
   act(() => vi.advanceTimersByTime(1000))
   const items = Array.from(document.querySelectorAll('[data-slot="message-scroller-item"]'))
-  expect(items.map((item) => item.textContent)).toEqual([
-    "Make a video", "Starting", "Chat work", "chat.thinking",
-  ])
+  expect(items).toHaveLength(4)
+  expect(items[0].textContent).toBe("Make a video")
+  expect(items[1].textContent).toBe("Starting")
+  expect(within(items[2] as HTMLElement).getByRole("button", { name: "chat.failed" })).toBeTruthy()
+  expect(items[3].textContent).toBe("chat.thinking")
 })
 
 it("keeps thinking below a submitted questionnaire when the continuation reuses the turn id", () => {
@@ -171,15 +168,20 @@ it("keeps native receipts in declaration order and scopes job outcomes to the or
       jobReceipt: { callId: "first", role: "export", outputId: "fixed-output", status: "available" } },
   ]
   const open = vi.fn()
-  const view = render(<ChatConversation {...props(rows, { openOutputViewer: open })} />)
-  const group = view.container.querySelector('[data-group-id="batch"]')!
-  expect(Array.from(group.querySelectorAll<HTMLElement>("[data-call-id]"), (el) =>
-    [el.dataset.callId, el.dataset.status])).toEqual([["first", "unknown"], ["second", "notExecuted"]])
-  expect(view.container.querySelectorAll("[data-call-id]")).toHaveLength(4)
-  expect(view.container.querySelector('[data-call-id="stopped"]')?.getAttribute("data-status")).toBe("cancelled")
+  render(<ChatConversation {...props(rows, { openOutputViewer: open })} />)
+  const [before, after] = screen.getAllByRole("button")
+  expect(before.textContent).toContain("agentReceipt.unknown")
   expect(screen.getByText("Reservation held")).toBeDefined()
-  const output = view.container.querySelector('[data-status="outputGenerated"]')!
-  act(() => (output.querySelector("button") as HTMLButtonElement).click())
+  expect(screen.queryByRole("listitem")).toBeNull()
+  act(() => before.click())
+  const steps = screen.getAllByRole("listitem")
+  expect(steps).toHaveLength(3)
+  expect(steps[0].textContent).toContain("agentReceipt.unknown")
+  expect(steps[0].textContent).toContain("agentReceipt.reservedCredits")
+  expect(steps[1].textContent).toContain("agentReceipt.notExecuted")
+  expect(steps[2].textContent).toContain("agentReceipt.cancelled")
+  expect(screen.queryByRole("button", { name: "common.preview" })).toBeNull()
+  act(() => after.click())
   act(() => screen.getByRole("button", { name: "common.preview" }).click())
   expect(open).toHaveBeenCalledWith("fixed-output")
 })

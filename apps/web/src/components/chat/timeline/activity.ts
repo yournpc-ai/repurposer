@@ -2,12 +2,11 @@
  * projection: no React, transport, or layout ownership. */
 
 import type {
-  ActivityReceipt,
   ActivityRowFrame,
   ConversationUnit,
   OverlayMessage,
+  WorkTrailEntry,
 } from "./types"
-import { parseActivityReceipt } from "./history"
 
 /** The draft span never enters the flow (2026-09-28 user ruling —
  * 落定即退役): the docked plan card IS the settled evidence. The server
@@ -56,129 +55,133 @@ export function isRunSpanRow(a: ActivityRowFrame): boolean {
   return a.kind === "run" && (a.key ?? "").startsWith("chat.activity.")
 }
 
-/** 折叠投影 (呈现层纯函数, ADR-110 段聚合——Claude Code 式坍缩 +
- * Flora 解剖): 两个用户可见散文段之间的活动行属于同一个工作段。
- * COMPLETED rows are its durable evidence; an ACTIVE row joins immediately
- * but supplies only the live seat until it settles. An active-only segment
- * therefore has `rows=[]` and a stable host key, never an empty Worked
- * receipt. A FAILED row adjacent to the current run becomes that segment's
- * terminal fact instead of a second top-level status; an isolated failure
- * still passes through. CANCELLED attempts were retired by the array map and
- * neither render nor split a segment.
- *
- * A fold is OPEN while no later user-visible prose / user / QA boundary
- * exists and its client clock has not been sealed. The dock gives the last
- * CURRENT-TURN open fold the live label; earlier failure-separated open
- * fragments stay withheld, so a busy turn can never show a completed fold
- * above a second thinking row. Empty streaming bubbles do not close a
- * segment — received characters are not yet visible speech. A user message
- * closes the previous segment structurally but never supplies its end
- * clock (user think time is not assistant work). */
+type ActivityUnit = Extract<ConversationUnit, { kind: "activity" }>
+type MessageUnit = Extract<ConversationUnit, { kind: "message" }>
+
+export function isConversationBoundary(m: OverlayMessage): boolean {
+  return m.role === "user" || !!(m.independentKind || m.qa || m.meta || m.candidates ||
+    m.outputRefs?.length || m.blocks?.length || m.suggestions?.length)
+}
+
+/** Declaration order is local to a batch. A later group may restart at zero. */
+function orderTrail(entries: WorkTrailEntry[]): WorkTrailEntry[] {
+  const ordered: WorkTrailEntry[] = []
+  let batch: Extract<WorkTrailEntry, { kind: "activity" }>[] = []
+  const finishBatch = () => {
+    ordered.push(...batch.sort((a, b) => (a.activity.call_index ?? 0) - (b.activity.call_index ?? 0)))
+    batch = []
+  }
+  for (const entry of entries) {
+    const group = entry.kind === "activity" && entry.activity.group_id
+    if (batch.length && batch[0].activity.group_id !== group) finishBatch()
+    if (entry.kind === "activity" && group) batch.push(entry)
+    else ordered.push(entry)
+  }
+  finishBatch()
+  return ordered
+}
+
+/** One contiguous work trail per opening. Pending prose becomes a note only
+ * when another activity arrives. Keep the last prose visible on a silent
+ * terminal edge, even when that means lifting it out of the folded trail. */
 export function foldActivityUnits(
   units: ConversationUnit[],
   defaultWorkStartedAtMs?: number,
+  liveTurnId?: string | null,
 ): ConversationUnit[] {
   const out: ConversationUnit[] = []
-  let run: Extract<ConversationUnit, { kind: "activity" }>[] = []
-  const flush = (failure: ActivityRowFrame | null = null) => {
-    if (run.length > 0) {
-      // Active members own the live seat but are not durable evidence yet.
-      // They join `rows` in place when their host settles COMPLETED.
-      const rows = run
-        .filter((u) => u.activity.group_id || u.activity.status === "completed")
-        .map((u) => u.activity)
-      const startedAtMs = workStart(out, run[0], defaultWorkStartedAtMs)
-      // A failed activity owns its own terminal edge. Do not move the first
-      // host's clock to a later turn envelope or add the tool duration to the
-      // segment's wall clock.
-      const lastActivity = run.at(-1)?.activity
-      // A silent hand-off to a worker continues the same visible work segment.
-      const endedAtMs = run[0].workEndedAtMs ?? activityEndMs(failure)
+  let run: ActivityUnit[] = []
+  let trail: WorkTrailEntry[] = []
+  let pending: MessageUnit[] = []
+  let lastNote: MessageUnit | undefined
+  let clockHost: ActivityUnit | undefined
+
+  const flush = (failure: ActivityRowFrame | null = null, following?: OverlayMessage) => {
+    const first = run[0]
+    if (first && clockHost) {
+      const rows = run.map(u => u.activity).filter(a => a.status !== "active" || a.call_id || a.group_id)
+      const active = run.map(u => u.activity).filter(a => a.jobReceipt
+        ? ["accepted", "queued", "running", "active"].includes(a.jobReceipt.status)
+        : a.status === "active")
+      const liveActivity = active.find(a => a.call_state === "running") ?? active.at(-1)
+      const startedAtMs = workStart(out, first, defaultWorkStartedAtMs)
+      const nextSpeech = pending.find(u => u.message.content.trim())?.message ?? following
+      const displayEdge = nextSpeech?.independentKind || nextSpeech?.qa ? undefined : nextSpeech?.clientVisibleAtMs
+      const endedAtMs = activityEndMs(failure) ?? clockHost.workEndedAtMs ?? displayEdge ?? null
+      const keepLast = lastNote && first.turnId !== liveTurnId && !following?.content.trim() &&
+        !pending.some(u => u.message.content.trim())
+      if (keepLast && lastNote) {
+        const key = lastNote.message.birthKey ?? lastNote.message.id
+        trail = trail.filter(entry => entry.rowKey !== key)
+      }
       out.push({
-        kind: "activityFold",
-        ...(lastActivity?.status === "active" ? { liveActivity: lastActivity } : {}),
-        rows,
-        failure,
-        firstActivityAt: run[0].activity.at,
-        startedAtMs,
-        endedAtMs,
+        kind: "activityFold", trail: orderTrail(trail), rows, failure, liveActivity,
+        firstActivityAt: first.activity.at, startedAtMs, endedAtMs,
         elapsedMs: foldElapsedMs(rows, startedAtMs, endedAtMs, failure),
-        openTail: false, // stamped by the reverse boundary pass below
-        // The fold's identity is its first member's host-row id: the
-        // segment's head never changes when later members join or settle.
-        rowKey: run[0].rowKey,
-        turnId: run[0].turnId,
-        independentKind: run[0].independentKind,
+        openTail: !failure && endedAtMs == null,
+        rowKey: first.rowKey, clockRowKey: clockHost.rowKey,
+        turnId: first.turnId, independentKind: first.independentKind,
       })
+      if (keepLast && lastNote) out.push(lastNote)
     }
+    out.push(...pending)
     run = []
+    trail = []
+    pending = []
+    lastNote = undefined
+    clockHost = undefined
   }
+
   for (const unit of units) {
-    // A declared single call is independently inspectable, including while
-    // running or after Stop. Only explicit group members share a tool card.
-    if (unit.kind === "activity" && unit.activity.call_id && !unit.activity.group_id) {
-      flush()
-      out.push(unit)
-      continue
-    }
-    if (unit.kind === "activity" && !unit.activity.group_id && unit.activity.status === "failed" && run.length > 0 &&
-      activityOwner(run[0]) === activityOwner(unit)) {
-      // One continuous segment settles into ONE failed receipt. The failure
-      // remains available in its expanded details, never as a sibling status.
-      flush(unit.activity)
-      continue
-    }
-    if (
-      unit.kind === "activity" &&
-      (unit.activity.group_id || unit.activity.status === "completed" || unit.activity.status === "active")
-    ) {
-      // A WorkSegment may fold only within one explicit ownership domain.
-      // Legacy rows share a non-semantic "legacy" domain (their existing
-      // fold stays readable); different real turns never merge.
-      if (run.length > 0 && activityOwner(run[0]) !== activityOwner(unit)) flush()
+    const first = run[0]
+    if (unit.kind === "activity") {
+      if (first && (first.turnId !== unit.turnId || first.independentKind || unit.independentKind)) flush()
+      if (unit.activity.status === "failed" && !unit.activity.call_id && !unit.activity.group_id &&
+        (!run.length || !unit.turnId)) {
+        if (run.length && !pending.length) flush(unit.activity)
+        else {
+          flush()
+          out.push(unit)
+        }
+        continue
+      }
+      if (!run.length || pending.length) clockHost = unit
+      for (const prose of pending) {
+        if (!prose.message.content.trim()) continue
+        lastNote = prose
+        trail.push({ kind: "note", rowKey: prose.message.birthKey ?? prose.message.id, text: prose.message.content })
+      }
+      pending = []
       run.push(unit)
-      continue
+      trail.push({ kind: "activity", rowKey: unit.rowKey, activity: unit.activity })
+    } else if (unit.kind === "message" && first?.turnId && !first.independentKind &&
+      unit.message.turnId === first.turnId && !isConversationBoundary(unit.message)) {
+      pending.push(unit)
+    } else {
+      const following = unit.kind === "message" && unit.message.turnId === first?.turnId &&
+        unit.message.role === "assistant" && !unit.message.meta ? unit.message : undefined
+      flush(null, following)
+      out.push(unit)
     }
-    flush()
-    out.push(unit)
   }
   flush()
 
-  let closedByLaterSpeech = false
-  for (let i = out.length - 1; i >= 0; i -= 1) {
+  // Empty streaming placeholders and terminal error notices must leave the
+  // preceding host eligible for its real first-visible / terminal clock seal.
+  let closed = false
+  for (let i = out.length - 1; i >= 0; i--) {
     const unit = out[i]
-    if (unit.kind === "message" && closesWorkSegment(unit.message)) {
-      closedByLaterSpeech = true
-      continue
-    }
-    if (unit.kind === "activityFold") {
-      out[i] = {
-        ...unit,
-        openTail:
-          unit.failure == null && !closedByLaterSpeech && unit.endedAtMs == null,
-      }
+    if (unit.kind === "message") {
+      const m = unit.message
+      if (!m.meta && (isConversationBoundary(m) || m.content.trim())) closed = true
+    } else if (unit.kind === "activityFold") {
+      if (closed && unit.openTail) out[i] = { ...unit, openTail: false }
+      closed = true
+    } else {
+      closed = true
     }
   }
   return out
-}
-
-function activityOwner(
-  unit: Extract<ConversationUnit, { kind: "activity" }>,
-): string {
-  if (unit.activity.group_id) return `turn:${unit.turnId}:group:${unit.activity.group_id}`
-  if (unit.independentKind) return `independent:${unit.independentKind}`
-  return unit.turnId ? `turn:${unit.turnId}` : "legacy"
-}
-
-/** Only following user-visible prose / a user / QA row closes a work segment
- * structurally. An empty preview is a pinned array position, not visible
- * prose; candidates and other empty structured rows still split the fold
- * grouping without faking a display timestamp. A terminal ERROR row is a
- * system fact, not following prose: the terminal seal owns its clock edge,
- * so the grey row cannot make the preceding fold ineligible first. */
-function closesWorkSegment(m: OverlayMessage): boolean {
-  if (m.meta === "error") return false
-  return m.role === "user" || m.qa !== undefined || m.content.trim().length > 0
 }
 
 function validMs(value: number | undefined): value is number {
@@ -216,8 +219,9 @@ function workStart(
     : parseMs(first.activity.at)
   for (let i = previous.length - 1; i >= 0; i -= 1) {
     const unit = previous[i]
-    if (unit.kind !== "message") continue
+    if (unit.kind !== "message") return fallback
     const m = unit.message
+    if (m.turnId && first.turnId && m.turnId !== first.turnId) return fallback
     if (m.role === "user") return parseMs(m.at) ?? fallback
     if (m.qa) {
       return validMs(m.clientVisibleAtMs) ? m.clientVisibleAtMs : fallback
@@ -225,7 +229,7 @@ function workStart(
     if (m.content.trim()) {
       return validMs(m.proseDrainedAtMs) ? m.proseDrainedAtMs : fallback
     }
-    if (m.candidates || m.meta) return fallback
+    if (isConversationBoundary(m)) return fallback
   }
   return fallback
 }
@@ -235,7 +239,7 @@ function workStart(
  * fragment (or a prose-less terminal state), then freezes. Unsealed /
  * replayed rows fall back to the observable activity span. Parallel tool
  * durations are NEVER summed into a pretend wall clock; without timestamps
- * the honest fallback is no elapsed (the row renders an action count). */
+ * the honest fallback is no elapsed (the header omits the time). */
 function foldElapsedMs(
   rows: ActivityRowFrame[],
   startedAtMs: number | null,
@@ -244,80 +248,24 @@ function foldElapsedMs(
 ): number | null {
   if (endedAtMs != null) {
     const liveStart = startedAtMs ?? parseMs(rows[0]?.at)
-    if (liveStart != null && endedAtMs > liveStart) {
+    if (liveStart != null && endedAtMs >= liveStart) {
       return endedAtMs - liveStart
     }
   }
   // Replay / legacy rows have no first-visible client fact. Preserve the
   // observable ACTIVITY span rather than stretching it to an assistant
   // created_at or a later user gesture.
-  const start = parseMs(rows[0]?.at ?? failure?.at)
-  if (start != null) {
-    const last = failure ?? rows[rows.length - 1]
-    const lastAt = parseMs(last?.at)
-    if (lastAt != null) {
-      const lastEnd = lastAt + (last.duration_ms ?? 0)
-      if (lastEnd > start) return lastEnd - start
-    }
+  const observations = failure ? [...rows, failure] : rows
+  let earliest = Infinity
+  let latest = -Infinity
+  for (const row of observations) {
+    const at = parseMs(row.at)
+    if (at == null) continue
+    earliest = Math.min(earliest, at)
+    latest = Math.max(latest, at + Math.max(0, row.duration_ms ?? 0))
   }
+  if (latest > earliest) return latest - earliest
   return null
-}
-
-/** The fold's expanded category rows (ADR-110 修订 — 归档归类目):
- * rows sharing one copy key AND asset type merge across the WHOLE segment
- * into ONE ×N category line (the Flora anatomy — 已读网页 ×3), order =
- * first appearance. Typed work receipts are the exception: each retains
- * its own evidence row and order. Instance names are the live phase's speech;
- * the archive speaks categories. A milestone row whose count IS its content
- * (the explore family's artifact counts — count without total) never
- * merges: two rows can't speak one honest count, so each rides as its own
- * entry. Progress beats (count+total = the N/M reading progress) merge
- * and drop the numbering — a settled row has no progress to report. */
-export interface FoldCategory {
-  kind: ActivityRowFrame["kind"]
-  key: string | null
-  /** Merge identity member: same key but different asset types are
-   * different categories (web_page beats share the base reading key with
-   * file beats — the verb fork predates the type). */
-  assetType?: string
-  repeat: number
-  /** A milestone row's own artifact count (merged categories: undefined). */
-  count?: number
-  /** Typed work evidence keeps its own row and is never folded into ×N. */
-  receipt?: ActivityReceipt
-}
-
-/** The aggregate row's expanded categories (ADR-110 修订). */
-export function foldCategories(rows: ActivityRowFrame[]): FoldCategory[] {
-  const cats: FoldCategory[] = []
-  for (const r of rows) {
-    // Live wire frames and hydrated rows share this tolerant reader. Invalid
-    // evidence falls back to the existing category without breaking replay.
-    const receipt = parseActivityReceipt(r.receipt)
-    const mergeable = receipt === undefined && (r.count == null || r.total != null)
-    const hit = mergeable
-      ? cats.find(
-          (c) =>
-            c.key === r.key &&
-            c.assetType === r.assetType &&
-            c.count === undefined &&
-            c.receipt === undefined,
-        )
-      : undefined
-    if (hit) {
-      hit.repeat += 1
-      continue
-    }
-    cats.push({
-      kind: r.kind,
-      key: r.key,
-      assetType: r.assetType,
-      repeat: 1,
-      count: mergeable ? undefined : (r.count ?? undefined),
-      ...(receipt ? { receipt } : {}),
-    })
-  }
-  return cats
 }
 
 /** A FAILED row must speak a terminal fact, never the abandoned attempt's

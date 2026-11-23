@@ -1,39 +1,12 @@
-/** Chat activity presentation has two row families:
- *
- * - WorkSegmentRow owns ONE continuous work segment in both poses: live
- *   Thinking / current milestone, then the settled aggregate receipt at the
- *   SAME timeline unit. Completed tools are facts inside that segment; their
- *   settlement never seals it. The first visible following prose fragment
- *   or a real terminal state does.
- * - ActivityRow renders an isolated terminal failure fact, or the failed
- *   activity inside a settled segment's details. Cancelled attempts retire
- *   in the timeline projection instead of leaving an error carcass; a real
- *   failure keeps one calm, honest terminal row.
- *
- * Rows are the user-safe projection of the loop's internal events. They never
- * gate Canvas / Confirm / Run and never carry params, raw results, or reasoning;
- * the accepted video review's typed evidence is the single bounded exception.
- * Copy resolves through i18n. Tool duration_ms remains the tool's own
- * duration; the work segment's separate client wall clock includes the model
- * wait until visible reply and freezes at that display edge. */
-
-import { useRef, useState, type ReactNode } from "react"
+/** User-visible work and receipts, projected from the original transcript. */
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import {
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  PenLine,
-  Play,
-  RotateCcw,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react"
+import { ChevronRight, TriangleAlert } from "lucide-react"
 
-import type { ActivityFramePayload } from "@/lib/chat-stream"
 import type {
   ActivityReceipt,
+  WorkTrailEntry,
   ActivityRowFrame,
   ComponentClipReceipt,
   NativeJobReceipt,
@@ -44,50 +17,36 @@ import type {
   VideoReviewReceipt,
   VideoRevisionReceipt,
 } from "./timeline/types"
-import { activityCategoryKey, activityFailureKey, foldCategories } from "./timeline/activity"
+import { activityCategoryKey, activityFailureKey } from "./timeline/activity"
 import { formatElapsed } from "@/components/chat/workTiming"
 import { useMessageScrollerViewportAnchor } from "@/components/chat/MessageScroller"
 import { Button } from "@/components/ui/button-clean"
-import { ThinkingLoader } from "@/components/ui/thinking-loader-clean"
-import { ToolCallCard, ToolCallGroup, type ToolCallStatus } from "@/components/ui/tool-call-card-clean"
+import { ThinkingState, type ThinkingTrailStep } from "@/components/ui/thinking-state-clean"
+import type { ToolCallStatus } from "@/components/ui/tool-call-card-clean"
 import { cn } from "@/lib/utils"
-
-/** Per-kind glyphs (2026-09-24 user ruling, OriginCut parity — 查看项目资源
- * → folder, 查看时间线 → eye): the kind is user-semantic (never a tool
- * name), so its icon reads as WHAT the agent did, not as machinery. The
- * completed row's leading mark IS the kind glyph (the generic ✓ said
- * "success", which the settled register already says); live rows keep the
- * 6px dot (the RunTaskList narrative row's own live mark, 2026-09-25 对齐批).
- * A real failure keeps a quiet alert seat, never a struck-through live
- * label. The `draft` glyph serves the settled storyboard-drafting activity
- * (not a 落定即退役 plan-draft span; the timeline's draft filter keys on
- * chat.activity.* keys and never touches it). */
-const KIND_ICONS: Record<ActivityFramePayload["kind"], LucideIcon> = {
-  read: Eye,
-  draft: PenLine,
-  run: Play,
-  repair: RotateCcw,
-}
 
 /** The live label payload: a wire milestone, or the frontend-synthesized
  * think empty state. "think" is NEVER on the wire and has no durable row of
  * its own; it simply gives the current work segment its base label. `seq`
  * is live-channel bookkeeping — array rows order by position and may omit
  * it. */
-export type NowRowPayload = Omit<ActivityFramePayload, "kind" | "seq"> & {
-  kind: ActivityFramePayload["kind"] | "think"
-  seq?: number
-  /** Think-state interpolation (the material activity names the file being
-   * read); wire milestones never carry it. */
-  name?: string
-  /** Batch-progress interpolation for a settled reading activity. */
-  total?: number
-  /** The material activity's asset type, used by the settled category form. */
-  assetType?: string
+export type NowRowPayload = Omit<ActivityRowFrame, "kind"> & {
+  kind: ActivityRowFrame["kind"] | "think"
 }
 
 export function activityText(activity: NowRowPayload, t: TFunction): string {
   const { status } = activity
+  if (activity.jobReceipt) {
+    const jobState = jobStatus(activity.jobReceipt)
+    if (jobState !== "running" && jobState !== "success" && jobState !== "outputGenerated") {
+      return t(`agentReceipt.${jobState}`)
+    }
+  }
+  if (activity.call_state === "queued") return t("agentReceipt.queued")
+  const action = activity.tool_name && toolActions[activity.tool_name]
+  if (!activity.key && action && (status === "active" || status === "completed")) {
+    return t(`chat.activity.${action}${status === "completed" ? "Done" : ""}`)
+  }
   // 归档归类目: a COMPLETED row drops the instance name and speaks the
   // category. A FAILED row uses terminal failure copy (an explicit failure
   // mirror may keep the target's name), never the active progressive label.
@@ -112,110 +71,28 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
               : "chat.completed",
         ),
       })
-    : t("chat.thinking")
+    : t(status === "failed" ? "chat.failed" : status === "completed" ? "chat.completed" : "chat.thinking")
 }
 
-export function ActivityRow({ activity, nested = false }: { activity: NowRowPayload; nested?: boolean }) {
+/** A terminal failure without preceding work stays visible in the conversation. */
+export function ActivityRow({ activity }: { activity: ActivityRowFrame }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const { status } = activity
   const label = activityText(activity, t)
-  // E7 诚实边界: expandability IS the payload fact (a count-carrying
-  // milestone) — never a chrome affordance on an empty row. Live rows never
-  // expand (2026-09-24: the now-line's transient count — "reading N files" —
-  // is the label itself, not a payload to unfold). Progress beats
-  // (count+total = the N/M batch index) never expand either — a batch index
-  // is no payload, and the settled category label no longer carries it.
-  const expandable =
-    activity.count != null && activity.total == null && status !== "active"
-  const duration =
-    status !== "active" && activity.duration_ms != null
-      ? formatElapsed(activity.duration_ms)
-      : null
-  // think rows are always active → the spinner seat — so the glyph lookup
-  // never sees "think"; the guard is for the type, not the moment.
-  const KindIcon = activity.kind === "think" ? null : KIND_ICONS[activity.kind]
-  return (
-    <div className="flex w-full flex-col gap-1">
-      <div
-        className={cn(
-          // Flora 体感 (flora-parity-ui D4①): the padded hit area reaches 6px
-          // past the label via the negative margin (the text column never
-          // shifts). Hover NEVER washes the row — expandable rows keep their
-          // pointer + click toggle, and hover only brightens the label text.
-          // Row metrics = the Flora tools-row anatomy: min-h-8, gap-2.5.
-          "-mx-1.5 -my-0.5 group/row flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 transition-colors",
-          nested ? "text-xs" : "text-sm leading-relaxed",
-          nested && status === "failed" ? "text-destructive" : "text-muted-foreground",
-          expandable && "cursor-pointer select-none",
-        )}
-        role={expandable ? "button" : undefined}
-        tabIndex={expandable ? 0 : undefined}
-        aria-expanded={expandable ? open : undefined}
-        onKeyDown={expandable ? (event) => {
-          if (event.key !== "Enter" && event.key !== " ") return
-          event.preventDefault()
-          event.currentTarget.click()
-        } : undefined}
-        onClick={expandable ? () => setOpen((v) => !v) : undefined}
-      >
-        {status === "active" ? (
-          // The live mark = the RunTaskList narrative row's own dot
-          // (2026-09-25 对齐批 — one live register across the flow). The dot
-          // RIDES the settled glyphs' 12px seat, centered (2026-09-27: the
-          // bare 6px span left-shifted live labels 6px against settled
-          // rows), and takes the label's own ink — bg-primary's solid black
-          // read as a second register next to the muted text (user ruling).
-          <span className="flex h-3 w-3 shrink-0 items-center justify-center">
-            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-          </span>
-        ) : status === "completed" && KindIcon ? (
-          <KindIcon className="h-3 w-3 shrink-0" />
-        ) : (
-          // A real failure is a quiet terminal fact. Cancelled attempts
-          // normally retire before this component; none becomes a crossed-out
-          // live label.
-          <TriangleAlert className="h-3 w-3 shrink-0" />
-        )}
-        <span
-          className={cn(
-            "min-w-0 truncate",
-            status === "active" && "shimmer",
-            // Hover brightens ordinary labels only; a failure stays quiet.
-            status !== "failed" &&
-              "transition-colors group-hover/row:text-foreground",
-          )}
-        >
-          {label}
-        </span>
-        {/* Left-cluster duration (2026-09-24 user ruling, OriginCut parity —
-            "查看时间线 · 893ms"): the elapsed rides the label with a ·
-            separator in the same quiet register, nothing floats right. */}
-        {duration && (
-          <span className="shrink-0 text-xs tabular-nums text-meta-foreground">
-            · {duration}
-          </span>
-        )}
-        {expandable &&
-          // The OS disclosure convention (> collapsed, ⌄ open) — the row
-          // IS the tap target.
-          (open ? (
-            <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
-          ) : (
-            <ChevronRight className="ml-auto h-3 w-3 shrink-0" />
-          ))}
-      </div>
-      {expandable && open && (
-        <div className="ml-5 flex flex-col gap-0.5 text-xs text-muted-foreground">
-          <span className="whitespace-pre-wrap">{label}</span>
-          <span className="tabular-nums text-meta-foreground">
-            {t("chat.activityMeta.count", { count: activity.count })}
-            {duration ? ` · ${duration}` : ""}
-          </span>
-        </div>
-      )}
-    </div>
-  )
+  const duration = activity.duration_ms != null ? formatElapsed(activity.duration_ms) : null
+  const line = <>
+    <TriangleAlert aria-hidden className="size-3 shrink-0" />
+    <span>{label}</span>
+    {duration && <span className="text-xs tabular-nums">· {duration}</span>}
+  </>
+  const style = "flex min-h-8 items-center gap-2 text-sm text-muted-foreground"
+  return activity.count != null && activity.total == null ? (
+    <details>
+      <summary className={cn(style, "w-fit cursor-pointer")}>
+        {line}<ChevronRight aria-hidden className="size-3" />
+      </summary>
+      <p className="ms-5 text-xs">{t("chat.activityMeta.count", { count: activity.count })}</p>
+    </details>
+  ) : <div className={style}>{line}{activity.error && <span>{activity.error}</span>}</div>
 }
 
 const REVIEW_SCOPE_KEYS = [
@@ -506,206 +383,104 @@ function JobDetails({ job, onOpen }: { job: NativeJobReceipt; onOpen?: (id: stri
   )
 }
 
-export function JobReceiptCard({ job, onOpen }: { job: NativeJobReceipt; onOpen: (id: string) => void }) {
-  const { t } = useTranslation()
-  return (
-    <ToolCallCard
-      callId={job.callId}
-      name={job.operation ? t(`chat.toolName.${job.operation}`, { defaultValue: job.operation.replaceAll("_", " ") }) : t("agentReceipt.job")}
-      status={jobStatus(job)}
-    >
-      <JobDetails job={job} onOpen={onOpen} />
-    </ToolCallCard>
-  )
+// Tool keys supply the verb even on thinner native frames with no copy key.
+const toolActions: Record<string, string | undefined> = {
+  capture_web: "videoCapturePlan", show_music_candidates: "musicSearch",
+  generate_voice: "recordVoice", generate_music: "generateMusic",
+  search_music: "musicSearch", select_music: "musicSelection",
+  generate_sfx: "generateSfx", edit_audio_clip: "editAudioClip",
+  insert_motion_block: "insertMotionBlock", update_motion_block: "updateMotionBlock",
+  set_transition: "setTransition", review_video: "videoReview", export_video: "exportVideo",
+  save_composition_as_skill: "saveSkill", instantiate_skill_blueprint: "instantiateSkill",
 }
 
-/** Native declaration order and member outcomes survive both live updates and replay. */
-export function NativeToolReceipts({ rows, grouped, onOpen }: { rows: ActivityRowFrame[]; grouped?: boolean; onOpen?: (id: string) => void }) {
-  const { t } = useTranslation()
-  const groupRef = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-  const anchor = useMessageScrollerViewportAnchor(groupRef, false)
-  const ordered = [...rows].sort((a, b) => (a.call_index ?? 0) - (b.call_index ?? 0))
-  const cards = ordered.map((row) => {
-    const name = row.tool_name
-      ? t(`chat.toolName.${row.tool_name}`, { defaultValue: row.tool_name.replaceAll("_", " ") })
-      : activityText(row, t)
-    let status = callStatuses[row.call_state ?? row.status] ?? "unknown"
-    if (row.jobReceipt) status = jobStatus(row.jobReceipt)
-    else if (status === "success" && row.receipt?.kind === "video_revision") status = "versionSaved"
-    return (
-      <ToolCallCard
-        key={row.call_id ?? row.activity_id}
-        callId={row.call_id}
-        name={name}
-        status={status}
-        duration={row.duration_ms}
-      >
-        {row.error && row.error !== row.jobReceipt?.error && <p>{row.error}</p>}
-        {row.key && !row.error && !row.call_state && !row.jobReceipt && <p>{activityText(row, t)}</p>}
-        {row.jobReceipt && <JobDetails job={row.jobReceipt} onOpen={onOpen} />}
-        {row.receipt && <ActivityEvidence receipt={row.receipt} />}
-      </ToolCallCard>
-    )
-  })
-  if (!grouped) return <>{cards}</>
-  const running = ordered.find((row) => row.call_state === "running")
-  const recording = ordered.some((row) => row.tool_name === "generate_voice") &&
-    ordered.some((row) => row.tool_name === "generate_music")
-  return (
-    <div ref={groupRef} data-group-id={ordered[0]?.group_id}>
-      <ToolCallGroup
-        open={open}
-        onOpenChange={(next) => {
-          anchor(groupRef.current)
-          setOpen(next)
-        }}
-        label={t("chat.toolGroup", { count: ordered[0]?.call_count ?? ordered.length })}
-        runningLabel={recording ? t("chat.recordingGroup") : running?.key ? t(running.key) : undefined}
-      >
-        {cards}
-      </ToolCallGroup>
-    </div>
-  )
+function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: (id: string) => void): ThinkingTrailStep {
+  if (entry.kind === "note") return { id: entry.rowKey, kind: "note", label: entry.text, status: "done" }
+  const row = entry.activity
+  const job = row.jobReceipt
+  const receipt = row.receipt
+  const status = job ? jobStatus(job) : callStatuses[row.call_state ?? row.status] ?? "unknown"
+  const success = status === "success" || status === "outputGenerated"
+  const running = live && status === "running"
+  const failed = status === "error" || status === "unknown"
+  const tool = row.tool_name ?? job?.operation
+  const action = tool && toolActions[tool]
+  const toolLabel = tool ? t(`chat.toolName.${tool}`, { defaultValue: t("agentReceipt.job") }) : t("agentReceipt.job")
+  let label = tool ? toolLabel : activityText(row, t)
+  if (success || running) {
+    if (action) label = t(`chat.activity.${action}${success ? "Done" : ""}`)
+    else if (row.key) label = activityText(row, t)
+  } else if (failed && !tool) {
+    label = activityText({ ...row, status: "failed" }, t)
+  }
+  const chips: string[] = []
+  if (receipt?.kind === "video_revision") chips.push(`v${receipt.version}`)
+  if (receipt?.kind === "music_selection" || receipt?.kind === "sfx_import") chips.push(receipt.title)
+  if (receipt?.kind === "music_search" || receipt?.kind === "sfx_search") chips.push(receipt.topic)
+  if (row.name && !label.includes(row.name) && !chips.includes(row.name)) chips.push(row.name)
+  let statusMeta: string | undefined
+  if (success && receipt?.kind === "video_revision") statusMeta = t("agentReceipt.versionSaved")
+  else if (status === "running" && !live) statusMeta = t("agentReceipt.unsettled")
+  else if (status !== "success" && !running && !(failed && !tool && !job)) statusMeta = t(`agentReceipt.${status}`)
+  const duration = row.duration_ms != null ? formatElapsed(row.duration_ms) : undefined
+  return {
+    id: entry.rowKey, label, chips, meta: [statusMeta, duration].filter(Boolean).join(" · "),
+    kind: failed ? "error" : row.assetType === "web_page" || row.key?.includes("viewWebPage") || tool === "capture_web" ? "web" : "step",
+    status: failed ? "error" : running ? "running" : "done",
+    detail: <>
+      {row.error && row.error !== job?.error && <p>{row.error}</p>}
+      {job && <JobDetails job={job} onOpen={onOpen} />}
+      {receipt && <ActivityEvidence receipt={receipt} />}
+    </>,
+  }
 }
 
-/** One work segment in BOTH poses, shared by chat activities and background
- * runs. The header owns the lifecycle; each adapter owns its details. Chat
- * keeps latent tool rows while live and category rows when settled. A run
- * may keep its live step tree visible, then fold the same tree at the seal.
- *
- * Disclosure overrides are pose-scoped: a live user's toggle survives a
- * running → reviewing handoff, but cannot keep the settled row expanded for
- * one extra frame. A post-settle toggle belongs to the settled pose. */
 export function WorkSegmentRow({
-  rows = [],
-  elapsedMs,
-  activity = null,
-  liveLabel,
-  liveTrailing = null,
-  liveDetails,
-  details,
-  children,
-  settledLabel,
-  failure = null,
+  trail = [], elapsedMs, startedAtMs, liveLabel, failure, onOpen,
 }: {
-  rows?: ActivityRowFrame[]
+  trail?: WorkTrailEntry[]
   elapsedMs?: number | null
-  activity?: NowRowPayload | null
-  /** Run adapters already own a builder-written live label; chat passes an
-   * activity instead. Either fact makes the row live. */
-  liveLabel?: ReactNode
-  liveTrailing?: ReactNode
-  liveDetails?: ReactNode
-  /** Settled details default to chat's category projection. */
-  details?: ReactNode
-  children?: ReactNode
-  /** Optional read fallback when a run has no honest elapsed span. */
-  settledLabel?: ReactNode
-  /** Chat's failed activity stays inside its settled segment's details. */
-  failure?: NowRowPayload | null
+  startedAtMs?: number | null
+  liveLabel?: string | null
+  failure?: ActivityRowFrame | null
+  onOpen?: (id: string) => void
 }) {
   const { t } = useTranslation()
-  const live = activity !== null || liveLabel != null
+  const live = liveLabel != null
   const rowRef = useRef<HTMLDivElement>(null)
-  const anchorDisclosure = useMessageScrollerViewportAnchor(rowRef, live)
-  const hasLiveDetails = liveDetails != null
-  const expandable = live ? hasLiveDetails : details != null || rows.length > 0 || failure != null
-  const [openOverride, setOpenOverride] = useState<{
-    live: boolean
-    open: boolean
-  } | null>(null)
-  const open =
-    openOverride && openOverride.live === live
-      ? openOverride.open
-      : live && hasLiveDetails
-  const elapsed = !live && elapsedMs != null ? formatElapsed(elapsedMs) : null
-  const label = live
-    ? (liveLabel ?? (activity ? activityText(activity, t) : t("chat.thinking")))
-    : elapsed
-      ? t("chat.activityFold.worked", { elapsed })
-      : settledLabel ?? t("chat.activityFold.actionCount", { count: rows.length })
-  const cats = foldCategories(rows)
+  const anchor = useMessageScrollerViewportAnchor(rowRef, live)
+  let error: ThinkingTrailStep | undefined
+  let group: string | undefined
+  const steps = trail.map(entry => {
+    const step = trailStep(entry, live, t, onOpen)
+    if (entry.kind === "activity" && (entry.activity.status !== "cancelled" || step.kind === "error")) {
+      // Keep failures in the final batch visible. A later successful call
+      // leaves earlier errors inspectable inside the completed trail.
+      if (!group || group !== entry.activity.group_id) error = undefined
+      if (step.kind === "error") error = step
+      group = entry.activity.group_id
+    }
+    return step
+  })
+  if (failure) {
+    error = trailStep({ kind: "activity", activity: failure, rowKey: failure.activity_id }, false, t, onOpen)
+    steps.push(error)
+  }
+  const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
+  const header = liveLabel ?? (error
+    ? [error.label, error.meta].filter(Boolean).join(" · ")
+    : elapsed ? t("chat.activityFold.worked", { elapsed }) : t("chat.activityFold.workedWithoutTime"))
+  const [override, setOverride] = useState<{ live: boolean; open: boolean } | null>(null)
+  if (override && override.live !== live) setOverride(null)
   return (
-    <div ref={rowRef} className="flex w-full flex-col gap-1">
-      <div
-        className={cn(
-          "-mx-1.5 -my-0.5 group/row flex items-center rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground transition-colors",
-          live
-            ? "min-h-8 w-full gap-2.5 py-0.5"
-            : "h-7 w-fit max-w-full gap-1.5",
-          expandable && "cursor-pointer select-none",
-        )}
-        role={expandable ? "button" : undefined}
-        tabIndex={expandable ? 0 : undefined}
-        aria-expanded={expandable ? open : undefined}
-        onKeyDown={expandable ? (event) => {
-          if (event.key !== "Enter" && event.key !== " ") return
-          event.preventDefault()
-          event.currentTarget.click()
-        } : undefined}
-        onClick={
-          expandable
-            ? (event) => {
-                anchorDisclosure(event.currentTarget)
-                setOpenOverride({ live, open: !open })
-              }
-            : undefined
-        }
-      >
-        {live && typeof label === "string" ? (
-          <ThinkingLoader label={label} />
-        ) : (
-          <span className="min-w-0 truncate">{label}</span>
-        )}
-        {live && liveTrailing ? (
-          <span className="shrink-0 tabular-nums text-meta-foreground">
-            · {liveTrailing}
-          </span>
-        ) : null}
-        {expandable &&
-          (open ? (
-            <ChevronDown className="h-3 w-3 shrink-0 text-meta-foreground" />
-          ) : (
-            <ChevronRight className="h-3 w-3 shrink-0 text-meta-foreground" />
-          ))}
-      </div>
-      {expandable && open
-        ? live
-          ? liveDetails
-          : (details ?? (
-              <div className="flex w-full flex-col gap-1">
-                {cats.map((c, i) => {
-                  const Glyph = KIND_ICONS[c.kind] ?? KIND_ICONS.read
-                  const key = activityCategoryKey(c.key, c.assetType)
-                  const catLabel = key
-                    ? t(key, {
-                        count: c.count,
-                        defaultValue: t("chat.completed"),
-                      })
-                    : t("chat.completed")
-                  return (
-                    <div key={i} className="flex flex-col">
-                      <div className="-mx-1.5 flex min-h-8 w-full items-center gap-2.5 rounded-md px-1.5 py-0.5 text-xs">
-                        <Glyph className="h-3 w-3 shrink-0 text-meta-foreground" />
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          {catLabel}
-                        </span>
-                        {c.repeat > 1 && (
-                          <span className="ml-auto shrink-0 tabular-nums text-meta-foreground">
-                            ×{c.repeat}
-                          </span>
-                        )}
-                      </div>
-                      {c.receipt ? <ActivityEvidence receipt={c.receipt} /> : null}
-                    </div>
-                  )
-                })}
-                {children}
-                {failure ? <ActivityRow activity={failure} nested /> : null}
-              </div>
-            ))
-        : null}
+    <div ref={rowRef}>
+      <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={startedAtMs}
+        open={override?.live === live && override.open}
+        onOpenChange={open => {
+          anchor(rowRef.current)
+          setOverride({ live, open })
+        }}
+      />
     </div>
   )
 }

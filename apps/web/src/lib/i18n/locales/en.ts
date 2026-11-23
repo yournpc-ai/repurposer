@@ -9,6 +9,7 @@ const en = {
     success: "Succeeded",
     error: "Failed",
     cancelled: "Cancelled",
+    unsettled: "No final receipt",
     unknown: "Result unknown",
     notExecuted: "Not executed",
     pending: "Awaiting confirmation",
@@ -1430,6 +1431,8 @@ const en = {
       skillPreviewDone: "Checked the Skill preview",
       importMusic: "Importing music…",
       imageUnavailable: "Image unavailable",
+      generateMusic: "Generating music",
+      generateMusicDone: "Generated music",
       recordVoice: "Recording narration…",
       recordVoiceDone: "Recorded narration",
       bindClipSource: "Binding fixed media",
@@ -1605,15 +1608,12 @@ const en = {
     activityMeta: {
       count: "Count: {{count}}",
     },
-    /** The aggregate row (ADR-110 段聚合): a settled work segment folds
-     * into ONE quiet total. Live `worked` time runs from the real work
-     * boundary to first VISIBLE prose (or a prose-less terminal), then
-     * freezes; replay without that client fact reports only the observable
-     * activity span. Expanded rows are the foldCategories ×N decomposition.
-     * `actionCount` is the honest fallback when no wall clock exists. */
-    recordingGroup: "Preparing narration and music…",
-    toolGroup: "{{count}} tool calls",
     toolName: {
+      export_video: "Export video",
+      review_video: "Review video",
+      capture_web: "Capture webpage",
+      search_music: "Search music",
+      select_music: "Select music",
       inspect_clip: "Inspect clip",
       inspect_timeline: "Inspect timeline",
       generate_voice: "Generate narration",

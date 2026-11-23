@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { foldCategories } from "./activity"
+import { foldActivityUnits } from "./activity"
+import { buildConversationUnits } from "./project"
 import { activityRowFrame, parseActivityReceipt } from "./history"
 import type {
   ActivityReceipt,
@@ -54,6 +55,14 @@ function liveRow(value: unknown, id = "a1"): ActivityRowFrame {
   }
 }
 
+function projectedRows(rows: ActivityRowFrame[]) {
+  const [fold] = foldActivityUnits(buildConversationUnits(rows.map(activity => ({
+    id: activity.activity_id, turnId: "opening", role: "assistant", content: "", activity,
+  }))))
+  if (fold.kind !== "activityFold") throw new Error("Expected a work trail")
+  return fold.rows
+}
+
 describe("video review Activity receipt", () => {
   it("uses the same evidence shape for live rows and history hydration", () => {
     const history = activityRowFrame({
@@ -63,9 +72,9 @@ describe("video review Activity receipt", () => {
     expect(history).toBeDefined()
     expect(history?.receipt).toEqual(parseActivityReceipt(receipt))
 
-    const categories = foldCategories([history!, liveRow(receipt, "a2")])
-    expect(categories).toHaveLength(2)
-    expect(categories.map((category) => category.receipt)).toEqual([
+    const steps = projectedRows([history!, liveRow(receipt, "a2")])
+    expect(steps).toHaveLength(2)
+    expect(steps.map((category) => category.receipt)).toEqual([
       parseActivityReceipt(receipt),
       parseActivityReceipt(receipt),
     ])
@@ -78,14 +87,14 @@ describe("video review Activity receipt", () => {
       findings: [],
       output_issue_codes: ["AUDIO_CLIPPED"],
     } satisfies VideoReviewReceipt
-    const categories = foldCategories([liveRow(receipt), liveRow(second, "a2")])
-    expect(categories.map((category) => category.repeat)).toEqual([1, 1])
-    expect(categories[0].receipt?.kind === "video_review" &&
-      categories[0].receipt.frames[0].frame_id).toBe("F01")
-    expect(categories[1].receipt?.kind === "video_review" &&
-      categories[1].receipt.frames[0].frame_id).toBe("F03")
-    expect(categories[1].receipt?.kind === "video_review" &&
-      categories[1].receipt.findings).toEqual([])
+    const steps = projectedRows([liveRow(receipt), liveRow(second, "a2")])
+    expect(steps.map(step => step.activity_id)).toEqual(["a1", "a2"])
+    expect(steps[0].receipt?.kind === "video_review" &&
+      steps[0].receipt.frames[0].frame_id).toBe("F01")
+    expect(steps[1].receipt?.kind === "video_review" &&
+      steps[1].receipt.frames[0].frame_id).toBe("F03")
+    expect(steps[1].receipt?.kind === "video_review" &&
+      steps[1].receipt.findings).toEqual([])
   })
 
   it("drops unknown audio codes without inventing a replacement", () => {
@@ -108,13 +117,11 @@ describe("video review Activity receipt", () => {
       scope: { ...receipt.scope, audio_signal_checked: "yes" },
     })).toBeUndefined()
 
-    const categories = foldCategories([
+    const steps = projectedRows([
       liveRow({ ...receipt, findings: [{ kind: "unknown" }] }),
       liveRow({ ...receipt, findings: [{ kind: "unknown" }] }, "a2"),
     ])
-    expect(categories).toHaveLength(1)
-    expect(categories[0].repeat).toBe(2)
-    expect(categories[0].receipt).toBeUndefined()
+    expect(steps.map(step => step.receipt)).toEqual([undefined, undefined])
   })
 })
 
@@ -194,7 +201,7 @@ describe("D5 typed work receipts", () => {
       })
       expect(history?.receipt).toEqual(evidence)
     }
-    const categories = foldCategories([
+    const steps = projectedRows([
       liveRow(component),
       liveRow(revision, "a2"),
       liveRow(sfx, "a3"),
@@ -202,8 +209,7 @@ describe("D5 typed work receipts", () => {
       liveRow(musicSearch, "a5"),
       liveRow(musicSelection, "a6"),
     ])
-    expect(categories.map((category) => category.repeat)).toEqual([1, 1, 1, 1, 1, 1])
-    expect(categories.map((category) => category.receipt?.kind)).toEqual([
+    expect(steps.map((category) => category.receipt?.kind)).toEqual([
       "component",
       "video_revision",
       "sfx_search",

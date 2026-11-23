@@ -11,6 +11,7 @@ const zh: Resources = {
     success: "成功",
     error: "失败",
     cancelled: "已取消",
+    unsettled: "尚无终态回执",
     unknown: "结果未知",
     notExecuted: "未执行",
     pending: "待确认",
@@ -1358,6 +1359,8 @@ const zh: Resources = {
       skillPreviewDone: "已查看 Skill 预览",
       importMusic: "正在导入音乐…",
       imageUnavailable: "图片暂时无法显示",
+      generateMusic: "正在生成配乐",
+      generateMusicDone: "已生成配乐",
       recordVoice: "正在生成旁白",
       recordVoiceDone: "旁白已生成",
       bindClipSource: "正在绑定素材",
@@ -1532,13 +1535,12 @@ const zh: Resources = {
     activityMeta: {
       count: "数量：{{count}}",
     },
-    /** 聚合行（ADR-110 段聚合）：落定工作段折成一条安静的总量。实时
-     * `worked` 从真实工作边界计到正文首显（或无正文真实终态）并冻结；
-     * 回放缺少该客户端事实时只报可观察活动跨度。展开 = 类目分解
-     * （foldCategories 的 ×N 行）；无墙钟事实时 `actionCount` 诚实显示操作数。 */
-    recordingGroup: "正在生成旁白与配乐",
-    toolGroup: "{{count}} 项操作",
     toolName: {
+      export_video: "导出视频",
+      review_video: "审阅视频",
+      capture_web: "采集网页",
+      search_music: "搜索配乐",
+      select_music: "选择配乐",
       inspect_clip: "查看片段",
       inspect_timeline: "检查时间线",
       generate_voice: "生成旁白",

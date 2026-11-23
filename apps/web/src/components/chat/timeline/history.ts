@@ -763,6 +763,8 @@ export function mapHistoryRows(
           content: "",
           at: m.created_at,
           activity: { ...frame, at: frame.at ?? m.created_at },
+          blocks: m.blocks?.length ? m.blocks : undefined,
+          outputRefs: deliveryOutputRefs(m.intent),
         })
         continue
       }
