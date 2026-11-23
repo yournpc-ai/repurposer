@@ -567,25 +567,28 @@ async def test_instantiate_skill_blueprint_sfx_outside_write_lock_and_adaptive_t
 
     events: list[str] = []
 
-    async def fake_synthesize_sfx(sfx_db, *, owner_id, project_id, recipe_id, params=None, seed=None):
+    async def fake_synthesize_sfx(*, owner_id, project_id, recipe_id, params=None, seed=None):
         events.append(f"sfx:{recipe_id}")
         sid = uuid4()
         dig = _dig(f"sfx_{recipe_id}_{sid}")
-        snap = SourceSnapshot(
-            id=sid,
-            owner_id=owner_id,
-            origin_project_id=project_id,
-            kind="audio",
-            digest=dig[:64],
-            storage_key=f"remake/sfx_{recipe_id}.wav",
-            duration_ticks=seconds_to_ticks(0.4, SOURCE_TIMEBASE),
-            meta={"origin": {"kind": "sound_recipe", "recipe_id": recipe_id, "params": params or {}, "seed": seed}},
-        )
-        sfx_db.add(snap)
-        await sfx_db.flush()
+        async with database() as sfx_db:
+            snap = SourceSnapshot(
+                id=sid,
+                owner_id=owner_id,
+                origin_project_id=project_id,
+                kind="audio",
+                digest=dig[:64],
+                storage_key=f"remake/sfx_{recipe_id}.wav",
+                duration_ticks=seconds_to_ticks(0.4, SOURCE_TIMEBASE),
+                meta={"origin": {"kind": "sound_recipe", "recipe_id": recipe_id, "params": params or {}, "seed": seed}},
+            )
+            sfx_db.add(snap)
+            await sfx_db.commit()
         return {
-            "snapshot_id": str(sid),
-            "digest": snap.digest,
+            "snapshot": {"snapshot_id": str(sid), "digest": snap.digest},
+            "audio_snapshot_id": str(sid),
+            "audio_digest": snap.digest,
+            "duration_seconds": 0.4,
             "acoustics": {"duration_ms": 400, "peak_offset_ms": 120, "peak_dbfs": -2.0},
         }
 

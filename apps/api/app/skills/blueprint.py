@@ -756,24 +756,23 @@ async def instantiate_skill_blueprint(
     # Synthesize all blueprint SFX cues strictly OUTSIDE any DB transaction lock (Guardrail #2)
     sfx_snapshots: dict[str, dict[str, Any]] = {}
     for cue in bp.sfx_cues:
-        async with AsyncSessionLocal() as sfx_db:
-            sfx_res = await synthesize_project_sfx(
-                sfx_db,
-                owner_id=owner,
-                project_id=project,
-                recipe_id=cue.recipe_id,
-                params=cue.params,
-                seed=cue.seed,
-            )
-            await sfx_db.commit()
-            snap_uuid = UUID(sfx_res["snapshot_id"])
-            sfx_snapshots[cue.cue_id] = {
-                "snapshot_id": snap_uuid,
-                "digest": sfx_res["digest"],
-                "duration_ms": int(sfx_res["acoustics"]["duration_ms"]),
-                "duration_ticks": seconds_to_ticks(sfx_res["acoustics"]["duration_ms"] / 1000.0, SOURCE_TIMEBASE),
-            }
-            bound_snapshots[snap_uuid] = sfx_res["digest"]
+        sfx_res = await synthesize_project_sfx(
+            owner_id=owner,
+            project_id=project,
+            recipe_id=cue.recipe_id,
+            params=cue.params,
+            seed=cue.seed,
+        )
+        snap_uuid = UUID(sfx_res["audio_snapshot_id"])
+        snap_digest = sfx_res["audio_digest"]
+        dur_s = float(sfx_res.get("duration_seconds") or (sfx_res["acoustics"]["duration_ms"] / 1000.0))
+        sfx_snapshots[cue.cue_id] = {
+            "snapshot_id": snap_uuid,
+            "digest": snap_digest,
+            "duration_ms": int(round(dur_s * 1000)),
+            "duration_ticks": seconds_to_ticks(dur_s, SOURCE_TIMEBASE),
+        }
+        bound_snapshots[snap_uuid] = snap_digest
 
     # ── Phase 2: Pure deterministic adaptive timeline assembly ──
     fps_num = int(bp.canvas.get("fps_num", 30))
