@@ -75,11 +75,11 @@ class GenerateSfxArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     recipe_id: SoundRecipeId | None = Field(
         default=None,
-        description="Sound recipe id (whoosh, impact, click, riser, stinger, swoosh_cut). Omit when revising base_clip_id with the same recipe.",
+        description="Choose one of the 22 recipe IDs in creative_catalog.sound_recipes. Omit when revising base_clip_id with the same recipe.",
     )
     params: dict[str, float | int] | None = Field(
         default=None,
-        description="Optional macro overrides (pitch, tone, length, punch, space). Merged over defaults or base_clip_id params.",
+        description="Pass only parameters declared for the target recipe in creative_catalog.sound_recipes. The 16 new recipes support length, pitch, and space. The original six also support tone and punch. Overrides are merged over defaults or base_clip_id params.",
     )
     base_clip_id: str | None = Field(
         default=None, min_length=1, max_length=64,
