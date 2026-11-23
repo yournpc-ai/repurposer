@@ -18,6 +18,10 @@ MediaJob 固定旁白、音乐或图片，成功回执包含所属项目、快�
 
 ## 消息、Stop 与恢复
 
+**编辑回合的结算合同。** 自然正文和显式 `answer` 都可能结束普通编辑回合。需要补观察时，沿原 opening 继续显示实际工具 Activity，把媒体返回同一模型，待其决定后再发布最终正文。用户能播放、模型收到样帧、模型收到带声媒体、用户实际播放分别陈述。交互中的流式说明可以保留，拟完成的正文不得提前写成最终消息或在刷新后变成第二条完成消息。
+
+遇到重复拒绝、预算耗尽或中断，Chat 从 opening 的 `editor_commits`、对应版本及 Job/Output 回执重建已保存的操作，区分本轮最后写入与并发推进后的当前 head。正文说明仍欠的目标、旧成片归属和可继续的动作。Live 和 Replay 使用相同的持久事实。普通结束前的证据核对及失败正文统一仍待实施，详见 [I8 评审](tasks/i8.md#15-现行处置与交付)。
+
 - SSE 提供 turn.started、assistant.row.append、assistant.row.update 和回合完成或失败通知。消息顺序使用会话内 seq。原生 Tool Group 以 group_id 与 call_index 排序，call_id 标识各成员，各自保留结果。
 - 客户端按原 opening 发送 Stop，提交实际可见的正文前缀、Activity 和组件 ID。空可见前沿可撤回 opening。已提交版本、固定媒体、Output 与账本按原身份保留。
 - 刷新读取原会话消息、原问题和作品引用，同一执行消息可由 Job 更新。Worker 与请求端恢复共用 opening 的数据库锁和持久回执。恢复时原请求、已执行操作、当前 head 与尚未授予的费用仍然可区分。
