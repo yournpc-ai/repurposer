@@ -449,6 +449,131 @@ def _add_audio_effect(
     )
 
 
+def motion_block_ops(
+    content: CompositionContent,
+    *,
+    block_id: str,
+    props: dict[str, Any],
+    resources: list[dict[str, Any]],
+    clip_id: str,
+    object_id: str,
+    scene_id: str | None,
+    start: int,
+    end: int,
+) -> list[Op]:
+    """Place a native MotionBlockObject on a non-colliding visual track below captions."""
+    from app.editing.edits import SetTrackOrder
+    from app.editing.schemas import LayoutBox, MotionBlockObject, RemotionResource
+
+    role = "title" if block_id == "kinetic_title" else "main"
+    prefix = f"trk_mg_{role}"
+
+    def overlaps(track) -> bool:
+        return any(c.range.start < end and start < c.range.end for c in track.clips)
+
+    visual_tracks = [t for t in content.timeline.tracks if t.kind == "visual"]
+    candidate_tracks = sorted(
+        (t for t in visual_tracks if t.role == role and t.track_id.startswith(prefix)),
+        key=lambda t: t.order,
+    )
+    target_track = next((t for t in candidate_tracks if not overlaps(t)), None)
+
+    ops: list[Op] = []
+    bound = {binding.snapshot_id for binding in content.sources}
+    typed_resources = [RemotionResource.model_validate(r) for r in resources]
+    for r in typed_resources:
+        if r.snapshot_id not in bound:
+            ops.append(BindSource(op="bind_source", snapshot_id=r.snapshot_id))
+            bound.add(r.snapshot_id)
+
+    if target_track is not None:
+        track_id = target_track.track_id
+    else:
+        existing_ids = {t.track_id for t in content.timeline.tracks}
+        track_id = prefix
+        suffix = 2
+        while track_id in existing_ids:
+            track_id = f"{prefix}_{suffix}"
+            suffix += 1
+
+        # Keep Z-order deterministic: main < title < caption.
+        if role == "main":
+            above_roles = {"title", "caption"}
+        else:
+            above_roles = {"caption"}
+        below = [t for t in visual_tracks if t.role not in above_roles]
+        above = sorted((t for t in visual_tracks if t.role in above_roles), key=lambda t: t.order)
+        desired_order = max((t.order for t in below), default=-1) + 1
+        # Bump any visual tracks at or above desired_order that belong above this layer
+        # (including title/caption tracks) so track orders stay strictly unique.
+        to_bump = sorted(
+            (t for t in visual_tracks if t.order >= desired_order),
+            key=lambda t: t.order,
+            reverse=True,
+        )
+        # Only bump tracks that belong in above_roles; if another same/lower track already
+        # sits at desired_order, step past it.
+        if any(t.role not in above_roles for t in to_bump):
+            if above:
+                min_above = min(t.order for t in above)
+                non_above_below_min = [t for t in visual_tracks if t.role not in above_roles and t.order < min_above]
+                desired_order = max((t.order for t in non_above_below_min), default=-1) + 1
+                to_bump = sorted(
+                    (t for t in visual_tracks if t.order >= desired_order),
+                    key=lambda t: t.order,
+                    reverse=True,
+                )
+            else:
+                desired_order = max((t.order for t in visual_tracks), default=-1) + 1
+                to_bump = []
+        for t in to_bump:
+            ops.append(SetTrackOrder(op="set_track_order", track_id=t.track_id, order=t.order + 1))
+
+        ops.append(
+            AddTrack(
+                op="add_track",
+                track={
+                    "track_id": track_id,
+                    "kind": "visual",
+                    "role": role,
+                    "order": desired_order,
+                    "clips": [],
+                },
+            )
+        )
+
+    obj = MotionBlockObject(
+        kind="motion_block",
+        object_id=object_id,
+        block_id=block_id,
+        block_version=1,
+        props=props,
+        resources=typed_resources,
+        layout=LayoutBox(
+            x=0,
+            y=0,
+            width=content.settings.width,
+            height=content.settings.height,
+        ),
+        fit="cover" if block_id == "product_showcase" else "contain",
+    )
+    ops.append(
+        AddClip(
+            op="add_clip",
+            track_id=track_id,
+            clip={
+                "clip_id": clip_id,
+                "range": {"start": start, "end": end},
+                "scene_id": scene_id,
+                "source": None,
+                "object": obj.model_dump(mode="json"),
+                "animations": [],
+            },
+        )
+    )
+    return ops
+
+
 def fixed_audio_ops(content, *, source_id, source_digest, track_id, role, clip_id, object_id,
                     scene_id, start, end, source_start, source_end, gain_db):
     ops: list[Op] = []

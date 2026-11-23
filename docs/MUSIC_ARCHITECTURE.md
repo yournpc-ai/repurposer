@@ -4,37 +4,25 @@
 
 ## 现役来源与操作
 
-后台已实现下列来源。当前普通原生编辑轮会投影生成和落轨工具，但其工具名单没有曲库搜索、候选选择、Freesound 搜索或导入。旧候选回执可供追溯，仍缺当前 Provider 到用户试听、选用的实测。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py)
+后台已实现下列来源。Batch 1 主线正在补齐普通编辑/创作轮对曲库候选的投影、MiniMax `speech-2.6-hd` 多音色扩展、多 `effect` 轨避撞、库曲正确映射 `music` 轨，以及 `edit_audio_clip(clip_id, gain_db?, source_id?)` 单实例修订能力。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py) · [Batch 1 合同](tasks/oxvalue-mg-sound.md)
 
 | 内容 | 如何取得来源 | 如何进入作品 |
 |---|---|---|
-| BGM 配乐 | 从可访问的 Music 库搜索，或用 `show_music_candidates` 试听、`select_music` 解析持久化的候选。需要原创配乐时，`generate_music` 经 MediaJob 将受控乐谱合成为 WAV | 库曲经 `prepare_video_materials(material_music_ids=…)` 固定音频。程序化配乐保存乐谱引用、版本、音频摘要和项目快照。Agent 再用 `insert_audio` 指定入点、时长和增益 |
-| Voice 旁白 | `generate_voice` 经 MediaJob 合成语音，回执含固定音频、台词和对齐身份 | 独立录音可用 `insert_audio`。已有待配音 Clip 可用 `bind_clip_source` 绑定匹配来源，SpeechObject 保留台词和对齐语义 |
-| SFX 音效 | 用户可提供已有音频。Freesound 是一个外部搜索来源，`search_sfx` 返回可试听候选，`import_sfx` 解析已保存的选项并重新校验来源、CC0 许可与实际音频 | 导入得到项目内的固定音频。需要应用时才经编辑写口放入 Audio Clip，使用同一预览和导出 |
+| BGM 配乐 | 从可访问的 Music 库搜索，或用 `show_music_candidates` 试听、`select_music` 解析持久化的候选。需要原创配乐时，`generate_music` 经 MediaJob 将受控乐谱合成为 WAV | 库曲经 `prepare_video_materials(material_music_ids=…)` 固定音频并映射为 `music` 轨。程序化配乐保存乐谱引用、版本、音频摘要和项目快照。Agent 再用 `insert_audio` 指定入点、时长和增益 |
+| Voice 旁白 | `generate_voice` 经 MediaJob 调用现役 MiniMax `speech-2.6-hd`（支持 `en/zh/fr/de/es/it` 与多组精选商业/学术音色）合成语音，回执含固定音频、台词和对齐身份 | 独立录音可用 `insert_audio`。已有待配音 Clip 可用 `bind_clip_source` 绑定匹配来源，SpeechObject 保留台词和对齐语义 |
+| SFX 音效 | **主力来源**：洁净室共享纯 TS 分层引擎 `@repurposer/sound-engine` 经 `generate_sfx` 确定性合成 48 kHz 立体声 WAV 并固定为项目 `SourceSnapshot`（0 新 SQL 表）。**可选外部来源**：Freesound（`search_sfx` / `import_sfx`，CC0 复核） | 固定快照经 `insert_audio` 落入空闲 `effect` 轨（支持同幕多音效重叠不撞轨）；单实例调增益或仅替换目标音效音源走 `edit_audio_clip`，保留其他同源实例与旧版本 |
 
-`insert_audio` 校验快照的 owner、项目、种类、来源时长和作品时间窗。现有映射只把 `programmatic_score` 放入 music 轨、带旁白来源哈希的音频放入 dialogue 轨，其余进入 effect 轨。按这个入口插入普通库曲，也会使用回退角色。曲库的内容分类与实际落轨角色需分别核对。[编辑工具](../apps/api/app/chat/editor.py) · [素材工具](../apps/api/app/chat/turn_tools.py) · [音效导入](../apps/api/app/tools/video/sfx.py)
+## 共享纯 TS 分层音效引擎（`@repurposer/sound-engine`）
 
-## Sound Recipes 的目标与边界
+**现行架构（替代原独立 Python 脚本，0 新 SQL 表）。** 洁净室编写零 DOM、纯数学 TypeScript 共享包 `packages/sound-engine`，直接输出 48 kHz 双声道 `Float32Array` 与 PCM16 WAV：
 
-**独立研究已收官。** Whoosh、Impact、Click 三种原创 DSP 生成六份默认与修订 WAV。25 项原始摘要校验与独立复产通过。用户听评确认三组 A/B 差异清楚、两版均可接受，三秒样片声画自然且旁白清晰。正式 Chat 与 Native Tools 尚未接入这条配方生产、单实例修订和恢复链。[研究](experiments/renderer-aac/audio-study/REPORT.md) · [复产与最终听评](experiments/renderer-aac/audio-study/REPLAY.md)
+- **前后端同构**：前端 React Studio（`apps/web`）直接导入 `@repurposer/sound-engine` 通过 `AudioContext.createBuffer()` 实时试听与调参；服务端通过现役 Node 服务 `apps/render` 的轻量内部端点 `/synthesize-sfx` 运行完全相同的 TS 代码，**无需 Headless Chrome 或 `OfflineAudioContext`**，前后端逐采样确定性一致。
+- **可演进分层模型**：内部采用声明式 `Layer[]` 合成图（oscillator + pitch envelope / seeded noise / biquad filter / ADSR / stereo pan / early reflections / limiter），对外暴露少量直觉化宏旋钮（`pitch`、`tone`、`length`/`duration`、`space`、`punch` 等）。首批内置 5 个洁净室原创配方：`whoosh`、`impact`、`click`、`riser`、`stinger`（吸收原声学研究参数经验，不复制任何外部代码或预设）。
+- **统一二级分类 Catalog 元数据**：每个配方声明 `domain`（`video` | `interface`）、`category`（`motion` / `impact` / `riser` / `stinger` / `transition` / `tap` / `select` / `toggle` / `feedback`）、`name`、`desc`、`use_for`、`avoid`、`suggested_duration_ms`、`sync_cue`（如 `energy_peak` / `onset`）。**发现与决策元数据绝不参与 WAV/spec 摘要哈希**，避免优化提示词文案导致音频缓存失效。
+- **持久身份与零新表**：`SourceSnapshot.meta.origin` 保存带版本的 Typed JSON（`schema_version`, `kind: "sound_recipe"`, `engine`, `recipe_id`, `recipe_version`, `params`, `seed`, `acoustics`, `wav_digest`）。`generate_sfx` 按 `owner/project/spec_digest` 单飞去重，本地零积分快速路径免付费确认弹窗，仍严格遵守 opening/call 幂等、Stop 边界与恢复契约。
+- **结构化声学特征（解决无原生音频理解模型的“聋子”问题）**：每个生成回执携带确定性声学指标（`duration_ms`、`peak_offset_ms`、`spectral_centroid_hz`、RMS/Peak）；`preview_range` 同步输出时间窗能量与旁白/音效重叠掩蔽提示，使当前 MiniMax 等无原生听觉模型也能准确卡点与控制电平。确定性指标不冒充主观听感，成片仍需人工或具备听觉能力的多模态模型听评。
 
-配方及其版本、参数和 seed 标识生成来源，SourceSnapshot 固定得到的 WAV。Audio Clip 标识一次使用。只调低第二个 Impact 的播放音量就改该 Clip 的增益；要改变它的音色则用新参数生成固定来源，只替换该 Clip 的绑定。其余实例、旧版本和已交付 Output 继续引用原音频。
-
-Sound Recipe 描述一种声音适合什么场景，以及可以改什么。例如标题入场需要一次短促、较柔和的冲击声，Agent 可按需要调音高、时长、音色、空间或冲击感。配方内部可使用合成层、包络、滤波和混响。目标是用确定的来源与参数重复产出固定音频。用户要求缩短这声冲击时，只重制受影响的音效，在同一作品修订对应 Clip，保留配乐、旁白和旧版本。
-
-首批目标是产品宣传、MG 动画和知识解释视频。以画面动作试听选型，例如移动用 whoosh、落点用 impact、界面反馈用 click/pop、上升蓄势用 riser、段末点题用 stinger。参数化合成是主力目标，Freesound 是可选的外部来源。每个候选配方都要说明其实际字段、单位、合法范围和听感用途。例如时长按秒描述动作覆盖多久，音高以半音偏移描述声音的轻重，空间或冲击参数须说明两端的听感和适用镜头。范围由具体来源校验并试听，不能把所有声音套用同一组数值。
-
-以短促 click 的候选配方为例，设计时可试用下列字段。数值是试听起点，尚无生产 Schema 或验收结论。
-
-| 字段及示例范围 | 创作用途 |
-|---|---|
-| `duration_ms` 30–250 ms | 短端贴合按钮落点，长端留出可闻尾音 |
-| `pitch_semitones` −12 至 +12 | 相对配方基准音移调，匹配轻快或厚重的动作 |
-| `cutoff_hz` 800–8000 Hz | 低通截止频率，调整音色明暗和与旁白的重叠 |
-| `reverb_mix` 0–0.35 | 混响湿声比例，控制界面近声或远处回声 |
-| `attack_ms` 1–25 ms | 控制起音由锐利到柔和，调整落点冲击感 |
-
-ReactBits Sound Lab 仅作交互和参数设计参考。商业集成与正式参数化音效生产均未验证。采用外部声音或合成实现前须确认复制、再分发及托管权利，不得直接复制其 200 个音效或合成引擎进入生产。已有乐谱合成、快照、播放器和导出可按需复用，音效沿用同一音轨模型与 ToolLoop。[现有配乐合成](../apps/api/app/tools/music/score.py) · [固定音频及乐谱来源](../apps/api/app/tools/video/music_preparation.py)
+ReactBits Sound Lab 仅作交互、分类与分层参数设计参考。其 MIT + Commons Clause 限制独立再分发声音包及托管实质相似工具，**严禁复制其源码、音效或预设进入生产**。原有 3 配方 Python 研究证据保留归档于 [audio-study](experiments/renderer-aac/audio-study/REPLAY.md)。已有乐谱合成、快照、播放器和导出按需复用，音效沿用同一音轨模型与 ToolLoop。[现有配乐合成](../apps/api/app/tools/music/score.py) · [固定音频及乐谱来源](../apps/api/app/tools/video/music_preparation.py)
 
 ## 数据、权限与历史消费者
 

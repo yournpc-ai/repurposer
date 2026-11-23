@@ -64,8 +64,14 @@ def _native_creation_tools(tools, *, facts):
     from app.chat.editor_create import voice_generation_forbidden
 
     voice_excluded = voice_generation_forbidden(facts.get("user_text") or "")
-    fixed_voice = any(r.get("role") == "narration" and r.get("status") == "available"
-                      for r in facts.get("media_receipts") or [])
+    fixed_voice = (
+        any(r.get("role") == "narration" and r.get("status") == "available"
+            for r in facts.get("media_receipts") or [])
+        or any(
+            r.get("kind") == "audio" and (r.get("alignment") or (r.get("origin") or {}).get("video_narration_hash"))
+            for _, r in resources
+        )
+    )
     aligned_voice = any((r.get("alignment") or {}).get("status") == "READY" for _, r in resources)
     projected = []
     for tool in tools:
@@ -78,8 +84,8 @@ def _native_creation_tools(tools, *, facts):
                 if fixed_voice or voice_excluded:
                     hidden.update({"narration", "narration_voice_id", "narration_language"})
                 if fixed_voice:
-                    description += " 本轮旁白已固定，保存画面后可用 insert_audio 放入原音。"
-                if fixed_voice and not aligned_voice:
+                    description += " 旁白音频已固定，先保存画面版本，再用 insert_audio 放入原音。"
+                if not aligned_voice:
                     hidden.update({"narration_snapshot_id", "narration_alignment_id"})
                 shot = parameters["$defs"]["FirstShot"]
                 for field in hidden:
@@ -223,11 +229,17 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["observation_requested_before_edit"] = "Inspect actual rendered footage before deciding whether anything needs changing."
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
-        names = set(EDITOR_NAMES) | {"read_conversation_context", "answer", "ask_user", "list_project_media", "review_video", "align_recording", "get_narration_alignment", "annotate_narration"}
+        names = set(EDITOR_NAMES) | {
+            "read_conversation_context", "answer", "ask_user", "list_project_media",
+            "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
+            "search_music", "show_music_candidates", "select_music",
+        }
         from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
+        from app.editing.catalog import catalog_prompt_index
 
+        context["creative_catalog"] = catalog_prompt_index()
         if media_generation_forbidden(user_text):
-            names.difference_update({"generate_voice", "generate_music", "generate_image"})
+            names.difference_update({"generate_voice", "generate_music", "generate_image", "generate_sfx"})
         elif voice_generation_forbidden(user_text):
             names.discard("generate_voice")
         if not native_creation:
@@ -348,6 +360,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 "brief", "material_text", "material_urls", "items", "slot",
             })
 
+        if (facts.get("authorized_media") or {}).get("status") == "available":
+            names.discard("ask_user")
+
         tools = [t for t in facts["tools"] if t.name in names]
         if native_creation:
             tools = _native_creation_tools(tools, facts=facts)
@@ -383,13 +398,20 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending:
             context["pending_question"] = getattr(pending, "question", None)
-        media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {"generate_voice", "generate_music", "generate_image"}
+        media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {
+            "generate_voice", "generate_music", "generate_image", "generate_sfx",
+        }
         return RoundAssembly(
             tools=tools,
             system=("你是视频剪辑师，用用户的语言交流。检查本轮目标、所选作品、素材与已有回执。"
                     "目标明确就编辑。多个素材符合描述且用户未指定全用时，写入前用 ask_user 让用户选定，以可辨特征或附件序号列出选项。分镜按需表达。"
                     "保留未要求改变的画面、字幕、动画和声音。依赖新增对象或素材时先读取上一步返回的标识。"
-                    "以本轮开始时的作品为基准，对照已保存动作的累计变化决定下一步。按需选择是否预览和观看范围，用户点名的窗口要准确播放。"
+                    "专业 MG 画面优先使用 insert_motion_block（如 product_showcase 承载网页截图、kinetic_title 透明叠加标题），单实例修订用 update_motion_block。"
+                    "creative_catalog.shot_combinations 提供开箱即用的成片+槽位组合（默认推荐 product_hero_card：浅色工作室画布+深松石磨砂标题卡）；若用户未定风格或希望挑选方案，可在采集网页后用 ask_user 给出 2–3 个具名组合供用户直接点选，选定后再按槽位填充并制作。"
+                    "配乐可用 search_music / show_music_candidates / select_music 选曲并经 prepare_video_materials(material_music_ids=…) 导入后 insert_audio（旁白下 BGM 压低至 −24 ~ −26 dB）。"
+                    "音效用 generate_sfx（已归一化至 −2 dBFS，常规点缀放 −10 ~ −14 dB），单实例调电平或换音源用 edit_audio_clip；遵循克制原则：只在明确视觉动效节拍（标题入场/定格、切镜、卡片弹出）处点缀，静态无节拍画面不要硬塞音效。"
+                    "音效卡点结合 peak_offset_ms 与 sync_cue，对照 preview_range 的 audio_windows 与 masking_warnings 控电平；audio_available_to_model 为 false 时不声称主观听感。"
+                    "以本轮开始时的作品为基准，对照 already_saved_this_turn 的改动前后值（含 gain_delta_db 与 props_before/after）决定下一步；相对调整（如“减 3 dB”“慢一点”）每段只执行一次，禁止多轮重复叠加。按需选择是否预览和观看范围，用户点名的窗口要准确播放。"
                     "结束时说明实际改动和尚未达成的目标。画面和声音判断以实际收到的对应媒体及其覆盖范围为限。"
                     "不得擅改目标或追加未经许可的生成与导出。只预览的任务以播放为止。"
                     "正式交付须审阅固定 Output，按原 opening 的回执报告费用与尚未满足的要求。"

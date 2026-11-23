@@ -365,7 +365,7 @@ async def render_preview(spec: dict) -> bytes:
 
     endpoint = settings.render_url.removesuffix("/render") + "/preview"
     try:
-        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=settings.render_timeout_seconds, trust_env=False) as client:
             response = await client.post(endpoint, json={"spec": spec})
     except httpx.HTTPError as exc:
         raise ScrubTargetError(f"continuous preview request failed: {type(exc).__name__}") from exc
@@ -583,6 +583,98 @@ def sampled_frame_facts(frames, *, background):
     return facts
 
 
+def _audio_window_facts(video: bytes, spec: dict, bounds_start: float, fps: Fraction) -> dict:
+    """Deterministic time-window energy bins & dialogue/SFX/BGM overlap hints."""
+    import math
+    import numpy as np
+
+    audio_clips = [
+        {
+            "clip_id": clip["clip_id"],
+            "role": track["role"],
+            "from": round(bounds_start + float(Fraction(clip["start_frame"], 1) / fps), 3),
+            "to": round(bounds_start + float(Fraction(clip["end_frame"], 1) / fps), 3),
+            "gain_db": float((clip.get("object") or {}).get("gain_db", 0.0)),
+        }
+        for track in spec.get("tracks", [])
+        if track.get("kind") == "audio"
+        for clip in track.get("clips", [])
+    ]
+
+    bins: list[dict] = []
+    overall_peak_db = -96.0
+    try:
+        with av.open(io.BytesIO(video)) as container:
+            astream = next(iter(container.streams.audio), None)
+            if astream is not None:
+                chunks = []
+                sr = int(astream.rate or 48000)
+                for frame in container.decode(astream):
+                    arr = frame.to_ndarray()
+                    if arr.ndim == 2:
+                        # Handle planar (C, N) vs packed (1, N*C)
+                        if arr.shape[0] <= 8 and arr.shape[1] > arr.shape[0]:
+                            mono = arr.astype(np.float32).mean(axis=0)
+                        else:
+                            mono = arr.astype(np.float32).reshape(-1, max(1, len(astream.layout.channels))).mean(axis=1)
+                    else:
+                        mono = arr.astype(np.float32)
+                    if np.issubdtype(arr.dtype, np.integer):
+                        info = np.iinfo(arr.dtype)
+                        mono = mono / float(max(abs(info.min), abs(info.max)))
+                    chunks.append(mono)
+                if chunks:
+                    pcm = np.concatenate(chunks)
+                    win = max(1, int(round(sr * 0.5)))
+                    for i in range(0, len(pcm), win):
+                        seg = pcm[i : i + win]
+                        if len(seg) == 0:
+                            continue
+                        peak = float(np.max(np.abs(seg)))
+                        rms = float(np.sqrt(np.mean(seg * seg)))
+                        peak_db = round(20.0 * math.log10(peak), 2) if peak > 1e-6 else -96.0
+                        rms_db = round(20.0 * math.log10(rms), 2) if rms > 1e-6 else -96.0
+                        if peak_db > overall_peak_db:
+                            overall_peak_db = peak_db
+                        bins.append({
+                            "from": round(bounds_start + i / sr, 3),
+                            "to": round(bounds_start + (i + len(seg)) / sr, 3),
+                            "rms_dbfs": rms_db,
+                            "peak_dbfs": peak_db,
+                        })
+    except av.FFmpegError:
+        pass
+
+    warnings: list[str] = []
+    if overall_peak_db > -1.0:
+        warnings.append(f"Mixed audio peaks at {overall_peak_db} dBFS (close to 0 dBFS clipping); lower music or SFX gain_db.")
+    dialogues = [c for c in audio_clips if c["role"] == "dialogue"]
+    for d in dialogues:
+        for other in audio_clips:
+            if other["role"] == "dialogue":
+                continue
+            ov_start = max(d["from"], other["from"])
+            ov_end = min(d["to"], other["to"])
+            if ov_end <= ov_start:
+                continue
+            if other["role"] == "music" and other["gain_db"] > -12.0:
+                warnings.append(
+                    f"Music clip {other['clip_id']} ({other['gain_db']:+g} dB) overlaps dialogue {d['clip_id']} "
+                    f"during {ov_start:g}-{ov_end:g}s; keep BGM around -16 to -20 dB under narration."
+                )
+            elif other["role"] == "effect" and other["gain_db"] > -6.0:
+                warnings.append(
+                    f"SFX clip {other['clip_id']} ({other['gain_db']:+g} dB) overlaps dialogue {d['clip_id']} "
+                    f"during {ov_start:g}-{ov_end:g}s; lower SFX gain_db or soften tone if it masks speech."
+                )
+
+    return {
+        "audio_clips_in_window": audio_clips,
+        "audio_windows": bins,
+        "masking_warnings": warnings,
+    }
+
+
 async def saved_preview_media(preview: dict, version_id: UUID):
     """Return the actual playback range and identify the media delivered to the model."""
     from app.providers.llm import get_llm_client
@@ -670,4 +762,5 @@ async def saved_preview_media(preview: dict, version_id: UUID):
         measured = await asyncio.to_thread(analyze_audio_bytes, video, snapshot_id=str(version_id),
                                            requested_probes=["decode", "pcm_stats", "loudness"])
         evidence["mixed_audio"] = {k: measured.media_facts[k] for k in ("decode", "pcm_stats", "loudness")}
+        evidence.update(await asyncio.to_thread(_audio_window_facts, video, spec, bounds["start"], fps))
     return tuple(media), evidence

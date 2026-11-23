@@ -16,6 +16,7 @@ WORKDIR /repo
 # Workspace descriptors first for a cached install layer.
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches/ patches/
+COPY packages/sound-engine/package.json packages/sound-engine/package.json
 COPY packages/video-spec/package.json packages/video-spec/package.json
 COPY packages/video-remotion/package.json packages/video-remotion/package.json
 COPY apps/render/package.json apps/render/package.json
@@ -23,6 +24,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --filter web... --frozen-lockfile
 
 # Source + build.
+COPY packages/sound-engine packages/sound-engine
 COPY packages/video-spec packages/video-spec
 COPY packages/video-remotion packages/video-remotion
 COPY apps/web apps/web

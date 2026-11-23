@@ -23,6 +23,7 @@
     "@microsoft/fetch-event-source": "^2.0.1",
     "@react-three/fiber": "^9.6.1",
     "@remotion/player": "^4.0.0",
+    "@repurposer/sound-engine": "workspace:*",
     "@repurposer/video-remotion": "workspace:*",
     "@repurposer/video-spec": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",

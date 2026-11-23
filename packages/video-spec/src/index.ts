@@ -8,6 +8,7 @@ export type {
   VideoKeyframe,
   VideoTextObject,
   VideoTextPart,
+  VideoMotionBlockObject,
 } from "./schema";
 export { ticksToFrames, secondsToTicks, ticksToSeconds } from "./timing";
 export { evaluateKeyframes, evaluateProperty } from "./animation";

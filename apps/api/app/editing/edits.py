@@ -47,6 +47,7 @@ from app.editing.schemas import (
     ClipSource,
     CompositionContent,
     EditTarget,
+    MotionBlockObject,
     Object,
     Scene,
     SourceBinding,
@@ -126,6 +127,14 @@ class AddTrack(BaseModel):
 
     op: Literal["add_track"]
     track: Track
+
+
+class SetTrackOrder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: Literal["set_track_order"]
+    track_id: str
+    order: int = Field(ge=0)
 
 
 class RemoveTrack(BaseModel):
@@ -483,6 +492,7 @@ Op = Annotated[
     | MoveScene
     | RemoveScene
     | AddTrack
+    | SetTrackOrder
     | RemoveTrack
     | AddClip
     | UpdateClip
@@ -595,7 +605,11 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
         )
     elif isinstance(op, UnbindSource):
         referenced = any(
-            c.source is not None and c.source.snapshot_id == op.snapshot_id
+            (c.source is not None and c.source.snapshot_id == op.snapshot_id)
+            or (
+                isinstance(c.object, MotionBlockObject)
+                and any(r.snapshot_id == op.snapshot_id for r in c.object.resources)
+            )
             for t in content.timeline.tracks
             for c in t.clips
         )
@@ -638,6 +652,9 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
         for clip in op.track.clips:
             _invalidate_visual_description(content, clip.scene_id)
         content.timeline.tracks.append(copy.deepcopy(op.track))
+    elif isinstance(op, SetTrackOrder):
+        track = _find_track(content, op.track_id)
+        track.order = op.order
     elif isinstance(op, RemoveTrack):
         track = _find_track(content, op.track_id)
         if track.clips:

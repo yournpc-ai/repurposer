@@ -18,10 +18,12 @@ import {
   evaluateProperty,
   type AnimValue,
   type VideoClip,
+  type VideoMotionBlockObject,
   type VideoSpec,
   type VideoTextObject,
   type VideoTextPart,
 } from "@repurposer/video-spec";
+import { MotionBlockView } from "./MotionBlocks";
 
 function scalar(v: AnimValue | undefined, fallback: number): number {
   return typeof v === "number" ? v : fallback;
@@ -409,11 +411,12 @@ const ShapeObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, f
   );
 };
 
-const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"]; gain: number }> = ({
-  clip,
-  fonts,
-  gain,
-}) => {
+const VisualObjectView: React.FC<{
+  clip: VideoClip;
+  fonts: VideoSpec["fonts"];
+  fps: number;
+  gain: number;
+}> = ({ clip, fonts, fps, gain }) => {
   const frame = useCurrentFrame();
   const obj = clip.object;
   if (obj.kind === "audio") return null;
@@ -425,6 +428,17 @@ const VisualObjectView: React.FC<{ clip: VideoClip; fonts: VideoSpec["fonts"]; g
   }
   if (obj.kind === "shape") {
     return <ShapeObjectView clip={clip} frame={frame} />;
+  }
+  if (obj.kind === "motion_block") {
+    return (
+      <MotionBlockView
+        clip={clip as VideoClip & { object: VideoMotionBlockObject }}
+        fonts={fonts}
+        fps={fps}
+        frame={frame}
+        containerStyle={wholeObjectStyle(clip, frame)}
+      />
+    );
   }
   if (!clip.source) throw new Error(`${obj.kind} clip ${clip.clip_id} carries no source`);
   return (
@@ -500,7 +514,12 @@ export const Video: React.FC<{
             durationInFrames={clip.end_frame - clip.start_frame}
           >
             <AbsoluteFill style={{ opacity: dissolve(clip.clip_id).opacity }}>
-              <VisualObjectView clip={clip} fonts={spec.fonts} gain={dissolve(clip.clip_id).gain} />
+              <VisualObjectView
+                clip={clip}
+                fonts={spec.fonts}
+                fps={spec.fps.num / spec.fps.den}
+                gain={dissolve(clip.clip_id).gain}
+              />
             </AbsoluteFill>
           </Sequence>
         )),

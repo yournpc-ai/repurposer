@@ -2,6 +2,7 @@ import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { apiGet } from "@/lib/api"
+import { playSoundRecipePreview } from "@/lib/sound-preview"
 import type { AudioPlaybackBlock } from "../timeline/types"
 import { WaveformPlayer } from "./WaveformPlayer"
 
@@ -39,11 +40,17 @@ function AudioPlaybackItem({
   const hasMeasurements = Number.isFinite(item.duration_seconds) && item.duration_seconds > 0 &&
     Array.isArray(item.peaks) && item.peaks.length > 0 &&
     item.peaks.every((peak) => Number.isFinite(peak) && peak >= 0)
+  const roleLabelKey =
+    item.role === "music"
+      ? "chat.audio.music"
+      : item.role === "effect"
+        ? "chat.audio.effect"
+        : "chat.audio.narration"
   return (
     <div className="rounded-lg bg-card px-3 py-2.5">
       <div className="mb-1.5 flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-xs text-muted-foreground">
-          {t(item.role === "music" ? "chat.audio.music" : "chat.audio.narration")}
+          {t(roleLabelKey)}
         </span>
         {item.role === "narration" && (item.scene_label || item.scene_id) ? (
           <span className="shrink-0 text-xs text-muted-foreground">
@@ -54,6 +61,21 @@ function AudioPlaybackItem({
           <span className="min-w-0 truncate text-sm text-foreground" title={item.title}>
             {item.title}
           </span>
+        ) : null}
+        {item.role === "effect" && item.sound_recipe?.recipe_id ? (
+          <button
+            type="button"
+            onClick={() =>
+              void playSoundRecipePreview({
+                recipeId: item.sound_recipe!.recipe_id,
+                params: item.sound_recipe!.params,
+                seed: item.sound_recipe!.seed,
+              })
+            }
+            className="ml-auto shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {t("chat.audio.audition")}
+          </button>
         ) : null}
       </div>
       {hasMeasurements ? (

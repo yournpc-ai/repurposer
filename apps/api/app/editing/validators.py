@@ -20,6 +20,7 @@ from app.editing.schemas import (
     CompositionContent,
     GeneratorObject,
     ImageObject,
+    MotionBlockObject,
     ShapeObject,
     SourceCaptionDerivation,
     SpeechObject,
@@ -203,6 +204,26 @@ def _validate_clip_source(
                                 problems,
                                 f"clip {clip.clip_id}: resource {resource.path!r} lacks its exact bound image snapshot",
                             )
+        return
+    if isinstance(obj, MotionBlockObject):
+        if src is not None:
+            _fail(problems, f"clip {clip.clip_id}: motion_block objects bind images via resources, not clip.source")
+        for resource in obj.resources:
+            binding = next(
+                (b for b in content.sources if b.snapshot_id == resource.snapshot_id), None
+            )
+            facts = snapshots.get(resource.snapshot_id)
+            if (
+                binding is None
+                or binding.snapshot_digest != resource.snapshot_digest
+                or facts is None
+                or facts.get("digest") != resource.snapshot_digest
+                or facts.get("kind") != "image"
+            ):
+                _fail(
+                    problems,
+                    f"clip {clip.clip_id}: motion_block resource {resource.path!r} lacks its exact bound image snapshot",
+                )
         return
     if isinstance(obj, (TextObject, ShapeObject)):
         if src is not None:

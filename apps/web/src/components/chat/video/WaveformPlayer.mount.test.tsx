@@ -165,4 +165,10 @@ describe("WaveformPlayer real-audio transport", () => {
       expect.objectContaining({ duration: 0 }),
     )
   })
+
+  it("formats sub-second sound effects in milliseconds instead of 0:00", () => {
+    vi.stubGlobal("Audio", MetadataAudio)
+    render(<WaveformPlayer src="whoosh.wav" durationSeconds={0.54} waveformKey="whoosh" />)
+    expect(screen.getByText("540 ms")).toBeTruthy()
+  })
 })

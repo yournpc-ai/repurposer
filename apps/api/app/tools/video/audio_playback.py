@@ -69,10 +69,26 @@ def _playback_item(measured: dict, report: dict, role: str, result: dict, reques
         or any(not isinstance(p, (int, float)) or not math.isfinite(p) or p < 0 for p in peaks)
     ):
         raise PlaybackUnavailable("incomplete waveform")
-    return {
+    if role == "music":
+        title = (result.get("music") or {}).get("title") or request.get("name") or ""
+    elif role == "effect":
+        sr = result.get("sound_recipe") or {}
+        recipe_id = sr.get("recipe_id") or request.get("recipe_id") or "sfx"
+        title = request.get("title") or recipe_id
+    else:
+        title = request.get("text") or result.get("text") or ""
+    item = {
         **measured,
         "role": role, "scene_id": result.get("scene_id") or request.get("scene_id"),
-        "title": ((result.get("music") or {}).get("title") or request.get("name") or "")
-        if role == "music" else request.get("text") or result.get("text") or "",
+        "title": title,
         "peaks": peaks, "analysis_digest": report["report_digest"],
     }
+    if role == "effect" and isinstance(result.get("sound_recipe"), dict):
+        sr = result["sound_recipe"]
+        item["sound_recipe"] = {
+            "recipe_id": sr.get("recipe_id"),
+            "recipe_version": sr.get("recipe_version"),
+            "params": sr.get("params") or {},
+            "seed": sr.get("seed"),
+        }
+    return item

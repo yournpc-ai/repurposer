@@ -764,16 +764,24 @@ class PlanTurn:
 
 
     async def _emit_candidates(self, payload: dict) -> None:
-        """Candidate Surface 信道 (Workspace 合同 v4.2 C8-c, 2026-09-26):
-        the candidate card's payload rides its OWN SSE frame
-        (``assistant.candidates``) at the door's success — the milestone's
-        count-only whitelist never carries members. The SSE route ALSO
-        collects every emitted payload and persists them as ONE
-        ``candidates_log`` message row at turn settle (the activity-row
-        precedent), so a refresh rebuilds the surface from the archive —
-        数据链全程消息载, no endpoint. No-op on the one-shot path."""
+        """Candidate Surface 信道: stream over SSE when attached, and always persist
+        as a candidates_log message row so select_music/import_sfx resolve reliably
+        across JSON, answer-resume, and refresh paths."""
         if self.on_candidates is not None:
             await self.on_candidates(payload)
+            return
+        from app.chat.service import record_candidates_log
+        from app.models.database import AsyncSessionLocal
+
+        ref = (
+            f"direct:{self.turn_id or self.conversation_id}:"
+            f"{payload.get('candidate_set_id')}:{payload.get('event')}:{payload.get('member_index')}"
+        )
+        async with AsyncSessionLocal() as db:
+            await record_candidates_log(
+                db, self.conversation_id, [payload], ref=ref, turn_id=self.turn_id,
+            )
+            await db.commit()
 
 
     async def _ask_user(self, params: PlanAskArgs, prose: str) -> str | None:

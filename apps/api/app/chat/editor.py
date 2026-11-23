@@ -3,7 +3,7 @@
 import json
 import re
 from fractions import Fraction
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,8 +12,9 @@ from sqlalchemy import func, select
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.editor_create import CreateVideoArgs
-from app.editing.edits import SplitClip, TemporalEdit, UpdateClip, UpdateScene
-from app.editing.schemas import EditTarget, TimeRange
+from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
+from app.editing.edits import BindSource, SplitClip, TemporalEdit, UpdateClip, UpdateScene
+from app.editing.schemas import ClipSource, EditTarget, MotionBlockObject, TimeRange
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -64,7 +65,74 @@ class GenerateVoiceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     text: str = Field(min_length=1, max_length=9000)
     language: Literal["en", "zh", "fr", "de", "es", "it"]
-    voice_id: Literal["presenter_male", "English_Graceful_Lady"] = "presenter_male"
+    voice_id: VoiceId = "presenter_male"
+
+
+class GenerateSfxArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recipe_id: SoundRecipeId | None = Field(
+        default=None,
+        description="Sound recipe id (whoosh, impact, click, riser, stinger). Omit when revising base_clip_id with the same recipe.",
+    )
+    params: dict[str, float | int] | None = Field(
+        default=None,
+        description="Optional macro overrides (pitch, tone, length, punch, space). Merged over defaults or base_clip_id params.",
+    )
+    base_clip_id: str | None = Field(
+        default=None, min_length=1, max_length=64,
+        description="Existing SFX clip_id whose recipe, params, and seed to inherit before applying params overrides.",
+    )
+    seed: int | None = Field(default=None, ge=0, le=0xFFFFFFFF)
+
+
+class EditAudioClipArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clip_id: str = Field(min_length=1, max_length=64)
+    gain_db: float | None = Field(
+        default=None, ge=-60, le=12, allow_inf_nan=False,
+        description="Updated clip gain in decibels for this single clip.",
+    )
+    source_id: UUID | None = Field(
+        default=None,
+        description="Replacement fixed audio snapshot ID for this clip only; preserves object_id and other instances.",
+    )
+
+    @model_validator(mode="after")
+    def check_change(self):
+        if self.gain_db is None and self.source_id is None:
+            raise ValueError("Provide gain_db or source_id to edit this audio clip.")
+        return self
+
+
+class InsertMotionBlockArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    block_id: MotionBlockId = Field(description="Native motion block id: kinetic_title or product_showcase.")
+    start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
+    end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
+    props: dict[str, Any] = Field(description="Declarative JSON props for the chosen motion block.")
+    resources: list[UUID] | None = Field(
+        default=None, max_length=16,
+        description="Pinned image or captured webpage snapshot IDs (required for product_showcase).",
+    )
+    view_id: str | None = Field(
+        default=None, max_length=120,
+        description="Optional view_id when passing a webpage snapshot in resources.",
+    )
+
+    @model_validator(mode="after")
+    def check_range(self):
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("end_seconds must exceed start_seconds.")
+        return self
+
+
+class UpdateMotionBlockArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clip_id: str = Field(min_length=1, max_length=64)
+    props_patch: dict[str, Any] = Field(
+        min_length=1,
+        description="Partial props to merge into this motion block only; unrelated clips stay untouched.",
+    )
 
 
 class InspectTimelineArgs(BaseModel):
@@ -170,7 +238,7 @@ def _editor_tool(name, description, args, key):
         args,
         terminal=False,
         batchable=True,
-        independent_media=name in {"generate_voice", "generate_music", "generate_image"},
+        independent_media=name in {"generate_voice", "generate_music", "generate_image", "generate_sfx"},
         snapshot_read=name in {"inspect_timeline", "inspect_clip"},
         presentation=ToolPresentation(
             kind="read",
@@ -203,6 +271,29 @@ EDITOR_TOOLS = (
     _editor_tool(
         "insert_audio", "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
         InsertAudioArgs, "insertAudio",
+    ),
+    _editor_tool(
+        "edit_audio_clip",
+        "Update absolute gain_db and/or replace source_id on one existing audio clip only, preserving object_id and all other clips. "
+        "For relative requests (e.g. '-3 dB'), compute once from the pre-turn clip gain_db and check already_saved_this_turn so the delta is never applied twice.",
+        EditAudioClipArgs, "editAudioClip",
+    ),
+    _editor_tool(
+        "generate_sfx",
+        "Synthesize a deterministic 48 kHz stereo sound effect (whoosh, impact, click, riser, stinger) with zero credit cost. "
+        "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs).",
+        GenerateSfxArgs, "generateSfx",
+    ),
+    _editor_tool(
+        "insert_motion_block",
+        "Insert a native declarative motion block (product_showcase or transparent-ready kinetic_title) onto the timeline below captions. "
+        "Pass captured webpage or image snapshot IDs in resources for product_showcase.",
+        InsertMotionBlockArgs, "insertMotionBlock",
+    ),
+    _editor_tool(
+        "update_motion_block",
+        "Patch declarative props on one existing motion_block clip only (e.g. slower entrance_duration_s), leaving all other tracks and clips unchanged.",
+        UpdateMotionBlockArgs, "updateMotionBlock",
     ),
     _editor_tool(
         "generate_image", "Create and review one image. Returns the actual pixels and a fixed project source.",
@@ -288,7 +379,8 @@ WRITE_TOOLS = {
     for t in EDITOR_TOOLS
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
-        InsertVisualArgs, InsertAudioArgs, ExtendStillArgs, BindClipSourceArgs,
+        InsertVisualArgs, InsertAudioArgs, EditAudioClipArgs, InsertMotionBlockArgs, UpdateMotionBlockArgs,
+        ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -305,12 +397,69 @@ def _transform_animations(animations):
             if a.text_part is None and a.property in {"transform.scale", "transform.position"}]
 
 
-def _clip_facts(track, clip, content):
+async def _load_snapshot_origins(db, clips) -> dict[UUID, dict[str, Any]]:
+    from app.models.tables import SourceSnapshot
+
+    ids = {
+        c.source.snapshot_id
+        for c in clips
+        if c.object.kind == "audio" and c.source is not None
+    }
+    if not ids:
+        return {}
+    rows = await db.scalars(select(SourceSnapshot).where(SourceSnapshot.id.in_(ids)))
+    out: dict[UUID, dict[str, Any]] = {}
+    for snap in rows:
+        meta = snap.meta or {}
+        origin = meta.get("origin") or {}
+        if origin.get("kind") == "sound_recipe":
+            out[snap.id] = {
+                "recipe_id": origin.get("recipe_id"),
+                "recipe_version": origin.get("recipe_version"),
+                "params": origin.get("params"),
+                "seed": origin.get("seed"),
+                "acoustics": origin.get("acoustics"),
+            }
+    return out
+
+
+def validate_motion_block_translate(
+    obj: MotionBlockObject, *, x: float, y: float, width: float, height: float
+) -> None:
+    """Keep region-select micro-adjustments working while preventing off-canvas clipping."""
+    if obj.block_id == "kinetic_title":
+        pos = str(obj.props.get("position", "bottom_left"))
+        min_x = -48.0 if pos.endswith("left") else -width * 0.35
+        max_x = width * 0.45 if pos.endswith("left") else width * 0.35
+        if pos.startswith("bottom"):
+            min_y, max_y = -height * 0.55, 24.0
+        elif pos.startswith("top"):
+            min_y, max_y = -24.0, height * 0.55
+        else:
+            min_y, max_y = -height * 0.35, height * 0.35
+        if not (min_x <= x <= max_x and min_y <= y <= max_y):
+            raise ValueError(
+                f"Translation (x={x:g}, y={y:g}) would push kinetic_title ({pos}) outside "
+                f"the visible canvas safe area (allowed x:[{min_x:g},{max_x:g}], y:[{min_y:g},{max_y:g}]). "
+                "Keep y <= 24 for bottom titles (0 resets layout, negative moves up) or change position via update_motion_block."
+            )
+    elif abs(x) > width * 0.15 or abs(y) > height * 0.15:
+        raise ValueError(
+            "Translation would shift the full-frame motion_block outside safe canvas bounds."
+        )
+
+
+def _clip_facts(track, clip, content, snapshot_origins: dict[UUID, dict[str, Any]] | None = None):
     rate = content.settings.timebase
     obj = clip.object
     transform = getattr(obj, "transform", None)
     scene_number = next(
         (i for i, scene in enumerate(content.scenes, 1) if scene.scene_id == clip.scene_id), None
+    )
+    sound_recipe = (
+        (snapshot_origins or {}).get(clip.source.snapshot_id)
+        if obj.kind == "audio" and clip.source is not None
+        else None
     )
     return {
         "clip_id": clip.clip_id,
@@ -330,6 +479,10 @@ def _clip_facts(track, clip, content):
         **({"fit": obj.fit} if hasattr(obj, "fit") else {}),
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
         **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
+        **({"sound_recipe": sound_recipe} if sound_recipe else {}),
+        **({"block_id": obj.block_id, "block_version": obj.block_version, "props": obj.props,
+            "resources": [r.model_dump(mode="json") for r in obj.resources]}
+           if obj.kind == "motion_block" else {}),
         **({"text": obj.text[:160]} if obj.kind == "text" else {}),
         **({"text": obj.text, "language": obj.language, "voice_id": obj.voice_id,
             "alignment_id": str(obj.alignment.alignment_id) if obj.alignment else None}
@@ -457,17 +610,168 @@ async def edit_clip(
         limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
         if not 0 < source_end <= snapshot.duration_ticks or end > limit or end <= start:
             raise ValueError("The audio must fit the source and the current composition duration.")
-        origin = (snapshot.meta or {}).get("origin") or {}
-        role = "music" if origin.get("kind") == "programmatic_score" else (
-            "dialogue" if origin.get("video_narration_hash") else "effect")
-        track_id = f"trk_editor_{role}"
-        track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
-        if track and (track.kind != "audio" or track.role != role):
-            raise ValueError("The destination track has a different role.")
+        meta = snapshot.meta or {}
+        origin = meta.get("origin") or {}
+        is_music = (
+            origin.get("kind") in {"programmatic_score", "library_music"}
+            or bool(meta.get("music"))
+        )
+        role = "music" if is_music else (
+            "dialogue" if origin.get("video_narration_hash") else "effect"
+        )
+        if role == "effect":
+            def _overlaps(t):
+                return any(c.range.start < end and start < c.range.end for c in t.clips)
+
+            existing_effects = sorted(
+                (t for t in content.timeline.tracks if t.kind == "audio" and t.role == "effect"),
+                key=lambda t: t.order,
+            )
+            free_track = next((t for t in existing_effects if not _overlaps(t)), None)
+            if free_track is not None:
+                track_id = free_track.track_id
+            else:
+                used_ids = {t.track_id for t in content.timeline.tracks}
+                track_id = "trk_editor_effect"
+                idx = 2
+                while track_id in used_ids:
+                    track_id = f"trk_editor_effect_{idx}"
+                    idx += 1
+        else:
+            track_id = f"trk_editor_{role}"
+            track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
+            if track and (track.kind != "audio" or track.role != role):
+                raise ValueError("The destination track has a different role.")
         ops = fixed_audio_ops(content, source_id=snapshot.id, source_digest=snapshot.digest,
                               track_id=track_id, role=role, clip_id=f"clp_{identity.hex}",
                               object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
                               source_start=0, source_end=source_end, gain_db=args.gain_db)
+    elif isinstance(args, EditAudioClipArgs):
+        from app.editing.timing import source_ticks_to_output_ticks
+        from app.models.tables import SourceSnapshot
+
+        target = clips.get(args.clip_id)
+        if target is None or target.object.kind != "audio":
+            raise ValueError("Select an existing audio clip to edit.")
+        updated_obj = (
+            target.object.model_copy(update={"gain_db": args.gain_db})
+            if args.gain_db is not None
+            else target.object
+        )
+        old_source_id = str(target.source.snapshot_id) if target.source else None
+        new_source_id = str(args.source_id) if args.source_id is not None else old_source_id
+        if updated_obj.gain_db == target.object.gain_db and new_source_id == old_source_id:
+            raise ValueError("The audio clip already has these settings.")
+        extra["gain_db_before"] = target.object.gain_db
+        extra["gain_db_after"] = updated_obj.gain_db
+        extra["source_before"] = old_source_id
+        extra["source_after"] = new_source_id
+        update_fields: dict[str, Any] = {}
+        if args.gain_db is not None:
+            update_fields["object"] = updated_obj
+        if args.source_id is not None:
+            snapshot = await db.get(SourceSnapshot, args.source_id)
+            if (
+                snapshot is None
+                or snapshot.owner_id != project.user_id
+                or snapshot.origin_project_id != project.id
+                or snapshot.kind != "audio"
+                or not snapshot.duration_ticks
+            ):
+                raise ValueError("Select a fixed audio source from the current project.")
+            if snapshot.id not in {b.snapshot_id for b in content.sources}:
+                ops.append(BindSource(op="bind_source", snapshot_id=snapshot.id))
+            limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
+            new_out_dur = source_ticks_to_output_ticks(snapshot.duration_ticks, rate)
+            new_end = min(limit, target.range.start + new_out_dur)
+            if new_end <= target.range.start:
+                raise ValueError("The replacement audio does not fit at this clip's start time.")
+            from app.editing.timing import output_ticks_to_source_ticks
+
+            used_source_end = min(
+                snapshot.duration_ticks,
+                output_ticks_to_source_ticks(new_end - target.range.start, rate),
+            )
+            update_fields["source"] = ClipSource(
+                snapshot_id=snapshot.id,
+                snapshot_digest=snapshot.digest,
+                source_range=TimeRange(start=0, end=used_source_end),
+            )
+            if new_end != target.range.end:
+                update_fields["range"] = TimeRange(start=target.range.start, end=new_end)
+        ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, **update_fields))
+    elif isinstance(args, InsertMotionBlockArgs):
+        from app.editing.revisions import motion_block_ops
+        from app.editing.sources import register_web_view_snapshot
+        from app.models.tables import Asset, SourceSnapshot
+
+        start = _ticks(args.start_seconds, rate)
+        end = _ticks(args.end_seconds, rate)
+        limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
+        if not 0 <= start < end <= limit:
+            raise ValueError("The motion block window must fit inside the composition duration.")
+        legacy_asset = select(Asset.id).where(Asset.user_id == project.user_id, Asset.project_id == project.id)
+        resolved_resources: list[dict[str, Any]] = []
+        ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
+        for idx, res_id in enumerate(args.resources or []):
+            snap = await db.scalar(select(SourceSnapshot).where(
+                SourceSnapshot.id == res_id,
+                SourceSnapshot.owner_id == project.user_id,
+                (SourceSnapshot.origin_project_id == project.id)
+                | (SourceSnapshot.origin_project_id.is_(None) & SourceSnapshot.asset_id.in_(legacy_asset)),
+            ))
+            if snap is None:
+                raise ValueError(f"Resource snapshot {res_id} is unavailable in this project.")
+            if snap.kind == "web":
+                views = (snap.meta or {}).get("views") or []
+                chosen_view = args.view_id or (views[0].get("view_id") if views else None)
+                if not chosen_view:
+                    raise ValueError("The captured webpage has no rendered views.")
+                snap = await register_web_view_snapshot(
+                    db, owner_id=project.user_id, web_snapshot=snap, view_id=chosen_view,
+                )
+                await db.flush()
+            if snap.kind != "image" or not snap.storage_key:
+                raise ValueError("Motion block resources must be fixed images or captured webpage views.")
+            ctype = (snap.meta or {}).get("content_type") or (
+                "image/jpeg" if snap.storage_key.lower().endswith((".jpg", ".jpeg"))
+                else "image/webp" if snap.storage_key.lower().endswith(".webp")
+                else "image/png"
+            )
+            if ctype not in ext_map:
+                ctype = "image/png"
+            resolved_resources.append({
+                "path": f"media/img_{idx}{ext_map[ctype]}",
+                "snapshot_id": str(snap.id),
+                "snapshot_digest": snap.digest,
+                "content_type": ctype,
+            })
+        scene = next((s for s in content.scenes if s.range.start <= start and end <= s.range.end), None)
+        ops = motion_block_ops(
+            content,
+            block_id=args.block_id,
+            props=args.props,
+            resources=resolved_resources,
+            clip_id=f"clp_mg_{identity.hex}",
+            object_id=f"obj_mg_{identity.hex}",
+            scene_id=scene.scene_id if scene else None,
+            start=start,
+            end=end,
+        )
+    elif isinstance(args, UpdateMotionBlockArgs):
+        target = clips.get(args.clip_id)
+        if target is None or not isinstance(target.object, MotionBlockObject):
+            raise ValueError("Select an existing motion_block clip to update.")
+        merged_props = {**target.object.props, **args.props_patch}
+        updated_obj = MotionBlockObject.model_validate({
+            **target.object.model_dump(mode="json"),
+            "props": merged_props,
+        })
+        if updated_obj.props == target.object.props:
+            raise ValueError("The motion block already has these prop values.")
+        extra["props_before"] = target.object.props
+        extra["props_after"] = updated_obj.props
+        op = UpdateClip(op="update_clip", clip_id=target.clip_id, object=updated_obj)
     elif isinstance(args, ObjectArgs):
         target = next((clip for _, clip in entries if clip.object.object_id == args.id), None)
         if target is None or not getattr(target.object, "transform", None):
@@ -478,6 +782,14 @@ async def edit_clip(
                 "Keyframes control this property. Its static transform cannot make this edit."
             )
         updates = {"scale": args.value} if name == "scale" else {"x": args.x, "y": args.y}
+        if name == "translate" and isinstance(target.object, MotionBlockObject):
+            validate_motion_block_translate(
+                target.object,
+                x=args.x,
+                y=args.y,
+                width=float(content.settings.width),
+                height=float(content.settings.height),
+            )
         transform = target.object.transform.model_copy(update=updates)
         extra["transform_before"] = target.object.transform.model_dump()
         extra["transform_after"] = transform.model_dump()
@@ -611,8 +923,10 @@ async def edit_clip(
         ops=ops or [op],
     )
     saved_content = content_of(saved)
+    saved_clips = [c for t in saved_content.timeline.tracks for c in t.clips if c != clips.get(c.clip_id)]
+    origins = await _load_snapshot_origins(db, saved_clips)
     changed = [
-        _clip_facts(t, c, saved_content)
+        _clip_facts(t, c, saved_content, origins)
         for t in saved_content.timeline.tracks
         for c in t.clips
         if c != clips.get(c.clip_id)
@@ -680,6 +994,13 @@ async def execute_editor(turn, name, args):
                 return ToolObservation(json.dumps(result), version_saved=True, valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}")
             except ValueError as exc:
                 return ToolObservation(str(exc), ok=False, user_error=str(exc))
+    if not base and turn.project is not None and name == "generate_sfx":
+        from app.chat.editor_media import execute_generate_sfx
+
+        try:
+            return await execute_generate_sfx(turn, args, None, None)
+        except (ValueError, PermissionError) as exc:
+            return ToolObservation(str(exc), ok=False, user_error=str(exc))
     if not base and turn.project is not None and name in {"generate_music", "generate_voice", "generate_image"}:
         from app.chat.editor_media import generate_media
 
@@ -740,10 +1061,18 @@ async def execute_editor(turn, name, args):
                 if name == "remove_clip":
                     focused.pop(result["removed_clip_id"], None)
                 for clip in result["changed_clips"]:
-                    focused[clip["clip_id"]] = {
+                    entry = {
                         k: clip[k]
                         for k in ("clip_id", "object_id", "kind", "start_seconds", "end_seconds")
                     }
+                    if clip.get("kind") == "motion_block":
+                        entry["block_id"] = clip.get("block_id")
+                        entry["props"] = clip.get("props")
+                    elif clip.get("kind") == "audio":
+                        entry["gain_db"] = clip.get("gain_db")
+                        if clip.get("source"):
+                            entry["source_snapshot_id"] = clip["source"].get("snapshot_id")
+                    focused[clip["clip_id"]] = entry
                 if name == "set_keyframe":
                     focused[args.clip_id]["transform_animations"] = result["transform_animations"]
                 applied = (
@@ -765,6 +1094,23 @@ async def execute_editor(turn, name, args):
                         }
                     if name in {"translate", "scale"}:
                         receipt.update(transform_before=result["transform_before"], transform_after=result["transform_after"])
+                    if name == "update_motion_block":
+                        receipt.update(
+                            clip_id=args.clip_id,
+                            props_before=result["props_before"],
+                            props_after=result["props_after"],
+                        )
+                    if name == "edit_audio_clip":
+                        g_before = result["gain_db_before"]
+                        g_after = result["gain_db_after"]
+                        receipt.update(
+                            clip_id=args.clip_id,
+                            gain_db_before=g_before,
+                            gain_db_after=g_after,
+                            gain_delta_db=round(g_after - g_before, 2),
+                            source_before=result["source_before"],
+                            source_after=result["source_after"],
+                        )
                     if name == "split_clip":
                         receipt["right_clip_id"] = result["right_clip_id"]
                     before = getattr(turn, "_editor_last_preview", None)
@@ -829,7 +1175,8 @@ async def execute_editor(turn, name, args):
                         "offset": args.offset,
                         "next_offset": next_offset if next_offset < len(clips) else None,
                     }
-                facts = [_clip_facts(track, clip, content) for track, clip in page]
+                origins = await _load_snapshot_origins(db, [clip for _, clip in page])
+                facts = [_clip_facts(track, clip, content, origins) for track, clip in page]
                 _remember_labels(turn, facts, version.id, version.content_digest, version.version)
                 return ToolObservation(
                     json.dumps(
@@ -850,6 +1197,11 @@ async def execute_editor(turn, name, args):
                 from app.chat.editor_media import deliver_video
 
                 return await deliver_video(db, turn, args.output_id, base)
+            if name == "generate_sfx":
+                from app.chat.editor_media import execute_generate_sfx
+
+                await db.close()
+                return await execute_generate_sfx(turn, args, composition, version)
             if name in {"export_video", "generate_music", "generate_voice", "generate_image"}:
                 from app.chat.editor_media import generate_media
 
