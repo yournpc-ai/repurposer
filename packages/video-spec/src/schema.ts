@@ -402,6 +402,8 @@ const trackSchema = z
   })
   .strict();
 
+export const transitionKinds = ["crossfade", "whip_pan", "wipe_reveal", "zoom_through", "iris_focus"] as const;
+
 export const videoSpecSchema = z
   .object({
     family: z.literal("video"),
@@ -416,13 +418,15 @@ export const videoSpecSchema = z
     tracks: z.array(trackSchema).min(1),
     transitions: z.array(z.object({
       transition_id: z.string().min(1),
-      kind: z.literal("crossfade"),
+      kind: z.enum(transitionKinds).default("crossfade"),
       from_clip_id: z.string().min(1),
       to_clip_id: z.string().min(1),
       start_frame: z.number().int().nonnegative(),
       end_frame: z.number().int().positive(),
       cut_frame: z.number().int().positive(),
-    }).strict()).optional(),
+    }).strict().refine(t => t.start_frame < t.cut_frame && t.cut_frame < t.end_frame, {
+      message: "A centered transition needs frames on both sides of its cut",
+    })).optional(),
     provenance: z
       .object({
         composition_id: z.string().min(1),

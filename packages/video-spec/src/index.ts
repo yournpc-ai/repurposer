@@ -1,6 +1,6 @@
 // Public contract surface of the video-spec family. This package never
 // imports React/Remotion — renderer adapters consume it from the outside.
-export { videoSpecSchema } from "./schema";
+export { transitionKinds, videoSpecSchema } from "./schema";
 export type {
   VideoSpec,
   VideoClip,

@@ -4,7 +4,7 @@ The four JSONB columns of a ``composition_versions`` row (settings / sources
 / scenes / timeline) serialize from ``CompositionContent`` — this module is
 the single shape law for what a version may carry. Current scope: Text /
 Shape / Image / Web / Video / Audio / Speech objects over visual + audio
-tracks; centered crossfades connect adjacent opaque fixed-media clips.
+tracks; centered transitions connect adjacent opaque fixed-media clips.
 Pending Speech carries its reviewed
 script and voice, never fabricated source media.
 
@@ -624,7 +624,7 @@ def captured_element_box(element: dict) -> list[float] | None:
         return None
     w, h = element["w"], element["h"]
     box = (element["x"] - w / 2, element["y"] - h / 2, w, h)
-    return [round(min(1.0, max(0.0, coordinate)), 3) for coordinate in box]
+    return [round(min(1.0, max(0.0, coordinate)), 12) for coordinate in box]
 
 
 class ProductShowcaseCallout(BaseModel):
@@ -638,32 +638,37 @@ class ProductShowcaseCallout(BaseModel):
     height: float = Field(gt=0.0, le=1.0, allow_inf_nan=False)
     label: str | None = Field(default=None, max_length=64)
 
-    @classmethod
-    def resolve_props(cls, props: dict, views: list[dict], view_id: str) -> dict:
-        callout = props.get("callout")
-        if not isinstance(callout, dict) or "element_id" not in callout:
-            return props
-        element_id = callout["element_id"]
-        if set(callout) - {"element_id", "label"}:
-            raise ValueError("An element_id callout accepts only element_id and label.")
-        view = next((v for v in views if v["view_id"] == view_id), None)
-        if view is None:
-            raise ValueError(f"No captured view {view_id!r}.")
-        element = next((e for e in view.get("elements", []) if e["id"] == element_id), None)
-        if element is None:
-            raise ValueError(f"No element {element_id!r} in view {view_id!r}.")
-        box = captured_element_box(element)
-        if box is None:
-            raise ValueError(f"Element {element_id!r} in view {view_id!r} has no captured box.")
-        x, y, width, height = box
-        resolved = cls(x=x, y=y, width=width, height=height, label=callout.get("label"))
-        return {**props, "callout": resolved.model_dump(exclude_none=True)}
-
     @model_validator(mode="after")
     def _in_viewport(self) -> ProductShowcaseCallout:
         if self.x + self.width > 1.001 or self.y + self.height > 1.001:
             raise ValueError("callout box must stay inside [0, 1] viewport coordinates")
         return self
+
+
+BackdropStyle = Literal["ambient_mesh", "architectural_grid", "editorial_paper", "clean"]
+CueSecond = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+UnitCoordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+
+
+class ShowcaseStep(ProductShowcaseCallout):
+    start_s: CueSecond
+    end_s: CueSecond
+    label: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _positive_window(self):
+        if self.end_s <= self.start_s:
+            raise ValueError("Each callout step needs end_s > start_s.")
+        return self
+
+
+class ShowcaseCursor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x: UnitCoordinate
+    y: UnitCoordinate
+    click_at_s: CueSecond
+    start_x: UnitCoordinate | None = None
+    start_y: UnitCoordinate | None = None
 
 
 class ProductShowcaseProps(BaseModel):
@@ -680,9 +685,58 @@ class ProductShowcaseProps(BaseModel):
     zoom_scale: float = Field(default=1.05, ge=1.0, le=1.35, allow_inf_nan=False)
     focus_x: float = Field(default=0.5, ge=0.1, le=0.9, allow_inf_nan=False)
     focus_y: float = Field(default=0.35, ge=0.1, le=0.9, allow_inf_nan=False)
+    # Omit implicit engine defaults to preserve the serialized identity of older drafts.
+    camera_preset: Literal["flat", "tilt_left", "tilt_right", "dolly_zoom", "scroll_reveal"] = Field(
+        default="flat", exclude_if=lambda value: value == "flat",
+    )
+    scroll_from_y: UnitCoordinate = Field(default=0, exclude_if=lambda value: value == 0)
+    scroll_to_y: UnitCoordinate = Field(default=1, exclude_if=lambda value: value == 1)
+    cursor: ShowcaseCursor | None = Field(default=None, exclude_if=lambda value: value is None)
+    callout_steps: list[ShowcaseStep] = Field(default_factory=list, max_length=4, exclude_if=lambda steps: not steps)
     callout: ProductShowcaseCallout | None = None
     accent_color: str = _HEX_COLOR
+    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
     show_backdrop: bool = True
+
+    @field_validator("callout_steps")
+    @classmethod
+    def _ordered_steps(cls, steps: list[ShowcaseStep]) -> list[ShowcaseStep]:
+        if any(a.end_s > b.start_s for a, b in zip(steps, steps[1:])):
+            raise ValueError("Callout steps must be ordered and must not overlap.")
+        return steps
+
+    @staticmethod
+    def resolve_props(props: dict, views: list[dict], view_id: str) -> dict:
+        """Resolve authoring targets once, against the selected capture only."""
+        view = next((v for v in views if v["view_id"] == view_id), None)
+        if view is None:
+            raise ValueError(f"No captured view {view_id!r}.")
+
+        def resolve(target, *, cursor=False):
+            if not isinstance(target, dict) or "element_id" not in target:
+                return target
+            if {"x", "y", "width", "height"} & target.keys():
+                raise ValueError("Choose either element_id or explicit coordinates.")
+            element_id = target["element_id"]
+            matches = [e for e in view.get("elements", []) if e["id"] == element_id]
+            if len(matches) != 1:
+                raise ValueError(f"No unique element {element_id!r} in view {view_id!r}.")
+            box = captured_element_box(matches[0])
+            if box is None:
+                raise ValueError(f"Element {element_id!r} in view {view_id!r} has no captured box.")
+            x, y, width, height = box
+            region = ProductShowcaseCallout(x=x, y=y, width=width, height=height)
+            geometry = ({"x": x + width / 2, "y": y + height / 2} if cursor
+                        else region.model_dump(exclude_none=True))
+            return {**{k: v for k, v in target.items() if k != "element_id"}, **geometry}
+
+        result = dict(props)
+        for key in ("callout", "cursor"):
+            if key in result:
+                result[key] = resolve(result[key], cursor=key == "cursor")
+        if isinstance(result.get("callout_steps"), list):
+            result["callout_steps"] = [resolve(step) for step in result["callout_steps"]]
+        return result
 
     @model_validator(mode="before")
     @classmethod
@@ -704,6 +758,7 @@ class StatementHookProps(BaseModel):
 
     headline: str = Field(min_length=1, max_length=160)
     eyebrow: str | None = Field(default=None, max_length=60)
+    highlight_at_s: CueSecond | None = Field(default=None, exclude_if=lambda value: value is None)
     highlight_phrase: str | None = Field(default=None, max_length=80)
     subheadline: str | None = Field(default=None, max_length=200)
     theme: Literal["light", "dark"] = "light"
@@ -711,6 +766,7 @@ class StatementHookProps(BaseModel):
     accent_color: str = _HEX_COLOR
     entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
     exit_duration_s: float = Field(default=0.35, ge=0.0, le=1.5, allow_inf_nan=False)
+    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
     show_backdrop: bool = True
 
     @model_validator(mode="before")
@@ -731,6 +787,7 @@ class MetricGridItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    reveal_at_s: CueSecond | None = Field(default=None, exclude_if=lambda s: s is None)
     value: str = Field(min_length=1, max_length=24)
     label: str = Field(min_length=1, max_length=48)
     detail: str | None = Field(default=None, max_length=110)
@@ -750,6 +807,7 @@ class MetricGridProps(BaseModel):
     accent_color: str = _HEX_COLOR
     stagger_s: float = Field(default=0.14, ge=0.04, le=0.6, allow_inf_nan=False)
     count_up: bool = True
+    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
     show_backdrop: bool = True
 
     @model_validator(mode="before")
@@ -778,6 +836,7 @@ class ClosingCtaProps(BaseModel):
     accent_color: str = _HEX_COLOR
     entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
     logo_surface: Literal["light_pill", "raw"] = "light_pill"
+    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
     show_backdrop: bool = True
 
     @model_validator(mode="before")
@@ -1159,12 +1218,15 @@ class Scene(BaseModel):
         return _list_wire(value)
 
 
+TransitionKind = Literal["crossfade", "whip_pan", "wipe_reveal", "zoom_through", "iris_focus"]
+
+
 class Transition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     transition_id: str = _ID
     from_clip_id: str = _ID
     to_clip_id: str = _ID
-    kind: Literal["crossfade"] = "crossfade"
+    kind: TransitionKind = "crossfade"
     duration: int = Field(gt=0, description="转场时长，单位为 settings.timebase 的成片刻度，不使用秒数或帧数。")
     alignment: Literal["center"] = "center"
 

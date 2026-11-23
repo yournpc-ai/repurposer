@@ -26,7 +26,7 @@ function canonical(value: unknown): string {
 }
 
 function artifactDirectory(identity: unknown, cacheRoot: string): string {
-  const key = createHash("sha256").update(canonical({ version: 2, rendererAudioPatch, identity })).digest("hex");
+  const key = createHash("sha256").update(canonical({ version: 3, rendererAudioPatch, identity })).digest("hex");
   return path.join(cacheRoot, key);
 }
 

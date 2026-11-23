@@ -90,3 +90,16 @@ test("legacy text styles read with zero letter spacing", () => {
   assert.equal(object.kind, "text");
   if (object.kind === "text") assert.equal(object.style.letter_spacing, 0);
 });
+
+test("centered transitions preserve cinematic kinds and default to crossfade", () => {
+  const transition = { transition_id: "cut", from_clip_id: "a", to_clip_id: "b", start_frame: 24, cut_frame: 30, end_frame: 36 };
+  function parse(fields: Record<string, unknown>) {
+    return videoSpecSchema.parse({ ...textSpec(), transitions: [{ ...transition, ...fields }] }).transitions?.[0];
+  }
+  assert.equal(parse({})?.kind, "crossfade");
+  for (const kind of ["crossfade", "whip_pan", "wipe_reveal", "zoom_through", "iris_focus"]) {
+    assert.equal(parse({ kind })?.kind, kind);
+  }
+  assert.throws(() => parse({ kind: "unknown" }));
+  assert.throws(() => parse({ end_frame: transition.cut_frame }));
+});
