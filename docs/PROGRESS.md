@@ -4,17 +4,17 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 **2026-11-22 成片存储策略更新**　正式导出与素材共用当前公开 TOS 桶。新成片写入 `exports/`，既有公开测试成片按原对象地址回放。成片预览使用公开直链，上传与带文件名的下载继续使用签名。项目、版本、导出费用和交付检查仍由原有接口负责。下方关于私有桶的记录属于此前的验收环境。
 
-> 更新至 2026-11-23。Agent Editor 的当前顺序见 §0，作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
+> 更新至 2026-11-24。Agent Editor 的当前顺序见 §0，作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
 
 ## 0. 当前里程碑与施工序列
 
-**当前唯一产品主线：Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（ACTIVE）。** 在 Batch 1 纵向闭环（`5c234fa2`）与 Renderer 音频时钟候选（`17b0e3dc`）合入 `main@0171cfda` 后，分两道内部检查点推进：**Checkpoint 2A**（`resources[0..N]` 统一 staging + 3 个新 Motion Blocks `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + `crossfade` 扩展 + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 35–40s OxValue 英文投资人版商业成片交付真人盲评）与 **Checkpoint 2B**（0 新表复用 `UserSkill`/`SkillVersion` 打通 `save_composition_as_skill` → `/` SkillPicker + `instantiate_skill_blueprint` 的 OxValue 跨角度/跨语言复刻与续改），并预留极薄隔离 Gemini 2.5 Pro 同题对照适配器（无 Key 不阻塞主线）。[Batch 2 施工与验收合同](tasks/batch2-multiscene-skill.md)
+**最新封板里程碑：Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（DONE · 已合入 `main@857d475a`）。** 零新 SQL 表完成全部两道检查点并通过真人验收：**Checkpoint 2A**（`resources[0..N]` 统一 staging + 3 个新 Motion Blocks `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + 不透明 `MotionBlockObject` `crossfade` + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 38.0s OxValue 英文投资人版 v40 交付并通过真人盲评）与 **Checkpoint 2B**（复用 `UserSkill`/`SkillVersion` 打通 `save_composition_as_skill` → `/` SkillPicker + `instantiate_skill_blueprint`，完成 OxValue 中文技术转移/治理跨视角复刻 v7 与单实例零漂移续改）。全仓核心回归（API 498 · Web 42/42 · 342 · Render 7/7 · sound-engine 2/2 · video-spec 11/11）及 Linux `apps/render/Dockerfile` 构建全绿；隔离 Gemini 2.5 Pro 适配器（`apps/api/app/providers/llm/gemini.py`）已就绪并按无 Key 约定静默预留，以 MiniMax 实证收口。下一批施工方向待用户拍板开启。[Batch 2 施工与验收合同](tasks/batch2-multiscene-skill.md)
 
-**前置封板基线。** Batch 1（9s OxValue 单镜创作 + 双维度零漂移修订 + 授权交付与 Chrome 恢复 + Linux Docker 构建）已完成并合入 `main`；I8 基础剪辑已阶段封板；Renderer 音频时钟候选已补完 `verifyAudioWindow` 基线探测失败闭修复与注错单测并合入 `main`（生产 Linux x86_64 验收、旧缓存排空与切换仍按独立基础设施门禁推进）；独立渲染核心 C 继续冻结。
+**前置封板基线。** Batch 1（9s OxValue 单镜创作 + 双维度零漂移修订 + 授权交付与 Chrome 恢复 + Linux Docker 构建）已完成并合入 `main@0171cfda`；I8 基础剪辑已阶段封板；Renderer 音频时钟候选已补完 `verifyAudioWindow` 基线探测失败闭修复与注错单测并合入 `main@17b0e3dc`（生产 Linux x86_64 验收、旧缓存排空与切换仍按独立基础设施门禁推进）；独立渲染核心 C 继续冻结。
 
 ### 0.1 里程碑状态
 
-- **Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（ACTIVE）。** 基于 `main` 拉取独立 worktree `feat/batch2-multiscene-skill` 施工，0 新 SQL 表，严格先过 **Checkpoint 2A** 真人盲评再进 **Checkpoint 2B**。[施工与验收合同](tasks/batch2-multiscene-skill.md)
+- **Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（DONE · 已合入 `main@857d475a`）。** 0 新 SQL 表交付多幕商业 MG（`statement_hook` / `metric_grid` / `closing_cta` + `callout`/`pill_caption` + `crossfade` + BGM 淡入淡出/闪避 + `swoosh_cut` + `resources[0..N]` staging）与可复用蓝图闭环（`save_composition_as_skill` / `instantiate_skill_blueprint`，事务外合成 SFX + 实测旁白自适应幕长 + 相对切点重锚音效）；8,000 字符对话窗 128 次模型调用实测截断率 6.25%、0 约束丢失。[施工与验收合同](tasks/batch2-multiscene-skill.md)
 
 - **Batch 1 · OxValue 首个专业 MG 音画镜头（DONE · 已合入 `main@0171cfda`）。** 交付 `packages/sound-engine`（5 配方 `-2.0 dBFS` 归一化）、Path β 原生 `MotionBlockObject`（`kinetic_title` / `product_showcase`）、统一二级分类元数据、`generate_sfx`/`edit_audio_clip`/`insert_motion_block`/`update_motion_block`、曲库与 11 个活体验证 MiniMax 音色及 3-Round 真实 Chat 五面验收。
 
@@ -44,7 +44,6 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前（主线）** | **多幕商业 MG 宣传片与 Skill + Slot 复刻（Batch 2）** | Checkpoint 2A：`resources[0..N]` staging + `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + `MotionBlockObject` `crossfade` + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 35–40s OxValue 商业成片盲评；Checkpoint 2B：0 新表 `save_composition_as_skill` + `instantiate_skill_blueprint` 跨角度/跨语言复刻。 | [施工与验收合同](tasks/batch2-multiscene-skill.md) |
 | **当前（独立门禁）** | **Renderer 音频时钟候选生产切换** | `verifyAudioWindow` 基线探测失败闭与注错单测已合入 `main@17b0e3dc`；待执行 Linux x86_64 目标架构验收、旧缓存排空与生产切换。 | [渲染合同](RENDERING.md) / [I8 候选证据](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) |
 | 历史验收 | **Agent Editor · 首错归因与最小闭环** | 六个独立素材原始首次仍为 3 完整、2 部分、1 失败，不回填分母。单人是最终视觉陈述过强，字幕是审阅已指出硬要求未满足后仍交付且漏报，开放演讲首错是已有作品上误用 `create_video`。本轮仅调整现有停止/未满足项 Prompt，并在固定源预览补源音频事实。原话复测中字幕本轮目标完整，开放 17 次请求交付但仍有留边误述，单人仍有手部误述；两个新增独立素材主任务达成。双人视觉编辑与 API 续改保持；接缝、片尾卡、媒体生成三项回归因 Worker fencing/固定音频恢复失控未通过。当前 API core 509、Web 44 文件/411、Renderer 28 通过，三份新 Output 实播/硬刷新、Stop 和 Studio 续发已核验。开放审美、主观音频、自然语言事实与 Worker 故障仍未关闭。 | [首错、五面、费用与开放项](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md) |
 | 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |

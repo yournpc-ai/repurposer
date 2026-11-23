@@ -1,6 +1,6 @@
-# Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（现行施工合同）
+# Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（验收归档）
 
-> **状态（2026-11-23）**：ACTIVE（当前唯一主线）。前置基线：Renderer 音频时钟候选（`17b0e3dc`）与 Batch 1（`5c234fa2`）已合入 `main@0171cfda`，全仓核心回归绿灯。上位架构见 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[声音合同](../MUSIC_ARCHITECTURE.md) 与 [进度 §0](../PROGRESS.md)。
+> **状态（2026-11-24）**：DONE（已合入 `main@857d475a`）。Checkpoint 2A（38.0s OxValue 英文投资人版 v40）与 Checkpoint 2B（Round 4 固化 `oxvalue-promo-blueprint` → Round 5 中文技术转移/治理视角复刻 v7 与单实例零漂移续改）全部真实 Chat 闭环通过并获用户拍板；0 新 SQL 表；全仓核心回归（API 498 · Web 42/42 · 342 · Render 7/7 · sound-engine 2/2 · video-spec 11/11）及 Linux `apps/render/Dockerfile` 构建全绿；8,000 字符窗口 128 次调用实测截断率 6.25%、0 约束丢失；隔离 `gemini.py` 适配器静默预留（无 `GEMINI_API_KEY`，以 MiniMax 实证收口）。上位架构见 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[声音合同](../MUSIC_ARCHITECTURE.md) 与 [进度 §0](../PROGRESS.md)。
 
 ---
 
