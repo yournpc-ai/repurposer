@@ -139,7 +139,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             system="用用户在本次对话中使用的语言作答。作品已经保存。根据本次保存回执展示实际版本，然后调用 answer。\n" + presentation,
             context="当前视频轮次（目标和状态由服务端提供）：\n{\"video_stage\": \"version_present\"}",
             stage="version_present", include_project_context=False,
-            include_observation_media=False, observation_tools=frozenset({"create_video"}),
+            include_observation_media=False, observation_tools=frozenset({"create_video", "instantiate_skill_blueprint"}),
         )
 
     pending = facts.get("pending_question")
@@ -244,6 +244,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             names.discard("generate_voice")
         if not native_creation:
             names.discard("create_video")
+            names.discard("instantiate_skill_blueprint")
+        if not selected:
+            names.discard("save_composition_as_skill")
         completed_delivery = facts.get("delivered") or {}
         if selected:
             names.update({"prepare_video_materials", "get_asset"})
@@ -260,8 +263,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             names.update({"prepare_video_materials", "get_asset", "get_understanding", "search_transcript"})
             # A project without a saved work can generate media, but has no timeline to inspect or edit.
             from app.chat.editor import WRITE_TOOLS
+            from app.models.schemas import ExternalSkillReference
             names.difference_update({*WRITE_TOOLS, "inspect_timeline", "inspect_clip", "preview_range",
-                                     "export_video", "deliver_video"})
+                                     "export_video", "deliver_video", "save_composition_as_skill"})
+            if not isinstance(facts.get("skill"), ExternalSkillReference):
+                names.discard("instantiate_skill_blueprint")
             source_resources = resources
             if readiness.task_kind == "website_promo":
                 from app.chat.readiness import canonical_url
@@ -299,6 +305,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 context["creative_state"] = _creative_state_projection(creative_state)
             if facts.get("material_pending") and not context["available_sources"]:
                 names.discard("create_video")
+                names.discard("instantiate_skill_blueprint")
             if facts.get("material_pending_line"):
                 context["material_pending_line"] = facts["material_pending_line"]
             if readiness.task_kind == "website_promo":
@@ -307,6 +314,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 website_evidence_rule = "网站产品主张和画面取自当前来源。采集失败时说明实际错误。"
                 if not (readiness.text_ready and readiness.required_views_ready):
                     names.discard("create_video")
+                    names.discard("instantiate_skill_blueprint")
         from app.chat.video_turn_seats import asks_for_export, draft_only_request
         delivery = facts.get("preceding_delivery") or {}
         if selected and delivery.get("composition_id") == selected["composition_id"]:
@@ -414,6 +422,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                     "多幕旁白按幕留 0.4–0.6 秒自然呼吸气口，避免相邻旁白首尾撞车。"
                     "音效用 generate_sfx（含 whoosh / impact / click / riser / stinger / swoosh_cut，已归一化至 −2 dBFS，常规点缀放 −10 ~ −14 dB），单实例调电平、淡入淡出或换音源用 edit_audio_clip；遵循克制原则：只在明确视觉动效节拍（开场/定格、crossfade 切镜用 swoosh_cut、指标弹出、收尾用 stinger）处点缀，静态无节拍画面不要硬塞音效。"
                     "音效卡点结合 peak_offset_ms 与 sync_cue，对照 preview_range 的 audio_windows 与 masking_warnings 控电平；audio_available_to_model 为 false 时不声称主观听感。"
+                    "当用户要求把已打磨的多幕作品固化为可复用 Skill / 模板时，调用 save_composition_as_skill 保存脱敏蓝图（SKILL.md + references/blueprint.json）；当本轮绑定了含 slot_blueprint_v1 的外部 Skill（见 bound_skill_method 与 skill_reference.skill_version_id）且尚无作品时，先按新需求采集目标网页/素材与新语言旁白（以及可选 BGM），再一次性调用 instantiate_skill_blueprint 填入全部可替换 Slot 展开成可编辑作品，之后按常规单实例工具预览或微调。"
                     "以本轮开始时的作品为基准，对照 already_saved_this_turn 的改动前后值（含 gain_delta_db 与 props_before/after）决定下一步；相对调整（如“减 3 dB”“慢一点”）每段只执行一次，禁止多轮重复叠加。按需选择是否预览和观看范围，用户点名的窗口要准确播放。"
                     "结束时说明实际改动和尚未达成的目标。画面和声音判断以实际收到的对应媒体及其覆盖范围为限。"
                     "不得擅改目标或追加未经许可的生成与导出。只预览的任务以播放为止。"

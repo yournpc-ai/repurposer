@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.editor_create import CreateVideoArgs
+from app.skills.blueprint import InstantiateSkillBlueprintArgs
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
 from app.editing.edits import BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, TimeRange, Transition
@@ -180,6 +181,18 @@ class UpdateMotionBlockArgs(BaseModel):
     )
 
 
+class SaveCompositionAsSkillArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(
+        min_length=2, max_length=64,
+        description="Kebab-case Skill slug (e.g. 'oxvalue-promo-blueprint') shown in the / SkillPicker.",
+    )
+    description: str = Field(
+        min_length=4, max_length=400,
+        description="Short description of the multi-act style, pacing, and ideal remake use case.",
+    )
+
+
 class InspectTimelineArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     offset: int = Field(default=0, ge=0, description="First clip index, starting at zero.")
@@ -295,6 +308,16 @@ def _editor_tool(name, description, args, key):
 
 EDITOR_TOOLS = (
     _editor_tool("create_video", "Create the first editable version from ordered shots. A title card only needs headline, duration_seconds and text_color. Save without exporting.", CreateVideoArgs, "createVideo"),
+    _editor_tool(
+        "instantiate_skill_blueprint",
+        "Instantiate a bound slot_blueprint_v1 Skill into a fresh editable multi-act Composition by filling every act's replaceable slots (fresh copy, metrics, webpage/image resources, and per-act narration). Adapts act durations to measured narration + breathing room and re-anchors SFX automatically.",
+        InstantiateSkillBlueprintArgs, "instantiateSkill",
+    ),
+    _editor_tool(
+        "save_composition_as_skill",
+        "Save the current multi-act Composition as an owner-scoped reusable Skill (SKILL.md + privacy-stripped references/blueprint.json) that appears immediately in the / SkillPicker for future remakes.",
+        SaveCompositionAsSkillArgs, "saveSkill",
+    ),
     _editor_tool(
         "deliver_video", "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
         DeliverVideoArgs, "deliverVideo",
@@ -1099,6 +1122,22 @@ async def execute_editor(turn, name, args):
         if (pin.get("output_id") == str(args.output_id) == review.get("output_id")
                 and pin.get("output_version_id") == review.get("composition_version_id")):
             base = {k: review[k] for k in ("composition_id", "composition_version_id", "content_digest")}
+    if name == "instantiate_skill_blueprint":
+        from app.skills.blueprint import instantiate_skill_blueprint
+
+        if not turn.project or not turn.turn_id or not current_call_id():
+            return ToolObservation("A project and persisted opening are required.", ok=False)
+        try:
+            result = await instantiate_skill_blueprint(
+                turn=turn, args=args, call_id=current_call_id()
+            )
+            return ToolObservation(
+                json.dumps(result),
+                version_saved=True,
+                valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}",
+            )
+        except ValueError as exc:
+            return ToolObservation(str(exc), ok=False, user_error=str(exc))
     if name == "create_video":
         from app.chat.editor_create import create_video
         from app.chat.editor_recovery import editor_lock_key
@@ -1327,6 +1366,19 @@ async def execute_editor(turn, name, args):
                     ),
                     valid_for_key=version_key,
                 )
+            if name == "save_composition_as_skill":
+                from app.skills.blueprint import save_composition_as_skill
+
+                result = await save_composition_as_skill(
+                    db,
+                    owner_id=turn.project.user_id,
+                    project_id=turn.project.id,
+                    composition_id=composition.id,
+                    version_id=version.id,
+                    name=args.name,
+                    description=args.description,
+                )
+                return ToolObservation(json.dumps(result), valid_for_key=version_key)
             if name == "deliver_video":
                 from app.chat.editor_media import deliver_video
 

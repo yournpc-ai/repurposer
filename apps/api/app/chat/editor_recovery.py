@@ -15,6 +15,11 @@ def editor_lock_key(turn_id):
 
 EDIT_LABELS = {
     "create_video": ("创建初稿", "create draft"),
+    "instantiate_skill_blueprint": ("展开 Skill 蓝图", "instantiate Skill blueprint"),
+    "insert_motion_block": ("加入动效组件", "insert motion block"),
+    "update_motion_block": ("调整动效组件", "update motion block"),
+    "edit_audio_clip": ("调整音频片段", "edit audio clip"),
+    "set_transition": ("设置转场", "set transition"),
     "insert_visual": ("插入图片", "insert image"),
     "insert_audio": ("插入音频", "insert audio"),
     "bind_clip_source": ("绑定固定素材", "bind fixed source"),
