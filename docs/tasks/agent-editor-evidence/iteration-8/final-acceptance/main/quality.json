@@ -1,0 +1,19 @@
+{
+  "job": "7a47ca27-0e05-5a2c-94aa-98d51893eee0",
+  "version": "4682cc68-125e-4ee0-9471-45358b27f905",
+  "sha256": "2b642ac8864dea3c537d34d1bfa15c50c7faae8b8ca07666cdf4e6d8229308fd",
+  "frame_count": 180,
+  "valid_samples": 288000,
+  "delta_x": -40.0,
+  "object": "obj_overlay_989ef066f37b5562968e2686e67d4c34",
+  "source": {
+    "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+    "source_range": null,
+    "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+  },
+  "picture_hit_min": 0.8201149425287356,
+  "outside_mae": 0.42363075086805557,
+  "subtitle_mae": 0.2868121317340067,
+  "preview_mae": 0.0,
+  "audio_corr": 1.0
+}

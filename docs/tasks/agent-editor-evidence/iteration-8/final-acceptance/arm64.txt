@@ -1,0 +1,20 @@
+2026-11-22T21:22:38.3322239Z  OS/Arch:           linux/arm64
+2026-11-22T21:22:38.3328525Z   OS/Arch:          linux/arm64
+2026-11-22T21:22:50.2587239Z candidate_diff=41961bef82ce3049847dfae2ab97bf16a55c598bc48dc068076ac81dc65b68c5 pnpm_patch_hash=2a914fa1fa9c60887f1bd370040872c062f92303a7b00555e8b5a9b689472713
+2026-11-22T21:23:16.5747446Z sha256:ebe4df25729895b45aae6a2e888dee3c9df07622f043a5ba49be2de002b2b579 linux/arm64 617782344 bytes
+2026-11-22T21:23:17.3089385Z dist/stringify-ffmpeg-filter.js: OK
+2026-11-22T21:24:57.9168050Z {'valid': 382000, 'decoded': 382000, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9179455Z {'valid': 382000, 'decoded': 382976, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9217223Z 24fps video.mp4 frames=191 ptsErrors=0 idErrors=0
+2026-11-22T21:24:57.9227857Z {'valid': 382000, 'decoded': 382976, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9266767Z {'valid': 382080, 'decoded': 382080, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9278817Z {'valid': 382080, 'decoded': 382976, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9302845Z 25fps video.mp4 frames=199 ptsErrors=0 idErrors=0
+2026-11-22T21:24:57.9313707Z {'valid': 382080, 'decoded': 382976, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9322619Z 25 fps Dynamic loudnorm verified
+2026-11-22T21:24:57.9337531Z {'valid': 384000, 'decoded': 384000, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9351908Z {'valid': 384000, 'decoded': 384000, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9362239Z 30fps video.mp4 frames=240 ptsErrors=0 idErrors=0
+2026-11-22T21:24:57.9374054Z {'valid': 384000, 'decoded': 384000, 'gaps': [], 'stems': {'voice': 0, 'whoosh': 0, 'impact': 0}, 'lag': 0, 'tail': 0}
+2026-11-22T21:24:57.9429805Z 24 fps short-window rejected, delivered baseline 5b0c78226318fe5b0228e50da3bbfa0db8d00797712f22f978b13a3b1f4b9d18
+2026-11-22T21:25:26.1031678Z sha256:49e626540f5fc96409d6f535028eb593940758b6c5dc5bd1925b907760e4ab1e linux/arm64 849688776 bytes

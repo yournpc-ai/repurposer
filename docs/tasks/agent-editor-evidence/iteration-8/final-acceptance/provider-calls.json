@@ -1,0 +1,2975 @@
+{
+  "schemas": {
+    "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348": [
+      {
+        "type": "function",
+        "function": {
+          "name": "ask_user",
+          "description": "询问一个确定目标所需的问题。",
+          "parameters": {
+            "$defs": {
+              "Option": {
+                "additionalProperties": false,
+                "description": "结构化问题中的一个选项。",
+                "properties": {
+                  "id": {
+                    "description": "本题内的选项 ID。固定选项按当前工具规范使用数字，服务端管理的实体目标保留稳定 ID。",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "description": {
+                    "default": "",
+                    "description": "用一行说明选择该项的理由，给出用户可以判断的结论，不展示推理过程。",
+                    "title": "Description",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "title": "Option",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "方案阶段的 ask_user 参数，沿用 QuestionProposal 的澄清结构，面向用户的正文通过消息发送。slot 指明所填的 Brief 字段，仅方案阶段使用，运行后的问题不回填 Brief。本轮的 Brief 更新和素材提升与该调用一并且只提交一次。",
+            "properties": {
+              "question": {
+                "description": "仅用界面语言写问题或问题组标题，不附引言或默认路径说明。",
+                "title": "Question",
+                "type": "string"
+              },
+              "options": {
+                "description": "从用户人设或上下文提取三个能用一个词回答的具体选项，并翻译为界面语言。只有真正的二选一才减为两项。每项在 description 中附一行理由。没有合理选项时可留空供自由回答；有选项时也始终允许自由输入。",
+                "items": {
+                  "$ref": "#/$defs/Option"
+                },
+                "title": "Options",
+                "type": "array"
+              },
+              "allow_freeform": {
+                "default": true,
+                "title": "Allow Freeform",
+                "type": "boolean"
+              },
+              "recommended_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "唯一推荐的选项 ID，最多一个，须与正文倾向一致。没有推荐时填 null。",
+                "title": "Recommended Id"
+              },
+              "default_path": {
+                "default": "",
+                "description": "用一个短句说明用户跳过时将如何继续。跳过必须是安全的。",
+                "title": "Default Path",
+                "type": "string"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question"
+            ],
+            "title": "PlanAskArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "answer",
+          "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+            "properties": {
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "title": "PlanAnswerArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "get_asset",
+          "description": "读取素材的处理状态、语言、时长和开头文本。项目只有一个文件素材时可省略 ID；有多个时返回带 ID 的清单。",
+          "parameters": {
+            "properties": {
+              "asset_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "素材 ID，来自 @ 引用或先前 get_asset 返回的清单。若为 null 且项目只有一个文件素材，读取该素材；若有多个，返回带 ID 的清单。",
+                "title": "Asset Id"
+              }
+            },
+            "title": "GetAssetParams",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "list_project_media",
+          "description": "设计包含上传录像或图片的视频前，先列出项目中可用于合成的素材，含稳定 ID、类型、已知或未知的时长、尺寸及可用性。只引用本项目真实 ID。按最新在前分页，每页 40 条，提示中给出旧记录的偏移。可直接传入所选 ID 读取确切素材，不受页数限制。",
+          "parameters": {
+            "properties": {
+              "ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "只按 ID 读取用户明确选定的素材（来自 @ 引用或之前的清单）。超出清单单页上限的 ID 也可读取。null 表示按最新在前分页列出。",
+                "title": "Ids"
+              },
+              "offset": {
+                "default": 0,
+                "description": "跳过的素材数量，按最新在前排序。清单提示有更早记录时用于翻页，例如每页 40 条时，第二页用 offset=40。",
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            },
+            "title": "ListProjectMediaParams",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "prepare_video_materials",
+          "description": "准备所选网页，并导入选定素材、已交付视频或曲库音乐以供剪辑。等待 URL 采集完成。结果含当前所有者范围内的 SourceSnapshot 标识，可用作工具参数。视频默认提供有限的代表静帧，不能据此声称连续审片。仅用户明确要求连续检查源视频时用 video_observation=continuous。search_music 或 select_music 返回的 Music ID 传入 material_music_ids，不传 material_asset_ids。只返回已完成资源或明确失败，不返回待处理。复用已导入的媒体，后续设计被拒绝不影响已准备好的资源。只读现有媒体，不合成或渲染。",
+          "parameters": {
+            "$defs": {
+              "PrepareVideoMaterialTarget": {
+                "additionalProperties": false,
+                "description": "需要获取确切事实或媒体的一个已列出来源。",
+                "properties": {
+                  "snapshot_id": {
+                    "format": "uuid",
+                    "title": "Snapshot Id",
+                    "type": "string"
+                  },
+                  "view_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "View Id"
+                  },
+                  "element_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Element Id"
+                  }
+                },
+                "required": [
+                  "snapshot_id"
+                ],
+                "title": "PrepareVideoMaterialTarget",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "在分步编排 Composition 前，固定明确选定的素材。",
+            "properties": {
+              "material_urls": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "逐字复制用户提供的新网页 URL，已固定的网页无需重新采集。",
+                "title": "Material Urls"
+              },
+              "material_asset_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 12,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "用户或当前作品明确选中的、归当前用户所有的素材。",
+                "title": "Material Asset Ids"
+              },
+              "material_output_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 12,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "明确用作新素材、归当前用户所有的已交付视频 Output。",
+                "title": "Material Output Ids"
+              },
+              "material_music_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 12,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "search_music 返回的曲库音乐 ID，不填 Asset ID。导入公开或用户自有曲库的已有音频，以供剪辑；返回确切的 SourceSnapshot 标识，不合成或渲染。",
+                "title": "Material Music Ids"
+              },
+              "material_targets": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PrepareVideoMaterialTarget"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "附上并返回选定的现有快照、视图或元素的确切事实。普通图片或视频快照省略 view_id 和 element_id。",
+                "title": "Material Targets"
+              },
+              "video_observation": {
+                "default": "representative_frames",
+                "description": "默认 representative_frames 为每段视频附最多三张真实源帧。仅当用户明确要求连续检查符合条件的短源视频播放或运动时，才用 continuous。已交付的 Output 用 review_video。",
+                "enum": [
+                  "representative_frames",
+                  "continuous"
+                ],
+                "title": "Video Observation",
+                "type": "string"
+              }
+            },
+            "title": "PrepareVideoMaterialsArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "deliver_video",
+          "description": "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "output_id": {
+                "description": "Exact MP4 Output inspected and chosen for delivery.",
+                "format": "uuid",
+                "title": "Output Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "output_id"
+            ],
+            "title": "DeliverVideoArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "extend_still",
+          "description": "Extend the closing static image, shape or title by additional seconds. Other tracks retain their duration.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "seconds": {
+                "description": "Additional seconds of the final still.",
+                "exclusiveMinimum": 0,
+                "title": "Seconds",
+                "type": "number"
+              }
+            },
+            "required": [
+              "clip_id",
+              "seconds"
+            ],
+            "title": "ExtendStillArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "export_video",
+          "description": "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {},
+            "title": "ExportVideoArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "bind_clip_source",
+          "description": "Bind a fixed project snapshot to a pending voice or image clip. Preserve timing and layout; inspect the saved version before export.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "source_id": {
+                "description": "Fixed project snapshot to bind to this pending media clip.",
+                "format": "uuid",
+                "title": "Source Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "clip_id",
+              "source_id"
+            ],
+            "title": "BindClipSourceArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "insert_visual",
+          "description": "Place a fixed project image above the existing footage for a timeline window. Use the returned object ID for later position or scale changes.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "description": "Fixed image snapshot returned by prepare_video_materials.",
+                "format": "uuid",
+                "title": "Source Id",
+                "type": "string"
+              },
+              "start_seconds": {
+                "description": "Inclusive composition time.",
+                "minimum": 0,
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "end_seconds": {
+                "description": "Exclusive composition time.",
+                "exclusiveMinimum": 0,
+                "title": "End Seconds",
+                "type": "number"
+              },
+              "position": {
+                "default": "top_right",
+                "enum": [
+                  "top_left",
+                  "top_right",
+                  "bottom_left",
+                  "bottom_right"
+                ],
+                "title": "Position",
+                "type": "string"
+              },
+              "width_ratio": {
+                "default": 0.25,
+                "description": "Fraction of canvas width; preserves image proportions.",
+                "exclusiveMinimum": 0.05,
+                "maximum": 1,
+                "title": "Width Ratio",
+                "type": "number"
+              }
+            },
+            "required": [
+              "source_id",
+              "start_seconds",
+              "end_seconds"
+            ],
+            "title": "InsertVisualArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "insert_audio",
+          "description": "Place fixed audio on the current timeline at original speed. Set the level using gain_db.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "description": "Owned fixed audio snapshot from the project or a generation result.",
+                "format": "uuid",
+                "title": "Source Id",
+                "type": "string"
+              },
+              "start_seconds": {
+                "description": "Start on the composition timeline.",
+                "minimum": 0,
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "duration_seconds": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Use the full recording when omitted.",
+                "title": "Duration Seconds"
+              },
+              "gain_db": {
+                "default": 0,
+                "description": "Clip gain in decibels.",
+                "maximum": 12,
+                "minimum": -60,
+                "title": "Gain Db",
+                "type": "number"
+              }
+            },
+            "required": [
+              "source_id",
+              "start_seconds"
+            ],
+            "title": "InsertAudioArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "generate_image",
+          "description": "Create and review one image. Returns the actual pixels and a fixed project source.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "description": "Describe the image and its narrative purpose.",
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "svg": {
+                "anyOf": [
+                  {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "For vector artwork only, an original self-contained SVG.",
+                "title": "Svg"
+              },
+              "evidence_snapshot_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Verified project webpage for brand facts.",
+                "title": "Evidence Snapshot Id"
+              }
+            },
+            "required": [
+              "prompt"
+            ],
+            "title": "GenerateImageArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "generate_voice",
+          "description": "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "maxLength": 9000,
+                "minLength": 1,
+                "title": "Text",
+                "type": "string"
+              },
+              "language": {
+                "enum": [
+                  "en",
+                  "zh",
+                  "fr",
+                  "de",
+                  "es",
+                  "it"
+                ],
+                "title": "Language",
+                "type": "string"
+              },
+              "voice_id": {
+                "default": "presenter_male",
+                "enum": [
+                  "presenter_male",
+                  "English_Graceful_Lady"
+                ],
+                "title": "Voice Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "language"
+            ],
+            "title": "GenerateVoiceArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "generate_music",
+          "description": "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "duration_seconds": {
+                "maximum": 120,
+                "minimum": 0.25,
+                "multipleOf": 0.001,
+                "title": "Duration Seconds",
+                "type": "number"
+              },
+              "style": {
+                "enum": [
+                  "light_electronic",
+                  "ambient",
+                  "driving_electronic"
+                ],
+                "title": "Style",
+                "type": "string"
+              },
+              "bpm": {
+                "default": 100,
+                "maximum": 200,
+                "minimum": 40,
+                "title": "Bpm",
+                "type": "integer"
+              },
+              "name": {
+                "default": "Electronic instrumental",
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "duration_seconds",
+              "style"
+            ],
+            "title": "GenerateMusicArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "inspect_timeline",
+          "description": "Read clips in timeline order, their tracks, scene numbers, source windows and spatial object IDs.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "offset": {
+                "default": 0,
+                "description": "First clip index, starting at zero.",
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            },
+            "title": "InspectTimelineArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "inspect_clip",
+          "description": "Inspect one clip, its layout, transform, whole-object scale and position keyframes (clip-local ticks) and same-track neighbors on the current version.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "clip_id"
+            ],
+            "title": "ClipArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "remove_clip",
+          "description": "Remove one identified clip after inspecting its source, timing and relations. If asked to listen or watch first, preview the affected window before removing it. Linked clips and dependent captions must remain intact. Other clips keep their positions.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "clip_id"
+            ],
+            "title": "ClipArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "split_clip",
+          "description": "Split a clip and its linked media at a clip-local second. Save one version.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "time": {
+                "description": "Seconds from the start of this clip.",
+                "exclusiveMinimum": 0,
+                "title": "Time",
+                "type": "number"
+              }
+            },
+            "required": [
+              "clip_id",
+              "time"
+            ],
+            "title": "SplitClipArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "trim_clip",
+          "description": "Keep a subrange measured from this clip's start. Crop linked fixed sources at 1x, leave gaps, keep other clips in place. Reject broken transitions or loss of a linked member.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "start": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "First clip-local second to keep. Defaults to zero.",
+                "title": "Start"
+              },
+              "end": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Exclusive clip-local end to keep. Defaults to the clip duration.",
+                "title": "End"
+              }
+            },
+            "required": [
+              "clip_id"
+            ],
+            "title": "TrimClipArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "move_clip",
+          "description": "Set a clip's start on the timeline, moving its linked clips equally. Preserve duration and source window, leave gaps. Reject same-track collisions, broken transitions and scene escape.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "time": {
+                "description": "New absolute start in composition seconds.",
+                "minimum": 0,
+                "title": "Time",
+                "type": "number"
+              }
+            },
+            "required": [
+              "clip_id",
+              "time"
+            ],
+            "title": "MoveClipArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "set_keyframe",
+          "description": "Change the value of one existing whole-object scale or position keyframe on the inspected clip. Inspect its animation ID and local tick first. Preview the affected motion before and after adjusting it.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "clip_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Clip Id",
+                "type": "string"
+              },
+              "animation_id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Animation Id",
+                "type": "string"
+              },
+              "at": {
+                "description": "Existing clip-local tick from inspect_clip.",
+                "minimum": 0,
+                "title": "At",
+                "type": "integer"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "type": "array"
+                  }
+                ],
+                "description": "Absolute scale multiplier or animated [x, y] offset added to the static transform. In canvas pixels, positive x moves the object right and positive y moves it down.",
+                "title": "Value"
+              }
+            },
+            "required": [
+              "clip_id",
+              "animation_id",
+              "at",
+              "value"
+            ],
+            "title": "SetKeyframeArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "translate",
+          "description": "Set one visual object's static offset relative to its layout box. Preserve other objects and time. Reject an animated position.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Visual object_id returned by inspection.",
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Id",
+                "type": "string"
+              },
+              "x": {
+                "description": "Absolute offset of the layout box in canvas pixels, positive right. 0 restores its layout x.",
+                "title": "X",
+                "type": "number"
+              },
+              "y": {
+                "description": "Absolute offset of the layout box in canvas pixels, positive down. 0 restores its layout y.",
+                "title": "Y",
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "x",
+              "y"
+            ],
+            "title": "TranslateArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "scale",
+          "description": "Set one visual object's static scale around its existing origin. Preserve other objects, including subtitles. Reject animated scale.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Visual object_id returned by inspection.",
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Id",
+                "type": "string"
+              },
+              "value": {
+                "description": "Absolute scale relative to layout size, 1 = original. Preserve origin and position.",
+                "exclusiveMinimum": 0,
+                "title": "Value",
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "value"
+            ],
+            "title": "ScaleArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "preview_range",
+          "description": "Publish this exact playback window in Chat, across all tracks. To play a local edit, copy its preview_range from recently_edited_clips. Include lead-in or tail only when the user wants a wider window. Times are absolute seconds (up to 12 seconds).",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "A bounded playback window in composition time.",
+            "properties": {
+              "kind": {
+                "const": "range",
+                "default": "range",
+                "title": "Kind",
+                "type": "string"
+              },
+              "start_seconds": {
+                "minimum": 0,
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "end_seconds": {
+                "exclusiveMinimum": 0,
+                "title": "End Seconds",
+                "type": "number"
+              }
+            },
+            "required": [
+              "start_seconds",
+              "end_seconds"
+            ],
+            "title": "VideoRangeScrubTarget",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "review_video",
+          "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+            "properties": {
+              "output_id": {
+                "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+                "format": "uuid",
+                "title": "Output Id",
+                "type": "string"
+              },
+              "at_seconds": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+                "title": "At Seconds"
+              },
+              "motion_scene_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+                "title": "Motion Scene Id"
+              },
+              "refresh": {
+                "default": false,
+                "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+                "title": "Refresh",
+                "type": "boolean"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "output_id"
+            ],
+            "title": "ReviewVideoArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "align_recording",
+          "description": "Align the exact transcript with an explicitly referenced recording.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "maxLength": 9000,
+                "minLength": 1,
+                "title": "Text",
+                "type": "string"
+              },
+              "audio_asset_id": {
+                "format": "uuid",
+                "title": "Audio Asset Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "audio_asset_id"
+            ],
+            "title": "AlignRecordingArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "get_narration_alignment",
+          "description": "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "alignment_id": {
+                "format": "uuid",
+                "title": "Alignment Id",
+                "type": "string"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "alignment_id"
+            ],
+            "title": "GetNarrationAlignmentArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "annotate_narration",
+          "description": "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。",
+          "parameters": {
+            "$defs": {
+              "NarrationSentenceSemanticsArgs": {
+                "additionalProperties": false,
+                "properties": {
+                  "sentence_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Sentence Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "definition",
+                      "process",
+                      "comparison",
+                      "evidence",
+                      "example",
+                      "summary",
+                      "transition"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "weight": {
+                    "enum": [
+                      "main",
+                      "sub"
+                    ],
+                    "title": "Weight",
+                    "type": "string"
+                  },
+                  "entities": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 12,
+                    "title": "Entities",
+                    "type": "array"
+                  },
+                  "needs": {
+                    "default": [],
+                    "description": "媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
+                    "items": {
+                      "enum": [
+                        "native_text",
+                        "diagram",
+                        "real_media",
+                        "data",
+                        "generator"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 5,
+                    "title": "Needs",
+                    "type": "array"
+                  },
+                  "emphasis_word_ids": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 24,
+                    "title": "Emphasis Word Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "sentence_id",
+                  "role",
+                  "weight"
+                ],
+                "title": "NarrationSentenceSemanticsArgs",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。",
+            "properties": {
+              "alignment_id": {
+                "format": "uuid",
+                "title": "Alignment Id",
+                "type": "string"
+              },
+              "expected_timing_digest": {
+                "maxLength": 64,
+                "minLength": 64,
+                "title": "Expected Timing Digest",
+                "type": "string"
+              },
+              "sentences": {
+                "items": {
+                  "$ref": "#/$defs/NarrationSentenceSemanticsArgs"
+                },
+                "minItems": 1,
+                "title": "Sentences",
+                "type": "array"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "alignment_id",
+              "expected_timing_digest",
+              "sentences"
+            ],
+            "title": "AnnotateNarrationArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_conversation_context",
+          "description": "读取因上下文预算而省略的历史工具调用及其实际结果。使用 CONVERSATION TOOL HISTORY 列出的条目 ID，或以空 item_ids 和 cursor 翻页。读取历史不会重做原操作或执行其参数。",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "item_ids": {
+                "description": "从 CONVERSATION TOOL HISTORY 中复制所需的、已省略条目的确切 ID。",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 4,
+                "title": "Item Ids",
+                "type": "array"
+              },
+              "cursor": {
+                "default": 0,
+                "description": "当 item_ids 为空时，按页列出可用历史条目 ID。用 next_cursor 读取更早的条目。",
+                "minimum": 0,
+                "title": "Cursor",
+                "type": "integer"
+              }
+            },
+            "title": "ReadConversationContextArgs",
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "6ce13b892c39b275d8b90eb43737ed06363dc2738c1c1ae3024ab30831ee6728": [
+      {
+        "type": "function",
+        "function": {
+          "name": "answer",
+          "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+            "properties": {
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "title": "PlanAnswerArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "review_video",
+          "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+            "properties": {
+              "output_id": {
+                "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+                "format": "uuid",
+                "title": "Output Id",
+                "type": "string"
+              },
+              "at_seconds": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+                "title": "At Seconds"
+              },
+              "motion_scene_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+                "title": "Motion Scene Id"
+              },
+              "refresh": {
+                "default": false,
+                "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+                "title": "Refresh",
+                "type": "boolean"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "output_id"
+            ],
+            "title": "ReviewVideoArgs",
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": [],
+    "7a6491681735df0d6f869da2497b41af529367c69afa9753021e2e376a4232bc": [
+      {
+        "type": "function",
+        "function": {
+          "name": "answer",
+          "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+            "properties": {
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "title": "PlanAnswerArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "deliver_video",
+          "description": "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "output_id": {
+                "description": "Exact MP4 Output inspected and chosen for delivery.",
+                "format": "uuid",
+                "title": "Output Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "output_id"
+            ],
+            "title": "DeliverVideoArgs",
+            "type": "object"
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "review_video",
+          "description": "对照用户要求审阅指定的已交付视频 Output。系统解码该 Output 自身的文件，附带真实采样帧及时间，检查绑定版本，保存建议性报告。默认复用已有报告，refresh=true 可重新执行所选采样模式。按指定时点复查用 at_seconds；审阅某个已执行 Scene 的有序帧用 motion_scene_id。二者互斥。声称看过成片或应要求做内容质量修订前，先用本工具。不要用分镜读取结果或最近的其他 Output 替代。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "对照用户明确的要求审阅一个确切的已交付 Output。",
+            "properties": {
+              "output_id": {
+                "description": "从视频卡片或 @output 引用取得的确切已交付视频 Output ID，不默认指向作品最近的 Output。",
+                "format": "uuid",
+                "title": "Output Id",
+                "type": "string"
+              },
+              "at_seconds": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 4,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "需要检查的具体成片时点。提供后按这些时点取样，尤其适用于复核先前发现。",
+                "title": "At Seconds"
+              },
+              "motion_scene_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "此 Output 已执行 render_spec 中的确切 Scene ID，用于一段有序运动帧审阅，不取 Composition 最新版本中的场景。与 at_seconds 互斥。",
+                "title": "Motion Scene Id"
+              },
+              "refresh": {
+                "default": false,
+                "description": "true 表示重新解码并审阅；false 在已有报告时复用此确切 Output 的报告。新 Output 须独立审阅。",
+                "title": "Refresh",
+                "type": "boolean"
+              },
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示回应原问题，'skip' 表示明确拒答，'none' 表示明显无关的插话。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "required": [
+              "output_id"
+            ],
+            "title": "ReviewVideoArgs",
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "59687ed2af713e21a04e46cf0be452b6925074f48e55d068e089d247873d1f39": [
+      {
+        "type": "function",
+        "function": {
+          "name": "answer",
+          "description": "根据实际结果结束本轮；也可以直接在消息正文答复。",
+          "parameters": {
+            "additionalProperties": false,
+            "description": "方案阶段的 answer 参数，只提供信息。答复本身在消息正文中，相关附带数据随本次调用提交。",
+            "properties": {
+              "pending_disposition": {
+                "default": "none",
+                "description": "有待回答问题时，'answer' 表示用户回答、讨论选项或将选择交给你，用用户原话结清问题；'skip' 表示明确拒答；'none' 表示明显无关的插话，问题继续待答。",
+                "enum": [
+                  "answer",
+                  "skip",
+                  "none"
+                ],
+                "title": "Pending Disposition",
+                "type": "string"
+              }
+            },
+            "title": "PlanAnswerArgs",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "requests": [
+    {
+      "id": "5645a315-6264-4114-b9e8-da5e0172d301",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "74b9afc50718b6dbca19deb4bb557cf3e8904ea1a77a2d2e85a5415ff2ac6d2c",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8207,
+        "total_characters": 0,
+        "prompt_tokens": 8112,
+        "completion_tokens": 95,
+        "completion_tokens_details": {
+          "reasoning_tokens": 8
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      },
+      "calls": [
+        {
+          "id": "call_58zaFku9dyhtS2XOV8eDIA4v",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        },
+        {
+          "id": "call_dFD1s5JAOwheMXXHZzTc7tkY",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_asset_ids\": [\"65e5ce64-efe8-435c-949e-b1d2e613df3a\"]}"
+        }
+      ]
+    },
+    {
+      "id": "81d03110-1c66-4f18-99e3-c7f65896a9a7",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "e4170c5c54da4b1fbf1ed58f172842e4a755c3c883bf21fc07c230472079718a",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "prepare_video_materials"
+      ],
+      "usage": {
+        "total_tokens": 9301,
+        "total_characters": 0,
+        "prompt_tokens": 9140,
+        "completion_tokens": 161,
+        "completion_tokens_details": {
+          "reasoning_tokens": 63
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "calls": [
+        {
+          "id": "call_17faa5747c0a45eda3309d34",
+          "name": "insert_visual",
+          "arguments": "{\"source_id\":\"84acede8-046d-5fde-ac2f-8195e17f33fe\",\"start_seconds\":2,\"end_seconds\":4,\"position\":\"top_right\",\"width_ratio\":0.25}"
+        }
+      ]
+    },
+    {
+      "id": "89056564-4b98-4c54-ae17-14e7bb7c594c",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "deb03ba97ac0f04f6c516e98be9dd4f53e99c8ac456914187b8907a1e37471c8",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "insert_visual"
+      ],
+      "usage": {
+        "total_tokens": 9275,
+        "total_characters": 0,
+        "prompt_tokens": 9255,
+        "completion_tokens": 20,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 7424
+        }
+      },
+      "calls": [
+        {
+          "id": "call_4b66ea05b36d4e1c9eb0e56f",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "859ab0d5-5cc3-4278-a60f-a88f0b059d29",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "7526b268de51c5c14a1b5bcefdf19e30311b832ad8b12e9427ec4c1bf1ac5e2f",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "insert_visual",
+        "assistant",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 10286,
+        "total_characters": 0,
+        "prompt_tokens": 10217,
+        "completion_tokens": 69,
+        "completion_tokens_details": {
+          "reasoning_tokens": 27
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 9216
+        }
+      },
+      "calls": [
+        {
+          "id": "call_edda57d2cc7a492c86e707ae",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\":2,\"end_seconds\":4}"
+        }
+      ]
+    },
+    {
+      "id": "ca2f6ed5-50c1-4dee-8137-f045bb1d5e2a",
+      "project": "e39f1fad-0c29-4f08-8ab9-ea9f5bbc1672",
+      "opening": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "a8de24923b4febf867d6ce4627dc009cfc193cf99685f2941d82e6f1deb03fe6",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8132,
+        "total_characters": 0,
+        "prompt_tokens": 8026,
+        "completion_tokens": 106,
+        "completion_tokens_details": {
+          "reasoning_tokens": 12
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_7bc5460603364eb6ad1eba6f",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        },
+        {
+          "id": "call_48714bddf4964eda8ecbd9e5",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_asset_ids\": [\"53d71593-54b7-484e-a7c6-c44fcad2f831\"]}"
+        }
+      ]
+    },
+    {
+      "id": "056815db-a248-4db5-ada0-a591c90d2347",
+      "project": "e39f1fad-0c29-4f08-8ab9-ea9f5bbc1672",
+      "opening": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "11615c60342d090176000ca0d10f17f10e51ee2fc4c1e69651a2d830ed077eaf",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "prepare_video_materials"
+      ],
+      "usage": {
+        "total_tokens": 9334,
+        "total_characters": 0,
+        "prompt_tokens": 9187,
+        "completion_tokens": 147,
+        "completion_tokens_details": {
+          "reasoning_tokens": 51
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_16e1df50f290ebf12c7b9304",
+          "name": "insert_visual",
+          "arguments": "{\"source_id\": \"d39bc929-c973-58e6-bba0-96ffa46f44f5\", \"start_seconds\": 2, \"end_seconds\": 4, \"position\": \"top_right\", \"width_ratio\": 0.25}"
+        }
+      ]
+    },
+    {
+      "id": "d5c8d31a-bd4a-4417-bbe5-684a8372d59d",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "73ea1a7301531ef1a613f0cb3ee2cf1a16f199a441b4e5835fe252c4bc5b5620",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "insert_visual",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "preview_range"
+      ],
+      "usage": {
+        "total_tokens": 13854,
+        "total_characters": 0,
+        "prompt_tokens": 13674,
+        "completion_tokens": 180,
+        "prompt_tokens_details": {
+          "cached_tokens": 176
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "0e747829-36a1-4285-8106-867f1c5297dc",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "9e457c75ec5f38fbcb327050881193bcc463742d3b6e5b27fa23cf8265acd393",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8304,
+        "total_characters": 0,
+        "prompt_tokens": 8149,
+        "completion_tokens": 155,
+        "completion_tokens_details": {
+          "reasoning_tokens": 45
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a20719c8ee7492bfaa2b61",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        },
+        {
+          "id": "call_01a20719c91b7610baa1a815",
+          "name": "get_asset",
+          "arguments": "{\"asset_id\":\"fa31bb32-0d55-49b7-b9bc-3ff79bb23c8c\"}"
+        },
+        {
+          "id": "call_01a20719c9677300a7b9d733",
+          "name": "get_asset",
+          "arguments": "{\"asset_id\":\"7402a540-6980-4fae-9453-6d327c265261\"}"
+        }
+      ]
+    },
+    {
+      "id": "7a6c61cf-207a-43f0-8792-e3003b95b837",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "62b73b9e3462fcdbd5461cb5a19438a73d9fa7d10b7007588c6c1f8c1985200e",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "get_asset",
+        "get_asset"
+      ],
+      "usage": {
+        "total_tokens": 9257,
+        "total_characters": 0,
+        "prompt_tokens": 9055,
+        "completion_tokens": 202,
+        "completion_tokens_details": {
+          "reasoning_tokens": 107
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8149
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a20719d3247655a4382a36",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_asset_ids\":[\"fa31bb32-0d55-49b7-b9bc-3ff79bb23c8c\",\"7402a540-6980-4fae-9453-6d327c265261\"]}"
+        }
+      ]
+    },
+    {
+      "id": "3251a3b1-8af0-4332-9424-f450813a774a",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "fb171bc4ced41ae29db80c642606c9f49f0c7f345e5410d2d75546ba558a4d70",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8121,
+        "total_characters": 0,
+        "prompt_tokens": 8067,
+        "completion_tokens": 54,
+        "completion_tokens_details": {
+          "reasoning_tokens": 23
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 187
+        }
+      },
+      "calls": [
+        {
+          "id": "call_SLWabZNoGZw7XbkBro4beFj9",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "6c08cc3d-927e-4a88-a10f-934a8b943820",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "67f1003225378ead0b0051ca95f289b9f38fabe3860a7673224b77d291613ff1",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "get_asset",
+        "get_asset",
+        "assistant",
+        "prepare_video_materials"
+      ],
+      "usage": {
+        "total_tokens": 10377,
+        "total_characters": 0,
+        "prompt_tokens": 10000,
+        "completion_tokens": 377,
+        "completion_tokens_details": {
+          "reasoning_tokens": 168
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_87676c1bd186e530e1832eb1",
+          "name": "ask_user",
+          "arguments": "{\"question\": \"两张附件都是绿色底的产品图（LAMP 08 与 LAMP 12），要插入第 2–4 秒的是哪一张？\", \"options\": [{\"id\": \"08\", \"label\": \"LAMP 08（深墨绿色横幅，220×120，附件1）\", \"description\": \"与作品标题「Studio lamp / I8」一致的第一张图\"}, {\"id\": \"12\", \"label\": \"LAMP 12（亮绿色竖图，132×184，附件2）\", \"description\": \"颜色更接近纯绿的第二张图\"}], \"recommended_id\": \"12\", \"pending_disposition\": \"answer\"}"
+        }
+      ]
+    },
+    {
+      "id": "7184b147-7b1b-456d-8f7e-1b99537a70c6",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "a0645519d962e0e167de132e32efa49c64cf6497d36369d7fb67d51f8d8b2322",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 9220,
+        "total_characters": 0,
+        "prompt_tokens": 9063,
+        "completion_tokens": 157,
+        "completion_tokens_details": {
+          "reasoning_tokens": 70
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8066
+        }
+      },
+      "calls": [
+        {
+          "id": "call_g6FZKZSlWjMc2OZNCzK2ayy7",
+          "name": "translate",
+          "arguments": "{\"id\": \"obj_overlay_989ef066f37b5562968e2686e67d4c34\", \"x\": -40, \"y\": 0}"
+        }
+      ]
+    },
+    {
+      "id": "b611041f-8a8d-41b5-acf1-7290240646f1",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "7fd87cd634a9f5309d1b17b0167802f875a9efed1517abebddf9763f1f51c161",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "translate"
+      ],
+      "usage": {
+        "total_tokens": 9041,
+        "total_characters": 0,
+        "prompt_tokens": 9000,
+        "completion_tokens": 41,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_8a821940d1124bf9800f4f95",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 2.0, \"end_seconds\": 4.0}"
+        }
+      ]
+    },
+    {
+      "id": "b350664e-5ce5-49b7-bec3-f1d9c70739f3",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "e5684574810a03e8c05020c9464d078b98a064475dc850d574c1ed081c372bc6",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "translate",
+        "assistant",
+        "preview_range"
+      ],
+      "usage": {
+        "total_tokens": 12621,
+        "total_characters": 0,
+        "prompt_tokens": 12446,
+        "completion_tokens": 175,
+        "completion_tokens_details": {
+          "reasoning_tokens": 30
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 7684
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "9b5b75ba-f516-4061-993f-d791ca474d9e",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "6ae664cb81ca26c2e4bb88c6f4da1097df327d3be0af3743d87ea8d94abeaf20",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8098,
+        "total_characters": 0,
+        "prompt_tokens": 8029,
+        "completion_tokens": 69,
+        "completion_tokens_details": {
+          "reasoning_tokens": 48
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      },
+      "calls": [
+        {
+          "id": "call_MNcJW2zpspgVeaHccbgoC2e2",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "7ee87651-d15e-463a-af84-169f37a23c81",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "4738691854d28ff632872a7d4bd3f7f2eae65513dc73bfee47a1e9fb45c6b621",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 9064,
+        "total_characters": 0,
+        "prompt_tokens": 9042,
+        "completion_tokens": 22,
+        "completion_tokens_details": {
+          "reasoning_tokens": 2
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8028
+        }
+      },
+      "calls": [
+        {
+          "id": "call_MwuS6gXU58LcemoM1blYx6iW",
+          "name": "export_video",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "14d2c53c-a44a-4f1d-bca1-70cd4eb502a0",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "842e48cb193e6ffd752b54a8dbcdc8d5cdda12de25e6c6583d7934b7ef3859c5",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "export_video",
+        "tool_feedback"
+      ],
+      "usage": {
+        "total_tokens": 9174,
+        "total_characters": 0,
+        "prompt_tokens": 9124,
+        "completion_tokens": 50,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 9041
+        }
+      },
+      "calls": [
+        {
+          "id": "call_9zfonuqhhAS5mVgnXXP7OI4T",
+          "name": "preview_range",
+          "arguments": "{\"kind\": \"range\", \"start_seconds\": 0, \"end_seconds\": 6}"
+        }
+      ]
+    },
+    {
+      "id": "39d4a695-3b3e-477f-ac6d-af990768fce1",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "a9a8b2ecbd24097ea4fe9398845459f9eed76bb1de56ee55ace88d022b3673dc",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "preview_range"
+      ],
+      "usage": {
+        "total_tokens": 13807,
+        "total_characters": 0,
+        "prompt_tokens": 13723,
+        "completion_tokens": 84,
+        "completion_tokens_details": {
+          "reasoning_tokens": 27
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8062
+        }
+      },
+      "calls": [
+        {
+          "id": "call_function_rwm3sj7vz3j0_1",
+          "name": "export_video",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "ba31272e-0d9c-4cb9-b8b4-0f5ae308f7f1",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "6ce13b892c39b275d8b90eb43737ed06363dc2738c1c1ae3024ab30831ee6728",
+      "payload_sha": "d6465bc8943d136e3b647d790aad08f64e47edc60524b1452976b54b538e4930",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 2206,
+        "total_characters": 0,
+        "prompt_tokens": 2136,
+        "completion_tokens": 70,
+        "completion_tokens_details": {
+          "reasoning_tokens": 8
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "calls": [
+        {
+          "id": "chatcmpl-tool-a40b3f07c4f61a9a",
+          "name": "review_video",
+          "arguments": "{\"output_id\":\"7a47ca27-0e05-5a2c-94aa-98d51893eee0\",\"refresh\":true}"
+        }
+      ]
+    },
+    {
+      "id": "a1ab2c69-e2b1-448c-93d8-83d8093e7a70",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "2a2f658e144758759f852c9c2f73c37a3a57cd987f8670c33b4ea709a686a49c",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8470,
+        "total_characters": 0,
+        "prompt_tokens": 8302,
+        "completion_tokens": 168,
+        "completion_tokens_details": {
+          "reasoning_tokens": 80
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071b8b5b74749b1210ca",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_asset_ids\":[\"7402a540-6980-4fae-9453-6d327c265261\"]}"
+        },
+        {
+          "id": "call_01a2071b8ba67798bd051f54",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "87f6fde6-b2f0-4156-8c8a-bca7e24b97d6",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "4b05a6f6c8379d9163091abb1494baa2f264eced34e243db25828c50ad2b98a8",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 9495,
+        "total_characters": 0,
+        "prompt_tokens": 9400,
+        "completion_tokens": 95,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8302
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071b940172728be2fba5",
+          "name": "insert_visual",
+          "arguments": "{\"source_id\":\"35251d35-c406-56b1-9a89-caef649cff93\",\"start_seconds\":2,\"end_seconds\":4,\"position\":\"top_right\",\"width_ratio\":0.25}"
+        }
+      ]
+    },
+    {
+      "id": "d0950dcf-02af-4044-aa01-cd942c45f8dd",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "3ea1932e23170d5c11a2468264f92f4c8dd3f839d55cce8520c91f6c7910fdd5",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "insert_visual"
+      ],
+      "usage": {
+        "total_tokens": 9545,
+        "total_characters": 0,
+        "prompt_tokens": 9504,
+        "completion_tokens": 41,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 7424
+        }
+      },
+      "calls": [
+        {
+          "id": "call_41de8661657a45d78c33d72c",
+          "name": "preview_range",
+          "arguments": "{\"start_seconds\": 2.0, \"end_seconds\": 4.0}"
+        }
+      ]
+    },
+    {
+      "id": "a5c107b2-565b-453e-bf38-d28e7f04c11e",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "payload_sha": "06e33a8c46685b2e3e09a6d3d5bd23a48e376bef8c08890bfe5b8efc32283524",
+      "inputs": [
+        "system",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 3835,
+        "total_characters": 0,
+        "prompt_tokens": 3454,
+        "completion_tokens": 381,
+        "completion_tokens_details": {
+          "reasoning_tokens": 255
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "eb0cb53e-72ac-427e-8211-2cebc91fd397",
+      "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "opening": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "a333a6188a91a2e844257ae338b8c791cfcb58012256084ce807283fc7b6ce35",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "insert_visual",
+        "assistant",
+        "preview_range"
+      ],
+      "usage": {
+        "total_tokens": 13233,
+        "total_characters": 0,
+        "prompt_tokens": 12994,
+        "completion_tokens": 239,
+        "prompt_tokens_details": {
+          "cached_tokens": 7649
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "9e3e687e-1be5-4337-b5e8-22a60564a35c",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "7a6491681735df0d6f869da2497b41af529367c69afa9753021e2e376a4232bc",
+      "payload_sha": "9ffcee7b6f21f3d50f167d5a76eb1bd927b567961f03e5ee60966283b83480cb",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "review_video"
+      ],
+      "usage": {
+        "total_tokens": 3619,
+        "total_characters": 0,
+        "prompt_tokens": 3565,
+        "completion_tokens": 54,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "calls": [
+        {
+          "id": "chatcmpl-tool-8bbd336c31bf165e",
+          "name": "deliver_video",
+          "arguments": "{\"output_id\":\"7a47ca27-0e05-5a2c-94aa-98d51893eee0\"}"
+        }
+      ]
+    },
+    {
+      "id": "fcec9b48-6108-4569-8197-260861e7b3bf",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "59687ed2af713e21a04e46cf0be452b6925074f48e55d068e089d247873d1f39",
+      "payload_sha": "d7e66ec3a741cfeaa95b864aa35a8ab6da87f5f399079e8d0a85af74f53c90c2",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "review_video",
+        "assistant",
+        "deliver_video"
+      ],
+      "usage": {
+        "total_tokens": 3386,
+        "total_characters": 0,
+        "prompt_tokens": 3241,
+        "completion_tokens": 145,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 187
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "36752617-14d5-4ee6-a731-10c3936c5fec",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "b48db4b06ed69edf38d24b7479fcba497d231af528493cdf0a462fce85cb9b0b",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8187,
+        "total_characters": 0,
+        "prompt_tokens": 8135,
+        "completion_tokens": 52,
+        "completion_tokens_details": {
+          "reasoning_tokens": 21
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 128
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071c7cb673f4bb4f9924",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "143636dc-9bef-497a-ab22-4f8c232a865b",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "41c8054ceef5014a25c98ebaf0b251a5a5eac30b816f23b47f09a8479cdc7eef",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 9446,
+        "total_characters": 0,
+        "prompt_tokens": 9131,
+        "completion_tokens": 315,
+        "completion_tokens_details": {
+          "reasoning_tokens": 239
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 8135
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071c85ae714382dc3b4c",
+          "name": "get_asset",
+          "arguments": "{\"asset_id\":\"7973dc46-8a70-498c-be4c-9cde3104fb67\"}"
+        },
+        {
+          "id": "call_01a2071c85ae714382dc3b4d",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\":\"clip_main\"}"
+        }
+      ]
+    },
+    {
+      "id": "aee866ff-6bbb-4e7a-9ca8-ff9f4b12299f",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "778afcfb00de93dddf0569345b925ccf85ba7e1f9209fdb503ea3b466630357d",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "get_asset",
+        "inspect_clip"
+      ],
+      "usage": {
+        "total_tokens": 10278,
+        "total_characters": 0,
+        "prompt_tokens": 9961,
+        "completion_tokens": 317,
+        "completion_tokens_details": {
+          "reasoning_tokens": 273
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 9131
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071c932b7048a55ee84c",
+          "name": "extend_still",
+          "arguments": "{\"clip_id\":\"clip_main\",\"seconds\":0.5}"
+        }
+      ]
+    },
+    {
+      "id": "e9682234-6d0f-451a-9277-c51200995cac",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "935dec16e86b3a4c5e6c36b77fac66d726cefa5059c0aa69c4367e231f604717",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "get_asset",
+        "inspect_clip",
+        "assistant",
+        "extend_still",
+        "tool_feedback"
+      ],
+      "usage": {
+        "total_tokens": 10674,
+        "total_characters": 0,
+        "prompt_tokens": 10348,
+        "completion_tokens": 326,
+        "completion_tokens_details": {
+          "reasoning_tokens": 266
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 9961
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071ca38770de8ab88133",
+          "name": "list_project_media",
+          "arguments": "{\"ids\":[\"a0ff5f54-9b01-59cd-b591-8a0be45abeb9\"]}"
+        }
+      ]
+    },
+    {
+      "id": "6b998712-d2a6-4efa-883c-226c9f471c8d",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "f7548a8ad79a0f101007e0c539f576fe1ea7e6b2148140abc178b46df8a2c415",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "get_asset",
+        "inspect_clip",
+        "assistant",
+        "list_project_media"
+      ],
+      "usage": {
+        "total_tokens": 10651,
+        "total_characters": 0,
+        "prompt_tokens": 10412,
+        "completion_tokens": 239,
+        "completion_tokens_details": {
+          "reasoning_tokens": 196
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 9962
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071cabd3769696975ca2",
+          "name": "trim_clip",
+          "arguments": "{\"clip_id\":\"clip_main\",\"end\":6.5}"
+        }
+      ]
+    },
+    {
+      "id": "273b8bbf-1c7c-45ef-b1e2-22c0cf185e9d",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "a942c25464005ac999ce33e0977d48ed1f4b5315658eb810bb8ca8d6cfb94b88",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "get_asset",
+        "inspect_clip",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "trim_clip",
+        "tool_feedback"
+      ],
+      "usage": {
+        "total_tokens": 11038,
+        "total_characters": 0,
+        "prompt_tokens": 10703,
+        "completion_tokens": 335,
+        "completion_tokens_details": {
+          "reasoning_tokens": 249
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 10412
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071cb55275b9bced32e0",
+          "name": "prepare_video_materials",
+          "arguments": "{\"material_asset_ids\":[\"7973dc46-8a70-498c-be4c-9cde3104fb67\"]}"
+        }
+      ]
+    },
+    {
+      "id": "81579546-dc50-48b6-80d9-6020a99abe75",
+      "project": "e39f1fad-0c29-4f08-8ab9-ea9f5bbc1672",
+      "opening": "78d9e622-0f64-4087-8d41-cc42d0a06c9b",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "982745809ac623c0072a73ab0b88eb7859c2124ae4acbd362167051d72a93029",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 8067,
+        "total_characters": 0,
+        "prompt_tokens": 8013,
+        "completion_tokens": 54,
+        "completion_tokens_details": {
+          "reasoning_tokens": 12
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "calls": [
+        {
+          "id": "chatcmpl-tool-822c8ff17d24f094",
+          "name": "inspect_timeline",
+          "arguments": "{\"offset\":0}"
+        }
+      ]
+    },
+    {
+      "id": "635175ff-aec5-493f-b832-d3c3262cc493",
+      "project": null,
+      "opening": null,
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "payload_sha": "5ca7090b797043752b47e7b87b5869a9a0a13ba9c1f931622272ca5df09f2684",
+      "inputs": [
+        "system",
+        "user"
+      ],
+      "usage": {
+        "total_tokens": 6028,
+        "total_characters": 0,
+        "prompt_tokens": 3057,
+        "completion_tokens": 2971,
+        "completion_tokens_details": {
+          "reasoning_tokens": 484
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 186
+        }
+      },
+      "calls": []
+    },
+    {
+      "id": "7f1d7583-d841-4aa4-8093-ff1efc5698c9",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "0f25aa864b2443cbfcc8565a5427e62e2934f178fff591537726e139d30d8d8c",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "get_asset",
+        "inspect_clip",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "prepare_video_materials",
+        "tool_feedback"
+      ],
+      "usage": {
+        "total_tokens": 11058,
+        "total_characters": 0,
+        "prompt_tokens": 10847,
+        "completion_tokens": 211,
+        "completion_tokens_details": {
+          "reasoning_tokens": 167
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 10413
+        }
+      },
+      "calls": [
+        {
+          "id": "call_01a2071e05eb72a5aa16cb72",
+          "name": "extend_still",
+          "arguments": "{\"clip_id\":\"clip_caption\",\"seconds\":0.5}"
+        }
+      ]
+    },
+    {
+      "id": "98d3a285-11f6-4902-993c-c381b291b258",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "afab3a596af68aaa056ee5f6f62dca726202720efaf043a9b10d7bb453b051ab",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "get_asset",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "extend_still"
+      ],
+      "usage": {
+        "total_tokens": 10209,
+        "total_characters": 0,
+        "prompt_tokens": 10069,
+        "completion_tokens": 140,
+        "completion_tokens_details": {
+          "reasoning_tokens": 121
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 7552
+        }
+      },
+      "calls": [
+        {
+          "id": "call_bbb9b20aa42f4583981fb611",
+          "name": "inspect_timeline",
+          "arguments": "{}"
+        }
+      ]
+    },
+    {
+      "id": "ba7c5770-6b8b-4e64-a90e-9a5afd21bc33",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "531eff3e693ba32dddd365a681541bea58641373a3889751902320784d048076",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "get_asset",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "extend_still",
+        "assistant",
+        "inspect_timeline"
+      ],
+      "usage": {
+        "total_tokens": 11405,
+        "total_characters": 0,
+        "prompt_tokens": 11166,
+        "completion_tokens": 239,
+        "completion_tokens_details": {
+          "reasoning_tokens": 189
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 10112
+        }
+      },
+      "calls": [
+        {
+          "id": "call_9c41158198ad4c48aec02440",
+          "name": "trim_clip",
+          "arguments": "{\"clip_id\": \"clip_main\", \"start\": 0.0, \"end\": 6.5}"
+        }
+      ]
+    },
+    {
+      "id": "6be922f0-ff81-48ea-8144-bff24e673f78",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "51ca0655aa93dc34e79be0c59fc934c008036657b125977267d1d7ffc895d0e6",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "get_asset",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "extend_still",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "trim_clip",
+        "tool_feedback"
+      ],
+      "usage": {
+        "total_tokens": 11968,
+        "total_characters": 0,
+        "prompt_tokens": 11459,
+        "completion_tokens": 509,
+        "completion_tokens_details": {
+          "reasoning_tokens": 479
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 11264
+        }
+      },
+      "calls": [
+        {
+          "id": "call_1dfae2f545f640ea9b231769",
+          "name": "inspect_clip",
+          "arguments": "{\"clip_id\": \"clip_main\"}"
+        }
+      ]
+    },
+    {
+      "id": "53c195a5-d95a-4791-b7ac-dcf4ddc67325",
+      "project": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "model": "MiniMax-M3.1-Flash",
+      "schema": "ec06b6615b54c503311602d219a391de8398b50902c65c8768a8a1011ee83348",
+      "payload_sha": "5da627b51b480754d2e1bc99ebfec4db5f9137abb224816991b1fea0ac9aba73",
+      "inputs": [
+        "system",
+        "project_evidence",
+        "user",
+        "assistant",
+        "get_asset",
+        "assistant",
+        "list_project_media",
+        "assistant",
+        "prepare_video_materials",
+        "assistant",
+        "extend_still",
+        "assistant",
+        "inspect_timeline",
+        "assistant",
+        "inspect_clip"
+      ],
+      "usage": {
+        "total_tokens": 12326,
+        "total_characters": 0,
+        "prompt_tokens": 12140,
+        "completion_tokens": 186,
+        "completion_tokens_details": {
+          "reasoning_tokens": 136
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 11136
+        }
+      },
+      "calls": [
+        {
+          "id": "call_224faff22def47e1aa46e89f",
+          "name": "trim_clip",
+          "arguments": "{\"clip_id\": \"clip_main\", \"start\": 0.0, \"end\": 6.5}"
+        }
+      ]
+    }
+  ]
+}

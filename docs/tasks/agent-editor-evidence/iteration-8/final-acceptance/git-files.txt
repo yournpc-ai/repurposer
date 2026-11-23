@@ -1,0 +1,37 @@
+M	apps/render/Dockerfile
+M	apps/render/src/artifacts.test.ts
+M	apps/render/src/artifacts.ts
+M	apps/render/src/audio.ts
+M	apps/render/src/video/index.ts
+M	apps/web/Dockerfile
+M	docs/PROGRESS.md
+M	docs/RENDERING.md
+M	docs/experiments/renderer-aac/audio-study/REPLAY.md
+M	pnpm-lock.yaml
+M	pnpm-workspace.yaml
+docs/experiments/renderer-aac/upstream-4.0.540/24-filter.txt
+docs/experiments/renderer-aac/upstream-4.0.540/REPORT.md
+docs/experiments/renderer-aac/upstream-4.0.540/SHA256SUMS
+docs/experiments/renderer-aac/upstream-4.0.540/boxes.py
+docs/experiments/renderer-aac/upstream-4.0.540/extract.cjs
+docs/experiments/renderer-aac/upstream-4.0.540/isolated-lock.diff
+docs/experiments/renderer-aac/upstream-4.0.540/logs/container-cleanup.txt
+docs/experiments/renderer-aac/upstream-4.0.540/logs/linux-commands.jsonl
+docs/experiments/renderer-aac/upstream-4.0.540/logs/mac-commands.jsonl
+docs/experiments/renderer-aac/upstream-4.0.540/media/24-baseline.mp4
+docs/experiments/renderer-aac/upstream-4.0.540/media/24-final.mp4
+docs/experiments/renderer-aac/upstream-4.0.540/media/24-mix.wav
+docs/experiments/renderer-aac/upstream-4.0.540/media/30-linux-final.mp4
+docs/experiments/renderer-aac/upstream-4.0.540/media/30-linux-pre.mkv
+docs/experiments/renderer-aac/upstream-4.0.540/media/484-marker.png
+docs/experiments/renderer-aac/upstream-4.0.540/media/540-marker.png
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/boxes.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/control-boxes.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/environment.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/extract-result.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/linux.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/mac.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/mux-controls.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/summary.json
+docs/experiments/renderer-aac/upstream-4.0.540/metrics/versions.json
+patches/@remotion__renderer@4.0.484.patch

@@ -1,0 +1,14 @@
+Linux x86_64
+PRETTY_NAME="Ubuntu 22.04.4 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+29.2.1
+repurposer-web-1 repurposer-web
+repurposer-worker-1 repurposer-worker
+repurposer-api-1 repurposer-api
+repurposer-render-1 repurposer-render
+repurposer-db-1 postgres:18-alpine
+sha256:2fd33fec64b956360578b31ddc8b84218ccb44be9038e5e8cdbf39fade46f4b1 /repo/apps/render running
+v22.23.5
+4.0.484
+73adbc935530651dd07f63c61778bbbe8664cb550db63762c6cf6733b64ed5f6  node_modules/@remotion/renderer/dist/stringify-ffmpeg-filter.js

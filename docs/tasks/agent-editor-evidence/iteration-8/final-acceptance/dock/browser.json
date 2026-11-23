@@ -1,0 +1,90 @@
+{
+  "project": "3440702d-3a5b-481e-aa81-3c034237dec0",
+  "goal": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+  "input_files": [
+    {
+      "name": "产品图.png",
+      "model": "08",
+      "sha256": "ada40e39c866de17dcda4052034ebb0c7905504ffcaf4f41f01984520a74bde1"
+    },
+    {
+      "name": "产品图.png",
+      "model": "12",
+      "sha256": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+    }
+  ],
+  "question": {
+    "kind": "question",
+    "slot": null,
+    "items": [],
+    "options": [
+      {
+        "id": "08",
+        "label": "LAMP 08（深墨绿色横幅，220×120，附件1）",
+        "description": "与作品标题「Studio lamp / I8」一致的第一张图"
+      },
+      {
+        "id": "12",
+        "label": "LAMP 12（亮绿色竖图，132×184，附件2）",
+        "description": "颜色更接近纯绿的第二张图"
+      }
+    ],
+    "question": "两张附件都是绿色底的产品图（LAMP 08 与 LAMP 12），要插入第 2–4 秒的是哪一张？",
+    "default_path": "",
+    "group_digest": null,
+    "allow_freeform": true,
+    "recommended_id": "12"
+  },
+  "question_id": "3282ebaf-bd3e-4515-841e-265982ec6ef2",
+  "before_click_versions": [
+    "2d6b3df0-dafd-46af-8f0c-9744072c1e4d"
+  ],
+  "clicked": {
+    "id": "12",
+    "label": "LAMP 12（亮绿色竖图，132×184，附件2）",
+    "description": "颜色更接近纯绿的第二张图"
+  },
+  "envelope": {
+    "id": "1e727cb9-2f72-4076-a996-2e87fcf7d748",
+    "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+    "seq": 14,
+    "blocks": [
+      {
+        "kind": "video_storyboard",
+        "scrub": {
+          "kind": "range",
+          "end_seconds": 4.0,
+          "start_seconds": 2.0
+        },
+        "version": 2,
+        "composition_id": "8c01979d-50a5-45a5-91d6-1e306183c949",
+        "content_digest": "83dff99ee111f3078229c62b3390ef4684df4406baf3ad96f0f915519e43d83b",
+        "presentation_digest": "6a7e221b18cf02e22a92b4df2f43748cc6a097373531d3e79b022575629a3594",
+        "presented_message_id": "1e727cb9-2f72-4076-a996-2e87fcf7d748",
+        "composition_version_id": "53b60f16-231f-48c2-bd05-5ac1a0e2d93b"
+      }
+    ]
+  },
+  "live": {
+    "clock": [
+      2.016236,
+      2.168207
+    ],
+    "slots": 1
+  },
+  "reload": {
+    "clock": [
+      2,
+      2.140741
+    ],
+    "slots": 1
+  },
+  "duplicate": {
+    "status": 200,
+    "response_tail": "event: answer.failed\ndata: {\"detail\": {\"code\": \"question.already_answered\"}, \"turn_id\": \"7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0\"}\n\n"
+  },
+  "versions_after": [
+    "2d6b3df0-dafd-46af-8f0c-9744072c1e4d",
+    "53b60f16-231f-48c2-bd05-5ac1a0e2d93b"
+  ]
+}

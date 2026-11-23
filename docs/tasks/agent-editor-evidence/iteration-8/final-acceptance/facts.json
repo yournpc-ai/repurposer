@@ -1,0 +1,3226 @@
+{
+  "wire": {
+    "interrupted_environment": {
+      "request": 20,
+      "response": 20,
+      "input": 190917,
+      "output": 2577,
+      "cached": 86016,
+      "estimated_usd": 0.03018375
+    },
+    "durable_environment": {
+      "request": 39,
+      "response": 39,
+      "input": 351346,
+      "output": 9251,
+      "cached": 189185,
+      "estimated_usd": 0.0582525
+    }
+  },
+  "versions": [
+    {
+      "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+      "id": "3cbb2e17-7827-4a4a-a209-b278baf065e4",
+      "base_version_id": null,
+      "version": 1,
+      "content_digest": "e6f8ad0f6f01fbe6707aa1dff0901a6e6304556bf2d71e1e2a9bb9c440436fd6",
+      "request_id": null,
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        }
+      ]
+    },
+    {
+      "composition_id": "8c01979d-50a5-45a5-91d6-1e306183c949",
+      "id": "2d6b3df0-dafd-46af-8f0c-9744072c1e4d",
+      "base_version_id": null,
+      "version": 1,
+      "content_digest": "59c30500b5a31b9082e22a52bf9f408eeb57a99d97ce4e9679896cd3a34743cc",
+      "request_id": null,
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "c7f42c75-0c07-578a-af33-66d5c1fefca7",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "c7f42c75-0c07-578a-af33-66d5c1fefca7",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        }
+      ]
+    },
+    {
+      "composition_id": "97724e34-3201-425e-80aa-903ff09a4f6e",
+      "id": "53265557-1f55-46ca-b068-b87c919682de",
+      "base_version_id": null,
+      "version": 1,
+      "content_digest": "74a8cb0133097a235dd62cc9ebab786f84fe3748f2dcca6602c22def757dd551",
+      "request_id": null,
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "e6c0402c-8c26-55da-9083-cc14b7577139",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "e6c0402c-8c26-55da-9083-cc14b7577139",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        }
+      ]
+    },
+    {
+      "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+      "id": "ca436c97-b17b-448e-a4f9-190109c815da",
+      "base_version_id": "3cbb2e17-7827-4a4a-a209-b278baf065e4",
+      "version": 2,
+      "content_digest": "2db90f122e3e701ec859dd6dae40ac4c27893cedc45f57d241702f737fc4185b",
+      "request_id": "989ef066-f37b-5562-968e-2686e67d4c34",
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          },
+          {
+            "kind": "visual",
+            "role": "effect",
+            "clips": [
+              {
+                "range": {
+                  "end": 360000,
+                  "start": 180000
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "image",
+                  "layout": {
+                    "x": 465.6,
+                    "y": 14.4,
+                    "width": 160.0,
+                    "height": 87.27272727272727
+                  },
+                  "opacity": 1.0,
+                  "object_id": "obj_overlay_989ef066f37b5562968e2686e67d4c34",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+                  "source_range": null,
+                  "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+                },
+                "clip_id": "clp_overlay_989ef066f37b5562968e2686e67d4c34",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 2,
+            "track_id": "trk_overlay_989ef066f37b5562968e2686e67d4c34"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        },
+        {
+          "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+          "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+        }
+      ]
+    },
+    {
+      "composition_id": "97724e34-3201-425e-80aa-903ff09a4f6e",
+      "id": "0550c50c-9039-44c6-a1c3-34ed9474a71c",
+      "base_version_id": "53265557-1f55-46ca-b068-b87c919682de",
+      "version": 2,
+      "content_digest": "db62f7f102f4c2c4ad0cf406c42fd1707a48d4dff9aa74c9e1dae625cfd62223",
+      "request_id": "ac9d3de3-4580-5606-a99d-7822211ce71f",
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "e6c0402c-8c26-55da-9083-cc14b7577139",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          },
+          {
+            "kind": "visual",
+            "role": "effect",
+            "clips": [
+              {
+                "range": {
+                  "end": 360000,
+                  "start": 180000
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "image",
+                  "layout": {
+                    "x": 465.6,
+                    "y": 14.4,
+                    "width": 160.0,
+                    "height": 87.27272727272727
+                  },
+                  "opacity": 1.0,
+                  "object_id": "obj_overlay_ac9d3de345805606a99d7822211ce71f",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "d39bc929-c973-58e6-bba0-96ffa46f44f5",
+                  "source_range": null,
+                  "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+                },
+                "clip_id": "clp_overlay_ac9d3de345805606a99d7822211ce71f",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 2,
+            "track_id": "trk_overlay_ac9d3de345805606a99d7822211ce71f"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "e6c0402c-8c26-55da-9083-cc14b7577139",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        },
+        {
+          "snapshot_id": "d39bc929-c973-58e6-bba0-96ffa46f44f5",
+          "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+        }
+      ]
+    },
+    {
+      "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+      "id": "4682cc68-125e-4ee0-9471-45358b27f905",
+      "base_version_id": "ca436c97-b17b-448e-a4f9-190109c815da",
+      "version": 3,
+      "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+      "request_id": "4a0a42ff-f593-5d0c-bccb-d59ef60b1dab",
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          },
+          {
+            "kind": "visual",
+            "role": "effect",
+            "clips": [
+              {
+                "range": {
+                  "end": 360000,
+                  "start": 180000
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "image",
+                  "layout": {
+                    "x": 465.6,
+                    "y": 14.4,
+                    "width": 160.0,
+                    "height": 87.27272727272727
+                  },
+                  "opacity": 1.0,
+                  "object_id": "obj_overlay_989ef066f37b5562968e2686e67d4c34",
+                  "transform": {
+                    "x": -40.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+                  "source_range": null,
+                  "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+                },
+                "clip_id": "clp_overlay_989ef066f37b5562968e2686e67d4c34",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 2,
+            "track_id": "trk_overlay_989ef066f37b5562968e2686e67d4c34"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        },
+        {
+          "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+          "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+        }
+      ]
+    },
+    {
+      "composition_id": "8c01979d-50a5-45a5-91d6-1e306183c949",
+      "id": "53b60f16-231f-48c2-bd05-5ac1a0e2d93b",
+      "base_version_id": "2d6b3df0-dafd-46af-8f0c-9744072c1e4d",
+      "version": 2,
+      "content_digest": "83dff99ee111f3078229c62b3390ef4684df4406baf3ad96f0f915519e43d83b",
+      "request_id": "278ee431-aa17-5d53-8ac1-b6c7f2f601d1",
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "c7f42c75-0c07-578a-af33-66d5c1fefca7",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          },
+          {
+            "kind": "visual",
+            "role": "effect",
+            "clips": [
+              {
+                "range": {
+                  "end": 360000,
+                  "start": 180000
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "image",
+                  "layout": {
+                    "x": 465.6,
+                    "y": 14.4,
+                    "width": 160.0,
+                    "height": 223.03030303030303
+                  },
+                  "opacity": 1.0,
+                  "object_id": "obj_overlay_278ee431aa175d538ac1b6c7f2f601d1",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "35251d35-c406-56b1-9a89-caef649cff93",
+                  "source_range": null,
+                  "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+                },
+                "clip_id": "clp_overlay_278ee431aa175d538ac1b6c7f2f601d1",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 2,
+            "track_id": "trk_overlay_278ee431aa175d538ac1b6c7f2f601d1"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 540000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "c7f42c75-0c07-578a-af33-66d5c1fefca7",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        },
+        {
+          "snapshot_id": "35251d35-c406-56b1-9a89-caef649cff93",
+          "snapshot_digest": "e21f1e49844493641ea1665e88fddd34b4e674749ba2ffdfba23656e0360ca5c"
+        }
+      ]
+    },
+    {
+      "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+      "id": "2c22736a-0f27-4a42-b53e-17dd642ba92b",
+      "base_version_id": "4682cc68-125e-4ee0-9471-45358b27f905",
+      "version": 4,
+      "content_digest": "d8a4bd9c8060434a651cfb0d3ff511b2ae5c1196a988f3a5d9bc2d5775dba0be",
+      "request_id": "aafb97dc-5629-58fe-b46b-3d5a8dc8c8c3",
+      "timeline": {
+        "tracks": [
+          {
+            "kind": "visual",
+            "role": "main",
+            "clips": [
+              {
+                "range": {
+                  "end": 540000,
+                  "start": 0
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "video",
+                  "muted": false,
+                  "layout": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 640.0,
+                    "height": 360.0
+                  },
+                  "gain_db": 0.0,
+                  "opacity": 1.0,
+                  "object_id": "demo_video",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+                  "source_range": {
+                    "end": 540000,
+                    "start": 0
+                  },
+                  "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+                },
+                "clip_id": "clip_main",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 0,
+            "track_id": "track_main"
+          },
+          {
+            "kind": "visual",
+            "role": "caption",
+            "clips": [
+              {
+                "range": {
+                  "end": 585000,
+                  "start": 0
+                },
+                "object": {
+                  "kind": "text",
+                  "text": "STUDIO LAMP",
+                  "style": {
+                    "font": {
+                      "digest": "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c",
+                      "font_id": "noto-sans-sc"
+                    },
+                    "align": "left",
+                    "color": "#FFFFFF",
+                    "shadow": null,
+                    "stroke": null,
+                    "weight": 600,
+                    "font_size": 23,
+                    "background": "#151515",
+                    "line_height": 1.2,
+                    "letter_spacing": 0.0
+                  },
+                  "layout": {
+                    "x": 125.0,
+                    "y": 300.0,
+                    "width": 390.0,
+                    "height": 55.0
+                  },
+                  "caption": null,
+                  "opacity": 1.0,
+                  "object_id": "subtitle",
+                  "transform": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  },
+                  "layout_version": "explicit-line-inline-v1",
+                  "segmentation_version": "scalar-grapheme-v1"
+                },
+                "source": null,
+                "clip_id": "clip_caption",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 1,
+            "track_id": "track_caption"
+          },
+          {
+            "kind": "visual",
+            "role": "effect",
+            "clips": [
+              {
+                "range": {
+                  "end": 360000,
+                  "start": 180000
+                },
+                "object": {
+                  "fit": "contain",
+                  "kind": "image",
+                  "layout": {
+                    "x": 465.6,
+                    "y": 14.4,
+                    "width": 160.0,
+                    "height": 87.27272727272727
+                  },
+                  "opacity": 1.0,
+                  "object_id": "obj_overlay_989ef066f37b5562968e2686e67d4c34",
+                  "transform": {
+                    "x": -40.0,
+                    "y": 0.0,
+                    "scale": 1.0,
+                    "origin": "center",
+                    "rotation": 0.0
+                  }
+                },
+                "source": {
+                  "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+                  "source_range": null,
+                  "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+                },
+                "clip_id": "clp_overlay_989ef066f37b5562968e2686e67d4c34",
+                "scene_id": "demo",
+                "animations": [],
+                "linked_group_id": null
+              }
+            ],
+            "order": 2,
+            "track_id": "trk_overlay_989ef066f37b5562968e2686e67d4c34"
+          }
+        ],
+        "transitions": []
+      },
+      "scenes": [
+        {
+          "range": {
+            "end": 585000,
+            "start": 0
+          },
+          "intent": "",
+          "scene_id": "demo",
+          "speech_clip_ids": [],
+          "visual_description": null
+        }
+      ],
+      "sources": [
+        {
+          "snapshot_id": "a0ff5f54-9b01-59cd-b591-8a0be45abeb9",
+          "snapshot_digest": "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b"
+        },
+        {
+          "snapshot_id": "84acede8-046d-5fde-ac2f-8195e17f33fe",
+          "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b"
+        }
+      ]
+    }
+  ],
+  "jobs": [
+    {
+      "id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0",
+      "project_id": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "version_id": "4682cc68-125e-4ee0-9471-45358b27f905",
+      "status": "succeeded",
+      "authorized_credits": 12,
+      "attempt": 1,
+      "receipt_id": "3e82f87c-f9a6-4f39-8c94-fc8d7cab13cd",
+      "render_spec": {
+        "fps": {
+          "den": 1,
+          "num": 30
+        },
+        "width": 640,
+        "height": 360,
+        "duration_frames": 180
+      }
+    }
+  ],
+  "ledger": [
+    {
+      "user_id": "c3ccb997-d98d-42db-acb5-6c13eff6ab72",
+      "kind": "grant",
+      "amount": 1000,
+      "idempotency_key": "user:c3ccb997-d98d-42db-acb5-6c13eff6ab72:signup_grant",
+      "ref": {
+        "source": "signup"
+      }
+    },
+    {
+      "user_id": "8072f6c5-0259-4587-aba1-3b13a051650b",
+      "kind": "grant",
+      "amount": 1000,
+      "idempotency_key": "user:8072f6c5-0259-4587-aba1-3b13a051650b:signup_grant",
+      "ref": {
+        "source": "signup"
+      }
+    },
+    {
+      "user_id": "8072f6c5-0259-4587-aba1-3b13a051650b",
+      "kind": "hold",
+      "amount": -12,
+      "idempotency_key": "export:7a47ca27-0e05-5a2c-94aa-98d51893eee0:hold",
+      "ref": {
+        "export_id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0"
+      }
+    },
+    {
+      "user_id": "8072f6c5-0259-4587-aba1-3b13a051650b",
+      "kind": "release",
+      "amount": 12,
+      "idempotency_key": "export:7a47ca27-0e05-5a2c-94aa-98d51893eee0:release",
+      "ref": {
+        "export_id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0"
+      }
+    },
+    {
+      "user_id": "8072f6c5-0259-4587-aba1-3b13a051650b",
+      "kind": "capture",
+      "amount": -12,
+      "idempotency_key": "export:7a47ca27-0e05-5a2c-94aa-98d51893eee0:capture",
+      "ref": {
+        "export_id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0"
+      }
+    }
+  ],
+  "usage": [
+    {
+      "project_id": "3440702d-3a5b-481e-aa81-3c034237dec0",
+      "usd": 0.010877,
+      "input": "67404",
+      "output": "1277",
+      "cached": "31966"
+    },
+    {
+      "project_id": "494bbe0c-73d9-4885-9100-1493c80ecaa4",
+      "usd": 0.041167,
+      "input": "255659",
+      "output": "4696",
+      "cached": "156777"
+    }
+  ],
+  "messages": [
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 1,
+      "id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "user",
+      "turn_state": "settled",
+      "content": "把第 2–4 秒加入我上传的产品图片，保留字幕和原声。做好后播放这一段给我看。",
+      "intent": {
+        "editor_commits": [
+          {
+            "tool": "insert_visual",
+            "request": "989ef066-f37b-5562-968e-2686e67d4c34",
+            "fingerprint": "89c6238304c6af5e55d8b4be12d6e8bade48094a572100bedb0de382c4f3f8c3",
+            "activity_row": "0215ba95-cc5c-4636-9c65-ca38889ec2dd"
+          }
+        ]
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 2,
+      "id": "29f4ad66-a98e-4372-9cc2-7a0b8d6c6195",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:34.648635+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_58zaFku9dyhtS2XOV8eDIA4v",
+          "group_id": "5645a315-6264-4114-b9e8-da5e0172d301",
+          "tool_name": "inspect_timeline",
+          "call_count": 2,
+          "call_index": 0,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:30:34.678576+00:00",
+          "started_at": "2026-11-23T06:30:34.671600+00:00",
+          "activity_id": "call_58zaFku9dyhtS2XOV8eDIA4v",
+          "duration_ms": 6
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 3,
+      "id": "8a11b9e8-7703-4a00-8482-52eec7e48758",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:34.657461+00:00",
+          "key": "chat.activity.videoMaterialsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_dFD1s5JAOwheMXXHZzTc7tkY",
+          "group_id": "5645a315-6264-4114-b9e8-da5e0172d301",
+          "tool_name": "prepare_video_materials",
+          "call_count": 2,
+          "call_index": 1,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:30:38.825677+00:00",
+          "started_at": "2026-11-23T06:30:34.681372+00:00",
+          "activity_id": "call_dFD1s5JAOwheMXXHZzTc7tkY",
+          "duration_ms": 4144
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 5,
+      "id": "ca9bfc4f-a914-4898-826b-76c53010d82d",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "我先看一下当前时间线和素材情况。",
+      "intent": {
+        "type": "interim_prose"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 6,
+      "id": "e34fcd3e-8854-485f-8394-fff85916118c",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:36.726185+00:00",
+          "key": "chat.material.readingDoneProgress",
+          "kind": "read",
+          "name": "lamp-1795415429-6xIAyg.png",
+          "count": 1,
+          "total": 2,
+          "status": "completed",
+          "activity_id": "asset-reading:65e5ce64-efe8-435c-949e-b1d2e613df3a",
+          "duration_ms": 7542
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 7,
+      "id": "0215ba95-cc5c-4636-9c65-ca38889ec2dd",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:41.562890+00:00",
+          "key": "chat.activity.insertVisualDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_17faa5747c0a45eda3309d34",
+          "tool_name": "insert_visual",
+          "settled_at": "2026-11-23T06:30:41.595818+00:00",
+          "activity_id": "2cb18fbe46f045a3b2b5abe31aa92bca",
+          "duration_ms": 32
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 8,
+      "id": "b5d6255a-fd8b-4ded-84fb-c62daabb9402",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:42.994309+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_4b66ea05b36d4e1c9eb0e56f",
+          "tool_name": "inspect_timeline",
+          "settled_at": "2026-11-23T06:30:43.011950+00:00",
+          "activity_id": "079e447a56de45b099149898f58ac5f6",
+          "duration_ms": 17
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 9,
+      "id": "8ea04838-3f0e-44df-87b0-79b47ae51e42",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:44.926957+00:00",
+          "key": "chat.activity.previewRangeDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_edda57d2cc7a492c86e707ae",
+          "tool_name": "preview_range",
+          "settled_at": "2026-11-23T06:30:52.854982+00:00",
+          "activity_id": "39305879b561454ebae88d2267a723ef",
+          "duration_ms": 7928
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 10,
+      "id": "92a4c467-6c9e-406b-b385-1e7fddf714d6",
+      "turn_id": "6a8a7297-660e-4a85-a6a9-d1124d47bc92",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "已完成并播放了该片段。\n\n- 你的产品图片（lamp.png，粉色 \"LAMP 08\" 卡片）作为叠加层放在 2.0–4.0 秒，位于画面右上角，宽约画布 25%，与底部字幕 \"STUDIO LAMP\" 无遮挡。\n- 原视频轨、字幕轨未做改动，原声保留：这段音频混合后非静音，响度约 -14.3 LUFS，真峰 -13.2 dBTP，无削波。\n- 采样帧（2.0 / 2.97 / 3.97 秒）显示彩条背景、斜向色带与角标持续运动，叠加图片在整个窗口内稳定可见。\n\n已保存为版本 2（version 第 2 版）。这次按预览处理，没有导出正式成片；如果你需要正式 MP4，我可以再导出。",
+      "intent": {},
+      "blocks": [
+        {
+          "kind": "video_storyboard",
+          "scrub": {
+            "kind": "range",
+            "end_seconds": 4.0,
+            "start_seconds": 2.0
+          },
+          "version": 2,
+          "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+          "content_digest": "2db90f122e3e701ec859dd6dae40ac4c27893cedc45f57d241702f737fc4185b",
+          "presentation_digest": "e1926af2b03182a2a47cff8eed06bd591e725b2a35db1d8493bfe9eb00007b71",
+          "presented_message_id": "92a4c467-6c9e-406b-b385-1e7fddf714d6",
+          "composition_version_id": "ca436c97-b17b-448e-a4f9-190109c815da"
+        }
+      ]
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 11,
+      "id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "user",
+      "turn_state": "settled",
+      "content": "图片往左移一点，其他不变，再播放这一段。",
+      "intent": {
+        "editor_commits": [
+          {
+            "tool": "translate",
+            "request": "4a0a42ff-f593-5d0c-bccb-d59ef60b1dab",
+            "fingerprint": "bd1f7c01fb14e2399f33b9954e135b995830f70f3a415c0e976e81d3fb6448c6",
+            "activity_row": "12156cd7-bf0f-4b6d-90e4-d2655ab93255"
+          }
+        ]
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 13,
+      "id": "0832b941-c2b6-44d0-8263-ab5a8f0bfe1e",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "我先看一下时间线，找到那个图片图层。",
+      "intent": {
+        "type": "interim_prose"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 14,
+      "id": "c9674e4a-e5ba-4c13-a649-13730cde02c3",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:08.553749+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_SLWabZNoGZw7XbkBro4beFj9",
+          "tool_name": "inspect_timeline",
+          "settled_at": "2026-11-23T06:31:08.561395+00:00",
+          "activity_id": "063b49dd4dad4fb99f652e234ec511e4",
+          "duration_ms": 7
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 15,
+      "id": "12156cd7-bf0f-4b6d-90e4-d2655ab93255",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:10.666612+00:00",
+          "key": "chat.activity.translateDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_g6FZKZSlWjMc2OZNCzK2ayy7",
+          "tool_name": "translate",
+          "settled_at": "2026-11-23T06:31:10.681434+00:00",
+          "activity_id": "0e725cce1dfa4f0089ab5842d4b68cc5",
+          "duration_ms": 14
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 16,
+      "id": "6ad40e82-e0a2-4e1c-8368-867a192e544d",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:12.292121+00:00",
+          "key": "chat.activity.previewRangeDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_8a821940d1124bf9800f4f95",
+          "tool_name": "preview_range",
+          "settled_at": "2026-11-23T06:31:14.652868+00:00",
+          "activity_id": "0aa10e4ae66f481595643ee7dc12583f",
+          "duration_ms": 2360
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 17,
+      "id": "311c936d-9b3f-4899-9e6a-b136a663490d",
+      "turn_id": "0abc7c85-8d63-406c-bb60-c94a5ea11d6d",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "图片已左移 40 像素并播放了 2–4 秒这一段。\n\n- 改动：右上角的叠加图片（粉色 \"LAMP 08\" 卡片）水平左移 40px，缩放、纵向位置、时长（2–4 秒）以及主视频和字幕均未变。\n- 预览结果：该窗口内三帧均显示图片已更靠左，右上角不再贴边；音频轨仍存在且非静音（约 -14.3 LUFS）。\n- 已保存版本 第 3 版（版本 3）。\n\n未做正式导出——原始需求只提到移动与播放。需要成片 MP4 的话告诉我，我再导出并交付。",
+      "intent": {},
+      "blocks": [
+        {
+          "kind": "video_storyboard",
+          "scrub": {
+            "kind": "range",
+            "end_seconds": 4.0,
+            "start_seconds": 2.0
+          },
+          "version": 3,
+          "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+          "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+          "presentation_digest": "32cd849194597b7c774687b75c7a6d7c79b53569f7af900fddc85b9d3d6efa9d",
+          "presented_message_id": "311c936d-9b3f-4899-9e6a-b136a663490d",
+          "composition_version_id": "4682cc68-125e-4ee0-9471-45358b27f905"
+        }
+      ]
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 18,
+      "id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "user",
+      "turn_state": "settled",
+      "content": "这样可以，导出正式视频。",
+      "intent": {
+        "resumed_media": "7a47ca27-0e05-5a2c-94aa-98d51893eee0"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 19,
+      "id": "fcdc563d-b179-4c26-9d05-a72b3888431c",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:24.209757+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_MNcJW2zpspgVeaHccbgoC2e2",
+          "tool_name": "inspect_timeline",
+          "settled_at": "2026-11-23T06:31:24.224282+00:00",
+          "activity_id": "c3634b5163d94f66a4716f8b2c701858",
+          "duration_ms": 14
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 20,
+      "id": "a3df6aa7-4b1a-4376-b9d2-0828a5ef34ed",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:25.533481+00:00",
+          "key": "chat.activity.exportVideo",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_MwuS6gXU58LcemoM1blYx6iW",
+          "tool_name": "export_video",
+          "settled_at": "2026-11-23T06:31:25.552113+00:00",
+          "activity_id": "967b256df02d46a6b7712f7d32f91c1e",
+          "duration_ms": 18
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 21,
+      "id": "a4f2e63f-1890-46e1-a560-bb92fc1f1135",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:26.957171+00:00",
+          "key": "chat.activity.previewRangeDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_9zfonuqhhAS5mVgnXXP7OI4T",
+          "tool_name": "preview_range",
+          "settled_at": "2026-11-23T06:31:31.824063+00:00",
+          "activity_id": "5160aa63fffd412fac3581efcb9fc58e",
+          "duration_ms": 4866
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 22,
+      "id": "f6baaa3b-08f9-4801-9dac-a2b5e7186175",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:40.395875+00:00",
+          "key": "chat.activity.mediaPermission",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_function_rwm3sj7vz3j0_1",
+          "tool_name": "export_video",
+          "settled_at": "2026-11-23T06:31:40.425373+00:00",
+          "activity_id": "a83360f572ec4c66a8f6900bca44cdde",
+          "duration_ms": 29
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 23,
+      "id": "997e5e05-b863-4d07-9ef6-82a424affa9f",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "允许导出这个版本的 MP4 吗？最多使用 12 积分。",
+      "intent": {
+        "native_call_id": "call_function_rwm3sj7vz3j0_1"
+      },
+      "blocks": [
+        {
+          "kind": "video_storyboard",
+          "scrub": {
+            "kind": "range",
+            "end_seconds": 6.0,
+            "start_seconds": 0.0
+          },
+          "version": 3,
+          "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+          "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+          "presentation_digest": "32cd849194597b7c774687b75c7a6d7c79b53569f7af900fddc85b9d3d6efa9d",
+          "presented_message_id": "997e5e05-b863-4d07-9ef6-82a424affa9f",
+          "composition_version_id": "4682cc68-125e-4ee0-9471-45358b27f905"
+        }
+      ]
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 24,
+      "id": "67b9bd96-17a7-4f47-9414-840051ba83cc",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity_forensics"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 25,
+      "id": "3e82f87c-f9a6-4f39-8c94-fc8d7cab13cd",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "正式 MP4 已导出，待审片。",
+      "intent": {
+        "tool": "export_video",
+        "media_result": {
+          "role": "export",
+          "status": "available",
+          "output_id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0",
+          "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+          "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+          "review_pending": true,
+          "charged_credits": 12,
+          "duration_seconds": 6.0,
+          "reserved_credits": 0,
+          "composition_version_id": "4682cc68-125e-4ee0-9471-45358b27f905"
+        },
+        "native_call_id": "call_function_rwm3sj7vz3j0_1"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 26,
+      "id": "2080e890-da3c-46a8-b0f8-1c4eb3f55936",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:03.209602+00:00",
+          "key": "chat.activity.videoReviewDone",
+          "seq": 2,
+          "kind": "draft",
+          "status": "completed",
+          "receipt": {
+            "kind": "video_review",
+            "scope": {
+              "audio_signal_checked": true,
+              "actual_output_decoded": true,
+              "static_frames_checked": true,
+              "audio_and_av_sync_checked": false,
+              "deterministic_output_checks": true,
+              "sampled_frame_signals_checked": true,
+              "motion_and_transitions_checked": false
+            },
+            "frames": [
+              {
+                "frame_id": "F01",
+                "time_seconds": 1.0
+              },
+              {
+                "frame_id": "F02",
+                "time_seconds": 3.0
+              },
+              {
+                "frame_id": "F03",
+                "time_seconds": 5.0
+              }
+            ],
+            "findings": [],
+            "output_issue_codes": []
+          },
+          "activity_id": "79be52219609487e95f7dc0af87eb89a",
+          "duration_ms": 5188
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 27,
+      "id": "354ef654-05a6-4427-8a6a-c73f7b891d40",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:05.953216+00:00",
+          "key": "chat.activity.deliverVideoDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "chatcmpl-tool-8bbd336c31bf165e",
+          "tool_name": "deliver_video",
+          "settled_at": "2026-11-23T06:33:05.994994+00:00",
+          "activity_id": "1ef71319aa0e4eeaac06edbfc16a7633",
+          "duration_ms": 41
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 28,
+      "id": "53c900fc-2f42-4e7d-ba5d-c570e426dabb",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "正式成片已交付。",
+      "intent": {
+        "output_refs": [
+          "7a47ca27-0e05-5a2c-94aa-98d51893eee0"
+        ],
+        "video_sha256": "2b642ac8864dea3c537d34d1bfa15c50c7faae8b8ca07666cdf4e6d8229308fd",
+        "reviewed_version": {
+          "composition_id": "e89a8226-4429-42fe-8fe7-a2326c116a40",
+          "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+          "composition_version_id": "4682cc68-125e-4ee0-9471-45358b27f905"
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 29,
+      "id": "0a56264d-6dd2-4ef0-a28d-42f150a65bf9",
+      "turn_id": "b2498b9a-1241-499b-b27f-012816f484f0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "正式视频已导出并交付到聊天中。\n\n- 作品：I8 • Studio lamp（版本 3），时长 6.0 秒，640×360 / 30fps，H.264 + AAC\n- 审阅结果：2–4 秒产品图片覆盖层完整可见且已向左调整，字幕“STUDIO LAMP”清晰无遮挡，音轨正常解码、无削波\n- 费用：本次导出扣除 12 积分（与原导出相同，未重复计费）\n- 说明：审阅基于 3 张采样静帧与音频电平测量，逐帧运动与音画同步未做连续播放核对\n\n目前所有要求均已满足。",
+      "intent": {},
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 30,
+      "id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "user",
+      "turn_state": "settled",
+      "content": "结尾再留半秒，其他保持原样。",
+      "intent": {
+        "editor_commits": [
+          {
+            "tool": "extend_still",
+            "request": "aafb97dc-5629-58fe-b46b-3d5a8dc8c8c3",
+            "fingerprint": "028b1dca56c209664b4385f8e3b94760ee4780ebc9519d75d38f08c8272a4774",
+            "activity_row": "9bd00d17-09de-4763-b203-688c292dc62d"
+          }
+        ]
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 32,
+      "id": "9dd9ca71-24e8-4fb3-8055-ee61b691cc65",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "我先看时间线结构，确认结尾片段。",
+      "intent": {
+        "type": "interim_prose"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 33,
+      "id": "48f4782e-14b6-4d92-a372-68474124bc61",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:57.287772+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071c7cb673f4bb4f9924",
+          "tool_name": "inspect_timeline",
+          "settled_at": "2026-11-23T06:33:57.299243+00:00",
+          "activity_id": "227aaa02c9314149a6eca5071495c7dd",
+          "duration_ms": 11
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 34,
+      "id": "7cca9212-f4a9-4a7e-a8d8-d3addae05b21",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:59.504207+00:00",
+          "key": "chat.inspectingDone.asset",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071c85ae714382dc3b4c",
+          "group_id": "143636dc-9bef-497a-ab22-4f8c232a865b",
+          "tool_name": "get_asset",
+          "call_count": 2,
+          "call_index": 0,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:33:59.526005+00:00",
+          "started_at": "2026-11-23T06:33:59.514819+00:00",
+          "activity_id": "call_01a2071c85ae714382dc3b4c",
+          "duration_ms": 11
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 35,
+      "id": "e9c683b4-8c91-48b6-8d49-b77a8aed3131",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:59.510115+00:00",
+          "key": "chat.activity.inspectClipDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071c85ae714382dc3b4d",
+          "group_id": "143636dc-9bef-497a-ab22-4f8c232a865b",
+          "tool_name": "inspect_clip",
+          "call_count": 2,
+          "call_index": 1,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:33:59.537039+00:00",
+          "started_at": "2026-11-23T06:33:59.529310+00:00",
+          "activity_id": "call_01a2071c85ae714382dc3b4d",
+          "duration_ms": 7
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 36,
+      "id": "f5ba783f-36de-48ae-bae1-00ab0642ee03",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:34:03.057028+00:00",
+          "key": "chat.activity.extendStill",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_01a2071c932b7048a55ee84c",
+          "tool_name": "extend_still",
+          "settled_at": "2026-11-23T06:34:03.075987+00:00",
+          "activity_id": "2e17c03a22f24104960b540251a93577",
+          "duration_ms": 18
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 37,
+      "id": "82ffc892-88a1-4545-827e-e3c5d1efddac",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:34:07.192185+00:00",
+          "key": "chat.inspectingDone.projectMedia",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071ca38770de8ab88133",
+          "tool_name": "list_project_media",
+          "settled_at": "2026-11-23T06:34:07.211303+00:00",
+          "activity_id": "813b27cb573e46c7a51f753d20960542",
+          "duration_ms": 19
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 38,
+      "id": "93684162-d238-44d0-8f05-79a582842062",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:34:09.286850+00:00",
+          "key": "chat.activity.trimClip",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_01a2071cabd3769696975ca2",
+          "tool_name": "trim_clip",
+          "settled_at": "2026-11-23T06:34:09.307930+00:00",
+          "activity_id": "75ce632a54394c8aa08d6104a3fdc848",
+          "duration_ms": 21
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 39,
+      "id": "d92e0161-ccd4-4f96-ab4d-75531fadf2cb",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:34:11.713108+00:00",
+          "key": "chat.activity.videoMaterials",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_01a2071cb55275b9bced32e0",
+          "tool_name": "prepare_video_materials",
+          "settled_at": "2026-11-23T06:35:35.888878+00:00",
+          "activity_id": "c8cb19dd44a94f0ab594f7acd3edd21e",
+          "duration_ms": 84176
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 40,
+      "id": "a771472e-0866-4159-bbb1-926ab573c159",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:34.761220+00:00",
+          "key": "chat.material.readingDoneProgress_video",
+          "kind": "read",
+          "name": "product-demo-1795415429-epXJqQ.mp4",
+          "count": 2,
+          "total": 2,
+          "status": "completed",
+          "activity_id": "asset-reading:7973dc46-8a70-498c-be4c-9cde3104fb67",
+          "duration_ms": 305592
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 41,
+      "id": "9bd00d17-09de-4763-b203-688c292dc62d",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:37.888065+00:00",
+          "key": "chat.activity.extendStillDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071e05eb72a5aa16cb72",
+          "tool_name": "extend_still",
+          "settled_at": "2026-11-23T06:35:37.912426+00:00",
+          "activity_id": "c838aaaf60ec4f63ba241f50369b9ad3",
+          "duration_ms": 24
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 42,
+      "id": "c3386e3d-312c-4141-8aad-193e3223284f",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:40.169197+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_bbb9b20aa42f4583981fb611",
+          "tool_name": "inspect_timeline",
+          "settled_at": "2026-11-23T06:35:40.180863+00:00",
+          "activity_id": "1cc9d2036d004d5291258a33646686c1",
+          "duration_ms": 11
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 43,
+      "id": "fd69b5c3-5b93-4ae0-8474-d2707610f556",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:43.567377+00:00",
+          "key": "chat.activity.trimClip",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_9c41158198ad4c48aec02440",
+          "tool_name": "trim_clip",
+          "settled_at": "2026-11-23T06:35:43.594186+00:00",
+          "activity_id": "7c2ded821c904aaba55b276b7f547c87",
+          "duration_ms": 26
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 44,
+      "id": "1efcbc80-e5a2-45fc-b790-c64c3ca2a6ef",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:50.519726+00:00",
+          "key": "chat.activity.inspectClipDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_1dfae2f545f640ea9b231769",
+          "tool_name": "inspect_clip",
+          "settled_at": "2026-11-23T06:35:50.542286+00:00",
+          "activity_id": "36b6fe5f629046e9b344eb3f6b5a4069",
+          "duration_ms": 22
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 45,
+      "id": "0d5f656b-8934-4408-9d0e-eebe56be4301",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:35:53.229800+00:00",
+          "key": "chat.activity.trimClip",
+          "kind": "read",
+          "status": "failed",
+          "call_id": "call_224faff22def47e1aa46e89f",
+          "tool_name": "trim_clip",
+          "settled_at": "2026-11-23T06:35:53.245053+00:00",
+          "activity_id": "3c9fdc34c0084deab19b501d35369d9f",
+          "duration_ms": 15
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 46,
+      "id": "5540b510-9e9e-4392-9ee7-f02ff7af0dc1",
+      "turn_id": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "这次后续调整没有完成，我已停止重复尝试。最近保存的分镜版本和已有成片都保留，本次没有开始新的制作。请再发一次，我会从最近保存的版本继续。",
+      "intent": {},
+      "blocks": []
+    },
+    {
+      "conversation_id": "26cb8ec0-2e91-4322-9726-cfb9f488f9dd",
+      "seq": 47,
+      "id": "63ffe592-803c-467d-9603-8c86e035fca7",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity_forensics"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 1,
+      "id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "user",
+      "turn_state": "settled",
+      "content": "把第 2–4 秒加入我提供的绿色产品图片，保留字幕和原声，做好后播放。",
+      "intent": {
+        "editor_commits": [
+          {
+            "tool": "insert_visual",
+            "request": "278ee431-aa17-5d53-8ac1-b6c7f2f601d1",
+            "fingerprint": "5a4a8dbbdb2a00c6e7a610f8f88672201f9f0871edf0c216de828830dd9e41ac",
+            "activity_row": "4f351b8b-46fa-4083-b7e1-32b8f11e9cce"
+          }
+        ]
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 2,
+      "id": "897cff86-9f80-4900-bd68-05592e4d703c",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:00.756006+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a20719c8ee7492bfaa2b61",
+          "group_id": "0e747829-36a1-4285-8106-867f1c5297dc",
+          "tool_name": "inspect_timeline",
+          "call_count": 3,
+          "call_index": 0,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:31:00.782008+00:00",
+          "started_at": "2026-11-23T06:31:00.771316+00:00",
+          "activity_id": "call_01a20719c8ee7492bfaa2b61",
+          "duration_ms": 10
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 3,
+      "id": "a33902ec-756f-446a-bf1d-1b4cb8691fd2",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:00.763136+00:00",
+          "key": "chat.inspectingDone.asset",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a20719c91b7610baa1a815",
+          "group_id": "0e747829-36a1-4285-8106-867f1c5297dc",
+          "tool_name": "get_asset",
+          "call_count": 3,
+          "call_index": 1,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:31:00.795584+00:00",
+          "started_at": "2026-11-23T06:31:00.788118+00:00",
+          "activity_id": "call_01a20719c91b7610baa1a815",
+          "duration_ms": 7
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 4,
+      "id": "0ea3752e-6649-42b4-8e5e-7f03af7b5999",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:00.766643+00:00",
+          "key": "chat.inspectingDone.asset",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a20719c9677300a7b9d733",
+          "group_id": "0e747829-36a1-4285-8106-867f1c5297dc",
+          "tool_name": "get_asset",
+          "call_count": 3,
+          "call_index": 2,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:31:00.804808+00:00",
+          "started_at": "2026-11-23T06:31:00.799290+00:00",
+          "activity_id": "call_01a20719c9677300a7b9d733",
+          "duration_ms": 5
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 5,
+      "id": "637f4b45-8cf0-4075-8e51-e4c7ad647b4a",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:02.793407+00:00",
+          "key": "chat.activity.videoMaterialsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a20719d3247655a4382a36",
+          "tool_name": "prepare_video_materials",
+          "settled_at": "2026-11-23T06:31:06.840933+00:00",
+          "activity_id": "549a4937337c4d65a2dc32359240bbbf",
+          "duration_ms": 4047
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 6,
+      "id": "5e968127-36ae-41ed-b1b5-a7f94a1e25ea",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:04.324920+00:00",
+          "key": "chat.material.readingDoneProgress",
+          "kind": "read",
+          "name": "产品图.png",
+          "count": 1,
+          "total": 3,
+          "status": "completed",
+          "activity_id": "asset-reading:7402a540-6980-4fae-9453-6d327c265261",
+          "duration_ms": 5595
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 7,
+      "id": "0bd93158-7041-408d-a2d9-9a450e0ec24c",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:31:06.355409+00:00",
+          "key": "chat.material.readingDoneProgress",
+          "kind": "read",
+          "name": "产品图.png",
+          "count": 2,
+          "total": 3,
+          "status": "completed",
+          "activity_id": "asset-reading:fa31bb32-0d55-49b7-b9bc-3ff79bb23c8c",
+          "duration_ms": 7626
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 8,
+      "id": "3282ebaf-bd3e-4515-841e-265982ec6ef2",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "两张附件都是绿色底的产品图（LAMP 08 与 LAMP 12），要插入第 2–4 秒的是哪一张？",
+      "intent": {},
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 9,
+      "id": "4badff89-5be9-4e2c-ae6c-ba56c3030d13",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:32:55.690804+00:00",
+          "key": "chat.activity.videoMaterialsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071b8b5b74749b1210ca",
+          "group_id": "a1ab2c69-e2b1-448c-93d8-83d8093e7a70",
+          "tool_name": "prepare_video_materials",
+          "call_count": 2,
+          "call_index": 0,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:32:55.746158+00:00",
+          "started_at": "2026-11-23T06:32:55.717498+00:00",
+          "activity_id": "call_01a2071b8b5b74749b1210ca",
+          "duration_ms": 28
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 10,
+      "id": "548fdc7e-e5cc-4531-be5a-49bed67256f4",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:32:55.704842+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071b8ba67798bd051f54",
+          "group_id": "a1ab2c69-e2b1-448c-93d8-83d8093e7a70",
+          "tool_name": "inspect_timeline",
+          "call_count": 2,
+          "call_index": 1,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:32:55.755644+00:00",
+          "started_at": "2026-11-23T06:32:55.748346+00:00",
+          "activity_id": "call_01a2071b8ba67798bd051f54",
+          "duration_ms": 7
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 11,
+      "id": "e928ae24-5ad6-4842-a595-c0846df03285",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "我先确认素材与当前时间线，再插入图片。",
+      "intent": {
+        "type": "interim_prose"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 12,
+      "id": "4f351b8b-46fa-4083-b7e1-32b8f11e9cce",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:32:57.827108+00:00",
+          "key": "chat.activity.insertVisualDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_01a2071b940172728be2fba5",
+          "tool_name": "insert_visual",
+          "settled_at": "2026-11-23T06:32:57.857299+00:00",
+          "activity_id": "63382935f0704d95874a129d545bb21e",
+          "duration_ms": 30
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 13,
+      "id": "f81d3195-2390-4237-94af-5c45cc49a5ef",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:33:00.552592+00:00",
+          "key": "chat.activity.previewRangeDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_41de8661657a45d78c33d72c",
+          "tool_name": "preview_range",
+          "settled_at": "2026-11-23T06:33:02.905439+00:00",
+          "activity_id": "b32333d064174cb7863a391270689545",
+          "duration_ms": 2352
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "2ac34073-2464-4c14-beb2-386fb17a58d7",
+      "seq": 14,
+      "id": "1e727cb9-2f72-4076-a996-2e87fcf7d748",
+      "turn_id": "7f0305dc-ddba-4f46-ae2d-c0c9bd919ec0",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "已完成插入并播放 2–4 秒窗口。\n\n- 素材：附件2「LAMP 12」（亮绿色竖图 132×184），以右上角覆盖层形式放在第 2–4 秒，宽度占画面 25%（约 160×223 像素），保持原比例不拉伸。\n- 核对帧（2.0 / 2.97 / 3.97 秒）显示绿色 LAMP 12 图在右上角稳定出现，白色圆角边框与原图一致。\n- 字幕「STUDIO LAMP」在整段保持可见、位置未变；底层测试画面与彩色条纹原样保留。\n- 音频：混音轨存在且非静音（RMS 约 0.148，无削波，积分响度 -14.3 LUFS），原声未被替换或静音。\n\n本次只是保存并预览了剪辑版本（版本 2，composition 8c01979d-50a5-45a5-91d6-1e306183c949）。按当前开场要求未做正式导出——如果需要导出 MP4，请告诉我，我再执行导出。",
+      "intent": {},
+      "blocks": [
+        {
+          "kind": "video_storyboard",
+          "scrub": {
+            "kind": "range",
+            "end_seconds": 4.0,
+            "start_seconds": 2.0
+          },
+          "version": 2,
+          "composition_id": "8c01979d-50a5-45a5-91d6-1e306183c949",
+          "content_digest": "83dff99ee111f3078229c62b3390ef4684df4406baf3ad96f0f915519e43d83b",
+          "presentation_digest": "6a7e221b18cf02e22a92b4df2f43748cc6a097373531d3e79b022575629a3594",
+          "presented_message_id": "1e727cb9-2f72-4076-a996-2e87fcf7d748",
+          "composition_version_id": "53b60f16-231f-48c2-bd05-5ac1a0e2d93b"
+        }
+      ]
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 1,
+      "id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "user",
+      "turn_state": "failed",
+      "content": "把第 2–4 秒加入我上传的产品图片，保留字幕和原声。做好后播放这一段给我看。",
+      "intent": {
+        "editor_commits": [
+          {
+            "tool": "insert_visual",
+            "request": "ac9d3de3-4580-5606-a99d-7822211ce71f",
+            "fingerprint": "bce660237064372b7e1991ec1cd479bfb92f66b8d4a2ef553cf5d25e5b60be08",
+            "activity_row": "0708aa41-540b-42e5-bab9-e4b0020fee69"
+          }
+        ]
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 2,
+      "id": "f353a629-e137-4240-be45-8c25266579d9",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:47.567577+00:00",
+          "key": "chat.activity.inspectClipsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_7bc5460603364eb6ad1eba6f",
+          "group_id": "ca2f6ed5-50c1-4dee-8137-f045bb1d5e2a",
+          "tool_name": "inspect_timeline",
+          "call_count": 2,
+          "call_index": 0,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:30:47.604385+00:00",
+          "started_at": "2026-11-23T06:30:47.595067+00:00",
+          "activity_id": "call_7bc5460603364eb6ad1eba6f",
+          "duration_ms": 9
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 3,
+      "id": "eef45e4e-07c3-45d7-97ec-03464c5eade0",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:47.574980+00:00",
+          "key": "chat.activity.videoMaterialsDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_48714bddf4964eda8ecbd9e5",
+          "group_id": "ca2f6ed5-50c1-4dee-8137-f045bb1d5e2a",
+          "tool_name": "prepare_video_materials",
+          "call_count": 2,
+          "call_index": 1,
+          "call_state": "completed",
+          "settled_at": "2026-11-23T06:30:49.718005+00:00",
+          "started_at": "2026-11-23T06:30:47.606276+00:00",
+          "activity_id": "call_48714bddf4964eda8ecbd9e5",
+          "duration_ms": 2111
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 5,
+      "id": "e93b3578-c55b-4c34-ba2d-3cdaa92cce01",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "我先看一下时间线和素材，再把产品图片叠到第 2–4 秒。",
+      "intent": {
+        "type": "interim_prose"
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 6,
+      "id": "a8a7b52d-ad97-4aeb-b972-58adda624ec6",
+      "turn_id": null,
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:48.142376+00:00",
+          "key": "chat.material.readingDoneProgress",
+          "kind": "read",
+          "name": "lamp-1795415431-VUeJew.png",
+          "count": 1,
+          "total": 2,
+          "status": "completed",
+          "activity_id": "asset-reading:53d71593-54b7-484e-a7c6-c44fcad2f831",
+          "duration_ms": 17026
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 7,
+      "id": "0708aa41-540b-42e5-bab9-e4b0020fee69",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "",
+      "intent": {
+        "type": "activity",
+        "frame": {
+          "at": "2026-11-23T06:30:51.350668+00:00",
+          "key": "chat.activity.insertVisualDone",
+          "kind": "read",
+          "status": "completed",
+          "call_id": "call_16e1df50f290ebf12c7b9304",
+          "tool_name": "insert_visual",
+          "settled_at": "2026-11-23T06:34:15.300154+00:00",
+          "activity_id": "520f63a954ab4e0eb2c5d309af117c51"
+        }
+      },
+      "blocks": []
+    },
+    {
+      "conversation_id": "dd7c6510-c3f1-40ef-aca3-037da215fa0d",
+      "seq": 8,
+      "id": "79d7cb2b-86b4-4294-b78b-ca07f449615e",
+      "turn_id": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+      "role": "assistant",
+      "turn_state": null,
+      "content": "本轮已中断。已保存的修改有插入图片（版本 2）。可以从当前作品继续。",
+      "intent": {
+        "type": "editor_recovery"
+      },
+      "blocks": []
+    }
+  ],
+  "outputs": [
+    {
+      "id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0",
+      "composition_version_id": "4682cc68-125e-4ee0-9471-45358b27f905",
+      "payload": {
+        "name": "Studio lamp",
+        "aspect": "16:9",
+        "duration": 6.0,
+        "duration_seconds": 6.0,
+        "composition_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df"
+      },
+      "render_status": "COMPLETED"
+    },
+    {
+      "id": "c0e1af37-cbe2-4468-9e1d-3cbf3e146ab1",
+      "composition_version_id": null,
+      "payload": {
+        "themes": [
+          "高饱和度标准色条",
+          "动态彩色斜带",
+          "几何图形与明度对比",
+          "程序化方块阵列",
+          "时间码与参数监测",
+          "视觉输出测试"
+        ],
+        "core_thesis": "在缺少转录的情况下，这段素材最明确传达的是一种高饱和度、标准化且动态变化的技术视觉测试设计；它适合作为演讲中的色彩测试、视觉信号或输出校验片段，但不足以支持有关演讲主题的实质性判断。",
+        "climax_spans": [
+          {
+            "end": null,
+            "why": "画面中同时出现高位折转的彩色斜带和尺寸显著扩大的灰色矩形，动态线条与实体块面形成最强烈的视觉对照。",
+            "text": "00:00:03.262",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 3.3
+          },
+          {
+            "end": null,
+            "why": "彩虹斜带与右侧规则方块阵列、左侧孤立灰色横条共同构成信息密度最高的画面关系。",
+            "text": "00:00:04.333",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 4.3
+          },
+          {
+            "end": null,
+            "why": "左侧长竖条、右下方上升斜带和持续变化的方块轨迹同时出现，形成片段结束前最集中的动态层次。",
+            "text": "00:00:05.407",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 5.4
+          }
+        ],
+        "key_arguments": [
+          {
+            "id": "a1",
+            "text": "片段以标题卡“LAMP 08”开场，明确把该画面标识为编号08的测试或展示单元。",
+            "text_en": "The clip opens with a title card reading “LAMP 08,” clearly identifying the visual as test or presentation item number 08.",
+            "text_zh": "片段以标题卡“LAMP 08”开场，明确将该画面标识为编号08的测试或展示单元。",
+            "position": "开头"
+          },
+          {
+            "id": "a2",
+            "text": "主体画面由红、绿、黄、蓝、品红和青色六条高饱和度竖向色带构成，呈现标准视频测试图的视觉特征。",
+            "text_en": "The main image consists of six highly saturated vertical bands of red, green, yellow, blue, magenta, and cyan, resembling a standard video test pattern.",
+            "text_zh": "主体画面由红、绿、黄、蓝、品红和青色六条高饱和度竖向色带构成，呈现出标准视频测试图的视觉特征。",
+            "position": "标题卡之后，测试画面开始时"
+          },
+          {
+            "id": "a3",
+            "text": "一条粗窄的彩虹色斜带持续横穿各色区域，并随时间改变颜色、位置和折转形态，成为画面的主要动态焦点。",
+            "text_en": "A thick, narrow rainbow-colored diagonal band continuously crosses the color fields, changing color, position, and bend as time passes, making it the main dynamic focus.",
+            "text_zh": "一条粗窄的彩虹色斜带持续横穿各色区域，并随时间改变颜色、位置和折转形态，成为画面的主要动态焦点。",
+            "position": "测试画面全段"
+          },
+          {
+            "id": "a4",
+            "text": "左侧与中部的灰色横条、竖条和矩形块不断改变尺寸及方向，与鲜艳色带形成明显的形态和明度对比。",
+            "text_en": "Gray horizontal bars, vertical bars, and rectangles in the left and central areas repeatedly change size and orientation, creating a clear contrast in shape and brightness with the vivid color bands.",
+            "text_zh": "左侧与中部的灰色横条、竖条和矩形块不断改变尺寸及方向，与鲜艳色带形成明显的形态和明度对比。",
+            "position": "测试画面中段至结尾"
+          },
+          {
+            "id": "a5",
+            "text": "画面右侧持续出现规则排列的灰色小方块与绿色小方块群，而右上方另有零散彩色方块沿弧形轨迹变化。",
+            "text_en": "The right side continuously displays a regular cluster of small gray squares and green squares, while scattered colored squares above them change along an arcing path.",
+            "text_zh": "画面右侧持续出现规则排列的灰色小方块与绿色小方块群，而右上方另有零散彩色方块沿弧形轨迹变化。",
+            "position": "测试画面全段"
+          },
+          {
+            "id": "a6",
+            "text": "左上角始终设有黑底黄色数字计时框，时间从“00:00:00.000”递增至约“00:00:05.907”，表明片段具有明确的程序运行或逐帧记录属性。",
+            "text_en": "A black box with yellow numerical overlays remains in the upper-left corner, with the time advancing from “00:00:00.000” to approximately “00:00:05.907,” indicating a programmed or frame-by-frame recorded sequence.",
+            "text_zh": "左上角始终设有黑底黄色数字计时框，时间从“00:00:00.000”递增至约“00:00:05.907”，表明该片段具有明确的程序运行或逐帧记录属性。",
+            "position": "测试画面全段"
+          },
+          {
+            "id": "a7",
+            "text": "左上角的第二组黄色数字也随时间从16递增至217，与计时器共同强化了技术监测和参数记录的视觉效果。",
+            "text_en": "A second set of yellow numbers in the upper-left corner also rises from 16 to 217, reinforcing the impression of technical monitoring and parameter logging.",
+            "text_zh": "左上角的第二组黄色数字也随时间从16递增至217，与计时器共同强化了技术监测和参数记录的视觉效果。",
+            "position": "测试画面全段"
+          }
+        ],
+        "emphasis_words": [
+          {
+            "word": "LAMP 08",
+            "start": null,
+            "weight": 0.95,
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "word": "00:00:00.000",
+            "start": null,
+            "weight": 0.9,
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "word": "00:00:03.262",
+            "start": null,
+            "weight": 0.78,
+            "asset_id": "",
+            "approx_start": 3.3
+          },
+          {
+            "word": "00:00:04.333",
+            "start": null,
+            "weight": 0.82,
+            "asset_id": "",
+            "approx_start": 4.3
+          },
+          {
+            "word": "00:00:05.407",
+            "start": null,
+            "weight": 0.86,
+            "asset_id": "",
+            "approx_start": 5.4
+          }
+        ],
+        "quotable_lines": [
+          {
+            "end": null,
+            "text": "LAMP 08",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 0.0,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:00.000",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 0.0,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:01.103",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 1.1,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:02.162",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 2.2,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:03.262",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 3.3,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:04.333",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 4.3,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:05.407",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 5.4,
+            "self_contained": true
+          },
+          {
+            "end": null,
+            "text": "00:00:05.907",
+            "start": null,
+            "asset_id": "",
+            "approx_start": 5.9,
+            "self_contained": true
+          }
+        ],
+        "visual_anchors": [
+          {
+            "ref": "image 1",
+            "label": "粉红色矩形标题卡，中心显示白色“LAMP 08”，四周有白色描边",
+            "asset_id": "65e5ce64-efe8-435c-949e-b1d2e613df3a",
+            "argument_ids": [
+              "a1"
+            ]
+          }
+        ],
+        "overall_summary": "素材仅包含一段约6秒的无声视觉测试画面，原始文字与演讲转录未提供，因此无法确认该片在演讲中的具体论述。画面由标题卡“LAMP 08”和多组彩条、动态彩色斜带、灰色几何块及右上角计数字组成，整体更像用于色彩、构图或技术输出测试的视觉信号。",
+        "target_audience": "由于没有提供演讲转录，无法确定现场听众；就素材本身而言，它面向关注视频测试信号、色彩校准、图形生成或技术视觉演示的观众。",
+        "topic_boundaries": [
+          {
+            "id": "t1",
+            "end": null,
+            "label": "编号标题卡",
+            "start": null,
+            "marker": "LAMP 08",
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "id": "t2",
+            "end": null,
+            "label": "彩条测试画面启动",
+            "start": null,
+            "marker": "00:00:00.000",
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "id": "t3",
+            "end": null,
+            "label": "动态几何图形展开",
+            "start": null,
+            "marker": "00:00:02.162",
+            "asset_id": "",
+            "approx_start": 2.2
+          },
+          {
+            "id": "t4",
+            "end": null,
+            "label": "矩形与折线斜带组合",
+            "start": null,
+            "marker": "00:00:04.333",
+            "asset_id": "",
+            "approx_start": 4.3
+          },
+          {
+            "id": "t5",
+            "end": null,
+            "label": "末段参数记录",
+            "start": null,
+            "marker": "00:00:05.407",
+            "asset_id": "",
+            "approx_start": 5.4
+          }
+        ],
+        "narrative_role_hints": [
+          {
+            "end": null,
+            "note": "粉红色标题卡以“LAMP 08”建立测试项目编号，并为后续技术画面提供清晰入口。",
+            "role": "setup",
+            "start": null,
+            "marker": "LAMP 08",
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "end": null,
+            "note": "标准色条和初始计时数字迅速交代画面属于程序化视觉测试。",
+            "role": "setup",
+            "start": null,
+            "marker": "00:00:00.000",
+            "asset_id": "",
+            "approx_start": 0.0
+          },
+          {
+            "end": null,
+            "note": "动态彩色斜带与灰色几何图形反复变化，展示不同色彩、方向和尺度的组合效果。",
+            "role": "example",
+            "start": null,
+            "marker": "00:00:02.162",
+            "asset_id": "",
+            "approx_start": 2.2
+          },
+          {
+            "end": null,
+            "note": "大矩形、折线斜带与规则方块阵列叠加，达到片段视觉复杂度的峰值。",
+            "role": "payoff",
+            "start": null,
+            "marker": "00:00:03.262",
+            "asset_id": "",
+            "approx_start": 3.3
+          },
+          {
+            "end": null,
+            "note": "斜带降向下方、灰色横条转向右侧，构图重心为后续末段变化重新蓄势。",
+            "role": "transition",
+            "start": null,
+            "marker": "00:00:04.333",
+            "asset_id": "",
+            "approx_start": 4.3
+          },
+          {
+            "end": null,
+            "note": "竖直灰条、双向斜带和方块轨迹在末段同时存在，形成最终且最密集的动态画面。",
+            "role": "payoff",
+            "start": null,
+            "marker": "00:00:05.407",
+            "asset_id": "",
+            "approx_start": 5.4
+          }
+        ]
+      },
+      "render_status": null
+    }
+  ],
+  "media": []
+}

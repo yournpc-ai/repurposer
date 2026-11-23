@@ -1,0 +1,52 @@
+{
+  "opening": "1deb7658-0ab3-463e-bbd1-2c78633692e3",
+  "notice": "本轮已中断。已保存的修改有插入图片（版本 2）。可以从当前作品继续。",
+  "call": "call_16e1df50f290ebf12c7b9304",
+  "result": {
+    "composition_id": "97724e34-3201-425e-80aa-903ff09a4f6e",
+    "base_version_id": "53265557-1f55-46ca-b068-b87c919682de",
+    "version_id": "0550c50c-9039-44c6-a1c3-34ed9474a71c",
+    "version": 2,
+    "content_digest": "db62f7f102f4c2c4ad0cf406c42fd1707a48d4dff9aa74c9e1dae625cfd62223",
+    "target_before_seconds": null,
+    "replayed": true,
+    "changed_clips": [
+      {
+        "clip_id": "clp_overlay_ac9d3de345805606a99d7822211ce71f",
+        "object_id": "obj_overlay_ac9d3de345805606a99d7822211ce71f",
+        "kind": "image",
+        "track_id": "trk_overlay_ac9d3de345805606a99d7822211ce71f",
+        "track_role": "effect",
+        "track_order": 2,
+        "scene_id": "demo",
+        "scene_number": 1,
+        "linked_group_id": null,
+        "start_seconds": 2.0,
+        "end_seconds": 4.0,
+        "source": {
+          "snapshot_id": "d39bc929-c973-58e6-bba0-96ffa46f44f5",
+          "snapshot_digest": "07d3ac4cf0c8b13c0cb58e0a4e8139418882cb97e26dbc487d887bac864c472b",
+          "source_range": null
+        },
+        "layout": {
+          "x": 465.6,
+          "y": 14.4,
+          "width": 160.0,
+          "height": 87.27272727272727
+        },
+        "transform": {
+          "x": 0.0,
+          "y": 0.0,
+          "scale": 1.0,
+          "rotation": 0.0,
+          "origin": "center"
+        },
+        "fit": "contain",
+        "animated_properties": []
+      }
+    ],
+    "added_clips": [
+      "clp_overlay_ac9d3de345805606a99d7822211ce71f"
+    ]
+  }
+}
